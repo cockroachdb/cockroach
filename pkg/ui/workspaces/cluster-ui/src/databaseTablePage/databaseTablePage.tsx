@@ -28,7 +28,13 @@ import {
   SummaryCardItemBoolSetting,
 } from "src/summaryCard";
 import * as format from "src/util/format";
-import { syncHistory, tableStatsClusterSetting } from "src/util";
+import {
+  ascendingAttr,
+  columnTitleAttr,
+  syncHistory,
+  tabAttr,
+  tableStatsClusterSetting,
+} from "src/util";
 
 import styles from "./databaseTablePage.module.scss";
 import { commonStyles } from "src/common";
@@ -147,11 +153,16 @@ export type DatabaseTablePageProps = DatabaseTablePageData &
   RouteComponentProps;
 
 interface DatabaseTablePageState {
-  sortSetting: SortSetting;
+  grantSortSetting: SortSetting;
+  indexSortSetting: SortSetting;
   tab: string;
 }
 
+const indexTabKey = "overview";
+const grantsTabKey = "grants";
+
 class DatabaseTableGrantsTable extends SortedTable<Grant> {}
+
 class IndexUsageStatsTable extends SortedTable<IndexStat> {}
 
 export class DatabaseTablePage extends React.Component<
@@ -163,18 +174,42 @@ export class DatabaseTablePage extends React.Component<
 
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
-    const defaultTab = searchParams.get("tab") || "overview";
+    const currentTab = searchParams.get(tabAttr) || indexTabKey;
+    const indexSort: SortSetting = {
+      ascending: true,
+      columnTitle: "last used",
+    };
+
+    const grantSort: SortSetting = {
+      ascending: true,
+      columnTitle: "username",
+    };
+
+    const columnTitle = searchParams.get(columnTitleAttr);
+    if (columnTitle) {
+      if (currentTab === grantsTabKey) {
+        grantSort.columnTitle = columnTitle;
+      } else {
+        indexSort.columnTitle = columnTitle;
+      }
+    }
 
     this.state = {
-      sortSetting: {
-        ascending: true,
-      },
-      tab: defaultTab,
+      indexSortSetting: indexSort,
+      grantSortSetting: grantSort,
+      tab: currentTab,
     };
   }
 
   onTabChange = (tab: string): void => {
-    this.setState({ tab });
+    this.setState({ ...this.state, tab });
+
+    this.updateUrlAttrFromState(
+      tab === grantsTabKey
+        ? this.state.grantSortSetting
+        : this.state.indexSortSetting,
+    );
+
     syncHistory(
       {
         tab: tab,
@@ -223,8 +258,28 @@ export class DatabaseTablePage extends React.Component<
 
   minDate = moment.utc("0001-01-01"); // minimum value as per UTC
 
-  private changeSortSetting(sortSetting: SortSetting) {
-    this.setState({ sortSetting });
+  private changeIndexSortSetting(sortSetting: SortSetting) {
+    const stateCopy = { ...this.state };
+    stateCopy.indexSortSetting = sortSetting;
+    this.setState(stateCopy);
+    this.updateUrlAttrFromState(sortSetting);
+  }
+
+  private changeGrantSortSetting(sortSetting: SortSetting) {
+    const stateCopy = { ...this.state };
+    stateCopy.grantSortSetting = sortSetting;
+    this.setState(stateCopy);
+    this.updateUrlAttrFromState(sortSetting);
+  }
+
+  private updateUrlAttrFromState(sortSetting: SortSetting) {
+    const { history } = this.props;
+    const searchParams = new URLSearchParams(history.location.search);
+
+    searchParams.set(columnTitleAttr, sortSetting.columnTitle);
+    searchParams.set(ascendingAttr, String(sortSetting.ascending));
+    history.location.search = searchParams.toString();
+    history.replace(history.location);
   }
 
   private getLastResetString() {
@@ -347,7 +402,11 @@ export class DatabaseTablePage extends React.Component<
             onChange={this.onTabChange}
             activeKey={this.state.tab}
           >
-            <TabPane tab="Overview" key="overview" className={cx("tab-pane")}>
+            <TabPane
+              tab="Overview"
+              key={indexTabKey}
+              className={cx("tab-pane")}
+            >
               <Row gutter={18}>
                 <Col className="gutter-row" span={18}>
                   <SqlBox value={this.props.details.createStatement} />
@@ -408,7 +467,7 @@ export class DatabaseTablePage extends React.Component<
                   <SummaryCard className={cx("summary-card")}>
                     {this.props.showNodeRegionsSection && (
                       <SummaryCardItem
-                        label="Regions/nodes"
+                        label="Regions/Nodes"
                         value={this.props.stats.nodesByRegionString}
                       />
                     )}
@@ -464,19 +523,19 @@ export class DatabaseTablePage extends React.Component<
                     className="index-stats-table"
                     data={this.props.indexStats.stats}
                     columns={this.indexStatsColumns}
-                    sortSetting={this.state.sortSetting}
-                    onChangeSortSetting={this.changeSortSetting.bind(this)}
+                    sortSetting={this.state.indexSortSetting}
+                    onChangeSortSetting={this.changeIndexSortSetting.bind(this)}
                     loading={this.props.indexStats.loading}
                   />
                 </SummaryCard>
               </Row>
             </TabPane>
-            <TabPane tab="Grants" key="grants" className={cx("tab-pane")}>
+            <TabPane tab="Grants" key={grantsTabKey} className={cx("tab-pane")}>
               <DatabaseTableGrantsTable
                 data={this.props.details.grants}
                 columns={this.grantsColumns}
-                sortSetting={this.state.sortSetting}
-                onChangeSortSetting={this.changeSortSetting.bind(this)}
+                sortSetting={this.state.grantSortSetting}
+                onChangeSortSetting={this.changeGrantSortSetting.bind(this)}
                 loading={this.props.details.loading}
               />
             </TabPane>
