@@ -629,12 +629,7 @@ func (r *testRunner) runWorker(
 			t.spec.Owner = oldOwner
 		} else {
 			c.setTest(t)
-			c.status("copying libraries")
-			if len(t.spec.NativeLibs) != 0 {
-				if err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs); err != nil {
-					shout(ctx, l, stdout, "Unable to put native libraries due to: %s", err)
-				}
-			}
+			err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
 
 			if err == nil {
 				// Tell the cluster that, from now on, it will be run "on behalf of this
