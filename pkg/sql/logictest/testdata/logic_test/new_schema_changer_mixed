@@ -25,6 +25,9 @@ SET use_declarative_schema_changer = unsafe_always;
 
 # Verify that DDL stmts only supported in v22.2 will cause a panic.
 statement error pq: \*tree\.AlterTable not implemented in the new schema changer
+ALTER TABLE testdb.testsc.t ADD COLUMN j INT NOT NULL DEFAULT 30;
+
+statement error pq: \*tree\.AlterTable not implemented in the new schema changer
 ALTER TABLE testdb.testsc.t DROP COLUMN j;
 
 statement error pq: \*tree\.AlterTable not implemented in the new schema changer
@@ -61,9 +64,6 @@ statement error pq: \*tree\.DropIndex not implemented in the new schema changer
 DROP INDEX testdb.testsc.t@idx
 
 # Verify that DDL stmts supported in v22.1 will succeed.
-statement ok
-ALTER TABLE testdb.testsc.t ADD COLUMN j INT NOT NULL DEFAULT 30;
-
 statement ok
 DROP TYPE testdb.testsc.typ;
 

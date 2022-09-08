@@ -537,7 +537,7 @@ func (cfg *Config) Report(ctx context.Context) {
 	} else {
 		log.Infof(ctx, "system total memory: %s", humanizeutil.IBytes(memSize))
 	}
-	log.Infof(ctx, "server configuration:\n%s", cfg)
+	log.Infof(ctx, "server configuration:\n%s", log.SafeManaged(cfg))
 }
 
 // Engines is a container of engines, allowing convenient closing.
@@ -732,7 +732,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 
 	log.Infof(ctx, "%d storage engine%s initialized",
-		len(engines), util.Pluralize(int64(len(engines))))
+		len(engines), redact.Safe(util.Pluralize(int64(len(engines)))))
 	for _, s := range details {
 		log.Infof(ctx, "%v", s)
 	}

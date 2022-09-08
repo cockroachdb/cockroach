@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // flowStreamClient is a utility interface used to mock out the RPC layer.
@@ -165,6 +166,8 @@ func (o *Outbox) Run(
 	ctx, o.span = execinfra.ProcessorSpan(ctx, "outbox")
 	if o.span != nil {
 		defer o.span.Finish()
+		o.span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(flowID.String()))
+		o.span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(streamID)))
 	}
 
 	o.runnerCtx = ctx

@@ -24,11 +24,24 @@ import (
 
 // TestAllElementsHaveDescID ensures that all element types have a DescID.
 func TestAllElementsHaveDescID(t *testing.T) {
+	forEachElementType(func(elem scpb.Element) {
+		require.Equalf(t, descpb.ID(0), GetDescID(elem), "elem %T", elem)
+	})
+}
+
+func TestAllElementsHaveMinVersion(t *testing.T) {
+	forEachElementType(func(elem scpb.Element) {
+		// If `elem` does not have a min version, the following function call will panic.
+		MinVersion(elem)
+	})
+}
+
+func forEachElementType(f func(element scpb.Element)) {
 	typ := reflect.TypeOf((*scpb.ElementProto)(nil)).Elem()
 	for i := 0; i < typ.NumField(); i++ {
-		f := typ.Field(i)
-		elem := reflect.New(f.Type.Elem()).Interface().(scpb.Element)
-		require.Equal(t, descpb.ID(0), GetDescID(elem))
+		field := typ.Field(i)
+		elem := reflect.New(field.Type.Elem()).Interface().(scpb.Element)
+		f(elem)
 	}
 }
 

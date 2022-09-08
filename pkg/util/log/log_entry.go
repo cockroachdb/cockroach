@@ -276,9 +276,9 @@ func (l *sinkInfo) getStartLines(now time.Time) []*buffer {
 	messages := make([]*buffer, 0, 6)
 	messages = append(messages,
 		makeStartLine(f, "file created at: %s", redact.Safe(now.Format("2006/01/02 15:04:05"))),
-		makeStartLine(f, "running on machine: %s", fullHostName),
+		makeStartLine(f, "running on machine: %s", SafeManaged(fullHostName)),
 		makeStartLine(f, "binary: %s", redact.Safe(build.GetInfo().Short())),
-		makeStartLine(f, "arguments: %s", os.Args),
+		makeStartLine(f, "arguments: %s", SafeManaged(os.Args)),
 	)
 
 	// Including a non-ascii character in the first 1024 bytes of the log helps

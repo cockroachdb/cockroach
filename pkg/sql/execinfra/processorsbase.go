@@ -276,11 +276,6 @@ func (h *ProcOutputHelper) ProcessRow(
 	return h.outputRow, h.rowIdx < h.maxRowIdx, nil
 }
 
-// consumerClosed stops output of additional rows from ProcessRow.
-func (h *ProcOutputHelper) consumerClosed() {
-	h.rowIdx = h.maxRowIdx
-}
-
 // Stats returns output statistics.
 func (h *ProcOutputHelper) Stats() execinfrapb.OutputStats {
 	return execinfrapb.OutputStats{
@@ -843,30 +838,16 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 //
 // so that the caller doesn't mistakenly use old ctx object.
 func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string) context.Context {
-	return pb.startImpl(ctx, true /* createSpan */, name)
-}
-
-// StartInternalNoSpan does the same as StartInternal except that it does not
-// start a span. This is used by pass-through components whose goal is to be a
-// silent translation layer for components that actually do work (e.g. a
-// planNodeToRowSource wrapping an insertNode, or a columnarizer wrapping a
-// rowexec flow).
-func (pb *ProcessorBaseNoHelper) StartInternalNoSpan(ctx context.Context) context.Context {
-	return pb.startImpl(ctx, false /* createSpan */, "")
-}
-
-func (pb *ProcessorBaseNoHelper) startImpl(
-	ctx context.Context, createSpan bool, spanName string,
-) context.Context {
 	pb.origCtx = ctx
-	if createSpan {
-		pb.Ctx, pb.span = ProcessorSpan(ctx, spanName)
+	pb.Ctx = ctx
+	noSpan := pb.FlowCtx != nil && pb.FlowCtx.Cfg != nil &&
+		pb.FlowCtx.Cfg.TestingKnobs.ProcessorNoTracingSpan
+	if !noSpan {
+		pb.Ctx, pb.span = ProcessorSpan(ctx, name)
 		if pb.span != nil && pb.span.IsVerbose() {
 			pb.span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(pb.FlowCtx.ID.String()))
 			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(pb.ProcessorID)))
 		}
-	} else {
-		pb.Ctx = ctx
 	}
 	pb.EvalCtx.Context = pb.Ctx
 	return pb.Ctx
@@ -882,31 +863,7 @@ func (pb *ProcessorBaseNoHelper) startImpl(
 //	if pb.InternalClose() {
 //	  // Perform processor specific close work.
 //	}
-func (pb *ProcessorBase) InternalClose() bool {
-	return pb.InternalCloseEx(nil /* onClose */)
-}
-
-// InternalCloseEx is like InternalClose, but also takes a closure to run in
-// case the processor was not already closed. The closure is run before the
-// processor's span is finished, so the closure can finalize work that relies on
-// that span (e.g. async work previously started by the processor that has
-// captured the processor's span).
-func (pb *ProcessorBase) InternalCloseEx(onClose func()) bool {
-	closing := pb.ProcessorBaseNoHelper.InternalCloseEx(onClose)
-	if closing {
-		// This prevents Next() from returning more rows.
-		pb.OutputHelper.consumerClosed()
-	}
-	return closing
-}
-
-// InternalClose is the meat of ProcessorBase.InternalClose.
 func (pb *ProcessorBaseNoHelper) InternalClose() bool {
-	return pb.InternalCloseEx(nil /* onClose */)
-}
-
-// InternalCloseEx is the meat of ProcessorBase.InternalCloseEx.
-func (pb *ProcessorBaseNoHelper) InternalCloseEx(onClose func()) bool {
 	// Protection around double closing is useful for allowing ConsumerClosed() to
 	// be called on processors that have already closed themselves by moving to
 	// StateTrailingMeta.
@@ -915,10 +872,6 @@ func (pb *ProcessorBaseNoHelper) InternalCloseEx(onClose func()) bool {
 	}
 	for _, input := range pb.inputsToDrain[pb.curInputToDrain:] {
 		input.ConsumerClosed()
-	}
-
-	if onClose != nil {
-		onClose()
 	}
 
 	pb.Closed = true

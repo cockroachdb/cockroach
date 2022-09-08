@@ -1499,10 +1499,6 @@ type ExecutorTestingKnobs struct {
 	// to use a transaction, and, in doing so, more deterministically allocate
 	// descriptor IDs at the cost of decreased parallelism.
 	UseTransactionalDescIDGenerator bool
-
-	// NoStatsCollectionWithVerboseTracing is used to disable the execution
-	// statistics collection in presence of the verbose tracing.
-	NoStatsCollectionWithVerboseTracing bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -2698,35 +2694,14 @@ func getMessagesForSubtrace(
 		return nil, errors.Errorf("duplicate span %d", span.SpanID)
 	}
 	var allLogs []logRecordRow
-	const spanStartMsgTemplate = "=== SPAN START: %s ==="
 
-	// spanStartMsgs are metadata about the span, e.g. the operation name and tags
-	// contained in the span. They are added as one log message.
-	spanStartMsgs := make([]string, 0)
-
-	spanStartMsgs = append(spanStartMsgs, fmt.Sprintf(spanStartMsgTemplate, span.Operation))
-
-	for _, tg := range span.TagGroups {
-		var prefix string
-		if tg.Name != tracingpb.AnonymousTagGroupName {
-			prefix = fmt.Sprintf("%s-", tg.Name)
-		}
-		for _, tag := range tg.Tags {
-			if !strings.HasPrefix(tag.Key, tracing.TagPrefix) {
-				// Not a tag to be output.
-				continue
-			}
-			spanStartMsgs = append(spanStartMsgs, fmt.Sprintf("%s%s: %s", prefix, tag.Key, tag.Value))
-		}
-	}
-
-	// This message holds all the spanStartMsgs and marks the beginning of the
-	// span, to indicate the start time and duration of the span.
+	// This message marks the beginning of the span, to indicate the start time
+	// and duration of the span.
 	allLogs = append(
 		allLogs,
 		logRecordRow{
 			timestamp: span.StartTime,
-			msg:       strings.Join(spanStartMsgs, "\n"),
+			msg:       fmt.Sprintf("=== SPAN START: %s ===", span.Operation),
 			span:      span,
 			index:     0,
 		},

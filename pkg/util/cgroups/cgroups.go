@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -433,7 +434,10 @@ func readInt64Value(
 func detectCntrlPath(cgroupFilePath string, controller string) (string, error) {
 	cgroup, err := os.Open(cgroupFilePath)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to read %s cgroup from cgroups file: %s", controller, cgroupFilePath)
+		return "", errors.Wrapf(err,
+			"failed to read %s cgroup from cgroups file: %s",
+			redact.Safe(controller),
+			log.SafeManaged(cgroupFilePath))
 	}
 	defer func() { _ = cgroup.Close() }()
 
@@ -465,7 +469,7 @@ func detectCntrlPath(cgroupFilePath string, controller string) (string, error) {
 func getCgroupDetails(mountinfoPath string, cRoot string, controller string) (string, int, error) {
 	info, err := os.Open(mountinfoPath)
 	if err != nil {
-		return "", 0, errors.Wrapf(err, "failed to read mounts info from file: %s", mountinfoPath)
+		return "", 0, errors.Wrapf(err, "failed to read mounts info from file: %s", log.SafeManaged(mountinfoPath))
 	}
 	defer func() {
 		_ = info.Close()
