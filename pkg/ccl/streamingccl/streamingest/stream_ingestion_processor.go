@@ -332,7 +332,10 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 // startPartitions initializes the event-related properties of the ingestion
 // processor and spins up goroutines to connect to and read in events from each
-// producer partition and forward them to sip.eventCh
+// producer partition and forward them to sip.eventCh.
+// When errors are encountered from the subscription to any partition, all
+// partitions are retried together as the shared batcher must be flushed prior
+// to repeating any events.
 func (sip *streamIngestionProcessor) startPartitions(ctx context.Context) {
 	// Initialize the event streams.
 	merged := make(chan partitionEvent)
