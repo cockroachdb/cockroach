@@ -112,8 +112,8 @@ func TestMVCCGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 		now := initialNow.Add(timePassed.Nanoseconds(), 0)
 		r := makeMVCCGCQueueScoreImpl(
 			ctx, int64(seed), now, ms, time.Duration(ttlSec)*time.Second, hlc.Timestamp{},
-			true,      /* canAdvanceGCThreshold */
-			time.Hour, /* txnCleanupThreshold */
+			true,                        /* canAdvanceGCThreshold */
+			roachpb.GCHint{}, time.Hour, /* txnCleanupThreshold */
 		)
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
@@ -137,7 +137,7 @@ func TestMVCCGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 			ValBytes:          int64(valBytes),
 			KeyBytes:          int64(keyBytes),
 		}, 60*time.Second, hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
-			time.Hour, /* txnCleanupThreshold */
+			roachpb.GCHint{}, time.Hour, /* txnCleanupThreshold */
 		)
 		return r.DeadFraction >= 0 && r.DeadFraction <= 1
 	}, &quick.Config{MaxCount: 1000}); err != nil {
@@ -162,7 +162,9 @@ func TestMVCCGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, 10000*time.Second,
-			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
+			hlc.Timestamp{},
+			true, /* canAdvanceGCThreshold */
+			roachpb.GCHint{},
 			time.Hour, /* txnCleanupThreshold */
 		)
 		require.True(t, r.ShouldQueue)
@@ -178,7 +180,9 @@ func TestMVCCGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, 10000*time.Second,
-			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
+			hlc.Timestamp{},
+			true, /* canAdvanceGCThreshold */
+			roachpb.GCHint{},
 			time.Hour, /* txnCleanupThreshold */
 		)
 		require.True(t, r.ShouldQueue)
@@ -190,7 +194,9 @@ func TestMVCCGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 		r := makeMVCCGCQueueScoreImpl(context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration},
 			ms, 10000*time.Second,
-			hlc.Timestamp{WallTime: expiration - 100}, true, /* canAdvanceGCThreshold */
+			hlc.Timestamp{WallTime: expiration - 100},
+			true, /* canAdvanceGCThreshold */
+			roachpb.GCHint{},
 			time.Hour, /* txnCleanupThreshold */
 		)
 		require.False(t, r.ShouldQueue)
@@ -232,7 +238,7 @@ func TestMVCCGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 
 			r := makeMVCCGCQueueScoreImpl(
 				ctx, seed, now, ms, gcTTL, tc.lastGC, true, /* canAdvanceGCThreshold */
-				time.Hour, /* txnCleanupThreshold */
+				roachpb.GCHint{}, time.Hour, /* txnCleanupThreshold */
 			)
 			require.Equal(t, tc.expectGC, r.ShouldQueue)
 		})
@@ -354,7 +360,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
 	r := makeMVCCGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl,
 		hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
-		time.Hour, /* txnCleanupThreshold */
+		roachpb.GCHint{}, time.Hour, /* txnCleanupThreshold */
 	)
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
 		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
@@ -519,7 +525,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 	shouldQueueAfter := func(ms enginepb.MVCCStats, delay time.Duration, gcTTL time.Duration) bool {
 		now := deletionTime.Add(delay.Nanoseconds(), 0)
 		r := makeMVCCGCQueueScoreImpl(ctx, 0 /* seed */, now, ms, gcTTL, hlc.Timestamp{}, true,
-			time.Hour)
+			roachpb.GCHint{}, time.Hour)
 		return r.ShouldQueue
 	}
 
@@ -553,6 +559,80 @@ func withBatch(eng storage.Engine, fn func(b storage.Batch)) {
 	b := eng.NewBatch()
 	defer b.Close()
 	fn(b)
+}
+
+func TestGCScoreWithHint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	now := hlc.Timestamp{WallTime: time.Hour.Nanoseconds()}
+	ttl := time.Minute
+
+	for _, d := range []struct {
+		name string
+
+		rangeKeys int
+		liveData  int
+		garbage   int
+		estimates int
+		hintTs    hlc.Timestamp
+
+		shouldGC bool
+		priority float64
+	}{
+		{
+			name:      "hint_not_reached",
+			liveData:  0,
+			garbage:   1000,
+			rangeKeys: 1,
+			hintTs:    now.Add(-ttl.Nanoseconds()+1000, 0),
+			shouldGC:  true,
+			priority:  60.441670451764324,
+		},
+		{
+			name:      "hint_reached",
+			liveData:  0,
+			garbage:   100,
+			rangeKeys: 1,
+			hintTs:    now.Add(-ttl.Nanoseconds()-1, 0),
+			shouldGC:  true,
+			priority:  deleteRangePriority,
+		},
+		{
+			name:      "hint_with_estimates",
+			estimates: 1,
+			hintTs:    now.Add(-ttl.Nanoseconds()-1, 0),
+			shouldGC:  true,
+			priority:  deleteRangePriority,
+		},
+		{
+			name:     "hint_with_live_data",
+			liveData: 1000,
+			garbage:  10,
+			hintTs:   now.Add(-ttl.Nanoseconds()-1, 0),
+			shouldGC: false,
+		},
+	} {
+		t.Run(d.name, func(t *testing.T) {
+			ms := enginepb.MVCCStats{
+				KeyCount:          int64(d.liveData + d.garbage),
+				KeyBytes:          int64((d.liveData + d.garbage) * 10),
+				RangeKeyCount:     int64(d.rangeKeys),
+				RangeKeyBytes:     int64(d.rangeKeys * 20),
+				LiveCount:         int64(d.liveData),
+				LiveBytes:         int64(d.liveData * 10),
+				ContainsEstimates: int64(d.estimates),
+				GCBytesAge:        int64((d.garbage + d.rangeKeys*2) * 10 * 100),
+			}
+			score := makeMVCCGCQueueScoreImpl(ctx, 1, now, ms, time.Minute, hlc.Timestamp{}, true,
+				roachpb.GCHint{LatestRangeDeleteTimestamp: d.hintTs}, time.Hour)
+			require.Equal(t, d.shouldGC, score.ShouldQueue)
+			if d.shouldGC {
+				require.Equal(t, d.priority, score.FinalScore)
+			}
+		})
+	}
 }
 
 // TestMVCCGCQueueProcess creates test data in the range over various time
@@ -1363,4 +1443,77 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	if a, e := atomic.LoadInt32(&gcRequests), int32(6); a != e {
 		t.Errorf("expected %d gc requests; got %d", e, a)
 	}
+}
+
+func TestMVCCGCQueueGroupsRangeDeletions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	key := func(k string) roachpb.RKey {
+		return testutils.MakeKey(keys.ScratchRangeMin, []byte(k))
+	}
+
+	var leaseError = true
+
+	// Create store and prepare by removing default range.
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClock(clock, time.Nanosecond) /* maxOffset */)
+	cfg.TestingKnobs.MVCCGCQueueLeaseCheckInterceptor = func(ctx context.Context, replica *Replica, now hlc.ClockTimestamp,
+	) bool {
+		return leaseError
+	}
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: false}, &cfg)
+	r, err := store.GetReplica(roachpb.RangeID(1))
+	require.NoError(t, err)
+	require.NoError(t, store.RemoveReplica(ctx, r, r.Desc().NextReplicaID, RemoveOptions{DestroyData: true}))
+	// Add replica without hint.
+	r1 := createReplica(store, roachpb.RangeID(100), key("a"), key("b"))
+	require.NoError(t, store.AddReplica(r1))
+	// Add replica with hint and GC ttl.
+	r2 := createReplica(store, roachpb.RangeID(101), key("b"), key("c"))
+	require.NoError(t, store.AddReplica(r2))
+	r2.RaftStatus()
+	r2.handleGCHintResult(ctx, &roachpb.GCHint{LatestRangeDeleteTimestamp: hlc.Timestamp{WallTime: 1}})
+	r2.SetSpanConfig(roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{TTLSeconds: 100}})
+
+	gcQueue := newMVCCGCQueue(store)
+
+	// Check that low priority replicas doesn't cause hint scan.
+	gcQueue.postProcessScheduled(ctx, r1, 1)
+	qr, _ := gcQueue.pop()
+	require.Nil(t, qr, "unexpected enqueued replica")
+
+	// Check that high priority replica is not added if GC hint time didn't exceed
+	// ttl.
+	gcQueue.postProcessScheduled(ctx, r1, deleteRangePriority)
+	qr, _ = gcQueue.pop()
+	require.Nil(t, qr, "unexpected enqueued replica")
+
+	// Check that replica is not queued if sequence of hi-pri replicas are being
+	// processed.
+	clock.Advance(200 * time.Second)
+	gcQueue.postProcessScheduled(ctx, r1, deleteRangePriority)
+	qr, _ = gcQueue.pop()
+	require.Nil(t, qr, "unexpected enqueued replica")
+
+	// Reset sequence by running a lo pri replica.
+	gcQueue.postProcessScheduled(ctx, r1, 1)
+	qr, _ = gcQueue.pop()
+	require.Nil(t, qr, "unexpected enqueued replica")
+
+	// Check that replica is processed when hint criteria is met.
+	gcQueue.postProcessScheduled(ctx, r1, deleteRangePriority)
+	qr, prio := gcQueue.pop()
+	require.NotNil(t, qr, "unexpected nil replica")
+	require.Equal(t, deleteRangePriority, prio, "expected high priority")
+
+	// Check that non leaseholder replicas are ignored.
+	leaseError = false
+	gcQueue.postProcessScheduled(ctx, r1, deleteRangePriority)
+	qr, _ = gcQueue.pop()
+	require.Nil(t, qr, "unexpected nil replica")
 }

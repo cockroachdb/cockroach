@@ -1274,7 +1274,7 @@ func mergeTrigger(
 		if err != nil {
 			return result.Result{}, err
 		}
-		if lhsHint.Merge(rhsHint) {
+		if lhsHint.Merge(rhsHint, rec.GetMVCCStats().HasNoUserData(), merge.RightMVCCStats.HasNoUserData()) {
 			updated, err := lhsLoader.SetGCHint(ctx, batch, ms, lhsHint, merge.WriteGCHint)
 			if err != nil {
 				return result.Result{}, err

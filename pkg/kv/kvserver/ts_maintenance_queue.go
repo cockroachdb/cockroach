@@ -84,6 +84,8 @@ type timeSeriesMaintenanceQueue struct {
 	mem            *mon.BytesMonitor
 }
 
+var _ queueImpl = &timeSeriesMaintenanceQueue{}
+
 // newTimeSeriesMaintenanceQueue returns a new instance of
 // timeSeriesMaintenanceQueue.
 func newTimeSeriesMaintenanceQueue(
@@ -159,6 +161,11 @@ func (q *timeSeriesMaintenanceQueue) process(
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 	return true, nil
+}
+
+func (*timeSeriesMaintenanceQueue) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
 }
 
 func (q *timeSeriesMaintenanceQueue) timer(duration time.Duration) time.Duration {

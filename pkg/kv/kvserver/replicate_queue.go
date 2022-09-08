@@ -524,6 +524,8 @@ type replicateQueue struct {
 	logTracesThresholdFunc queueProcessTimeoutFunc
 }
 
+var _ queueImpl = &replicateQueue{}
+
 // newReplicateQueue returns a new instance of replicateQueue.
 func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replicateQueue {
 	rq := &replicateQueue{
@@ -1933,6 +1935,11 @@ func (rq *replicateQueue) canTransferLeaseFrom(ctx context.Context, repl *Replic
 		return timeutil.Since(lastLeaseTransfer.(time.Time)) > minInterval
 	}
 	return true
+}
+
+func (*replicateQueue) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
 }
 
 func (*replicateQueue) timer(_ time.Duration) time.Duration {
