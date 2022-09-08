@@ -75,12 +75,23 @@ var (
 
 	// PrettyPrintKey prints a key in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
-	// package circle import.
+	// circular package import dependencies (see keys.PrettyPrint for
+	// implementation).
 	// valDirs correspond to the encoding direction of each encoded value
 	// in the key (if known). If left unspecified, the default encoding
 	// direction for each value type is used (see
 	// encoding.go:prettyPrintFirstValue).
+	// See SafeFormatKey for a redaction-safe implementation.
 	PrettyPrintKey func(valDirs []encoding.Direction, key Key) string
+
+	// SafeFormatKey is the generalized redaction function used to redact pretty
+	// printed keys. It's implemented in git.com/cockroachdb/cockroach/keys to
+	// avoid circular package import dependencies (see keys.SafeFormat for
+	// implementation).
+	// valDirs correspond to the encoding direction of each encoded value
+	// in the key (if known). If left unspecified, the default encoding
+	// direction for each value type is used (see encoding.go:prettyPrintFirstValue).
+	SafeFormatKey func(w redact.SafeWriter, valDirs []encoding.Direction, key Key)
 
 	// PrettyPrintRange prints a key range in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
@@ -133,13 +144,18 @@ func (rk RKey) PrefixEnd() RKey {
 	return RKey(keysbase.PrefixEnd(rk))
 }
 
+// SafeFormat - see Key.SafeFormat.
+func (rk RKey) SafeFormat(w redact.SafePrinter, r rune) {
+	rk.AsRawKey().SafeFormat(w, r)
+}
+
 func (rk RKey) String() string {
 	return Key(rk).String()
 }
 
-// StringWithDirs - see Key.String.WithDirs.
-func (rk RKey) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
-	return Key(rk).StringWithDirs(valDirs, maxLen)
+// StringWithDirs - see Key.StringWithDirs.
+func (rk RKey) StringWithDirs(valDirs []encoding.Direction) string {
+	return Key(rk).StringWithDirs(valDirs)
 }
 
 // Key is a custom type for a byte string in proto
@@ -202,31 +218,31 @@ func (k Key) Compare(b Key) int {
 	return bytes.Compare(k, b)
 }
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (k Key) SafeFormat(w redact.SafePrinter, _ rune) {
+	SafeFormatKey(w, nil /* valDirs */, k)
+}
+
 // String returns a string-formatted version of the key.
 func (k Key) String() string {
-	return k.StringWithDirs(nil /* valDirs */, 0 /* maxLen */)
+	return redact.StringWithoutMarkers(k)
 }
 
 // StringWithDirs is the value encoding direction-aware version of String.
 //
 // Args:
-// valDirs: The direction for the key's components, generally needed for correct
 //
-//	decoding. If nil, the values are pretty-printed with default encoding
-//	direction.
-//
-// maxLen: If not 0, only the first maxLen chars from the decoded key are
+//	valDirs: The direction for the key's components, generally needed for
+//	correct decoding. If nil, the values are pretty-printed with default
+//	encoding direction.
 //
 //	returned, plus a "..." suffix.
-func (k Key) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
+func (k Key) StringWithDirs(valDirs []encoding.Direction) string {
 	var s string
 	if PrettyPrintKey != nil {
 		s = PrettyPrintKey(valDirs, k)
 	} else {
 		s = fmt.Sprintf("%q", []byte(k))
-	}
-	if maxLen != 0 && len(s) > maxLen {
-		return s[0:maxLen] + "..."
 	}
 	return s
 }

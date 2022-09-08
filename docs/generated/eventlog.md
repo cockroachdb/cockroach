@@ -2607,6 +2607,12 @@ contains common SQL event/execution details.
 | `ZigZagJoinCount` | The number of zig zag joins in the query plan. | no |
 | `ContentionNanos` | The duration of time in nanoseconds that the query experienced contention. | no |
 | `Regions` | The regions of the nodes where SQL processors ran. | no |
+| `NetworkBytesSent` | The number of network bytes sent by nodes for this query. | no |
+| `MaxMemUsage` | The maximum amount of memory usage by nodes for this query. | no |
+| `MaxDiskUsage` | The maximum amount of disk usage by nodes for this query. | no |
+| `KVBytesRead` | The number of bytes read at the KV layer for this query. | no |
+| `KVRowsRead` | The number of rows read at the KV layer for this query. | no |
+| `NetworkMessages` | The number of network messages sent by nodes for this query. | no |
 
 
 #### Common fields

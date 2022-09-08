@@ -3904,6 +3904,60 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, ']')
 	}
 
+	if m.NetworkBytesSent != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NetworkBytesSent\":"...)
+		b = strconv.AppendInt(b, int64(m.NetworkBytesSent), 10)
+	}
+
+	if m.MaxMemUsage != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MaxMemUsage\":"...)
+		b = strconv.AppendInt(b, int64(m.MaxMemUsage), 10)
+	}
+
+	if m.MaxDiskUsage != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MaxDiskUsage\":"...)
+		b = strconv.AppendInt(b, int64(m.MaxDiskUsage), 10)
+	}
+
+	if m.KVBytesRead != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KVBytesRead\":"...)
+		b = strconv.AppendInt(b, int64(m.KVBytesRead), 10)
+	}
+
+	if m.KVRowsRead != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KVRowsRead\":"...)
+		b = strconv.AppendInt(b, int64(m.KVRowsRead), 10)
+	}
+
+	if m.NetworkMessages != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NetworkMessages\":"...)
+		b = strconv.AppendInt(b, int64(m.NetworkMessages), 10)
+	}
+
 	return printComma, b
 }
 
