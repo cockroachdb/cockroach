@@ -1908,3 +1908,33 @@ func TestRebalancingSnapshotMetrics(t *testing.T) {
 	require.Equal(t, receiverTotalExpected, receiverTotalDelta)
 	require.Equal(t, receiverMapExpected, receiverMapDelta)
 }
+
+func TestReplicateQueueWithoutRaftQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	// Disable the raft snapshot queue to make sure we don't require a raft snapshot.
+	tc := testcluster.StartTestCluster(
+		t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{DisableRaftSnapshotQueue: true, DisableRaftLogQueue: true}},
+			},
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a scratch range, copy it to n3.
+	key := tc.ScratchRange(t)
+	desc, err := tc.AddVoters(key, tc.Target(2))
+	require.NoError(t, err)
+	leaseholderStore := tc.GetFirstStoreFromServer(t, 0)
+	leaseholderRepl := leaseholderStore.GetReplicaIfExists(desc.RangeID)
+	require.NotNil(t, leaseholderRepl)
+
+	// The  replicate queue doesn't like an even number of voters, so it will send
+	// a snapshot to n2.
+	_, pErr, err := leaseholderStore.Enqueue(ctx, "replicate", leaseholderRepl, false, false)
+	require.NoError(t, pErr)
+	require.NoError(t, err)
+}
