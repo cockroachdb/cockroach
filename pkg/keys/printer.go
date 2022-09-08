@@ -21,11 +21,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // PrettyPrintTimeseriesKey is a hook for pretty printing a timeseries key. The
 // timeseries key prefix will already have been stripped off.
 var PrettyPrintTimeseriesKey func(key roachpb.Key) string
+
+// QuoteOpt is a flag option used when pretty-printing keys to indicate whether
+// to quote raw key values.
+type QuoteOpt bool
+
+const (
+	// QuoteRaw is the QuoteOpt used to indicate that we should use quotes when
+	// printing raw keys.
+	QuoteRaw QuoteOpt = true
+	// DontQuoteRaw is the QuoteOpt used to indicate that we shouldn't use quotes
+	// when printing raw keys.
+	DontQuoteRaw QuoteOpt = false
+)
 
 // DictEntry contains info on pretty-printing and pretty-scanning keys in a
 // region of the key space.
@@ -34,6 +48,8 @@ type DictEntry struct {
 	prefix roachpb.Key
 	// print the key's pretty value, key has been removed prefix data
 	ppFunc func(valDirs []encoding.Direction, key roachpb.Key) string
+	// safe format the key's pretty value into a RedactableString
+	sfFunc func(valDirs []encoding.Direction, key roachpb.Key) redact.RedactableString
 	// PSFunc parses the relevant prefix of the input into a roachpb.Key,
 	// returning the remainder and the key corresponding to the consumed prefix of
 	// 'input'. Allowed to panic on errors.
@@ -56,9 +72,14 @@ type KeyComprehensionTable []struct {
 	Entries []DictEntry
 }
 
+// KeyDict drives the pretty-printing and pretty-scanning of the key space.
+// This is initialized in init().
+var KeyDict KeyComprehensionTable
+
 var (
-	// ConstKeyDict translates some pretty-printed keys.
-	ConstKeyDict = []struct {
+	// ConstKeyOverrides provides overrides that define how to translate specific
+	// pretty-printed keys.
+	ConstKeyOverrides = []struct {
 		Name  string
 		Value roachpb.Key
 	}{
@@ -66,82 +87,6 @@ var (
 		{"/Min", MinKey},
 		{"/Meta1/Max", Meta1KeyMax},
 		{"/Meta2/Max", Meta2KeyMax},
-	}
-
-	// KeyDict drives the pretty-printing and pretty-scanning of the key space.
-	KeyDict = KeyComprehensionTable{
-		{Name: "/Local", start: LocalPrefix, end: LocalMax, Entries: []DictEntry{
-			{Name: "/Store", prefix: roachpb.Key(LocalStorePrefix),
-				ppFunc: localStoreKeyPrint, PSFunc: localStoreKeyParse},
-			{Name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix),
-				ppFunc: localRangeIDKeyPrint, PSFunc: localRangeIDKeyParse},
-			{Name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint,
-				PSFunc: parseUnsupported},
-			{Name: "/Lock", prefix: LocalRangeLockTablePrefix, ppFunc: localRangeLockTablePrint,
-				PSFunc: parseUnsupported},
-		}},
-		{Name: "/Meta1", start: Meta1Prefix, end: Meta1KeyMax, Entries: []DictEntry{
-			{Name: "", prefix: Meta1Prefix, ppFunc: print,
-				PSFunc: func(input string) (string, roachpb.Key) {
-					input = mustShiftSlash(input)
-					unq, err := strconv.Unquote(input)
-					if err != nil {
-						panic(err)
-					}
-					if len(unq) == 0 {
-						return "", Meta1Prefix
-					}
-					return "", RangeMetaKey(RangeMetaKey(MustAddr(
-						roachpb.Key(unq)))).AsRawKey()
-				},
-			}},
-		},
-		{Name: "/Meta2", start: Meta2Prefix, end: Meta2KeyMax, Entries: []DictEntry{
-			{Name: "", prefix: Meta2Prefix, ppFunc: print,
-				PSFunc: func(input string) (string, roachpb.Key) {
-					input = mustShiftSlash(input)
-					unq, err := strconv.Unquote(input)
-					if err != nil {
-						panic(&ErrUglifyUnsupported{err})
-					}
-					if len(unq) == 0 {
-						return "", Meta2Prefix
-					}
-					return "", RangeMetaKey(MustAddr(roachpb.Key(unq))).AsRawKey()
-				},
-			}},
-		},
-		{Name: "/System", start: SystemPrefix, end: SystemMax, Entries: []DictEntry{
-			{Name: "/NodeLiveness", prefix: NodeLivenessPrefix,
-				ppFunc: decodeKeyPrint,
-				PSFunc: parseUnsupported,
-			},
-			{Name: "/NodeLivenessMax", prefix: NodeLivenessKeyMax,
-				ppFunc: decodeKeyPrint,
-				PSFunc: parseUnsupported,
-			},
-			{Name: "/StatusNode", prefix: StatusNodePrefix,
-				ppFunc: decodeKeyPrint,
-				PSFunc: parseUnsupported,
-			},
-			{Name: "/tsd", prefix: TimeseriesPrefix,
-				ppFunc: timeseriesKeyPrint,
-				PSFunc: parseUnsupported,
-			},
-			{Name: "/SystemSpanConfigKeys", prefix: SystemSpanConfigPrefix,
-				ppFunc: decodeKeyPrint,
-				PSFunc: parseUnsupported,
-			},
-		}},
-		{Name: "/NamespaceTable", start: NamespaceTableMin, end: NamespaceTableMax, Entries: []DictEntry{
-			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported},
-		}},
-		{Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
-			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse},
-		}},
-		{Name: "/Tenant", start: TenantTableDataMin, end: TenantTableDataMax, Entries: []DictEntry{
-			{Name: "", prefix: nil, ppFunc: tenantKeyPrint, PSFunc: tenantKeyParse},
-		}},
 	}
 
 	// keyofKeyDict means the key of suffix which is itself a key,
@@ -541,7 +486,9 @@ func localRangeKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 
 // lockTablePrintLockedKey is initialized to prettyPrintInternal in init() to break an
 // initialization loop.
-var lockTablePrintLockedKey func(valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys bool) string
+var lockTablePrintLockedKey func(
+	valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys QuoteOpt, skipOverrides bool,
+) string
 
 func localRangeLockTablePrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	var buf bytes.Buffer
@@ -556,7 +503,7 @@ func localRangeLockTablePrint(valDirs []encoding.Direction, key roachpb.Key) str
 		fmt.Fprintf(&buf, "/\"%x\"", key)
 		return buf.String()
 	}
-	buf.WriteString(lockTablePrintLockedKey(valDirs, lockedKey, true))
+	buf.WriteString(lockTablePrintLockedKey(valDirs, lockedKey, QuoteRaw, false /*skipOverrides*/))
 	return buf.String()
 }
 
@@ -618,7 +565,7 @@ func tenantKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 	if len(key) == 0 {
 		return fmt.Sprintf("/%s", tID)
 	}
-	return fmt.Sprintf("/%s%s", tID, key.StringWithDirs(valDirs, 0))
+	return fmt.Sprintf("/%s%s", tID, key.StringWithDirs(valDirs))
 }
 
 // prettyPrintInternal parse key with prefix in KeyDict.
@@ -628,10 +575,22 @@ func tenantKeyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 // type is used (see encoding.go:prettyPrintFirstValue).
 // If the key doesn't match any prefix in KeyDict, return its byte value with
 // quotation and false, or else return its human readable value and true.
-func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys bool) string {
-	for _, k := range ConstKeyDict {
-		if key.Equal(k.Value) {
-			return k.Name
+//
+// skipOverrides provides a way to skip the usage of ConstKeyOverrides. This is
+// configurable to enable recursive printing of keys (e.g. from SafeFormat) a way
+// to avoid treating the remainder as a potential match for the overrides in
+// ConstKeyOverrides, which in general, should not apply to the remainder of any key.
+// For example: The key `/Meta1/""` would have `/Meta1` trimmed from the key, and
+// prettyPrintInternal may be called to print the remainder of `""`. This would
+// incorrectly be interpreted as `/Min` if we didn't skip the usage of ConstKeyOverrides.
+func prettyPrintInternal(
+	valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys QuoteOpt, skipOverrides bool,
+) string {
+	if !skipOverrides {
+		for _, k := range ConstKeyOverrides {
+			if key.Equal(k.Value) {
+				return k.Name
+			}
 		}
 	}
 
@@ -702,14 +661,210 @@ func prettyPrintInternal(valDirs []encoding.Direction, key roachpb.Key, quoteRaw
 // type is used (see encoding.go:prettyPrintFirstValue).
 //
 // See keysutil.UglyPrint() for an inverse.
+//
+// See SafeFormat for a redaction-safe implementation.
 func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
-	return prettyPrintInternal(valDirs, key, true /* quoteRawKeys */)
+	return prettyPrintInternal(valDirs, key, QuoteRaw, false /*skipOverrides*/)
+}
+
+// formatTableKey formats the given key in the system tenant table keyspace & redacts any
+// sensitive information from the result. Sensitive information is considered any value other
+// than the table ID or index ID (e.g. any index-key/value-literal).
+//
+// NB: It's the responsibility of the caller to prefix the printed key values with the relevant
+// keyspace identifier (e.g. `/Table`).
+//
+// For example:
+//   - `/42/‹"index key"›`
+//   - `/42/122/‹"index key"›`
+//   - `/42/122/‹"index key"›/‹"some value"›`
+//   - `/42/122/‹"index key"›/‹"some value"›/‹"some other value"›`
+func formatTableKey(valDirs []encoding.Direction, key roachpb.Key) redact.RedactableString {
+	buf := redact.StringBuilder{}
+	vals, types := encoding.PrettyPrintValuesWithTypes(valDirs, key)
+	prefixLength := 1
+
+	if len(vals) > 0 && types[0] != encoding.Int {
+		buf.Printf("/err:ExpectedTableID-FoundType%v", redact.Safe(types[0]))
+		return buf.RedactableString()
+	}
+
+	// Accommodate cases where the table key contains a primary index field in
+	// the prefix. ex: `/<table id>/<index id>`
+	if len(vals) > 1 && types[1] == encoding.Int {
+		prefixLength++
+	}
+
+	for i := 0; i < prefixLength; i++ {
+		buf.Printf("/%v", redact.Safe(vals[i]))
+	}
+	for _, val := range vals[prefixLength:] {
+		buf.Printf("/%s", val)
+	}
+	return buf.RedactableString()
+}
+
+// formatTenantKey formats the given key for a tenant table & redacts any sensitive information
+// from the result. Sensitive information is considered any value other than the TenantID,
+// table ID, or index ID (e.g. any index-key/value-literal).
+//
+// NB: It's the responsibility of the caller to prefix the printed key values with the relevant
+// keyspace identifier (e.g. `/Tenant`).
+//
+// For example:
+//   - `/5/Table/42/‹"index key"›`
+//   - `/5/Table/42/122/‹"index key"›`
+func formatTenantKey(valDirs []encoding.Direction, key roachpb.Key) redact.RedactableString {
+	buf := redact.StringBuilder{}
+	key, tID, err := DecodeTenantPrefix(key)
+	if err != nil {
+		buf.Printf("/err:%v", err)
+		return buf.RedactableString()
+	}
+
+	buf.Printf("/%s", tID)
+	if len(key) != 0 {
+		buf.Print(safeFormatInternal(valDirs, key))
+	}
+	return buf.RedactableString()
+}
+
+// SafeFormat is the generalized redaction function used to redact pretty-printed keys.
+func SafeFormat(w redact.SafeWriter, valDirs []encoding.Direction, key roachpb.Key) {
+	w.Print(safeFormatInternal(valDirs, key))
+}
+
+func safeFormatInternal(valDirs []encoding.Direction, key roachpb.Key) redact.RedactableString {
+	for _, k := range ConstKeyOverrides {
+		if key.Equal(k.Value) {
+			return redact.Sprint(redact.Safe(k.Name))
+		}
+	}
+
+	helper := func(key roachpb.Key, isRemainder bool) redact.RedactableString {
+		var b redact.StringBuilder
+		for _, k := range KeyDict {
+			if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
+				if k.end != nil && k.end.Compare(key) == 0 {
+					b.Print(redact.Safe(k.Name))
+					b.Print(redact.Safe("/Max"))
+					return b.RedactableString()
+				}
+
+				for _, e := range k.Entries {
+					if bytes.HasPrefix(key, e.prefix) && e.sfFunc != nil {
+						b.Print(redact.Safe(k.Name))
+						key = key[len(e.prefix):]
+						b.Print(redact.Safe(e.Name))
+						b.Print(e.sfFunc(valDirs, key))
+						return b.RedactableString()
+					}
+				}
+			}
+		}
+		// If we reach this point, the key is not recognized based on KeyDict, or no `sfFunc`
+		// is defined for the keyspace. Therefore, we fall back to the standard pretty print
+		// functionality and avoid marking safe from a redaction perspective.
+		// NB: This will lead to the entirety of the pretty-printed key to be redactable, e.g:
+		//		Unredacted: `‹/SomeKeyspace/42›`
+		//		Redacted:   `‹x›`
+		return redact.Sprint(prettyPrintInternal(valDirs, key, QuoteRaw, isRemainder /*skipOverrides*/))
+	}
+
+	for _, k := range keyOfKeyDict {
+		if bytes.HasPrefix(key, k.prefix) {
+			key = key[len(k.prefix):]
+			str := helper(key, true /* isRemainder */)
+			if len(str) > 0 && strings.Index(str.StripMarkers(), "/") != 0 {
+				return redact.Sprintf("%v/%v", redact.Sprint(k.name), str)
+			}
+			return redact.Sprintf("%v%v", redact.Sprint(k.name), str)
+		}
+	}
+	return helper(key, false /* isRemainder */)
 }
 
 func init() {
 	roachpb.PrettyPrintKey = PrettyPrint
+	roachpb.SafeFormatKey = SafeFormat
 	roachpb.PrettyPrintRange = PrettyPrintRange
 	lockTablePrintLockedKey = prettyPrintInternal
+
+	// KeyDict drives the pretty-printing and pretty-scanning of the key space.
+	KeyDict = KeyComprehensionTable{
+		{Name: "/Local", start: LocalPrefix, end: LocalMax, Entries: []DictEntry{
+			{Name: "/Store", prefix: roachpb.Key(LocalStorePrefix),
+				ppFunc: localStoreKeyPrint, PSFunc: localStoreKeyParse},
+			{Name: "/RangeID", prefix: roachpb.Key(LocalRangeIDPrefix),
+				ppFunc: localRangeIDKeyPrint, PSFunc: localRangeIDKeyParse},
+			{Name: "/Range", prefix: LocalRangePrefix, ppFunc: localRangeKeyPrint,
+				PSFunc: parseUnsupported},
+			{Name: "/Lock", prefix: LocalRangeLockTablePrefix, ppFunc: localRangeLockTablePrint,
+				PSFunc: parseUnsupported},
+		}},
+		{Name: "/Meta1", start: Meta1Prefix, end: Meta1KeyMax, Entries: []DictEntry{
+			{Name: "", prefix: Meta1Prefix, ppFunc: print,
+				PSFunc: func(input string) (string, roachpb.Key) {
+					input = mustShiftSlash(input)
+					unq, err := strconv.Unquote(input)
+					if err != nil {
+						panic(err)
+					}
+					if len(unq) == 0 {
+						return "", Meta1Prefix
+					}
+					return "", RangeMetaKey(RangeMetaKey(MustAddr(
+						roachpb.Key(unq)))).AsRawKey()
+				},
+			}},
+		},
+		{Name: "/Meta2", start: Meta2Prefix, end: Meta2KeyMax, Entries: []DictEntry{
+			{Name: "", prefix: Meta2Prefix, ppFunc: print,
+				PSFunc: func(input string) (string, roachpb.Key) {
+					input = mustShiftSlash(input)
+					unq, err := strconv.Unquote(input)
+					if err != nil {
+						panic(&ErrUglifyUnsupported{err})
+					}
+					if len(unq) == 0 {
+						return "", Meta2Prefix
+					}
+					return "", RangeMetaKey(MustAddr(roachpb.Key(unq))).AsRawKey()
+				},
+			}},
+		},
+		{Name: "/System", start: SystemPrefix, end: SystemMax, Entries: []DictEntry{
+			{Name: "/NodeLiveness", prefix: NodeLivenessPrefix,
+				ppFunc: decodeKeyPrint,
+				PSFunc: parseUnsupported,
+			},
+			{Name: "/NodeLivenessMax", prefix: NodeLivenessKeyMax,
+				ppFunc: decodeKeyPrint,
+				PSFunc: parseUnsupported,
+			},
+			{Name: "/StatusNode", prefix: StatusNodePrefix,
+				ppFunc: decodeKeyPrint,
+				PSFunc: parseUnsupported,
+			},
+			{Name: "/tsd", prefix: TimeseriesPrefix,
+				ppFunc: timeseriesKeyPrint,
+				PSFunc: parseUnsupported,
+			},
+			{Name: "/SystemSpanConfigKeys", prefix: SystemSpanConfigPrefix,
+				ppFunc: decodeKeyPrint,
+				PSFunc: parseUnsupported,
+			},
+		}},
+		{Name: "/NamespaceTable", start: NamespaceTableMin, end: NamespaceTableMax, Entries: []DictEntry{
+			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported},
+		}},
+		{Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
+			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse, sfFunc: formatTableKey},
+		}},
+		{Name: "/Tenant", start: TenantTableDataMin, end: TenantTableDataMax, Entries: []DictEntry{
+			{Name: "", prefix: nil, ppFunc: tenantKeyPrint, PSFunc: tenantKeyParse, sfFunc: formatTenantKey},
+		}},
+	}
 }
 
 // PrettyPrintRange pretty prints a compact representation of a key range. The
@@ -728,7 +883,7 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 	if maxChars < 8 {
 		maxChars = 8
 	}
-	prettyStart := prettyPrintInternal(nil /* valDirs */, start, false /* quoteRawKeys */)
+	prettyStart := prettyPrintInternal(nil /* valDirs */, start, DontQuoteRaw, false /*skipOverrides*/)
 	if len(end) == 0 {
 		if len(prettyStart) <= maxChars {
 			return prettyStart
@@ -737,7 +892,7 @@ func PrettyPrintRange(start, end roachpb.Key, maxChars int) string {
 		b.WriteRune('…')
 		return b.String()
 	}
-	prettyEnd := prettyPrintInternal(nil /* valDirs */, end, false /* quoteRawKeys */)
+	prettyEnd := prettyPrintInternal(nil /* valDirs */, end, DontQuoteRaw, false /*skipOverrides*/)
 	i := 0
 	// Find the common prefix.
 	for ; i < len(prettyStart) && i < len(prettyEnd) && prettyStart[i] == prettyEnd[i]; i++ {

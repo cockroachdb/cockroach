@@ -331,7 +331,7 @@ func (w *schemaChangeWorker) getErrorState() string {
 }
 
 func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
-	w.logger.startLog()
+	w.logger.startLog(w.id)
 	w.logger.writeLog("BEGIN")
 	opsNum := 1 + w.opGen.randIntn(w.maxOpsPerWorker)
 
@@ -534,13 +534,14 @@ func (w *schemaChangeWorker) releaseLocksIfHeld() {
 
 // startLog initializes the currentLogEntry of the schemaChangeWorker. It is a noop
 // if l.verbose < 1.
-func (l *logger) startLog() {
+func (l *logger) startLog(workerID int) {
 	if l.verbose < 1 {
 		return
 	}
 	l.currentLogEntry.mu.Lock()
 	defer l.currentLogEntry.mu.Unlock()
 	l.currentLogEntry.mu.entry = &LogEntry{
+		WorkerID:        workerID,
 		ClientTimestamp: timeutil.Now().Format("15:04:05.999999"),
 	}
 }
