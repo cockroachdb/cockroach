@@ -9363,7 +9363,7 @@ func TestReplicaMetrics(t *testing.T) {
 			// quiescent metric.
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
-			metrics := calcReplicaMetrics(ctx, calcReplicaMetricsInput{
+			metrics := calcReplicaMetrics(calcReplicaMetricsInput{
 				raftCfg:            &cfg.RaftConfig,
 				conf:               spanConfig,
 				livenessMap:        c.liveness,
