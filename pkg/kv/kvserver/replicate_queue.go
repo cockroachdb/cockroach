@@ -637,15 +637,14 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	// If the lease is valid, check to see if we should transfer it.
-	status := repl.LeaseStatusAt(ctx, now)
-	if status.IsValid() &&
+	if repl.OwnsValidLease(ctx, now) &&
 		rq.canTransferLeaseFrom(ctx, repl) &&
 		rq.allocator.ShouldTransferLease(ctx, conf, voterReplicas, repl, repl.loadStats.batchRequests) {
 
 		log.KvDistribution.VEventf(ctx, 2, "lease transfer needed, enqueuing")
 		return true, 0
 	}
-	if !status.IsValid() {
+	if !repl.LeaseStatusAt(ctx, now).IsValid() {
 		// The lease for this range is currently invalid, if this replica is
 		// the raft leader then it is necessary that it acquires the lease. We
 		// enqueue it regardless of being a leader or follower, where the
@@ -708,7 +707,8 @@ func (rq *replicateQueue) process(
 
 		// After we made a replica change, make sure the lease is still on the
 		// correct store.
-		if rq.canTransferLeaseFrom(ctx, repl) {
+		if repl.OwnsValidLease(ctx, rq.store.Clock().NowAsClockTimestamp()) &&
+			rq.canTransferLeaseFrom(ctx, repl) {
 			transferStatus, err := rq.shedLease(
 				ctx,
 				repl,
