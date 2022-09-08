@@ -189,8 +189,11 @@ func NewFunctionDefinition(
 		if def[i].PreferredOverload {
 			// Builtins with a preferred overload are always ambiguous.
 			props.AmbiguousReturnType = true
+			break
 		}
+	}
 
+	for i := range def {
 		def[i].FunctionProperties = *props
 		overloads[i] = &def[i]
 	}
