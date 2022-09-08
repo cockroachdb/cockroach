@@ -38,11 +38,6 @@ describe('select', () => {
 
 describe('error cases', () => {
   const cases = [{
-    name: 'not enough params',
-    query: { text: 'SELECT 3', values: ['foo'] },
-    msg: "expected 0 arguments, got 1",
-    code: '08P01',
-  }, {
     name: 'invalid utf8',
     query: { text: 'SELECT $1::STRING', values: [new Buffer([167])] },
     msg: "invalid UTF-8 sequence",
