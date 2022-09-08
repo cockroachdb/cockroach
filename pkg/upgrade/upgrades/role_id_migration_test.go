@@ -205,6 +205,7 @@ func TestRoleIDMigration100User(t *testing.T) {
 
 func TestRoleIDMigration15000Users(t *testing.T) {
 	skip.UnderStress(t)
+	skip.UnderRace(t)
 	// 15000 is 1.5x the batch size used in the migration.
 	runTestRoleIDMigration(t, 15000)
 }
