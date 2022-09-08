@@ -382,7 +382,6 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		require.NoError(t, err)
 
 		emittedRows := readRows(out)
-		fmt.Printf("\x1b[34m EMITTED ROWS: (%+v) \x1b[0m\n", emittedRows)
 
 		// Only compare the latest advancement, since not all intermediary resolved
 		// timestamps might be flushed (due to the minimum flush interval setting in
@@ -391,8 +390,6 @@ func TestStreamIngestionProcessor(t *testing.T) {
 			"partition 1 should advance to timestamp 7")
 		require.Contains(t, emittedRows, "key_2{-\\x00} 0.000000009,0",
 			"partition 2 should advance to timestamp 9")
-
-		fmt.Printf("\x1b[34m DONE TEST \x1b[0m\n")
 	})
 
 	// Two partitions, checkpoint for each, client start time for each should match

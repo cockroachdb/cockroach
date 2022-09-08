@@ -10,7 +10,6 @@ package streamingest
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -348,7 +347,6 @@ func (sip *streamIngestionProcessor) startPartitions(ctx context.Context) {
 		streamClient := sip.streamPartitionClients[partitionSpec.PartitionID]
 		g.GoCtx(func(ctx context.Context) error {
 			err := sip.partitionWorker(ctx, streamClient, partitionSpec, merged)
-			fmt.Printf("\x1b[33m worker err: %s \x1b[0m\n", err)
 			if err != nil {
 				errCh <- err
 			}
@@ -383,7 +381,6 @@ func (sip *streamIngestionProcessor) partitionWorker(
 	sip.mu.Lock()
 	startTime := frontierForSpans(sip.mu.frontier, spec.Spans...)
 	sip.mu.Unlock()
-	fmt.Printf("\x1b[36m subscribing from time %d \x1b[0m\n", startTime.WallTime)
 
 	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 		if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
@@ -404,10 +401,8 @@ func (sip *streamIngestionProcessor) partitionWorker(
 		select {
 		case event, ok := <-sub.Events():
 			if !ok {
-				fmt.Printf("\x1b[31m partition worker done \x1b[0m\n")
 				return errors.Wrapf(sub.Err(), "partition %s subscription from %v", spec.PartitionID, addr)
 			}
-			fmt.Printf("\x1b[32m partition worker event %v \x1b[0m\n", event)
 
 			pe := partitionEvent{
 				Event:     event,
@@ -426,7 +421,6 @@ func (sip *streamIngestionProcessor) partitionWorker(
 
 // Next is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
-	fmt.Printf("\x1b[31m calling next \x1b[0m\n")
 	if sip.State != execinfra.StateRunning {
 		return nil, sip.DrainHelper()
 	}
@@ -439,9 +433,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, sip.DrainHelper()
 	}
 
-	fmt.Printf("\x1b[31m calling consumeEvents \x1b[0m\n")
 	progressUpdate, err := sip.consumeEvents()
-	fmt.Printf("\x1b[31m got consumeEvents (%+v) (%+v)\x1b[0m\n", progressUpdate, err)
 	if err != nil {
 		sip.MoveToDraining(err)
 		return nil, sip.DrainHelper()
@@ -461,7 +453,6 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 
 	sip.mu.Lock()
 	err = sip.mu.ingestionErr
-	fmt.Printf("\x1b[31m grabbing ingestionerr %s \x1b[0m\n", err)
 	sip.mu.Unlock()
 	if err != nil {
 		sip.MoveToDraining(err)
@@ -486,7 +477,6 @@ func (sip *streamIngestionProcessor) close() {
 	if sip.Closed {
 		return
 	}
-	fmt.Printf("\x1b[31m closing \x1b[0m\n")
 
 	for _, client := range sip.streamPartitionClients {
 		_ = client.Close(sip.Ctx)
@@ -576,8 +566,6 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 	for sip.State == execinfra.StateRunning {
 		select {
 		case err, ok := <-sip.subErrCh:
-			fmt.Printf("\x1b[32m subErrCh (%+v) \x1b[0m\n", ok)
-
 			// Clear subErrCh since we only want to handle the first event for a
 			// single set of workers.
 			sip.subErrCh = nil
@@ -614,7 +602,6 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 			}
 			continue
 		case event, ok := <-sip.eventCh:
-			fmt.Printf("\x1b[32m event from eventCh %v\x1b[0m\n", ok)
 			if !ok {
 				sip.internalDrained = true
 				flushResult, flushErr := sip.flush()
@@ -633,10 +620,8 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				}
 			}
 
-			fmt.Printf("\x1b[32m %s emitting event \x1b[0m\n", event.partition)
 			switch event.Type() {
 			case streamingccl.KVEvent:
-				fmt.Printf("\x1b[32m kv event %v\x1b[0m\n", event.GetKV().Value.Timestamp)
 				if err := sip.bufferKV(event.GetKV()); err != nil {
 					return nil, err
 				}
@@ -649,7 +634,6 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 					return nil, err
 				}
 			case streamingccl.CheckpointEvent:
-				fmt.Printf("\x1b[32m checkpoint event %v\x1b[0m\n", event.GetResolvedSpans()[0].Timestamp)
 				if err := sip.bufferCheckpoint(event); err != nil {
 					return nil, err
 				}
@@ -711,10 +695,8 @@ func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) er
 }
 
 func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
-	fmt.Printf("\x1b[32m rekey from %s \x1b[0m\n", key.String())
 	rekey, ok, err := sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
 	if !ok {
-		fmt.Printf("\x1b[35m rekey for %s, %v \x1b[0m\n", key.String(), ok)
 		return nil, errors.Wrapf(err, "key %s did not match tenant prefix")
 	}
 	if err != nil {
