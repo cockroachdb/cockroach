@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -239,7 +238,7 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.event_consumer_workers",
 	"the number of workers to use when processing events; 0 disables",
-	int64(util.ConstantWithMetamorphicTestRange("changefeed.consumer_max_workers", 0, 0, 32)),
+	32,
 	settings.NonNegativeInt,
 ).WithPublic()
 
