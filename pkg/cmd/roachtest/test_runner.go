@@ -781,11 +781,9 @@ func (r *testRunner) runTest(
 		t.end = timeutil.Now()
 
 		// We only have to record panics if the panic'd value is not the sentinel
-		// produced by t.Fatal*().
-		//
-		// TODO(test-eng): we shouldn't be seeing errTestFatal here unless this
-		// goroutine accidentally ends up calling t.Fatal; the test runs in a
-		// different goroutine.
+		// produced by t.Fatal*(). We may see calls to t.Fatal from this goroutine
+		// during the post-flight checks; the test itself runs on a different
+		// goroutine and has similar code to terminate errTestFatal.
 		if err := recover(); err != nil && err != errTestFatal {
 			t.mu.Lock()
 			t.mu.failed = true
