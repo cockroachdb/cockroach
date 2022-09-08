@@ -51,8 +51,8 @@ export const TransactionsPageRoot = ({
       label: "Active Executions",
       description: (
         <span>
-          Active executions represent individual statement executions in
-          progress. Use active statement execution details, such as the
+          Active executions represent individual transactions executions in
+          progress. Use active transaction execution details, such as the
           application or elapsed time, to understand and tune workload
           performance.
           {/* TODO (xinhaoz) #78379 add 'Learn More' link to documentation page*/}

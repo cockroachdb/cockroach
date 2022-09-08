@@ -2438,7 +2438,7 @@ func (s *statusServer) HotRangesV2(
 									CommonLookupFlags: commonLookupFlags,
 								})
 								if err != nil {
-									return errors.Wrapf(err, "cannot get table descriptor with tabaleID: %d. %s, %s", tableID, r.Desc.String())
+									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d. %s", tableID, r.Desc.String())
 								}
 								tableName = desc.GetName()
 
