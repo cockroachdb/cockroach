@@ -3413,7 +3413,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		}
 		for i := range query.expectedResults {
 			expected, actual := query.expectedResults[i], actualResults[i]
-			resultMatches := expected == actual
+			resultMatches, _ := regexp.MatchString(expected, actual)
 			// Results are flattened into columns for each row.
 			// To find the coltype for the given result, mod the result number
 			// by the number of coltypes.
