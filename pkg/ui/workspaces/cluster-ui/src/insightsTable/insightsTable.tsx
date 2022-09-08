@@ -88,8 +88,8 @@ function descriptionCell(
     </>
   );
   const summary = computeOrUseStmtSummary(
-    insightRec.execution.statement,
-    insightRec.execution.summary,
+    insightRec.execution?.statement,
+    insightRec.execution?.summary,
   );
   switch (insightRec.type) {
     case "CreateIndex":
