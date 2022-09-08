@@ -49,7 +49,7 @@ type SettingsWatcher struct {
 		syncutil.Mutex
 
 		updater   settings.Updater
-		values    map[string]settings.EncodedValue
+		values    map[string]settingsValue
 		overrides map[string]settings.EncodedValue
 	}
 
@@ -130,7 +130,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		}
 	}
 
-	s.mu.values = make(map[string]settings.EncodedValue)
+	s.mu.values = make(map[string]settingsValue)
 
 	if s.overridesMonitor != nil {
 		s.mu.overrides = make(map[string]settings.EncodedValue)
@@ -250,25 +250,52 @@ func (s *SettingsWatcher) handleKV(
 		}
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, hasOverride := s.mu.overrides[name]
-	if tombstone {
-		// This event corresponds to a deletion.
-		delete(s.mu.values, name)
-		if !hasOverride {
-			s.setDefaultLocked(ctx, name)
-		}
-	} else {
-		s.mu.values[name] = val
-		if !hasOverride {
-			s.setLocked(ctx, name, val)
-		}
-	}
+	s.maybeSet(ctx, name, settingsValue{
+		val:       val,
+		ts:        kv.Value.Timestamp,
+		tombstone: tombstone,
+	})
 	if s.storage != nil {
 		return kv
 	}
 	return nil
+}
+
+// maybeSet will update the stored value and the corresponding setting
+// in response to a kv event, assuming that event is new.
+func (s *SettingsWatcher) maybeSet(ctx context.Context, name string, sv settingsValue) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Skip updates which have an earlier timestamp to avoid regressing on the
+	// value of a setting. Note that we intentionally process values at the same
+	// timestamp as the current value. This is important to deal with cases where
+	// the underlying rangefeed restarts. When that happens, we'll construct a
+	// new settings updater and expect to re-process every setting which is
+	// currently set.
+	if existing, ok := s.mu.values[name]; ok && sv.ts.Less(existing.ts) {
+		return
+	}
+	_, hasOverride := s.mu.overrides[name]
+	s.mu.values[name] = sv
+	if sv.tombstone {
+		// This event corresponds to a deletion.
+		if !hasOverride {
+			s.setDefaultLocked(ctx, name)
+		}
+	} else {
+		if !hasOverride {
+			s.setLocked(ctx, name, sv.val)
+		}
+	}
+}
+
+// settingValue tracks an observed value from the rangefeed. By tracking the
+// timestamp, we can avoid regressing the settings values in the face of
+// rangefeed restarts.
+type settingsValue struct {
+	val       settings.EncodedValue
+	ts        hlc.Timestamp
+	tombstone bool
 }
 
 const versionSettingKey = "version"
@@ -343,8 +370,8 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) {
 
 			// Reset the setting to the value in the settings table (or the default
 			// value).
-			if val, ok := s.mu.values[key]; ok {
-				s.setLocked(ctx, key, val)
+			if sv, ok := s.mu.values[key]; ok && !sv.tombstone {
+				s.setLocked(ctx, key, sv.val)
 			} else {
 				s.setDefaultLocked(ctx, key)
 			}
