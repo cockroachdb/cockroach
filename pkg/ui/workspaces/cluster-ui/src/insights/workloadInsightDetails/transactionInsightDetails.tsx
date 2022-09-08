@@ -156,7 +156,9 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
             </Col>
           </Row>
           <Row gutter={24} className={tableCx("margin-bottom")}>
-            <InsightsSortedTable columns={insightsColumns} data={tableData} />
+            <Col className="gutter-row"  span={12}>
+              <InsightsSortedTable columns={insightsColumns} data={tableData} />
+            </Col>
           </Row>
         </section>
         <section className={tableCx("section")}>
@@ -167,14 +169,12 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
             tableName={insightDetails.tableName}
             indexName={insightDetails.indexName}
             databaseName={insightDetails.databaseName}
-            contendedKey={String(insightDetails.contendedKey)}
             waitTime={moment.duration(insightDetails.elapsedTime)}
             waitingExecutions={[]}
             blockingExecutions={[]}
           />
           <Row gutter={24}>
-            <Col>
-              <Row>
+            <Col className="gutter-row">
                 <Heading type="h5">
                   {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
                     insightDetails.executionID,
@@ -187,7 +187,6 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
                     execType={insightDetails.execType}
                   />
                 </div>
-              </Row>
             </Col>
           </Row>
         </section>
