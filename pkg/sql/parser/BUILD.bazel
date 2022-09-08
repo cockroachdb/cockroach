@@ -89,13 +89,19 @@ genrule(
     ],
     outs = ["sql.go"],
     cmd = """
-      $(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
-          $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
-          $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
-    """,
+GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+export PATH=$$GO_ABS_PATH:$$PATH
+export HOME=$(GENDIR)
+export GOPATH=/nonexist-gopath
+$(location :sql-gen) $(location sql.y) $(location replace_help_rules.awk) \
+    $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc) \
+    $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports)
+""",
     exec_tools = [
         ":sql-gen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+        "@go_sdk//:bin/go",
         "@org_golang_x_tools//cmd/goyacc",
     ],
     visibility = ["//visibility:public"],

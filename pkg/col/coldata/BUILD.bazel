@@ -62,13 +62,19 @@ genrule(
     srcs = ["vec_tmpl.go"],
     outs = ["vec.eg.go"],
     cmd = """
-      $(location //pkg/sql/colexec/execgen/cmd/execgen) \
-        -fmt=false pkg/col/coldata/$@ > $@
-      $(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
-    """,
+GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+export PATH=$$GO_ABS_PATH:$$PATH
+export HOME=$(GENDIR)
+export GOPATH=/nonexist-gopath
+$(location //pkg/sql/colexec/execgen/cmd/execgen) \
+    -fmt=false pkg/col/coldata/$@ > $@
+$(location @com_github_cockroachdb_gostdlib//x/tools/cmd/goimports) -w $@
+""",
     exec_tools = [
         "//pkg/sql/colexec/execgen/cmd/execgen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
+        "@go_sdk//:bin/go",
     ],
     visibility = [
         ":__pkg__",

@@ -1398,10 +1398,10 @@ def go_deps():
         name = "com_github_cockroachdb_gostdlib",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/gostdlib",
-        sha256 = "b3d43d8f95edf65f73a5348f29e1159823cac64b148f8d3bb48340bf55d70872",
-        strip_prefix = "github.com/cockroachdb/gostdlib@v1.13.0",
+        sha256 = "c4d516bcfe8c07b6fc09b8a9a07a95065b36c2855627cb3514e40c98f872b69e",
+        strip_prefix = "github.com/cockroachdb/gostdlib@v1.19.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/gostdlib/com_github_cockroachdb_gostdlib-v1.13.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/gostdlib/com_github_cockroachdb_gostdlib-v1.19.0.zip",
         ],
     )
     go_repository(
