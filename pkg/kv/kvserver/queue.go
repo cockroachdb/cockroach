@@ -276,6 +276,12 @@ type queueImpl interface {
 	// (vs. it being a no-op or an error).
 	process(context.Context, *Replica, spanconfig.StoreReader) (processed bool, err error)
 
+	// processScheduled is called after async task was created to run process.
+	// This function is called by the process loop synchronously. This method is
+	// called regardless of process being called or not since replica validity
+	// checks are done asynchronously.
+	postProcessScheduled(ctx context.Context, replica replicaInQueue, priority float64)
+
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
 	// is supplied as an argument. If no replicas have finished processing
@@ -687,7 +693,8 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	if !should {
 		return
 	}
-	if _, err := bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority); !isExpectedQueueError(err) {
+	_, err := bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
+	if !isExpectedQueueError(err) {
 		log.Errorf(ctx, "unable to add: %+v", err)
 	}
 }
@@ -853,7 +860,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 					// Acquire from the process semaphore.
 					bq.processSem <- struct{}{}
 
-					repl := bq.pop()
+					repl, priority := bq.pop()
 					if repl != nil {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if stopper.RunAsyncTaskEx(annotatedCtx, stop.TaskOpts{
@@ -875,6 +882,7 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 							<-bq.processSem
 							return
 						}
+						bq.impl.postProcessScheduled(ctx, repl, priority)
 					} else {
 						// Release semaphore if no replicas were available.
 						<-bq.processSem
@@ -1260,12 +1268,12 @@ func (bq *baseQueue) processReplicasInPurgatory(
 // replicaItem corresponding to the returned Replica will be moved to the
 // "processing" state and should be cleaned up by calling
 // finishProcessingReplica once the Replica has finished processing.
-func (bq *baseQueue) pop() replicaInQueue {
+func (bq *baseQueue) pop() (replicaInQueue, float64) {
 	bq.mu.Lock()
 	for {
 		if bq.mu.priorityQ.Len() == 0 {
 			bq.mu.Unlock()
-			return nil
+			return nil, 0
 		}
 		item := heap.Pop(&bq.mu.priorityQ).(*replicaItem)
 		if item.processing {
@@ -1277,7 +1285,7 @@ func (bq *baseQueue) pop() replicaInQueue {
 
 		repl, _ := bq.getReplica(item.rangeID)
 		if repl != nil && item.replicaID == repl.ReplicaID() {
-			return repl
+			return repl, item.priority
 		}
 		// Replica not found or was recreated with a new replica ID, remove from
 		// set and try again.
@@ -1350,7 +1358,7 @@ func (bq *baseQueue) DrainQueue(stopper *stop.Stopper) {
 	defer bq.lockProcessing()()
 
 	ctx := bq.AnnotateCtx(context.Background())
-	for repl := bq.pop(); repl != nil; repl = bq.pop() {
+	for repl, _ := bq.pop(); repl != nil; repl, _ = bq.pop() {
 		annotatedCtx := repl.AnnotateCtx(ctx)
 		err := bq.processReplica(annotatedCtx, repl)
 		bq.finishProcessingReplica(annotatedCtx, stopper, repl, err)

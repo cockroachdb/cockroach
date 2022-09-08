@@ -131,6 +131,8 @@ type fakeQueueImpl struct {
 	pr func(context.Context, *Replica, spanconfig.StoreReader) (processed bool, err error)
 }
 
+var _ queueImpl = &fakeQueueImpl{}
+
 func (fakeQueueImpl) shouldQueue(
 	context.Context, hlc.ClockTimestamp, *Replica, spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
@@ -141,6 +143,11 @@ func (fq fakeQueueImpl) process(
 	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
 ) (bool, error) {
 	return fq.pr(ctx, repl, confReader)
+}
+
+func (fakeQueueImpl) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
 }
 
 func (fakeQueueImpl) timer(time.Duration) time.Duration {

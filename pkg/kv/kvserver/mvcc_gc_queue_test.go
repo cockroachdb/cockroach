@@ -113,7 +113,7 @@ func TestMVCCGCQueueMakeGCScoreInvariantQuick(t *testing.T) {
 		r := makeMVCCGCQueueScoreImpl(
 			ctx, int64(seed), now, ms, time.Duration(ttlSec)*time.Second, hlc.Timestamp{},
 			true,      /* canAdvanceGCThreshold */
-			time.Hour, /* txnCleanupThreshold */
+			roachpb.GCHint{}, time.Hour, /* txnCleanupThreshold */
 		)
 		wouldHaveToDeleteSomething := gcBytes*int64(ttlSec) < ms.GCByteAge(now.WallTime)
 		result := !r.ShouldQueue || wouldHaveToDeleteSomething
@@ -137,7 +137,7 @@ func TestMVCCGCQueueMakeGCScoreAnomalousStats(t *testing.T) {
 			ValBytes:          int64(valBytes),
 			KeyBytes:          int64(keyBytes),
 		}, 60*time.Second, hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
-			time.Hour, /* txnCleanupThreshold */
+			roachpb.GCHint{}, time.Hour, /* txnCleanupThreshold */
 		)
 		return r.DeadFraction >= 0 && r.DeadFraction <= 1
 	}, &quick.Config{MaxCount: 1000}); err != nil {
@@ -162,7 +162,9 @@ func TestMVCCGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, 10000*time.Second,
-			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
+			hlc.Timestamp{},
+			true, /* canAdvanceGCThreshold */
+			roachpb.GCHint{},
 			time.Hour, /* txnCleanupThreshold */
 		)
 		require.True(t, r.ShouldQueue)
@@ -178,7 +180,9 @@ func TestMVCCGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 			context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration + 1},
 			ms, 10000*time.Second,
-			hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
+			hlc.Timestamp{},
+			true, /* canAdvanceGCThreshold */
+			roachpb.GCHint{},
 			time.Hour, /* txnCleanupThreshold */
 		)
 		require.True(t, r.ShouldQueue)
@@ -190,7 +194,9 @@ func TestMVCCGCQueueMakeGCScoreLargeAbortSpan(t *testing.T) {
 		r := makeMVCCGCQueueScoreImpl(context.Background(), seed,
 			hlc.Timestamp{WallTime: expiration},
 			ms, 10000*time.Second,
-			hlc.Timestamp{WallTime: expiration - 100}, true, /* canAdvanceGCThreshold */
+			hlc.Timestamp{WallTime: expiration - 100},
+			true, /* canAdvanceGCThreshold */
+			roachpb.GCHint{},
 			time.Hour, /* txnCleanupThreshold */
 		)
 		require.False(t, r.ShouldQueue)
@@ -232,7 +238,7 @@ func TestMVCCGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 
 			r := makeMVCCGCQueueScoreImpl(
 				ctx, seed, now, ms, gcTTL, tc.lastGC, true, /* canAdvanceGCThreshold */
-				time.Hour, /* txnCleanupThreshold */
+				roachpb.GCHint{}, time.Hour, /* txnCleanupThreshold */
 			)
 			require.Equal(t, tc.expectGC, r.ShouldQueue)
 		})
@@ -354,7 +360,7 @@ func (cws *cachedWriteSimulator) shouldQueue(
 	ts := hlc.Timestamp{}.Add(ms.LastUpdateNanos+after.Nanoseconds(), 0)
 	r := makeMVCCGCQueueScoreImpl(context.Background(), 0 /* seed */, ts, ms, ttl,
 		hlc.Timestamp{}, true, /* canAdvanceGCThreshold */
-		time.Hour, /* txnCleanupThreshold */
+		roachpb.GCHint{}, time.Hour, /* txnCleanupThreshold */
 	)
 	if fmt.Sprintf("%.2f", r.FinalScore) != fmt.Sprintf("%.2f", prio) || b != r.ShouldQueue {
 		cws.t.Errorf("expected queued=%t (is %t), prio=%.2f, got %.2f: after=%s, ttl=%s:\nms: %+v\nscore: %s",
@@ -519,7 +525,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 	shouldQueueAfter := func(ms enginepb.MVCCStats, delay time.Duration, gcTTL time.Duration) bool {
 		now := deletionTime.Add(delay.Nanoseconds(), 0)
 		r := makeMVCCGCQueueScoreImpl(ctx, 0 /* seed */, now, ms, gcTTL, hlc.Timestamp{}, true,
-			time.Hour)
+			roachpb.GCHint{}, time.Hour)
 		return r.ShouldQueue
 	}
 

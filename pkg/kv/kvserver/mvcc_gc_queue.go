@@ -39,6 +39,10 @@ const (
 	// mvccGCQueueDefaultTimerDuration is the default duration between MVCC GCs
 	// of queued replicas.
 	mvccGCQueueDefaultTimerDuration = 1 * time.Second
+	// mvccHiPriGCQueueDefaultTimerDuration is default duration between MVCC GCs
+	// of queued replicas when replicas contain only garbage removed by range
+	// tombstone completely.
+	mvccHiPriGCQueueDefaultTimerDuration = 0 * time.Second
 	// mvccGCQueueTimeout is the timeout for a single MVCC GC run.
 	mvccGCQueueTimeout = 10 * time.Minute
 	// mvccGCQueueIntentBatchTimeout is the timeout for resolving a single batch
@@ -64,6 +68,11 @@ const (
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
 	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
+
+	// deleteRangePriority is used to indicate replicas that needs to be processed
+	// out of band quickly to enable storage compaction optimization because all
+	// data in them was removed.
+	deleteRangePriority = math.MaxFloat64
 )
 
 // mvccGCQueueInterval is a setting that controls how long the mvcc GC queue
@@ -73,6 +82,15 @@ var mvccGCQueueInterval = settings.RegisterDurationSetting(
 	"kv.mvcc_gc.queue_interval",
 	"how long the mvcc gc queue waits between processing replicas",
 	mvccGCQueueDefaultTimerDuration,
+	settings.NonNegativeDuration,
+)
+
+// mvccGCQueueHighPriInterval
+var mvccGCQueueHighPriInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.mvcc_gc.queue_hi_pri_interval",
+	"how long the mvcc gc queue waits between processing replicas when it detects that all data is being removed",
+	mvccHiPriGCQueueDefaultTimerDuration,
 	settings.NonNegativeDuration,
 )
 
@@ -118,7 +136,12 @@ func largeAbortSpan(ms enginepb.MVCCStats) bool {
 // single priority. If any task is overdue, shouldQueue returns true.
 type mvccGCQueue struct {
 	*baseQueue
+
+	// Set to true when GC finds first range that is completely deleted.
+	collectingEmptyRanges bool
 }
+
+var _ queueImpl = &mvccGCQueue{}
 
 // newMVCCGCQueue returns a new instance of mvccGCQueue.
 func newMVCCGCQueue(store *Store) *mvccGCQueue {
@@ -206,6 +229,7 @@ func (mgcq *mvccGCQueue) shouldQueue(
 		log.VErrEventf(ctx, 2, "failed to fetch last processed time: %v", err)
 		return false, 0
 	}
+
 	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
 	return r.ShouldQueue, r.FinalScore
 }
@@ -231,7 +255,7 @@ func makeMVCCGCQueueScore(
 	// trigger GC at the same time.
 	r := makeMVCCGCQueueScoreImpl(
 		ctx, int64(repl.RangeID), now, ms, gcTTL, lastGC, canAdvanceGCThreshold,
-		gc.TxnCleanupThreshold.Get(&repl.ClusterSettings().SV),
+		repl.GetGCHint(), gc.TxnCleanupThreshold.Get(&repl.ClusterSettings().SV),
 	)
 	return r
 }
@@ -335,6 +359,7 @@ func makeMVCCGCQueueScoreImpl(
 	gcTTL time.Duration,
 	lastGC hlc.Timestamp,
 	canAdvanceGCThreshold bool,
+	hint roachpb.GCHint,
 	txnCleanupThreshold time.Duration,
 ) mvccGCQueueScore {
 	ms.Forward(now.WallTime)
@@ -425,11 +450,24 @@ func makeMVCCGCQueueScoreImpl(
 
 	// If range was deleted, lower score threshold to allow faster cleanup as
 	// most of the garbage is concentrated at the ttl threshold.
-	if !r.ShouldQueue && suspectedFullRangeDeletion(ms) {
-		r.ShouldQueue = canAdvanceGCThreshold && r.FuzzFactor*valScore > mvccGCDropRangeKeyScoreThreshold
+	if suspectedFullRangeDeletion(ms) {
+		if !r.ShouldQueue {
+			r.ShouldQueue = canAdvanceGCThreshold && r.FuzzFactor*valScore > mvccGCDropRangeKeyScoreThreshold
+		}
+		// If we are removing all data from the range, then we should check if we
+		// have a GC hint that would trigger scanning for related ranges and raise
+		// priority to collect all related ranges together.
+		if r.ShouldQueue && gcHintedRangeDelete(hint, gcTTL, now) {
+			r.FinalScore = deleteRangePriority
+		}
 	}
 
 	return r
+}
+
+func gcHintedRangeDelete(hint roachpb.GCHint, ttl time.Duration, now hlc.Timestamp) bool {
+	gcThreshold := now.Add(-ttl.Nanoseconds(), 0)
+	return hint.LatestRangeDeleteTimestamp.Less(gcThreshold)
 }
 
 // suspectedFullRangeDeletion checks for ranges where there's no live data and
@@ -700,6 +738,7 @@ func (mgcq *mvccGCQueue) process(
 			log.Errorf(ctx, "failed to recompute stats with error=%s", err)
 		}
 	}
+
 	return true, nil
 }
 
@@ -722,9 +761,51 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCFailedClearRange.Inc(int64(info.ClearRangeKeyFailures))
 }
 
+func (mgcq *mvccGCQueue) postProcessScheduled(
+	ctx context.Context, processedReplica replicaInQueue, priority float64,
+) {
+	log.Infof(context.Background(), "Post add range %d with priority %f", processedReplica.GetRangeID(), priority)
+	if priority < deleteRangePriority {
+		mgcq.collectingEmptyRanges = false
+		return
+	}
+
+	if priority == deleteRangePriority && !mgcq.collectingEmptyRanges {
+		// We are processing first range that has a GC hint notifying that multiple
+		// range deletions happen. Find related replicas that are also eligible for
+		// collection.
+		v := newStoreReplicaVisitor(mgcq.store)
+		v.Visit(func(replica *Replica) bool {
+			if replica.ReplicaID() == processedReplica.ReplicaID() {
+				return true
+			}
+			if _, err := replica.redirectOnOrAcquireLease(ctx); err != nil {
+				return true
+			}
+			gCHint := replica.GetGCHint()
+			if !gCHint.LatestRangeDeleteTimestamp.IsEmpty() {
+				desc, spanConfig := replica.DescAndSpanConfig()
+				gcThreshold := replica.store.Clock().Now().Add(-int64(spanConfig.GCPolicy.TTLSeconds)*1e9, 0)
+				if gCHint.LatestRangeDeleteTimestamp.Less(gcThreshold) {
+					log.Infof(context.Background(), "adding related range %d with high priority", replica.GetRangeID())
+					_, _ = mgcq.addInternal(context.Background(), desc, replica.ReplicaID(), deleteRangePriority)
+					mgcq.store.metrics.GCEnqueueHighPriority.Inc(1)
+				}
+			}
+			return true
+		})
+		// Set flag indicating that we are already collecting high priority to avoid
+		// rescanning and re-enqueueing ranges multiple times.
+		mgcq.collectingEmptyRanges = true
+	}
+}
+
 // timer returns a constant duration to space out GC processing
 // for successive queued replicas.
 func (mgcq *mvccGCQueue) timer(_ time.Duration) time.Duration {
+	if mgcq.collectingEmptyRanges {
+		return mvccGCQueueHighPriInterval.Get(&mgcq.store.ClusterSettings().SV)
+	}
 	return mvccGCQueueInterval.Get(&mgcq.store.ClusterSettings().SV)
 }
 
