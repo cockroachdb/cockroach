@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -141,14 +142,10 @@ type streamIngestionProcessor struct {
 	forceClientForTests streamclient.Client
 	// streamPartitionClients are a collection of streamclient.Client created for
 	// consuming multiple partitions from a stream.
-	streamPartitionClients []streamclient.Client
+	streamPartitionClients map[string]streamclient.Client
 
 	// cutoverProvider indicates when the cutover time has been reached.
 	cutoverProvider cutoverProvider
-
-	// frontier keeps track of the progress for the spans tracked by this processor
-	// and is used forward resolved spans
-	frontier *span.Frontier
 	// lastFlushTime keeps track of the last time that we flushed due to a
 	// checkpoint timestamp event.
 	lastFlushTime time.Time
@@ -177,12 +174,19 @@ type streamIngestionProcessor struct {
 	// cancelMergeAndWait cancels the merging goroutines and waits for them to
 	// finish. It cannot be called concurrently with Next(), as it consumes from
 	// the merged channel.
-	cancelMergeAndWait func()
+	cancelMergeAndWait func() error
+
+	// subErrCh is used to signal subscription errors
+	subErrCh chan error
 
 	// mu is used to provide thread-safe read-write operations to ingestionErr
 	// and pollingErr.
 	mu struct {
 		syncutil.Mutex
+
+		// frontier keeps track of the progress for the spans tracked by this processor
+		// and is used forward resolved spans
+		frontier *span.Frontier
 
 		// ingestionErr stores any error that is returned from the worker goroutine so
 		// that it can be forwarded through the DistSQL flow.
@@ -243,7 +247,6 @@ func newStreamIngestionDataProcessor(
 		spec:              spec,
 		output:            output,
 		curKVBatch:        make([]storage.MVCCKeyValue, 0),
-		frontier:          frontier,
 		maxFlushRateTimer: timeutil.NewTimer(),
 		cutoverProvider: &cutoverFromJobProgress{
 			jobID:    jobspb.JobID(spec.JobID),
@@ -254,6 +257,8 @@ func newStreamIngestionDataProcessor(
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 	}
+	sip.mu.frontier = frontier
+
 	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
@@ -303,23 +308,11 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	}()
 
 	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
-	if err := sip.startPartitions(ctx); err != nil {
-		sip.MoveToDraining(err)
-		return
-	}
-}
 
-// startPartitions initializes the event-related properties of the ingestion
-// processor and spins up goroutines to connect to and read in events from each
-// producer partition and forward them to sip.eventCh
-func (sip *streamIngestionProcessor) startPartitions(ctx context.Context) error {
-	// Initialize the event streams.
 	sip.cg = ctxgroup.WithContext(ctx)
-	sip.streamPartitionClients = make([]streamclient.Client, 0)
 
-	clients := make(map[string]streamclient.Client)
+	sip.streamPartitionClients = make(map[string]streamclient.Client)
 	for _, partitionSpec := range sip.spec.PartitionSpecs {
-		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
 		addr := partitionSpec.Address
 		var streamClient streamclient.Client
 		if sip.forceClientForTests != nil {
@@ -329,42 +322,53 @@ func (sip *streamIngestionProcessor) startPartitions(ctx context.Context) error 
 			var err error
 			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr))
 			if err != nil {
-				return errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr)
+				sip.MoveToDraining(err)
+				return
 			}
 		}
-		sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
-		clients[partitionSpec.PartitionID] = streamClient
+		sip.streamPartitionClients[partitionSpec.PartitionID] = streamClient
 	}
+	sip.startPartitions(ctx)
+}
 
+// startPartitions initializes the event-related properties of the ingestion
+// processor and spins up goroutines to connect to and read in events from each
+// producer partition and forward them to sip.eventCh
+func (sip *streamIngestionProcessor) startPartitions(ctx context.Context) {
+	// Initialize the event streams.
 	merged := make(chan partitionEvent)
 	ctx, cancel := context.WithCancel(ctx)
 	g := ctxgroup.WithContext(ctx)
 
+	// errCh is used to signal for the closing of all workers and potentially a retry
+	errCh := make(chan error, len(sip.spec.PartitionSpecs))
+
 	for _, partitionSpec := range sip.spec.PartitionSpecs {
 		partitionSpec := partitionSpec
-		streamClient := clients[partitionSpec.PartitionID]
+		streamClient := sip.streamPartitionClients[partitionSpec.PartitionID]
 		g.GoCtx(func(ctx context.Context) error {
-			return sip.partitionWorker(ctx, streamClient, partitionSpec, merged)
+			err := sip.partitionWorker(ctx, streamClient, partitionSpec, merged)
+			fmt.Printf("\x1b[33m worker err: %s \x1b[0m\n", err)
+			if err != nil {
+				errCh <- err
+			}
+			return err
 		})
 	}
 
-	go func() {
-		err := g.Wait()
-		sip.mu.Lock()
-		defer sip.mu.Unlock()
-		sip.mu.ingestionErr = err
-		close(merged)
-	}()
-
-	sip.cancelMergeAndWait = func() {
+	sip.cancelMergeAndWait = func() error {
 		cancel()
-		// Wait until the merged channel is closed by the goroutine above.
-		for range merged {
-		}
+		return g.Wait()
 	}
 
+	go func() {
+		// Ignore err since non-nil error would have been sent to errCh already
+		_ = g.Wait()
+		close(errCh)
+	}()
+
 	sip.eventCh = merged
-	return nil
+	sip.subErrCh = errCh
 }
 
 func (sip *streamIngestionProcessor) partitionWorker(
@@ -376,88 +380,53 @@ func (sip *streamIngestionProcessor) partitionWorker(
 	token := streamclient.SubscriptionToken(spec.SubscriptionToken)
 	addr := spec.Address
 
-	var err error
-
-	attemptCount := 0
-	ro := retry.Options{
-		InitialBackoff: 3 * time.Second,
-		Multiplier:     2,
-		MaxBackoff:     1 * time.Minute,
-		MaxRetries:     5,
-	}
+	sip.mu.Lock()
+	startTime := frontierForSpans(sip.mu.frontier, spec.Spans...)
+	sip.mu.Unlock()
+	fmt.Printf("\x1b[36m subscribing from time %d \x1b[0m\n", startTime.WallTime)
 
 	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
-		if streamingKnobs != nil && streamingKnobs.OverrideIngestionPartitionRetry != nil {
-			ro = streamingKnobs.OverrideIngestionPartitionRetry()
+		if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
+			streamingKnobs.BeforeClientSubscribe(addr, string(token), startTime)
 		}
 	}
 
-retryLoop:
-	for r := retry.Start(ro); r.Next(); {
-		attemptCount++
-		if err != nil {
-			log.Infof(ctx, "stream partition %s retrying subscription (attempt %d) after error: %s", spec.PartitionID, attemptCount, err.Error())
-		}
+	var sub streamclient.Subscription
+	sub, err := client.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), token, startTime)
+	if err != nil {
+		return errors.Wrapf(err, "subscribing to partition %v", addr)
+	}
 
-		startTime := frontierForSpans(sip.frontier, spec.Spans...)
-		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
-			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), startTime)
+	sip.cg.GoCtx(sub.Subscribe)
+	ctxDone := ctx.Done()
+
+	for {
+		select {
+		case event, ok := <-sub.Events():
+			if !ok {
+				fmt.Printf("\x1b[31m partition worker done \x1b[0m\n")
+				return errors.Wrapf(sub.Err(), "partition %s subscription from %v", spec.PartitionID, addr)
 			}
-		}
+			fmt.Printf("\x1b[32m partition worker event %v \x1b[0m\n", event)
 
-		var sub streamclient.Subscription
-		sub, err = client.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), token, startTime)
-		if err != nil {
-			err = errors.Wrapf(err, "subscribing to partition %v", addr)
-			continue
-		}
-
-		sip.cg.GoCtx(sub.Subscribe)
-		ctxDone := ctx.Done()
-
-		for {
+			pe := partitionEvent{
+				Event:     event,
+				partition: spec.PartitionID,
+			}
 			select {
-			case event, ok := <-sub.Events():
-				if !ok {
-					err = errors.Wrapf(sub.Err(), "partition subscription from %v", addr)
-					if err == nil {
-						break retryLoop
-					}
-					continue retryLoop
-				}
-
-				// Don't allow transient error consequences to compound as this is
-				// generally an extremely long lived job.
-				r.Reset()
-
-				pe := partitionEvent{
-					Event:     event,
-					partition: spec.PartitionID,
-				}
-
-				select {
-				case out <- pe:
-				case <-ctxDone:
-					return ctx.Err()
-				}
+			case out <- pe:
 			case <-ctxDone:
 				return ctx.Err()
 			}
+		case <-ctxDone:
+			return ctx.Err()
 		}
 	}
-
-	if err != nil {
-		log.Errorf(ctx, "partition %s worker exiting with error: %s", spec.PartitionID, err.Error())
-	} else {
-		log.Infof(ctx, "partition %s worker completed", spec.PartitionID)
-	}
-
-	return err
 }
 
 // Next is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	fmt.Printf("\x1b[31m calling next \x1b[0m\n")
 	if sip.State != execinfra.StateRunning {
 		return nil, sip.DrainHelper()
 	}
@@ -470,7 +439,9 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, sip.DrainHelper()
 	}
 
+	fmt.Printf("\x1b[31m calling consumeEvents \x1b[0m\n")
 	progressUpdate, err := sip.consumeEvents()
+	fmt.Printf("\x1b[31m got consumeEvents (%+v) (%+v)\x1b[0m\n", progressUpdate, err)
 	if err != nil {
 		sip.MoveToDraining(err)
 		return nil, sip.DrainHelper()
@@ -490,6 +461,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 
 	sip.mu.Lock()
 	err = sip.mu.ingestionErr
+	fmt.Printf("\x1b[31m grabbing ingestionerr %s \x1b[0m\n", err)
 	sip.mu.Unlock()
 	if err != nil {
 		sip.MoveToDraining(err)
@@ -514,6 +486,7 @@ func (sip *streamIngestionProcessor) close() {
 	if sip.Closed {
 		return
 	}
+	fmt.Printf("\x1b[31m closing \x1b[0m\n")
 
 	for _, client := range sip.streamPartitionClients {
 		_ = client.Close(sip.Ctx)
@@ -530,7 +503,9 @@ func (sip *streamIngestionProcessor) close() {
 	sip.pollingWaitGroup.Wait()
 	// Wait for the merge goroutine.
 	if sip.cancelMergeAndWait != nil {
-		sip.cancelMergeAndWait()
+		if err := sip.cancelMergeAndWait(); err != nil {
+			sip.mu.ingestionErr = err
+		}
 	}
 	sip.InternalClose()
 }
@@ -570,6 +545,7 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 // increasing after it has flushed all KV events previously received by that
 // partition.
 func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, error) {
+	ctx := sip.Ctx
 	// This timer is used to batch up resolved timestamp events that occur within
 	// a given time interval, as to not flush too often and allow the buffer to
 	// accumulate data.
@@ -580,12 +556,69 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 		return nil, nil
 	}
 
+	ro := retry.Options{
+		InitialBackoff: 3 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     1 * time.Minute,
+		MaxRetries:     5,
+	}
+	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+		if streamingKnobs != nil && streamingKnobs.OverrideIngestionPartitionRetry != nil {
+			ro = streamingKnobs.OverrideIngestionPartitionRetry()
+		}
+	}
+	// The retry struct is created fresh for every call to consumeEvents(),
+	// meaning its backoff amount is effectively reset at least every flush
+	// interval.
+	r := retry.Start(ro)
+	retryCount := 0
+
 	for sip.State == execinfra.StateRunning {
 		select {
+		case err, ok := <-sip.subErrCh:
+			fmt.Printf("\x1b[32m subErrCh (%+v) \x1b[0m\n", ok)
+
+			// Clear subErrCh since we only want to handle the first event for a
+			// single set of workers.
+			sip.subErrCh = nil
+
+			// If the first event we observe is that channel was closed, the workers
+			// completed without error and we can signal termination of events.
+			if !ok {
+				close(sip.eventCh)
+				continue
+			}
+
+			// If out of retries, record the error and signal the termination of events.
+			if !r.Next() {
+				log.Errorf(ctx, "exiting after %d attempts with subscription error %s", retryCount, err.Error())
+				sip.mu.Lock()
+				sip.mu.ingestionErr = err
+				sip.mu.Unlock()
+				close(sip.eventCh)
+				continue
+			}
+
+			retryCount++
+			log.Infof(ctx, "retrying subscriptions (attempt %d) after error: %s", retryCount, err.Error())
+			_ = sip.cancelMergeAndWait()
+
+			// Must flush to avoid inserting old KVs into the same SST
+			flushResult, flushErr := sip.flush()
+
+			sip.startPartitions(ctx)
+
+			// Only return if there was some progress made by the flush
+			if flushErr != nil || (flushResult != nil && len(flushResult.ResolvedSpans) > 0) {
+				return flushResult, flushErr
+			}
+			continue
 		case event, ok := <-sip.eventCh:
+			fmt.Printf("\x1b[32m event from eventCh %v\x1b[0m\n", ok)
 			if !ok {
 				sip.internalDrained = true
-				return sip.flush()
+				flushResult, flushErr := sip.flush()
+				return flushResult, flushErr
 			}
 			if event.Type() == streamingccl.KVEvent {
 				sip.metrics.AdmitLatency.RecordValue(
@@ -600,8 +633,10 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 				}
 			}
 
+			fmt.Printf("\x1b[32m %s emitting event \x1b[0m\n", event.partition)
 			switch event.Type() {
 			case streamingccl.KVEvent:
+				fmt.Printf("\x1b[32m kv event %v\x1b[0m\n", event.GetKV().Value.Timestamp)
 				if err := sip.bufferKV(event.GetKV()); err != nil {
 					return nil, err
 				}
@@ -614,6 +649,7 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 					return nil, err
 				}
 			case streamingccl.CheckpointEvent:
+				fmt.Printf("\x1b[32m checkpoint event %v\x1b[0m\n", event.GetResolvedSpans()[0].Timestamp)
 				if err := sip.bufferCheckpoint(event); err != nil {
 					return nil, err
 				}
@@ -675,9 +711,11 @@ func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) er
 }
 
 func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
+	fmt.Printf("\x1b[32m rekey from %s \x1b[0m\n", key.String())
 	rekey, ok, err := sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
 	if !ok {
-		return nil, errors.Newf("key did not match tenant prefix: %s", key.String())
+		fmt.Printf("\x1b[35m rekey for %s, %v \x1b[0m\n", key.String(), ok)
+		return nil, errors.Wrapf(err, "key %s did not match tenant prefix")
 	}
 	if err != nil {
 		return nil, err
@@ -753,6 +791,8 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
+	sip.mu.Lock()
+	defer sip.mu.Unlock()
 	resolvedSpans := event.GetResolvedSpans()
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
@@ -767,7 +807,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 		if highestTimestamp.Less(resolvedSpan.Timestamp) {
 			highestTimestamp = resolvedSpan.Timestamp
 		}
-		_, err := sip.frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
+		_, err := sip.mu.frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
 		if err != nil {
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
@@ -894,9 +934,12 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 		}
 	}
 
+	sip.mu.Lock()
+	defer sip.mu.Unlock()
+
 	// Go through buffered checkpoint events, and put them on the channel to be
 	// emitted to the downstream frontier processor.
-	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+	sip.mu.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
 		flushedCheckpoints.ResolvedSpans = append(flushedCheckpoints.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
 		return span.ContinueMatch
 	})
