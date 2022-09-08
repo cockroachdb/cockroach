@@ -199,8 +199,11 @@ type Descriptor interface {
 	// ValidateSelf checks the internal consistency of the descriptor.
 	ValidateSelf(vea ValidationErrorAccumulator)
 
-	// ValidateCrossReferences performs cross-reference checks.
-	ValidateCrossReferences(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
+	// ValidateForwardReferences performs forward-reference checks.
+	ValidateForwardReferences(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
+
+	// ValidateBackReferences performs back-reference checks.
+	ValidateBackReferences(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
 
 	// ValidateTxnCommit performs pre-commit checks.
 	ValidateTxnCommit(vea ValidationErrorAccumulator, vdg ValidationDescGetter)

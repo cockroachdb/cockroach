@@ -787,7 +787,13 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	for _, deletedID := range b.zoneConfigsToDelete.Ordered() {
 		b.s.LogSideEffectf("deleting zone config for #%d", deletedID)
 	}
-	ve := b.s.uncommitted.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...)
+	ve := b.s.uncommitted.Validate(
+		ctx,
+		clusterversion.TestingClusterVersion,
+		catalog.NoValidationTelemetry,
+		catalog.ValidationLevelAllPreTxnCommit,
+		b.descs...,
+	)
 	return ve.CombinedError()
 }
 

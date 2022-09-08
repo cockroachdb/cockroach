@@ -94,7 +94,11 @@ func (p synthetic) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 }
 func (p synthetic) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
 }
-func (p synthetic) ValidateCrossReferences(
+func (p synthetic) ValidateForwardReferences(
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
+) {
+}
+func (p synthetic) ValidateBackReferences(
 	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }

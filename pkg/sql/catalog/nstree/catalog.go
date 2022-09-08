@@ -199,7 +199,7 @@ func (c Catalog) ValidateWithRecover(
 			ve = append(ve, err)
 		}
 	}()
-	return c.Validate(ctx, version, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
+	return c.Validate(ctx, version, catalog.NoValidationTelemetry, validate.Write, desc)
 }
 
 // ByteSize returns memory usage of the underlying map in bytes.
