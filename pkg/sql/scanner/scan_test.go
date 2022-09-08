@@ -12,9 +12,12 @@ package scanner
 
 import (
 	"fmt"
+	"strings"
 	"testing"
+	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
@@ -175,5 +178,62 @@ func TestScannerBuffer(t *testing.T) {
 func makeScanner(str string) Scanner {
 	var s Scanner
 	s.Init(str)
+	return s
+}
+
+func TestInspect(t *testing.T) {
+	datadriven.RunTest(t, "testdata/inspect", func(t *testing.T, td *datadriven.TestData) string {
+		switch td.Cmd {
+		case "inspect":
+			sql := strings.TrimSuffix(td.Input, "🛇")
+			tokens := Inspect(sql)
+			var buf strings.Builder
+			fmt.Fprintf(&buf, "input: %q\n", td.Input)
+			tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
+			for _, tok := range tokens {
+				fmt.Fprintf(tw, "%d\t%d\t%s\t%s\t%s\t%q\t%s\n",
+					tok.Start, tok.End,
+					qMarker(tok.Quoted),
+					tokname(tok.ID), tokname(tok.MaybeID),
+					tok.Str,
+					prefix(td.Input, tok.Start, tok.End),
+				)
+			}
+			_ = tw.Flush()
+			return buf.String()
+		default:
+			t.Fatalf("%s: unrecognized command", td.Pos)
+		}
+		return ""
+	})
+}
+
+func tokname(id int32) string {
+	if s, ok := tokenNames[int(id)]; ok {
+		return s
+	}
+	if id == 0 {
+		return "EOF"
+	}
+	return fmt.Sprint(id)
+}
+
+func qMarker(q bool) string {
+	if q {
+		return "q"
+	}
+	return " "
+}
+func prefix(s string, b, e int32) string {
+	s = s[b:]
+	if len(s) > int(e-b) {
+		s = s[:e-b]
+	}
+	if len(s) > 5 {
+		s = s[:5] + "…"
+	}
+	if len(s) == 0 {
+		s = "🛇"
+	}
 	return s
 }
