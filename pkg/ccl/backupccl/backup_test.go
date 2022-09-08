@@ -8719,8 +8719,6 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "takes >1 min under race")
-
 	aboutToGC := make(chan struct{})
 	allowGC := make(chan struct{})
 	var gcJobID jobspb.JobID
@@ -8744,6 +8742,7 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 				},
 				SkipWaitingForMVCCGC: true,
 			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
