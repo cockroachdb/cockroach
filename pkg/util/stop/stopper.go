@@ -424,6 +424,14 @@ type TaskOpts struct {
 // RunAsyncTaskEx is like RunTask, except the callback f is run in a goroutine.
 // The call doesn't block for the callback to finish execution.
 func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(context.Context)) error {
+	{
+		defer func() {
+			if r := recover(); r != nil {
+				log.Warningf(context.Background(), "BUG: recovering from panic: %v", r)
+			}
+		}()
+		_ = ctx.Value("non-existent-key")
+	}
 	var alloc *quotapool.IntAlloc
 	taskStarted := false
 	if opt.Sem != nil {
