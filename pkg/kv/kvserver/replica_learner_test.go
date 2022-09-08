@@ -1906,3 +1906,54 @@ func TestRebalancingSnapshotMetrics(t *testing.T) {
 	require.Equal(t, receiverTotalExpected, receiverTotalDelta)
 	require.Equal(t, receiverMapExpected, receiverMapDelta)
 }
+
+// TestAddVotersWithoutRaftQueue verifies that in normal operations Raft
+// snapshots are not required. This test creates a range with a single voter,
+// then adds two additional voters. Most of the time this succeeds, however it
+// fails (today) occasionally due to the addition of the first voter being
+// "incomplete" and therefore the second voter is not able to be added because
+// there is no quorum.
+//
+// Specifically the following sequence of events happens when the leader adds
+// the first voter:
+//  1. AdminChangeReplicasRequest is processed on n1.
+//     a) Adds a n2 as a LEARNER to raft.
+//     b) Sends an initial snapshot to n2.
+//     c) n2 receives and applies the snapshot.
+//     d) n2 responds that it successfully applied the snapshot.
+//     e) n1 receives the response and updates state to Follower.
+//  2. Before step c above, n1 sends a MsgApp to n2
+//     a) MsgApp - entries up-to and including the conf change.
+//     b) The MsgApp is received and REJECTED because the term is wrong.
+//     c) After 1e above, n1 receives the rejection.
+//     d) n1 updates n2 from StateReplicate to StateProbe and then StateSnapshot.
+//
+// From n2's perspective, it receives the MsgApp prior to the initial snapshot.
+// This results in it responding with a rejected MsgApp. Later it receives the
+// snapshot and correctly applies it. However, when n1 sees the rejected MsgApp,
+// it moves n2 status to StateProbe and stops sending Raft updates to it as it
+// plans to fix it with a Raft Snapshot. As the raft snapshot queue is disabled
+// this never happens and the state is stuck as a non-Learner in StateProbe. At
+// this point, the Raft group is wedged since it only has 1/2 nodes available
+// for Raft consensus.
+func TestAddVotersWithoutRaftQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 87553)
+	ctx := context.Background()
+
+	// Disable the raft snapshot queue to make sure we don't require a raft snapshot.
+	tc := testcluster.StartTestCluster(
+		t, 3, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{DisableRaftSnapshotQueue: true}},
+			},
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Target(1))
+	// This may hang since without the snapshot queue, the raft group is broken.
+	tc.AddVotersOrFatal(t, key, tc.Target(2))
+}
