@@ -51,7 +51,7 @@ func NewStatsProfiler(
 		return nil, errors.AssertionFailedf("need to specify dir for NewStatsProfiler")
 	}
 
-	log.Infof(ctx, "writing memory stats to %s at last every %s", dir, resetHighWaterMarkInterval)
+	log.Infof(ctx, "writing memory stats to %s at last every %s", log.SafeManaged(dir), resetHighWaterMarkInterval)
 
 	dumpStore := dumpstore.NewStore(dir, maxCombinedFileSize, st)
 

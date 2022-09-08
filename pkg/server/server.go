@@ -1518,14 +1518,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 	logPendingLossOfQuorumRecoveryEvents(ctx, s.node.stores)
 
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
-		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
+		redact.Safe(s.cfg.HTTPRequestScheme()), log.SafeManaged(s.cfg.HTTPAddr), log.SafeManaged(s.cfg.HTTPAdvertiseAddr))
 	rpcConnType := redact.SafeString("grpc/postgres")
 	if s.cfg.SplitListenSQL {
 		rpcConnType = "grpc"
-		log.Ops.Infof(ctx, "starting postgres server at %s (use: %s)", s.cfg.SQLAddr, s.cfg.SQLAdvertiseAddr)
+		log.Ops.Infof(ctx, "starting postgres server at %s (use: %s)",
+			log.SafeManaged(s.cfg.SQLAddr), log.SafeManaged(s.cfg.SQLAdvertiseAddr))
 	}
-	log.Ops.Infof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
-	log.Ops.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
+	log.Ops.Infof(ctx, "starting %s server at %s", log.SafeManaged(rpcConnType), log.SafeManaged(s.cfg.Addr))
+	log.Ops.Infof(ctx, "advertising CockroachDB node at %s", log.SafeManaged(s.cfg.AdvertiseAddr))
 
 	log.Event(ctx, "accepting connections")
 
