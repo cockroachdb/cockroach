@@ -20,7 +20,7 @@ $(location @com_github_cockroachdb_tools//cmd/stringer:stringer) -output=$@ -typ
          args = " ".join(additional_args),
         ),
         visibility = [":__pkg__", "//pkg/gen:__pkg__"],
-        tools = [
+        exec_tools = [
             "@go_sdk//:bin/go",
             "@com_github_cockroachdb_tools//cmd/stringer",
         ],
