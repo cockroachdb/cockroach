@@ -8600,11 +8600,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 
 func TestBackupWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 64773, "flaky test")
 	defer log.Scope(t).Close(t)
-
-	skip.UnderStress(t, "under stress the test unexpectedly surfaces non-retryable errors on"+
-		" backup failure")
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
@@ -8623,7 +8619,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 
 	var expectedCount int
 	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&expectedCount)
-	query := `BACKUP DATABASE data TO 'userfile:///worker-failure'`
+	query := `BACKUP DATABASE data INTO 'userfile:///worker-failure'`
 	errCh := make(chan error)
 	go func() {
 		_, err := conn.Exec(query)
@@ -8652,7 +8648,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 
 	// Drop database and restore to ensure that the backup was successful.
 	sqlDB.Exec(t, `DROP DATABASE data`)
-	sqlDB.Exec(t, `RESTORE DATABASE data FROM 'userfile:///worker-failure'`)
+	sqlDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN 'userfile:///worker-failure'`)
 	var actualCount int
 	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&actualCount)
 	require.Equal(t, expectedCount, actualCount)
