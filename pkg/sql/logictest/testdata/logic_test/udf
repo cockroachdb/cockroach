@@ -55,16 +55,6 @@ CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT * FROM ab WHERE a
 statement ok
 CREATE FUNCTION d(i INT2) RETURNS INT4 LANGUAGE SQL AS 'SELECT i'
 
-# TODO(mgartner): This should be allowed because the cast from INT2::FLOAT4 is
-# allowed in implicit contexts.
-statement error return type mismatch in function declared to return float4\nDETAIL: Actual return type is int2
-CREATE FUNCTION e(i INT2) RETURNS FLOAT4 LANGUAGE SQL AS 'SELECT i'
-
-# TODO(mgartner): This should be allowed because the cast from BOOL::STRING is
-# allowed in assignment contexts.
-statement error return type mismatch in function declared to return string\nDETAIL: Actual return type is bool
-CREATE FUNCTION f(b BOOL) RETURNS STRING LANGUAGE SQL AS 'SELECT b'
-
 statement error return type mismatch in function declared to return bool\nDETAIL: Actual return type is int
 CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
 
@@ -78,12 +68,6 @@ CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
 # It should pass the return type validation and stored as a tuple type.
 statement ok
 CREATE TABLE t_implicit_type(a INT PRIMARY KEY, b STRING);
-
-statement error pq: unimplemented: implicit record types as argument or return types in user-defined functions are not supported
-CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
-
-statement error pq: unimplemented: implicit record types as argument or return types in user-defined functions are not supported
-CREATE FUNCTION f(t_implicit_type) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$
 
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is record
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
@@ -1546,7 +1530,7 @@ a  b
 
 statement ok
 CREATE FUNCTION max_in_values() RETURNS INT LANGUAGE SQL AS $$
-SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
+  SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
 $$
 
 query I
@@ -1671,6 +1655,15 @@ query I
 SELECT fetch_b(99999999)
 ----
 NULL
+
+statement ok
+CREATE FUNCTION one_nth(n INT) RETURNS INT LANGUAGE SQL AS 'SELECT 1/n'
+
+statement error pgcode 22012 division by zero
+SELECT one_nth(0)
+
+statement error pgcode 22012 division by zero
+SELECT int_identity((1/0)::INT)
 
 
 subtest args
@@ -1863,3 +1856,186 @@ l1  l2  i1  i2  s1  s2  v1  v2
 1   1   1   1   1   1   11  11
 2   2   2   2   2   2   12  12
 3   3   3   3   3   3   13  13
+
+
+subtest implicit_record_types
+
+statement ok
+CREATE TABLE imp(k INT PRIMARY KEY, a INT, b TEXT);
+INSERT INTO imp VALUES (1, 2, 'a');
+
+statement ok
+CREATE FUNCTION imp_const_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')
+$$
+
+query TBT
+SELECT imp_const_tup(), (11,22,'b')::imp = imp_const_tup(), pg_typeof(imp_const_tup())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')::imp
+$$
+
+query TBT
+SELECT imp_const_cast(), (11,22,'b')::imp = imp_const_cast(), pg_typeof(imp_const_cast())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11 AS k, 22 AS a, 'b' AS b
+$$
+
+query TBT
+SELECT imp_const(), (11,22,'b')::imp = imp_const(), pg_typeof(imp_const())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const_unnamed() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11, 22, 'b'
+$$
+
+query TBT
+SELECT imp_const_unnamed(), (11,22,'b')::imp = imp_const_unnamed(), pg_typeof(imp_const_unnamed())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp
+$$
+
+# TODO(mgartner): pg_typeof(imp_tup()) is omitted because we get different
+# results for different configurations, due to #58252.
+query TB
+SELECT imp_tup(), (1,2,'a')::imp = imp_tup()
+----
+(1,2,a)  true
+
+statement ok
+CREATE FUNCTION imp() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp
+$$
+
+query TBT
+SELECT imp(), (1,2,'a')::imp = imp(), pg_typeof(imp())
+----
+(1,2,a)  true  imp
+
+statement ok
+CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
+  SELECT * FROM imp
+$$
+
+query TBT
+SELECT imp_star(), (1,2,'a')::imp = imp_star(), pg_typeof(imp_star())
+----
+(1,2,a)  true  imp
+
+statement ok
+INSERT INTO imp VALUES (100, 200, 'z')
+
+statement ok
+CREATE FUNCTION imp_tup_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp ORDER BY b DESC
+$$
+
+# TODO(mgartner): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations, due to #58252.
+query TB
+SELECT imp_tup_ordered(), (100,200,'z')::imp = imp_tup_ordered()
+----
+(100,200,z)  true
+
+statement ok
+CREATE FUNCTION imp_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp ORDER BY b DESC
+$$
+
+query TBT
+SELECT imp_ordered(), (100,200,'z')::imp = imp_ordered(), pg_typeof(imp_ordered())
+----
+(100,200,z)  true  imp
+
+statement ok
+CREATE FUNCTION imp_identity(i imp) RETURNS imp LANGUAGE SQL AS $$
+  SELECT i
+$$
+
+query TT
+SELECT imp_identity((1,2,'a')), imp_identity((1,2,'a')::imp)
+----
+(1,2,a)  (1,2,a)
+
+statement ok
+CREATE FUNCTION imp_a(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT (i).a
+$$
+
+query II
+SELECT imp_a((1,2,'a')), imp_a((1,2,'a')::imp)
+----
+2  2
+
+statement ok
+CREATE FUNCTION imp_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2, 3)
+$$
+
+query TBT
+SELECT imp_cast(), (1,2,'3') = imp_cast(), pg_typeof(imp_cast())
+----
+(1,2,3)  true  imp
+
+statement error return type mismatch in function declared to return imp
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2)
+$$
+
+# TODO(mgartner): The error message should say "imp" instead of "record".
+statement error pgcode 42P13 return type mismatch in function declared to return record
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a FROM imp
+$$
+
+# TODO(mgartner): The error message should say "imp" instead of "record".
+statement error pgcode 42P13 return type mismatch in function declared to return record
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b::INT FROM imp
+$$
+
+statement error pgcode 42P13 return type mismatch in function declared to return int
+CREATE FUNCTION err(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT i
+$$
+
+
+subtest return_type_assignment_casts
+
+# Do not allow functions with return type mismatches that cannot be cast in an
+# implicit or assignment context.
+statement error pgcode 42P13 return type mismatch in function declared to return bool
+CREATE FUNCTION err(i INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i'
+
+statement ok
+CREATE FUNCTION itof(i INT) RETURNS FLOAT8 LANGUAGE SQL AS 'SELECT i'
+
+query FT
+SELECT itof(123), pg_typeof(itof(123))
+----
+123  double precision
+
+statement ok
+CREATE FUNCTION stoc(s STRING) RETURNS CHAR LANGUAGE SQL AS 'SELECT s'
+
+query FT
+SELECT stoc('a'), pg_typeof(stoc('a'))
+----
+a  text
+
+statement error pgcode 22001 value too long for type CHAR
+SELECT stoc('abc')
