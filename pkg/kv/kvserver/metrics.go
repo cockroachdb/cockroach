@@ -1023,6 +1023,15 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaIOOverload = metric.Metadata{
+		Name: "admission.io.overload",
+		Help: `1-normalized float to pause replication to raft group followers if its value is at least 1.
+
+Composed of LSM L0 sub-level and file counts.`,
+		Measurement: "Threshold",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	// Replica queue metrics.
 	metaMVCCGCQueueSuccesses = metric.Metadata{
 		Name:        "queue.gc.process.success",
@@ -1770,6 +1779,7 @@ type StoreMetrics struct {
 
 	RaftPausedFollowerCount       *metric.Gauge
 	RaftPausedFollowerDroppedMsgs *metric.Counter
+	IOOverload                    *metric.GaugeFloat64
 
 	RaftCoalescedHeartbeatsPending *metric.Gauge
 
@@ -2293,6 +2303,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		RaftPausedFollowerCount:       metric.NewGauge(metaRaftFollowerPaused),
 		RaftPausedFollowerDroppedMsgs: metric.NewCounter(metaRaftPausedFollowerDroppedMsgs),
+		IOOverload:                    metric.NewGaugeFloat64(metaIOOverload),
 
 		// This Gauge measures the number of heartbeats queued up just before
 		// the queue is cleared, to avoid flapping wildly.
