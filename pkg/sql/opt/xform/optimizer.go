@@ -998,6 +998,9 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		// Needed to prevent rule cycles that lead to timeouts and OOMs.
 		int(opt.EliminateProject),
 		int(opt.EliminateSelect),
+		// Needed to make sure that dummy columns are pruned so that the
+		// database name is retrieved correctly.
+		int(opt.PruneScanCols),
 	)
 
 	var disabledRules RuleSet
