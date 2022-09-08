@@ -125,40 +125,48 @@ type calcReplicaMetricsInput struct {
 }
 
 func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
-	var m ReplicaMetrics
-
-	var leaseOwner bool
-	m.LeaseStatus = d.leaseStatus
+	var validLease, validLeaseOwner bool
+	var validLeaseType roachpb.LeaseType
 	if d.leaseStatus.IsValid() {
-		m.LeaseValid = true
-		leaseOwner = d.leaseStatus.Lease.OwnedBy(d.storeID)
-		m.LeaseType = d.leaseStatus.Lease.Type()
+		validLease = true
+		validLeaseOwner = d.leaseStatus.Lease.OwnedBy(d.storeID)
+		validLeaseType = d.leaseStatus.Lease.Type()
 	}
-	m.Leaseholder = m.LeaseValid && leaseOwner
-	m.Leader = isRaftLeader(d.raftStatus)
-	m.Quiescent = d.quiescent
-	m.Ticking = d.ticking
 
-	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated = calcRangeCounter(
+	rangeCounter, unavailable, underreplicated, overreplicated := calcRangeCounter(
 		d.storeID, d.desc, d.leaseStatus, d.livenessMap, d.conf.GetNumVoters(), d.conf.NumReplicas, d.clusterNodes)
-
-	m.QuotaPoolPercentUsed = calcQuotaPoolPercentUsed(d.qpUsed, d.qpCapacity)
-
-	const raftLogTooLargeMultiple = 4
-	m.RaftLogTooLarge = d.raftLogSize > (raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold) &&
-		d.raftLogSizeTrusted
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
-	if m.Leader {
-		m.BehindCount = calcBehindCount(d.raftStatus, d.desc, d.livenessMap)
-		m.PausedFollowerCount = int64(len(d.paused))
+	leader := isRaftLeader(d.raftStatus)
+	var leaderBehindCount, leaderPausedFollowerCount int64
+	if leader {
+		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.livenessMap)
+		leaderPausedFollowerCount = int64(len(d.paused))
 	}
-	m.SlowRaftProposalCount += d.slowRaftProposalCount
-	m.LatchMetrics = d.latchMetrics
-	m.LockTableMetrics = d.lockTableMetrics
 
-	return m
+	const raftLogTooLargeMultiple = 4
+	return ReplicaMetrics{
+		Leader:          leader,
+		LeaseValid:      validLease,
+		Leaseholder:     validLeaseOwner,
+		LeaseType:       validLeaseType,
+		LeaseStatus:     d.leaseStatus,
+		Quiescent:       d.quiescent,
+		Ticking:         d.ticking,
+		RangeCounter:    rangeCounter,
+		Unavailable:     unavailable,
+		Underreplicated: underreplicated,
+		Overreplicated:  overreplicated,
+		RaftLogTooLarge: d.raftLogSizeTrusted &&
+			d.raftLogSize > raftLogTooLargeMultiple*d.raftCfg.RaftLogTruncationThreshold,
+		BehindCount:           leaderBehindCount,
+		PausedFollowerCount:   leaderPausedFollowerCount,
+		SlowRaftProposalCount: d.slowRaftProposalCount,
+		QuotaPoolPercentUsed:  calcQuotaPoolPercentUsed(d.qpUsed, d.qpCapacity),
+		LatchMetrics:          d.latchMetrics,
+		LockTableMetrics:      d.lockTableMetrics,
+	}
 }
 
 func calcQuotaPoolPercentUsed(qpUsed, qpCapacity int64) int64 {
