@@ -50,7 +50,9 @@ func initProbeRangesBuiltins() {
 var probeRangesGenerators = map[string]builtinDefinition{
 	"crdb_internal.probe_ranges": makeBuiltin(
 		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
+			Category:     categorySystemInfo,
+			Class:        tree.GeneratorClass,
+			Undocumented: true,
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{
