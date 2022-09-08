@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +22,10 @@ import (
 
 const (
 	clusterFlag = "cluster"
+)
+
+var (
+	dependsOnGeos = false
 )
 
 func makeRoachprodStressCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -94,6 +99,7 @@ func (d *dev) roachprodStress(cmd *cobra.Command, commandLine []string) error {
 	}
 	if strings.TrimSpace(string(queryOutput)) != "" {
 		// If the test depends on geos we additionally want to cross-build it.
+		dependsOnGeos = true
 		crossTargets = append(crossTargets, "//c-deps:libgeos")
 	}
 
@@ -109,24 +115,28 @@ func (d *dev) roachprodStress(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 
-	testTargetBasename := strings.Split(targets[0].fullName, ":")[1]
-	// Build roachprod-stress and roachprod.
-	args, buildTargets, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/roachprod-stress"})
-	if err != nil {
-		return err
-	}
-	if _, err := d.exec.CommandContextSilent(ctx, "bazel", args...); err != nil {
-		return err
-	}
-	if err := d.stageArtifacts(ctx, buildTargets); err != nil {
-		return err
-	}
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
 	}
+
+	libdir := path.Join(workspace, "artifacts", "libgeos", "lib")
+	if dependsOnGeos {
+		if err = d.os.MkdirAll(libdir); err != nil {
+			return err
+		}
+		for _, libWithExt := range []string{"libgeos.so", "libgeos_c.so"} {
+			src := filepath.Join(workspace, "artifacts", libWithExt)
+			dst := filepath.Join(libdir, libWithExt)
+			if err := d.os.CopyFile(src, dst); err != nil {
+				return err
+			}
+		}
+	}
+
+	testTargetBasename := strings.Split(targets[0].fullName, ":")[1]
 	// Run roachprod-stress.
-	roachprodStressArgs := []string{cluster, fmt.Sprintf("./%s", pkg), "-testbin", filepath.Join(workspace, "artifacts", testTargetBasename), "-stressbin", filepath.Join(workspace, "artifacts", "stress"), "-libdir", filepath.Join(workspace, "artifacts", "libgeos", "lib")}
+	roachprodStressArgs := []string{cluster, fmt.Sprintf("./%s", pkg), "-testbin", filepath.Join(workspace, "artifacts", testTargetBasename), "-stressbin", filepath.Join(workspace, "artifacts", "stress"), "-libdir", libdir}
 	roachprodStressArgs = append(roachprodStressArgs, strings.Fields(stressCmdArgs)...)
 	roachprodStressArgs = append(roachprodStressArgs, "--")
 	roachprodStressArgs = append(roachprodStressArgs, testArgs...)
