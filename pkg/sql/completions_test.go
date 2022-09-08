@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package delegate
+package sql
 
 import (
 	"reflect"
@@ -103,7 +103,7 @@ func TestCompletions(t *testing.T) {
 		if tc.offset == 0 {
 			offset = len(tc.stmt)
 		}
-		completions, err := RunShowCompletions(tc.stmt, offset)
+		completions, err := runShowCompletions(tc.stmt, offset)
 		if err != nil {
 			t.Error(err)
 		}

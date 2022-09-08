@@ -359,6 +359,9 @@ func (b *Builder) buildStmt(
 	case *tree.ControlSchedules:
 		return b.buildControlSchedules(stmt, inScope)
 
+	case *tree.ShowCompletions:
+		return b.buildShowCompletions(stmt, inScope)
+
 	case *tree.CancelQueries:
 		return b.buildCancelQueries(stmt, inScope)
 

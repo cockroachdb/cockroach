@@ -1,62 +1,62 @@
-query T
+query TTTII
 SHOW COMPLETIONS AT OFFSET 1 FOR 'select 1'
 ----
-SELECT
+SELECT  NULL  NULL  NULL  NULL
 
-query T
+query TTTII
 SHOW COMPLETIONS AT OFFSET 7 FOR 'select 1'
 ----
 
-query T
+query TTTII
 SHOW COMPLETIONS AT OFFSET 7 FOR 'select 2'
 ----
 
-query T
+query TTTII
 SHOW COMPLETIONS AT OFFSET 10 FOR 'select * fro'
 ----
-FRO
+FRO  NULL  NULL  NULL  NULL
 
-query T
+query TTTII
 SHOW COMPLETIONS AT OFFSET 11 FOR 'select * fro'
 ----
-FRO
+FRO  NULL  NULL  NULL  NULL
 
-query T
+query TTTII
 SHOW COMPLETIONS AT OFFSET 12 FOR 'select * fro'
 ----
-FROM
+FROM  NULL  NULL  NULL  NULL
 
-query T
+query TTTII
 SHOW COMPLETIONS AT OFFSET 10 FOR 'select * from'
 ----
-FROM
+FROM  NULL  NULL  NULL  NULL
 
-query T
+query TTTII
 SHOW COMPLETIONS AT OFFSET 11 FOR 'select * from'
 ----
-FROM
+FROM  NULL  NULL  NULL  NULL
 
 # This case doesn't really make sense - completing this as SELECT doesn't
 # really make sense but we'll need to add more complex logic to determine
 # whether our SQL token is a string const.
 # However we do want to test this so we can ensure we handle escaped strings.
-query T
+query TTTII
 SHOW COMPLETIONS AT OFFSET 4 FOR e'\'se\'';
 ----
-SEARCH
-SECOND
-SECONDARY
-SECURITY
-SELECT
-SEQUENCE
-SEQUENCES
-SERIALIZABLE
-SERVER
-SESSION
-SESSIONS
-SESSION_USER
-SET
-SETOF
-SETS
-SETTING
-SETTINGS
+SEARCH        NULL  NULL  NULL  NULL
+SECOND        NULL  NULL  NULL  NULL
+SECONDARY     NULL  NULL  NULL  NULL
+SECURITY      NULL  NULL  NULL  NULL
+SELECT        NULL  NULL  NULL  NULL
+SEQUENCE      NULL  NULL  NULL  NULL
+SEQUENCES     NULL  NULL  NULL  NULL
+SERIALIZABLE  NULL  NULL  NULL  NULL
+SERVER        NULL  NULL  NULL  NULL
+SESSION       NULL  NULL  NULL  NULL
+SESSIONS      NULL  NULL  NULL  NULL
+SESSION_USER  NULL  NULL  NULL  NULL
+SET           NULL  NULL  NULL  NULL
+SETOF         NULL  NULL  NULL  NULL
+SETS          NULL  NULL  NULL  NULL
+SETTING       NULL  NULL  NULL  NULL
+SETTINGS      NULL  NULL  NULL  NULL

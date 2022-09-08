@@ -311,6 +311,16 @@ func (b *Builder) buildControlSchedules(ctl *memo.ControlSchedulesExpr) (execPla
 	return execPlan{root: node}, nil
 }
 
+func (b *Builder) buildShowCompletions(ctl *memo.ShowCompletionsExpr) (execPlan, error) {
+	node, err := b.factory.ConstructShowCompletions(
+		ctl.Command,
+	)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return planWithColumns(node, ctl.Columns), nil
+}
+
 func (b *Builder) buildCancelQueries(cancel *memo.CancelQueriesExpr) (execPlan, error) {
 	input, err := b.buildRelational(cancel.Input)
 	if err != nil {
