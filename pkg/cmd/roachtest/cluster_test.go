@@ -181,6 +181,8 @@ func TestCmdLogFileName(t *testing.T) {
 }
 
 func TestVerifyLibraries(t *testing.T) {
+	originalLibraryPaths := libraryFilePaths
+	defer func() { libraryFilePaths = originalLibraryPaths }()
 	testCases := []struct {
 		name             string
 		verifyLibs       []string

@@ -1683,6 +1683,9 @@ func (c *clusterImpl) PutE(
 func (c *clusterImpl) PutLibraries(
 	ctx context.Context, libraryDir string, libraries []string,
 ) error {
+	if len(libraries) == 0 {
+		return nil
+	}
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Put")
 	}
