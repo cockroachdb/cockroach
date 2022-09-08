@@ -119,11 +119,11 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
     }
 
     const tableData = insightsTableData();
-    const waitingExecutions: EventExecution[] = [
+    const blockingExecutions: EventExecution[] = [
       {
-        executionID: insightDetails.waitingExecutionID,
-        fingerprintID: insightDetails.waitingFingerprintID,
-        queries: insightDetails.waitingQueries,
+        executionID: insightDetails.blockingExecutionID,
+        fingerprintID: insightDetails.blockingFingerprintID,
+        queries: insightDetails.blockingQueries,
         startTime: insightDetails.startTime,
         elapsedTime: insightDetails.elapsedTime,
         execType: insightDetails.execType,
@@ -176,14 +176,14 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
             <Col>
               <Row>
                 <Heading type="h5">
-                  {WaitTimeInsightsLabels.WAITED_TXNS_TABLE_TITLE(
+                  {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
                     insightDetails.executionID,
                     insightDetails.execType,
                   )}
                 </Heading>
                 <div className={tableCx("margin-bottom-large")}>
                   <WaitTimeDetailsTable
-                    data={waitingExecutions}
+                    data={blockingExecutions}
                     execType={insightDetails.execType}
                   />
                 </div>

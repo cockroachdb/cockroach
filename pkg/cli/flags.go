@@ -1056,17 +1056,19 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.SplitListenSQL = changed(fs, cliflags.ListenSQLAddr.Name)
 
 	// Fill in the defaults for --advertise-sql-addr, if the flag exists on `cmd`.
-	advSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
+	advHostSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
 		changed(fs, cliflags.AdvertiseHost.Name)
+	advPortSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
+		changed(fs, cliflags.AdvertisePort.Name)
 	if serverSQLAdvertiseAddr == "" {
-		if advSpecified {
+		if advHostSpecified {
 			serverSQLAdvertiseAddr = serverAdvertiseAddr
 		} else {
 			serverSQLAdvertiseAddr = serverSQLAddr
 		}
 	}
 	if serverSQLAdvertisePort == "" {
-		if advSpecified && !serverCfg.SplitListenSQL {
+		if advPortSpecified && !serverCfg.SplitListenSQL {
 			serverSQLAdvertisePort = serverAdvertisePort
 		} else {
 			serverSQLAdvertisePort = serverSQLPort
@@ -1104,7 +1106,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 
 	if serverHTTPAdvertiseAddr == "" {
-		if advSpecified {
+		if advHostSpecified || advPortSpecified {
 			serverHTTPAdvertiseAddr = serverAdvertiseAddr
 		} else {
 			serverHTTPAdvertiseAddr = serverHTTPAddr
