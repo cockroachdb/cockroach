@@ -239,7 +239,7 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.event_consumer_workers",
 	"the number of workers to use when processing events; 0 or 1 disables",
-	int64(util.ConstantWithMetamorphicTestRange("changefeed.consumer_max_workers", 0, 0, 32)),
+	32,
 	settings.NonNegativeInt,
 ).WithPublic()
 
@@ -249,6 +249,6 @@ var EventConsumerWorkerQueueSize = settings.RegisterIntSetting(
 	"changefeed.event_consumer_worker_queue_size",
 	"if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events"+
 		"which a worker can buffer",
-	int64(util.ConstantWithMetamorphicTestRange("changefeed.event_consumer_worker_queue_size", 16, 0, 16)),
+	int64(util.ConstantWithMetamorphicTestRange("changefeed.event_consumer_worker_queue_size", 16, 0, 0)),
 	settings.NonNegativeInt,
 ).WithPublic()
