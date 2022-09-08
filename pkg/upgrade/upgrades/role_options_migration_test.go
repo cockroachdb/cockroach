@@ -214,6 +214,7 @@ func TestRoleOptionsMigration100User(t *testing.T) {
 
 func TestRoleOptionsMigration15000User(t *testing.T) {
 	skip.UnderStress(t)
+	skip.UnderRace(t)
 	runTestRoleOptionsMigration(t, 15000)
 }
 
