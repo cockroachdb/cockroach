@@ -28,7 +28,7 @@ var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(
 var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)$`)
 
 var djangoSupportedTag = "cockroach-4.1.x"
-var djangoCockroachDBSupportedTag = "4.1"
+var djangoCockroachDBSupportedTag = "4.1.*"
 
 func registerDjango(r registry.Registry) {
 	runDjango := func(
@@ -176,13 +176,7 @@ func registerDjango(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailureList, ignoredlistName, ignoredlist := djangoBlocklists.getLists(version)
-		if expectedFailureList == nil {
-			t.Fatalf("No django blocklist defined for cockroach version %s", version)
-		}
-		if ignoredlist == nil {
-			t.Fatalf("No django ignorelist defined for cockroach version %s", version)
-		}
+		blocklistName, ignoredlistName := "djangoBlocklist", "djangoIgnoreList"
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 			version, blocklistName, ignoredlistName)
 
@@ -219,9 +213,9 @@ func registerDjango(r registry.Registry) {
 		t.Status("collating test results")
 
 		results := newORMTestsResults()
-		results.parsePythonUnitTestOutput(fullTestResults, expectedFailureList, ignoredlist)
+		results.parsePythonUnitTestOutput(fullTestResults, djangoBlocklist, djangoIgnoreList)
 		results.summarizeAll(
-			t, "django" /* ormName */, blocklistName, expectedFailureList, version, djangoSupportedTag,
+			t, "django" /* ormName */, blocklistName, djangoBlocklist, version, djangoSupportedTag,
 		)
 	}
 
