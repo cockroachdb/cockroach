@@ -188,6 +188,42 @@ func (a *Allocator) ResetBatch(batch coldata.Batch) {
 	a.ReleaseMemory(batch.ResetInternalBatch())
 }
 
+// checkDesiredCapacityMemoryLimit returns the largest batch capacity that is
+// still within the memory limit for the given type schema. The returned value
+// is at most minDesiredCapacity and at least 1.
+func checkDesiredCapacityMemoryLimit(
+	minDesiredCapacity int, maxBatchMemSize int64, typs []*types.T,
+) int {
+	if maxBatchMemSize == math.MaxInt64 {
+		// If there is no memory limit, then we don't reduce the ask.
+		return minDesiredCapacity
+	}
+	// If we have a memory limit, then make sure that it is sufficient for the
+	// desired capacity, if not, reduce the ask.
+	estimatedMemoryUsage := SelVectorSize(minDesiredCapacity) + EstimateBatchSizeBytes(typs, minDesiredCapacity)
+	if estimatedMemoryUsage >= maxBatchMemSize {
+		minDesiredCapacity = int(float64(minDesiredCapacity) / float64(estimatedMemoryUsage) * float64(maxBatchMemSize))
+		if minDesiredCapacity == 0 {
+			minDesiredCapacity = 1
+		}
+	}
+	return minDesiredCapacity
+}
+
+// growCapacity grows the batch capacity exponentially or up to
+// minDesiredCapacity (whichever is larger) without exceeding
+// coldata.BatchSize().
+func growCapacity(oldBatch coldata.Batch, minDesiredCapacity int) int {
+	newCapacity := oldBatch.Capacity() * 2
+	if newCapacity < minDesiredCapacity {
+		newCapacity = minDesiredCapacity
+	}
+	if newCapacity > coldata.BatchSize() {
+		newCapacity = coldata.BatchSize()
+	}
+	return newCapacity
+}
+
 // resetMaybeReallocate returns a batch that is guaranteed to be in a "reset"
 // state (meaning it is ready to be used) and to have the capacity of at least
 // 1. minDesiredCapacity is a hint about the capacity of the returned batch
@@ -227,10 +263,29 @@ func (a *Allocator) resetMaybeReallocate(
 	}
 	reallocated = true
 	if oldBatch == nil {
+		minDesiredCapacity = checkDesiredCapacityMemoryLimit(minDesiredCapacity, maxBatchMemSize, typs)
 		newBatch = a.NewMemBatchWithFixedCapacity(typs, minDesiredCapacity)
 	} else {
 		// If old batch is already of the largest capacity, we will reuse it.
 		useOldBatch := oldBatch.Capacity() == coldata.BatchSize()
+		// Check that if we were to grow the capacity and allocate a new batch,
+		// the new batch would still not exceed the limit by too much.
+		if estimatedMaxCapacity := checkDesiredCapacityMemoryLimit(
+			growCapacity(oldBatch, minDesiredCapacity), maxBatchMemSize, typs,
+		); estimatedMaxCapacity < minDesiredCapacity {
+			// Reduce the ask according to the estimated maximum. Note that we
+			// do not set desiredCapacitySufficient to false since this is the
+			// largest capacity we can allocate, so it doesn't matter that the
+			// caller wanted more (similar to what we do with clamping at
+			// coldata.BatchSize() above).
+			minDesiredCapacity = estimatedMaxCapacity
+			if estimatedMaxCapacity < int(float64(oldBatch.Capacity())*1.1) {
+				// If we cannot grow the capacity of the old batch by more than
+				// 10%, we might as well just reuse the old batch.
+				minDesiredCapacity = oldBatch.Capacity()
+				desiredCapacitySufficient = true
+			}
+		}
 		// If the old batch already satisfies the desired capacity which is
 		// sufficient, we will reuse it too.
 		if desiredCapacitySufficient && oldBatch.Capacity() >= minDesiredCapacity {
@@ -251,13 +306,8 @@ func (a *Allocator) resetMaybeReallocate(
 			newBatch = oldBatch
 		} else {
 			a.ReleaseMemory(oldBatchMemSize)
-			newCapacity := oldBatch.Capacity() * 2
-			if newCapacity < minDesiredCapacity {
-				newCapacity = minDesiredCapacity
-			}
-			if newCapacity > coldata.BatchSize() {
-				newCapacity = coldata.BatchSize()
-			}
+			newCapacity := growCapacity(oldBatch, minDesiredCapacity)
+			newCapacity = checkDesiredCapacityMemoryLimit(newCapacity, maxBatchMemSize, typs)
 			newBatch = a.NewMemBatchWithFixedCapacity(typs, newCapacity)
 		}
 	}
@@ -724,6 +774,20 @@ func (h *AccountingHelper) ResetMaybeReallocate(
 		// allows us to avoid computing the memory size of the batch on each
 		// call.
 		h.maxCapacity = oldBatch.Capacity()
+	} else if reallocated && GetBatchMemSize(newBatch) >= h.memoryLimit {
+		// A new batch has just been allocated and it exceeds the memory limit,
+		// so we memorize its capacity to use from now on. Notably, this will
+		// also ensure that the SetAccountingHelper will use the full capacity
+		// of this batch when variable-width types are present.
+		if buildutil.CrdbTestBuild {
+			if batchMemSize := GetBatchMemSize(newBatch); h.discardBatch(batchMemSize) && newBatch.Capacity() > 1 {
+				colexecerror.InternalError(errors.AssertionFailedf(
+					"newly-allocated batch of capacity %d should be discarded right away: "+
+						"memory limit %d, batch mem size %d", newBatch.Capacity(), h.memoryLimit, batchMemSize,
+				))
+			}
+		}
+		h.maxCapacity = newBatch.Capacity()
 	}
 	return newBatch, reallocated
 }
