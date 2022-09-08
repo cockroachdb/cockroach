@@ -3127,6 +3127,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		overreplicatedRangeCount  int64
 		behindCount               int64
 		pausedFollowerCount       int64
+		ioOverload                float64
 
 		locks                          int64
 		totalLockHoldDurationNanos     int64
@@ -3150,6 +3151,10 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.mu.RLock()
 	uninitializedCount = int64(len(s.mu.uninitReplicas))
 	s.mu.RUnlock()
+
+	s.ioThreshold.Lock()
+	ioOverload, _ = s.ioThreshold.t.Score()
+	s.ioThreshold.Unlock()
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
@@ -3247,6 +3252,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 	s.metrics.RaftPausedFollowerCount.Update(pausedFollowerCount)
+	s.metrics.IOOverload.Update(ioOverload)
 
 	var averageLockHoldDurationNanos int64
 	var averageLockWaitDurationNanos int64
