@@ -491,6 +491,15 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 			defer alloc.Release()
 		}
 
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Warningf(context.Background(), "BUG: recovering from panic: %v\n\n\nstack trace: %s", r, debug.Stack())
+				}
+			}()
+			_ = ctx.Value("non-existent-key")
+		}()
+
 		f(ctx)
 	}()
 	return nil
