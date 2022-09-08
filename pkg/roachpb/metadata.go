@@ -780,17 +780,21 @@ func (h *GCHint) IsEmpty() bool {
 	return h.LatestRangeDeleteTimestamp.IsEmpty()
 }
 
-// Merge forwards latest delete timestamp of the receiver (lhs) with timestamp of
-// argument (rhs).
+// Merge combines GC hints of two ranges. The result is either a hint that
+// covers both ranges or empty hint if it is not possible to merge hints.
+// leftEmpty and rightEmpty arguments are set based on MVCCStats.HasNoUserData
+// of receiver hint (leftEmpty) and argument hint (rightEmpty).
 // Returns true if receiver state was changed.
-func (h *GCHint) Merge(rhs *GCHint) bool {
-	if h.LatestRangeDeleteTimestamp.Less(rhs.LatestRangeDeleteTimestamp) {
-		// If right hand side of merge is higher, then use its timestamp and signal
-		// the change to caller.
-		h.LatestRangeDeleteTimestamp = rhs.LatestRangeDeleteTimestamp
-		return true
+func (h *GCHint) Merge(rhs *GCHint, leftEmpty, rightEmpty bool) bool {
+	// If either side has data but no hint, merged range can't have a hint.
+	if (rhs.LatestRangeDeleteTimestamp.IsEmpty() && !rightEmpty) ||
+		(h.LatestRangeDeleteTimestamp.IsEmpty() && !leftEmpty) {
+		updated := h.LatestRangeDeleteTimestamp.IsSet()
+		h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
+		return updated
 	}
-	return false
+	// Otherwise, use the newest hint.
+	return h.ForwardLatestRangeDeleteTimestamp(rhs.LatestRangeDeleteTimestamp)
 }
 
 // ForwardLatestRangeDeleteTimestamp bumps LatestDeleteRangeTimestamp in GC hint
@@ -801,4 +805,9 @@ func (h *GCHint) ForwardLatestRangeDeleteTimestamp(ts hlc.Timestamp) bool {
 		return true
 	}
 	return false
+}
+
+// ResetLatestRangeDeleteTimestamp resets delete range timestamp.
+func (h *GCHint) ResetLatestRangeDeleteTimestamp() {
+	h.LatestRangeDeleteTimestamp = hlc.Timestamp{}
 }
