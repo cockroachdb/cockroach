@@ -815,14 +815,20 @@ func NewColOperator(
 				// present if HAVING clause is present, for example, with a
 				// query as follows: SELECT 1 FROM t HAVING true. In this case,
 				// we plan a special operator that outputs a batch of length 1
-				// without actual columns once and then zero-length batches. The
-				// actual "data" will be added by projections below.
+				// or 0 (depending on whether the aggregate is in scalar context
+				// or not) without actual columns once and then zero-length
+				// batches. The actual "data" will be added by projections
+				// below.
 				// TODO(solon): The distsql plan for this case includes a
 				// TableReader, so we end up creating an orphaned colBatchScan.
 				// We should avoid that. Ideally the optimizer would not plan a
 				// scan in this unusual case.
+				numTuples := 0
+				if aggSpec.IsScalar() {
+					numTuples = 1
+				}
 				result.Root, err = colexecutils.NewFixedNumTuplesNoInputOp(
-					getStreamingAllocator(ctx, args), 1 /* numTuples */, inputs[0].Root,
+					getStreamingAllocator(ctx, args), numTuples, inputs[0].Root,
 				), nil
 				// We make ColumnTypes non-nil so that sanity check doesn't
 				// panic.
