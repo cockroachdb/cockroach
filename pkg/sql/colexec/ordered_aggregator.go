@@ -255,7 +255,18 @@ func (a *orderedAggregator) Next() coldata.Batch {
 						}
 					})
 				}
-				a.scratch.resumeIdx = a.bucket.fns[0].CurrentOutputIndex()
+				if len(a.bucket.fns) > 0 {
+					a.scratch.resumeIdx = a.bucket.fns[0].CurrentOutputIndex()
+				} else {
+					// When there are no aggregate functions to compute, we
+					// simply need to output the same number of empty rows as
+					// the number of groups.
+					for _, newGroup := range a.groupCol[:batchLength] {
+						if newGroup {
+							a.scratch.resumeIdx++
+						}
+					}
+				}
 			}
 			if batchLength == 0 {
 				a.state = orderedAggregatorOutputting
