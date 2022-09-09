@@ -2,7 +2,7 @@ exec
 dev lint
 ----
 bazel run --config=test //build/bazelutil:lint -- -test.v
-bazel build //pkg/cmd/cockroach-short --//build/toolchains:nogo_flag
+bazel build //pkg/cmd/cockroach-short //pkg/cmd/dev //pkg/obsservice/cmd/obsservice //pkg/cmd/roachprod //pkg/cmd/roachtest --//build/toolchains:nogo_flag
 
 exec
 dev lint --short --timeout=5m
@@ -24,7 +24,7 @@ exec
 dev lint --cpus 4
 ----
 bazel run --config=test //build/bazelutil:lint --local_cpu_resources=4 -- -test.v
-bazel build //pkg/cmd/cockroach-short --//build/toolchains:nogo_flag --local_cpu_resources=4
+bazel build //pkg/cmd/cockroach-short //pkg/cmd/dev //pkg/obsservice/cmd/obsservice //pkg/cmd/roachprod //pkg/cmd/roachtest --//build/toolchains:nogo_flag --local_cpu_resources=4
 
 exec
 dev lint pkg/cmd/dev pkg/spanconfig
