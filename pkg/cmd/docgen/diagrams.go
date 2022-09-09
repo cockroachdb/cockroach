@@ -559,7 +559,7 @@ var specs = []stmtSpec{
 		name:   "backup",
 		stmt:   "backup_stmt",
 		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
-		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
+		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' backup_targets 'INTO'")},
 		replace: map[string]string{
 			"grant_targets":                  "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"backup_targets":                 "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
