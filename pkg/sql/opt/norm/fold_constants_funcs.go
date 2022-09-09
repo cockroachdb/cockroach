@@ -11,6 +11,7 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -369,6 +370,15 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 
 	result, err := eval.Expr(c.f.evalCtx, texpr)
 	if err != nil {
+		// Casts can require KV operations. KV errors are not safe to swallow.
+		// Check if the error is a KV error, and, if so, propagate it rather
+		// than swallowing it. See #85677.
+		// TODO(mgartner): Ideally, casts that can error and cause adverse
+		// side-effects would be marked as volatile so that they are not folded.
+		// That would eliminate the need for this special error handling.
+		if errors.HasInterface(err, (*roachpb.ErrorDetailInterface)(nil)) {
+			panic(err)
+		}
 		return nil, false
 	}
 
@@ -395,6 +405,15 @@ func (c *CustomFuncs) FoldAssignmentCast(
 	datum := memo.ExtractConstDatum(input)
 	result, err := eval.PerformAssignmentCast(c.f.evalCtx, datum, typ)
 	if err != nil {
+		// Casts can require KV operations. KV errors are not safe to swallow.
+		// Check if the error is a KV error, and, if so, propagate it rather
+		// than swallowing it. See #85677.
+		// TODO(mgartner): Ideally, casts that can error and cause adverse
+		// side-effects would be marked as volatile so that they are not folded.
+		// That would eliminate the need for this special error handling.
+		if errors.HasInterface(err, (*roachpb.ErrorDetailInterface)(nil)) {
+			panic(err)
+		}
 		return nil, false
 	}
 
