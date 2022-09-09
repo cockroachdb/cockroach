@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -74,6 +73,15 @@ func (ud *uncommittedDescriptors) reset(ctx context.Context) {
 	}
 }
 
+// getOriginalByID returns the original version of the uncommitted descriptor
+// with this ID, if it exists.
+func (ud *uncommittedDescriptors) getOriginalByID(id descpb.ID) catalog.Descriptor {
+	if e := ud.original.Get(id); e != nil {
+		return e.(catalog.Descriptor)
+	}
+	return nil
+}
+
 // getUncommittedByID returns the uncommitted descriptor for this ID, if it
 // exists.
 func (ud *uncommittedDescriptors) getUncommittedByID(id descpb.ID) catalog.Descriptor {
@@ -83,21 +91,16 @@ func (ud *uncommittedDescriptors) getUncommittedByID(id descpb.ID) catalog.Descr
 	return nil
 }
 
-// getUncommittedMutableByID returns the original descriptor as well as the
-// uncommitted mutable descriptor for this ID if they exist.
+// getUncommittedMutableByID returns the uncommitted descriptor for this ID, if
+// it exists, in mutable form. This mutable descriptor is owned by the
+// collection.
 func (ud *uncommittedDescriptors) getUncommittedMutableByID(
 	id descpb.ID,
-) (original catalog.Descriptor, mutable catalog.MutableDescriptor) {
-	if ud.uncommitted.GetByID(id) == nil {
-		return nil, nil
+) catalog.MutableDescriptor {
+	if me := ud.mutable.Get(id); me != nil && ud.uncommitted.GetByID(id) != nil {
+		return me.(catalog.MutableDescriptor)
 	}
-	if me := ud.mutable.Get(id); me != nil {
-		mutable = me.(catalog.MutableDescriptor)
-	}
-	if oe := ud.original.Get(id); oe != nil {
-		original = oe.(catalog.Descriptor)
-	}
-	return original, mutable
+	return nil
 }
 
 // getUncommittedByName returns the uncommitted descriptor for this name key, if
@@ -109,20 +112,6 @@ func (ud *uncommittedDescriptors) getUncommittedByName(
 		return e.(catalog.Descriptor)
 	}
 	return nil
-}
-
-// iterateNewVersionByID applies fn to each lease.IDVersion from the original
-// descriptor, if it exists, for each uncommitted descriptor, in ascending
-// sequence of IDs.
-func (ud *uncommittedDescriptors) iterateNewVersionByID(
-	fn func(originalVersion lease.IDVersion) error,
-) error {
-	return ud.uncommitted.IterateByID(func(entry catalog.NameEntry) error {
-		if o := ud.original.Get(entry.GetID()); o != nil {
-			return fn(lease.NewIDVersionPrev(o.GetName(), o.GetID(), o.(catalog.Descriptor).GetVersion()))
-		}
-		return nil
-	})
 }
 
 // iterateUncommittedByID applies fn to the uncommitted descriptors in ascending
@@ -146,14 +135,17 @@ func (ud *uncommittedDescriptors) ensureMutable(
 		return e.(catalog.MutableDescriptor), nil
 	}
 	mut := original.NewBuilder().BuildExistingMutable()
+	newBytes := mut.ByteSize()
 	if original.GetID() == keys.SystemDatabaseID {
 		return mut, nil
 	}
-	if err := ud.memAcc.Grow(ctx, mut.ByteSize()); err != nil {
-		return nil, errors.Wrap(err, "Memory usage exceeds limit for uncommittedDescriptors")
-	}
-	ud.original.Upsert(original)
 	ud.mutable.Upsert(mut)
+	original = original.NewBuilder().BuildImmutable()
+	newBytes += original.ByteSize()
+	ud.original.Upsert(original)
+	if err := ud.memAcc.Grow(ctx, newBytes); err != nil {
+		return nil, errors.Wrap(err, "memory usage exceeds limit for uncommittedDescriptors")
+	}
 	return mut, nil
 }
 
@@ -161,8 +153,26 @@ func (ud *uncommittedDescriptors) ensureMutable(
 // This is called exclusively by the Collection's AddUncommittedDescriptor
 // method.
 func (ud *uncommittedDescriptors) upsert(
-	ctx context.Context, original catalog.Descriptor, mut catalog.MutableDescriptor,
+	ctx context.Context, mut catalog.MutableDescriptor,
 ) (err error) {
+	original := ud.getOriginalByID(mut.GetID())
+	// Perform some sanity checks to ensure the version counters are correct.
+	if original == nil {
+		if !mut.IsNew() {
+			return errors.New("non-new descriptor does not exist in storage yet")
+		}
+		if mut.GetVersion() != 1 {
+			return errors.New("new descriptor version should be 1")
+		}
+	} else {
+		if mut.IsNew() {
+			return errors.New("new descriptor already exists in storage")
+		}
+		if mut.GetVersion() != original.GetVersion()+1 {
+			return errors.Newf("expected uncommitted version %d, instead got %d",
+				original.GetVersion()+1, mut.GetVersion())
+		}
+	}
 	// Refresh the cached fields on mutable type descriptors.
 	if typ, ok := mut.(*typedesc.Mutable); ok {
 		mut, err = typedesc.UpdateCachedFieldsOnModifiedMutable(typ)
@@ -171,18 +181,16 @@ func (ud *uncommittedDescriptors) upsert(
 		}
 	}
 	// Add the descriptors to the uncommitted descriptors layer.
-	imm := mut.ImmutableCopy()
-	newBytes := imm.ByteSize()
+	var newBytes int64
 	if mut.IsNew() {
 		newBytes += mut.ByteSize()
 	}
-	if err = ud.memAcc.Grow(ctx, newBytes); err != nil {
-		return errors.Wrap(err, "Memory usage exceeds limit for uncommittedDescriptors")
-	}
 	ud.mutable.Upsert(mut)
-	ud.uncommitted.Upsert(imm, imm.SkipNamespace())
-	if original != nil {
-		ud.original.Upsert(original)
+	uncommitted := mut.ImmutableCopy()
+	newBytes += uncommitted.ByteSize()
+	ud.uncommitted.Upsert(uncommitted, uncommitted.SkipNamespace())
+	if err = ud.memAcc.Grow(ctx, newBytes); err != nil {
+		return errors.Wrap(err, "memory usage exceeds limit for uncommittedDescriptors")
 	}
 	return nil
 }

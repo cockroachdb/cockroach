@@ -366,6 +366,16 @@ func (tc *Collection) finalizeDescriptors(
 			"len(validationLevels) = %d should be equal to len(descs) = %d",
 			len(validationLevels), len(descs))
 	}
+	// Add the descriptors to the uncommitted layer if we want them to be mutable.
+	if flags.RequireMutable {
+		for i, desc := range descs {
+			mut, err := tc.uncommitted.ensureMutable(ctx, desc)
+			if err != nil {
+				return err
+			}
+			descs[i] = mut
+		}
+	}
 	// Ensure that all descriptors are sufficiently validated.
 	requiredLevel := validate.MutableRead
 	if !flags.RequireMutable && !flags.AvoidLeased {
@@ -384,17 +394,6 @@ func (tc *Collection) finalizeDescriptors(
 		for _, desc := range toValidate {
 			tc.stored.UpdateValidationLevel(desc, requiredLevel)
 		}
-	}
-	// Add the descriptors to the uncommitted layer if we want them to be mutable.
-	if !flags.RequireMutable {
-		return nil
-	}
-	for i, desc := range descs {
-		mut, err := tc.uncommitted.ensureMutable(ctx, desc)
-		if err != nil {
-			return err
-		}
-		descs[i] = mut
 	}
 	return nil
 }
