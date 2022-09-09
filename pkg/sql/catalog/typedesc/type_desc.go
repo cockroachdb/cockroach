@@ -858,41 +858,52 @@ func (desc *immutable) HydrateTypeInfoWithName(
 	if typ.IsHydrated() {
 		return nil
 	}
-	typ.TypeMeta.Name = &types.UserDefinedTypeName{
-		Catalog:        name.Catalog(),
-		ExplicitSchema: name.ExplicitSchema,
-		Schema:         name.Schema(),
-		Name:           name.Object(),
-	}
-	typ.TypeMeta.Version = uint32(desc.Version)
+	var enumData *types.EnumMetadata
 	switch desc.Kind {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		if typ.Family() != types.EnumFamily {
 			return errors.New("cannot hydrate a non-enum type with an enum type descriptor")
 		}
-		typ.TypeMeta.EnumData = &types.EnumMetadata{
+		enumData = &types.EnumMetadata{
 			LogicalRepresentations:  desc.logicalReps,
 			PhysicalRepresentations: desc.physicalReps,
 			IsMemberReadOnly:        desc.readOnlyMembers,
 		}
-		return nil
 	case descpb.TypeDescriptor_ALIAS:
 		if typ.UserDefined() {
 			switch typ.Family() {
 			case types.ArrayFamily:
 				// Hydrate the element type.
 				elemType := typ.ArrayContents()
-				return EnsureTypeIsHydrated(ctx, elemType, res)
+				if err := EnsureTypeIsHydrated(ctx, elemType, res); err != nil {
+					return err
+				}
 			case types.TupleFamily:
-				return EnsureTypeIsHydrated(ctx, typ, res)
+				if err := EnsureTypeIsHydrated(ctx, typ, res); err != nil {
+					return err
+				}
 			default:
 				return errors.AssertionFailedf("unhandled alias type family %s", typ.Family())
 			}
 		}
-		return nil
 	default:
 		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
 	}
+
+	// Only hydrate the type if we did not fail to perform any of the above
+	// steps. If we were to populate these before something that might fail,
+	// the type may end up partially hydrated.
+	typ.TypeMeta = types.UserDefinedTypeMetadata{
+		Name: &types.UserDefinedTypeName{
+			Catalog:        name.Catalog(),
+			ExplicitSchema: name.ExplicitSchema,
+			Schema:         name.Schema(),
+			Name:           name.Object(),
+		},
+		Version:  uint32(desc.Version),
+		EnumData: enumData,
+	}
+	return nil
 }
 
 // NumEnumMembers implements the TypeDescriptor interface.
