@@ -335,10 +335,10 @@ func (s *externalSorter) doneWithCurrentPartition() {
 	}
 }
 
-func (s *externalSorter) resetPartitionsInfoForCurrentPartition() {
-	s.partitionsInfo.tupleCount[s.numPartitions] = 0
-	s.partitionsInfo.totalSize[s.numPartitions] = 0
-	s.partitionsInfo.maxBatchMemSize[s.numPartitions] = 0
+func (s *externalSorter) resetPartitionsInfo(i int) {
+	s.partitionsInfo.tupleCount[i] = 0
+	s.partitionsInfo.totalSize[i] = 0
+	s.partitionsInfo.maxBatchMemSize[i] = 0
 }
 
 func (s *externalSorter) Next() coldata.Batch {
@@ -365,7 +365,7 @@ func (s *externalSorter) Next() coldata.Batch {
 					s.fdState.acquiredFDs = toAcquire
 				}
 			}
-			s.resetPartitionsInfoForCurrentPartition()
+			s.resetPartitionsInfo(s.numPartitions)
 			partitionDone := s.enqueue(b)
 			if partitionDone {
 				s.doneWithCurrentPartition()
@@ -407,7 +407,6 @@ func (s *externalSorter) Next() coldata.Batch {
 			merger := s.createMergerForPartitions(n)
 			merger.Init(s.Ctx)
 			s.numPartitions -= n
-			s.resetPartitionsInfoForCurrentPartition()
 			for b := merger.Next(); ; b = merger.Next() {
 				partitionDone := s.enqueue(b)
 				if b.Length() == 0 || partitionDone {
@@ -501,9 +500,12 @@ func (s *externalSorter) Next() coldata.Batch {
 // merger (which performs the merge of N already sorted partitions while
 // preserving the order of tuples).
 func (s *externalSorter) enqueue(b coldata.Batch) bool {
-	if b.Length() > 0 {
-		batchMemSize := colmem.GetBatchMemSize(b)
-		s.partitionsInfo.tupleCount[s.numPartitions] += uint64(b.Length())
+	if n := b.Length(); n > 0 {
+		// We only need to include the footprint of the tuples that are being
+		// enqueued rather than the total footprint of the batch (which can be
+		// larger if the capacity of the batch is not fully used).
+		batchMemSize := colmem.GetProportionalBatchMemSize(b, int64(n))
+		s.partitionsInfo.tupleCount[s.numPartitions] += uint64(n)
 		s.partitionsInfo.totalSize[s.numPartitions] += batchMemSize
 		if batchMemSize > s.partitionsInfo.maxBatchMemSize[s.numPartitions] {
 			s.partitionsInfo.maxBatchMemSize[s.numPartitions] = batchMemSize
@@ -673,15 +675,16 @@ func (s *externalSorter) createMergerForPartitions(n int) *colexec.OrderedSynchr
 
 	// Calculate the limit on the output batch mem size.
 	outputBatchMemSize := s.mergeMemoryLimit
-	for i := 0; i < s.numPartitions; i++ {
+	for i := s.numPartitions - n; i < s.numPartitions; i++ {
 		outputBatchMemSize -= s.partitionsInfo.maxBatchMemSize[i]
+		s.resetPartitionsInfo(i)
 	}
 	// It is possible that the expected usage of the dequeued batches already
 	// exceeds the memory limit (this is likely when the tuples are wide). In
 	// such a scenario we want to produce output batches of relatively large
 	// memory size too, so we give the output batch at least its fair share of
 	// the memory limit.
-	minOutputBatchMemSize := s.mergeMemoryLimit / int64(s.numPartitions+1)
+	minOutputBatchMemSize := s.mergeMemoryLimit / int64(n+1)
 	if outputBatchMemSize < minOutputBatchMemSize {
 		outputBatchMemSize = minOutputBatchMemSize
 	}
