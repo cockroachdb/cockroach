@@ -170,7 +170,7 @@ func captureIndexUsageStats(
 
 	// Capture index usage statistics for each database.
 	var ok bool
-	expectedNumDatums := 9
+	expectedNumDatums := 11
 	var allCapturedIndexUsageStats []eventpb.EventPayload
 	for _, databaseName := range allDatabaseNames {
 		// Omit index usage statistics on the default databases 'system',
@@ -188,13 +188,17 @@ func captureIndexUsageStats(
 		 ti.is_unique,
 		 ti.is_inverted,
 		 total_reads,
-		 last_read
+		 last_read,
+		 ti.created_at,
+     t.schema_name
 		FROM %s.crdb_internal.index_usage_statistics AS us
 		JOIN %s.crdb_internal.table_indexes ti
 		ON us.index_id = ti.index_id
 		 AND us.table_id = ti.descriptor_id
+    JOIN %s.crdb_internal.tables t 
+    ON ti.descriptor_id = t.table_id
 		ORDER BY total_reads ASC;
-	`, databaseName, databaseName)
+	`, databaseName, databaseName, databaseName)
 
 		it, err := ie.QueryIteratorEx(
 			ctx,
@@ -232,6 +236,11 @@ func captureIndexUsageStats(
 			if row[8] != tree.DNull {
 				lastRead = tree.MustBeDTimestampTZ(row[8]).Time
 			}
+			createdAt := time.Time{}
+			if row[9] != tree.DNull {
+				createdAt = tree.MustBeDTimestamp(row[9]).Time
+			}
+			schemaName := tree.MustBeDString(row[10])
 
 			capturedIndexStats := &eventpb.CapturedIndexUsageStats{
 				TableID:        uint32(roachpb.TableID(tableID)),
@@ -244,6 +253,8 @@ func captureIndexUsageStats(
 				IndexType:      string(indexType),
 				IsUnique:       bool(isUnique),
 				IsInverted:     bool(isInverted),
+				CreatedAt:      createdAt.String(),
+				SchemaName:     string(schemaName),
 			}
 
 			allCapturedIndexUsageStats = append(allCapturedIndexUsageStats, capturedIndexStats)

@@ -2361,16 +2361,18 @@ An event of type `captured_index_usage_stats`
 
 | Field | Description | Sensitive |
 |--|--|--|
-| `TotalReadCount` | TotalReadCount is the number of times this index has been read from. | no |
-| `LastRead` | LastRead is the timestamp that this index was last being read from. | no |
-| `TableID` | TableID is the ID of the table this index is created on. This is same as descpb.TableID and is unique within the cluster. | no |
+| `TotalReadCount` | TotalReadCount is the number of times the index has been read. | no |
+| `LastRead` | LastRead is the timestamp at which the index was last read. | no |
+| `TableID` | TableID is the ID of the table on which the index was created. This is same as descpb.TableID and is unique within the cluster. | no |
 | `IndexID` | IndexID is the ID of the index within the scope of the given table. | no |
-| `DatabaseName` |  | no |
-| `TableName` |  | no |
-| `IndexName` |  | no |
-| `IndexType` |  | no |
-| `IsUnique` |  | no |
-| `IsInverted` |  | no |
+| `DatabaseName` | DatabaseName is the name of the database in which the index was created. | no |
+| `TableName` | TableName is the name of the table on which the index was created. | no |
+| `IndexName` | IndexName is the name of the index within the scope of the given table. | no |
+| `IndexType` | IndexType is the type of the index. Index types include "primary" and "secondary". | no |
+| `IsUnique` | IsUnique indicates if the index has a UNIQUE constraint. | no |
+| `IsInverted` | IsInverted indicates if the index is an inverted index. | no |
+| `CreatedAt` | CreatedAt is the timestamp at which the index was created. | no |
+| `SchemaName` | SchemaName is the name of the schema in which the index was created. | no |
 
 
 #### Common fields
