@@ -759,7 +759,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	sessionRegistry := sql.NewSessionRegistry()
 	closedSessionCache := sql.NewClosedSessionCache(cfg.Settings, sqlMonitorAndMetrics.rootSQLMemoryMonitor, time.Now)
-	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
+	remoteFlowRunnerAcc := sqlMonitorAndMetrics.rootSQLMemoryMonitor.MakeBoundAccount()
+	remoteFlowRunner := flowinfra.NewRemoteFlowRunner(cfg.AmbientCtx, stopper, &remoteFlowRunnerAcc)
 
 	sStatus := newStatusServer(
 		cfg.AmbientCtx,
@@ -777,7 +778,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		stopper,
 		sessionRegistry,
 		closedSessionCache,
-		flowScheduler,
+		remoteFlowRunner,
 		internalExecutor,
 	)
 
@@ -843,7 +844,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
 		closedSessionCache:       closedSessionCache,
-		flowScheduler:            flowScheduler,
+		remoteFlowRunner:         remoteFlowRunner,
 		circularInternalExecutor: internalExecutor,
 		internalExecutorFactory:  internalExecutorFactory,
 		circularJobRegistry:      jobRegistry,

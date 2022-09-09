@@ -3626,59 +3626,6 @@ func TestChangefeedRetryableError(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
-func TestChangefeedJobRetryOnNoInboundStream(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderRace(t)
-	skip.UnderStress(t)
-
-	cluster, db, cleanup := startTestCluster(t)
-	defer cleanup()
-	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	// force fast "no inbound stream" error
-	var oldMaxRunningFlows int
-	var oldTimeout string
-	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
-	sqlDB.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows").Scan(&oldMaxRunningFlows)
-	sqlDB.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.flow_stream_timeout").Scan(&oldTimeout)
-	serverutils.SetClusterSetting(t, cluster, "sql.distsql.max_running_flows", 0)
-	serverutils.SetClusterSetting(t, cluster, "sql.distsql.flow_stream_timeout", "1s")
-
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
-
-	// Connect to a non-leaseholder node so that a DistSQL flow is required
-	var leaseHolder int
-	sqlDB.QueryRow(t, `SELECT lease_holder FROM [SHOW RANGES FROM TABLE foo] LIMIT 1`).Scan(&leaseHolder)
-	feedServerID := ((leaseHolder - 1) + 1) % 3
-	db = cluster.ServerConn(feedServerID)
-	sqlDB = sqlutils.MakeSQLRunner(db)
-	f := makeKafkaFeedFactoryForCluster(cluster, db)
-	foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-	defer closeFeed(t, foo)
-
-	// Verify job progress contains retryable error status.
-	registry := cluster.Server(feedServerID).JobRegistry().(*jobs.Registry)
-	jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
-	testutils.SucceedsSoon(t, func() error {
-		job, err := registry.LoadJob(context.Background(), jobID)
-		require.NoError(t, err)
-		if strings.Contains(job.Progress().RunningStatus, "retryable error") {
-			return nil
-		}
-		return errors.Newf("job status was %s", job.Progress().RunningStatus)
-	})
-
-	// Fix the error. Job should retry successfully.
-	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.max_running_flows=$1", oldMaxRunningFlows)
-	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_stream_timeout=$1", oldTimeout)
-	assertPayloads(t, foo, []string{
-		`foo: [1]->{"after": {"a": 1}}`,
-	})
-
-}
-
 func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
