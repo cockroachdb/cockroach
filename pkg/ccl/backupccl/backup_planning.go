@@ -1301,7 +1301,7 @@ func createBackupManifest(
 		}
 	}
 
-	var newSpans roachpb.Spans
+	var newSpans, reintroducedSpans roachpb.Spans
 	var priorIDs map[descpb.ID]descpb.ID
 
 	var revs []backuppb.BackupManifest_DescriptorRevision
@@ -1357,11 +1357,11 @@ func createBackupManifest(
 
 		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
 
-		tableSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
+		reintroducedSpans, err = getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
 			return backuppb.BackupManifest{}, err
 		}
-		newSpans = append(newSpans, tableSpans...)
+		newSpans = append(newSpans, reintroducedSpans...)
 	}
 
 	// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion
@@ -1386,6 +1386,7 @@ func createBackupManifest(
 		CompleteDbs:         jobDetails.ResolvedCompleteDbs,
 		Spans:               spans,
 		IntroducedSpans:     newSpans,
+		ReintroducedSpans:   reintroducedSpans,
 		FormatVersion:       backupinfo.BackupFormatDescriptorTrackingVersion,
 		BuildInfo:           build.GetInfo(),
 		ClusterVersion:      execCfg.Settings.Version.ActiveVersion(ctx).Version,

@@ -121,11 +121,6 @@ func makeTableSpan(tableID uint32) roachpb.Span {
 	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
 }
 
-func makeIndexSpan(tableID uint32, indexID uint32) roachpb.Span {
-	k := keys.SystemSQLCodec.IndexPrefix(tableID, indexID)
-	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
-}
-
 func TestBackupRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

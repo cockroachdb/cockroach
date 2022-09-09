@@ -125,7 +125,9 @@ message BackupManifest {
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
 
-  // NEXT ID: 27
+  repeated roachpb.Span reintroduced_spans = 27 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 28
 }
 
 message BackupPartitionDescriptor{

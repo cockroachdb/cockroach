@@ -9,6 +9,8 @@
 package backupccl
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,9 +29,10 @@ type restorationData interface {
 	// getSpans returns the data spans that we're restoring into this cluster.
 	getSpans() []roachpb.Span
 
-	// getLastIntros returns the end time of the last backup that reintroduced
-	// span i.
-	getLatestIntros() []hlc.Timestamp
+	// coveredByLaterReintroduction is true if the passed backupEndTime is less
+	// than the last time the given key's table was introduced. The function
+	// always returns false during the restore of a tenant.
+	coveredByLaterReintroduction(key roachpb.Key, backupEndTime hlc.Timestamp) (bool, error)
 
 	// getSystemTables returns nil for non-cluster restores. It returns the
 	// descriptors of the temporary system tables that should be restored into the
@@ -73,13 +76,19 @@ type restorationDataBase struct {
 	// spans is the spans included in this bundle.
 	spans []roachpb.Span
 
-	// latestIntros is the last time each span was introduced.
-	latestIntros []hlc.Timestamp
+	// latestEndTimesForReIntroducedTables is a map from a table ID to the end time of the last backup
+	// that reintroduced the table via getReintroducedSpans.
+	latestEndTimesForReIntroducedTables map[descpb.ID]hlc.Timestamp
+
+	// backupCodec is the codec used to decode backup data
+	backupCodec keys.SQLCodec
 
 	// rekeys maps old table IDs to their new table descriptor.
 	tableRekeys []execinfrapb.TableRekey
+
 	// tenantRekeys maps tenants being restored to their new ID.
 	tenantRekeys []execinfrapb.TenantRekey
+
 	// pkIDs stores the ID of the primary keys for all of the tables that we're
 	// restoring for RowCount calculation.
 	pkIDs map[uint64]bool
@@ -115,9 +124,26 @@ func (b *restorationDataBase) getSpans() []roachpb.Span {
 	return b.spans
 }
 
-// getLastReIntros implements restorationData.
-func (b *restorationDataBase) getLatestIntros() []hlc.Timestamp {
-	return b.latestIntros
+// coveredByLaterReintroduction implements restorationData.
+func (b *restorationDataBase) coveredByLaterReintroduction(
+	spanStartKey roachpb.Key, backupEndTime hlc.Timestamp,
+) (bool, error) {
+	if b.backupCodec.ForSystemTenant() && bytes.HasPrefix(spanStartKey, keys.TenantPrefix) {
+		// During a restore of a tenant, the tenant's tables cannot get decoded, as
+		// restore spans are processed on the tenant level instead of the table or
+		// index level.
+		return false, nil
+	}
+	_, tablePrefix, err := b.backupCodec.DecodeTablePrefix(spanStartKey)
+	if err != nil {
+		return false, err
+	}
+	latestIntro, ok := b.latestEndTimesForReIntroducedTables[descpb.ID(tablePrefix)]
+	if !ok {
+		// span was never introduced
+		return false, nil
+	}
+	return backupEndTime.Less(latestIntro), nil
 }
 
 // getSystemTables implements restorationData.
@@ -129,7 +155,6 @@ func (b *restorationDataBase) getSystemTables() []catalog.TableDescriptor {
 func (b *restorationDataBase) addTenant(fromTenantID, toTenantID roachpb.TenantID) {
 	prefix := keys.MakeTenantPrefix(fromTenantID)
 	b.spans = append(b.spans, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
-	b.latestIntros = append(b.latestIntros, hlc.Timestamp{})
 	b.tenantRekeys = append(b.tenantRekeys, execinfrapb.TenantRekey{
 		OldID: fromTenantID,
 		NewID: toTenantID,
@@ -163,22 +188,4 @@ func checkForMigratedData(details jobspb.RestoreDetails, dataToRestore restorati
 	}
 
 	return false
-}
-
-// findLatestIntroBySpan finds the latest intro time for the inputted spans.
-// This function assumes that each span's start and end key belong to the same
-// index.
-func findLatestIntroBySpan(
-	spans roachpb.Spans, codec keys.SQLCodec, latestIntros map[tableAndIndex]hlc.Timestamp,
-) ([]hlc.Timestamp, error) {
-	latestIntrosBySpan := make([]hlc.Timestamp, len(spans))
-	for i, sp := range spans {
-		_, tablePrefix, indexPrefix, err := codec.DecodeIndexPrefix(sp.Key)
-		if err != nil {
-			return nil, err
-		}
-		introKey := tableAndIndex{descpb.ID(tablePrefix), descpb.IndexID(indexPrefix)}
-		latestIntrosBySpan[i] = latestIntros[introKey]
-	}
-	return latestIntrosBySpan, nil
 }

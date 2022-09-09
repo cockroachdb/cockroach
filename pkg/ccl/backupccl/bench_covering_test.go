@@ -13,6 +13,7 @@ import (
 	fmt "fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -56,9 +57,8 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 						b.Run(fmt.Sprintf("numSpans=%d", numSpans), func(b *testing.B) {
 							ctx := context.Background()
 							backups := MockBackupChain(numBackups, numSpans, baseFiles, r)
-							latestIntrosByIndex, err := findLatestIntroFromManifests(backups, keys.SystemSQLCodec, hlc.Timestamp{})
-							require.NoError(b, err)
-							latestIntrosBySpan, err := findLatestIntroBySpan(backups[numBackups-1].Spans, keys.SystemSQLCodec, latestIntrosByIndex)
+							latestIntrosByTable, err := backupinfo.FindLatestReIntroductionByTable(backups,
+								keys.TODOSQLCodec, hlc.Timestamp{})
 							require.NoError(b, err)
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
@@ -66,10 +66,12 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 									b.Fatal(err)
 								}
 								restoreData := restorationDataBase{
-									spans:        backups[numBackups-1].Spans,
-									latestIntros: latestIntrosBySpan,
+									spans:                               backups[numBackups-1].Spans,
+									backupCodec:                         keys.TODOSQLCodec,
+									latestEndTimesForReIntroducedTables: latestIntrosByTable,
 								}
-								cov := makeSimpleImportSpans(&restoreData, backups, nil, nil, 0)
+								cov, err := makeSimpleImportSpans(&restoreData, backups, nil, nil, 0)
+								require.NoError(b, err)
 								b.ReportMetric(float64(len(cov)), "coverSize")
 							}
 						})

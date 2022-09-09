@@ -86,9 +86,9 @@ func makeSimpleImportSpans(
 	backupLocalityMap map[int]storeByLocalityKV,
 	lowWaterMark roachpb.Key,
 	targetSize int64,
-) []execinfrapb.RestoreSpanEntry {
+) ([]execinfrapb.RestoreSpanEntry, error) {
 	if len(backups) < 1 {
-		return nil
+		return nil, nil
 	}
 
 	for i := range backups {
@@ -96,8 +96,7 @@ func makeSimpleImportSpans(
 	}
 	var cover []execinfrapb.RestoreSpanEntry
 	spans := data.getSpans()
-	latestIntros := data.getLatestIntros()
-	for spanIdx, span := range spans {
+	for _, span := range spans {
 		if span.EndKey.Compare(lowWaterMark) < 0 {
 			continue
 		}
@@ -107,7 +106,11 @@ func makeSimpleImportSpans(
 
 		spanCoverStart := len(cover)
 		for layer := range backups {
-			if backups[layer].EndTime.Less(latestIntros[spanIdx]) {
+			isCovered, err := data.coveredByLaterReintroduction(span.Key, backups[layer].EndTime)
+			if err != nil {
+				return nil, err
+			}
+			if isCovered {
 				// Don't use this backup to cover this span if the span was reintroduced
 				// after the backup's endTime. In this case, this backup may
 				// have invalid data, and further, a subsequent backup will contain all of
@@ -189,7 +192,7 @@ func makeSimpleImportSpans(
 		}
 	}
 
-	return cover
+	return cover, nil
 }
 
 func makeEntry(start, end roachpb.Key, f execinfrapb.RestoreFileSpec) execinfrapb.RestoreSpanEntry {
