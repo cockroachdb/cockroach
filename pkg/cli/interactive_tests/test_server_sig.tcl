@@ -47,7 +47,7 @@ send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs -s
 eexpect "restarted"
 
 # Make a client open a connection and keep using it with an open txn.
-spawn $argv sql
+spawn $argv sql --no-line-editor
 set client_spawn_id $spawn_id
 eexpect root@
 send "begin;\r\rselect 1;\r"
@@ -94,7 +94,7 @@ send "$argv start-single-node --insecure --pid-file=server_pid --log-dir=logs -s
 eexpect "restarted"
 
 # Make a client open a connection and keep using it with an open txn.
-spawn $argv sql
+spawn $argv sql --no-line-editor
 set client_spawn_id $spawn_id
 eexpect root@
 send "begin;\r\rselect 1;\r"
