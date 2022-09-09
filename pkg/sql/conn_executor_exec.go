@@ -456,6 +456,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.Prepared = ps
 		stmt.ExpectedTypes = ps.Columns
 		stmt.StmtNoConstants = ps.StatementNoConstants
+		stmt.StmtSummary = ps.StatementSummary
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
