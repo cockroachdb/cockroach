@@ -2438,16 +2438,16 @@ func (s *statusServer) HotRangesV2(
 									CommonLookupFlags: commonLookupFlags,
 								})
 								if err != nil {
-									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d. %s", tableID, r.Desc.String())
+									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
 								}
 								tableName = desc.GetName()
 
 								if !maybeIndexPrefix.Equal(roachpb.KeyMin) {
 									if _, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey()); err != nil {
-										log.Warningf(ctx, "cannot decode index prefix for range descriptor: %s. %s", r.Desc.String(), err.Error())
+										log.Warningf(ctx, "cannot decode index prefix for range descriptor: %s: %v", r.Desc, err)
 									} else {
 										if index, err := desc.FindIndexWithID(descpb.IndexID(idxID)); err != nil {
-											log.Warningf(ctx, "cannot get index name for range descriptor: %s. %s", r.Desc.String(), err.Error())
+											log.Warningf(ctx, "cannot get index name for range descriptor: %s: %v", r.Desc, err)
 										} else {
 											indexName = index.GetName()
 										}
@@ -2455,19 +2455,19 @@ func (s *statusServer) HotRangesV2(
 								}
 
 								if ok, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), commonLookupFlags); err != nil {
-									log.Warningf(ctx, "cannot get database by descriptor ID: %s. %s", r.Desc.String(), err.Error())
+									log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
 								} else if ok {
 									dbName = dbDesc.GetName()
 								}
 
 								if schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), commonLookupFlags); err != nil {
-									log.Warningf(ctx, "cannot get schema name for range descriptor: %s. %s", r.Desc.String(), err.Error())
+									log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
 								} else {
 									schemaName = schemaDesc.GetName()
 								}
 								return nil
 							}); err != nil {
-							log.Warningf(ctx, "failed to get table info for %s. %s", r.Desc.String(), err.Error())
+							log.Warningf(ctx, "failed to get table info for %s: %v", r.Desc, err)
 							continue
 						}
 
