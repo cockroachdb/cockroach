@@ -61,6 +61,7 @@ func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
 			return ctx, sp
 		}
 	}
+	_ = ctx.Value("non-existent-key")
 	return context.WithValue(ctx, activeSpanKey{}, sp), sp
 }
 

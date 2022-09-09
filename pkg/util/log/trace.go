@@ -42,6 +42,7 @@ func (el *ctxEventLog) finish() {
 }
 
 func embedCtxEventLog(ctx context.Context, el *ctxEventLog) context.Context {
+	_ = ctx.Value("non-existent-key")
 	return context.WithValue(ctx, ctxEventLogKey{}, el)
 }
 

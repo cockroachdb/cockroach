@@ -36,6 +36,7 @@ type localRequestKey struct{}
 
 // NewLocalRequestContext returns a Context that can be used for local (in-process) requests.
 func NewLocalRequestContext(ctx context.Context) context.Context {
+	_ = ctx.Value("non-existent-key")
 	return context.WithValue(ctx, localRequestKey{}, struct{}{})
 }
 

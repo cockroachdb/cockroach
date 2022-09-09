@@ -565,6 +565,7 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	username, cookie, err := am.getSession(w, req)
 	if err == nil {
 		ctx := req.Context()
+		_ = ctx.Value("non-existent-key")
 		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
 		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
 		req = req.WithContext(ctx)

@@ -43,6 +43,7 @@ type CancelWithReasonFunc func(reason error)
 // This function doesn't change the deadline of a context if it already exists.
 func WithCancelReason(ctx context.Context) (context.Context, CancelWithReasonFunc) {
 	val := new(atomic.Value)
+	_ = ctx.Value("non-existent-key")
 	ctx = context.WithValue(ctx, reasonKey{}, val)
 	ctx, cancel := wrap(context.WithCancel(ctx))
 	return ctx, func(reason error) {

@@ -141,6 +141,7 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 			ctx = logtags.WithTags(ctx, ac.tags)
 		}
 		if ac.ServerIDs != nil {
+			_ = ctx.Value("non-existent-key")
 			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
 		}
 		return ctx
@@ -155,6 +156,7 @@ func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Conte
 		ctx = logtags.AddTags(ctx, ac.tags)
 	}
 	if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
+		_ = ctx.Value("non-existent-key")
 		ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
 	}
 	return ctx
@@ -182,6 +184,7 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 			ctx = logtags.AddTags(ctx, ac.tags)
 		}
 		if ac.ServerIDs != nil && ctx.Value(ServerIdentificationContextKey{}) == nil {
+			_ = ctx.Value("non-existent-key")
 			ctx = context.WithValue(ctx, ServerIdentificationContextKey{}, ac.ServerIDs)
 		}
 	}

@@ -146,6 +146,7 @@ func (sh *StatsHandler) HandleRPC(ctx context.Context, rpcStats stats.RPCStats) 
 // ConnTagInfo, and use that to properly update the Stats object
 // belonging to that remote address.
 func (sh *StatsHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo) context.Context {
+	_ = ctx.Value("non-existent-key")
 	return context.WithValue(ctx, remoteAddrKey{}, cti.RemoteAddr.String())
 }
 

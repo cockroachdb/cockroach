@@ -3475,6 +3475,7 @@ type contextStatementKey struct{}
 // withStatement adds a SQL statement to the provided context. The statement
 // will then be included in crash reports which use that context.
 func withStatement(ctx context.Context, stmt tree.Statement) context.Context {
+	_ = ctx.Value("non-existent-key")
 	return context.WithValue(ctx, contextStatementKey{}, stmt)
 }
 

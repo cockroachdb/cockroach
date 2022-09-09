@@ -358,6 +358,7 @@ func (a *authenticationV2Mux) ServeHTTP(w http.ResponseWriter, req *http.Request
 		// Valid session found. Set the username in the request context, so
 		// child http.Handlers can access it.
 		ctx := req.Context()
+		_ = ctx.Value("non-existent-key")
 		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
 		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
 		req = req.WithContext(ctx)
