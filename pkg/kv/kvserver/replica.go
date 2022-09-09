@@ -552,7 +552,7 @@ type Replica struct {
 		lastUpdateTimes lastUpdateTimesMap
 
 		// Computed checksum at a snapshot UUID.
-		checksums map[uuid.UUID]replicaChecksum
+		checksums map[uuid.UUID]*replicaChecksum
 
 		// proposalQuota is the quota pool maintained by the lease holder where
 		// incoming writes acquire quota from a fixed quota pool before going
