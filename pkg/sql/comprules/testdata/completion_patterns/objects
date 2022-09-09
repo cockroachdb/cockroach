@@ -1,0 +1,179 @@
+filter
+objects:
+----
+
+subtest at_ident
+
+comp at=8
+select xor
+----
+ii'
+  ^
+--
+objects: completing for "xor" (7,10), schema: IN (TABLE unnest(current_schemas(true)))
+--sql:
+WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
+     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+SELECT relname AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.oid = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.oid = pc.object_id AND pc.type = 1
+ WHERE left(relname, length($1:::STRING)) = $1::STRING
+--placeholders: []interface {}{"xor", 7, 10}
+
+comp at=12
+select xor
+----
+ii_
+  ^
+--
+objects: completing for "xor" (7,10), schema: IN (TABLE unnest(current_schemas(true)))
+--sql:
+WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname IN (TABLE unnest(current_schemas(true)))),
+     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+SELECT relname AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.oid = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.oid = pc.object_id AND pc.type = 1
+ WHERE left(relname, length($1:::STRING)) = $1::STRING
+--placeholders: []interface {}{"xor", 7, 10}
+
+subtest end
+
+subtest after_period
+
+comp at=10
+select a.xor
+----
+ii.i'
+    ^
+--
+objects: completing for "xor" (9,12), schema: = 'a'
+--sql:
+WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
+     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+SELECT relname AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.oid = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.oid = pc.object_id AND pc.type = 1
+ WHERE left(relname, length($1:::STRING)) = $1::STRING
+--placeholders: []interface {}{"xor", 9, 12}
+
+comp at=10
+select a.
+----
+ii._
+   ^
+--
+objects: completing for "" (10,10), schema: = 'a'
+--sql:
+WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
+     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+SELECT relname AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.oid = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.oid = pc.object_id AND pc.type = 1
+ WHERE left(relname, length($1:::STRING)) = $1::STRING
+--placeholders: []interface {}{"", 10, 10}
+
+comp at=9
+select a.
+----
+ii.'
+   ^
+--
+objects: completing for "" (9,9), schema: = 'a'
+--sql:
+WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'a'),
+     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+SELECT relname AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.oid = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.oid = pc.object_id AND pc.type = 1
+ WHERE left(relname, length($1:::STRING)) = $1::STRING
+--placeholders: []interface {}{"", 9, 9}
+
+
+subtest end
+
+subtest quoted_ident
+
+comp at=21
+select "pg_catalog".xor
+----
+ii.i'
+    ^
+--
+objects: completing for "xor" (20,23), schema: = 'pg_catalog'
+--sql:
+WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'pg_catalog'),
+     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+SELECT relname AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.oid = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.oid = pc.object_id AND pc.type = 1
+ WHERE left(relname, length($1:::STRING)) = $1::STRING
+--placeholders: []interface {}{"xor", 20, 23}
+
+# Quoted uppercase is a different schema entirely.
+comp at=22
+select "PG_CATALOG".xor
+----
+ii.i'
+    ^
+--
+objects: completing for "xor" (20,23), schema: = 'PG_CATALOG'
+--sql:
+WITH n AS (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'PG_CATALOG'),
+     t AS (SELECT oid, relname FROM pg_catalog.pg_class WHERE reltype != 0 AND relnamespace IN (TABLE n))
+SELECT relname AS completion,
+       'relation' AS category,
+       substr(COALESCE(pc.comment, sc.comment, ''), e'[^\n]{0,80}') as description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM t
+LEFT OUTER JOIN system.public.comments sc
+    ON t.oid = sc.object_id AND sc.type = 1
+LEFT OUTER JOIN "".crdb_internal.predefined_comments pc
+    ON t.oid = pc.object_id AND pc.type = 1
+ WHERE left(relname, length($1:::STRING)) = $1::STRING
+--placeholders: []interface {}{"xor", 20, 23}
+
+
+subtest end
