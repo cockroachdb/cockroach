@@ -606,8 +606,8 @@ func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return ids, nil
 }
 
-// ValidateCrossReferences performs cross reference checks on the type descriptor.
-func (desc *immutable) ValidateCrossReferences(
+// ValidateForwardReferences implements the catalog.Descriptor interface.
+func (desc *immutable) ValidateForwardReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Validate the parentID.
@@ -638,26 +638,36 @@ func (desc *immutable) ValidateCrossReferences(
 		desc.validateMultiRegion(dbDesc, vea)
 	}
 
-	// Validate that the referenced types exist.
+	// Validate that the forward-referenced types exist.
+	if desc.GetKind() == descpb.TypeDescriptor_ALIAS && desc.GetAlias().UserDefined() {
+		aliasedID, err := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
+		if err != nil {
+			vea.Report(err)
+		}
+		if typ, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
+			vea.Report(errors.Wrapf(err, "aliased type %d does not exist", aliasedID))
+		} else if typ.Dropped() {
+			vea.Report(errors.AssertionFailedf("aliased type %q (%d) is dropped", typ.GetName(), typ.GetID()))
+		}
+	}
+}
+
+// ValidateBackReferences implements the catalog.Descriptor interface.
+func (desc *immutable) ValidateBackReferences(
+	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+) {
+
+	// Validate that the backward-referenced types exist.
 	switch desc.GetKind() {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		// Ensure that the referenced array type exists.
+		// Ensure that the array type exists.
+		// This is considered to be a backward reference, not a forward reference,
+		// as the element type doesn't need the array type to exist, but the
+		// converse is not true.
 		if typ, err := vdg.GetTypeDescriptor(desc.GetArrayTypeID()); err != nil {
 			vea.Report(errors.Wrapf(err, "arrayTypeID %d does not exist for %q", desc.GetArrayTypeID(), desc.GetKind()))
 		} else if typ.Dropped() {
 			vea.Report(errors.AssertionFailedf("array type %q (%d) is dropped", typ.GetName(), typ.GetID()))
-		}
-	case descpb.TypeDescriptor_ALIAS:
-		if desc.GetAlias().UserDefined() {
-			aliasedID, err := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
-			if err != nil {
-				vea.Report(err)
-			}
-			if typ, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
-				vea.Report(errors.Wrapf(err, "aliased type %d does not exist", aliasedID))
-			} else if typ.Dropped() {
-				vea.Report(errors.AssertionFailedf("aliased type %q (%d) is dropped", typ.GetName(), typ.GetID()))
-			}
 		}
 	}
 

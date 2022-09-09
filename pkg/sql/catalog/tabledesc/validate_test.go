@@ -2718,7 +2718,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			desc := NewBuilder(&test.desc).BuildImmutable()
 			cb.UpsertDescriptorEntry(funcdesc.NewBuilder(&descpb.FunctionDescriptor{ID: 100, Name: "f"}).BuildImmutable())
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-			const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
+			const validateCrossReferencesOnly = catalog.ValidationLevelBackReferences &^ catalog.ValidationLevelSelfOnly
 			results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
 			if err := results.CombinedError(); err == nil {
 				if test.err != "" {

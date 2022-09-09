@@ -204,8 +204,14 @@ func (v TableImplicitRecordType) GetReferencedDescIDs() (catalog.DescriptorIDSet
 func (v TableImplicitRecordType) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
 }
 
-// ValidateCrossReferences implements the Descriptor interface.
-func (v TableImplicitRecordType) ValidateCrossReferences(
+// ValidateForwardReferences implements the Descriptor interface.
+func (v TableImplicitRecordType) ValidateForwardReferences(
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
+) {
+}
+
+// ValidateBackReferences implements the Descriptor interface.
+func (v TableImplicitRecordType) ValidateBackReferences(
 	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }
