@@ -295,9 +295,9 @@ type sqlServerArgs struct {
 	// Used to store closed sessions.
 	closedSessionCache *sql.ClosedSessionCache
 
-	// Used to track the DistSQL flows scheduled on this node but initiated on
-	// behalf of other nodes.
-	flowScheduler *flowinfra.FlowScheduler
+	// Used to track the DistSQL flows currently running on this node but
+	// initiated on behalf of other nodes.
+	remoteFlowRunner *flowinfra.RemoteFlowRunner
 
 	// KV depends on the internal executor, so we pass a pointer to an empty
 	// struct in this configuration, which newSQLServer fills.
@@ -682,7 +682,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		distSQLCfg.TestingKnobs.JobsTestingKnobs = cfg.TestingKnobs.JobsTestingKnobs
 	}
 
-	distSQLServer := distsql.NewServer(ctx, distSQLCfg, cfg.flowScheduler)
+	distSQLServer := distsql.NewServer(ctx, distSQLCfg, cfg.remoteFlowRunner)
 	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
 
 	// Set up Executor
