@@ -336,26 +336,49 @@ func moveConflictingSystemTable(
 	defer span.Finish()
 
 	codec := p.ExecCfg().Codec
+
+	// Create a new table with the same schema as the table we want to
+	// move.
+	//
+	// TODO(ssd): We create these tables first rather than creating them
+	// in the same transaction because we've seen issues in which we occasionally
+	// don't see the newly created table. This problem is not well understood.
+	systemTableCopyName := fmt.Sprintf("%s_%s",
+		catprivilege.RestoreCopySystemTablePrefix, oldTable.GetName())
+	newTable := oldTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
+	newTable.Name = systemTableCopyName
+	// Allow the upgrades package to dynamically assign an ID to the new system
+	// table.
+	newTable.ID = descpb.InvalidID
+
 	err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		// Create a new table with the same schema as the table we want to
-		// move.
-		newTable := oldTable.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
-
-		systemTableCopyName := fmt.Sprintf("%s_%s",
-			catprivilege.RestoreCopySystemTablePrefix, oldTable.GetName())
-		newTable.Name = systemTableCopyName
-
-		// Allow the upgrades package to dynamically assign an ID to the new system
-		// table.
-		newTable.ID = descpb.InvalidID
-		_, created, err := migrations.CreateSystemTableInTxn(ctx, p.ExecCfg().DB, txn, codec, newTable)
+		newID, created, err := migrations.CreateSystemTableInTxn(ctx, p.ExecCfg().DB, txn, codec, newTable)
 		if err != nil {
 			return err
 		}
 		if !created {
 			return errors.New("temporary table for system table already exists")
 		}
+		newTable.ID = newID
+		if err := descsCol.AddUncommittedDescriptor(newTable); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 
+	dropTable := func() {
+		dropStmt := fmt.Sprintf("DROP TABLE IF EXISTS system.%s", systemTableCopyName)
+		// NB: The txn here _must_ be nil or the schema change job is not created.
+		if _, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "cleanup-new-system-table-on-failure", nil,
+			sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, dropStmt); err != nil {
+			log.Warningf(ctx, "could not clean up temporary system table: %v", err)
+		}
+	}
+
+	err = sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		// Copy data from the old table to the new table.
 		insertStmt := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM system.%s)", newTable.GetName(), oldTable.GetName())
 		if _, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "copy-to-temp-table", txn,
@@ -363,10 +386,19 @@ func moveConflictingSystemTable(
 			return err
 		}
 
-		// Drop the old system table.
-		dropStmt := fmt.Sprintf("DROP TABLE system.%s", oldTable.GetName())
-		if _, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "drop-system-table", txn,
-			sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, dropStmt); err != nil {
+		// Any DDL statements past this point will not actually create schema change jobs.
+		//
+		// We use SQL to perform the rename because it doesn't actually depend on
+		// anything that the schema change job would do.
+		//
+		// DO NOT ADD SQL OPERATIONS PAST THIS POINT WITHOUT CAREFUL THOUGHT.
+
+		// Delete the original system table.
+		delBatch := txn.NewBatch()
+		delBatch.Del(catalogkeys.MakeDescMetadataKey(codec, oldTable.GetID()))
+		delBatch.Del(catalogkeys.EncodeNameKey(codec, oldTable))
+		descsCol.AddDeletedDescriptor(oldTable.GetID())
+		if err := txn.Run(ctx, delBatch); err != nil {
 			return err
 		}
 
@@ -379,9 +411,9 @@ func moveConflictingSystemTable(
 		return nil
 	})
 	if err != nil {
+		dropTable()
 		return errors.Wrap(err, "failed to move conflicting system table")
 	}
-
 	// ClearRange on the table span for the old system table that we've just
 	// migrated.
 	spanToClear := oldTable.TableSpan(codec)
