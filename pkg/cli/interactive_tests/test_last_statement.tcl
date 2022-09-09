@@ -8,7 +8,7 @@ spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
 
-send "$argv sql\r"
+send "$argv sql --no-line-editor\r"
 eexpect root@
 
 start_test "Check that an error in the last statement is propagated to the shell."
@@ -23,7 +23,7 @@ eexpect ":/# "
 end_test
 
 start_test "Check that an incomplete last statement in interactive mode is not executed."
-send "$argv sql\r"
+send "$argv sql --no-line-editor\r"
 eexpect root@
 send "drop database if exists t cascade; create database t; create table t.foo(x int);\r"
 eexpect "CREATE TABLE"
@@ -33,7 +33,7 @@ eexpect " ->"
 send_eof
 eexpect ":/# "
 
-send "$argv sql\r"
+send "$argv sql --no-line-editor\r"
 eexpect root@
 send "select count(*) from t.foo;\r"
 eexpect "0"
