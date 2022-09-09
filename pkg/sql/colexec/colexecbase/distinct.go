@@ -35,8 +35,19 @@ func OrderedDistinctColsToOperators(
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		fn:             func() { copy(distinctCol, colexecutils.ZeroBoolColumn) },
 	}
-	for i := range distinctCols {
-		input = newSingleDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]], nullsAreDistinct)
+	if len(distinctCols) > 0 {
+		for i := range distinctCols {
+			input = newSingleDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]], nullsAreDistinct)
+		}
+	} else {
+		// If there are no distinct columns, we have to mark the very first
+		// tuple as distinct ourselves.
+		firstTuple := true
+		input.(*fnOp).fn = func() {
+			copy(distinctCol, colexecutils.ZeroBoolColumn)
+			distinctCol[0] = firstTuple
+			firstTuple = false
+		}
 	}
 	r, ok := input.(colexecop.ResettableOperator)
 	if !ok {
