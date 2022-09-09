@@ -164,7 +164,7 @@ func (p *scanRequestScanner) exportSpan(
 		if res.ResumeSpan != nil {
 			consumed := roachpb.Span{Key: remaining.Key, EndKey: res.ResumeSpan.Key}
 			if err := sink.Add(
-				ctx, kvevent.MakeResolvedEvent(consumed, ts, jobspb.ResolvedSpan_NONE),
+				ctx, kvevent.NewBackfillResolvedEvent(consumed, ts, jobspb.ResolvedSpan_NONE),
 			); err != nil {
 				return err
 			}
@@ -173,7 +173,7 @@ func (p *scanRequestScanner) exportSpan(
 	}
 	// p.metrics.PollRequestNanosHist.RecordValue(scanDuration.Nanoseconds())
 	if err := sink.Add(
-		ctx, kvevent.MakeResolvedEvent(span, ts, jobspb.ResolvedSpan_NONE),
+		ctx, kvevent.NewBackfillResolvedEvent(span, ts, jobspb.ResolvedSpan_NONE),
 	); err != nil {
 		return err
 	}
@@ -233,27 +233,20 @@ func slurpScanResponse(
 	ctx context.Context,
 	sink kvevent.Writer,
 	res *roachpb.ScanResponse,
-	ts hlc.Timestamp,
+	backfillTS hlc.Timestamp,
 	withDiff bool,
 	span roachpb.Span,
 ) error {
+	var keyBytes, valBytes []byte
+	var ts hlc.Timestamp
+	var err error
 	for _, br := range res.BatchResponses {
 		for len(br) > 0 {
-			var kv roachpb.KeyValue
-			var err error
-			kv.Key, kv.Value.Timestamp, kv.Value.RawBytes, br, err = enginepb.ScanDecodeKeyValue(br)
+			keyBytes, ts, valBytes, br, err = enginepb.ScanDecodeKeyValue(br)
 			if err != nil {
 				return errors.Wrapf(err, `decoding changes for %s`, span)
 			}
-			var prevVal roachpb.Value
-			if withDiff {
-				// Include the same value for the "before" and "after" KV, but
-				// interpret them at different timestamp. Specifically, interpret
-				// the "before" KV at the timestamp immediately before the schema
-				// change. This is handled in kvsToRows.
-				prevVal = kv.Value
-			}
-			if err = sink.Add(ctx, kvevent.MakeKVEvent(kv, prevVal, ts)); err != nil {
+			if err = sink.Add(ctx, kvevent.NewBackfillKVEvent(keyBytes, ts, valBytes, withDiff, backfillTS)); err != nil {
 				return errors.Wrapf(err, `buffering changes for %s`, span)
 			}
 		}
