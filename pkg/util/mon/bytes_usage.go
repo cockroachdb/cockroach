@@ -198,10 +198,6 @@ type BytesMonitor struct {
 
 	// name identifies this monitor in logging messages.
 	name redact.RedactableString
-	// nameWithPointer contains name with the address of the monitor attached to
-	// it. This can be used in logging messages to uniquely identify all
-	// messages for a single monitor.
-	nameWithPointer redact.RedactableString
 
 	// resource specifies what kind of resource the monitor is tracking
 	// allocations for. Specific behavior is delegated to this resource (e.g.
@@ -305,7 +301,6 @@ func NewMonitorWithLimit(
 		poolAllocationSize:   increment,
 		settings:             settings,
 	}
-	m.nameWithPointer = redact.Sprintf("%s (%p)", name, redact.Safe(m))
 	m.mu.curBytesCount = curCount
 	m.mu.maxBytesHist = maxHist
 	return m
@@ -351,10 +346,10 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 	if log.V(2) {
 		poolname := redact.RedactableString("(none)")
 		if pool != nil {
-			poolname = pool.nameWithPointer
+			poolname = pool.name
 		}
 		log.InfofDepth(ctx, 1, "%s: starting monitor, reserved %s, pool %s",
-			mm.nameWithPointer,
+			mm.name,
 			humanizeutil.IBytes(mm.reserved.used),
 			poolname)
 	}
@@ -384,7 +379,6 @@ func NewUnlimitedMonitor(
 		reserved:             MakeStandaloneBudget(math.MaxInt64),
 		settings:             settings,
 	}
-	m.nameWithPointer = redact.Sprintf("%s (%p)", name, redact.Safe(m))
 	m.mu.curBytesCount = curCount
 	m.mu.maxBytesHist = maxHist
 	return m
@@ -413,7 +407,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	// monitor is not shared any more.
 	if log.V(1) && mm.mu.maxAllocated >= bytesMaxUsageLoggingThreshold {
 		log.InfofDepth(ctx, 1, "%s, bytes usage max %s",
-			mm.nameWithPointer,
+			mm.name,
 			humanizeutil.IBytes(mm.mu.maxAllocated))
 	}
 
@@ -692,7 +686,7 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 			// many small allocations.
 			if bits.Len64(uint64(mm.mu.curAllocated)) != bits.Len64(uint64(mm.mu.curAllocated-x)) {
 				log.Infof(ctx, "%s: bytes usage increases to %s (+%d)",
-					mm.nameWithPointer,
+					mm.name,
 					humanizeutil.IBytes(mm.mu.curAllocated), x)
 			}
 		}
@@ -702,7 +696,7 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 		// We avoid VEventf here because we want to avoid computing the
 		// trace string if there is nothing to log.
 		log.Infof(ctx, "%s: now at %d bytes (+%d) - %s",
-			mm.nameWithPointer, mm.mu.curAllocated, x, util.GetSmallTrace(3))
+			mm.name, mm.mu.curAllocated, x, util.GetSmallTrace(3))
 	}
 	return nil
 }
@@ -728,7 +722,7 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 		// We avoid VEventf here because we want to avoid computing the
 		// trace string if there is nothing to log.
 		log.Infof(ctx, "%s: now at %d bytes (-%d) - %s",
-			mm.nameWithPointer, mm.mu.curAllocated, sz, util.GetSmallTrace(5))
+			mm.name, mm.mu.curAllocated, sz, util.GetSmallTrace(5))
 	}
 }
 
@@ -744,7 +738,7 @@ func (mm *BytesMonitor) increaseBudget(ctx context.Context, minExtra int64) erro
 		)
 	}
 	if log.V(2) {
-		log.Infof(ctx, "%s: requesting %d bytes from the pool", mm.nameWithPointer, minExtra)
+		log.Infof(ctx, "%s: requesting %d bytes from the pool", mm.name, minExtra)
 	}
 
 	return mm.mu.curBudget.Grow(ctx, minExtra)
@@ -768,7 +762,7 @@ func (mm *BytesMonitor) roundSize(sz int64) int64 {
 func (mm *BytesMonitor) releaseBudget(ctx context.Context) {
 	// NB: mm.mu need not be locked here, as this is only called from StopMonitor().
 	if log.V(2) {
-		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.nameWithPointer, mm.mu.curBudget.allocated())
+		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.allocated())
 	}
 	mm.mu.curBudget.Clear(ctx)
 }
