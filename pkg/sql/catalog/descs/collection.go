@@ -308,16 +308,42 @@ func (tc *Collection) WriteDesc(
 	return txn.Run(ctx, b)
 }
 
-// GetDescriptorsWithNewVersion returns all the IDVersion pairs that have
-// undergone a schema change. Returns nil for no schema changes. The version
-// returned for each schema change is clusterVersion - 1, because that's the one
-// that will be used when checking for table descriptor two version invariance.
-func (tc *Collection) GetDescriptorsWithNewVersion() (originalVersions []lease.IDVersion) {
-	_ = tc.uncommitted.iterateNewVersionByID(func(originalVersion lease.IDVersion) error {
-		originalVersions = append(originalVersions, originalVersion)
+// GetOriginalPreviousIDVersionsForUncommitted returns all the IDVersion
+// pairs for descriptors that have undergone a schema change.
+// Returns an empty slice for no schema changes.
+//
+// The version returned for each schema change is clusterVersion - 1, because
+// that's the one that will be used when checking for table descriptor
+// two-version invariance.
+func (tc *Collection) GetOriginalPreviousIDVersionsForUncommitted() (
+	withNewVersions []lease.IDVersion,
+	err error,
+) {
+	err = tc.uncommitted.iterateOriginalByID(func(original catalog.Descriptor) error {
+		uncommitted := tc.uncommitted.getUncommittedByID(original.GetID())
+		// Sanity check.
+		if original.GetVersion() == 0 {
+			return errors.AssertionFailedf(
+				"expected original version of uncommitted %s %q (%d) to be non-zero",
+				uncommitted.DescriptorType(), uncommitted.GetName(), uncommitted.GetID())
+		}
+		// Ignore uncommitted descriptors which for whatever reason have not
+		// bumped their version counter.
+		if uncommitted.GetVersion() == original.GetVersion() {
+			return nil
+		}
+		// Sanity check. If AddUncommittedDescriptor is implemented and used
+		// correctly then this should never fail.
+		if expected, actual := uncommitted.GetVersion()-1, original.GetVersion(); expected != actual {
+			return errors.AssertionFailedf(
+				"expected original version of uncommitted %s %q (%d) to be %d, instead is %d",
+				uncommitted.DescriptorType(), uncommitted.GetName(), uncommitted.GetID(), expected, actual)
+		}
+		prev := lease.NewIDVersionPrev(original.GetName(), original.GetID(), original.GetVersion())
+		withNewVersions = append(withNewVersions, prev)
 		return nil
 	})
-	return originalVersions
+	return withNewVersions, err
 }
 
 // GetUncommittedTables returns all the tables updated or created in the

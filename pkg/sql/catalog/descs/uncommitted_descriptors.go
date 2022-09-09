@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -111,17 +110,19 @@ func (ud *uncommittedDescriptors) getUncommittedByName(
 	return nil
 }
 
-// iterateNewVersionByID applies fn to each lease.IDVersion from the original
-// descriptor, if it exists, for each uncommitted descriptor, in ascending
-// sequence of IDs.
-func (ud *uncommittedDescriptors) iterateNewVersionByID(
-	fn func(originalVersion lease.IDVersion) error,
+// iterateOriginalByID applies fn to each original descriptor for which an
+// uncommitted non-new descriptor exists (new descriptors don't have an original
+// descriptor).
+func (ud *uncommittedDescriptors) iterateOriginalByID(
+	fn func(original catalog.Descriptor) error,
 ) error {
 	return ud.uncommitted.IterateByID(func(entry catalog.NameEntry) error {
-		if o := ud.original.Get(entry.GetID()); o != nil {
-			return fn(lease.NewIDVersionPrev(o.GetName(), o.GetID(), o.(catalog.Descriptor).GetVersion()))
+		o := ud.original.Get(entry.GetID())
+		// Ignore new descriptors.
+		if o == nil {
+			return nil
 		}
-		return nil
+		return fn(o.(catalog.Descriptor))
 	})
 }
 
