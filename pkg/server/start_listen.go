@@ -34,9 +34,9 @@ import (
 // This does not start *accepting* connections just yet.
 func startListenRPCAndSQL(
 	ctx, workersCtx context.Context, cfg BaseConfig, stopper *stop.Stopper, grpc *grpcServer,
-) (sqlListener net.Listener, startRPCServer func(ctx context.Context), err error) {
+) (sqlListeners []net.Listener, startRPCServer func(ctx context.Context), err error) {
 	rpcChanName := "rpc/sql"
-	if cfg.SplitListenSQL {
+	if cfg.SplitListenSQL && !cfg.KeepHybridSQL {
 		rpcChanName = "rpc"
 	}
 	var ln net.Listener
@@ -53,12 +53,12 @@ func startListenRPCAndSQL(
 		log.Eventf(ctx, "listening on port %s", cfg.Addr)
 	}
 
-	var pgL net.Listener
 	if cfg.SplitListenSQL {
-		pgL, err = ListenAndUpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, "sql")
+		pgL, err := ListenAndUpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, "sql")
 		if err != nil {
 			return nil, nil, err
 		}
+		sqlListeners = append(sqlListeners, pgL)
 		// The SQL listener shutdown worker, which closes everything under
 		// the SQL port when the stopper indicates we are shutting down.
 		waitQuiesce := func(ctx context.Context) {
@@ -84,19 +84,22 @@ func startListenRPCAndSQL(
 
 	m := cmux.New(ln)
 
-	if !cfg.SplitListenSQL {
+	if !cfg.SplitListenSQL || cfg.KeepHybridSQL {
 		// If the pg port is split, it will be opened above. Otherwise,
 		// we make it hang off the RPC listener via cmux here.
-		pgL = m.Match(func(r io.Reader) bool {
+		pgL := m.Match(func(r io.Reader) bool {
 			return pgwire.Match(r)
 		})
-		// Also if the pg port is not split, the actual listen address for
-		// SQL become equal to that of RPC.
-		cfg.SQLAddr = cfg.Addr
-		// Then we update the advertised addr with the right port, if
-		// the port had been auto-allocated.
-		if err := UpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, ln.Addr()); err != nil {
-			return nil, nil, errors.Wrapf(err, "internal error")
+		sqlListeners = append(sqlListeners, pgL)
+		if !cfg.SplitListenSQL {
+			// Also if the pg port is not split, the actual listen address for
+			// SQL become equal to that of RPC.
+			cfg.SQLAddr = cfg.Addr
+			// Then we update the advertised addr with the right port, if
+			// the port had been auto-allocated.
+			if err := UpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, ln.Addr()); err != nil {
+				return nil, nil, errors.Wrapf(err, "internal error")
+			}
 		}
 	}
 
@@ -145,5 +148,5 @@ func startListenRPCAndSQL(
 		})
 	}
 
-	return pgL, startRPCServer, nil
+	return sqlListeners, startRPCServer, nil
 }

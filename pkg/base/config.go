@@ -198,6 +198,10 @@ type Config struct {
 	// clients on a separate address from RPC requests.
 	SplitListenSQL bool
 
+	// KeepHybridSQL indicates whether to keep the hybrid
+	// SQL/RPC listener when SplitListenSQL is true.
+	KeepHybridSQL bool
+
 	// SQLAddr is the configured SQL listen address.
 	// This is used if SplitListenSQL is set to true.
 	SQLAddr string
@@ -269,6 +273,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.DisableTLSForHTTP = false
 	cfg.HTTPAdvertiseAddr = ""
 	cfg.SplitListenSQL = false
+	cfg.KeepHybridSQL = false
 	cfg.SQLAddr = defaultSQLAddr
 	cfg.SQLAdvertiseAddr = cfg.SQLAddr
 	cfg.SocketFile = ""

@@ -189,7 +189,9 @@ func startTenantInternal(
 			// running in a worker and usually sits on accept(pgL) which unblocks
 			// only when pgL closes. In other words, pgL needs to close when
 			// quiescing starts to allow that worker to shut down.
-			_ = pgL.Close()
+			for _, l := range pgL {
+				_ = l.Close()
+			}
 		}
 		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-pgl", waitQuiesce); err != nil {
 			waitQuiesce(background)

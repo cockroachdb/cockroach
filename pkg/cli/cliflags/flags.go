@@ -111,6 +111,22 @@ specialized hardware or number of cores (e.g. "gpu", "x16c"). For example:
   --attrs=x16c:gpu</PRE>`,
 	}
 
+	KeepHybridSQL = FlagInfo{
+		Name: "keep-hybrid-sql-port",
+		Description: `
+When specified, the network listener defined with --listen-addr also
+accepts SQL connections, even when --sql-addr is specified.
+<PRE>
+
+</PRE>
+This flag is intended as a transition mode when adding --sql-addr
+to a cluster previously running with a mixed use TCP port.
+After the cluster has been restarted with split ports
+and --keep-hybrid-sql-port, and the SQL client config
+has been updated to use the new SQL port, the cluster can then be restarted
+anew without --keep-hybrid-sql-port.`,
+	}
+
 	Locality = FlagInfo{
 		Name: "locality",
 		Description: `

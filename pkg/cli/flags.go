@@ -453,6 +453,8 @@ func init() {
 
 		// More server flags.
 
+		cliflagcfg.BoolFlag(f, &serverCfg.KeepHybridSQL, cliflags.KeepHybridSQL)
+
 		cliflagcfg.VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
 
 		cliflagcfg.StringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
@@ -904,6 +906,7 @@ func init() {
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAddr, &serverHTTPPort), cliflags.ListenHTTPAddr)
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort), cliflags.HTTPAdvertiseAddr)
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverAdvertiseAddr, &serverAdvertisePort), cliflags.AdvertiseAddr)
+		cliflagcfg.BoolFlag(f, &serverCfg.KeepHybridSQL, cliflags.KeepHybridSQL)
 
 		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
 		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)

@@ -173,8 +173,9 @@ type SQLServer struct {
 
 	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
 
-	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
-	pgL net.Listener
+	// pgL is the SQL listeners.
+	pgL []net.Listener
+
 	// connManager is the connection manager to use to set up additional
 	// SQL listeners in AcceptClients().
 	connManager netutil.Server
@@ -1223,7 +1224,7 @@ func (s *SQLServer) preStart(
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
 	connManager netutil.Server,
-	pgL net.Listener,
+	pgL []net.Listener,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
 	// The sqlliveness and sqlinstance subsystem should be started first to ensure
@@ -1412,7 +1413,7 @@ func (s *SQLServer) startServeSQL(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	connManager netutil.Server,
-	pgL net.Listener,
+	pgL []net.Listener,
 	socketFileCfg *string,
 ) error {
 	log.Ops.Info(ctx, "serving sql connections")
@@ -1421,21 +1422,23 @@ func (s *SQLServer) startServeSQL(
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
 	tcpKeepAlive := makeTCPKeepAliveManager()
 
-	_ = stopper.RunAsyncTaskEx(pgCtx,
-		stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
-		func(ctx context.Context) {
-			err := connManager.ServeWith(ctx, stopper, pgL, func(ctx context.Context, conn net.Conn) {
-				connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
-				tcpKeepAlive.configure(connCtx, conn)
+	for _, thisL := range pgL {
+		_ = stopper.RunAsyncTaskEx(pgCtx,
+			stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
+			func(ctx context.Context) {
+				err := connManager.ServeWith(ctx, stopper, thisL, func(ctx context.Context, conn net.Conn) {
+					connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
+					tcpKeepAlive.configure(connCtx, conn)
 
-				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
-					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
-				}
+					if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
+						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+					}
+				})
+				netutil.FatalIfUnexpected(err)
 			})
-			netutil.FatalIfUnexpected(err)
-		})
+	}
 
-	socketFile, socketLock, err := prepareUnixSocket(pgCtx, pgL, socketFileCfg)
+	socketFile, socketLock, err := prepareUnixSocket(pgCtx, pgL[0], socketFileCfg)
 	if err != nil {
 		return err
 	}
