@@ -150,10 +150,10 @@ func (cf *CollectionFactory) TxnWithExecutor(
 		return nil
 	}
 	for {
-		var modifiedDescriptors []lease.IDVersion
+		var withNewVersion []lease.IDVersion
 		var deletedDescs catalog.DescriptorIDSet
-		if err := run(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			modifiedDescriptors, deletedDescs = nil, catalog.DescriptorIDSet{}
+		if err := run(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			withNewVersion, deletedDescs = nil, catalog.DescriptorIDSet{}
 			descsCol := cf.NewCollection(
 				ctx, nil, /* temporarySchemaProvider */
 				cf.ieFactoryWithTxn.MemoryMonitor(),
@@ -164,13 +164,16 @@ func (cf *CollectionFactory) TxnWithExecutor(
 				return err
 			}
 			deletedDescs = descsCol.deletedDescs
-			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
+			withNewVersion, err = descsCol.GetOriginalPreviousIDVersionsForUncommitted()
+			if err != nil {
+				return err
+			}
 			return commitTxnFn(ctx)
 		}); IsTwoVersionInvariantViolationError(err) {
 			continue
 		} else {
 			if err == nil {
-				err = waitForDescriptors(modifiedDescriptors, deletedDescs)
+				err = waitForDescriptors(withNewVersion, deletedDescs)
 			}
 			return err
 		}
@@ -210,9 +213,9 @@ func CheckTwoVersionInvariant(
 	txn *kv.Txn,
 	onRetryBackoff func(),
 ) error {
-	withNewVersion := descsCol.GetDescriptorsWithNewVersion()
-	if withNewVersion == nil {
-		return nil
+	withNewVersion, err := descsCol.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil || withNewVersion == nil {
+		return err
 	}
 	if txn.IsCommitted() {
 		panic("transaction has already committed")
