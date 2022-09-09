@@ -13,6 +13,7 @@ package kvevent
 import (
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -66,74 +67,96 @@ type Writer interface {
 // Different types indicate which methods will be meaningful.
 // Events are implemented this way rather than as an interface to remove the
 // need to box the events and allow for events to be used in slices directly.
-type Type int
+type Type uint8
 
 const (
-	// TypeKV indicates that the KV, PrevValue, and BackfillTimestamp methods
-	// on the Event meaningful.
-	TypeKV Type = iota
-
-	// TypeResolved indicates that the Resolved method on the Event will be
-	// meaningful.
-	TypeResolved
+	// TypeUnknown indicates the event could not be parsed. Will fail the feed.
+	TypeUnknown Type = iota
 
 	// TypeFlush indicates a request to flush buffered data.
 	// This request type is emitted by blocking buffer when it's blocked, waiting
 	// for more memory.
 	TypeFlush
 
-	// TypeUnknown indicates the event could not be parsed. Will fail the feed.
-	TypeUnknown
+	// TypeKV indicates that the KV, PrevKeyValue, and BackfillTimestamp methods
+	// on the Event meaningful.
+	TypeKV
+
+	// Private fields indicating the type of the resolved event.
+	resolvedNone
+	resolvedBackfill
+	resolvedRestart
+	resolvedExit
+
+	// TypeResolved indicates that the Resolved method on the Event will be
+	// meaningful.
+	TypeResolved = resolvedNone
 )
 
 // Event represents an event emitted by a kvfeed. It is either a KV or a
 // resolved timestamp.
 type Event struct {
-	kv                 roachpb.KeyValue
-	prevVal            roachpb.Value
-	flush              bool
-	resolved           jobspb.ResolvedSpan
+	ev                 *roachpb.RangeFeedEvent
+	et                 Type
 	backfillTimestamp  hlc.Timestamp
 	bufferAddTimestamp time.Time
-	approxSize         int
 	alloc              Alloc
 }
 
 // Type returns the event's Type.
-func (b *Event) Type() Type {
-	if b.kv.Key != nil {
-		return TypeKV
-	}
-	if b.resolved.Span.Key != nil {
+func (e *Event) Type() Type {
+	switch e.et {
+	case resolvedNone, resolvedBackfill, resolvedRestart, resolvedExit:
 		return TypeResolved
+	default:
+		return e.et
 	}
-	if b.flush {
-		return TypeFlush
-	}
-	return TypeUnknown
 }
 
 // ApproximateSize returns events approximate size in bytes.
-func (b *Event) ApproximateSize() int {
-	return b.approxSize
+func (e *Event) ApproximateSize() int {
+	return e.ev.Size() + int(unsafe.Sizeof(Event{}))
 }
 
 // KV is populated if this event returns true for IsKV().
-func (b *Event) KV() roachpb.KeyValue {
-	return b.kv
+func (e *Event) KV() roachpb.KeyValue {
+	v := e.ev.Val
+	return roachpb.KeyValue{Key: v.Key, Value: v.Value}
 }
 
-// PrevValue returns the previous value for this event. PrevValue is non-zero
+// PrevKeyValue returns the previous value for this event. PrevKeyValue is non-zero
 // if this is a KV event and the key had a non-tombstone value before the change
 // and the before value of each change was requested (optDiff).
-func (b *Event) PrevValue() roachpb.Value {
-	return b.prevVal
+func (e *Event) PrevKeyValue() roachpb.KeyValue {
+	v := e.ev.Val
+	return roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}
+}
+
+func (e *Event) boundaryType() jobspb.ResolvedSpan_BoundaryType {
+	switch e.et {
+	case resolvedNone:
+		return jobspb.ResolvedSpan_NONE
+	case resolvedBackfill:
+		return jobspb.ResolvedSpan_BACKFILL
+	case resolvedRestart:
+		return jobspb.ResolvedSpan_RESTART
+	case resolvedExit:
+		return jobspb.ResolvedSpan_EXIT
+	default:
+		log.Warningf(context.TODO(),
+			"returning jobspb.ResolvedSpan_EXIT boundary type for unknown boundary")
+		return jobspb.ResolvedSpan_EXIT
+	}
 }
 
 // Resolved will be non-nil if this is a resolved timestamp event (i.e. IsKV()
 // returns false).
-func (b *Event) Resolved() jobspb.ResolvedSpan {
-	return b.resolved
+func (e *Event) Resolved() jobspb.ResolvedSpan {
+	return jobspb.ResolvedSpan{
+		Span:         e.ev.Checkpoint.Span,
+		Timestamp:    e.ev.Checkpoint.ResolvedTS,
+		BoundaryType: e.boundaryType(),
+	}
 }
 
 // BackfillTimestamp overrides the timestamp of the schema that should be
@@ -142,46 +165,39 @@ func (b *Event) Resolved() jobspb.ResolvedSpan {
 //
 // If unset (zero-valued), the KV's timestamp will be used to interpret both
 // of the current and previous values instead.
-func (b *Event) BackfillTimestamp() hlc.Timestamp {
-	return b.backfillTimestamp
+func (e *Event) BackfillTimestamp() hlc.Timestamp {
+	return e.backfillTimestamp
 }
 
 // BufferAddTimestamp is the time this event came into  the buffer.
-func (b *Event) BufferAddTimestamp() time.Time {
-	return b.bufferAddTimestamp
+func (e *Event) BufferAddTimestamp() time.Time {
+	return e.bufferAddTimestamp
 }
 
 // Timestamp returns the timestamp of the write if this is a KV event.
 // If there is a non-zero BackfillTimestamp, that is returned.
 // If this is a resolved timestamp event, the timestamp is the resolved
 // timestamp.
-func (b *Event) Timestamp() hlc.Timestamp {
-	switch b.Type() {
-	case TypeResolved:
-		return b.resolved.Timestamp
-	case TypeKV:
-		if !b.backfillTimestamp.IsEmpty() {
-			return b.backfillTimestamp
-		}
-		return b.kv.Value.Timestamp
-	case TypeFlush:
-		return hlc.Timestamp{}
-	default:
-		log.Warningf(context.TODO(),
-			"setting empty timestamp for unknown event type")
-		return hlc.Timestamp{}
-	}
+func (e *Event) Timestamp() hlc.Timestamp {
+	return e.getTimestamp(e.backfillTimestamp)
 }
 
 // MVCCTimestamp returns the Timestamp of the KV, ignoring the
 // backfillTimestamp if present. This helps distinguish backfills from
 // other events.
-func (b *Event) MVCCTimestamp() hlc.Timestamp {
-	switch b.Type() {
+func (e *Event) MVCCTimestamp() hlc.Timestamp {
+	return e.getTimestamp(hlc.Timestamp{})
+}
+
+func (e *Event) getTimestamp(backfillTS hlc.Timestamp) hlc.Timestamp {
+	switch e.Type() {
 	case TypeResolved:
-		return b.resolved.Timestamp
+		return e.ev.Checkpoint.ResolvedTS
 	case TypeKV:
-		return b.kv.Value.Timestamp
+		if !backfillTS.IsEmpty() {
+			return backfillTS
+		}
+		return e.ev.Val.Value.Timestamp
 	case TypeFlush:
 		return hlc.Timestamp{}
 	default:
@@ -192,35 +208,83 @@ func (b *Event) MVCCTimestamp() hlc.Timestamp {
 }
 
 // DetachAlloc detaches and returns allocation associated with this event.
-func (b *Event) DetachAlloc() Alloc {
-	a := b.alloc
-	b.alloc.clear()
+func (e *Event) DetachAlloc() Alloc {
+	a := e.alloc
+	e.alloc.clear()
 	return a
 }
 
-// MakeResolvedEvent returns resolved event.
-func MakeResolvedEvent(
-	span roachpb.Span, ts hlc.Timestamp, boundaryType jobspb.ResolvedSpan_BoundaryType,
-) Event {
-	e := Event{
-		resolved: jobspb.ResolvedSpan{
-			Span:         span,
-			Timestamp:    ts,
-			BoundaryType: boundaryType,
-		},
+func getTypeForBoundary(bt jobspb.ResolvedSpan_BoundaryType) Type {
+	switch bt {
+	case jobspb.ResolvedSpan_NONE:
+		return resolvedNone
+	case jobspb.ResolvedSpan_BACKFILL:
+		return resolvedBackfill
+	case jobspb.ResolvedSpan_RESTART:
+		return resolvedRestart
+	case jobspb.ResolvedSpan_EXIT:
+		return resolvedExit
+	default:
+		panic("unknown boundary type")
 	}
-	e.approxSize = e.resolved.Size() + 1
-	return e
 }
 
-// MakeKVEvent returns KV event.
-func MakeKVEvent(
-	kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
+// MakeResolvedEvent returns resolved event constructed from existing RangeFeedEvent.
+func MakeResolvedEvent(
+	ev *roachpb.RangeFeedEvent, boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) Event {
+	if ev.Checkpoint == nil {
+		panic("expected initialized RangeFeedCheckpoint")
+	}
+	return Event{ev: ev, et: getTypeForBoundary(boundaryType)}
+}
+
+// NewBackfillResolvedEvent returns new resolved event.  Method intended to be
+// used during backfill.
+func NewBackfillResolvedEvent(
+	span roachpb.Span, ts hlc.Timestamp, boundaryType jobspb.ResolvedSpan_BoundaryType,
+) Event {
+	rfe := &roachpb.RangeFeedEvent{
+		Checkpoint: &roachpb.RangeFeedCheckpoint{
+			Span:       span,
+			ResolvedTS: ts,
+		},
+	}
+	return MakeResolvedEvent(rfe, boundaryType)
+}
+
+// MakeKVEvent returns KV event constructed from existing RangeFeedEvent.
+func MakeKVEvent(ev *roachpb.RangeFeedEvent) Event {
+	if ev.Val == nil {
+		panic("expected initialized RangeFeedValue")
+	}
+	return Event{ev: ev, et: TypeKV}
+}
+
+// NewBackfillKVEvent returns new KV event constructed during the backfill.
+// Method intended to be used during backfill.
+func NewBackfillKVEvent(
+	key []byte, ts hlc.Timestamp, val []byte, withDiff bool, backfillTS hlc.Timestamp,
+) Event {
+	rfe := &roachpb.RangeFeedEvent{
+		Val: &roachpb.RangeFeedValue{
+			Key: key,
+			Value: roachpb.Value{
+				RawBytes:  val,
+				Timestamp: ts,
+			},
+		}}
+
+	if withDiff {
+		// Include the same value for the "before" and "after" KV, but
+		// interpret them at different timestamp. Specifically, interpret
+		// the "before" KV at the timestamp immediately before the schema
+		// change.
+		rfe.Val.PrevValue = rfe.Val.Value
+	}
 	return Event{
-		kv:                kv,
-		prevVal:           prevVal,
-		backfillTimestamp: backfillTimestamp,
-		approxSize:        kv.Size() + prevVal.Size() + backfillTimestamp.Size(),
+		ev:                rfe,
+		et:                TypeKV,
+		backfillTimestamp: backfillTS,
 	}
 }
