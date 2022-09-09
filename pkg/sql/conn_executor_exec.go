@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -2003,8 +2004,33 @@ func (ex *connExecutor) runShowCompletions(
 	ctx context.Context, n *tree.ShowCompletions, res RestrictedCommandResult,
 ) error {
 	res.SetColumns(ctx, colinfo.ShowCompletionsColumns)
-	completions, err := newCompletionsGenerator(n)
+	log.Warningf(ctx, "COMPLETION GENERATOR FOR: %+v", *n)
+	ie := ex.server.cfg.InternalExecutor
+	sd := ex.planner.SessionData()
+	override := sessiondata.InternalExecutorOverride{
+		SearchPath: &sd.SearchPath,
+		Database:   sd.Database,
+		User:       sd.User(),
+	}
+	// If a txn is currently open, reuse it. If not,
+	// we will read in a fresh txn.
+	var txn *kv.Txn
+	if _, ok := ex.machine.CurState().(stateOpen); ok {
+		txn = func() *kv.Txn {
+			ex.state.mu.RLock()
+			defer ex.state.mu.RUnlock()
+			return ex.state.mu.txn
+		}()
+	}
+	queryIterFn := func(ctx context.Context, opName string, stmt string, args ...interface{}) (sqlutil.InternalRows, error) {
+		return ie.QueryIteratorEx(ctx, opName, txn,
+			override,
+			stmt, args...)
+	}
+
+	completions, err := newCompletionsGenerator(queryIterFn, n)
 	if err != nil {
+		log.Warningf(ctx, "COMPLETION GENERATOR FAILED: %v", err)
 		return err
 	}
 
@@ -2013,8 +2039,12 @@ func (ex *connExecutor) runShowCompletions(
 		row := completions.Values()
 		err = res.AddRow(ctx, row)
 		if err != nil {
+			log.Warningf(ctx, "COMPLETION ADDROW FAILED: %v", err)
 			return err
 		}
+	}
+	if err != nil {
+		log.Warningf(ctx, "COMPLETION GENERATOR NEXT FAILED: %v", err)
 	}
 	return err
 }
