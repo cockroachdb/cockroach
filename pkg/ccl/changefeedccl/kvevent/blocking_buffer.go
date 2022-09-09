@@ -126,6 +126,9 @@ func (b *blockingBuffer) pop() (e *bufferEntry, err error) {
 		// we may never be able to make forward progress.
 		// So, we issue the flush request to the consumer to ensure that we release some memory.
 		e = newBufferEntry(Event{flush: true})
+		// Ensure we notify only once.  If we're still out of quota,
+		// subsequent notifyOutOfQuota will reset this field.
+		b.mu.canFlush = false
 	}
 
 	if b.mu.drainCh != nil && b.mu.queue.empty() {
