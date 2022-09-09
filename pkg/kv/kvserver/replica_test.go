@@ -9363,12 +9363,18 @@ func TestReplicaMetrics(t *testing.T) {
 			// quiescent metric.
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
-			metrics := calcReplicaMetrics(
-				ctx, hlc.Timestamp{}, &cfg.RaftConfig, spanConfig,
-				c.liveness, 0, &c.desc, c.raftStatus, kvserverpb.LeaseStatus{},
-				c.storeID, c.expected.Quiescent, c.expected.Ticking,
-				concurrency.LatchMetrics{}, concurrency.LockTableMetrics{}, c.raftLogSize,
-				true, 0, 0, nil /* overloadMap */)
+			metrics := calcReplicaMetrics(calcReplicaMetricsInput{
+				raftCfg:            &cfg.RaftConfig,
+				conf:               spanConfig,
+				livenessMap:        c.liveness,
+				desc:               &c.desc,
+				raftStatus:         c.raftStatus,
+				storeID:            c.storeID,
+				quiescent:          c.expected.Quiescent,
+				ticking:            c.expected.Ticking,
+				raftLogSize:        c.raftLogSize,
+				raftLogSizeTrusted: true,
+			})
 			require.Equal(t, c.expected, metrics)
 		})
 	}

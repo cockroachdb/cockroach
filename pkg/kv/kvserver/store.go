@@ -3127,6 +3127,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		overreplicatedRangeCount  int64
 		behindCount               int64
 		pausedFollowerCount       int64
+		slowRaftProposalCount     int64
 
 		locks                          int64
 		totalLockHoldDurationNanos     int64
@@ -3186,6 +3187,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		pausedFollowerCount += metrics.PausedFollowerCount
+		slowRaftProposalCount += metrics.SlowRaftProposalCount
 		behindCount += metrics.BehindCount
 		if qps, dur := rep.loadStats.batchRequests.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageQueriesPerSecond += qps
@@ -3247,6 +3249,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 	s.metrics.RaftPausedFollowerCount.Update(pausedFollowerCount)
+	s.metrics.SlowRaftRequests.Update(slowRaftProposalCount)
 
 	var averageLockHoldDurationNanos int64
 	var averageLockWaitDurationNanos int64
