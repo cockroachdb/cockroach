@@ -2899,3 +2899,35 @@ project
                 ├── t0_85393.rowid:10 [as=t0_85393.rowid:2, outer=(10)]
                 ├── t1_85393.c0:13 [as=t1_85393.c0:5, outer=(13)]
                 └── t1_85393.rowid:14 [as=t1_85393.rowid:6, outer=(14)]
+
+# Regression test for #83793 - include scan columns that are constrained to be
+# constant in the provided ordering when they are in the output of the scan.
+exec-ddl
+CREATE TABLE t83793 (
+  a INT,
+  b STRING AS (a::STRING) STORED,
+  c STRING AS (a::STRING) VIRTUAL,
+  UNIQUE (b, a)
+);
+----
+
+opt format=hide-all
+SELECT NULL FROM t83793
+WHERE NOT (c NOT SIMILAR TO '')
+GROUP BY b HAVING bool_and(NULL);
+----
+project
+ ├── select
+ │    ├── group-by (streaming)
+ │    │    ├── project
+ │    │    │    ├── scan t83793@t83793_b_a_key
+ │    │    │    │    └── constraint: /2/1: [/'' - /'']
+ │    │    │    └── projections
+ │    │    │         └── NULL
+ │    │    └── aggregations
+ │    │         └── bool-and
+ │    │              └── column7
+ │    └── filters
+ │         └── bool_and
+ └── projections
+      └── NULL
