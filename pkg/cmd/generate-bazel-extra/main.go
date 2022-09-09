@@ -18,6 +18,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -48,15 +49,49 @@ func runBuildozer(args []string) {
 	}
 }
 
-func getTestTargets(testTargetSize string) ([]string, error) {
-	if _, ok := testSizeToDefaultTimeout[testTargetSize]; !ok {
-		return nil, errors.New("testTargetSize should be one of {small,medium,large,enormous}")
+// parseQueryXML is used because Go doesn't support parsing XML "1.1".
+// It returns a map where the key is a test size {small,medium,large,enormous} and
+// the value is a list of test targets having that size.
+func parseQueryXML(data []byte) (map[string][]string, error) {
+	targetNameRegex, err := regexp.Compile(`<rule.*class="go_test".*name="(.*)".*>`)
+	if err != nil {
+		return nil, err
 	}
+
+	targetSizeRegex, err := regexp.Compile(`<string.*name="size".*value="(.*)".*/>`)
+	if err != nil {
+		return nil, err
+	}
+
+	targetToSize := make(map[string]string)
+	var currentTargetName string
+	for _, line := range strings.Split(string(data), "\n") {
+		// Check if the line contains a target name.
+		line = strings.TrimSpace(line)
+		if submatch := targetNameRegex.FindStringSubmatch(line); submatch != nil {
+			currentTargetName = submatch[1]
+			// Default size is medium so if not found then it will be medium.
+			targetToSize[currentTargetName] = "medium"
+			continue
+		}
+		// Check if the line contains a target size.
+		if submatch := targetSizeRegex.FindStringSubmatch(line); submatch != nil {
+			targetToSize[currentTargetName] = submatch[1]
+		}
+	}
+	sizeToTargets := make(map[string][]string)
+	for target, size := range targetToSize {
+		sizeToTargets[size] = append(sizeToTargets[size], target)
+	}
+	return sizeToTargets, nil
+}
+
+func getTestTargets() (map[string][]string, error) {
 	cmd := exec.Command(
 		"bazel",
 		"query",
-		fmt.Sprintf(`attr(size, %s, kind("go_test", tests(//pkg/...)))`, testTargetSize),
-		"--output=label",
+		fmt.Sprintf(`kind("go_test", %s)`, getPackagesToQuery()),
+		"--output=xml",
 	)
 	buf, err := cmd.Output()
 	if err != nil {
@@ -69,10 +104,10 @@ func getTestTargets(testTargetSize string) ([]string, error) {
 		}
 		os.Exit(1)
 	}
-	return strings.Split(strings.TrimSpace(string(buf[:])), "\n"), nil
+	return parseQueryXML(buf)
 }
 
-func generateTestSuites() {
+func getPackagesToQuery() string {
 	// First list all test and binary targets.
 	infos, err := os.ReadDir("pkg")
 	if err != nil {
@@ -80,17 +115,22 @@ func generateTestSuites() {
 	}
 	var packagesToQuery []string
 	for _, info := range infos {
-		// We don't want to query into pkg/ui because it never contains any Go tests and
-		// because doing so causes a pull from `npm`.
+		// We don't want to query into pkg/ui because it only contains a
+		// single Go test target at its root which will be included below.
+		// Querying into its subdirectories is unneeded and causes a pull from `npm`.
 		if !info.IsDir() || info.Name() == "ui" {
 			continue
 		}
 		packagesToQuery = append(packagesToQuery, fmt.Sprintf("//pkg/%s/...", info.Name()))
 	}
-	allPackages := strings.Join(packagesToQuery, "+")
+	packagesToQuery = append(packagesToQuery, "//pkg/ui:*")
+	return strings.Join(packagesToQuery, "+")
+}
+
+func generateTestSuites() {
 	cmd := exec.Command(
 		"bazel", "query",
-		fmt.Sprintf(`kind("(_get_x_data|(go|sh)_(binary|library|test|transition_binary|transition_test))", %s)`, allPackages),
+		fmt.Sprintf(`kind("(_get_x_data|(go|sh)_(binary|library|test|transition_binary|transition_test))", %s)`, getPackagesToQuery()),
 		"--output=label_kind",
 	)
 	buf, err := cmd.Output()
@@ -245,11 +285,11 @@ unused_checker(srcs = GET_X_DATA_TARGETS)`)
 }
 
 func generateTestsTimeouts() {
+	targets, err := getTestTargets()
+	if err != nil {
+		log.Fatal(err)
+	}
 	for size, timeout := range testSizeToDefaultTimeout {
-		targets, err := getTestTargets(size)
-		if err != nil {
-			log.Fatal(err)
-		}
 		// Let the `go test` process timeout 5 seconds before bazel attempts to kill it.
 		// Note that if this causes issues such as not having enough time to run normally
 		// (because of the 5 seconds taken) then the troubled test target size must be bumped
@@ -257,7 +297,7 @@ func generateTestsTimeouts() {
 		// anyways to avoid flakiness.
 		runBuildozer(append([]string{
 			fmt.Sprintf(`set args "-test.timeout=%ds"`, timeout-5)},
-			targets...,
+			targets[size]...,
 		))
 	}
 }
