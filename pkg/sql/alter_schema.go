@@ -105,6 +105,27 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			return err
 		}
 
+		// Ensure that the new name is a valid schema name.
+		if err := schemadesc.IsSchemaNameValid(newName); err != nil {
+			return err
+		}
+
+		// Check that there isn't a name collision with the new name.
+		found, _, err := schemaExists(params.ctx, params.p.txn, params.p.Descriptors(), n.db.ID, newName)
+		if err != nil {
+			return err
+		}
+		if found {
+			return sqlerrors.NewSchemaAlreadyExistsError(newName)
+		}
+
+		lookupFlags := tree.CommonLookupFlags{Required: true, AvoidLeased: true}
+		if err := maybeFailOnDependentDescInRename(
+			params.ctx, params.p, n.db, n.desc.GetName(), lookupFlags, catalog.Schema,
+		); err != nil {
+			return err
+		}
+
 		if err := params.p.renameSchema(
 			params.ctx, n.db, n.desc, newName, tree.AsStringWithFQNames(n.n, params.Ann()),
 		); err != nil {
@@ -202,20 +223,6 @@ func (p *planner) renameSchema(
 		ParentID:       desc.GetParentID(),
 		ParentSchemaID: desc.GetParentSchemaID(),
 		Name:           desc.GetName(),
-	}
-
-	// Check that there isn't a name collision with the new name.
-	found, _, err := schemaExists(ctx, p.txn, p.Descriptors(), db.ID, newName)
-	if err != nil {
-		return err
-	}
-	if found {
-		return sqlerrors.NewSchemaAlreadyExistsError(newName)
-	}
-
-	// Ensure that the new name is a valid schema name.
-	if err := schemadesc.IsSchemaNameValid(newName); err != nil {
-		return err
 	}
 
 	// Set the new name for the descriptor.

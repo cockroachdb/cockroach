@@ -353,6 +353,10 @@ $$;
 			testName: "drop database",
 			stmt:     "DROP DATABASE test_db CASCADE",
 		},
+		{
+			testName: "drop schema",
+			stmt:     "DROP SCHEMA test_sc CASCADE",
+		},
 	}
 
 	for _, tc := range testCases {
