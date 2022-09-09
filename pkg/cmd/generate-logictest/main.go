@@ -303,6 +303,14 @@ func generate() error {
 		if err != nil {
 			return err
 		}
+		err = t.addLogicTests("TestBackupRestoreLogic", logictestbase.ConfigCalculator{
+			ConfigOverrides:       []string{"3node-backup-restore"},
+			ConfigFilterOverrides: []string{"3node-backup-restore"},
+			RunCCLConfigs:         true,
+		})
+		if err != nil {
+			return err
+		}
 		err = t.dump()
 		if err != nil {
 			return err
@@ -347,6 +355,14 @@ func generate() error {
 			return err
 		}
 		err = t.addExecBuildLogicTests("TestTenantExecBuild", tenantCalc)
+		if err != nil {
+			return err
+		}
+		err = t.addCclLogicTests("TestBackupRestoreCCLLogic", logictestbase.ConfigCalculator{
+			ConfigOverrides:       []string{"3node-backup-restore"},
+			ConfigFilterOverrides: []string{"3node-backup-restore"},
+			RunCCLConfigs:         true,
+		})
 		if err != nil {
 			return err
 		}

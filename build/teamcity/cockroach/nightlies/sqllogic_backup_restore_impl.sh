@@ -7,19 +7,16 @@ source "$dir/teamcity-bazel-support.sh"  # For process_test_json
 
 bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
-
-ARTIFACTS_DIR=/artifacts
-GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
-
+GO_TEST_JSON_OUTPUT_FILE=/artifacts/test.json.txt
 exit_status=0
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-    test //pkg/ccl/logictestccl:logictestccl_test -- \
+
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
+    //pkg/ccl/logictestccl/tests/3node-backup-restore/... \
     --test_arg=-show-sql \
-    --test_filter='^TestBackupRestoreLogic/^3node-backup$/^a.*$/' \
-    --test_env=COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY=0.01 \
+    --test_env=COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY=1.0 \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
-    --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE \
+    --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE.3node-backup-restore \
     --test_timeout=7200 \
     || exit_status=$?
 

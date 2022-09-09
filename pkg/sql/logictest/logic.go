@@ -534,10 +534,6 @@ var (
 		"enables generation and storage of a declarative schema changer	corpus",
 	)
 
-	// BackupRestoreProbability is the environment variable for `3node-backup` config.
-	BackupRestoreProbability = envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0)
-)
-
 	// globalMVCCRangeTombstone will write a global MVCC range tombstone across
 	// the entire user keyspace during cluster bootstrapping. This should not
 	// semantically affect the test data written above it, but will activate MVCC
@@ -2153,7 +2149,7 @@ func (t *logicTest) maybeBackupRestore(
 	// Perform the backup and restore as root.
 	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
 
-	if _, err := t.db.Exec(fmt.Sprintf("BACKUP TO '%s'", backupLocation)); err != nil {
+	if _, err := t.db.Exec(fmt.Sprintf("BACKUP INTO '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "backing up cluster")
 	}
 
@@ -2163,7 +2159,7 @@ func (t *logicTest) maybeBackupRestore(
 
 	// Run the restore as root.
 	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
-	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM '%s'", backupLocation)); err != nil {
+	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM LATEST IN '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "restoring cluster")
 	}
 

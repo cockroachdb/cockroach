@@ -22,9 +22,11 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 var (
@@ -32,6 +34,9 @@ var (
 		"print-blocklist-issues", false,
 		"for any test files that contain a blocklist directive, print a link to the associated issue",
 	)
+
+	// backupRestoreProbability is the environment variable for `3node-backup` config.
+	backupRestoreProbability = envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0)
 )
 
 // TestClusterConfig is a struct representing a single logictest
@@ -468,6 +473,20 @@ var LogicTestConfigs = []TestClusterConfig{
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
+	{
+		// 3node-backup is a config that periodically performs a cluster backup,
+		// and restores that backup into a new cluster before continuing the test.
+		// This config can only be run with a CCL binary, so is a noop if run
+		// through the normal logictest command.
+		// To run a logic test with this config as a directive, run:
+		//  make test PKG=./pkg/ccl/logictestccl TESTS=TestBackupRestoreLogic//<test_name>
+		Name:                     "3node-backup-restore",
+		NumNodes:                 3,
+		BackupRestoreProbability: backupRestoreProbability,
+		IsCCLConfig:              true,
+		DisableDefaultTestTenant: true,
+		OverrideDistSQLMode:      "on",
+	},
 }
 
 // ConfigIdx is an index in the above slice.
@@ -551,12 +570,19 @@ var (
 		"3node-tenant",
 		"3node-tenant-multiregion",
 	}
+	// ThreeNodeBackupRestoreDefaultConfigName is the list of 3 node
+	// backup-restore configs.
+	ThreeNodeBackupRestoreDefaultConfigName = "3node-backup-restore"
 	// DefaultConfig is the default test configuration.
 	DefaultConfig = parseTestConfig(DefaultConfigNames)
 	// FiveNodeDefaultConfig is the five-node default test configuration.
 	FiveNodeDefaultConfig = parseTestConfig(FiveNodeDefaultConfigNames)
 	// ThreeNodeTenantDefaultConfig is the three-node tenant default test configuration.
 	ThreeNodeTenantDefaultConfig = parseTestConfig(ThreeNodeTenantDefaultConfigNames)
+	// ThreeNodeBackupRestoreDefaultConfig is the three-node backup-restore
+	// default test configuration.
+	ThreeNodeBackupRestoreDefaultConfig = parseTestConfig(
+		[]string{ThreeNodeBackupRestoreDefaultConfigName})
 )
 
 // logger is an interface implemented by testing.TB as well as stdlogger below.
@@ -697,6 +723,8 @@ func processConfigs(
 				configs = append(configs, applyBlocklistToConfigs(FiveNodeDefaultConfig, blocklist)...)
 			case ThreeNodeTenantDefaultConfigName:
 				configs = append(configs, applyBlocklistToConfigs(ThreeNodeTenantDefaultConfig, blocklist)...)
+			case ThreeNodeBackupRestoreDefaultConfigName:
+				configs = append(configs, applyBlocklistToConfigs(ThreeNodeBackupRestoreDefaultConfig, blocklist)...)
 			default:
 				t.Fatalf("%s: unknown config name %s", path, configName)
 			}
