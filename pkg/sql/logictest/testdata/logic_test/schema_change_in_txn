@@ -1921,3 +1921,32 @@ DROP INDEX t1_57592@idx;
 
 statement error pgcode XXA00 there is no unique constraint matching given keys for referenced table t1_57592
 COMMIT
+
+# Regression test for issue #87672 in which the lease manager would wait on
+# the wrong version to be released.
+subtest regression_87672
+
+statement ok
+CREATE DATABASE db_87672;
+
+statement ok
+USE db_87672;
+
+statement ok
+CREATE SCHEMA sc;
+
+statement ok
+BEGIN;
+
+statement ok
+CREATE SCHEMA sc2;
+
+statement ok
+SELECT * FROM crdb_internal.tables;
+
+statement ok
+DROP SCHEMA sc;
+
+# Prior to fixing this bug, this commit would hang indefinitely.
+statement ok
+COMMIT;

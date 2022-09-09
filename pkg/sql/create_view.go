@@ -107,18 +107,35 @@ func (n *createViewNode) startExec(params runParams) error {
 	// If so, promote this view to temporary.
 	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable, len(n.planDeps))
 	hasTempBackref := false
-	for id, updated := range n.planDeps {
-		_, backRefMutable, err := params.p.Descriptors().GetUncommittedMutableTableByID(id)
-		if err != nil {
+	{
+		var ids catalog.DescriptorIDSet
+		for id := range n.planDeps {
+			ids.Add(id)
+		}
+		flags := tree.CommonLookupFlags{
+			Required:       true,
+			RequireMutable: true,
+			AvoidLeased:    true,
+			AvoidSynthetic: true,
+		}
+		// Lookup the dependent tables in bulk to minimize round-trips to KV.
+		if _, err := params.p.Descriptors().GetImmutableDescriptorsByID(
+			params.ctx, params.p.Txn(), flags, ids.Ordered()...,
+		); err != nil {
 			return err
 		}
-		if backRefMutable == nil {
-			backRefMutable = tabledesc.NewBuilder(updated.desc.TableDesc()).BuildExistingMutableTable()
+		for id := range n.planDeps {
+			backRefMutable, err := params.p.Descriptors().GetMutableTableByID(
+				params.ctx, params.p.Txn(), id, tree.ObjectLookupFlagsWithRequired(),
+			)
+			if err != nil {
+				return err
+			}
+			if !n.persistence.IsTemporary() && backRefMutable.Temporary {
+				hasTempBackref = true
+			}
+			backRefMutables[id] = backRefMutable
 		}
-		if !n.persistence.IsTemporary() && backRefMutable.Temporary {
-			hasTempBackref = true
-		}
-		backRefMutables[id] = backRefMutable
 	}
 	if hasTempBackref {
 		n.persistence = tree.PersistenceTemporary

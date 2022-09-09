@@ -1520,20 +1520,16 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 					Required: true, AvoidLeased: true,
 				},
 			}
-			tbl, err := col.GetImmutableTableByID(ctx, txn, tableDesc.GetID(), flags)
+			tbl, err := col.GetMutableTableByID(ctx, txn, tableDesc.GetID(), flags)
 			if err != nil {
 				return err
 			}
-			table := tabledesc.NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
-			if err != nil {
-				return err
-			}
-			table.MaybeIncrementVersion()
+			tbl.Version++
 			ba := txn.NewBatch()
-			if err := col.WriteDescToBatch(ctx, false /* kvTrace */, table, ba); err != nil {
+			if err := col.WriteDescToBatch(ctx, false /* kvTrace */, tbl, ba); err != nil {
 				return err
 			}
-			version = table.GetVersion()
+			version = tbl.GetVersion()
 
 			// Here we don't want to actually wait for the backfill to drop its lease.
 			// To avoid that, we hack the machinery which tries oh so hard to make it

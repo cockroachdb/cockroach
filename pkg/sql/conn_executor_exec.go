@@ -979,9 +979,11 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	// Now that we've committed, if we modified any descriptor we need to make sure
 	// to release the leases for them so that the schema change can proceed and
 	// we don't block the client.
-	if descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(); descs != nil {
-		ex.extraTxnState.descCollection.ReleaseLeases(ctx)
+	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil || withNewVersion == nil {
+		return err
 	}
+	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 	return nil
 }
 

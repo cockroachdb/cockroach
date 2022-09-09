@@ -237,20 +237,6 @@ func (tc *Collection) AddUncommittedDescriptor(
 				desc.DescriptorType(), desc.GetName(), desc.GetID(), desc.GetVersion())
 		}
 	}()
-	original := tc.stored.GetCachedByID(desc.GetID())
-	if original == nil {
-		if !desc.IsNew() {
-			return errors.New("non-new descriptor does not exist in storage yet")
-		}
-		if desc.GetVersion() != 1 {
-			return errors.New("version should be 1, descriptor does not exist in storage yet")
-		}
-	} else {
-		if desc.GetVersion() != original.GetVersion() && desc.GetVersion() != original.GetVersion()+1 {
-			return errors.Newf("incompatible version, descriptor version %d exists in storage",
-				original.GetVersion())
-		}
-	}
 	if tc.synthetic.getSyntheticByID(desc.GetID()) != nil {
 		return errors.AssertionFailedf(
 			"cannot add uncommitted %s %q (%d) when a synthetic descriptor with the same ID exists",
@@ -262,7 +248,7 @@ func (tc *Collection) AddUncommittedDescriptor(
 			desc.DescriptorType(), desc.GetName(), desc.GetID())
 	}
 	tc.stored.RemoveFromNameIndex(desc)
-	return tc.uncommitted.upsert(ctx, original, desc)
+	return tc.uncommitted.upsert(ctx, desc)
 }
 
 // ValidateOnWriteEnabled is the cluster setting used to enable or disable
@@ -308,16 +294,40 @@ func (tc *Collection) WriteDesc(
 	return txn.Run(ctx, b)
 }
 
-// GetDescriptorsWithNewVersion returns all the IDVersion pairs that have
-// undergone a schema change. Returns nil for no schema changes. The version
-// returned for each schema change is clusterVersion - 1, because that's the one
-// that will be used when checking for table descriptor two version invariance.
-func (tc *Collection) GetDescriptorsWithNewVersion() (originalVersions []lease.IDVersion) {
-	_ = tc.uncommitted.iterateNewVersionByID(func(originalVersion lease.IDVersion) error {
-		originalVersions = append(originalVersions, originalVersion)
+// GetOriginalPreviousIDVersionsForUncommitted returns all the IDVersion
+// pairs for descriptors that have undergone a schema change.
+// Returns an empty slice for no schema changes.
+//
+// The version returned for each schema change is clusterVersion - 1, because
+// that's the one that will be used when checking for table descriptor
+// two-version invariance.
+func (tc *Collection) GetOriginalPreviousIDVersionsForUncommitted() (
+	withNewVersions []lease.IDVersion,
+	err error,
+) {
+	err = tc.uncommitted.iterateUncommittedByID(func(uncommitted catalog.Descriptor) error {
+		original := tc.uncommitted.getOriginalByID(uncommitted.GetID())
+		// Ignore new descriptors.
+		if original == nil {
+			return nil
+		}
+		// Sanity checks. If AddUncommittedDescriptor is implemented and used
+		// correctly then these should never fail.
+		if original.GetVersion() == 0 {
+			return errors.AssertionFailedf(
+				"expected original version of uncommitted %s %q (%d) to be non-zero",
+				uncommitted.DescriptorType(), uncommitted.GetName(), uncommitted.GetID())
+		}
+		if expected, actual := uncommitted.GetVersion()-1, original.GetVersion(); expected != actual {
+			return errors.AssertionFailedf(
+				"expected original version of uncommitted %s %q (%d) to be %d, instead is %d",
+				uncommitted.DescriptorType(), uncommitted.GetName(), uncommitted.GetID(), expected, actual)
+		}
+		prev := lease.NewIDVersionPrev(original.GetName(), original.GetID(), original.GetVersion())
+		withNewVersions = append(withNewVersions, prev)
 		return nil
 	})
-	return originalVersions
+	return withNewVersions, err
 }
 
 // GetUncommittedTables returns all the tables updated or created in the
