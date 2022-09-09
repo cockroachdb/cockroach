@@ -234,7 +234,7 @@ var errChangefeedCompleted = errors.New("changefeed completed")
 func (f *kvFeed) run(ctx context.Context) (err error) {
 	emitResolved := func(ts hlc.Timestamp, boundary jobspb.ResolvedSpan_BoundaryType) error {
 		for _, sp := range f.spans {
-			if err := f.writer.Add(ctx, kvevent.MakeResolvedEvent(sp, ts, boundary)); err != nil {
+			if err := f.writer.Add(ctx, kvevent.NewBackfillResolvedEvent(sp, ts, boundary)); err != nil {
 				return err
 			}
 		}
