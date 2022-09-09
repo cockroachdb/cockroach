@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-spawn $argv sql
+spawn $argv sql --no-line-editor
 eexpect root@
 
 set logfile logs/db/logs/cockroach-sql-audit.log
@@ -71,7 +71,7 @@ system "$argv start-single-node --insecure --pid-file=server_pid --background -s
 set logfile logs/db/audit-new/cockroach-sql-audit.log
 
 # Start a client and make a simple audit test.
-spawn $argv sql
+spawn $argv sql --no-line-editor
 eexpect root@
 send "create database d; create table d.helloworld(x INT);\r"
 eexpect CREATE

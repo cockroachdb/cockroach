@@ -7,7 +7,7 @@ start_server $argv
 start_test "Ensure that EXPLAIN ANALYZE works as expected in the sql shell"
 
 # Spawn a sql shell.
-spawn $argv sql
+spawn $argv sql --no-line-editor
 set client_spawn_id $spawn_id
 eexpect root@
 

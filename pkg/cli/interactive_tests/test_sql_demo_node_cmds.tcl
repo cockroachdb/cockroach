@@ -8,7 +8,7 @@ start_test "Ensure demo commands are not available in the sql shell"
 start_server $argv
 
 # Spawn a sql shell.
-spawn $argv sql
+spawn $argv sql --no-line-editor
 set client_spawn_id $spawn_id
 eexpect root@
 

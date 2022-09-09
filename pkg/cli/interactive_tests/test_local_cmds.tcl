@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-spawn $argv sql
+spawn $argv sql --no-line-editor
 eexpect root@
 
 start_test "Check that times are displayed by default on interactive terminals."
@@ -30,14 +30,14 @@ end_test
 start_test "Check that \\q terminates the client."
 send "\\q\r"
 eexpect eof
-spawn $argv sql --format=tsv
+spawn $argv sql --no-line-editor --format=tsv
 eexpect root@
 end_test
 
 start_test "Check that quit terminates the client."
 send "quit\r"
 eexpect eof
-spawn $argv sql --format=tsv
+spawn $argv sql --no-line-editor --format=tsv
 eexpect root@
 end_test
 
@@ -50,7 +50,7 @@ end_test
 start_test "Check that exit terminates the client."
 send "exit\r"
 eexpect eof
-spawn $argv sql --format=tsv
+spawn $argv sql --no-line-editor --format=tsv
 eexpect root@
 end_test
 
@@ -320,7 +320,7 @@ stop_server $argv
 start_test "Check that client-side options can be overridden with set"
 
 # First establish a baseline with all the defaults.
-send "$argv demo --no-example-database\r"
+send "$argv demo --no-line-editor --no-example-database\r"
 eexpect root@
 send "\\set display_format csv\r"
 send "\\set\r"
@@ -335,7 +335,7 @@ send_eof
 eexpect ":/# "
 
 # Then verify that the defaults can be overridden.
-send "$argv demo --no-example-database --set=auto_trace=on --set=check_syntax=false --set=echo=true --set=errexit=true --set=prompt1=%n@haa --set=show_times=false\r"
+send "$argv demo --no-line-editor --no-example-database --set=auto_trace=on --set=check_syntax=false --set=echo=true --set=errexit=true --set=prompt1=%n@haa --set=show_times=false\r"
 eexpect root@
 send "\\set display_format csv\r"
 send "\\set\r"
