@@ -354,7 +354,7 @@ func TestChangefeedSendError(t *testing.T) {
 
 		// Allow triggering a single sendError
 		sendErrorCh := make(chan error, 1)
-		knobs.FeedKnobs.OnRangeFeedValue = func(_ roachpb.KeyValue) error {
+		knobs.FeedKnobs.OnRangeFeedValue = func() error {
 			select {
 			case err := <-sendErrorCh:
 				return err

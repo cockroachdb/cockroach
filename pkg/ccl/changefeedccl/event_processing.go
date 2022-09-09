@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -146,8 +145,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		if !c.details.Opts.GetFilters().WithDiff {
 			return cdcevent.Row{}, nil
 		}
-		prevKV := roachpb.KeyValue{Key: ev.KV().Key, Value: ev.PrevValue()}
-		return c.decoder.DecodeKV(ctx, prevKV, prevSchemaTimestamp)
+		return c.decoder.DecodeKV(ctx, ev.PrevKeyValue(), prevSchemaTimestamp)
 	}()
 	if err != nil {
 		// Column families are stored contiguously, so we'll get
