@@ -114,12 +114,8 @@ func (r *StmtBufReader) AdvanceOne() {
 // interface{} so that external packages can call NewInternalPlanner and pass
 // the result) and executes a sql statement through the DistSQLPlanner.
 func (dsp *DistSQLPlanner) Exec(
-	ctx context.Context, localPlanner interface{}, sql string, distribute bool,
+	ctx context.Context, localPlanner interface{}, stmt parser.Statement, distribute bool,
 ) error {
-	stmt, err := parser.ParseOne(sql)
-	if err != nil {
-		return err
-	}
 	p := localPlanner.(*planner)
 	p.stmt = makeStatement(stmt, ClusterWideID{} /* queryID */)
 	if err := p.makeOptimizerPlan(ctx); err != nil {

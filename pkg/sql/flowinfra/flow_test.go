@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -44,6 +45,10 @@ func BenchmarkFlowSetup(b *testing.B) {
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	dsp := execCfg.DistSQLPlanner
+	stmt, err := parser.ParseOne("SELECT k FROM b.test WHERE k=1")
+	if err != nil {
+		b.Fatal(err)
+	}
 	for _, vectorize := range []bool{true, false} {
 		for _, distribute := range []bool{true, false} {
 			b.Run(fmt.Sprintf("vectorize=%t/distribute=%t", vectorize, distribute), func(b *testing.B) {
@@ -51,6 +56,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 				if vectorize {
 					vectorizeMode = sessiondatapb.VectorizeOn
 				}
+				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					// NB: planner cannot be reset and can only be used for
 					// a single statement, so we create a new one on every
@@ -63,12 +69,15 @@ func BenchmarkFlowSetup(b *testing.B) {
 						&execCfg,
 						sessiondatapb.SessionData{VectorizeMode: vectorizeMode},
 					)
-					if err := dsp.Exec(
+					b.StartTimer()
+					err := dsp.Exec(
 						ctx,
 						planner,
-						"SELECT k FROM b.test WHERE k=1",
+						stmt,
 						distribute,
-					); err != nil {
+					)
+					b.StopTimer()
+					if err != nil {
 						b.Fatal(err)
 					}
 					cleanup()
