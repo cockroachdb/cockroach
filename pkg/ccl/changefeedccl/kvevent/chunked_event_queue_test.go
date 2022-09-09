@@ -11,6 +11,7 @@ package kvevent
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -58,7 +59,7 @@ func TestBufferEntryQueue(t *testing.T) {
 	for eventCount > 0 {
 		op := rand.Intn(2)
 		if op == 0 {
-			q.enqueue(Event{approxSize: lastPush + 1})
+			q.enqueue(Event{backfillTimestamp: hlc.Timestamp{WallTime: lastPush + 1}})
 			lastPush++
 		} else {
 			e, ok := q.dequeue()
@@ -66,7 +67,7 @@ func TestBufferEntryQueue(t *testing.T) {
 				assert.Equal(t, lastPop, lastPush)
 				assert.True(t, q.empty())
 			} else {
-				assert.Equal(t, e.approxSize, lastPop+1)
+				assert.Equal(t, lastPop+1, e.backfillTimestamp.WallTime)
 				lastPop++
 				eventCount--
 			}
@@ -76,7 +77,7 @@ func TestBufferEntryQueue(t *testing.T) {
 	// Verify that purging works.
 	eventCount = bufferEventChunkArrSize * 2.5
 	for eventCount > 0 {
-		q.enqueue(Event{approxSize: lastPush + 1})
+		q.enqueue(Event{})
 		eventCount--
 	}
 	q.purge()

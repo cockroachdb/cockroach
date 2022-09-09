@@ -17,7 +17,17 @@ import (
 type TestingKnobs struct {
 	// BeforeScanRequest is a callback invoked before issuing Scan request.
 	BeforeScanRequest func(b *kv.Batch) error
-	OnRangeFeedValue  func(kv roachpb.KeyValue) error
+	// OnRangeFeedValue invoked when rangefeed receives a value.
+	OnRangeFeedValue func() error
+	// ShouldSkipCheckpoint invoked when rangefed receives a checkpoint.
+	// Returns true if checkpoint should be skipped.
+	ShouldSkipCheckpoint func(*roachpb.RangeFeedCheckpoint) bool
+	// OnRangeFeedStart invoked when rangefeed starts.  It is given
+	// the list of SpanTimePairs.
+	OnRangeFeedStart func(spans []kvcoord.SpanTimePair)
+	// EndTimeReached is a callback that may return true to indicate the
+	// feed should exit because its end time has been reached.
+	EndTimeReached func() bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

@@ -34,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeKV(rnd *rand.Rand, valSize int) roachpb.KeyValue {
+func makeRangeFeedEvent(rnd *rand.Rand, valSize int, prevValSize int) *roachpb.RangeFeedEvent {
 	const tableID = 42
 
 	key, err := keyside.Encode(
@@ -46,13 +46,23 @@ func makeKV(rnd *rand.Rand, valSize int) roachpb.KeyValue {
 		panic(err)
 	}
 
-	return roachpb.KeyValue{
-		Key: key,
-		Value: roachpb.Value{
-			RawBytes:  randutil.RandBytes(rnd, valSize),
-			Timestamp: hlc.Timestamp{WallTime: 1},
+	e := roachpb.RangeFeedEvent{
+		Val: &roachpb.RangeFeedValue{
+			Key: key,
+			Value: roachpb.Value{
+				RawBytes:  randutil.RandBytes(rnd, valSize),
+				Timestamp: hlc.Timestamp{WallTime: 1},
+			},
 		},
 	}
+
+	if prevValSize > 0 {
+		e.Val.PrevValue = roachpb.Value{
+			RawBytes:  randutil.RandBytes(rnd, prevValSize),
+			Timestamp: hlc.Timestamp{WallTime: 1},
+		}
+	}
+	return &e
 }
 
 func getBoundAccountWithBudget(budget int64) (account mon.BoundAccount, cleanup func()) {
@@ -97,7 +107,7 @@ func TestBlockingBuffer(t *testing.T) {
 	wg.GoCtx(func(ctx context.Context) error {
 		rnd, _ := randutil.NewTestRand()
 		for {
-			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(rnd, 256), roachpb.Value{}, hlc.Timestamp{}))
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeRangeFeedEvent(rnd, 256, 0)))
 			if err != nil {
 				return err
 			}
@@ -141,7 +151,7 @@ func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 	wg.GoCtx(func(ctx context.Context) error {
 		rnd, _ := randutil.NewTestRand()
 		for {
-			err := buf.Add(ctx, kvevent.MakeKVEvent(makeKV(rnd, 256), roachpb.Value{}, hlc.Timestamp{}))
+			err := buf.Add(ctx, kvevent.MakeKVEvent(makeRangeFeedEvent(rnd, 256, 0)))
 			if err != nil {
 				return err
 			}
