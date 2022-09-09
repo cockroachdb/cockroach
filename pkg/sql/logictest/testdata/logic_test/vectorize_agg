@@ -55,3 +55,19 @@ NULL NULL
 1    1
 22   22
 33   33
+
+# Regression test for incorrect handling of non-scalar GROUP BY with no
+# aggregate functions (#87619).
+statement ok
+CREATE TABLE t87619 (b) AS SELECT true;
+SET testing_optimizer_random_seed = 3164997759865821235;
+SET testing_optimizer_disable_rule_probability = 0.500000;
+
+query B
+SELECT true FROM t87619 GROUP BY b HAVING b
+----
+true
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;
