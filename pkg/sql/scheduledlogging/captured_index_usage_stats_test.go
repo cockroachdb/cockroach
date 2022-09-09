@@ -116,6 +116,9 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	db.Exec(t, "CREATE DATABASE test")
 	db.Exec(t, "CREATE DATABASE test2")
 
+	// Test fix for #85577.
+	db.Exec(t, `CREATE DATABASE "test-hyphen"`)
+
 	// Create a table for each database.
 	db.Exec(t, "CREATE TABLE test.test_table (num INT PRIMARY KEY, letter char)")
 	db.Exec(t, "CREATE TABLE test2.test2_table (num INT PRIMARY KEY, letter char)")

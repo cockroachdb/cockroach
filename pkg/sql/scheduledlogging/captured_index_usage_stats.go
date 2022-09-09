@@ -192,14 +192,14 @@ func captureIndexUsageStats(
 		 last_read,
 		 ti.created_at,
      t.schema_name
-		FROM %s.crdb_internal.index_usage_statistics AS us
-		JOIN %s.crdb_internal.table_indexes ti
+	  FROM %[1]s.crdb_internal.index_usage_statistics AS us
+    JOIN %[1]s.crdb_internal.table_indexes ti
 		ON us.index_id = ti.index_id
 		 AND us.table_id = ti.descriptor_id
-    JOIN %s.crdb_internal.tables t 
+    JOIN %[1]s.crdb_internal.tables t 
     ON ti.descriptor_id = t.table_id
-		ORDER BY total_reads ASC;
-	`, databaseName, databaseName, databaseName)
+		ORDER BY total_reads ASC;`,
+			databaseName.String())
 
 		it, err := ie.QueryIteratorEx(
 			ctx,
@@ -248,7 +248,7 @@ func captureIndexUsageStats(
 				IndexID:        uint32(roachpb.IndexID(indexID)),
 				TotalReadCount: uint64(totalReads),
 				LastRead:       lastRead.String(),
-				DatabaseName:   databaseName,
+				DatabaseName:   databaseName.String(),
 				TableName:      string(tableName),
 				IndexName:      string(indexName),
 				IndexType:      string(indexType),
@@ -295,8 +295,8 @@ func logIndexUsageStatsWithDelay(
 	timer.Stop()
 }
 
-func getAllDatabaseNames(ctx context.Context, ie sqlutil.InternalExecutor) ([]string, error) {
-	var allDatabaseNames []string
+func getAllDatabaseNames(ctx context.Context, ie sqlutil.InternalExecutor) (tree.NameList, error) {
+	var allDatabaseNames tree.NameList
 	var ok bool
 	var expectedNumDatums = 1
 
@@ -308,7 +308,7 @@ func getAllDatabaseNames(ctx context.Context, ie sqlutil.InternalExecutor) ([]st
 		`SELECT database_name FROM [SHOW DATABASES]`,
 	)
 	if err != nil {
-		return []string{}, err
+		return tree.NameList{}, err
 	}
 
 	// We have to make sure to close the iterator since we might return from the
@@ -317,13 +317,13 @@ func getAllDatabaseNames(ctx context.Context, ie sqlutil.InternalExecutor) ([]st
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		var row tree.Datums
 		if row = it.Cur(); row == nil {
-			return []string{}, errors.New("unexpected null row while capturing index usage stats")
+			return tree.NameList{}, errors.New("unexpected null row while capturing index usage stats")
 		}
 		if row.Len() != expectedNumDatums {
-			return []string{}, errors.Newf("expected %d columns, received %d while capturing index usage stats", expectedNumDatums, row.Len())
+			return tree.NameList{}, errors.Newf("expected %d columns, received %d while capturing index usage stats", expectedNumDatums, row.Len())
 		}
 
-		databaseName := string(tree.MustBeDString(row[0]))
+		databaseName := tree.Name(tree.MustBeDString(row[0]))
 		allDatabaseNames = append(allDatabaseNames, databaseName)
 	}
 	return allDatabaseNames, nil
