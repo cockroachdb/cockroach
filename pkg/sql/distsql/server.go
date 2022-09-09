@@ -61,23 +61,23 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	execinfra.ServerConfig
-	flowRegistry  *flowinfra.FlowRegistry
-	flowScheduler *flowinfra.FlowScheduler
-	memMonitor    *mon.BytesMonitor
-	regexpCache   *tree.RegexpCache
+	flowRegistry     *flowinfra.FlowRegistry
+	remoteFlowRunner *flowinfra.RemoteFlowRunner
+	memMonitor       *mon.BytesMonitor
+	regexpCache      *tree.RegexpCache
 }
 
 var _ execinfrapb.DistSQLServer = &ServerImpl{}
 
 // NewServer instantiates a DistSQLServer.
 func NewServer(
-	ctx context.Context, cfg execinfra.ServerConfig, flowScheduler *flowinfra.FlowScheduler,
+	ctx context.Context, cfg execinfra.ServerConfig, remoteFlowRunner *flowinfra.RemoteFlowRunner,
 ) *ServerImpl {
 	ds := &ServerImpl{
-		ServerConfig:  cfg,
-		regexpCache:   tree.NewRegexpCache(512),
-		flowRegistry:  flowinfra.NewFlowRegistry(),
-		flowScheduler: flowScheduler,
+		ServerConfig:     cfg,
+		regexpCache:      tree.NewRegexpCache(512),
+		flowRegistry:     flowinfra.NewFlowRegistry(),
+		remoteFlowRunner: remoteFlowRunner,
 		memMonitor: mon.NewMonitor(
 			"distsql",
 			mon.MemoryResource,
@@ -89,11 +89,11 @@ func NewServer(
 		),
 	}
 	ds.memMonitor.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
-	// We have to initialize the flow scheduler at the same time we're creating
+	// We have to initialize the flow runner at the same time we're creating
 	// the DistSQLServer because the latter will be registered as a gRPC service
 	// right away, so the RPCs might start coming in pretty much right after the
 	// current method returns. See #66330.
-	ds.flowScheduler.Init(ds.Metrics)
+	ds.remoteFlowRunner.Init(ds.Metrics)
 
 	return ds
 }
@@ -103,7 +103,7 @@ func NewServer(
 // Note that the initialization of the server required for performing the
 // incoming RPCs needs to go into NewServer above because once that method
 // returns, the server is registered as a gRPC service and needs to be fully
-// initialized. For example, the initialization of the flow scheduler has to
+// initialized. For example, the initialization of the flow runner has to
 // happen in NewServer.
 func (ds *ServerImpl) Start() {
 	// Gossip the version info so that other nodes don't plan incompatible flows
@@ -126,27 +126,12 @@ func (ds *ServerImpl) Start() {
 	if err := ds.setDraining(false); err != nil {
 		panic(err)
 	}
-
-	ds.flowScheduler.Start()
-}
-
-// NumRemoteFlowsInQueue returns the number of remote flows scheduled to run on
-// this server which are currently in the queue of the flow scheduler.
-func (ds *ServerImpl) NumRemoteFlowsInQueue() int {
-	return ds.flowScheduler.NumFlowsInQueue()
 }
 
 // NumRemoteRunningFlows returns the number of remote flows currently running on
 // this server.
 func (ds *ServerImpl) NumRemoteRunningFlows() int {
-	return ds.flowScheduler.NumRunningFlows()
-}
-
-// SetCancelDeadFlowsCallback sets a testing callback that will be executed by
-// the flow scheduler at the end of CancelDeadFlows call. The callback must be
-// concurrency-safe.
-func (ds *ServerImpl) SetCancelDeadFlowsCallback(cb func(int)) {
-	ds.flowScheduler.TestingKnobs.CancelDeadFlowsCallback = cb
+	return ds.remoteFlowRunner.NumRunningFlows()
 }
 
 // TODO(yuzefovich): remove this setting in 23.1.
@@ -650,7 +635,7 @@ func (ds *ServerImpl) SetupFlow(
 		if err != nil {
 			return err
 		}
-		return ds.flowScheduler.ScheduleFlow(ctx, f)
+		return ds.remoteFlowRunner.RunFlow(ctx, f)
 	}(); err != nil {
 		// We return flow deployment errors in the response so that they are
 		// packaged correctly over the wire. If we return them directly to this
@@ -664,7 +649,8 @@ func (ds *ServerImpl) SetupFlow(
 func (ds *ServerImpl) CancelDeadFlows(
 	_ context.Context, req *execinfrapb.CancelDeadFlowsRequest,
 ) (*execinfrapb.SimpleResponse, error) {
-	ds.flowScheduler.CancelDeadFlows(req)
+	// This function is a noop on this node because it doesn't queue any of the
+	// remote flows, so there are no dead flows to cancel.
 	return &execinfrapb.SimpleResponse{}, nil
 }
 

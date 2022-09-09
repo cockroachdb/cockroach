@@ -2162,20 +2162,8 @@ var charts = []sectionDescription{
 				Metrics: []string{"sql.distsql.flows.active"},
 			},
 			{
-				Title:   "Queue Wait",
-				Metrics: []string{"sql.distsql.flows.queue_wait"},
-			},
-			{
-				Title:   "Queued",
-				Metrics: []string{"sql.distsql.flows.queued"},
-			},
-			{
 				Title:   "Total",
 				Metrics: []string{"sql.distsql.flows.total"},
-			},
-			{
-				Title:   "Scheduled",
-				Metrics: []string{"sql.distsql.flows.scheduled"},
 			},
 		},
 	},

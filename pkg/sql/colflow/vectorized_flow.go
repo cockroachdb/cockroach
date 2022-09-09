@@ -300,17 +300,17 @@ func (f *vectorizedFlow) Setup(
 }
 
 // Run is part of the Flow interface.
-func (f *vectorizedFlow) Run(ctx context.Context, doneFn func()) {
+func (f *vectorizedFlow) Run(ctx context.Context) {
 	if f.batchFlowCoordinator == nil {
 		// If we didn't create a BatchFlowCoordinator, then we have a processor
 		// as the root, so we run this flow with the default implementation.
-		f.FlowBase.Run(ctx, doneFn)
+		f.FlowBase.Run(ctx)
 		return
 	}
 
 	defer f.Wait()
 
-	if err := f.StartInternal(ctx, nil /* processors */, doneFn); err != nil {
+	if err := f.StartInternal(ctx, nil /* processors */); err != nil {
 		f.GetRowSyncFlowConsumer().Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: err})
 		f.GetRowSyncFlowConsumer().ProducerDone()
 		return

@@ -2317,6 +2317,7 @@ func populateContentionEventsTable(
 	return nil
 }
 
+// TODO(yuzefovich): remove 'status' column in 23.2.
 const distSQLFlowsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   flow_id UUID NOT NULL,
@@ -2330,9 +2331,8 @@ CREATE TABLE crdb_internal.%s (
 const distSQLFlowsCommentPattern = `DistSQL remote flows information %s
 
 This virtual table contains all of the remote flows of the DistSQL execution
-that are currently running or queued on %s. The local
-flows (those that are running on the same node as the query originated on)
-are not included.
+that are currently running on %s. The local flows (those that are
+running on the same node as the query originated on) are not included.
 `
 
 var crdbInternalLocalDistSQLFlowsTable = virtualSchemaTable{

@@ -569,167 +569,97 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 		),
 	)
 
-	// Enable the queueing mechanism of the flow scheduler.
-	sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_scheduler_queueing.enabled = true")
-
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	tableID := sqlutils.QueryTableID(t, sqlDB.DB, "test", "public", "foo")
 	tableKey.Store(execCfg.Codec.TablePrefix(tableID))
 
 	const query = "SELECT * FROM test.foo"
 
-	// When maxRunningFlows is 0, we expect the remote flows to be queued up and
-	// the test query will error out; when it is 1, we block the execution of
-	// running flows.
-	for maxRunningFlows := range []int{0, 1} {
-		t.Run(fmt.Sprintf("MaxRunningFlows=%d", maxRunningFlows), func(t *testing.T) {
-			// Limit the execution of remote flows and shorten the timeout.
-			const flowStreamTimeout = 1 // in seconds
-			sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.max_running_flows=$1", maxRunningFlows)
-			sqlDB.Exec(t, "SET CLUSTER SETTING sql.distsql.flow_stream_timeout=$1", fmt.Sprintf("%ds", flowStreamTimeout))
+	atomic.StoreInt64(&stallAtomic, 1)
 
-			// Wait for all nodes to get the updated values of these cluster
-			// settings.
-			testutils.SucceedsSoon(t, func() error {
-				for nodeID := 0; nodeID < numNodes; nodeID++ {
-					conn := tc.ServerConn(nodeID)
-					db := sqlutils.MakeSQLRunner(conn)
-					var flows int
-					db.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows").Scan(&flows)
-					if flows != maxRunningFlows {
-						return errors.New("old max_running_flows value")
-					}
-					var timeout string
-					db.QueryRow(t, "SHOW CLUSTER SETTING sql.distsql.flow_stream_timeout").Scan(&timeout)
-					if timeout != fmt.Sprintf("00:00:0%d", flowStreamTimeout) {
-						return errors.Errorf("old flow_stream_timeout value")
-					}
-				}
-				return nil
-			})
+	// Spin up a separate goroutine that will run the query. The query will
+	// succeed once we close 'unblock' channel.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		conn := tc.ServerConn(gatewayNodeID)
+		atomic.StoreInt64(&queryRunningAtomic, 1)
+		_, err := conn.ExecContext(ctx, query)
+		atomic.StoreInt64(&queryRunningAtomic, 0)
+		return err
+	})
 
-			if maxRunningFlows == 1 {
-				atomic.StoreInt64(&stallAtomic, 1)
-				defer func() {
-					atomic.StoreInt64(&stallAtomic, 0)
-				}()
+	t.Log("waiting for remote flows to be run")
+	testutils.SucceedsSoon(t, func() error {
+		for idx, s := range []*distsql.ServerImpl{
+			tc.Server(1).DistSQLServer().(*distsql.ServerImpl),
+			tc.Server(2).DistSQLServer().(*distsql.ServerImpl),
+		} {
+			numRunning := s.NumRemoteRunningFlows()
+			if numRunning != 1 {
+				return errors.Errorf("%d flows are found in the queue of node %d, %d expected", numRunning, idx+1, 1)
 			}
+		}
+		return nil
+	})
 
-			// Spin up a separate goroutine that will run the query. If
-			// maxRunningFlows is 0, the query eventually will error out because
-			// the remote flows don't connect in time; if maxRunningFlows is 1,
-			// the query will succeed once we close 'unblock' channel.
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			g := ctxgroup.WithContext(ctx)
-			g.GoCtx(func(ctx context.Context) error {
-				conn := tc.ServerConn(gatewayNodeID)
-				atomic.StoreInt64(&queryRunningAtomic, 1)
-				_, err := conn.ExecContext(ctx, query)
-				atomic.StoreInt64(&queryRunningAtomic, 0)
-				return err
-			})
-
-			t.Log("waiting for remote flows to be scheduled or run")
-			testutils.SucceedsSoon(t, func() error {
-				for idx, s := range []*distsql.ServerImpl{
-					tc.Server(1).DistSQLServer().(*distsql.ServerImpl),
-					tc.Server(2).DistSQLServer().(*distsql.ServerImpl),
-				} {
-					numQueued := s.NumRemoteFlowsInQueue()
-					if numQueued != 1-maxRunningFlows {
-						return errors.Errorf("%d flows are found in the queue of node %d, %d expected", numQueued, idx+1, 1-maxRunningFlows)
-					}
-					numRunning := s.NumRemoteRunningFlows()
-					if numRunning != maxRunningFlows {
-						return errors.Errorf("%d flows are found in the queue of node %d, %d expected", numRunning, idx+1, maxRunningFlows)
-					}
-				}
-				return nil
-			})
-
-			t.Log("checking the virtual tables")
-			const (
-				clusterScope  = "cluster"
-				nodeScope     = "node"
-				runningStatus = "running"
-				queuedStatus  = "queued"
-			)
-			getNum := func(db *sqlutils.SQLRunner, scope, status string) int {
-				querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows WHERE status = '%s'", scope, status)
-				// Check that all remote flows (if any) correspond to the
-				// expected statement.
-				stmts := db.QueryStr(t, "SELECT stmt "+querySuffix)
-				for _, stmt := range stmts {
-					require.Equal(t, query, stmt[0])
-				}
-				var num int
-				db.QueryRow(t, "SELECT count(*) "+querySuffix).Scan(&num)
-				return num
-			}
-			for nodeID := 0; nodeID < numNodes; nodeID++ {
-				conn := tc.ServerConn(nodeID)
-				db := sqlutils.MakeSQLRunner(conn)
-
-				// Check cluster level table.
-				expRunning, expQueued := 0, 2
-				if maxRunningFlows == 1 {
-					expRunning, expQueued = expQueued, expRunning
-				}
-				gotRunning, gotQueued := getNum(db, clusterScope, runningStatus), getNum(db, clusterScope, queuedStatus)
-				if gotRunning != expRunning {
-					t.Fatalf("unexpected output from cluster_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
-				}
-				if maxRunningFlows == 1 {
-					if gotQueued != expQueued {
-						t.Fatalf("unexpected output from cluster_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
-					}
-				} else {
-					if gotQueued > expQueued { // it's possible for the query to have already errored out
-						t.Fatalf("unexpected output from cluster_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
-					}
-				}
-
-				// Check node level table.
-				if nodeID == gatewayNodeID {
-					if getNum(db, nodeScope, runningStatus) != 0 || getNum(db, nodeScope, queuedStatus) != 0 {
-						t.Fatal("unexpectedly non empty output from node_distsql_flows on the gateway")
-					}
-				} else {
-					expRunning, expQueued = 0, 1
-					if maxRunningFlows == 1 {
-						expRunning, expQueued = expQueued, expRunning
-					}
-					gotRunning, gotQueued = getNum(db, nodeScope, runningStatus), getNum(db, nodeScope, queuedStatus)
-					if gotRunning != expRunning {
-						t.Fatalf("unexpected output from node_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
-					}
-					if maxRunningFlows == 1 {
-						if gotQueued != expQueued {
-							t.Fatalf("unexpected output from node_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
-						}
-					} else {
-						if gotQueued > expQueued { // it's possible for the query to have already errored out
-							t.Fatalf("unexpected output from node_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
-						}
-					}
-				}
-			}
-
-			if maxRunningFlows == 1 {
-				// Unblock the scan requests.
-				close(unblock)
-			}
-
-			t.Log("waiting for query to finish")
-			err := g.Wait()
-			if maxRunningFlows == 0 {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
+	t.Log("checking the virtual tables")
+	const (
+		clusterScope  = "cluster"
+		nodeScope     = "node"
+		runningStatus = "running"
+		queuedStatus  = "queued"
+	)
+	getNum := func(db *sqlutils.SQLRunner, scope, status string) int {
+		querySuffix := fmt.Sprintf("FROM crdb_internal.%s_distsql_flows WHERE status = '%s'", scope, status)
+		// Check that all remote flows (if any) correspond to the expected
+		// statement.
+		stmts := db.QueryStr(t, "SELECT stmt "+querySuffix)
+		for _, stmt := range stmts {
+			require.Equal(t, query, stmt[0])
+		}
+		var num int
+		db.QueryRow(t, "SELECT count(*) "+querySuffix).Scan(&num)
+		return num
 	}
+	for nodeID := 0; nodeID < numNodes; nodeID++ {
+		conn := tc.ServerConn(nodeID)
+		db := sqlutils.MakeSQLRunner(conn)
+
+		// Check cluster level table.
+		expRunning, expQueued := 2, 0
+		gotRunning, gotQueued := getNum(db, clusterScope, runningStatus), getNum(db, clusterScope, queuedStatus)
+		if gotRunning != expRunning {
+			t.Fatalf("unexpected output from cluster_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
+		}
+		if gotQueued != expQueued {
+			t.Fatalf("unexpected output from cluster_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+		}
+
+		// Check node level table.
+		if nodeID == gatewayNodeID {
+			if getNum(db, nodeScope, runningStatus) != 0 || getNum(db, nodeScope, queuedStatus) != 0 {
+				t.Fatal("unexpectedly non empty output from node_distsql_flows on the gateway")
+			}
+		} else {
+			expRunning, expQueued = 1, 0
+			gotRunning, gotQueued = getNum(db, nodeScope, runningStatus), getNum(db, nodeScope, queuedStatus)
+			if gotRunning != expRunning {
+				t.Fatalf("unexpected output from node_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
+			}
+			if gotQueued != expQueued {
+				t.Fatalf("unexpected output from node_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+			}
+		}
+	}
+
+	// Unblock the scan requests.
+	close(unblock)
+
+	t.Log("waiting for query to finish")
+	err := g.Wait()
+	require.NoError(t, err)
 }
 
 // setupTraces takes two tracers (potentially on different nodes), and creates
