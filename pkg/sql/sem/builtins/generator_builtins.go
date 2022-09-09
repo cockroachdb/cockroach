@@ -1833,12 +1833,21 @@ type checkConsistencyGenerator struct {
 	from, to           roachpb.Key
 	mode               roachpb.ChecksumMode
 
+	// The descriptors for which we haven't yet emitted rows. Rows are consumed
+	// from this field and produce one (or more, in the case of splits not reflected
+	// in the descriptor) rows in `next`.
 	descs []roachpb.RangeDescriptor
-	// remainingRows is populated by Next() call peels of the first
-	// row and moves it to curRow. When empty, consumes from 'descs' to produce
-	// more rows.
-	remainingRows      []roachpb.CheckConsistencyResponse_Result
-	lastRefillDuration time.Duration
+	// The current row, emitted by Values().
+	cur roachpb.CheckConsistencyResponse_Result
+	// The time it took to produce the current row, i.e. how long it took to run
+	// the consistency check that produced the row. When a consistency check
+	// produces more than one row (i.e. after a split), all of the duration will
+	// be attributed to the first row.
+	dur time.Duration
+	// next are the potentially prefetched subsequent rows. This is usually empty
+	// (as one consistency check produces one result which immediately moves to
+	// `cur`) except when a descriptor we use doesn't reflect subsequent splits.
+	next []roachpb.CheckConsistencyResponse_Result
 }
 
 var _ eval.ValueGenerator = &checkConsistencyGenerator{}
@@ -1925,24 +1934,20 @@ func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error 
 		}
 		c.descs = append(c.descs, desc)
 	}
-	// Dummy element that the first call to .Next() can peel off.
-	c.remainingRows = make([]roachpb.CheckConsistencyResponse_Result, 1)
 	return nil
 }
 
-// maybeRefillRows checks whether c.remainingRows is empty and if so, consumes
-// the first element of c.descs and runs a consistency check on it, appending to
-// c.remainingRows with the result. If there are no descriptors or there are
-// remaining rows, this is a no-op. Otherwise, this will always populate
-// c.remainingRows with at least one element.
-func (c *checkConsistencyGenerator) maybeRefillRows(ctx context.Context) {
-	if len(c.descs) == 0 || len(c.remainingRows) > 0 {
-		// Nothing to do.
-		return
+// maybeRefillRows checks whether c.next is empty and if so, consumes the first
+// element of c.descs for a consistency check. This populates c.next with at
+// least one result (even on error). Returns the duration of the consistency
+// check, if any, and zero otherwise.
+func (c *checkConsistencyGenerator) maybeRefillRows(ctx context.Context) time.Duration {
+	if len(c.next) > 0 || len(c.descs) == 0 {
+		// We have a row to produce or no more ranges to check, so we're done
+		// for now or for good, respectively.
+		return 0
 	}
-	defer func(tBegin time.Time) {
-		c.lastRefillDuration = timeutil.Since(tBegin)
-	}(timeutil.Now())
+	tBegin := timeutil.Now()
 	// NB: peeling off the spans one by one allows this generator to produce
 	// rows in a streaming manner. If we called CheckConsistency(c.from, c.to)
 	// we would only get the result once all checks have completed and it will
@@ -1954,45 +1959,45 @@ func (c *checkConsistencyGenerator) maybeRefillRows(ctx context.Context) {
 		ctx, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), c.mode,
 	)
 	if err != nil {
-		// Emit result as a row, and keep going.
-		c.remainingRows = []roachpb.CheckConsistencyResponse_Result{
-			{
-				RangeID:  desc.RangeID,
-				StartKey: desc.StartKey,
-				Status:   roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE,
-				Detail:   err.Error(),
-			},
-		}
-		return
+		resp = &roachpb.CheckConsistencyResponse{Result: []roachpb.CheckConsistencyResponse_Result{{
+			RangeID:  desc.RangeID,
+			StartKey: desc.StartKey,
+			Status:   roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE,
+			Detail:   err.Error(),
+		}}}
 	}
 
 	// NB: this could have more than one entry, if a range split in the
 	// meantime.
-	c.remainingRows = resp.Result
+	c.next = resp.Result
+	return timeutil.Since(tBegin)
 }
 
 // Next is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Next(ctx context.Context) (bool, error) {
-	// Invariant: len(c.remainingRows) > 0.
-	c.remainingRows = c.remainingRows[1:]
-	c.maybeRefillRows(ctx) // if necessary, try to repopulate remainingRows
-	return len(c.remainingRows) > 0, nil
+	dur := c.maybeRefillRows(ctx)
+	if len(c.next) == 0 {
+		return false, nil
+	}
+	c.dur, c.cur, c.next = dur, c.next[0], c.next[1:]
+	return len(c.next) > 0, nil
 }
 
 // Values is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Values() (tree.Datums, error) {
+	row := c.next[0]
 	intervalMeta := types.IntervalTypeMetadata{
 		DurationField: types.IntervalDurationField{
 			DurationType: types.IntervalDurationType_MILLISECOND,
 		},
 	}
 	return tree.Datums{
-		tree.NewDInt(tree.DInt(c.remainingRows[0].RangeID)),
-		tree.NewDBytes(tree.DBytes(c.remainingRows[0].StartKey)),
-		tree.NewDString(roachpb.Key(c.remainingRows[0].StartKey).String()),
-		tree.NewDString(c.remainingRows[0].Status.String()),
-		tree.NewDString(c.remainingRows[0].Detail),
-		tree.NewDInterval(duration.MakeDuration(c.lastRefillDuration.Nanoseconds(), 0 /* days */, 0 /* months */), intervalMeta),
+		tree.NewDInt(tree.DInt(row.RangeID)),
+		tree.NewDBytes(tree.DBytes(row.StartKey)),
+		tree.NewDString(roachpb.Key(row.StartKey).String()),
+		tree.NewDString(row.Status.String()),
+		tree.NewDString(row.Detail),
+		tree.NewDInterval(duration.MakeDuration(c.dur.Nanoseconds(), 0 /* days */, 0 /* months */), intervalMeta),
 	}, nil
 }
 
