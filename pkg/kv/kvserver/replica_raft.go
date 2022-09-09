@@ -492,7 +492,14 @@ func (r *Replica) numPendingProposalsRLocked() int {
 // the range, and then on every follower to confirm that the range can indeed be
 // quiesced.
 func (r *Replica) hasPendingProposalsRLocked() bool {
-	return r.numPendingProposalsRLocked() > 0
+	return r.numPendingProposalsRLocked() > 0 ||
+		// If slow proposals just finished, it's possible that
+		// refreshProposalsLocked hasn't been invoked yet. We don't want to quiesce
+		// until it has been, since otherwise we're never fully resetting this
+		// Replica's contribution to `requests.slow.raft`. So we only claim to
+		// have no pending proposals when we've done one last refresh that resets
+		// the counter, i.e. in a few ticks at most.
+		r.mu.slowProposalCount > 0
 }
 
 // hasPendingProposalQuotaRLocked is part of the quiescer interface. It returns
@@ -1306,11 +1313,16 @@ func (r *Replica) refreshProposalsLocked(
 		// so delays shouldn't dramatically change the detection latency.
 		inflightDuration := r.store.cfg.RaftTickInterval * time.Duration(r.mu.ticks-p.createdAtTicks)
 		if ok && inflightDuration > slowReplicationThreshold {
+			slowProposalCount++
 			if maxSlowProposalDuration < inflightDuration {
 				maxSlowProposalDuration = inflightDuration
 				maxSlowProposalDurationRequest = p.Request
-				slowProposalCount++
 			}
+		} else if inflightDuration > defaultReplicaCircuitBreakerSlowReplicationThreshold {
+			// If replica circuit breakers are disabled, we still want to
+			// track the number of "slow" proposals for metrics, so fall
+			// back to one minute.
+			slowProposalCount++
 		}
 		switch reason {
 		case reasonSnapshotApplied:
@@ -1349,7 +1361,7 @@ func (r *Replica) refreshProposalsLocked(
 		}
 	}
 
-	r.store.metrics.SlowRaftRequests.Update(slowProposalCount)
+	r.mu.slowProposalCount = slowProposalCount
 
 	// If the breaker isn't tripped yet but we've detected commands that have
 	// taken too long to replicate, trip the breaker now.

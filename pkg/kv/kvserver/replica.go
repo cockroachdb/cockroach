@@ -634,6 +634,8 @@ type Replica struct {
 		// Never mutated in place (always replaced wholesale), so can be leaked
 		// outside the surrounding mutex.
 		pausedFollowers map[roachpb.ReplicaID]struct{}
+
+		slowProposalCount int64 // updated in refreshProposalsLocked
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own
