@@ -1649,6 +1649,15 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 		snapStatus = raft.SnapshotFailure
 	}
 
+	// NB: we are technically violating raft's contract around which index the
+	// snapshot is supposed to be at. Raft asked for a particular applied index,
+	// but the snapshot we sent might have been at a higher (most of the time) or
+	// lower (corner cases) index too. Luckily this is not an issue as the call
+	// below will only inform at which idnex the follower is next probed (after
+	// ReportSnapshot with a success). Raft does not a priori assume that the
+	// index it requested is now actually durable on the follower.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/87581
 	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil
