@@ -25,9 +25,9 @@ do
         # Run affected tests.
         for test in $tests
         do
-            if [[ ! -z $(bazel query "attr(tags, \"broken_in_bazel\", $test)") ]]
+            if [[ ! -z $(bazel query "attr(tags, \"broken_in_bazel\", $test)") ]] || [[ ! -z $(bazel query "attr(tags, \"integration\", $test)") ]]
             then
-                echo "Skipping test $test as it is broken in bazel"
+                echo "Skipping test $test"
                 continue
             fi
             $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- test --config=ci --config=race "$test" \
