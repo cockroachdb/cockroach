@@ -148,6 +148,10 @@ var retiredSettings = map[string]struct{}{
 
 	// removed as of 22.2.1
 	"sql.ttl.default_range_concurrency": {},
+
+	// removed as of 23.1.
+	"sql.distsql.max_running_flows":               {},
+	"sql.distsql.flow_scheduler_queueing.enabled": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

@@ -1142,6 +1142,7 @@ message DistSQLRemoteFlows {
     ];
 
     // Status is the current status of this remote flow.
+    // TODO(yuzefovich): remove this in 23.2.
     Status status = 3;
 
     // Stmt is the SQL statement for which this flow is executing.

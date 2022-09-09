@@ -211,7 +211,7 @@ func startTenantInternal(
 	// the SQL server object.
 	tenantStatusServer := newTenantStatusServer(
 		baseCfg.AmbientCtx, nil,
-		args.sessionRegistry, args.closedSessionCache, args.flowScheduler, baseCfg.Settings, nil,
+		args.sessionRegistry, args.closedSessionCache, args.remoteFlowRunner, baseCfg.Settings, nil,
 		args.rpcContext, args.stopper,
 	)
 
@@ -556,13 +556,14 @@ func makeTenantSQLServerArgs(
 	grpcServer.setMode(modeOperational)
 
 	sessionRegistry := sql.NewSessionRegistry()
-	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
 
 	monitorAndMetrics := newRootSQLMemoryMonitor(monitorAndMetricsOptions{
 		memoryPoolSize:          sqlCfg.MemoryPoolSize,
 		histogramWindowInterval: baseCfg.HistogramWindowInterval(),
 		settings:                baseCfg.Settings,
 	})
+	remoteFlowRunnerAcc := monitorAndMetrics.rootSQLMemoryMonitor.MakeBoundAccount()
+	remoteFlowRunner := flowinfra.NewRemoteFlowRunner(baseCfg.AmbientCtx, stopper, &remoteFlowRunnerAcc)
 
 	// Create the EventServer. It will be made operational later, after the
 	// cluster ID is known, with a SetResourceInfo() call.
@@ -612,7 +613,7 @@ func makeTenantSQLServerArgs(
 		registry:                 registry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
-		flowScheduler:            flowScheduler,
+		remoteFlowRunner:         remoteFlowRunner,
 		circularInternalExecutor: circularInternalExecutor,
 		internalExecutorFactory:  internalExecutorFactory,
 		circularJobRegistry:      circularJobRegistry,
