@@ -234,7 +234,7 @@ export function insightType(type: InsightType): string {
     case "FailedExecution":
       return "Failed Execution";
     default:
-      return "Insight";
+      return "Slow Execution";
   }
 }
 
