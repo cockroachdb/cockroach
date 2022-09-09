@@ -66,6 +66,15 @@ var gcsChunkingEnabled = settings.RegisterBoolSetting(
 	true, /* default */
 )
 
+// gcsChunkRetryTimeout is used to configure the per-chunk retry deadline when
+// uploading chunks to Google Cloud Storage.
+var gcsChunkRetryTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"cloudstorage.gs.chunking.retry_timeout",
+	"per-chunk retry deadline when chunking of file upload to Google Cloud Storage",
+	60,
+)
+
 func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
 	gsURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
@@ -253,6 +262,7 @@ func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteClose
 	if !gcsChunkingEnabled.Get(&g.settings.SV) {
 		w.ChunkSize = 0
 	}
+	w.ChunkRetryDeadline = gcsChunkRetryTimeout.Get(&g.settings.SV)
 	return w, nil
 }
 
