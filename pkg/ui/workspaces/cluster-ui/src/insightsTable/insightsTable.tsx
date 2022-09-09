@@ -15,7 +15,7 @@ import classNames from "classnames/bind";
 import styles from "./insightsTable.module.scss";
 import { StatementLink } from "../statementsTable";
 import IdxRecAction from "../insights/indexActionBtn";
-import { Duration, statementsRetries } from "../util";
+import { clusterSettings, Duration, statementsRetries } from "../util";
 import { Anchor } from "../anchor";
 import { Link } from "react-router-dom";
 import { performanceTuningRecipes } from "../util";
@@ -71,6 +71,15 @@ function typeCell(value: string): React.ReactElement {
 function descriptionCell(
   insightRec: InsightRecommendation,
 ): React.ReactElement {
+  const clusterSettingsLink = (
+    <>
+      {"This threshold can be configured in "}
+      <Anchor href={clusterSettings} target="_blank">
+        cluster settings
+      </Anchor>
+      {"."}
+    </>
+  );
   switch (insightRec.type) {
     case "CreateIndex":
     case "ReplaceIndex":
@@ -129,7 +138,7 @@ function descriptionCell(
           </div>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Description: </span>{" "}
-            {insightRec.details.description}
+            {insightRec.details.description} {clusterSettingsLink}
           </div>
         </>
       );
@@ -142,7 +151,7 @@ function descriptionCell(
           </div>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Description: </span>{" "}
-            {insightRec.details.description}
+            {insightRec.details.description} {clusterSettingsLink}
             {" Learn more about "}
             <Anchor href={statementsRetries} target="_blank">
               retries
@@ -186,7 +195,12 @@ function descriptionCell(
       return (
         <>
           <div className={cx("description-item")}>
-            Unable to identify specific reasons why this execution was slow.
+            <span className={cx("label-bold")}>Elapsed Time: </span>
+            {Duration(insightRec.details.duration * 1e6)}
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.details.description} {clusterSettingsLink}
           </div>
         </>
       );
