@@ -997,13 +997,11 @@ $(go-targets): override LINKFLAGS += \
 $(COCKROACH) $(COCKROACHOSS) go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
-settings-doc-gen = $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
+docs/generated/settings/settings.html: $(COCKROACHSHORT)
+	@$(COCKROACHSHORT) gen settings-list --format=rawhtml > $@
 
-docs/generated/settings/settings.html: $(settings-doc-gen)
-	@$(settings-doc-gen) gen settings-list --format=rawhtml > $@
-
-docs/generated/settings/settings-for-tenants.txt:  $(settings-doc-gen)
-	@$(settings-doc-gen) gen settings-list --without-system-only > $@
+docs/generated/settings/settings-for-tenants.txt: $(COCKROACHSHORT)
+	@$(COCKROACHSHORT) gen settings-list --without-system-only > $@
 
 SETTINGS_DOC_PAGES := docs/generated/settings/settings.html docs/generated/settings/settings-for-tenants.txt
 

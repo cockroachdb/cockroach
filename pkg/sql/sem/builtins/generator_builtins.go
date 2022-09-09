@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -1827,13 +1828,26 @@ func (j *jsonRecordSetGenerator) Next(ctx context.Context) (bool, error) {
 }
 
 type checkConsistencyGenerator struct {
+	txn                *kv.Txn // to load range descriptors
 	consistencyChecker eval.ConsistencyCheckRunner
 	from, to           roachpb.Key
 	mode               roachpb.ChecksumMode
-	// remainingRows is populated by Start(). Each Next() call peels of the first
-	// row and moves it to curRow.
-	remainingRows []roachpb.CheckConsistencyResponse_Result
-	curRow        roachpb.CheckConsistencyResponse_Result
+
+	// The descriptors for which we haven't yet emitted rows. Rows are consumed
+	// from this field and produce one (or more, in the case of splits not reflected
+	// in the descriptor) rows in `next`.
+	descs []roachpb.RangeDescriptor
+	// The current row, emitted by Values().
+	cur roachpb.CheckConsistencyResponse_Result
+	// The time it took to produce the current row, i.e. how long it took to run
+	// the consistency check that produced the row. When a consistency check
+	// produces more than one row (i.e. after a split), all of the duration will
+	// be attributed to the first row.
+	dur time.Duration
+	// next are the potentially prefetched subsequent rows. This is usually empty
+	// (as one consistency check produces one result which immediately moves to
+	// `cur`) except when a descriptor we use doesn't reflect subsequent splits.
+	next []roachpb.CheckConsistencyResponse_Result
 }
 
 var _ eval.ValueGenerator = &checkConsistencyGenerator{}
@@ -1850,14 +1864,18 @@ func makeCheckConsistencyGenerator(
 	keyTo := roachpb.Key(*args[2].(*tree.DBytes))
 
 	if len(keyFrom) == 0 {
-		keyFrom = keys.LocalMax
+		// NB: you'd expect LocalMax here but when we go and call ScanMetaKVs, it
+		// would interpret LocalMax as Meta1Prefix and translate that to KeyMin,
+		// then fail on the scan. That method should really handle this better
+		// but also we should use IterateRangeDescriptors instead.
+		keyFrom = keys.Meta2Prefix
 	}
 	if len(keyTo) == 0 {
 		keyTo = roachpb.KeyMax
 	}
 
-	if bytes.Compare(keyFrom, keys.LocalMax) < 0 {
-		return nil, errors.Errorf("start key must be >= %q", []byte(keys.LocalMax))
+	if bytes.Compare(keyFrom, keys.LocalMax) <= 0 {
+		return nil, errors.Errorf("start key must be > %q", []byte(keys.LocalMax))
 	}
 	if bytes.Compare(keyTo, roachpb.KeyMax) > 0 {
 		return nil, errors.Errorf("end key must be < %q", []byte(roachpb.KeyMax))
@@ -1872,6 +1890,7 @@ func makeCheckConsistencyGenerator(
 	}
 
 	return &checkConsistencyGenerator{
+		txn:                ctx.Txn,
 		consistencyChecker: ctx.ConsistencyChecker,
 		from:               keyFrom,
 		to:                 keyTo,
@@ -1880,8 +1899,8 @@ func makeCheckConsistencyGenerator(
 }
 
 var checkConsistencyGeneratorType = types.MakeLabeledTuple(
-	[]*types.T{types.Int, types.Bytes, types.String, types.String, types.String},
-	[]string{"range_id", "start_key", "start_key_pretty", "status", "detail"},
+	[]*types.T{types.Int, types.Bytes, types.String, types.String, types.String, types.Interval},
+	[]string{"range_id", "start_key", "start_key_pretty", "status", "detail", "duration"},
 )
 
 // ResolvedType is part of the tree.ValueGenerator interface.
@@ -1891,32 +1910,94 @@ func (*checkConsistencyGenerator) ResolvedType() *types.T {
 
 // Start is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Start(ctx context.Context, _ *kv.Txn) error {
-	resp, err := c.consistencyChecker.CheckConsistency(ctx, c.from, c.to, c.mode)
+	span := roachpb.Span{Key: c.from, EndKey: c.to}
+	// NB: should use IterateRangeDescriptors here which is in the 'upgrade'
+	// package to avoid pulling all into memory. That needs a refactor, though.
+	// kvprober also has some code to iterate in batches.
+	descs, err := kvclient.ScanMetaKVs(ctx, c.txn, span)
 	if err != nil {
 		return err
 	}
-	c.remainingRows = resp.Result
+	for _, v := range descs {
+		var desc roachpb.RangeDescriptor
+		if err := v.ValueProto(&desc); err != nil {
+			return err
+		}
+		if len(desc.StartKey) == 0 {
+			desc.StartKey = keys.MustAddr(keys.LocalMax)
+			// Elide potential second copy we might be getting for r1
+			// if meta1 and meta2 haven't split.
+			// This too should no longer be necessary with IterateRangeDescriptors.
+			if len(c.descs) == 1 {
+				continue
+			}
+		}
+		c.descs = append(c.descs, desc)
+	}
 	return nil
 }
 
+// maybeRefillRows checks whether c.next is empty and if so, consumes the first
+// element of c.descs for a consistency check. This populates c.next with at
+// least one result (even on error). Returns the duration of the consistency
+// check, if any, and zero otherwise.
+func (c *checkConsistencyGenerator) maybeRefillRows(ctx context.Context) time.Duration {
+	if len(c.next) > 0 || len(c.descs) == 0 {
+		// We have a row to produce or no more ranges to check, so we're done
+		// for now or for good, respectively.
+		return 0
+	}
+	tBegin := timeutil.Now()
+	// NB: peeling off the spans one by one allows this generator to produce
+	// rows in a streaming manner. If we called CheckConsistency(c.from, c.to)
+	// we would only get the result once all checks have completed and it will
+	// generally be a lot more brittle since an error will completely wipe out
+	// the result set.
+	desc := c.descs[0]
+	c.descs = c.descs[1:]
+	resp, err := c.consistencyChecker.CheckConsistency(
+		ctx, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), c.mode,
+	)
+	if err != nil {
+		resp = &roachpb.CheckConsistencyResponse{Result: []roachpb.CheckConsistencyResponse_Result{{
+			RangeID:  desc.RangeID,
+			StartKey: desc.StartKey,
+			Status:   roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE,
+			Detail:   err.Error(),
+		}}}
+	}
+
+	// NB: this could have more than one entry, if a range split in the
+	// meantime.
+	c.next = resp.Result
+	return timeutil.Since(tBegin)
+}
+
 // Next is part of the tree.ValueGenerator interface.
-func (c *checkConsistencyGenerator) Next(_ context.Context) (bool, error) {
-	if len(c.remainingRows) == 0 {
+func (c *checkConsistencyGenerator) Next(ctx context.Context) (bool, error) {
+	dur := c.maybeRefillRows(ctx)
+	if len(c.next) == 0 {
 		return false, nil
 	}
-	c.curRow = c.remainingRows[0]
-	c.remainingRows = c.remainingRows[1:]
+	c.dur, c.cur, c.next = dur, c.next[0], c.next[1:]
 	return true, nil
 }
 
 // Values is part of the tree.ValueGenerator interface.
 func (c *checkConsistencyGenerator) Values() (tree.Datums, error) {
+	row := c.cur
+	intervalMeta := types.IntervalTypeMetadata{
+		DurationField: types.IntervalDurationField{
+			DurationType: types.IntervalDurationType_MILLISECOND,
+		},
+	}
 	return tree.Datums{
-		tree.NewDInt(tree.DInt(c.curRow.RangeID)),
-		tree.NewDBytes(tree.DBytes(c.curRow.StartKey)),
-		tree.NewDString(roachpb.Key(c.curRow.StartKey).String()),
-		tree.NewDString(c.curRow.Status.String()),
-		tree.NewDString(c.curRow.Detail),
+		tree.NewDInt(tree.DInt(row.RangeID)),
+		tree.NewDBytes(tree.DBytes(row.StartKey)),
+		tree.NewDString(roachpb.Key(row.StartKey).String()),
+		tree.NewDString(row.Status.String()),
+		tree.NewDString(row.Detail),
+		tree.NewDInterval(duration.MakeDuration(c.dur.Nanoseconds(), 0 /* days */, 0 /* months */), intervalMeta),
 	}, nil
 }
 

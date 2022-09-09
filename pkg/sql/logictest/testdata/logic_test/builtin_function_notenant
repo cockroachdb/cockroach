@@ -4,20 +4,20 @@ subtest check_consistency
 
 # Sanity-check crdb_internal.check_consistency.
 
-statement error start key must be >= "\\x02"
-SELECT crdb_internal.check_consistency(true, '\x01', '\xffff')
+statement error start key must be > "\\x02"
+SELECT crdb_internal.check_consistency(true, '\x02', '\xffff')
 
 statement error end key must be < "\\xff\\xff"
-SELECT crdb_internal.check_consistency(true, '\x02', '\xffff00')
+SELECT crdb_internal.check_consistency(true, '\x0200', '\xffff00')
 
 statement error start key must be less than end key
-SELECT crdb_internal.check_consistency(true, '\x02', '\x02')
+SELECT crdb_internal.check_consistency(true, '\x03', '\x03')
 
 statement error start key must be less than end key
-SELECT crdb_internal.check_consistency(true, '\x03', '\x02')
+SELECT crdb_internal.check_consistency(true, '\x04', '\x03')
 
 query ITT
-SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_internal.check_consistency(true, '\x02', '\xffff') WHERE range_id = 1
+SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_internal.check_consistency(true, '\x03', '\xffff') WHERE range_id = 1
 ----
 1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
 
@@ -32,14 +32,18 @@ SELECT count(*) > 5 FROM crdb_internal.check_consistency(true, '', '')
 true
 
 # Query that should touch only a single range.
+#
+# NB: the use of ScanMetaKVs causes issues here. Bounds [`k`, k.Next()]` don't work,
+# with errors such as (here k=\xff):
+#          pq: failed to verify keys for Scan: end key /Meta2/"\xff\x00" must be greater than start /Meta2/"\xff\x00"
 query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\x03', '\x0300')
+SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\xff', '\xffff')
 ----
 true
 
-# Ditto, but implicit start key \x02
+# Ditto, but implicit start key \x03
 query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '', '\x0200')
+SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '', '\x04')
 ----
 true
 
