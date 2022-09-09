@@ -19,7 +19,9 @@ import (
 	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClusterNodes(t *testing.T) {
@@ -176,4 +178,60 @@ func TestCmdLogFileName(t *testing.T) {
 		exp,
 		cmdLogFileName(ts, nodes, "./cockroach bla --foo bar"),
 	)
+}
+
+func TestVerifyLibraries(t *testing.T) {
+	originalLibraryPaths := libraryFilePaths
+	defer func() { libraryFilePaths = originalLibraryPaths }()
+	testCases := []struct {
+		name             string
+		verifyLibs       []string
+		libraryFilePaths []string
+		expectedError    error
+	}{
+		{
+			name:             "valid nil input",
+			verifyLibs:       nil,
+			libraryFilePaths: []string{"/some/path/lib.so"},
+			expectedError:    nil,
+		},
+		{
+			name:             "no match",
+			verifyLibs:       []string{"required_c"},
+			libraryFilePaths: []string{"/some/path/lib.so"},
+			expectedError: errors.Wrap(errors.Errorf("missing required library %s",
+				"required_c"), "cluster.VerifyLibraries"),
+		},
+		{
+			name:             "no match on nil libs",
+			verifyLibs:       []string{"required_b"},
+			libraryFilePaths: nil,
+			expectedError: errors.Wrap(errors.Errorf("missing required library %s",
+				"required_b"), "cluster.VerifyLibraries"),
+		},
+		{
+			name:             "single match",
+			verifyLibs:       []string{"geos"},
+			libraryFilePaths: []string{"/lib/geos.so"},
+			expectedError:    nil,
+		},
+		{
+			name:             "multiple matches",
+			verifyLibs:       []string{"lib", "ltwo", "geos"},
+			libraryFilePaths: []string{"ltwo.so", "a/geos.so", "/some/path/to/lib.so"},
+			expectedError:    nil,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			libraryFilePaths = tc.libraryFilePaths
+			actualError := VerifyLibraries(tc.verifyLibs)
+			if tc.expectedError == nil {
+				require.NoError(t, actualError)
+			} else {
+				require.NotNil(t, actualError)
+				require.EqualError(t, actualError, tc.expectedError.Error())
+			}
+		})
+	}
 }

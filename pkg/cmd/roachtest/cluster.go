@@ -187,6 +187,36 @@ func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
 	return filepathAbs(path)
 }
 
+// VerifyLibraries verifies that the required libraries, specified by name, are
+// available for the target environment.
+func VerifyLibraries(requiredLibs []string) error {
+	for _, requiredLib := range requiredLibs {
+		if !contains(libraryFilePaths, libraryNameFromPath, requiredLib) {
+			return errors.Wrap(errors.Errorf("missing required library %s", requiredLib), "cluster.VerifyLibraries")
+		}
+	}
+	return nil
+}
+
+// libraryNameFromPath returns the name of a library without the extension, for a
+// given path.
+func libraryNameFromPath(path string) string {
+	filename := filepath.Base(path)
+	return strings.TrimSuffix(filename, filepath.Ext(filename))
+}
+
+func contains(list []string, transformString func(s string) string, str string) bool {
+	if transformString == nil {
+		transformString = func(s string) string { return s }
+	}
+	for _, element := range list {
+		if transformString(element) == str {
+			return true
+		}
+	}
+	return false
+}
+
 func initBinariesAndLibraries() {
 	// If we're running against an existing "local" cluster, force the local flag
 	// to true in order to get the "local" test configurations.
@@ -1604,13 +1634,17 @@ func (c *clusterImpl) PutE(
 	return errors.Wrap(roachprod.Put(ctx, l, c.MakeNodes(nodes...), src, dest, true /* useTreeDist */), "cluster.PutE")
 }
 
-// PutLibraries inserts all available library files into all nodes on the cluster
+// PutLibraries inserts the specified libraries, by name, into all nodes on the cluster
 // at the specified location.
-func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error {
+func (c *clusterImpl) PutLibraries(
+	ctx context.Context, libraryDir string, libraries []string,
+) error {
+	if len(libraries) == 0 {
+		return nil
+	}
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Put")
 	}
-
 	c.status("uploading library files")
 	defer c.status("")
 
@@ -1618,6 +1652,9 @@ func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error
 		return err
 	}
 	for _, libraryFilePath := range libraryFilePaths {
+		if !contains(libraries, nil, libraryNameFromPath(libraryFilePath)) {
+			continue
+		}
 		putPath := filepath.Join(libraryDir, filepath.Base(libraryFilePath))
 		if err := c.PutE(
 			ctx,

@@ -553,6 +553,13 @@ func (r *testRunner) runWorker(
 				testToRun.canReuseCluster = false
 			}
 		}
+
+		// Verify that required native libraries are available.
+		if err = VerifyLibraries(testToRun.spec.NativeLibs); err != nil {
+			shout(ctx, l, stdout, "Library verification failed: %s", err)
+			return err
+		}
+
 		var clusterCreateErr error
 
 		if !testToRun.canReuseCluster {
@@ -621,28 +628,32 @@ func (r *testRunner) runWorker(
 			t.spec.Name = oldName
 			t.spec.Owner = oldOwner
 		} else {
-			// Tell the cluster that, from now on, it will be run "on behalf of this
-			// test".
-			c.status("running test")
 			c.setTest(t)
+			err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
 
-			switch t.Spec().(*registry.TestSpec).EncryptionSupport {
-			case registry.EncryptionAlwaysEnabled:
-				c.encAtRest = true
-			case registry.EncryptionAlwaysDisabled:
-				c.encAtRest = false
-			case registry.EncryptionMetamorphic:
-				// when tests opted-in to metamorphic testing, encryption will
-				// be enabled according to the probability passed to
-				// --metamorphic-encryption-probability
-				c.encAtRest = prng.Float64() < encryptionProbability
+			if err == nil {
+				// Tell the cluster that, from now on, it will be run "on behalf of this
+				// test".
+				c.status("running test")
+
+				switch t.Spec().(*registry.TestSpec).EncryptionSupport {
+				case registry.EncryptionAlwaysEnabled:
+					c.encAtRest = true
+				case registry.EncryptionAlwaysDisabled:
+					c.encAtRest = false
+				case registry.EncryptionMetamorphic:
+					// when tests opted-in to metamorphic testing, encryption will
+					// be enabled according to the probability passed to
+					// --metamorphic-encryption-probability
+					c.encAtRest = prng.Float64() < encryptionProbability
+				}
+
+				wStatus.SetCluster(c)
+				wStatus.SetTest(t, testToRun)
+				wStatus.SetStatus("running test")
+
+				err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL)
 			}
-
-			wStatus.SetCluster(c)
-			wStatus.SetTest(t, testToRun)
-			wStatus.SetStatus("running test")
-
-			err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL)
 		}
 
 		if err != nil {
