@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -909,6 +910,28 @@ func LoadSQLDescsFromBackupsAtTime(
 		allDescs = append(allDescs, desc)
 	}
 	return allDescs, lastBackupManifest
+}
+
+// FindLatestReIntroductionByTable finds the endtime of the latest incremental
+// backup that reintroduced each backed up table, as of restore time. Note: this
+// function assumes that each introduced span in the manifest covers a single table.
+func FindLatestReIntroductionByTable(
+	manifests []backuppb.BackupManifest, codec keys.SQLCodec, asOf hlc.Timestamp,
+) (map[descpb.ID]hlc.Timestamp, error) {
+	latestReIntro := make(map[descpb.ID]hlc.Timestamp)
+	for _, b := range manifests {
+		if !asOf.IsEmpty() && asOf.Less(b.StartTime) {
+			break
+		}
+		for _, sp := range b.ReintroducedSpans {
+			_, tablePrefix, err := codec.DecodeTablePrefix(sp.Key)
+			if err != nil {
+				return nil, err
+			}
+			latestReIntro[descpb.ID(tablePrefix)] = b.EndTime
+		}
+	}
+	return latestReIntro, nil
 }
 
 // SanitizeLocalityKV returns a sanitized version of the input string where all

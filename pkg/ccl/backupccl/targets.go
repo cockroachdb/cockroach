@@ -492,16 +492,20 @@ func MakeBackupTableEntry(
 		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
 	}
 	restoreData := restorationDataBase{
-		spans:        []roachpb.Span{tablePrimaryIndexSpan},
-		latestIntros: make([]hlc.Timestamp, 1),
+		spans:                               []roachpb.Span{tablePrimaryIndexSpan},
+		backupCodec:                         backupCodec,
+		latestEndTimesForReIntroducedTables: make(map[descpb.ID]hlc.Timestamp, 1),
 	}
-	entry := makeSimpleImportSpans(
+	entry, err := makeSimpleImportSpans(
 		&restoreData,
 		backupManifests,
 		nil,           /*backupLocalityInfo*/
 		roachpb.Key{}, /*lowWaterMark*/
 		0,             /* disable merging */
 	)
+	if err != nil {
+		return BackupTableEntry{}, err
+	}
 	lastSchemaChangeTime := findLastSchemaChangeTime(backupManifests, tbDesc, endTime)
 
 	backupTableEntry := BackupTableEntry{
