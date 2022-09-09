@@ -3,18 +3,18 @@ subtest stmt_source_equiv
 query TTTII
 SHOW COMPLETIONS AT OFFSET 5 FOR 'creat'
 ----
-CREATE       NULL  NULL  NULL  NULL
-CREATEDB     NULL  NULL  NULL  NULL
-CREATELOGIN  NULL  NULL  NULL  NULL
-CREATEROLE   NULL  NULL  NULL  NULL
+CREATE       keyword  reserved    0  5
+CREATEDB     keyword  unreserved  0  5
+CREATELOGIN  keyword  unreserved  0  5
+CREATEROLE   keyword  unreserved  0  5
 
 query TTTII
 SELECT * FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'creat']
 ----
-CREATE       NULL  NULL  NULL  NULL
-CREATEDB     NULL  NULL  NULL  NULL
-CREATELOGIN  NULL  NULL  NULL  NULL
-CREATEROLE   NULL  NULL  NULL  NULL
+CREATE       keyword  reserved    0  5
+CREATEDB     keyword  unreserved  0  5
+CREATELOGIN  keyword  unreserved  0  5
+CREATEROLE   keyword  unreserved  0  5
 
 subtest end
 
@@ -54,11 +54,12 @@ CREATEROLE
 
 subtest end
 
-subtest no_completion_at_space
+subtest completion_at_space
 
-query T
-SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 6 FOR 'creat ']
+query B
+SELECT count(*) > 0 FROM [SHOW COMPLETIONS AT OFFSET 6 FOR 'creat ']
 ----
+true
 
 subtest end
 
@@ -77,6 +78,9 @@ query T
 SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 3 FOR 'create ta']
 ----
 CREATE
+CREATEDB
+CREATELOGIN
+CREATEROLE
 
 subtest end
 
@@ -91,18 +95,16 @@ subtest end
 
 subtest multi_character_runes
 
-# This completion looks strange. Is it correct?
 query T
 SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 2 FOR '你好，我的名字是鲍勃 SELECT']
 ----
-你好，我的名字是鲍勃
 
 query T
 SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 11 FOR '你好，我的名字是鲍勃 SELECT']
 ----
 
 query T
-SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 12 FOR '你好，我的名字是鲍勃 SELECT']
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 33 FOR '你好，我的名字是鲍勃 SELECT']
 ----
 SELECT
 
