@@ -1,7 +1,7 @@
 post
 ----
 ----
-searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestReplicateQueueRebalance failed" label:branch-release-0.1: []
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestReplicateQueueRebalance failed" label:branch-release-0.1 -label:X-noreuse: []
 searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestReplicateQueueRebalance failed" -label:branch-release-0.1: []
 getLatestTag: result v3.3.0
 listMilestones owner=cockroachdb repo=cockroach: result [github.Milestone{Number:2, Title:"3.3"} github.Milestone{Number:1, Title:"3.2"}]
