@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"net/url"
 	"path"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -788,6 +790,122 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 	}:
 		return nil
 	}
+}
+
+func getBackupDetailAndManifest(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	initialDetails jobspb.BackupDetails,
+	user username.SQLUsername,
+	backupDestination backupdest.ResolvedDestination,
+) (jobspb.BackupDetails, backuppb.BackupManifest, error) {
+	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
+
+	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig,
+		execCfg.DB, user, execCfg.InternalExecutor)
+
+	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
+
+	prevBackups, encryptionOptions, memSize, err := backupinfo.FetchPreviousBackups(ctx, &mem, user,
+		makeCloudStorage, backupDestination.PrevBackupURIs, *initialDetails.EncryptionOptions, &kmsEnv)
+
+	if err != nil {
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+	}
+	defer func() {
+		mem.Shrink(ctx, memSize)
+	}()
+
+	if len(prevBackups) > 0 {
+		baseManifest := prevBackups[0]
+		if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
+			!initialDetails.FullCluster {
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
+		}
+
+		if err := requireEnterprise(execCfg, "incremental"); err != nil {
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+		}
+		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
+		if lastEndTime.Compare(initialDetails.EndTime) > 0 {
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{},
+				errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
+					"the previous backup's end time of %s.",
+					initialDetails.EndTime.GoTime(), lastEndTime.GoTime())
+		}
+	}
+
+	localityKVs := make([]string, len(backupDestination.URIsByLocalityKV))
+	i := 0
+	for k := range backupDestination.URIsByLocalityKV {
+		localityKVs[i] = k
+		i++
+	}
+
+	for i := range prevBackups {
+		prevBackup := prevBackups[i]
+		// IDs are how we identify tables, and those are only meaningful in the
+		// context of their own cluster, so we need to ensure we only allow
+		// incremental previous backups that we created.
+		if fromCluster := prevBackup.ClusterID; !fromCluster.Equal(execCfg.NodeInfo.LogicalClusterID()) {
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
+		}
+
+		prevLocalityKVs := prevBackup.LocalityKVs
+
+		// Checks that each layer in the backup uses the same localities
+		// Does NOT check that each locality/layer combination is actually at the
+		// expected locations.
+		// This is complex right now, but should be easier shortly.
+		// TODO(benbardin): Support verifying actual existence of localities for
+		// each layer after deprecating TO-syntax in 22.2
+		sort.Strings(localityKVs)
+		sort.Strings(prevLocalityKVs)
+		if !(len(localityKVs) == 0 && len(prevLocalityKVs) == 0) && !reflect.DeepEqual(localityKVs,
+			prevLocalityKVs) {
+			// Note that this won't verify the default locality. That's not
+			// necessary, because the default locality defines the backup manifest
+			// location. If that URI isn't right, the backup chain will fail to
+			// load.
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf(
+				"Requested backup has localities %s, but a previous backup layer in this collection has localities %s. "+
+					"Mismatched backup layers are not supported. Please take a new full backup with the new localities, or an "+
+					"incremental backup with matching localities.",
+				localityKVs, prevLocalityKVs,
+			)
+		}
+	}
+
+	// updatedDetails and backupManifest should be treated as read-only after
+	// they're returned from their respective functions. Future changes to those
+	// objects should be made within those functions.
+	updatedDetails, err := updateBackupDetails(
+		ctx,
+		initialDetails,
+		backupDestination.CollectionURI,
+		backupDestination.DefaultURI,
+		backupDestination.ChosenSubdir,
+		backupDestination.URIsByLocalityKV,
+		prevBackups,
+		encryptionOptions,
+		&kmsEnv)
+	if err != nil {
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+	}
+
+	backupManifest, err := createBackupManifest(
+		ctx,
+		execCfg,
+		txn,
+		updatedDetails,
+		prevBackups)
+	if err != nil {
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+	}
+
+	return updatedDetails, backupManifest, nil
 }
 
 func (b *backupResumer) readManifestOnResume(

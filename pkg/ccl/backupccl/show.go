@@ -88,6 +88,9 @@ func (m manifestInfoReader) showBackup(
 	kmsEnv cloud.KMSEnv,
 	resultsCh chan<- tree.Datums,
 ) error {
+	ctx, sp := tracing.ChildSpan(ctx, "backupccl.showBackup")
+	defer sp.Finish()
+
 	var memReserved int64
 
 	defer func() {
@@ -401,10 +404,20 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		info.subdir = computedSubdir
 
 		mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+		incStores, cleanupFn, err := backupdest.MakeBackupDestinationStores(ctx, p.User(), mkStore,
+			fullyResolvedIncrementalsDirectory)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err := cleanupFn(); err != nil {
+				log.Warningf(ctx, "failed to close incremental store: %+v", err)
+			}
+		}()
 
 		info.defaultURIs, info.manifests, info.localityInfo, memReserved,
 			err = backupdest.ResolveBackupManifests(
-			ctx, &mem, baseStores, mkStore, fullyResolvedDest,
+			ctx, &mem, baseStores, incStores, mkStore, fullyResolvedDest,
 			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, &kmsEnv, p.User())
 		defer func() {
 			mem.Shrink(ctx, memReserved)
@@ -649,6 +662,9 @@ func backupShowerDefault(
 	return backupShower{
 		header: backupShowerHeaders(showSchemas, opts),
 		fn: func(ctx context.Context, info backupInfo) ([]tree.Datums, error) {
+			ctx, sp := tracing.ChildSpan(ctx, "backupccl.backupShowerDefault.fn")
+			defer sp.Finish()
+
 			var rows []tree.Datums
 			for layer, manifest := range info.manifests {
 				// Map database ID to descriptor name.
@@ -1267,5 +1283,5 @@ func showBackupsInCollectionPlanHook(
 }
 
 func init() {
-	sql.AddPlanHook("show backup", showBackupPlanHook)
+	sql.AddPlanHook("backupccl.showBackupPlanHook", showBackupPlanHook)
 }

@@ -29,6 +29,7 @@ go_library(
         "//pkg/util/ioctx",
         "//pkg/util/mon",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
