@@ -137,13 +137,23 @@ func Start(
 func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "capture-index-usage-stats", func(ctx context.Context) {
 		// Start the scheduler immediately.
-		for timer := time.NewTimer(0 * time.Second); ; timer.Reset(s.durationUntilNextInterval()) {
+		timer := time.NewTimer(0 * time.Second)
+		defer timer.Stop()
+
+		for {
 			select {
 			case <-stopper.ShouldQuiesce():
-				timer.Stop()
 				return
 			case <-timer.C:
 				s.currentCaptureStartTime = timeutil.Now()
+				dur := s.durationUntilNextInterval()
+				if dur < time.Second {
+					// Avoid intervals that are too short, to prevent a hot
+					// spot on this task.
+					dur = time.Second
+				}
+				timer.Reset(dur)
+
 				if !telemetryCaptureIndexUsageStatsEnabled.Get(&s.st.SV) {
 					continue
 				}
@@ -274,13 +284,12 @@ ORDER BY total_reads ASC;`,
 func logIndexUsageStatsWithDelay(
 	ctx context.Context, events []eventpb.EventPayload, stopper *stop.Stopper, delay time.Duration,
 ) {
-
 	// Log the first event immediately.
 	timer := time.NewTimer(0 * time.Second)
+	defer timer.Stop()
 	for len(events) > 0 {
 		select {
 		case <-stopper.ShouldQuiesce():
-			timer.Stop()
 			return
 		case <-timer.C:
 			event := events[0]
@@ -290,7 +299,6 @@ func logIndexUsageStatsWithDelay(
 			timer.Reset(delay)
 		}
 	}
-	timer.Stop()
 }
 
 func getAllDatabaseNames(ctx context.Context, ie sqlutil.InternalExecutor) (tree.NameList, error) {
