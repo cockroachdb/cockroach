@@ -1559,6 +1559,10 @@ type BackupRestoreTestingKnobs struct {
 	// span has been exported.
 	RunAfterExportingSpanEntry func(ctx context.Context, response *roachpb.ExportResponse)
 
+	// RunAfterMovingSystemTables runs after we process any conflicting system
+	// tables during a cluster RESTORE.
+	RunAfterMovingSystemTables func(ctx context.Context, txn *kv.Txn, db *kv.DB)
+
 	// BackupMonitor is used to overwrite the monitor used by backup during
 	// testing. This is typically the bulk mem monitor if not
 	// specified here.

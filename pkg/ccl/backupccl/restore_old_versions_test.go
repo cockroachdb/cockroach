@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -123,10 +124,37 @@ func TestRestoreOldVersions(t *testing.T) {
 				t.Run(dir.Name(), deprecatedRestoreOldVersionClusterTest(exportDir))
 				continue
 			}
-			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir))
+			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir, nil))
 		}
 	})
+	t.Run("cluster-restore-with-planning-restart", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(clusterDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(clusterDirs, dir.Name()))
+			require.NoError(t, err)
 
+			// TODO(adityamaru): Figure out how to generate a 20.1.7 fixture using the
+			// updated `create_cluster.sql` file.
+			if strings.Contains(dir.Name(), "v20.1.7") {
+				t.Run(dir.Name(), deprecatedRestoreOldVersionClusterTest(exportDir))
+				continue
+			}
+			var retryOnce sync.Once
+			t.Run(dir.Name(), restoreOldVersionClusterTest(exportDir, &sql.BackupRestoreTestingKnobs{
+				RunAfterMovingSystemTables: func(ctx context.Context, txn *kv.Txn, db *kv.DB) {
+					retryOnce.Do(func() {
+						// Force a transaction restart during restore planning.
+						_, err := txn.Get(ctx, keys.ScratchRangeMin)
+						require.NoError(t, err)
+						require.NoError(t, db.Put(ctx, keys.ScratchRangeMin, "foo"))
+						_ = txn.Put(ctx, keys.ScratchRangeMin, "bar")
+					})
+				},
+			}))
+		}
+	})
 	t.Run("multi-region-restore", func(t *testing.T) {
 		skip.UnderRace(t, "very slow as it starts multiple servers")
 		dirs, err := ioutil.ReadDir(multiRegionDirs)
@@ -553,12 +581,17 @@ ORDER BY
 	}
 }
 
-func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
+func restoreOldVersionClusterTest(
+	exportDir string, testingKnobs *sql.BackupRestoreTestingKnobs,
+) func(t *testing.T) {
 	return func(t *testing.T) {
 		externalDir, dirCleanup := testutils.TempDir(t)
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					BackupRestore: testingKnobs,
+				},
 				ExternalIODir: externalDir,
 			},
 		})
