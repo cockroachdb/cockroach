@@ -180,25 +180,24 @@ func captureIndexUsageStats(
 			continue
 		}
 		stmt := fmt.Sprintf(`
-		SELECT
-		 ti.descriptor_name as table_name,
-		 ti.descriptor_id as table_id,
-		 ti.index_name,
-		 ti.index_id,
-		 ti.index_type,
-		 ti.is_unique,
-		 ti.is_inverted,
-		 total_reads,
-		 last_read,
-		 ti.created_at,
-     t.schema_name
-	  FROM %[1]s.crdb_internal.index_usage_statistics AS us
+  SELECT ti.descriptor_name as table_name,
+         ti.descriptor_id as table_id,
+         ti.index_name,
+         ti.index_id,
+         ti.index_type,
+         ti.is_unique,
+         ti.is_inverted,
+         total_reads,
+         last_read,
+         ti.created_at,
+         t.schema_name
+    FROM %[1]s.crdb_internal.index_usage_statistics us
     JOIN %[1]s.crdb_internal.table_indexes ti
-		ON us.index_id = ti.index_id
-		 AND us.table_id = ti.descriptor_id
-    JOIN %[1]s.crdb_internal.tables t 
-    ON ti.descriptor_id = t.table_id
-		ORDER BY total_reads ASC;`,
+      ON us.index_id = ti.index_id
+     AND us.table_id = ti.descriptor_id
+    JOIN %[1]s.crdb_internal.tables t
+      ON ti.descriptor_id = t.table_id
+ORDER BY total_reads ASC;`,
 			databaseName.String())
 
 		it, err := ie.QueryIteratorEx(
