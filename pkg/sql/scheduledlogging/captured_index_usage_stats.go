@@ -38,7 +38,7 @@ var telemetryCaptureIndexUsageStatsEnabled = settings.RegisterBoolSetting(
 )
 
 var telemetryCaptureIndexUsageStatsInterval = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.TenantReadOnly,
 	"sql.telemetry.capture_index_usage_stats.interval",
 	"the scheduled interval time between capturing index usage statistics when capturing index usage statistics is enabled",
 	8*time.Hour,
@@ -46,7 +46,7 @@ var telemetryCaptureIndexUsageStatsInterval = settings.RegisterDurationSetting(
 )
 
 var telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.TenantReadOnly,
 	"sql.telemetry.capture_index_usage_stats.check_enabled_interval",
 	"the scheduled interval time between checks to see if index usage statistics has been enabled",
 	10*time.Minute,
@@ -54,7 +54,7 @@ var telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval = settings.Registe
 )
 
 var telemetryCaptureIndexUsageStatsLoggingDelay = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.TenantReadOnly,
 	"sql.telemetry.capture_index_usage_stats.logging_delay",
 	"the time delay between emitting individual index usage stats logs, this is done to "+
 		"mitigate the log-line limit of 10 logs per second on the telemetry pipeline",
