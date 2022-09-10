@@ -469,7 +469,7 @@ export class TransactionDetails extends React.Component<
                         "transactionDetails",
                         isTenant,
                         hasViewActivityRedactedRole,
-                      )}
+                      ).filter(c => !(isTenant && c.hideIfTenant))}
                       className={cx("statements-table")}
                       sortSetting={sortSetting}
                       onChangeSortSetting={this.onChangeSortSetting}
