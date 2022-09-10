@@ -14,11 +14,12 @@ func _() {
 	_ = x[value-3]
 	_ = x[left-4]
 	_ = x[right-5]
+	_ = x[i16ref-6]
 }
 
-const _testAttr_name = "i8pi8i16valueleftright"
+const _testAttr_name = "i8pi8i16valueleftrighti16ref"
 
-var _testAttr_index = [...]uint8{0, 2, 5, 8, 13, 17, 22}
+var _testAttr_index = [...]uint8{0, 2, 5, 8, 13, 17, 22, 28}
 
 func (i testAttr) String() string {
 	if i < 0 || i >= testAttr(len(_testAttr_index)-1) {

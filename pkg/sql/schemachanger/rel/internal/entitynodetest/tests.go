@@ -30,7 +30,7 @@ var (
 	}
 
 	r  = reltest.NewRegistry()
-	a  = r.FromYAML("a", `{i16: 1, i8: 1, pi8: 1}`, &entity{}).(*entity)
+	a  = r.FromYAML("a", `{i16: 1, i8: 1, pi8: 1, i16refs: [1]}`, &entity{}).(*entity)
 	b  = r.FromYAML("b", `{i16: 2, i8: 2}`, &entity{}).(*entity)
 	c  = r.FromYAML("c", `{i16: 1, i8: 2}`, &entity{}).(*entity)
 	na = r.Register("na", &node{Value: a}).(*node)
@@ -183,6 +183,10 @@ var (
 						Attrs:  []rel.Attr{right},
 						Exists: []rel.Attr{right},
 					},
+				},
+				{ // 8
+					{Attrs: []rel.Attr{}},
+					{Attrs: []rel.Attr{i16ref}, Inverted: true},
 				},
 			},
 			QueryCases: []reltest.QueryTest{
@@ -722,6 +726,46 @@ var (
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
+				{
+					Name: "containment by entity",
+					Query: rel.Clauses{
+						v("n").Type((*node)(nil)),
+						v("n").AttrEqVar(value, "entity"),
+						v("entity").AttrContainsVar(i16ref, "otheri16"),
+						v("otherEntity").AttrEqVar(i16, "otheri16"),
+					},
+					Entities: []rel.Var{"n", "entity", "otherEntity"},
+					ResVars:  []v{"n", "entity", "otheri16", "otherEntity"},
+					Results: [][]interface{}{
+						{na, a, int16(1), c},
+						{na, a, int16(1), a},
+					},
+					UnsatisfiableIndexes: []int{0, 1, 2, 3, 4, 5, 6, 7},
+				},
+				{
+					Name: "containment by value",
+					Query: rel.Clauses{
+						v("i16").Eq(int16(1)),
+						v("entity").AttrContainsVar(i16ref, "i16"),
+					},
+					Entities: []rel.Var{"entity"},
+					ResVars:  []v{"i16", "entity"},
+					Results: [][]interface{}{
+						{int16(1), a},
+					},
+					UnsatisfiableIndexes: []int{0, 1, 2, 3, 4, 5, 6, 7},
+				},
+				{
+					Name: "containment by value (fails)",
+					Query: rel.Clauses{
+						v("i16").Eq(2),
+						v("entity").AttrContainsVar(i16ref, "i16"),
+					},
+					Entities:             []rel.Var{"entity"},
+					ResVars:              []v{"i16", "entity"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{0, 1, 2, 3, 4, 5, 6, 7},
+				},
 			},
 		},
 	}
@@ -729,9 +773,10 @@ var (
 		{
 			Entity: "a",
 			Expected: addToEmptyEntityMap(map[rel.Attr]interface{}{
-				pi8: int8(1),
-				i8:  int8(1),
-				i16: int16(1),
+				pi8:    int8(1),
+				i8:     int8(1),
+				i16:    int16(1),
+				i16ref: []int16{1},
 			}),
 		},
 		{

@@ -145,13 +145,71 @@ func (p *queryBuilder) processClause(t Clause) {
 }
 
 func (p *queryBuilder) processTripleDecl(fd tripleDecl) {
+	ord := p.sc.mustGetOrdinal(fd.attribute)
+	if p.maybeHandleContains(fd, ord) {
+		return
+	}
 	f := fact{
 		variable: p.maybeAddVar(fd.entity, true /* entity */),
-		attr:     p.sc.mustGetOrdinal(fd.attribute),
+		attr:     ord,
+		value:    p.processValueExpr(fd.value),
 	}
-	f.value = p.processValueExpr(fd.value)
 	p.typeCheck(f)
 	p.facts = append(p.facts, f)
+}
+
+func (p *queryBuilder) maybeHandleContains(fd tripleDecl, ord ordinal) (isContains bool) {
+	contains, isContains := fd.value.(containsExpr)
+	isContainAttr := p.sc.sliceOrdinals.contains(ord)
+	switch {
+	case !isContains && !isContainAttr:
+		return false
+	case !isContainAttr:
+		panic(errors.Errorf("cannot use Contains for non-slice attribute %v", fd.attribute))
+	case !isContains:
+		panic(errors.Errorf("cannot use attribute %v for operations other than Contains", fd.attribute))
+	default: // isContains && isContainsAttr
+		p.handleContains(fd.entity, ord, contains.v)
+		return true
+	}
+}
+
+// handleContains will add facts to join the source to the slice member
+// value by joining the source and a slice member entity.
+//
+// Importantly we choose to create the entity for the slice member prior
+// to creating marking the variable which is the source of the slice
+// membership such that users can write containment queries as the first
+// reference to the source element and join on containment first rather
+// than always joining on the source first.
+//
+// To make this concrete, consider the following single-clause query:
+//
+//	Var("e").AttrContains(SliceAttr, 1)
+//
+// This query will first find the slice members which have values of
+// 1 and then will join those to the sources (which will be constant)
+// as opposed to searching all entities and then seeing if they contain
+// 1. The following query will do the less efficient join:
+//
+//	Var("e").AttrEqVar(rel.Self, "e"),
+//	Var("e").AttrContains(SliceAttr, 1)
+//
+// This second query will first find all attributes, and then it will join
+// them with slice members which are 1 and have the entity as its source.
+func (p *queryBuilder) handleContains(source Var, valOrd ordinal, val expr) {
+	sliceMember := p.fillSlot(slot{}, true /* isEntity */)
+	p.maybeAddVar(source, true /* isEntity */)
+	srcOrd := p.sc.sliceSourceOrdinal
+	valValue := p.processValueExpr(val)
+	srcValue := p.processValueExpr(source)
+	for _, f := range []fact{
+		{variable: sliceMember, attr: valOrd, value: valValue},
+		{variable: sliceMember, attr: srcOrd, value: srcValue},
+	} {
+		p.typeCheck(f)
+		p.facts = append(p.facts, f)
+	}
 }
 
 func (p *queryBuilder) processEqDecl(t eqDecl) {
@@ -245,26 +303,28 @@ func (p *queryBuilder) processValueExpr(rawValue expr) slotIdx {
 			panic(err)
 		}
 		return p.fillSlot(slot{not: tv}, false)
+	case containsExpr:
+		return p.processValueExpr(v.v)
 	default:
 		panic(errors.AssertionFailedf("unknown expr type %T", rawValue))
 	}
 }
 
-func (p *queryBuilder) maybeAddVar(v Var, entity bool) slotIdx {
+func (p *queryBuilder) maybeAddVar(v Var, isEntity bool) slotIdx {
 	if v == Blank {
-		if entity {
+		if isEntity {
 			panic(errors.AssertionFailedf("cannot use _ as an entity"))
 		}
-		return p.fillSlot(slot{}, entity)
+		return p.fillSlot(slot{}, isEntity)
 	}
 	id, exists := p.variableSlots[v]
 	if exists {
-		if entity && !p.slotIsEntity[id] {
-			p.slotIsEntity[id] = entity
+		if isEntity && !p.slotIsEntity[id] {
+			p.slotIsEntity[id] = isEntity
 		}
 		return id
 	}
-	id = p.fillSlot(slot{}, entity)
+	id = p.fillSlot(slot{}, isEntity)
 	p.variables = append(p.variables, v)
 	p.variableSlots[v] = id
 	return id
