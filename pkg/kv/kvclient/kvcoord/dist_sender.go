@@ -2388,8 +2388,12 @@ func TestNewSendError(msg string) error {
 	return newSendError(msg)
 }
 
+// SendErrorString is the prefix for all sendErrors, exported in order to
+// perform cross-node error-checks.
+const SendErrorString = "failed to send RPC"
+
 func (s sendError) Error() string {
-	return "failed to send RPC: " + s.message
+	return SendErrorString + ": " + s.message
 }
 
 // IsSendError returns true if err is a sendError.
