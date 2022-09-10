@@ -11,6 +11,7 @@
 package reltest
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -85,6 +86,17 @@ func (r *Registry) MustGetName(t *testing.T, v interface{}) string {
 
 // GetName is like MustGetName but does not enforce that it exists.
 func (r *Registry) GetName(i interface{}) (string, bool) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		if re, ok := r.(runtime.Error); ok &&
+			strings.Contains(re.Error(), "hash of unhashable type") {
+			return
+		}
+		panic(r)
+	}()
 	got, ok := r.valueToName[i]
 	return got, ok
 }

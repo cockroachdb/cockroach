@@ -21,7 +21,7 @@ import (
 // entities and strings as integers in the context of a database.
 //
 // TODO(ajwerner): Consider reworking the interning such that the values are
-// self-describing and don't need the entitySet to be dereferenced. In
+// self-describing and don't need the entitySet to be de-referenced. In
 // particular, consider storing pointers in the inline values. For the strings,
 // this is straightforward. For the entities, we may want to store a pointer
 // to the entity itself in the inline value and then somewhere in the entity
@@ -60,6 +60,32 @@ func (t *entitySet) insert(v interface{}, es entityStore) (int, error) {
 	for _, field := range ti.fields {
 		var val uintptr
 		switch {
+		case field.isSlice():
+			// In this case, we want to create slice members for each member in
+			// the slice and then be done with it.
+			fvi := field.value(vp)
+			if fvi == nil {
+				continue
+			}
+			fv := reflect.ValueOf(fvi)
+			if fv.Kind() != reflect.Slice {
+				return 0, errors.AssertionFailedf(
+					"expected a slice type, got %v", fv.Type(),
+				)
+			}
+			for i := 0; i < fv.Len(); i++ {
+				smpv := reflect.New(field.sliceMemberType.Elem())
+				smv := smpv.Elem()
+				smv.Field(sliceMemberSourceFieldIndex).Set(value)
+				smv.Field(sliceMemberIndexFieldIndex).Set(reflect.ValueOf(i))
+				smv.Field(sliceMemberValueFieldIndex).Set(fv.Index(i))
+				if _, err := es.insert(smpv.Interface(), es); err != nil {
+					return 0, err
+				}
+			}
+			// We do not directly store the slice anywhere in the entity; we only
+			// index slice member entities for each slice member.
+			continue
 		case field.isStruct():
 			fv := field.value(vp)
 			if fv == nil {

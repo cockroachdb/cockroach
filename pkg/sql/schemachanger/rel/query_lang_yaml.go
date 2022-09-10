@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -33,6 +34,10 @@ func (v valueExpr) encoded() interface{} {
 
 func (v notValueExpr) encoded() interface{} {
 	return valueForYAML(v.value)
+}
+
+func (c containsExpr) encoded() interface{} {
+	return c.v.encoded()
 }
 
 func (a anyExpr) encoded() interface{} {
@@ -117,6 +122,10 @@ func clauseStr(lhs string, rhs expr) (string, error) {
 		op = "IN"
 	case notValueExpr:
 		op = "!="
+	case containsExpr:
+		op = "CONTAINS"
+	default:
+		return "", errors.AssertionFailedf("unknown expression type %T", rhs)
 	}
 	return fmt.Sprintf("%s %s %s", lhs, op, rhsStr), nil
 }

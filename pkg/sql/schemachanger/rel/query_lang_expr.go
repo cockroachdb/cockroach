@@ -53,3 +53,9 @@ func (v notValueExpr) expr() {}
 type anyExpr []interface{}
 
 func (a anyExpr) expr() {}
+
+type containsExpr struct {
+	v expr
+}
+
+func (c containsExpr) expr() {}

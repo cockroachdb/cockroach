@@ -145,13 +145,72 @@ func (p *queryBuilder) processClause(t Clause) {
 }
 
 func (p *queryBuilder) processTripleDecl(fd tripleDecl) {
+	ord := p.sc.mustGetOrdinal(fd.attribute)
+	if p.maybeHandleContains(fd, ord) {
+		return
+	}
 	f := fact{
 		variable: p.maybeAddVar(fd.entity, true /* entity */),
-		attr:     p.sc.mustGetOrdinal(fd.attribute),
+		attr:     ord,
+		value:    p.processValueExpr(fd.value),
 	}
-	f.value = p.processValueExpr(fd.value)
 	p.typeCheck(f)
 	p.facts = append(p.facts, f)
+}
+
+func (p *queryBuilder) maybeHandleContains(fd tripleDecl, ord ordinal) (isContains bool) {
+	contains, isContains := fd.value.(containsExpr)
+	isContainAttr := p.sc.sliceOrdinals.contains(ord)
+	switch {
+	case !isContains && !isContainAttr:
+		return false
+	case !isContainAttr:
+		panic(errors.Errorf("cannot use Contains for non-slice attribute %v", fd.attribute))
+	case !isContains:
+		panic(errors.Errorf("cannot use attribute %v for operations other than Contains", fd.attribute))
+	default: // isContains && isContainsAttr
+		p.handleContains(fd.entity, ord, contains.v)
+		return true
+	}
+}
+
+// handleContains will add facts to join the source to the slice member
+// value by joining the source and a slice member entity.
+//
+// Note that we declare the variable slot for the slice member entity
+// before we declare the variable slot for the source entity. This means
+// that if the source entity has not been previously referenced in the
+// query, it will be joined after the slice member. This gives the user
+// the ability to find the source entity via its slice membership. If we
+// were to declare the source entity first, we'd have to way to perform
+// efficient lookups via the slice member's value. To make this concrete,
+// consider the following single-clause query:
+//
+//	Var("e").AttrContains(SliceAttr, 1)
+//
+// This query will first find the slice members which have values of
+// 1 and then will join those to the sources (which will be constant)
+// as opposed to searching all entities and then seeing if they contain
+// 1. The following query will do the less efficient join:
+//
+//	Var("e").AttrEqVar(rel.Self, "e"),
+//	Var("e").AttrContains(SliceAttr, 1)
+//
+// This second query will first find all attributes, and then it will join
+// them with slice members which are 1 and have the entity as its source.
+func (p *queryBuilder) handleContains(source Var, valOrd ordinal, val expr) {
+	sliceMember := p.fillSlot(slot{}, true /* isEntity */)
+	p.maybeAddVar(source, true /* isEntity */)
+	srcOrd := p.sc.sliceSourceOrdinal
+	valValue := p.processValueExpr(val)
+	srcValue := p.processValueExpr(source)
+	for _, f := range []fact{
+		{variable: sliceMember, attr: valOrd, value: valValue},
+		{variable: sliceMember, attr: srcOrd, value: srcValue},
+	} {
+		p.typeCheck(f)
+		p.facts = append(p.facts, f)
+	}
 }
 
 func (p *queryBuilder) processEqDecl(t eqDecl) {
@@ -200,7 +259,7 @@ func (p *queryBuilder) processFilterDecl(t filterDecl) {
 
 	slots := make([]slotIdx, len(t.vars))
 	for i, v := range t.vars {
-		slots[i] = p.maybeAddVar(v, false)
+		slots[i] = p.maybeAddVar(v, false /* isEntity */)
 		// TODO(ajwerner): This should end up constraining the slot type, but
 		// it currently doesn't. In fact, we have no way of constraining the
 		// type for a non-entity variable. Probably the way this should go is
@@ -220,7 +279,7 @@ func (p *queryBuilder) processFilterDecl(t filterDecl) {
 func (p *queryBuilder) processValueExpr(rawValue expr) slotIdx {
 	switch v := rawValue.(type) {
 	case Var:
-		return p.maybeAddVar(v, false)
+		return p.maybeAddVar(v, false /* isEntity */)
 	case anyExpr:
 		sd := slot{
 			any: make([]typedValue, len(v)),
@@ -232,39 +291,41 @@ func (p *queryBuilder) processValueExpr(rawValue expr) slotIdx {
 			}
 			sd.any[i] = tv
 		}
-		return p.fillSlot(sd, false)
+		return p.fillSlot(sd, false /* isEntity */)
 	case valueExpr:
 		tv, err := makeComparableValue(v.value)
 		if err != nil {
 			panic(err)
 		}
-		return p.fillSlot(slot{typedValue: tv}, false)
+		return p.fillSlot(slot{typedValue: tv}, false /* isEntity */)
 	case notValueExpr:
 		tv, err := makeComparableValue(v.value)
 		if err != nil {
 			panic(err)
 		}
-		return p.fillSlot(slot{not: tv}, false)
+		return p.fillSlot(slot{not: tv}, false /* isEntity */)
+	case containsExpr:
+		return p.processValueExpr(v.v)
 	default:
 		panic(errors.AssertionFailedf("unknown expr type %T", rawValue))
 	}
 }
 
-func (p *queryBuilder) maybeAddVar(v Var, entity bool) slotIdx {
+func (p *queryBuilder) maybeAddVar(v Var, isEntity bool) slotIdx {
 	if v == Blank {
-		if entity {
+		if isEntity {
 			panic(errors.AssertionFailedf("cannot use _ as an entity"))
 		}
-		return p.fillSlot(slot{}, entity)
+		return p.fillSlot(slot{}, isEntity)
 	}
 	id, exists := p.variableSlots[v]
 	if exists {
-		if entity && !p.slotIsEntity[id] {
-			p.slotIsEntity[id] = entity
+		if isEntity && !p.slotIsEntity[id] {
+			p.slotIsEntity[id] = isEntity
 		}
 		return id
 	}
-	id = p.fillSlot(slot{}, entity)
+	id = p.fillSlot(slot{}, isEntity)
 	p.variables = append(p.variables, v)
 	p.variableSlots[v] = id
 	return id
