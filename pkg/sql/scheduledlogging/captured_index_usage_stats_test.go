@@ -140,7 +140,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// Assert that we have the expected number of total logs and expected number
 	// of logs for each index.
 	testutils.SucceedsWithin(t, func() error {
-		return checkNumTotalEntriesAndNumIndexEntries(
+		return checkNumTotalEntriesAndNumIndexEntries(t,
 			expectedTotalNumEntriesInSingleInterval,
 			expectedNumberOfIndividualIndexEntriesInSingleInterval,
 		)
@@ -162,7 +162,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// Assert that we have the expected number of total logs and expected number
 	// of logs for each index.
 	testutils.SucceedsWithin(t, func() error {
-		return checkNumTotalEntriesAndNumIndexEntries(
+		return checkNumTotalEntriesAndNumIndexEntries(t,
 			expectedTotalNumEntriesAfterTwoIntervals,
 			expectedNumberOfIndividualIndexEntriesAfterTwoIntervals,
 		)
@@ -179,7 +179,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// Assert that we have the expected number of total logs and expected number
 	// of logs for each index.
 	testutils.SucceedsWithin(t, func() error {
-		return checkNumTotalEntriesAndNumIndexEntries(
+		return checkNumTotalEntriesAndNumIndexEntries(t,
 			expectedTotalNumEntriesAfterThreeIntervals,
 			expectedNumberOfIndividualIndexEntriesAfterThreeIntervals,
 		)
@@ -247,7 +247,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 // log entries for each index. Also checks that each log entry contains a node_id
 // field, used to filter node-duplicate logs downstream.
 func checkNumTotalEntriesAndNumIndexEntries(
-	expectedTotalEntries int, expectedIndividualIndexEntries int,
+	t *testing.T, expectedTotalEntries int, expectedIndividualIndexEntries int,
 ) error {
 	// Fetch log entries.
 	entries, err := log.FetchEntriesFromFiles(
@@ -275,6 +275,7 @@ func checkNumTotalEntriesAndNumIndexEntries(
 	)
 
 	for _, e := range entries {
+		t.Logf("checking entry: %v", e)
 		if strings.Contains(e.Message, `"IndexName":"test_table_pkey"`) {
 			numEntriesForTestTablePrimaryKeyIndex++
 		}
