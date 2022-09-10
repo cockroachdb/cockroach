@@ -33,6 +33,16 @@ const (
 
 	// Self is an attribute which stores the variable itself.
 	Self
+
+	// sliceSource is the attribute used internally when building
+	// slice member entities to reference the source entity of the slice member.
+	sliceSource
+	// sliceIndex is the attributed used internally when building
+	// slice member entities to reference the index of the slice member in the
+	// slice. It is used to give slice member entities unique identities and to
+	// order slice entries according to their index. At time of writing, there
+	// is no way to access this property in queries.
+	sliceIndex
 )
 
 var _ Attr = systemAttribute(0)

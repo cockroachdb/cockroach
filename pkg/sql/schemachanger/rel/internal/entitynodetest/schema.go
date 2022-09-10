@@ -20,9 +20,10 @@ import (
 )
 
 type entity struct {
-	I8  int8
-	PI8 *int8
-	I16 int16
+	I8      int8
+	PI8     *int8
+	I16     int16
+	I16Refs []int16
 }
 
 type node struct {
@@ -67,6 +68,7 @@ const (
 	value
 	left
 	right
+	i16ref
 )
 
 var schema = rel.MustSchema("testschema",
@@ -74,6 +76,7 @@ var schema = rel.MustSchema("testschema",
 		rel.EntityAttr(i8, "I8"),
 		rel.EntityAttr(pi8, "PI8"),
 		rel.EntityAttr(i16, "I16"),
+		rel.EntityAttr(i16ref, "I16Refs"),
 	),
 	rel.EntityMapping(reflect.TypeOf((*node)(nil)),
 		rel.EntityAttr(value, "Value"),
