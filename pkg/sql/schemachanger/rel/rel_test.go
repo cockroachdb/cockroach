@@ -375,3 +375,67 @@ func TestRuleValidation(t *testing.T) {
 		})
 	})
 }
+
+// TestEmbeddedFieldsWork is a sanity check that the logic to use
+// embedded fields works correctly. Ensure also that embedded pointers
+// are not supported.
+func TestEmbeddedFieldsWork(t *testing.T) {
+	type embed2 struct {
+		C int32
+	}
+	type Embed struct {
+		B int32
+		embed2
+	}
+	type outer struct {
+		A int32
+		Embed
+		D int32
+		embed2
+	}
+	var a, b, c1, c2, d stringAttr = "a", "b", "c1", "c2", "d"
+	t.Run("basic", func(t *testing.T) {
+		sc := rel.MustSchema("rules",
+			rel.EntityMapping(reflect.TypeOf((*outer)(nil)),
+				rel.EntityAttr(a, "A"),
+				rel.EntityAttr(b, "B"),
+				rel.EntityAttr(c1, "C"),
+				rel.EntityAttr(c2, "Embed.C"),
+				rel.EntityAttr(d, "D"),
+			),
+		)
+		v := &outer{}
+		v.A = 1
+		v.B = 2
+		v.C = 3
+		v.Embed.C = 4
+		v.D = 5
+		checkAttr := func(ent interface{}, attr stringAttr, exp int32) {
+			got, err := sc.GetAttribute(attr, ent)
+			require.NoError(t, err)
+			require.Equal(t, exp, got)
+		}
+		checkAttr(v, a, 1)
+		checkAttr(v, b, 2)
+		checkAttr(v, c1, 3)
+		checkAttr(v, c2, 4)
+		checkAttr(v, d, 5)
+	})
+	t.Run("pointer embedding is not supported", func(t *testing.T) {
+		type outerOuter struct {
+			*outer
+			B int32
+		}
+		_, err := rel.NewSchema("rules",
+			rel.EntityMapping(reflect.TypeOf((*outerOuter)(nil)),
+				rel.EntityAttr(a, "A"),
+				rel.EntityAttr(b, "B"),
+				rel.EntityAttr(c1, "C"),
+				rel.EntityAttr(c2, "Embed.C"),
+			),
+		)
+		require.EqualError(t, err,
+			"failed to construct schema: *rel_test.outerOuter.A references an "+
+				"embedded pointer outer")
+	})
+}
