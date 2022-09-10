@@ -366,7 +366,22 @@ func getOffsetAndTypeFromSelector(
 		if !ok {
 			panic(errors.Errorf("%v.%s is not a field", structPointer, selector))
 		}
-		offset += sf.Offset
+		// If this field is accessed by embedding, ensure
+		// that all the offsets add up. Also, ensure that
+		// there is no pointer field which needs to be
+		// traversed.
+		for i := 0; i <= len(sf.Index); i++ {
+			f := cur.FieldByIndex(sf.Index[:i])
+			// Ensure that the value we are looking for is actually inside the
+			// struct. One can embed pointers, and, thus, go pointer chasing to
+			// access some field. This is not currently implemented.
+			//
+			// TODO(ajwerner): Support pointer chasing for embedded fields.
+			if i < len(sf.Index) && f.Type.Kind() != reflect.Struct {
+				panic(errors.Errorf("%v.%s references an embedded pointer %s", structPointer, selector, f.Name))
+			}
+			offset += f.Offset
+		}
 		cur = sf.Type
 	}
 	return offset, cur
