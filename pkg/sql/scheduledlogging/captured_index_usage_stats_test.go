@@ -252,12 +252,10 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 			previousTimestamp = currentTimestamp
 		}
 
-		nanoSecondDiff := currentTimestamp - previousTimestamp
-		// We allow for integer division to remove any miscellaneous nanosecond
-		// delay from the logging.
-		secondDiff := nanoSecondDiff / 1e9
-		actualDuration := time.Duration(secondDiff) * time.Second
-		require.Equal(t, expectedDuration, actualDuration)
+		actualDuration := time.Duration(currentTimestamp-previousTimestamp) * time.Nanosecond
+		// Use a time window to afford some non-determinisim in the test.
+		require.Greater(t, expectedDuration, actualDuration-time.Second)
+		require.Greater(t, actualDuration+time.Second, expectedDuration)
 		previousTimestamp = currentTimestamp
 	}
 }
