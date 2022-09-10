@@ -52,6 +52,18 @@ func (v Var) AttrIn(a Attr, values ...interface{}) Clause {
 	return makeTriple(v, a, (anyExpr)(values))
 }
 
+// AttrContainsVar constrains the entity bound to v to have a slice attribute
+// a which contains an entry bound to the value Var.
+func (v Var) AttrContainsVar(a Attr, value Var) Clause {
+	return makeTriple(v, a, containsExpr{v: value})
+}
+
+// AttrContains constrains the entity bound to v to have a slice attribute
+// a which contains the entry indicated by value.
+func (v Var) AttrContains(a Attr, value interface{}) Clause {
+	return makeTriple(v, a, containsExpr{v: valueExpr{value: value}})
+}
+
 // AttrEqVar constrains the entity bound to v to have a value for
 // the specified attr equal to the variable value.
 func (v Var) AttrEqVar(a Attr, value Var) Clause {

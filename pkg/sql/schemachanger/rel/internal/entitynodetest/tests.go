@@ -30,9 +30,10 @@ var (
 	}
 
 	r  = reltest.NewRegistry()
-	a  = r.FromYAML("a", `{i16: 1, i8: 1, pi8: 1}`, &entity{}).(*entity)
+	a  = r.FromYAML("a", `{i16: 1, i8: 1, pi8: 1, i16refs: [1]}`, &entity{}).(*entity)
 	b  = r.FromYAML("b", `{i16: 2, i8: 2}`, &entity{}).(*entity)
 	c  = r.FromYAML("c", `{i16: 1, i8: 2}`, &entity{}).(*entity)
+	d  = r.FromYAML("d", `{i16: 4, i8: 4, pi8: 4, i16refs: [1, 2]}`, &entity{}).(*entity)
 	na = r.Register("na", &node{Value: a}).(*node)
 	nb = r.Register("nb", &node{Value: b, Left: na}).(*node)
 	nc = r.Register("nc", &node{Value: c, Right: nb}).(*node)
@@ -113,7 +114,7 @@ var (
 
 	databaseTests = []reltest.DatabaseTest{
 		{
-			Data: []string{"a", "b", "c", "na", "nb", "nc"},
+			Data: []string{"a", "b", "c", "d", "na", "nb", "nc"},
 			Indexes: [][]rel.Index{
 				{{}}, // 0
 				{ // 1
@@ -184,6 +185,10 @@ var (
 						Exists: []rel.Attr{right},
 					},
 				},
+				{ // 8
+					{Attrs: []rel.Attr{}},
+					{Attrs: []rel.Attr{i16ref}, Inverted: true},
+				},
 			},
 			QueryCases: []reltest.QueryTest{
 				{
@@ -252,8 +257,24 @@ var (
 						{a, int8(1)},
 						{b, int8(2)},
 						{c, int8(2)},
+						{d, int8(4)},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
+				},
+				{
+					Name: "list all the entities",
+					Query: rel.Clauses{
+						v("entity").Type((*entity)(nil)),
+					},
+					Entities: []v{"entity"},
+					ResVars:  []v{"entity"},
+					Results: [][]interface{}{
+						{a},
+						{b},
+						{c},
+						{d},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
 				{
 					Name: "list all the values with type constraint",
@@ -267,6 +288,7 @@ var (
 						{a, int8(1)},
 						{b, int8(2)},
 						{c, int8(2)},
+						{d, int8(4)},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
@@ -314,6 +336,7 @@ var (
 						{int8(1)},
 						{int8(2)},
 						{int8(2)},
+						{int8(4)},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
@@ -343,6 +366,7 @@ var (
 						{a, reflect.TypeOf((*entity)(nil))},
 						{b, reflect.TypeOf((*entity)(nil))},
 						{c, reflect.TypeOf((*entity)(nil))},
+						{d, reflect.TypeOf((*entity)(nil))},
 						{na, reflect.TypeOf((*node)(nil))},
 						{nb, reflect.TypeOf((*node)(nil))},
 						{nc, reflect.TypeOf((*node)(nil))},
@@ -401,6 +425,7 @@ var (
 						{a},
 						{b},
 						{c},
+						{d},
 						{na},
 						{nb},
 						{nc},
@@ -438,7 +463,7 @@ var (
 					Entities: []v{"entity"},
 					ResVars:  []v{"entity"},
 					Results: [][]interface{}{
-						{a}, {b}, {c}, {na}, {nb}, {nc},
+						{a}, {b}, {c}, {d}, {na}, {nb}, {nc},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
@@ -549,7 +574,7 @@ var (
 				{
 					Name: "no match in any expr",
 					Query: rel.Clauses{
-						v("e").AttrIn(i8, newInt8(4), newInt8(5)),
+						v("e").AttrIn(i8, newInt8(42), newInt8(43)),
 					},
 					Entities:             []v{"e"},
 					ResVars:              []v{"e"},
@@ -560,7 +585,7 @@ var (
 					Name: "any clause no match on variable eq",
 					Query: rel.Clauses{
 						v("e").AttrEqVar(i8, "i8"),
-						v("i8").In(int8(3), int8(4)),
+						v("i8").In(int8(33), int8(42)),
 					},
 					Entities:             []v{"e"},
 					ResVars:              []v{"e", "i8"},
@@ -575,7 +600,7 @@ var (
 					Entities: []v{"e"},
 					ResVars:  []v{"e"},
 					Results: [][]interface{}{
-						{a}, {b}, {c},
+						{a}, {b}, {c}, {d},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
@@ -587,7 +612,7 @@ var (
 					Entities: []v{"e"},
 					ResVars:  []v{"e"},
 					Results: [][]interface{}{
-						{a},
+						{a}, {d},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
@@ -602,6 +627,7 @@ var (
 					Results: [][]interface{}{
 						{b},
 						{c},
+						{d},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
@@ -616,6 +642,7 @@ var (
 					Results: [][]interface{}{
 						{b},
 						{c},
+						{d},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
@@ -631,6 +658,7 @@ var (
 					Results: [][]interface{}{
 						{b, int8(2)},
 						{c, int8(2)},
+						{d, int8(4)},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
@@ -645,6 +673,7 @@ var (
 					ResVars:  []v{"e", "v"},
 					Results: [][]interface{}{
 						{a, int8(1)},
+						{d, int8(4)},
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
@@ -722,6 +751,77 @@ var (
 					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
+				{
+					Name: "containment by entity",
+					Query: rel.Clauses{
+						v("n").Type((*node)(nil)),
+						v("n").AttrEqVar(value, "entity"),
+						v("entity").AttrContainsVar(i16ref, "otheri16"),
+						v("otherEntity").AttrEqVar(i16, "otheri16"),
+					},
+					Entities: []rel.Var{"n", "entity", "otherEntity"},
+					ResVars:  []v{"n", "entity", "otheri16", "otherEntity"},
+					Results: [][]interface{}{
+						{na, a, int16(1), c},
+						{na, a, int16(1), a},
+					},
+					UnsatisfiableIndexes: []int{0, 1, 2, 3, 4, 5, 6, 7},
+				},
+				{
+					Name: "containment by value",
+					Query: rel.Clauses{
+						v("i16").Eq(int16(1)),
+						v("entity").AttrContainsVar(i16ref, "i16"),
+					},
+					Entities: []rel.Var{"entity"},
+					ResVars:  []v{"i16", "entity"},
+					Results: [][]interface{}{
+						{int16(1), a},
+						{int16(1), d},
+					},
+					UnsatisfiableIndexes: []int{0, 1, 2, 3, 4, 5, 6, 7},
+				},
+				{
+					Name: "containment by value with any",
+					Query: rel.Clauses{
+						v("i16").In(int16(2), int16(3)),
+						v("entity").AttrContainsVar(i16ref, "i16"),
+					},
+					Entities: []rel.Var{"entity"},
+					ResVars:  []v{"i16", "entity"},
+					Results: [][]interface{}{
+						{int16(2), d},
+					},
+					UnsatisfiableIndexes: []int{0, 1, 2, 3, 4, 5, 6, 7},
+				},
+				{
+					Name: "containment by value (fails)",
+					Query: rel.Clauses{
+						v("i16").Eq(int16(3)),
+						v("entity").AttrContainsVar(i16ref, "i16"),
+					},
+					Entities:             []rel.Var{"entity"},
+					ResVars:              []v{"i16", "entity"},
+					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{0, 1, 2, 3, 4, 5, 6, 7},
+				},
+				{
+					Name: "join with containment",
+					Query: rel.Clauses{
+						v("inverted_source").AttrContainsVar(i16ref, "i16"),
+						v("referenced_entity").AttrEqVar(i16, "i16"),
+					},
+					Entities: []v{"inverted_source", "referenced_entity"},
+					ResVars:  []v{"inverted_source", "i16", "referenced_entity"},
+					Results: [][]interface{}{
+						{a, int16(1), a},
+						{a, int16(1), c},
+						{d, int16(1), a},
+						{d, int16(1), c},
+						{d, int16(2), b},
+					},
+					UnsatisfiableIndexes: []int{0, 1, 2, 3, 4, 5, 6, 7},
+				},
 			},
 		},
 	}
@@ -729,9 +829,10 @@ var (
 		{
 			Entity: "a",
 			Expected: addToEmptyEntityMap(map[rel.Attr]interface{}{
-				pi8: int8(1),
-				i8:  int8(1),
-				i16: int16(1),
+				pi8:    int8(1),
+				i8:     int8(1),
+				i16:    int16(1),
+				i16ref: []int16{1},
 			}),
 		},
 		{

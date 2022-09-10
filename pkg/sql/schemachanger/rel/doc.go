@@ -153,11 +153,16 @@
 // indexes in O(N*log(N)) per statement meaning at worst O(N^2 log(N)) which is
 // acceptable for an N of ~1000 as opposed to O(N^3) which isn't really.
 //
+// # Slices
+//
+// Rel supports inverted indexes over slices. In order to use them, you create
+// an attribute referencing a slice. Internally, rel will create a new
+// element internally for each member. The containment operator can be used
+// to perform an inverted lookup.
+//
 // # Future work
 //
 // Below find a listing of features not yet done.
-//
-//   - Arrays, Maps, Slices.
 //
 //   - It would be nice to have a mechanism to talk about decomposing
 //     data stored in these collections. One approach would be to define
