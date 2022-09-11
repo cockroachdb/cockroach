@@ -1,62 +1,117 @@
-query TTTII
-SHOW COMPLETIONS AT OFFSET 1 FOR 'select 1'
-----
-SELECT  NULL  NULL  NULL  NULL
+subtest stmt_source_equiv
 
 query TTTII
-SHOW COMPLETIONS AT OFFSET 7 FOR 'select 1'
+SHOW COMPLETIONS AT OFFSET 5 FOR 'creat'
 ----
+CREATE       NULL  NULL  NULL  NULL
+CREATEDB     NULL  NULL  NULL  NULL
+CREATELOGIN  NULL  NULL  NULL  NULL
+CREATEROLE   NULL  NULL  NULL  NULL
 
 query TTTII
-SHOW COMPLETIONS AT OFFSET 7 FOR 'select 2'
+SELECT * FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'creat']
+----
+CREATE       NULL  NULL  NULL  NULL
+CREATEDB     NULL  NULL  NULL  NULL
+CREATELOGIN  NULL  NULL  NULL  NULL
+CREATEROLE   NULL  NULL  NULL  NULL
+
+subtest end
+
+subtest case_insensitivity
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'creat']
+----
+CREATE
+CREATEDB
+CREATELOGIN
+CREATEROLE
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 5 FOR 'CREAT']
+----
+CREATE
+CREATEDB
+CREATELOGIN
+CREATEROLE
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 10 FOR 'SHOW CREAT']
+----
+CREATE
+CREATEDB
+CREATELOGIN
+CREATEROLE
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 10 FOR 'show creat']
+----
+CREATE
+CREATEDB
+CREATELOGIN
+CREATEROLE
+
+subtest end
+
+subtest no_completion_at_space
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 6 FOR 'creat ']
 ----
 
-query TTTII
-SHOW COMPLETIONS AT OFFSET 10 FOR 'select * fro'
-----
-FRO  NULL  NULL  NULL  NULL
+subtest end
 
-query TTTII
-SHOW COMPLETIONS AT OFFSET 11 FOR 'select * fro'
-----
-FRO  NULL  NULL  NULL  NULL
+subtest only_one_kw_completion
 
-query TTTII
-SHOW COMPLETIONS AT OFFSET 12 FOR 'select * fro'
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 3 FOR 'sel']
 ----
-FROM  NULL  NULL  NULL  NULL
+SELECT
 
-query TTTII
-SHOW COMPLETIONS AT OFFSET 10 FOR 'select * from'
-----
-FROM  NULL  NULL  NULL  NULL
+subtest end
 
-query TTTII
-SHOW COMPLETIONS AT OFFSET 11 FOR 'select * from'
-----
-FROM  NULL  NULL  NULL  NULL
+subtest complete_before_suffix
 
-# This case doesn't really make sense - completing this as SELECT doesn't
-# really make sense but we'll need to add more complex logic to determine
-# whether our SQL token is a string const.
-# However we do want to test this so we can ensure we handle escaped strings.
-query TTTII
-SHOW COMPLETIONS AT OFFSET 4 FOR e'\'se\'';
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 3 FOR 'create ta']
 ----
-SEARCH        NULL  NULL  NULL  NULL
-SECOND        NULL  NULL  NULL  NULL
-SECONDARY     NULL  NULL  NULL  NULL
-SECURITY      NULL  NULL  NULL  NULL
-SELECT        NULL  NULL  NULL  NULL
-SEQUENCE      NULL  NULL  NULL  NULL
-SEQUENCES     NULL  NULL  NULL  NULL
-SERIALIZABLE  NULL  NULL  NULL  NULL
-SERVER        NULL  NULL  NULL  NULL
-SESSION       NULL  NULL  NULL  NULL
-SESSIONS      NULL  NULL  NULL  NULL
-SESSION_USER  NULL  NULL  NULL  NULL
-SET           NULL  NULL  NULL  NULL
-SETOF         NULL  NULL  NULL  NULL
-SETS          NULL  NULL  NULL  NULL
-SETTING       NULL  NULL  NULL  NULL
-SETTINGS      NULL  NULL  NULL  NULL
+CREATE
+
+subtest end
+
+subtest complete_middle_of_keyword
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 2 FOR 'select']
+----
+SELECT
+
+subtest end
+
+subtest multi_character_runes
+
+# This completion looks strange. Is it correct?
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 2 FOR '你好，我的名字是鲍勃 SELECT']
+----
+你好，我的名字是鲍勃
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 11 FOR '你好，我的名字是鲍勃 SELECT']
+----
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 12 FOR '你好，我的名字是鲍勃 SELECT']
+----
+SELECT
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 25 FOR '😋😋😋 😋😋😋']
+----
+
+query T
+SELECT completion FROM [SHOW COMPLETIONS AT OFFSET 9 FOR 'Jalapeño']
+----
+
+subtest end
