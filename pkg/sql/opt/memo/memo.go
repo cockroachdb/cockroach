@@ -532,6 +532,25 @@ func (v *ValuesExpr) Len() int {
 	return len(v.Rows)
 }
 
+// IsConstantsAndPlaceholders returns true if all values in the list are
+// constant, placeholders or tuples containing constants, placeholders or other
+// such nested tuples.
+func (v *ValuesExpr) IsConstantsAndPlaceholders() bool {
+	// Constant expressions should be leak-proof, so this is a quick test to
+	// determine if the ValuesExpr even needs to be checked.
+	if !v.Relational().VolatilitySet.IsLeakproof() {
+		return false
+	}
+	// A safety check
+	if len(v.Rows) == 0 {
+		return false
+	}
+	if !v.Rows.IsConstantsAndPlaceholders(v.Memo().EvalContext()) {
+		return false
+	}
+	return true
+}
+
 // ColList implements the ValuesContainer interface.
 func (l *LiteralValuesExpr) ColList() opt.ColList {
 	return l.Cols
@@ -540,4 +559,35 @@ func (l *LiteralValuesExpr) ColList() opt.ColList {
 // Len implements the ValuesContainer interface.
 func (l *LiteralValuesExpr) Len() int {
 	return l.Rows.Rows.NumRows()
+}
+
+// IsConstantsAndPlaceholders returns true if all scalar expressions in the list
+// are constants, placeholders or tuples containing constants or placeholders.
+// If a tuple nested within a tuple is found, false is returned.
+func (e ScalarListExpr) IsConstantsAndPlaceholders(evalCtx *eval.Context) bool {
+	return e.isConstantsAndPlaceholders(evalCtx, false /* insideTuple */)
+}
+
+func (e ScalarListExpr) isConstantsAndPlaceholders(evalCtx *eval.Context, insideTuple bool) bool {
+	for _, scalarExpr := range e {
+		if tupleExpr, ok := scalarExpr.(*TupleExpr); ok {
+			if insideTuple {
+				return false
+			}
+			if !tupleExpr.Elems.isConstantsAndPlaceholders(evalCtx, true) {
+				return false
+			}
+		} else {
+			// Extra caution
+			if scalarExpr == nil {
+				return false
+			}
+			if !opt.IsConstValueOp(scalarExpr) {
+				if scalarExpr.Op() != opt.PlaceholderOp {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }

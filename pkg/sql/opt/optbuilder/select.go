@@ -96,12 +96,20 @@ func (b *Builder) buildDataSource(
 				outCols[i] = newCol.id
 			}
 
+			// If the CTE has an ordering, the Materialize flag may be set later on,
+			// which disallows inlining. No need to check for inlining if a CTE is
+			// correlated.
+			hasOrdering := len(cte.ordering) > 0
+			isCorrelated := !cte.expr.Relational().OuterCols.Empty()
+			canInlineInPlace := !isCorrelated && !hasOrdering && (!cte.mtr.Set || !cte.mtr.Materialize)
+
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				With:    cte.id,
-				Name:    string(cte.name.Alias),
-				InCols:  inCols,
-				OutCols: outCols,
-				ID:      b.factory.Metadata().NextUniqueID(),
+				With:             cte.id,
+				Name:             string(cte.name.Alias),
+				InCols:           inCols,
+				OutCols:          outCols,
+				ID:               b.factory.Metadata().NextUniqueID(),
+				CanInlineInPlace: canInlineInPlace,
 			})
 
 			return outScope
@@ -203,11 +211,12 @@ func (b *Builder) buildDataSource(
 		}
 
 		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			With:    cte.id,
-			Name:    string(cte.name.Alias),
-			InCols:  inCols,
-			OutCols: outCols,
-			ID:      b.factory.Metadata().NextUniqueID(),
+			With:             cte.id,
+			Name:             string(cte.name.Alias),
+			InCols:           inCols,
+			OutCols:          outCols,
+			ID:               b.factory.Metadata().NextUniqueID(),
+			CanInlineInPlace: false, /* CanInlineInPlace */
 		})
 
 		return outScope
