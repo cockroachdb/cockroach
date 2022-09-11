@@ -12,3 +12,10 @@
 )
 =>
 (InlineWith $binding $input $withPrivate)
+
+[InlineWithScan, Normalize]
+(WithScan
+    $withScanPrivate:* & (CanInlineWithScan $withScanPrivate)
+)
+=>
+(InlineWithScan $withScanPrivate)

@@ -96,12 +96,17 @@ func (b *Builder) buildDataSource(
 				outCols[i] = newCol.id
 			}
 
+			canInlineInPlace := true
+			if cte.mtr.Set {
+				canInlineInPlace = !cte.mtr.Materialize
+			}
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				With:    cte.id,
-				Name:    string(cte.name.Alias),
-				InCols:  inCols,
-				OutCols: outCols,
-				ID:      b.factory.Metadata().NextUniqueID(),
+				With:             cte.id,
+				Name:             string(cte.name.Alias),
+				InCols:           inCols,
+				OutCols:          outCols,
+				ID:               b.factory.Metadata().NextUniqueID(),
+				CanInlineInPlace: canInlineInPlace,
 			})
 
 			return outScope
@@ -202,12 +207,17 @@ func (b *Builder) buildDataSource(
 			outScope.cols = append(outScope.cols, col)
 		}
 
+		canInlineInPlace := true
+		if cte.mtr.Set {
+			canInlineInPlace = !cte.mtr.Materialize
+		}
 		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			With:    cte.id,
-			Name:    string(cte.name.Alias),
-			InCols:  inCols,
-			OutCols: outCols,
-			ID:      b.factory.Metadata().NextUniqueID(),
+			With:             cte.id,
+			Name:             string(cte.name.Alias),
+			InCols:           inCols,
+			OutCols:          outCols,
+			ID:               b.factory.Metadata().NextUniqueID(),
+			CanInlineInPlace: canInlineInPlace,
 		})
 
 		return outScope
