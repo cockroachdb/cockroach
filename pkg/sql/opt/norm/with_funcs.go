@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/errors"
 )
 
 // CanInlineWith returns whether or not it's valid to inline binding in expr.
@@ -60,4 +61,52 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 	}
 
 	return replace(input).(memo.RelExpr)
+}
+
+// CanInlineWithScan returns whether or not it's valid and heuristically cheaper
+// to inline a WithScanExpr with its bound expression from the memo. Currently
+// this only allows inlining leak-proof constant VALUES clauses of the form
+// `column IN (VALUES(...))` or `column NOT IN(VALUES(...))`, but could likely
+// be extended to handle other expressions in the future.
+func (c *CustomFuncs) CanInlineWithScan(private *memo.WithScanPrivate, scalar opt.ScalarExpr) bool {
+	if !private.CanInlineInPlace {
+		return false
+	}
+	// If we don't have `column IN(...)` or `column NOT IN(...)`, it is not
+	// cheaper to inline because we wouldn't be avoiding one or more joins.
+	if scalar.Op() != opt.VariableOp {
+		return false
+	}
+	expr := c.mem.Metadata().WithBinding(private.With)
+	var valuesExpr *memo.ValuesExpr
+	var ok bool
+	if valuesExpr, ok = expr.(*memo.ValuesExpr); !ok {
+		return false
+	}
+	if !valuesExpr.IsConstantsAndPlaceholders() {
+		return false
+	}
+	return true
+}
+
+// InlineWithScan replaces a WithScanExpr with its bound expression, mapped to
+// new output ColumnIDs.
+func (c *CustomFuncs) InlineWithScan(private *memo.WithScanPrivate) memo.RelExpr {
+	expr := c.mem.Metadata().WithBinding(private.With)
+	var valuesExpr *memo.ValuesExpr
+	var ok bool
+	valuesExpr.Op()
+	if valuesExpr, ok = expr.(*memo.ValuesExpr); !ok {
+		// Didn't find the expected VALUES.
+		panic(errors.AssertionFailedf("attempt to inline a WithScan which is not a VALUES clause; operator: %s",
+			expr.Op().String()))
+	}
+	projections := make(memo.ProjectionsExpr, len(private.InCols))
+	for i := range private.InCols {
+		projections[i] = c.f.ConstructProjectionsItem(
+			c.f.ConstructVariable(private.InCols[i]),
+			private.OutCols[i],
+		)
+	}
+	return c.f.ConstructProject(valuesExpr, projections, opt.ColSet{})
 }
