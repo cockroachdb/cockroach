@@ -173,7 +173,6 @@ with &2 (bar)
                           ├── key: ()
                           └── fd: ()-->(5)
 
-# We should inline foo, but not bar.
 norm expect=InlineWith
 WITH foo AS (SELECT 1), bar AS (SELECT 2) SELECT * FROM foo CROSS JOIN bar CROSS JOIN bar AS bar2
 ----
@@ -876,3 +875,142 @@ scalar-group-by
  └── aggregations
       └── sum [as=sum:6, outer=(5)]
            └── n:5
+
+# Regression test for #87790
+exec-ddl
+CREATE TABLE t87790(i INT, j INT, k float, CONSTRAINT "primary" PRIMARY KEY (i,j))
+----
+
+# An array unnested to VALUES should be inlined.
+norm
+WITH ivals AS (SELECT * FROM unnest(ARRAY[1,2,3]))
+SELECT * FROM t87790 WHERE i IN (SELECT * FROM ivals)
+----
+select
+ ├── columns: i:2!null j:3!null k:4
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(4)
+ ├── scan t87790
+ │    ├── columns: i:2!null j:3!null k:4
+ │    ├── key: (2,3)
+ │    └── fd: (2,3)-->(4)
+ └── filters
+      └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+
+# An array unnested to VALUES in a MATERIALIZED WITH should not be inlined.
+norm expect-not=InlineAnyWithScan
+WITH ivals AS MATERIALIZED (SELECT * FROM unnest(ARRAY[1,2,3]))
+SELECT * FROM t87790 WHERE i IN (SELECT * FROM ivals)
+----
+with &1 (ivals)
+ ├── columns: i:2!null j:3!null k:4
+ ├── materialized
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(4)
+ ├── values
+ │    ├── columns: unnest:1!null
+ │    ├── cardinality: [3 - 3]
+ │    ├── (1,)
+ │    ├── (2,)
+ │    └── (3,)
+ └── semi-join (hash)
+      ├── columns: i:2!null j:3!null k:4
+      ├── key: (2,3)
+      ├── fd: (2,3)-->(4)
+      ├── scan t87790
+      │    ├── columns: i:2!null j:3!null k:4
+      │    ├── key: (2,3)
+      │    └── fd: (2,3)-->(4)
+      ├── with-scan &1 (ivals)
+      │    ├── columns: unnest:7!null
+      │    ├── mapping:
+      │    │    └──  unnest:1 => unnest:7
+      │    └── cardinality: [3 - 3]
+      └── filters
+           └── i:2 = unnest:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
+# Random (volatile) VALUES should not be inlined.
+norm expect-not=InlineAnyWithScan
+WITH randvals AS (SELECT random())
+SELECT * FROM t87790 WHERE k NOT IN (SELECT * FROM randvals)
+----
+with &1 (randvals)
+ ├── columns: i:2!null j:3!null k:4
+ ├── volatile
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(4)
+ ├── values
+ │    ├── columns: random:1
+ │    ├── cardinality: [1 - 1]
+ │    ├── volatile
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (random(),)
+ └── anti-join (cross)
+      ├── columns: i:2!null j:3!null k:4
+      ├── key: (2,3)
+      ├── fd: (2,3)-->(4)
+      ├── scan t87790
+      │    ├── columns: i:2!null j:3!null k:4
+      │    ├── key: (2,3)
+      │    └── fd: (2,3)-->(4)
+      ├── with-scan &1 (randvals)
+      │    ├── columns: random:7
+      │    ├── mapping:
+      │    │    └──  random:1 => random:7
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    └── fd: ()-->(7)
+      └── filters
+           └── (k:4 = random:7) IS NOT false [outer=(4,7)]
+
+# A non-constant WITH expression cannot be inlined in the middle of
+# normalization.
+norm expect-not=InlineAnyWithScan
+WITH ivals AS (SELECT * FROM unnest(ARRAY(SELECT i FROM t87790)))
+SELECT * FROM t87790 WHERE i IN (SELECT * FROM ivals)
+----
+semi-join (hash)
+ ├── columns: i:7!null j:8!null k:9
+ ├── immutable
+ ├── key: (7,8)
+ ├── fd: (7,8)-->(9)
+ ├── scan t87790
+ │    ├── columns: i:7!null j:8!null k:9
+ │    ├── key: (7,8)
+ │    └── fd: (7,8)-->(9)
+ ├── project
+ │    ├── columns: unnest:12
+ │    ├── immutable
+ │    ├── project-set
+ │    │    ├── columns: unnest:6
+ │    │    ├── immutable
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── ()
+ │    │    └── zip
+ │    │         └── function: unnest [immutable, subquery]
+ │    │              └── array-flatten
+ │    │                   └── scan t87790
+ │    │                        └── columns: i:1!null
+ │    └── projections
+ │         └── unnest:6 [as=unnest:12, outer=(6)]
+ └── filters
+      └── i:7 = unnest:12 [outer=(7,12), constraints=(/7: (/NULL - ]; /12: (/NULL - ]), fd=(7)==(12), (12)==(7)]
+
+# Placeholders are considered constant for the InlineAnyWithScan normalization.
+assign-placeholders-norm query-args=(1, 2, 3)
+WITH ivals AS (SELECT * FROM unnest(ARRAY[$1::INT, $2::INT, $3::INT]))
+SELECT * FROM t87790 WHERE i IN (SELECT * FROM ivals)
+----
+select
+ ├── columns: i:2!null j:3!null k:4
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(4)
+ ├── scan t87790
+ │    ├── columns: i:2!null j:3!null k:4
+ │    ├── key: (2,3)
+ │    └── fd: (2,3)-->(4)
+ └── filters
+      └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
