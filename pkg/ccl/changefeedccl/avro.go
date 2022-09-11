@@ -826,7 +826,7 @@ func (r *avroDataRecord) nativeFromRow(it cdcevent.Iterator) (interface{}, error
 	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) (err error) {
 		fieldIdx, ok := r.fieldIdxByName[col.Name]
 		if !ok {
-			return errors.AssertionFailedf("could not find avro field for column %s", col.Name)
+			return errors.AssertionFailedf("could not find avro field for column %s in avro record %+v", col.Name, r)
 		}
 		r.native[col.Name], err = r.Fields[fieldIdx].encodeFn(d)
 		return err

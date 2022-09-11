@@ -57,6 +57,9 @@ type Row struct {
 	// datums is the new value of a changed table row.
 	datums rowenc.EncDatumRow
 
+	// if set, used as the key in output instead of the row's primary key datums.
+	customKeyDatums *tree.Datums
+
 	// deleted is true if row is a deletion. In this case, only the primary
 	// key columns are guaranteed to be set in `datums`.
 	deleted bool
@@ -81,8 +84,15 @@ type Iterator interface {
 	Col(fn ColumnFn) error
 }
 
+func (r Row) SetCustomKeyDatums(datums tree.Datums) {
+	*r.customKeyDatums = datums
+}
+
 // ForEachKeyColumn returns Iterator for each key column
 func (r Row) ForEachKeyColumn() Iterator {
+	if r.customKeyDatums != nil && len(*r.customKeyDatums) > 0 {
+		return iterOverDatums{*r.customKeyDatums}
+	}
 	return iter{r: r, cols: r.keyCols}
 }
 
@@ -424,11 +434,14 @@ func (d *eventDecoder) DecodeKV(
 		return Row{}, err
 	}
 
+	customKeyDatums := d.alloc.NewDatums(len(datums))
+
 	return Row{
 		EventDescriptor: ed,
 		datums:          datums,
 		deleted:         isDeleted,
 		alloc:           &d.alloc,
+		customKeyDatums: &customKeyDatums,
 	}, nil
 }
 
@@ -501,6 +514,42 @@ func (it iter) Datum(fn DatumFn) error {
 // Col implements Iterator interface.
 func (it iter) Col(fn ColumnFn) error {
 	return it.r.forEachColumn(fn, it.cols)
+}
+
+type iterOverDatums struct {
+	datums tree.Datums
+}
+
+var _ Iterator = iterOverDatums{}
+
+// Datum implements Iterator interface.
+func (it iterOverDatums) Datum(fn DatumFn) error {
+	for i, d := range it.datums {
+		if err := fn(d, it.dummyResultColumn(i, d)); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
+}
+
+// Col implements Iterator interface.
+func (it iterOverDatums) Col(fn ColumnFn) error {
+	for i, d := range it.datums {
+		if err := fn(it.dummyResultColumn(i, d)); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
+}
+
+func (it iterOverDatums) dummyResultColumn(i int, d tree.Datum) ResultColumn {
+	return ResultColumn{
+		ord: i,
+		ResultColumn: colinfo.ResultColumn{
+			Name: fmt.Sprintf("pseudoColumn%d", i),
+			Typ:  d.ResolvedType(),
+		},
+	}
 }
 
 // TestingMakeEventRow initializes Row with provided arguments.

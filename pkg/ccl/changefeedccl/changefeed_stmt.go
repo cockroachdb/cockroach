@@ -426,6 +426,7 @@ func createChangefeedJobRecord(
 		if needDiff {
 			opts.ForceDiff()
 		}
+
 		// TODO: Set the default envelope to row here when using a sink and format
 		// that support it.
 		details.Select = cdceval.AsStringUnredacted(normalized.Clause())
@@ -440,6 +441,17 @@ func createChangefeedJobRecord(
 		if schemachangeOptions.Policy != changefeedbase.OptSchemaChangePolicyStop {
 			return nil, errors.Errorf(`using "AS SELECT" requires option schema_change_policy='stop'`)
 		}
+
+		setsPartitionKey, err := cdceval.CallsFunction(ctx, *p.SemaCtx(), normalized, "cdc_set_key")
+		if err != nil {
+			return nil, err
+		}
+		if setsPartitionKey && !opts.IsSet(changefeedbase.OptUnordered) {
+			return nil, errors.Newf("Use of custom keys means the overall ordering of a row history is no longer guaranteed "+
+				"and therefore requires the WITH %s option.", changefeedbase.OptUnordered,
+			)
+		}
+
 	}
 
 	// TODO(dan): In an attempt to present the most helpful error message to the

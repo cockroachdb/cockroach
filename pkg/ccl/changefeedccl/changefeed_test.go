@@ -4494,6 +4494,66 @@ func TestChangefeedDescription(t *testing.T) {
 
 }
 
+func TestChangefeedCustomKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'x'), (2, 'x'), (3, 'y'), (4, 'y'), (5, 'z')`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy='stop', unordered AS SELECT * FROM foo WHERE cdc_set_key(b)`)
+		defer closeFeed(t, foo)
+
+		assertPayloads(t, foo, []string{
+			`foo: ["x"]->{"a": 1, "b": "x"}`,
+			`foo: ["x"]->{"a": 2, "b": "x"}`,
+			`foo: ["y"]->{"a": 3, "b": "y"}`,
+			`foo: ["y"]->{"a": 4, "b": "y"}`,
+			`foo: ["z"]->{"a": 5, "b": "z"}`,
+		})
+
+		fooAvro := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy='stop', format='avro', unordered AS SELECT * FROM foo WHERE cdc_set_key(b)`)
+		defer closeFeed(t, fooAvro)
+
+		assertPayloads(t, fooAvro, []string{
+			`foo: {"pseudoColumn0":{"string":"x"}}->{"record":{"foo":{"a":{"long":1},"b":{"string":"x"}}}}`,
+			`foo: {"pseudoColumn0":{"string":"x"}}->{"record":{"foo":{"a":{"long":2},"b":{"string":"x"}}}}`,
+			`foo: {"pseudoColumn0":{"string":"y"}}->{"record":{"foo":{"a":{"long":3},"b":{"string":"y"}}}}`,
+			`foo: {"pseudoColumn0":{"string":"y"}}->{"record":{"foo":{"a":{"long":4},"b":{"string":"y"}}}}`,
+			`foo: {"pseudoColumn0":{"string":"z"}}->{"record":{"foo":{"a":{"long":5},"b":{"string":"z"}}}}`,
+		})
+
+		sqlDB.Exec(t, `UPDATE foo SET b = 'y' WHERE a = 5`)
+
+		assertPayloads(t, foo, []string{
+			`foo: ["y"]->{"a": 5, "b": "y"}`,
+		})
+
+		fooWithDiff := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy='stop', unordered AS SELECT a, cdc_prev()->'b' AS old_b FROM foo WHERE cdc_set_key(b)`)
+		defer closeFeed(t, fooWithDiff)
+
+		assertPayloads(t, fooWithDiff, []string{
+			`foo: ["x"]->{"a": 1, "old_b": null}`,
+			`foo: ["x"]->{"a": 2, "old_b": null}`,
+			`foo: ["y"]->{"a": 3, "old_b": null}`,
+			`foo: ["y"]->{"a": 4, "old_b": null}`,
+			`foo: ["y"]->{"a": 5, "old_b": null}`,
+		})
+
+		sqlDB.Exec(t, `UPDATE foo SET b = 'x' WHERE a = 5`)
+
+		assertPayloads(t, fooWithDiff, []string{
+			`foo: ["x"]->{"a": 5, "old_b": "y"}`,
+		})
+
+	}
+
+	cdcTest(t, testFn, feedTestForceSink(`kafka`))
+
+}
+
 func TestChangefeedPauseUnpause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -94,6 +94,7 @@ const (
 	OptWebhookClientTimeout     = `webhook_client_timeout`
 	OptOnError                  = `on_error`
 	OptMetricsScope             = `metrics_label`
+	OptUnordered                = `unordered`
 	OptVirtualColumns           = `virtual_columns`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
@@ -312,6 +313,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptWebhookClientTimeout:     durationOption,
 	OptOnError:                  enum("pause", "fail"),
 	OptMetricsScope:             stringOption,
+	OptUnordered:                flagOption,
 	OptVirtualColumns:           enum("omitted", "null"),
 }
 
@@ -324,7 +326,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptSchemaChangeEvents, OptSchemaChangePolicy,
 	OptProtectDataFromGCOnPause, OptOnError,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly,
-	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics)
+	OptMinCheckpointFrequency, OptMetricsScope, OptUnordered, OptVirtualColumns, Topics)
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil

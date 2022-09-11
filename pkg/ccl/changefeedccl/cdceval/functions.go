@@ -85,6 +85,23 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 			return rowEvalCtx.updatedRow.SchemaTS
 		},
 	),
+	"cdc_set_key": makeCDCBuiltIn(
+		"cdc_set_key",
+		tree.Overload{
+			Types:      tree.VariadicType{VarType: types.Any},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				var datums []tree.Datum
+				rowEvalContext := rowEvalContextFromEvalContext(evalCtx)
+				for _, arg := range args {
+					datums = append(datums, arg)
+				}
+				rowEvalContext.updatedRow.SetCustomKeyDatums(datums)
+				return tree.DBoolTrue, nil
+			},
+			Info:       "Changes the partition key from the primary key to the input. Always returns true so it can be used in a WHERE clause.",
+			Volatility: volatility.Stable,
+		}),
 	"cdc_prev": makeCDCBuiltIn(
 		"cdc_prev",
 		tree.Overload{
