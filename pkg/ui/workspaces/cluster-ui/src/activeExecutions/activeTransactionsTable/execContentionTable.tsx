@@ -51,6 +51,19 @@ export function makeContentionColumns(
       ),
       sort: item => item.query,
     },
+    execType === "statement"
+      ? {
+          name: "transactionID",
+          title: executionsTableTitles.executionID("transaction"),
+          cell: item => (
+            <Link to={`/execution/transaction/${item.transactionExecutionID}`}>
+              {item.transactionExecutionID}
+            </Link>
+          ),
+          sort: item => item.transactionExecutionID,
+          alwaysShow: true,
+        }
+      : null,
     {
       name: "status",
       title: executionsTableTitles.status(execType),
@@ -74,7 +87,7 @@ export function makeContentionColumns(
       cell: item => Duration(item.contentionTime.asSeconds() * 1e9),
       sort: item => item.contentionTime.asSeconds(),
     },
-  ];
+  ].filter(col => col);
 }
 
 interface ContentionTableProps {
