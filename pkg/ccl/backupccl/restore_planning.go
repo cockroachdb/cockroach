@@ -348,7 +348,7 @@ func moveConflictingSystemTable(
 		// Allow the upgrades package to dynamically assign an ID to the new system
 		// table.
 		newTable.ID = descpb.InvalidID
-		_, created, err := migrations.CreateSystemTableInTxn(ctx, p.ExecCfg().DB, txn, codec, newTable)
+		id, created, err := migrations.CreateSystemTableInTxn(ctx, p.ExecCfg().DB, txn, codec, newTable)
 		if err != nil {
 			return err
 		}
@@ -357,16 +357,22 @@ func moveConflictingSystemTable(
 		}
 
 		// Copy data from the old table to the new table.
-		insertStmt := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM system.%s)", newTable.GetName(), oldTable.GetName())
+		insertStmt := fmt.Sprintf("INSERT INTO [%d as new_table] (SELECT * FROM [%d as old_table])", id, oldTable.GetID())
 		if _, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "copy-to-temp-table", txn,
 			sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, insertStmt); err != nil {
 			return err
 		}
 
 		// Drop the old system table.
-		dropStmt := fmt.Sprintf("DROP TABLE system.%s", oldTable.GetName())
-		if _, err := p.ExecCfg().InternalExecutor.ExecEx(ctx, "drop-system-table", txn,
-			sessiondata.InternalExecutorOverride{User: security.NodeUserName()}, dropStmt); err != nil {
+		//
+		// NB: We don't use SQL here to avoid issues
+		// around name resolution and transaction management in the internal
+		// executor.
+		delBatch := txn.NewBatch()
+		delBatch.Del(catalogkeys.MakeDescMetadataKey(codec, oldTable.GetID()))
+		delBatch.Del(catalogkeys.EncodeNameKey(codec, oldTable))
+		descsCol.AddDeletedDescriptor(oldTable.GetID())
+		if err := txn.Run(ctx, delBatch); err != nil {
 			return err
 		}
 
@@ -1913,11 +1919,17 @@ func doRestorePlan(
 		}
 
 		// We check for any system tables in the restoring cluster that might
-		// conflict with backed up decsriptors, and move the system tables to a
+		// conflict with backed up descriptors, and move the system tables to a
 		// higher, non-conflicting ID.
 		if err := moveConflictingSystemTables(ctx, p, databasesByID, schemasByID, filteredTablesByID, typesByID); err != nil {
 			return err
 		}
+
+		testingKnobs := p.ExecCfg().BackupRestoreTestingKnobs
+		if testingKnobs != nil && testingKnobs.RunAfterMovingSystemTables != nil {
+			testingKnobs.RunAfterMovingSystemTables(ctx, p.ExtendedEvalContext().Txn, p.ExecCfg().DB)
+		}
+
 		// TODO(adityamaru): Do we want to add a scan on the descriptors table that
 		// checks for *any* conflicting IDs with the backed up descriptors, and fail
 		// the restore in that case?
