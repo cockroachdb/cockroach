@@ -532,6 +532,17 @@ func (v *ValuesExpr) Len() int {
 	return len(v.Rows)
 }
 
+// IsConstantsAndPlaceholders returns true if all values in the list are constant expressions.
+func (v *ValuesExpr) IsConstantsAndPlaceholders() bool {
+	if !v.Relational().VolatilitySet.IsLeakproof() {
+		return false
+	}
+	if !v.Rows.IsConstantsAndPlaceholders(v.Memo().EvalContext()) {
+		return false
+	}
+	return true
+}
+
 // ColList implements the ValuesContainer interface.
 func (l *LiteralValuesExpr) ColList() opt.ColList {
 	return l.Cols
@@ -540,4 +551,24 @@ func (l *LiteralValuesExpr) ColList() opt.ColList {
 // Len implements the ValuesContainer interface.
 func (l *LiteralValuesExpr) Len() int {
 	return l.Rows.Rows.NumRows()
+}
+
+// IsConstantsAndPlaceholders returns true if all scalar expressions in the list
+// are constants, placeholders or tuples containing constants, placeholders or
+// other such nested tuples.
+func (e ScalarListExpr) IsConstantsAndPlaceholders(evalCtx *eval.Context) bool {
+	for _, scalarExpr := range e {
+		if tupleExpr, ok := scalarExpr.(*TupleExpr); ok {
+			if !tupleExpr.Elems.IsConstantsAndPlaceholders(evalCtx) {
+				return false
+			}
+		} else {
+			if !opt.IsConstValueOp(scalarExpr) {
+				if scalarExpr.Op() != opt.PlaceholderOp {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }
