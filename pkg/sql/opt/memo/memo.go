@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
@@ -526,6 +527,17 @@ func (v *ValuesExpr) Len() int {
 	return len(v.Rows)
 }
 
+// IsConstant returns true if all values in the list are constant expressions.
+func (v *ValuesExpr) IsConstant() bool {
+	if !v.Relational().VolatilitySet.IsLeakproof() {
+		return false
+	}
+	if !v.Rows.IsConstant(v.Memo().EvalContext()) {
+		return false
+	}
+	return true
+}
+
 // ColList implements the ValuesContainer interface.
 func (l *LiteralValuesExpr) ColList() opt.ColList {
 	return l.Cols
@@ -534,4 +546,39 @@ func (l *LiteralValuesExpr) ColList() opt.ColList {
 // Len implements the ValuesContainer interface.
 func (l *LiteralValuesExpr) Len() int {
 	return l.Rows.Rows.NumRows()
+}
+
+var constantOps = map[opt.Operator]struct{}{
+	opt.TrueOp:        {},
+	opt.FalseOp:       {},
+	opt.NullOp:        {},
+	opt.ConstOp:       {},
+	opt.PlaceholderOp: {},
+}
+
+func opIsConstant(op opt.Operator) bool {
+	_, ok := constantOps[op]
+	return ok
+}
+
+// IsConstant returns true if all scalar expressions in the list are constant.
+func (e ScalarListExpr) IsConstant(evalCtx *eval.Context) bool {
+	for _, scalarExpr := range e {
+		if typeExpr, ok := scalarExpr.(tree.TypedExpr); ok {
+			if !eval.IsConst(evalCtx, typeExpr) {
+				return false
+			}
+		} else {
+			if tupleExpr, ok := scalarExpr.(*TupleExpr); ok {
+				if !tupleExpr.Elems.IsConstant(evalCtx) {
+					return false
+				}
+			} else {
+				if !opIsConstant(scalarExpr.Op()) {
+					return false
+				}
+			}
+		}
+	}
+	return true
 }

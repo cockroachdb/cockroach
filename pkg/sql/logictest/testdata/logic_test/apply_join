@@ -529,7 +529,7 @@ FROM
 
 query error pq: st_mpointfromwkb\(\): error parsing EWKB: wkb: unknown byte order: 11000000
 WITH
-  with_111870 (col_664924) AS (SELECT * FROM (VALUES (NULL)) AS tab_397795 (col_664924))
+  with_111870 (col_664924) AS (SELECT * FROM (VALUES (true)) AS tab_397795 (col_664924))
 SELECT
   cte_ref_33032.col_664924 AS col_664951
 FROM

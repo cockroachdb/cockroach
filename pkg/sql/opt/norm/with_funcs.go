@@ -61,3 +61,47 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 
 	return replace(input).(memo.RelExpr)
 }
+
+// CanInlineWithScan returns whether or not it's valid to inline a WithScanExpr
+// with its bound expression from the memo. Currently this only allows inlining
+// leak-proof constaint VALUES clauses, but could likely be extended to handle
+// other expressions in the future.
+func (c *CustomFuncs) CanInlineWithScan(private *memo.WithScanPrivate) bool {
+	if !private.CanInlineInPlace {
+		return false
+	}
+	expr := c.mem.Metadata().WithBinding(private.With)
+	var valuesExpr *memo.ValuesExpr
+	var ok bool
+	if valuesExpr, ok = expr.(*memo.ValuesExpr); !ok {
+		return false
+	}
+	if !valuesExpr.Relational().VolatilitySet.IsLeakproof() {
+		return false
+	}
+	if !valuesExpr.Rows.IsConstant(c.f.evalCtx) {
+		return false
+	}
+	return true
+}
+
+// InlineWithScan replaces a WithScanExpr with its bound expression, mapped to
+// new output ColumnIDs.
+func (c *CustomFuncs) InlineWithScan(private *memo.WithScanPrivate) memo.RelExpr {
+	expr := c.mem.Metadata().WithBinding(private.With)
+	var valuesExpr *memo.ValuesExpr
+	var ok bool
+	if valuesExpr, ok = expr.(*memo.ValuesExpr); !ok {
+		// Didn't find the expected VALUES. Return a copy of the original
+		// expression.
+		return c.f.ConstructWithScan(private)
+	}
+	projections := make(memo.ProjectionsExpr, len(private.InCols))
+	for i := range private.InCols {
+		projections[i] = c.f.ConstructProjectionsItem(
+			c.f.ConstructVariable(private.InCols[i]),
+			private.OutCols[i],
+		)
+	}
+	return c.f.ConstructProject(valuesExpr, projections, opt.ColSet{})
+}
