@@ -10,7 +10,6 @@ package kvevent
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -32,6 +31,11 @@ type blockingBuffer struct {
 	qp       allocPool     // Pool for memory allocations.
 	signalCh chan struct{} // Signal when new events are available.
 
+	req struct {
+		syncutil.Mutex
+		memRequest
+	}
+
 	mu struct {
 		syncutil.Mutex
 		closed     bool          // True when buffer closed.
@@ -39,7 +43,7 @@ type blockingBuffer struct {
 		drainCh    chan struct{} // Set when Drain request issued.
 		numBlocked int           // Number of waitors blocked to acquire quota.
 		canFlush   bool
-		queue      bufferEntryQueue // Queue of added events.
+		queue      *bufferEventChunkQueue // Queue of added events.
 	}
 }
 
@@ -100,22 +104,23 @@ func newMemBuffer(
 		AbstractPool: quotapool.New("changefeed", quota, opts...),
 		metrics:      metrics,
 	}
+	b.mu.queue = &bufferEventChunkQueue{}
 
 	return b
 }
 
 var _ Buffer = (*blockingBuffer)(nil)
 
-func (b *blockingBuffer) pop() (e *bufferEntry, err error) {
+func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.mu.closed {
-		return nil, ErrBufferClosed{reason: b.mu.reason}
+		return Event{}, false, ErrBufferClosed{reason: b.mu.reason}
 	}
 
-	e = b.mu.queue.dequeue()
+	e, ok = b.mu.queue.dequeue()
 
-	if e == nil && b.mu.numBlocked > 0 && b.mu.canFlush {
+	if !ok && b.mu.numBlocked > 0 && b.mu.canFlush {
 		// Here, we know that we are blocked, waiting for memory; yet we have nothing queued up
 		// (and thus, no resources that could be released by draining the queue).
 		// This means that all the previously added entries have been read by the consumer,
@@ -125,14 +130,18 @@ func (b *blockingBuffer) pop() (e *bufferEntry, err error) {
 		// If the batching event consumer does not have periodic flush configured,
 		// we may never be able to make forward progress.
 		// So, we issue the flush request to the consumer to ensure that we release some memory.
-		e = newBufferEntry(Event{flush: true})
+		e = Event{flush: true}
+		ok = true
+		// Ensure we notify only once.  If we're still out of quota,
+		// subsequent notifyOutOfQuota will reset this field.
+		b.mu.canFlush = false
 	}
 
 	if b.mu.drainCh != nil && b.mu.queue.empty() {
 		close(b.mu.drainCh)
 		b.mu.drainCh = nil
 	}
-	return e, nil
+	return e, ok, nil
 }
 
 // notifyOutOfQuota is invoked by memQuota to notify blocking buffer that
@@ -151,16 +160,14 @@ func (b *blockingBuffer) notifyOutOfQuota(canFlush bool) {
 // Get implements kvevent.Reader interface.
 func (b *blockingBuffer) Get(ctx context.Context) (ev Event, err error) {
 	for {
-		got, err := b.pop()
+		got, ok, err := b.pop()
 		if err != nil {
 			return Event{}, err
 		}
 
-		if got != nil {
+		if ok {
 			b.metrics.BufferEntriesOut.Inc(1)
-			e := got.e
-			bufferEntryPool.Put(got)
-			return e, nil
+			return got, nil
 		}
 
 		select {
@@ -171,37 +178,18 @@ func (b *blockingBuffer) Get(ctx context.Context) (ev Event, err error) {
 	}
 }
 
-func (b *blockingBuffer) ensureOpened(ctx context.Context) error {
+func (b *blockingBuffer) enqueue(ctx context.Context, e Event) (err error) {
+	// Enqueue message, and signal if anybody is waiting.
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.ensureOpenedLocked(ctx)
-}
 
-func (b *blockingBuffer) ensureOpenedLocked(ctx context.Context) error {
 	if b.mu.closed {
 		logcrash.ReportOrPanic(ctx, b.sv, "buffer unexpectedly closed")
 		return errors.AssertionFailedf("buffer unexpectedly closed")
 	}
 
-	return nil
-}
-
-func (b *blockingBuffer) enqueue(ctx context.Context, be *bufferEntry) (err error) {
-	// Enqueue message, and signal if anybody is waiting.
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	defer func() {
-		if err != nil {
-			bufferEntryPool.Put(be)
-		}
-	}()
-
-	if err = b.ensureOpenedLocked(ctx); err != nil {
-		return err
-	}
-
 	b.metrics.BufferEntriesIn.Inc(1)
-	b.mu.queue.enqueue(be)
+	b.mu.queue.enqueue(e)
 
 	select {
 	case b.signalCh <- struct{}{}:
@@ -212,13 +200,9 @@ func (b *blockingBuffer) enqueue(ctx context.Context, be *bufferEntry) (err erro
 
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
-	if err := b.ensureOpened(ctx); err != nil {
-		return err
-	}
-
 	if e.alloc.ap != nil {
 		// Use allocation associated with the event itself.
-		return b.enqueue(ctx, newBufferEntry(e))
+		return b.enqueue(ctx, e)
 	}
 
 	// Acquire the quota first.
@@ -226,20 +210,21 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
 		return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
 	}
-	e.alloc = Alloc{
-		bytes:   alloc,
-		entries: 1,
-		ap:      &b.qp,
-	}
+	e.alloc.init(alloc, &b.qp)
 	e.bufferAddTimestamp = timeutil.Now()
-	be := newBufferEntry(e)
-
-	if err := b.qp.Acquire(ctx, be); err != nil {
-		bufferEntryPool.Put(be)
+	if err := func() error {
+		b.req.Lock()
+		defer b.req.Unlock()
+		b.req.memRequest = memRequest(alloc)
+		if err := b.qp.Acquire(ctx, &b.req); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
 		return err
 	}
 	b.metrics.BufferEntriesMemAcquired.Inc(alloc)
-	return b.enqueue(ctx, be)
+	return b.enqueue(ctx, e)
 }
 
 // tryDrain attempts to see if the buffer already empty.
@@ -309,11 +294,7 @@ func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) erro
 	close(b.signalCh)
 
 	// Return all queued up entries to the buffer pool.
-	// Note: we do not need to release their resources since we are going to close
-	// bound account anyway.
-	for be := b.mu.queue.dequeue(); be != nil; be = b.mu.queue.dequeue() {
-		bufferEntryPool.Put(be)
-	}
+	b.mu.queue.purge()
 
 	return nil
 }
@@ -344,36 +325,14 @@ type memQuota struct {
 
 var _ quotapool.Resource = (*memQuota)(nil)
 
-// bufferEntry forms a linked list of elements in the buffer.
-// These entries are pooled to eliminate allocations.
-// bufferEntry also implements quotapool.Request interface for resource acquisition.
-type bufferEntry struct {
-	e    Event
-	next *bufferEntry // linked-list element
-}
-
-var bufferEntryPool = sync.Pool{
-	New: func() interface{} {
-		return new(bufferEntry)
-	},
-}
-
-func newBufferEntry(e Event) *bufferEntry {
-	be := bufferEntryPool.Get().(*bufferEntry)
-	be.e = e
-	be.next = nil
-	return be
-}
-
-var _ quotapool.Request = (*bufferEntry)(nil)
+type memRequest int64
 
 // Acquire implements quotapool.Request interface.
-func (be *bufferEntry) Acquire(
+func (r *memRequest) Acquire(
 	ctx context.Context, resource quotapool.Resource,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	quota := resource.(*memQuota)
-	fulfilled, tryAgainAfter = be.acquireQuota(ctx, quota)
-
+	fulfilled, tryAgainAfter = r.acquireQuota(ctx, quota)
 	if !fulfilled {
 		// canFlush indicates to the consumer (Get() caller) that it may issue flush
 		// request if necessary.
@@ -399,7 +358,7 @@ func (be *bufferEntry) Acquire(
 	return fulfilled, tryAgainAfter
 }
 
-func (be *bufferEntry) acquireQuota(
+func (r *memRequest) acquireQuota(
 	ctx context.Context, quota *memQuota,
 ) (fulfilled bool, tryAgainAfter time.Duration) {
 	if quota.canAllocateBelow > 0 {
@@ -409,7 +368,7 @@ func (be *bufferEntry) acquireQuota(
 		quota.canAllocateBelow = 0
 	}
 
-	if err := quota.acc.Grow(ctx, be.e.alloc.bytes); err != nil {
+	if err := quota.acc.Grow(ctx, int64(*r)); err != nil {
 		if quota.allocated == 0 {
 			// We've failed but there's nothing outstanding.  It seems that this request
 			// is doomed to fail forever. However, that's not the case since our memory
@@ -425,43 +384,14 @@ func (be *bufferEntry) acquireQuota(
 		return false, 0
 	}
 
-	quota.allocated += be.e.alloc.bytes
+	quota.allocated += int64(*r)
 	quota.canAllocateBelow = 0
 	return true, 0
 }
 
 // ShouldWait implements quotapool.Request interface.
-func (be *bufferEntry) ShouldWait() bool {
+func (r *memRequest) ShouldWait() bool {
 	return true
-}
-
-// bufferEntryQueue is a queue implemented as a linked-list of bufferEntry.
-type bufferEntryQueue struct {
-	head, tail *bufferEntry
-}
-
-func (l *bufferEntryQueue) enqueue(be *bufferEntry) {
-	if l.tail == nil {
-		l.head, l.tail = be, be
-	} else {
-		l.tail.next = be
-		l.tail = be
-	}
-}
-
-func (l *bufferEntryQueue) empty() bool {
-	return l.head == nil
-}
-
-func (l *bufferEntryQueue) dequeue() *bufferEntry {
-	if l.head == nil {
-		return nil
-	}
-	ret := l.head
-	if l.head = l.head.next; l.head == nil {
-		l.tail = nil
-	}
-	return ret
 }
 
 type allocPool struct {
