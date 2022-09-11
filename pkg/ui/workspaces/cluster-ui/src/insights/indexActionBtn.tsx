@@ -9,6 +9,10 @@
 // licenses/APL.txt.
 
 import React, { useCallback, useState } from "react";
+import copy from "copy-to-clipboard";
+import { message, Icon } from "antd";
+import "antd/lib/message/style";
+import "antd/lib/icon/style";
 import { Modal } from "../modal";
 import { Text, TextTypes } from "../text";
 import { Button } from "../button";
@@ -57,6 +61,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
         }
         if (!foundError) {
           setVisible(false);
+          message.success("Recommendation applied");
         }
       },
     );
@@ -68,6 +73,11 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
   };
 
   const onCancelHandler = useCallback(() => setVisible(false), []);
+  const onCopyClick = () => {
+    copy(query);
+    message.success("Copied to clipboard");
+  };
+
   let title = "Update index";
   let btnLAbel = "Update Index";
   let descriptionDocs = <></>;
@@ -153,6 +163,16 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
         </Text>
         <Text textType={TextTypes.Code} className={"code-area"}>
           {query}
+          <br />
+          <Button
+            type={"unstyled-link"}
+            size={"small"}
+            className={cx("bottom-corner")}
+            icon={<Icon type="copy" className={cx("copy-icon")} />}
+            onClick={onCopyClick}
+          >
+            Copy
+          </Button>
         </Text>
         <InlineAlert
           intent="warning"

@@ -3,4 +3,15 @@
 .alert-area {
   margin-top: 10px;
   margin-left: -5px;
+
+  .copy-icon {
+    fill: $colors--neutral-0;
+  }
+}
+
+.bottom-corner {
+  align: right;
+  margin-bottom: 0px;
+  float: right;
+  margin-top: -5px;
 }
