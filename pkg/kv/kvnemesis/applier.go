@@ -220,17 +220,23 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			}
 		}
 	case *DeleteRangeOperation:
-		if !inTxn {
-			panic(errors.AssertionFailedf(`non-transactional DelRange operations currently unsupported`))
-		}
-		deletedKeys, err := db.DelRange(ctx, o.Key, o.EndKey, true /* returnKeys */)
-		if err != nil {
+		// If we're not in a transaction, we need to see the timestamp at which the
+		// operation executed, so we need to use `kv.Batch` which lets us do this.
+		var b kv.Batch
+		b.DelRange(o.Key, o.EndKey, true /* returnKeys */)
+		if err := db.Run(ctx, &b); err != nil {
 			o.Result = resultError(ctx, err)
 		} else {
+			if !inTxn {
+				// We're not in a transaction, but a non-transactional DeleteRange ought
+				// to be have like a transactional one that used the 1PC optimization.
+				// Use the timestamp at which the command wrote (and read) to set up
+				// a transaction and which will be used to verify the history.
+				o.Txn = syntheticTxnAtTime(b.RawResponse().Timestamp)
+			}
 			o.Result.Type = ResultType_Keys
-			o.Result.Keys = make([][]byte, len(deletedKeys))
-			for i, deletedKey := range deletedKeys {
-				o.Result.Keys[i] = deletedKey
+			for _, deletedKey := range b.RawResponse().Responses[0].GetDeleteRange().Keys {
+				o.Result.Keys = append(o.Result.Keys, deletedKey)
 			}
 		}
 	case *BatchOperation:
@@ -239,6 +245,18 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 	default:
 		panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, o, o))
 	}
+}
+
+func syntheticTxnAtTime(ts hlc.Timestamp) *roachpb.Transaction {
+	txn := roachpb.MakeTransaction(
+		"synthetic",
+		nil, // baseKey
+		roachpb.NormalUserPriority,
+		ts,
+		0, // maxOffsetNs
+		0, // coordinatorNodeID
+	)
+	return &txn
 }
 
 func applyBatchOp(

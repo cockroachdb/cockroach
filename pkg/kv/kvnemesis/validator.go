@@ -381,37 +381,52 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
 		}
 	case *DeleteRangeOperation:
+		// If this DeleteRangeOperation is taking place in a transactional context
+		// (i.e. a ClosureTxnOperation), we have a txnID. Otherwise, we made
+		// sure[^1] to attach a synthetic transaction in `t.Txn` (reflecting the
+		// write timestamp of the DeleteRange). So, confusingly, `t.Txn != nil` is
+		// the *non-transactional* case.
+		//
+		// [^1]: see applyClientOp.
+		var optTxn *roachpb.Transaction
 		if txnID == nil {
-			v.checkAtomic(`deleteRange`, t.Result, nil, op)
-		} else {
-			// For the purposes of validation, DelRange operations decompose into
-			// a specialized scan for keys with non-nil values, followed by
-			// writes for each key, with a span to validate that the keys we are
-			// deleting are within the proper bounds.  See above comment for how
-			// the individual deletion tombstones for each key are validated.
-			scan := &observedScan{
-				Span: roachpb.Span{
-					Key:    t.Key,
-					EndKey: t.EndKey,
-				},
-				IsDeleteRange: true,
-				KVs:           make([]roachpb.KeyValue, len(t.Result.Keys)),
+			optTxn = t.Txn
+			s := t.Txn.ID.String()
+			txnID = &s
+		}
+		// For the purposes of validation, DelRange operations decompose into
+		// a specialized scan for keys with non-nil values, followed by
+		// writes for each key, with a span to validate that the keys we are
+		// deleting are within the proper bounds.  See above comment for how
+		// the individual deletion tombstones for each key are validated.
+		scan := &observedScan{
+			Span: roachpb.Span{
+				Key:    t.Key,
+				EndKey: t.EndKey,
+			},
+			IsDeleteRange: true,
+			KVs:           make([]roachpb.KeyValue, len(t.Result.Keys)),
+		}
+		deleteOps := make([]observedOp, len(t.Result.Keys))
+		for i, key := range t.Result.Keys {
+			scan.KVs[i] = roachpb.KeyValue{
+				Key:   key,
+				Value: roachpb.Value{},
 			}
-			deleteOps := make([]observedOp, len(t.Result.Keys))
-			for i, key := range t.Result.Keys {
-				scan.KVs[i] = roachpb.KeyValue{
-					Key:   key,
-					Value: roachpb.Value{},
-				}
-				write := &observedWrite{
-					Key:           key,
-					Value:         roachpb.Value{},
-					IsDeleteRange: true,
-				}
-				deleteOps[i] = write
+			write := &observedWrite{
+				Key:           key,
+				Value:         roachpb.Value{},
+				IsDeleteRange: true, // just for logging
 			}
-			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], scan)
-			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], deleteOps...)
+			deleteOps[i] = write
+		}
+		v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], scan)
+		v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], deleteOps...)
+		if optTxn != nil {
+			// If this is a non-txn'al DeleteRange, in which case optTxn is a
+			// *synthetic txn*, verify that txn now. (Otherwise, verification happens
+			// for the surrounding ClosureTxnOperation).
+			v.checkAtomic(`deleterange`, t.Result, optTxn, op)
 		}
 	case *ScanOperation:
 		v.failIfError(op, t.Result)
@@ -985,8 +1000,9 @@ func validScanTime(
 		// be 0 or 1 valid read time span for each `(key, specific-non-nil-value)`
 		// returned, given that the values are guaranteed to be unique by the
 		// Generator. However, in the DeleteRange case where we are looking for
-		// `(key, any-non-nil-value)`, it is of course valid for there to be
-		// multiple disjoint time spans.
+		// `(key, any-non-nil-value)`, it is valid for there to be multiple disjoint
+		// time spans. For example, a key that gets written at t1, deleted at t2, then
+		// written at t3 would give rise to the intervals [t1, t2), [t3, max).
 		validTimes := validReadTimes(b, kv.Key, kv.Value.RawBytes, isDeleteRange)
 		if !isDeleteRange && len(validTimes) > 1 {
 			panic(errors.AssertionFailedf(
