@@ -108,7 +108,7 @@ const highContentionInsight = (
   let threshold = latencyThreshold + "ms";
   if (!latencyThreshold) {
     threshold =
-      "the value of the sql.insights.latency_threshold cluster setting";
+      "the value of the 'sql.insights.latency_threshold' cluster setting";
   }
   const description = `This ${execType} has been waiting on other ${execType}s to execute for longer than ${threshold}.`;
   return {
@@ -120,8 +120,16 @@ const highContentionInsight = (
   };
 };
 
-const slowExecutionInsight = (execType: InsightExecEnum): Insight => {
-  const description = `Unable to identify a specific cause for this ${execType}.`;
+const slowExecutionInsight = (
+  execType: InsightExecEnum,
+  latencyThreshold: number,
+): Insight => {
+  let threshold = latencyThreshold + "ms";
+  if (!latencyThreshold) {
+    threshold =
+      "the value of the 'sql.insights.latency_threshold' cluster setting";
+  }
+  const description = `This ${execType} took longer than ${threshold} to execute.`;
   return {
     name: InsightNameEnum.slowExecution,
     label: "Slow Execution",
@@ -160,8 +168,7 @@ const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
 
 const highRetryCountInsight = (execType: InsightExecEnum): Insight => {
   const description =
-    `This ${execType} was slow because of being retried multiple times, again due ` +
-    `to contention. The "high" threshold may be configured by the ` +
+    `This ${execType} has being retried more times than the value of the ` +
     `'sql.insights.high_retry_count.threshold' cluster setting.`;
   return {
     name: InsightNameEnum.highRetryCount,
@@ -204,7 +211,7 @@ export const getInsightFromProblem = (
     case InsightNameEnum.highRetryCount:
       return highRetryCountInsight(execOption);
     default:
-      return slowExecutionInsight(execOption);
+      return slowExecutionInsight(execOption, latencyThreshold);
   }
 };
 

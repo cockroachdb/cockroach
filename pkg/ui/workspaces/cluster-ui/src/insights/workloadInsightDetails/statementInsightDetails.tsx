@@ -123,6 +123,10 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
           default:
             rec = {
               type: "Unknown",
+              details: {
+                duration: insightDetails.elapsedTimeMillis,
+                description: insight.description,
+              },
             };
             break;
         }

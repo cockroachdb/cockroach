@@ -15,7 +15,13 @@ import classNames from "classnames/bind";
 import styles from "./insightsTable.module.scss";
 import { StatementLink } from "../statementsTable";
 import IdxRecAction from "../insights/indexActionBtn";
-import { Duration, statementsRetries } from "../util";
+import {
+  clusterSettings,
+  computeOrUseStmtSummary,
+  Duration,
+  performanceBestPractices,
+  statementsRetries,
+} from "../util";
 import { Anchor } from "../anchor";
 import { Link } from "react-router-dom";
 import { performanceTuningRecipes } from "../util";
@@ -70,7 +76,21 @@ function typeCell(value: string): React.ReactElement {
 
 function descriptionCell(
   insightRec: InsightRecommendation,
+  disableStmtLink?: boolean,
 ): React.ReactElement {
+  const clusterSettingsLink = (
+    <>
+      {"This threshold can be configured in "}
+      <Anchor href={clusterSettings} target="_blank">
+        cluster settings
+      </Anchor>
+      {"."}
+    </>
+  );
+  const summary = computeOrUseStmtSummary(
+    insightRec.execution.statement,
+    insightRec.execution.summary,
+  );
   switch (insightRec.type) {
     case "CreateIndex":
     case "ReplaceIndex":
@@ -79,13 +99,25 @@ function descriptionCell(
         <>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Statement Fingerprint: </span>{" "}
-            <StatementLink
-              statementFingerprintID={insightRec.execution.fingerprintID}
-              statement={insightRec.execution.statement}
-              statementSummary={insightRec.execution.summary}
-              implicitTxn={insightRec.execution.implicit}
-              className={"inline"}
-            />
+            {disableStmtLink && (
+              <div className={cx("inline")}>
+                <Tooltip
+                  placement="bottom"
+                  content={insightRec.execution.statement}
+                >
+                  {summary}
+                </Tooltip>
+              </div>
+            )}
+            {!disableStmtLink && (
+              <StatementLink
+                statementFingerprintID={insightRec.execution.fingerprintID}
+                statement={insightRec.execution.statement}
+                statementSummary={insightRec.execution.summary}
+                implicitTxn={insightRec.execution.implicit}
+                className={"inline"}
+              />
+            )}
           </div>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Recommendation: </span>{" "}
@@ -129,7 +161,7 @@ function descriptionCell(
           </div>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Description: </span>{" "}
-            {insightRec.details.description}
+            {insightRec.details.description} {clusterSettingsLink}
           </div>
         </>
       );
@@ -142,7 +174,7 @@ function descriptionCell(
           </div>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Description: </span>{" "}
-            {insightRec.details.description}
+            {insightRec.details.description} {clusterSettingsLink}
             {" Learn more about "}
             <Anchor href={statementsRetries} target="_blank">
               retries
@@ -186,7 +218,19 @@ function descriptionCell(
       return (
         <>
           <div className={cx("description-item")}>
-            Unable to identify specific reasons why this execution was slow.
+            <span className={cx("label-bold")}>Elapsed Time: </span>
+            {Duration(insightRec.details.duration * 1e6)}
+          </div>
+          <div className={cx("description-item")}>
+            <span className={cx("label-bold")}>Description: </span>{" "}
+            {insightRec.details.description} {clusterSettingsLink}
+          </div>
+          <div className={cx("description-item")}>
+            {"Learn about "}
+            <Anchor href={performanceBestPractices} target="_blank">
+              SQL performance best practices
+            </Anchor>
+            {" to optimize slow queries."}
           </div>
         </>
       );
@@ -239,6 +283,7 @@ function actionCell(
 
 export function makeInsightsColumns(
   isCockroachCloud: boolean,
+  disableStmtLink?: boolean,
 ): ColumnDescriptor<InsightRecommendation>[] {
   return [
     {
@@ -250,7 +295,8 @@ export function makeInsightsColumns(
     {
       name: "details",
       title: insightsTableTitles.details(),
-      cell: (item: InsightRecommendation) => descriptionCell(item),
+      cell: (item: InsightRecommendation) =>
+        descriptionCell(item, disableStmtLink),
       sort: (item: InsightRecommendation) => item.type,
     },
     {
