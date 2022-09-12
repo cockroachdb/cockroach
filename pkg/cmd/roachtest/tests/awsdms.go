@@ -27,23 +27,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
 	"google.golang.org/protobuf/proto"
 )
 
 const (
-	awsdmsRoachtestRDSClusterName = "roachtest-awsdms-rds-cluster"
-
-	awsdmsRoachtestDMSParameterGroup          = "roachtest-awsdms-param-group"
-	awsdmsRoachtestDMSTaskName                = "roachtest-awsdms-dms-task"
-	awsdmsRoachtestDMSReplicationInstanceName = "roachtest-awsdms-replication-instance"
-	awsdmsRoachtestDMSRDSEndpointName         = "roachtest-awsdms-rds-endpoint"
-	awsdmsRoachtestDMSCRDBEndpointName        = "roachtest-awsdms-crdb-endpoint"
-
 	awsdmsWaitTimeLimit  = 30 * time.Minute
 	awsdmsUser           = "cockroachdbtest"
 	awsdmsDatabase       = "rdsdb"
@@ -52,33 +44,69 @@ const (
 	awsdmsNumInitialRows = 100000
 )
 
-var (
-	rdsClusterFilters = []rdstypes.Filter{
+func awsdmsVerString(v *version.Version) string {
+	return fmt.Sprintf("-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
+}
+
+func awsdmsRoachtestRDSClusterName(v *version.Version) string {
+	return "roachtest-awsdms-rds-cluster" + awsdmsVerString(v)
+}
+
+func awsdmsRoachtestDMSParameterGroup(v *version.Version) string {
+	return "roachtest-awsdms-param-group" + awsdmsVerString(v)
+}
+
+func awsdmsRoachtestDMSTaskName(v *version.Version) string {
+	return "roachtest-awsdms-dms-task" + awsdmsVerString(v)
+}
+
+func awsdmsRoachtestDMSReplicationInstanceName(v *version.Version) string {
+	return "roachtest-awsdms-replication-instance" + awsdmsVerString(v)
+}
+
+func awsdmsRoachtestDMSRDSEndpointName(v *version.Version) string {
+	return "roachtest-awsdms-rds-endpoint" + awsdmsVerString(v)
+}
+func awsdmsRoachtestDMSCRDBEndpointName(v *version.Version) string {
+	return "roachtest-awsdms-crdb-endpoint" + awsdmsVerString(v)
+}
+
+func rdsClusterFilters(v *version.Version) []rdstypes.Filter {
+	return []rdstypes.Filter{
 		{
 			Name:   proto.String("db-cluster-id"),
-			Values: []string{awsdmsRoachtestRDSClusterName},
+			Values: []string{awsdmsRoachtestRDSClusterName(v)},
 		},
 	}
-	rdsDescribeInstancesInput = &rds.DescribeDBInstancesInput{
-		Filters: rdsClusterFilters,
+}
+
+func rdsDescribeInstancesInput(v *version.Version) *rds.DescribeDBInstancesInput {
+	return &rds.DescribeDBInstancesInput{
+		Filters: rdsClusterFilters(v),
 	}
-	dmsDescribeInstancesInput = &dms.DescribeReplicationInstancesInput{
+}
+
+func dmsDescribeInstancesInput(v *version.Version) *dms.DescribeReplicationInstancesInput {
+	return &dms.DescribeReplicationInstancesInput{
 		Filters: []dmstypes.Filter{
 			{
 				Name:   proto.String("replication-instance-id"),
-				Values: []string{awsdmsRoachtestDMSReplicationInstanceName},
+				Values: []string{awsdmsRoachtestDMSReplicationInstanceName(v)},
 			},
 		},
 	}
-	dmsDescribeTasksInput = &dms.DescribeReplicationTasksInput{
+}
+
+func dmsDescribeTasksInput(v *version.Version) *dms.DescribeReplicationTasksInput {
+	return &dms.DescribeReplicationTasksInput{
 		Filters: []dmstypes.Filter{
 			{
 				Name:   proto.String("replication-task-id"),
-				Values: []string{awsdmsRoachtestDMSTaskName},
+				Values: []string{awsdmsRoachtestDMSTaskName(v)},
 			},
 		},
 	}
-)
+}
 
 func registerAWSDMS(r registry.Registry) {
 	r.Add(registry.TestSpec{
@@ -114,7 +142,7 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// Attempt a clean-up of old instances on startup.
 	t.L().Printf("attempting to delete old instances")
-	if err := tearDownAWSDMS(ctx, t.L(), rdsCli, dmsCli); err != nil {
+	if err := tearDownAWSDMS(ctx, t, rdsCli, dmsCli); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,7 +154,7 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 		t.L().Printf("attempting to cleanup instances")
 		// Try to delete from a new context, in case the previous one is cancelled.
-		if err := tearDownAWSDMS(context.Background(), t.L(), rdsCli, dmsCli); err != nil {
+		if err := tearDownAWSDMS(context.Background(), t, rdsCli, dmsCli); err != nil {
 			t.L().Printf("failed to delete old instances on cleanup: %+v", err)
 		}
 	}()
@@ -299,7 +327,7 @@ func setupDMSReplicationInstance(
 			ctx,
 			&dms.CreateReplicationInstanceInput{
 				ReplicationInstanceClass:      proto.String("dms.c4.large"),
-				ReplicationInstanceIdentifier: proto.String(awsdmsRoachtestDMSReplicationInstanceName),
+				ReplicationInstanceIdentifier: proto.String(awsdmsRoachtestDMSReplicationInstanceName(t.BuildVersion())),
 			},
 		)
 		if err != nil {
@@ -308,7 +336,7 @@ func setupDMSReplicationInstance(
 		*replicationARN = *createReplOut.ReplicationInstance.ReplicationInstanceArn
 		// Wait for replication instance to become available
 		t.L().Printf("waiting for all replication instance to be available")
-		if err := dms.NewReplicationInstanceAvailableWaiter(dmsCli).Wait(ctx, dmsDescribeInstancesInput, awsdmsWaitTimeLimit); err != nil {
+		if err := dms.NewReplicationInstanceAvailableWaiter(dmsCli).Wait(ctx, dmsDescribeInstancesInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 			return err
 		}
 		return nil
@@ -330,7 +358,7 @@ func setupRDSCluster(
 			ctx,
 			&rds.CreateDBClusterParameterGroupInput{
 				DBParameterGroupFamily:      proto.String("aurora-postgresql13"),
-				DBClusterParameterGroupName: proto.String(awsdmsRoachtestDMSParameterGroup),
+				DBClusterParameterGroupName: proto.String(awsdmsRoachtestDMSParameterGroup(t.BuildVersion())),
 				Description:                 proto.String("roachtest awsdms parameter groups"),
 			},
 		)
@@ -362,9 +390,9 @@ func setupRDSCluster(
 		rdsClusterOutput, err := rdsCli.CreateDBCluster(
 			ctx,
 			&rds.CreateDBClusterInput{
-				DBClusterIdentifier:         proto.String(awsdmsRoachtestRDSClusterName),
+				DBClusterIdentifier:         proto.String(awsdmsRoachtestRDSClusterName(t.BuildVersion())),
 				Engine:                      proto.String("aurora-postgresql"),
-				DBClusterParameterGroupName: proto.String(awsdmsRoachtestDMSParameterGroup),
+				DBClusterParameterGroupName: proto.String(awsdmsRoachtestDMSParameterGroup(t.BuildVersion())),
 				MasterUsername:              proto.String(awsdmsUser),
 				MasterUserPassword:          proto.String(awsdmsPassword),
 				DatabaseName:                proto.String(awsdmsDatabase),
@@ -380,9 +408,9 @@ func setupRDSCluster(
 			ctx,
 			&rds.CreateDBInstanceInput{
 				DBInstanceClass:      proto.String("db.r5.large"),
-				DBInstanceIdentifier: proto.String(awsdmsRoachtestRDSClusterName + "-1"),
+				DBInstanceIdentifier: proto.String(awsdmsRoachtestRDSClusterName(t.BuildVersion()) + "-1"),
 				Engine:               proto.String("aurora-postgresql"),
-				DBClusterIdentifier:  proto.String(awsdmsRoachtestRDSClusterName),
+				DBClusterIdentifier:  proto.String(awsdmsRoachtestRDSClusterName(t.BuildVersion())),
 				PubliclyAccessible:   proto.Bool(true),
 			},
 		); err != nil {
@@ -390,7 +418,7 @@ func setupRDSCluster(
 		}
 
 		t.L().Printf("waiting for RDS instances to become available")
-		if err := rds.NewDBInstanceAvailableWaiter(rdsCli).Wait(ctx, rdsDescribeInstancesInput, awsdmsWaitTimeLimit); err != nil {
+		if err := rds.NewDBInstanceAvailableWaiter(rdsCli).Wait(ctx, rdsDescribeInstancesInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 			return err
 		}
 		pgURL := fmt.Sprintf(
@@ -449,7 +477,7 @@ func setupDMSEndpointsAndTask(
 	}{
 		{
 			in: dms.CreateEndpointInput{
-				EndpointIdentifier: proto.String(awsdmsRoachtestDMSRDSEndpointName),
+				EndpointIdentifier: proto.String(awsdmsRoachtestDMSRDSEndpointName(t.BuildVersion())),
 				EndpointType:       dmstypes.ReplicationEndpointTypeValueSource,
 				EngineName:         proto.String("aurora-postgresql"),
 				DatabaseName:       proto.String(awsdmsDatabase),
@@ -462,7 +490,7 @@ func setupDMSEndpointsAndTask(
 		},
 		{
 			in: dms.CreateEndpointInput{
-				EndpointIdentifier: proto.String(awsdmsRoachtestDMSCRDBEndpointName),
+				EndpointIdentifier: proto.String(awsdmsRoachtestDMSCRDBEndpointName(t.BuildVersion())),
 				EndpointType:       dmstypes.ReplicationEndpointTypeValueTarget,
 				EngineName:         proto.String("postgres"),
 				SslMode:            dmstypes.DmsSslModeValueNone,
@@ -547,7 +575,7 @@ func setupDMSEndpointsAndTask(
 		&dms.CreateReplicationTaskInput{
 			MigrationType:             dmstypes.MigrationTypeValueFullLoadAndCdc,
 			ReplicationInstanceArn:    proto.String(replicationARN),
-			ReplicationTaskIdentifier: proto.String(awsdmsRoachtestDMSTaskName),
+			ReplicationTaskIdentifier: proto.String(awsdmsRoachtestDMSTaskName(t.BuildVersion())),
 			SourceEndpointArn:         proto.String(sourceARN),
 			TargetEndpointArn:         proto.String(targetARN),
 			// TODO(#migrations): when AWS API supports EnableValidation, add it here.
@@ -571,7 +599,7 @@ func setupDMSEndpointsAndTask(
 		return err
 	}
 	t.L().Printf("waiting for replication task to be ready")
-	if err := dms.NewReplicationTaskReadyWaiter(dmsCli).Wait(ctx, dmsDescribeTasksInput, awsdmsWaitTimeLimit); err != nil {
+	if err := dms.NewReplicationTaskReadyWaiter(dmsCli).Wait(ctx, dmsDescribeTasksInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 		return err
 	}
 	t.L().Printf("starting replication task")
@@ -585,7 +613,11 @@ func setupDMSEndpointsAndTask(
 		return err
 	}
 	t.L().Printf("waiting for replication task to be running")
-	if err := dms.NewReplicationTaskRunningWaiter(dmsCli).Wait(ctx, dmsDescribeTasksInput, awsdmsWaitTimeLimit); err != nil {
+	if err := dms.NewReplicationTaskRunningWaiter(dmsCli).Wait(
+		ctx,
+		dmsDescribeTasksInput(t.BuildVersion()),
+		awsdmsWaitTimeLimit,
+	); err != nil {
 		return err
 	}
 	return nil
@@ -596,20 +628,20 @@ func isDMSResourceNotFound(err error) bool {
 }
 
 func tearDownAWSDMS(
-	ctx context.Context, l *logger.Logger, rdsCli *rds.Client, dmsCli *dms.Client,
+	ctx context.Context, t test.Test, rdsCli *rds.Client, dmsCli *dms.Client,
 ) error {
 	if err := func() error {
-		if err := tearDownDMSTasks(ctx, l, dmsCli); err != nil {
+		if err := tearDownDMSTasks(ctx, t, dmsCli); err != nil {
 			return err
 		}
-		if err := tearDownDMSEndpoints(ctx, l, dmsCli); err != nil {
+		if err := tearDownDMSEndpoints(ctx, t, dmsCli); err != nil {
 			return err
 		}
 
 		// Delete the replication and rds instances in parallel.
 		g := ctxgroup.WithContext(ctx)
-		g.Go(tearDownDMSInstances(ctx, l, dmsCli))
-		g.Go(tearDownRDSInstances(ctx, l, rdsCli))
+		g.Go(tearDownDMSInstances(ctx, t, dmsCli))
+		g.Go(tearDownRDSInstances(ctx, t, rdsCli))
 		return g.Wait()
 	}(); err != nil {
 		return errors.Wrapf(err, "failed to tear down DMS")
@@ -619,8 +651,8 @@ func tearDownAWSDMS(
 
 // tearDownDMSTasks tears down the DMS task, endpoints and replication instance
 // that may have been created.
-func tearDownDMSTasks(ctx context.Context, l *logger.Logger, dmsCli *dms.Client) error {
-	dmsTasks, err := dmsCli.DescribeReplicationTasks(ctx, dmsDescribeTasksInput)
+func tearDownDMSTasks(ctx context.Context, t test.Test, dmsCli *dms.Client) error {
+	dmsTasks, err := dmsCli.DescribeReplicationTasks(ctx, dmsDescribeTasksInput(t.BuildVersion()))
 	if err != nil {
 		if !isDMSResourceNotFound(err) {
 			return err
@@ -629,7 +661,7 @@ func tearDownDMSTasks(ctx context.Context, l *logger.Logger, dmsCli *dms.Client)
 		wasRunning := false
 		for _, task := range dmsTasks.ReplicationTasks {
 			if *task.Status == "running" {
-				l.Printf("stopping DMS task %s (arn: %s)", *task.ReplicationTaskIdentifier, *task.ReplicationTaskArn)
+				t.L().Printf("stopping DMS task %s (arn: %s)", *task.ReplicationTaskIdentifier, *task.ReplicationTaskArn)
 				if _, err := dmsCli.StopReplicationTask(ctx, &dms.StopReplicationTaskInput{ReplicationTaskArn: task.ReplicationTaskArn}); err != nil {
 					return err
 				}
@@ -637,27 +669,27 @@ func tearDownDMSTasks(ctx context.Context, l *logger.Logger, dmsCli *dms.Client)
 			}
 		}
 		if wasRunning {
-			l.Printf("waiting for task to be stopped")
-			if err := dms.NewReplicationTaskStoppedWaiter(dmsCli).Wait(ctx, dmsDescribeTasksInput, awsdmsWaitTimeLimit); err != nil {
+			t.L().Printf("waiting for task to be stopped")
+			if err := dms.NewReplicationTaskStoppedWaiter(dmsCli).Wait(ctx, dmsDescribeTasksInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 				return err
 			}
 		}
 		for _, task := range dmsTasks.ReplicationTasks {
-			l.Printf("deleting DMS task %s (arn: %s)", *task.ReplicationTaskIdentifier, *task.ReplicationTaskArn)
+			t.L().Printf("deleting DMS task %s (arn: %s)", *task.ReplicationTaskIdentifier, *task.ReplicationTaskArn)
 			if _, err := dmsCli.DeleteReplicationTask(ctx, &dms.DeleteReplicationTaskInput{ReplicationTaskArn: task.ReplicationTaskArn}); err != nil {
 				return err
 			}
 		}
-		l.Printf("waiting for task to be deleted")
-		if err := dms.NewReplicationTaskDeletedWaiter(dmsCli).Wait(ctx, dmsDescribeTasksInput, awsdmsWaitTimeLimit); err != nil {
+		t.L().Printf("waiting for task to be deleted")
+		if err := dms.NewReplicationTaskDeletedWaiter(dmsCli).Wait(ctx, dmsDescribeTasksInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func tearDownDMSEndpoints(ctx context.Context, l *logger.Logger, dmsCli *dms.Client) error {
-	for _, ep := range []string{awsdmsRoachtestDMSRDSEndpointName, awsdmsRoachtestDMSCRDBEndpointName} {
+func tearDownDMSEndpoints(ctx context.Context, t test.Test, dmsCli *dms.Client) error {
+	for _, ep := range []string{awsdmsRoachtestDMSRDSEndpointName(t.BuildVersion()), awsdmsRoachtestDMSCRDBEndpointName(t.BuildVersion())} {
 		dmsEndpoints, err := dmsCli.DescribeEndpoints(ctx, &dms.DescribeEndpointsInput{
 			Filters: []dmstypes.Filter{
 				{
@@ -672,7 +704,7 @@ func tearDownDMSEndpoints(ctx context.Context, l *logger.Logger, dmsCli *dms.Cli
 			}
 		} else {
 			for _, dmsEndpoint := range dmsEndpoints.Endpoints {
-				l.Printf("deleting DMS endpoint %s (arn: %s)", *dmsEndpoint.EndpointIdentifier, *dmsEndpoint.EndpointArn)
+				t.L().Printf("deleting DMS endpoint %s (arn: %s)", *dmsEndpoint.EndpointIdentifier, *dmsEndpoint.EndpointArn)
 				if _, err := dmsCli.DeleteEndpoint(ctx, &dms.DeleteEndpointInput{EndpointArn: dmsEndpoint.EndpointArn}); err != nil {
 					return err
 				}
@@ -682,16 +714,16 @@ func tearDownDMSEndpoints(ctx context.Context, l *logger.Logger, dmsCli *dms.Cli
 	return nil
 }
 
-func tearDownDMSInstances(ctx context.Context, l *logger.Logger, dmsCli *dms.Client) func() error {
+func tearDownDMSInstances(ctx context.Context, t test.Test, dmsCli *dms.Client) func() error {
 	return func() error {
-		dmsInstances, err := dmsCli.DescribeReplicationInstances(ctx, dmsDescribeInstancesInput)
+		dmsInstances, err := dmsCli.DescribeReplicationInstances(ctx, dmsDescribeInstancesInput(t.BuildVersion()))
 		if err != nil {
 			if !isDMSResourceNotFound(err) {
 				return err
 			}
 		} else {
 			for _, dmsInstance := range dmsInstances.ReplicationInstances {
-				l.Printf("deleting DMS replication instance %s (arn: %s)", *dmsInstance.ReplicationInstanceIdentifier, *dmsInstance.ReplicationInstanceArn)
+				t.L().Printf("deleting DMS replication instance %s (arn: %s)", *dmsInstance.ReplicationInstanceIdentifier, *dmsInstance.ReplicationInstanceArn)
 				if _, err := dmsCli.DeleteReplicationInstance(ctx, &dms.DeleteReplicationInstanceInput{
 					ReplicationInstanceArn: dmsInstance.ReplicationInstanceArn,
 				}); err != nil {
@@ -700,8 +732,8 @@ func tearDownDMSInstances(ctx context.Context, l *logger.Logger, dmsCli *dms.Cli
 			}
 
 			// Wait for the replication instance to be deleted.
-			l.Printf("waiting for all replication instances to be deleted")
-			if err := dms.NewReplicationInstanceDeletedWaiter(dmsCli).Wait(ctx, dmsDescribeInstancesInput, awsdmsWaitTimeLimit); err != nil {
+			t.L().Printf("waiting for all replication instances to be deleted")
+			if err := dms.NewReplicationInstanceDeletedWaiter(dmsCli).Wait(ctx, dmsDescribeInstancesInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 				return err
 			}
 		}
@@ -709,16 +741,16 @@ func tearDownDMSInstances(ctx context.Context, l *logger.Logger, dmsCli *dms.Cli
 	}
 }
 
-func tearDownRDSInstances(ctx context.Context, l *logger.Logger, rdsCli *rds.Client) func() error {
+func tearDownRDSInstances(ctx context.Context, t test.Test, rdsCli *rds.Client) func() error {
 	return func() error {
-		rdsInstances, err := rdsCli.DescribeDBInstances(ctx, rdsDescribeInstancesInput)
+		rdsInstances, err := rdsCli.DescribeDBInstances(ctx, rdsDescribeInstancesInput(t.BuildVersion()))
 		if err != nil {
 			if !errors.HasType(err, &rdstypes.ResourceNotFoundFault{}) {
 				return err
 			}
 		} else {
 			for _, rdsInstance := range rdsInstances.DBInstances {
-				l.Printf("attempting to delete instance %s", *rdsInstance.DBInstanceIdentifier)
+				t.L().Printf("attempting to delete instance %s", *rdsInstance.DBInstanceIdentifier)
 				if _, err := rdsCli.DeleteDBInstance(
 					ctx,
 					&rds.DeleteDBInstanceInput{
@@ -730,15 +762,15 @@ func tearDownRDSInstances(ctx context.Context, l *logger.Logger, rdsCli *rds.Cli
 					return err
 				}
 			}
-			l.Printf("waiting for all cluster db instances to be deleted")
-			if err := rds.NewDBInstanceDeletedWaiter(rdsCli).Wait(ctx, rdsDescribeInstancesInput, awsdmsWaitTimeLimit); err != nil {
+			t.L().Printf("waiting for all cluster db instances to be deleted")
+			if err := rds.NewDBInstanceDeletedWaiter(rdsCli).Wait(ctx, rdsDescribeInstancesInput(t.BuildVersion()), awsdmsWaitTimeLimit); err != nil {
 				return err
 			}
 		}
 
 		// Delete RDS clusters that may be created.
 		rdsClusters, err := rdsCli.DescribeDBClusters(ctx, &rds.DescribeDBClustersInput{
-			Filters: rdsClusterFilters,
+			Filters: rdsClusterFilters(t.BuildVersion()),
 		})
 		if err != nil {
 			if !errors.HasType(err, &rdstypes.ResourceNotFoundFault{}) {
@@ -746,7 +778,7 @@ func tearDownRDSInstances(ctx context.Context, l *logger.Logger, rdsCli *rds.Cli
 			}
 		} else {
 			for _, rdsCluster := range rdsClusters.DBClusters {
-				l.Printf("attempting to delete cluster %s", *rdsCluster.DBClusterIdentifier)
+				t.L().Printf("attempting to delete cluster %s", *rdsCluster.DBClusterIdentifier)
 				if _, err := rdsCli.DeleteDBCluster(
 					ctx,
 					&rds.DeleteDBClusterInput{
@@ -759,7 +791,7 @@ func tearDownRDSInstances(ctx context.Context, l *logger.Logger, rdsCli *rds.Cli
 			}
 		}
 		rdsParamGroups, err := rdsCli.DescribeDBClusterParameterGroups(ctx, &rds.DescribeDBClusterParameterGroupsInput{
-			DBClusterParameterGroupName: proto.String(awsdmsRoachtestDMSParameterGroup),
+			DBClusterParameterGroupName: proto.String(awsdmsRoachtestDMSParameterGroup(t.BuildVersion())),
 		})
 		if err != nil {
 			// Sometimes they don't deserialize to DBClusterParameterGroupNotFoundFault :\.
@@ -768,7 +800,7 @@ func tearDownRDSInstances(ctx context.Context, l *logger.Logger, rdsCli *rds.Cli
 			}
 		} else {
 			for _, rdsGroup := range rdsParamGroups.DBClusterParameterGroups {
-				l.Printf("attempting to delete param group %s", *rdsGroup.DBClusterParameterGroupName)
+				t.L().Printf("attempting to delete param group %s", *rdsGroup.DBClusterParameterGroupName)
 
 				// This can sometimes fail as the cluster still relies on the param
 				// group but the cluster takes a while to wind down. Ideally, we wait
@@ -791,7 +823,7 @@ func tearDownRDSInstances(ctx context.Context, l *logger.Logger, rdsCli *rds.Cli
 					if err == nil {
 						break
 					}
-					l.Printf("expected error: failed to delete cluster param group, retrying: %+v", err)
+					t.L().Printf("expected error: failed to delete cluster param group, retrying: %+v", err)
 				}
 				if lastErr != nil {
 					return errors.Wrapf(lastErr, "failed to delete param group")
