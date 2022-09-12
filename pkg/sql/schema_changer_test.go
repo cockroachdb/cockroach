@@ -3323,18 +3323,18 @@ func TestPrimaryKeyDropIndexNotCancelable(t *testing.T) {
 
 	ctx := context.Background()
 	var db *gosql.DB
-	shouldAttemptCancel := true
+	var shouldAttemptCancel syncutil.AtomicBool
+	shouldAttemptCancel.Set(true)
 	hasAttemptedCancel := make(chan struct{})
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		GCJob: &sql.GCJobTestingKnobs{
 			RunBeforeResume: func(jobID jobspb.JobID) error {
-				if !shouldAttemptCancel {
+				if !shouldAttemptCancel.Swap(false) {
 					return nil
 				}
 				_, err := db.Exec(`CANCEL JOB ($1)`, jobID)
-				require.Regexp(t, "not cancelable", err)
-				shouldAttemptCancel = false
+				assert.Regexp(t, "not cancelable", err)
 				close(hasAttemptedCancel)
 				return nil
 			},
