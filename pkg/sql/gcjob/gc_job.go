@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -305,8 +306,7 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 		return err
 	}
 
-	if details.Tenant != nil ||
-		!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) {
+	if !shouldUseDelRange(ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs) {
 		return r.legacyWaitAndClearTableData(ctx, execCfg, details, progress)
 	}
 	return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
@@ -419,10 +419,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 
 	// Now that we've registered to be notified, check to see if we raced
 	// with the new version becoming active.
-	//
-	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
-	if details.Tenant == nil &&
-		execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) {
+	if shouldUseDelRange(ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs) {
 		return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
 	}
 
@@ -438,10 +435,9 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 		}
 		// We'll be notified if the new version becomes active, so check and
 		// see if it's now time to change to the new protocol.
-		//
-		// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
-		if details.Tenant == nil &&
-			execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) {
+		if shouldUseDelRange(
+			ctx, details, execCfg.Settings, execCfg.GCJobTestingKnobs,
+		) {
 			return r.deleteDataAndWaitForGC(ctx, execCfg, details, progress)
 		}
 
@@ -488,6 +484,20 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 			timerDuration = MaxSQLGCInterval
 		}
 	}
+}
+
+func shouldUseDelRange(
+	ctx context.Context,
+	details *jobspb.SchemaChangeGCDetails,
+	s *cluster.Settings,
+	knobs *sql.GCJobTestingKnobs,
+) bool {
+	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
+	return details.Tenant == nil &&
+		s.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) &&
+		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
+			// Allow this testing knob to override the storage setting, for convenience.
+			knobs.SkipWaitingForMVCCGC)
 }
 
 // waitForWork waits until there is work to do given the gossipUpDateC, the
