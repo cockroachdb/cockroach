@@ -8377,6 +8377,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 
 func TestBackupWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 64773, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	allowResponse := make(chan struct{})
