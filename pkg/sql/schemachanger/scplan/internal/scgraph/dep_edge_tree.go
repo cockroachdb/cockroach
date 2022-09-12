@@ -11,100 +11,217 @@
 package scgraph
 
 import (
+	"sync"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 )
-
-type depEdgeTree struct {
-	t     *btree.BTree
-	order edgeTreeOrder
-	cmp   nodeCmpFn
-}
-
-type nodeCmpFn func(a, b *screl.Node) (less, eq bool)
-
-func newDepEdgeTree(order edgeTreeOrder, cmp nodeCmpFn) *depEdgeTree {
-	const degree = 8 // arbitrary
-	return &depEdgeTree{
-		t:     btree.New(degree),
-		order: order,
-		cmp:   cmp,
-	}
-}
 
 // edgeTreeOrder order in which the edge tree is sorted,
 // either based on from/to node indexes.
 type edgeTreeOrder bool
-
-func (o edgeTreeOrder) first(e Edge) *screl.Node {
-	if o == fromTo {
-		return e.From()
-	}
-	return e.To()
-}
-
-func (o edgeTreeOrder) second(e Edge) *screl.Node {
-	if o == toFrom {
-		return e.From()
-	}
-	return e.To()
-}
 
 const (
 	fromTo edgeTreeOrder = true
 	toFrom edgeTreeOrder = false
 )
 
-// edgeTreeEntry BTree items for tracking edges
-// in an ordered manner.
-type edgeTreeEntry struct {
-	t    *depEdgeTree
-	edge *DepEdge
+// getTargetIdxFunc is used to get the location of the node in the graph.
+type getTargetIdxFunc = func(n *screl.Node) targetIdx
+
+// depEdges is a data structure to store the set of depEdges. It offers
+// in-order traversal of edges from or to any node in the graph.
+type depEdges struct {
+	fromTo *btree.BTree
+	toFrom *btree.BTree
+
+	getTargetIdx getTargetIdxFunc
+	edgeAlloc    depEdgeAlloc
+	entryAlloc   depEdgeTreeEntryAlloc
 }
 
-func (et *depEdgeTree) insert(e *DepEdge) {
-	et.t.ReplaceOrInsert(&edgeTreeEntry{
-		t:    et,
-		edge: e,
+// makeDepEdges constructs the depEdge structure.
+func makeDepEdges(getTargetIdx getTargetIdxFunc) depEdges {
+	const degree = 32 // arbitrary
+	return depEdges{
+		fromTo:       btree.New(degree),
+		toFrom:       btree.New(degree),
+		getTargetIdx: getTargetIdx,
+	}
+}
+
+// insertOrUpdate will insert a new dep edge if no such edge exists between
+// from and to. Otherwise, it will update the edge accordingly. An error
+// may be returned if the kind is incompatible with the existing kind for
+// the edge.
+func (et *depEdges) insertOrUpdate(rule Rule, kind DepEdgeKind, from, to *screl.Node) error {
+	k := makeEdgeKey(et.getTargetIdx, from, to)
+	if got, ok := et.get(k); ok {
+		return updateExistingDepEdge(rule, kind, got)
+	}
+	de := et.edgeAlloc.new(DepEdge{
+		kind:  kind,
+		from:  from,
+		to:    to,
+		rules: []Rule{rule},
 	})
+	et.fromTo.ReplaceOrInsert(et.entryAlloc.new(k, fromTo, de))
+	et.toFrom.ReplaceOrInsert(et.entryAlloc.new(k, toFrom, de))
+	return nil
 }
 
-func (et *depEdgeTree) get(e *DepEdge) *DepEdge {
-	got, ok := et.t.Get(&edgeTreeEntry{
-		t:    et,
-		edge: e,
-	}).(*edgeTreeEntry)
-	if !ok {
-		return nil
-	}
-	return got.edge
-}
-
-func (et *depEdgeTree) iterateSourceNode(n *screl.Node, it DepEdgeIterator) (err error) {
-	e := &edgeTreeEntry{t: et, edge: &DepEdge{}}
-	if et.order == fromTo {
-		e.edge.from = n
-	} else {
-		e.edge.to = n
-	}
-	et.t.AscendGreaterOrEqual(e, func(i btree.Item) (wantMore bool) {
-		e := i.(*edgeTreeEntry)
-		if et.order.first(e.edge) != n {
-			return false
+func updateExistingDepEdge(rule Rule, kind DepEdgeKind, got *DepEdge) error {
+	if got.kind != kind && kind != Precedence {
+		if got.kind != Precedence {
+			return errors.AssertionFailedf(
+				"inconsistent dep edge kinds: %s rule %q conflicts with %s",
+				rule.Kind, rule.Name, got,
+			)
 		}
-		err = it(e.edge)
+		got.kind = kind
+	}
+	got.rules = append(got.rules, rule)
+	return nil
+}
+
+// iterateFromNode iterates the set of edges from the passed node.
+func (et *depEdges) iterateFromNode(n *screl.Node, it DepEdgeIterator) (err error) {
+	return iterateDepEdges(
+		et.getTargetIdx(n), n.CurrentStatus, fromTo, et.fromTo, it,
+	)
+}
+
+// iterateFromNode iterates the set of edges to the passed node.
+func (et *depEdges) iterateToNode(n *screl.Node, it DepEdgeIterator) (err error) {
+	return iterateDepEdges(
+		et.getTargetIdx(n), n.CurrentStatus, toFrom, et.toFrom, it,
+	)
+}
+
+func iterateDepEdges(
+	target targetIdx, status scpb.Status, order edgeTreeOrder, t *btree.BTree, it DepEdgeIterator,
+) (err error) {
+	var idx int
+	if order == toFrom {
+		idx = 1
+	}
+	var qk edgeKey
+	qk.targets[idx] = target
+	qk.statuses[idx] = uint8(status)
+	k1, k2 := getDepEdgeTreeEntry(), getDepEdgeTreeEntry()
+	defer putDepEdgeTreeEntry(k1)
+	defer putDepEdgeTreeEntry(k2)
+	*k1 = depEdgeTreeEntry{edgeKey: qk, order: order, kind: queryStart}
+	*k2 = depEdgeTreeEntry{edgeKey: qk, order: order, kind: queryEnd}
+	t.AscendRange(k1, k2, func(i btree.Item) (wantMore bool) {
+		err = it(i.(*depEdgeTreeEntry).edge)
 		return err == nil
 	})
 	return iterutil.Map(err)
 }
 
-// Less implements btree.Item.
-func (e *edgeTreeEntry) Less(otherItem btree.Item) bool {
-	o := otherItem.(*edgeTreeEntry)
-	if less, eq := e.t.cmp(e.t.order.first(e.edge), e.t.order.first(o.edge)); !eq {
-		return less
+// iterates iterates all edges.
+func (et *depEdges) iterate(it DepEdgeIterator) (err error) {
+	et.fromTo.Ascend(func(i btree.Item) bool {
+		err = it(i.(*depEdgeTreeEntry).edge)
+		return err == nil
+	})
+	return iterutil.Map(err)
+}
+
+// get looks up a dep edge with an edgeKey.
+func (et *depEdges) get(k edgeKey) (*DepEdge, bool) {
+	qk := getDepEdgeTreeEntry()
+	defer putDepEdgeTreeEntry(qk)
+	*qk = depEdgeTreeEntry{edgeKey: k, order: fromTo}
+	if got := et.fromTo.Get(qk); got != nil {
+		return got.(*depEdgeTreeEntry).edge, true
 	}
-	less, _ := e.t.cmp(e.t.order.second(e.edge), e.t.order.second(o.edge))
+	return nil, false
+}
+
+// edgeKey stores two node identities in a packed structure which uses
+// only two words. It also places the statuses at the end so that when
+// embedded in depEdgeTreeEntry, only 4 words in total are used.
+type edgeKey struct {
+	targets  [2]targetIdx
+	statuses [2]uint8
+}
+
+// makeEdgeKey constructs an edgeKey for two nodes.
+func makeEdgeKey(getTargetIdx getTargetIdxFunc, from, to *screl.Node) edgeKey {
+	return edgeKey{
+		targets:  [2]targetIdx{getTargetIdx(from), getTargetIdx(to)},
+		statuses: [2]uint8{uint8(from.CurrentStatus), uint8(to.CurrentStatus)},
+	}
+}
+
+// depEdgeTreeEntryKind is an entry in one of the two depEdges trees.
+// The order indicates the tree this entry is a member of, and how to
+// perform comparisons with other entries. The kind field is used to
+// determine how to order the entry in the case of queries. The edge
+// points to the value of the corresponding edge.
+type depEdgeTreeEntry struct {
+	edgeKey
+	order edgeTreeOrder
+	kind  depEdgeTreeEntryKind
+	edge  *DepEdge
+}
+
+// depEdgeTreeEntryKind indicates whether the entry corresponds to an edge,
+// a key start value or a query end value.
+type depEdgeTreeEntryKind uint8
+
+const (
+	edge depEdgeTreeEntryKind = iota
+	queryStart
+	queryEnd
+)
+
+func (ek *depEdgeTreeEntry) Less(other btree.Item) bool {
+	o := other.(*depEdgeTreeEntry)
+	less, eq := cmpEdgeTreeEntry(ek, o, true /* first */)
+	if eq {
+		less, _ = cmpEdgeTreeEntry(ek, o, false /* first */)
+	}
 	return less
+}
+
+func cmpEdgeTreeEntry(a, b *depEdgeTreeEntry, first bool) (less, eq bool) {
+	idx := 0
+	if a.order == fromTo && !first ||
+		a.order == toFrom && first {
+		idx = 1
+	}
+	if ta, tb := a.targets[idx], b.targets[idx]; ta != tb {
+		return ta < tb, false
+	}
+	if sa, sb := a.statuses[idx], b.statuses[idx]; sa != sb {
+		return sa < sb, false
+	}
+	if a.kind != b.kind {
+		return a.kind == queryStart || b.kind == queryEnd, false
+	}
+	return false, true
+}
+
+// depEdgeTreeEntryPool pools depEdgeTreeEntry objects. This turns out to be
+// important because these objects are used when querying the depEdges, which
+// happens many times.
+var depEdgeTreeEntryPool = sync.Pool{
+	New: func() interface{} {
+		return &depEdgeTreeEntry{}
+	},
+}
+
+func getDepEdgeTreeEntry() (a *depEdgeTreeEntry) {
+	return depEdgeTreeEntryPool.Get().(*depEdgeTreeEntry)
+}
+
+func putDepEdgeTreeEntry(a *depEdgeTreeEntry) {
+	*a = depEdgeTreeEntry{}
+	depEdgeTreeEntryPool.Put(a)
 }
