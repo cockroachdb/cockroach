@@ -541,11 +541,14 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		if !resultIsRetryable(t.Result) {
 			v.failIfError(op, t.Result)
 			if txnID == nil {
-				v.checkAtomic(`batch`, t.Result, nil, t.Ops...)
-			} else {
-				for _, op := range t.Ops {
-					v.processOp(txnID, op)
-				}
+				s := t.Txn.String()
+				txnID = &s
+			}
+			for _, op := range t.Ops {
+				v.processOp(txnID, op)
+			}
+			if t.Txn != nil {
+				v.checkAtomic(`batch`, t.Result, t.Txn, t.Ops...)
 			}
 		}
 	case *ClosureTxnOperation:

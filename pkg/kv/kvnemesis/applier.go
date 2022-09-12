@@ -289,15 +289,16 @@ func applyBatchOp(
 		case *DeleteOperation:
 			b.Del(subO.Key)
 		case *DeleteRangeOperation:
-			if !inTxn {
-				panic(errors.AssertionFailedf(`non-transactional batch DelRange operations currently unsupported`))
-			}
 			b.DelRange(subO.Key, subO.EndKey, true /* returnKeys */)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
 	}
 	runErr := runFn(ctx, b)
+	if runErr == nil && !inTxn {
+		o.Txn = syntheticTxnAtTime(b.RawResponse().Timestamp)
+	}
+
 	o.Result = resultError(ctx, runErr)
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
