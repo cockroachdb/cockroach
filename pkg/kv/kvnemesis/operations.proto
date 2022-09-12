@@ -104,6 +104,8 @@ message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
 
+  util.hlc.Timestamp optional_timestamp = 17 [(gogoproto.nullable) = false];
+
   BatchOperation batch = 1;
 
   // TODO(dan): The original prototype of kvnemesis had separate operations for

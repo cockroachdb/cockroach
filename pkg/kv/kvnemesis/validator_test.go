@@ -228,11 +228,11 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(del(`a`), nil)),
 				step(withResult(put(`a`, `v1`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v2`), nil),
 					withResult(del(`a`), nil),
 					withResult(put(`a`, `v3`), nil),
-				), nil)),
+				), 3), nil)),
 				step(withResult(del(`a`), nil)),
 			},
 			kvs:      kvs(tombstone(`a`, 1), kv(`a`, 2, `v1`), kv(`a`, 3, `v3`), tombstone(`a`, 4)),
@@ -265,9 +265,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one transactionally committed put with the correct writes",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: nil,
@@ -275,9 +275,9 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one transactionally committed delete with the correct writes",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(del(`a`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(tombstone(`a`, 1)),
 			expected: nil,
@@ -285,10 +285,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one transactionally committed put with first write missing",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`b`, `v2`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`b`, 1, `v2`)),
 			expected: []string{`committed txn missing write: [w]"a":missing->v1 [w]"b":0.000000001,0->v2`},
@@ -307,10 +307,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one transactionally committed put with second write missing",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`b`, `v2`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: []string{`committed txn missing write: [w]"a":0.000000001,0->v1 [w]"b":missing->v2`},
@@ -329,10 +329,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one transactionally committed put with write timestamp disagreement",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`b`, `v2`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: []string{
@@ -421,10 +421,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed puts of the same key",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`a`, `v2`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v2`)),
 			expected: nil,
@@ -454,10 +454,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed writes (delete, put) of the same key",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(del(`a`), nil),
 					withResult(put(`a`, `v2`), nil),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v2`)),
 			expected: nil,
@@ -465,10 +465,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed puts of the same key with extra write",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`a`, `v2`), nil),
-				), nil)),
+				), 2), nil)),
 			},
 			// HACK: These should be the same timestamp. See the TODO in
 			// watcher.processEvents.
@@ -805,10 +805,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(put(`b`, `v4`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withReadResult(get(`b`), `v3`),
-				), nil)),
+				), 3), nil)),
 			},
 			// Reading v1 is valid from 1-3 and v3 is valid from 2-3: overlap 2-3
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
@@ -821,11 +821,11 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`b`, `v2`), nil)),
 				step(withResult(del(`a`), nil)),
 				step(withResult(del(`b`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withReadResult(get(`b`), `v2`),
 					withReadResult(get(`c`), ``),
-				), nil)),
+				), 4), nil)),
 			},
 			// Reading (a, <nil>) is valid from min-1 or 3-max, and (b, v2) is valid from 2-4: overlap 3-4
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
@@ -838,10 +838,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(put(`b`, `v4`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withReadResult(get(`b`), `v3`),
-				), nil)),
+				), 3), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 2-3: no overlap
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
@@ -859,11 +859,11 @@ func TestValidate(t *testing.T) {
 					withResult(del(`a`), nil),
 					withResult(del(`b`), nil),
 				), 3), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withReadResult(get(`b`), `v2`),
 					withReadResult(get(`c`), ``),
-				), nil)),
+				), 4), nil)),
 			},
 			// Reading (a, <nil>) is valid from min-1 or 3-max, and (b, v2) is valid from 2-3: no overlap
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 3)),
@@ -913,10 +913,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withReadResult(get(`b`), ``),
-				), nil)),
+				), 1), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-2: overlap 1-2
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
@@ -928,10 +928,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withReadResult(get(`b`), ``),
-				), nil)),
+				), 1), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-1: no overlap
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 1, `v3`)),
@@ -945,10 +945,10 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withResult(put(`b`, `v3`), nil),
-				), nil)),
+				), 2), nil)),
 			},
 			// Reading v1 is valid from 1-3 and v3 is valid at 2: overlap @2
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`)),
@@ -959,10 +959,10 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withResult(put(`b`, `v3`), nil),
-				), nil)),
+				), 2), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid at 2: no overlap
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
@@ -974,11 +974,11 @@ func TestValidate(t *testing.T) {
 		{
 			name: "transaction with read before and after write",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withResult(put(`a`, `v1`), nil),
 					withReadResult(get(`a`), `v1`),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: nil,
@@ -999,11 +999,11 @@ func TestValidate(t *testing.T) {
 		{
 			name: "transaction with incorrect read before write",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), `v1`),
 					withResult(put(`a`, `v1`), nil),
 					withReadResult(get(`a`), `v1`),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
@@ -1030,11 +1030,11 @@ func TestValidate(t *testing.T) {
 		{
 			name: "transaction with incorrect read after write",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withResult(put(`a`, `v1`), nil),
 					withReadResult(get(`a`), ``),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
@@ -1061,13 +1061,13 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed puts of the same key with reads",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withReadResult(get(`a`), ``),
 					withResult(put(`a`, `v1`), nil),
 					withReadResult(get(`a`), `v1`),
 					withResult(put(`a`, `v2`), nil),
 					withReadResult(get(`a`), `v2`),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v2`)),
 			expected: nil,
@@ -1122,7 +1122,7 @@ func TestValidate(t *testing.T) {
 			},
 			kvs: kvs(kv(`a`, 2, `v1`)),
 			expected: []string{
-				`committed txn mismatched write timestamp 0.000000001,0: [w]"a":0.000000002,0->v1`,
+				`mismatched write timestamp 0.000000001,0: [w]"a":0.000000002,0->v1`,
 			},
 		},
 		{
@@ -1318,10 +1318,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one scan after writes and delete returning missing key",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`), nil),
 					withResult(put(`b`, `v2`), nil),
-				), nil)),
+				), 1), nil)),
 				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`b`, `v2`)),
 					withResult(del(`a`), nil),
@@ -1471,10 +1471,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(put(`b`, `v4`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v3`)),
 					withScanResult(scan(`b`, `d`), scanKV(`b`, `v3`)),
-				), nil)),
+				), 2), nil)),
 			},
 			// Reading v1 is valid from 1-3 and v3 is valid from 2-3: overlap 2-3
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
@@ -1488,10 +1488,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(del(`b`), nil)),
 				step(withResult(put(`b`, `v4`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
 					withScanResult(scan(`b`, `d`)),
-				), nil)),
+				), 2), nil)),
 			},
 			// Reading v1 is valid from 1-3 and <nil> for `b` is valid <min>-1 and 2-4: overlap 2-3
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 1, `v3`), tombstone(`b`, 2), kv(`b`, 4, `v4`)),
@@ -1504,10 +1504,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(put(`b`, `v4`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v3`)),
 					withScanResult(scan(`b`, `d`), scanKV(`b`, `v3`)),
-				), nil)),
+				), 2), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 2-3: no overlap
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`), kv(`b`, 3, `v4`)),
@@ -1524,10 +1524,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
 				step(withResult(del(`b`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
 					withScanResult(scan(`b`, `d`)),
-				), nil)),
+				), 3), nil)),
 			},
 			// Reading v1 is valid from 1-2 and <nil> for `b` is valid from <min>-1, 3-<max>: no overlap
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 1, `v3`), tombstone(`b`, 3)),
@@ -1543,10 +1543,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
 					withScanResult(scan(`b`, `d`)),
-				), nil)),
+				), 2), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-2: overlap 1-2
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
@@ -1558,10 +1558,10 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
 				step(withResult(put(`b`, `v3`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
 					withScanResult(scan(`b`, `d`)),
-				), nil)),
+				), 1), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid from 0-1: no overlap
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 1, `v3`)),
@@ -1576,10 +1576,10 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
 					withResult(put(`b`, `v3`), nil),
-				), nil)),
+				), 2), nil)),
 			},
 			// Reading v1 is valid from 1-3 and v3 is valid at 2: overlap @2
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`a`, 3, `v2`), kv(`b`, 2, `v3`)),
@@ -1590,10 +1590,10 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`a`, `v2`), nil)),
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
 					withResult(put(`b`, `v3`), nil),
-				), nil)),
+				), 2), nil)),
 			},
 			// Reading v1 is valid from 1-2 and v3 is valid at 2: no overlap
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`a`, 2, `v2`), kv(`b`, 2, `v3`)),
@@ -1605,11 +1605,11 @@ func TestValidate(t *testing.T) {
 		{
 			name: "transaction with scan before and after write",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`)),
 					withResult(put(`a`, `v1`), nil),
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: nil,
@@ -1617,11 +1617,11 @@ func TestValidate(t *testing.T) {
 		{
 			name: "transaction with incorrect scan before write",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
 					withResult(put(`a`, `v1`), nil),
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
@@ -1634,11 +1634,11 @@ func TestValidate(t *testing.T) {
 		{
 			name: "transaction with incorrect scan after write",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`)),
 					withResult(put(`a`, `v1`), nil),
 					withScanResult(scan(`a`, `c`)),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
@@ -1649,7 +1649,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "two transactionally committed puts of the same key with scans",
 			steps: []Step{
-				step(withResult(closureTxn(ClosureTxnType_Commit,
+				step(withResult(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withScanResult(scan(`a`, `c`)),
 					withResult(put(`a`, `v1`), nil),
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`)),
@@ -1657,7 +1657,7 @@ func TestValidate(t *testing.T) {
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`)),
 					withResult(put(`b`, `v3`), nil),
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v2`), scanKV(`b`, `v3`)),
-				), nil)),
+				), 1), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v2`), kv(`b`, 1, `v3`)),
 			expected: nil,
