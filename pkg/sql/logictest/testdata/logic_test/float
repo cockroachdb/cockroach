@@ -139,3 +139,17 @@ query FFF
 SELECT -0.1234567890123456, 123456789012345.6, 1234567.890123456
 ----
 -0.1234567890123457 123456789012345.7 1234567.890123457
+
+statement ok
+CREATE TABLE t87605 (col2 FLOAT8 NULL)
+
+statement ok
+insert into t87605 values (1.234567890123456e+13), (1.234567890123456e+6)
+
+# Regression test for issue #87605.
+# The floor division operator `//` should not be folded away.
+query F
+SELECT ((col2::FLOAT8 // 1.0:::FLOAT8::FLOAT8)::FLOAT8) FROM t87605@[0] ORDER BY 1
+----
+1.234567e+06
+1.2345678901234e+13
