@@ -850,11 +850,7 @@ func (c *coster) computeHashJoinCost(join memo.RelExpr) memo.Cost {
 	on := join.Child(2).(*memo.FiltersExpr)
 	leftCols := join.Child(0).(memo.RelExpr).Relational().OutputCols
 	rightCols := join.Child(1).(memo.RelExpr).Relational().OutputCols
-	var filtersToSkip util.FastIntSet
-	_, _, toSkip := memo.ExtractJoinEqualityColumns(leftCols, rightCols, *on)
-	for _, idx := range toSkip {
-		filtersToSkip.Add(idx)
-	}
+	filtersToSkip := memo.ExtractJoinConditionFilterOrds(leftCols, rightCols, *on, false /* inequality */)
 	filterSetup, filterPerRow := c.computeFiltersCost(*on, filtersToSkip)
 	cost += filterSetup
 

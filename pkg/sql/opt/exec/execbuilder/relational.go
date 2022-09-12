@@ -1179,7 +1179,7 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		}
 	}
 
-	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
 		leftExpr.Relational().OutputCols,
 		rightExpr.Relational().OutputCols,
 		*filters,
