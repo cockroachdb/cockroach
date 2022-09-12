@@ -66,9 +66,11 @@ const replicaChecksumGCInterval = time.Hour
 //   - ContainsEstimates==false, i.e. the stats claimed they were correct.
 //
 // Before issuing the fatal error, the cluster bootstrap version is verified.
-// We know that old versions of CockroachDB sometimes violated this invariant,
-// but we want to exclude these violations, focusing only on cases in which we
-// know old CRDB versions (<19.1 at time of writing) were not involved.
+// Note that on clusters that originally got bootstrapped on older releases
+// (definitely 19.1, and likely also more recent ones) we know of the existence
+// of stats bugs, so it has to be expected to see the assertion fire there.
+//
+// This env var is intended solely for use in Cockroach Labs testing.
 var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTENT_STATS", false)
 
 // replicaChecksum contains progress on a replica checksum computation.
