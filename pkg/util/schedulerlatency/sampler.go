@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -58,9 +59,22 @@ var sampleDuration = settings.RegisterDurationSetting(
 	},
 )
 
+var schedulerLatency = metric.Metadata{
+	Name:        "go.scheduler_latency",
+	Help:        "Go scheduling latency",
+	Measurement: "Nanoseconds",
+	Unit:        metric.Unit_NANOSECONDS,
+}
+
 // StartSampler spawn a goroutine to periodically sample the scheduler latencies
 // and invoke all registered callbacks.
-func StartSampler(ctx context.Context, st *cluster.Settings, stopper *stop.Stopper) error {
+func StartSampler(
+	ctx context.Context,
+	st *cluster.Settings,
+	stopper *stop.Stopper,
+	registry *metric.Registry,
+	statsInterval time.Duration,
+) error {
 	return stopper.RunAsyncTask(ctx, "scheduler-latency-sampler", func(ctx context.Context) {
 		settingsValuesMu := struct {
 			syncutil.Mutex
@@ -69,10 +83,46 @@ func StartSampler(ctx context.Context, st *cluster.Settings, stopper *stop.Stopp
 
 		settingsValuesMu.period = samplePeriod.Get(&st.SV)
 		settingsValuesMu.duration = sampleDuration.Get(&st.SV)
-		ticker := time.NewTicker(settingsValuesMu.period)
-		defer ticker.Stop()
 
 		s := newSampler(settingsValuesMu.period, settingsValuesMu.duration)
+		_ = stopper.RunAsyncTask(ctx, "export-scheduler-stats", func(ctx context.Context) {
+			// cpuSchedulerLatencyBuckets are prometheus histogram buckets
+			// suitable for a histogram that records a (second-denominated)
+			// quantity where measurements correspond to delays in scheduling
+			// goroutines onto processors, i.e. are in the {micro,milli}-second
+			// range during normal operation. See TestHistogramBuckets for more
+			// details.
+			cpuSchedulerLatencyBuckets := reBucketExpAndTrim(
+				sample().Buckets,                   // original buckets
+				1.1,                                // base
+				(50 * time.Microsecond).Seconds(),  // min
+				(100 * time.Millisecond).Seconds(), // max
+			)
+
+			schedulerLatencyHistogram := newRuntimeHistogram(schedulerLatency, cpuSchedulerLatencyBuckets)
+			registry.AddMetric(schedulerLatencyHistogram)
+
+			ticker := time.NewTicker(statsInterval) // compute periodic stats
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-stopper.ShouldQuiesce():
+					return
+				case <-ticker.C:
+					lastIntervalHistogram := s.lastIntervalHistogram()
+					if lastIntervalHistogram == nil {
+						continue
+					}
+
+					schedulerLatencyHistogram.update(lastIntervalHistogram)
+				}
+			}
+		})
+
+		ticker := time.NewTicker(settingsValuesMu.period)
+		defer ticker.Stop()
 		samplePeriod.SetOnChange(&st.SV, func(ctx context.Context) {
 			period := samplePeriod.Get(&st.SV)
 			settingsValuesMu.Lock()
@@ -109,7 +159,8 @@ func StartSampler(ctx context.Context, st *cluster.Settings, stopper *stop.Stopp
 type sampler struct {
 	mu struct {
 		syncutil.Mutex
-		ringBuffer ring.Buffer // contains *metrics.Float64Histogram
+		ringBuffer            ring.Buffer // contains *metrics.Float64Histogram
+		lastIntervalHistogram *metrics.Float64Histogram
 	}
 }
 
@@ -128,40 +179,47 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 		numSamples = 1 // we need at least one sample to compare (also safeguards against integer division)
 	}
 	s.mu.ringBuffer.Resize(numSamples)
+	s.mu.lastIntervalHistogram = nil
 	s.mu.Unlock()
 }
 
 // sampleOnTickAndInvokeCallbacks samples scheduler latency stats as the ticker
 // has ticked. It invokes all callbacks registered with this package.
 func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	latestCumulative := sample()
-	oldestCumulative, ok := s.record(latestCumulative)
+	oldestCumulative, ok := s.recordLocked(latestCumulative)
 	if !ok {
 		return
 	}
-	interval := sub(latestCumulative, oldestCumulative)
-	latency := time.Duration(int64(percentile(interval, 0.99) * float64(time.Second.Nanoseconds())))
+	s.mu.lastIntervalHistogram = sub(latestCumulative, oldestCumulative)
+	p99 := time.Duration(int64(percentile(s.mu.lastIntervalHistogram, 0.99) * float64(time.Second.Nanoseconds())))
 
 	globallyRegisteredCallbacks.mu.Lock()
 	defer globallyRegisteredCallbacks.mu.Unlock()
 	cbs := globallyRegisteredCallbacks.mu.callbacks
 	for i := range cbs {
-		cbs[i].cb(latency, period)
+		cbs[i].cb(p99, period)
 	}
 }
 
-func (s *sampler) record(
+func (s *sampler) recordLocked(
 	sample *metrics.Float64Histogram,
 ) (oldest *metrics.Float64Histogram, ok bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.mu.ringBuffer.Len() == s.mu.ringBuffer.Cap() { // no more room, clear out the oldest
 		oldest = s.mu.ringBuffer.GetLast().(*metrics.Float64Histogram)
 		s.mu.ringBuffer.RemoveLast()
 	}
 	s.mu.ringBuffer.AddFirst(sample)
 	return oldest, oldest != nil
+}
+
+func (s *sampler) lastIntervalHistogram() *metrics.Float64Histogram {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.lastIntervalHistogram
 }
 
 // sample the cumulative (since process start) scheduler latency histogram from
@@ -204,17 +262,37 @@ func sub(a, b *metrics.Float64Histogram) *metrics.Float64Histogram {
 }
 
 // percentile computes a specific percentile value of the given histogram.
+//
+// TODO(irfansharif): Deduplicate this with the quantile computation in
+// util/metrics? Here we're using the raw histogram at the highest resolution
+// and with zero translation between types; there we rebucket the histogram and
+// translate to another type.
 func percentile(h *metrics.Float64Histogram, p float64) float64 {
 	// Counts contains the number of occurrences for each histogram bucket.
 	// Given N buckets, Count[n] is the number of occurrences in the range
 	// [bucket[n], bucket[n+1]), for 0 <= n < N.
 	//
-	// TODO(irfansharif): Consider maintaining the total count in the runtime
-	// itself to make this cheaper if we're calling this at a high frequency.
-	//
 	// TODO(irfansharif): Consider adjusting the default bucket count in the
 	// runtime to make this cheaper and with a more appropriate amount of
-	// resolution.
+	// resolution. The defaults can be seen through TestHistogramBuckets:
+	//
+	//   bucket[  0] width=0s boundary=[-Inf, 0s)
+	//   bucket[  1] width=1ns boundary=[0s, 1ns)
+	//   bucket[  2] width=1ns boundary=[1ns, 2ns)
+	//   bucket[  3] width=1ns boundary=[2ns, 3ns)
+	//   bucket[  4] width=1ns boundary=[3ns, 4ns)
+	//   ...
+	//   bucket[270] width=16.384µs boundary=[737.28µs, 753.664µs)
+	//   bucket[271] width=16.384µs boundary=[753.664µs, 770.048µs)
+	//   bucket[272] width=278.528µs boundary=[770.048µs, 1.048576ms)
+	//   bucket[273] width=32.768µs boundary=[1.048576ms, 1.081344ms)
+	//   bucket[274] width=32.768µs boundary=[1.081344ms, 1.114112ms)
+	//   ...
+	//   bucket[717] width=1h13m18.046511104s boundary=[53h45m14.046488576s, 54h58m32.09299968s)
+	//   bucket[718] width=1h13m18.046511104s boundary=[54h58m32.09299968s, 56h11m50.139510784s)
+	//   bucket[719] width=1h13m18.046511104s boundary=[56h11m50.139510784s, 57h25m8.186021888s)
+	//   bucket[720] width=57h25m8.186021888s boundary=[57h25m8.186021888s, +Inf)
+	//
 	var total uint64 // total count across all buckets
 	for i := range h.Counts {
 		total += h.Counts[i]
@@ -253,5 +331,16 @@ func percentile(h *metrics.Float64Histogram, p float64) float64 {
 			break // we've found the bucket where the cumulative count until that point is p% of the total
 		}
 	}
-	return (start + end) / 2 // linear interpolate within the bucket
+
+	return (start + end) / 2 // grab the mid-point within the bucket
+
+	// TODO(irfansharif): Implement proper linear interpolation instead and then
+	// write test comparing against it against metric.ValueAtQuantileWindowed.
+	// If pmax, we'll return the bucket max. If pmin, we'll return the bucket
+	// min. If the 90th and 100th percentile values lie within some bucket, and
+	// we're looking for 99.9th percentile, we'll interpolate to the 99% point
+	// between bucket start and end. Because we're doing this naive mid-point
+	// thing, it makes for a confusing difference when comparing the p99
+	// computed off of go.scheduler_latency vs.
+	// admission.scheduler_latency_listener.p99_nanos.
 }

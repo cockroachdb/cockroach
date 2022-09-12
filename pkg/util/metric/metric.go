@@ -22,7 +22,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
-	metrics "github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -68,8 +68,8 @@ type PrometheusExportable interface {
 }
 
 // PrometheusIterable is an extension of PrometheusExportable to indicate that
-// this metric is comprised of children metrics which augment the parent's
-// label values.
+// this metric comprises children metrics which augment the parent's label
+// values.
 //
 // The motivating use-case for this interface is the existence of tenants. We'd
 // like to capture per-tenant metrics and expose them to prometheus while not
@@ -80,6 +80,22 @@ type PrometheusIterable interface {
 	// Each takes a slice of label pairs associated with the parent metric and
 	// calls the passed function with each of the children metrics.
 	Each([]*prometheusgo.LabelPair, func(metric *prometheusgo.Metric))
+}
+
+// WindowedHistogram represents a histogram with data over recent window of
+// time. It's used primarily to record histogram data into CRDB's internal
+// time-series database, which does not know how to encode cumulative
+// histograms. What it does instead is scrape off sample count, sum of values,
+// and values at specific quantiles from "windowed" histograms and record that
+// data directly. These windows could be arbitrary and overlapping.
+type WindowedHistogram interface {
+	// TotalCountWindowed returns the number of samples in the current window.
+	TotalCountWindowed() int64
+	// TotalSumWindowed returns the number of samples in the current window.
+	TotalSumWindowed() float64
+	// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
+	// interpolated value at that quantile for the windowed histogram.
+	ValueAtQuantileWindowed(q float64) float64
 }
 
 // GetName returns the metric's name.
@@ -160,10 +176,6 @@ func maybeTick(m periodic) {
 	}
 }
 
-// TODO(irfansharif): Figure out how to export runtime scheduler latencies as a
-// prometheus histogram? Can we use a functional histogram? And maintain deltas
-// underneath? What does prometheus/client_golang do?
-
 // NewHistogram is a prometheus-backed histogram. Depending on the value of
 // opts.Buckets, this is suitable for recording any kind of quantity. Common
 // sensible choices are {IO,Network}LatencyBuckets.
@@ -192,6 +204,7 @@ func NewHistogram(meta Metadata, windowDuration time.Duration, buckets []float64
 
 var _ periodic = (*Histogram)(nil)
 var _ PrometheusExportable = (*Histogram)(nil)
+var _ WindowedHistogram = (*Histogram)(nil)
 
 // Histogram is a prometheus-backed histogram. It collects observed values by
 // keeping bucketed counts. For convenience, internally two sets of buckets are
@@ -296,7 +309,7 @@ func (h *Histogram) TotalCount() int64 {
 	return int64(h.ToPrometheusMetric().Histogram.GetSampleCount())
 }
 
-// TotalCountWindowed returns the number of samples in the current window.
+// TotalCountWindowed implements the WindowedHistogram interface.
 func (h *Histogram) TotalCountWindowed() int64 {
 	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount())
 }
@@ -306,7 +319,7 @@ func (h *Histogram) TotalSum() float64 {
 	return h.ToPrometheusMetric().Histogram.GetSampleSum()
 }
 
-// TotalSumWindowed returns the number of samples in the current window.
+// TotalSumWindowed implements the WindowedHistogram interface.
 func (h *Histogram) TotalSumWindowed() float64 {
 	return h.ToPrometheusMetricWindowed().Histogram.GetSampleSum()
 }
@@ -316,10 +329,9 @@ func (h *Histogram) Mean() float64 {
 	return h.TotalSum() / float64(h.TotalCount())
 }
 
-// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
-// interpolated value at that quantile for the windowed histogram.
+// ValueAtQuantileWindowed implements the WindowedHistogram interface.
 //
-// https://github.com/prometheus/prometheus/blob/d91621890a2ccb3191a6d74812cc1827dd4093bf/promql/quantile.go#L75
+// https://github.com/prometheus/prometheus/blob/d9162189/promql/quantile.go#L75
 // This function is mostly taken from a prometheus internal function that
 // does the same thing. There are a few differences for our use case:
 //  1. As a user of the prometheus go client library, we don't have access
@@ -328,40 +340,7 @@ func (h *Histogram) Mean() float64 {
 //  2. Since the prometheus client library ensures buckets are in a strictly
 //     increasing order at creation, we do not sort them.
 func (h *Histogram) ValueAtQuantileWindowed(q float64) float64 {
-	m := h.ToPrometheusMetricWindowed()
-
-	buckets := m.Histogram.Bucket
-	n := float64(*m.Histogram.SampleCount)
-	if n == 0 {
-		return 0
-	}
-
-	rank := uint64(((q / 100) * n) + 0.5)
-	b := sort.Search(len(buckets)-1, func(i int) bool { return *buckets[i].CumulativeCount >= rank })
-
-	var (
-		bucketStart float64
-		bucketEnd   = *buckets[b].UpperBound
-		count       = *buckets[b].CumulativeCount
-	)
-
-	// Calculate the linearly interpolated value within the bucket
-	if b > 0 {
-		bucketStart = *buckets[b-1].UpperBound
-		count -= *buckets[b-1].CumulativeCount
-		rank -= *buckets[b-1].CumulativeCount
-	}
-	val := bucketStart + (bucketEnd-bucketStart)*(float64(rank)/float64(count))
-	if math.IsNaN(val) || math.IsInf(val, -1) {
-		return 0
-	}
-
-	// should not extrapolate past the upper bound of the largest bucket
-	if val > *buckets[len(buckets)-1].UpperBound {
-		return *buckets[len(buckets)-1].UpperBound
-	}
-
-	return val
+	return ValueAtQuantileWindowed(h.ToPrometheusMetricWindowed().Histogram, q)
 }
 
 // A Counter holds a single mutable atomic value.
@@ -493,20 +472,11 @@ func (g *Gauge) GetMetadata() Metadata {
 type GaugeFloat64 struct {
 	Metadata
 	bits *uint64
-	fn   func() float64
 }
 
 // NewGaugeFloat64 creates a GaugeFloat64.
 func NewGaugeFloat64(metadata Metadata) *GaugeFloat64 {
-	return &GaugeFloat64{metadata, new(uint64), nil}
-}
-
-// NewFunctionalGaugeFloat64 creates a GaugeFloat64 metric whose value is
-// determined when asked for by calling the provided function.
-// Note that Update, Inc, and Dec should NOT be called on a Gauge returned
-// from NewFunctionalGaugeFloat64.
-func NewFunctionalGaugeFloat64(metadata Metadata, f func() float64) *GaugeFloat64 {
-	return &GaugeFloat64{metadata, nil, f}
+	return &GaugeFloat64{metadata, new(uint64)}
 }
 
 // Snapshot returns a read-only copy of the gauge.
@@ -521,9 +491,6 @@ func (g *GaugeFloat64) Update(v float64) {
 
 // Value returns the gauge's current value.
 func (g *GaugeFloat64) Value() float64 {
-	if g.fn != nil {
-		return g.fn()
-	}
 	return math.Float64frombits(atomic.LoadUint64(g.bits))
 }
 
@@ -569,4 +536,71 @@ func (g *GaugeFloat64) GetMetadata() Metadata {
 	baseMetadata := g.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
 	return baseMetadata
+}
+
+// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
+// interpolated value at that quantile for the given histogram.
+func ValueAtQuantileWindowed(histogram *prometheusgo.Histogram, q float64) float64 {
+	buckets := histogram.Bucket
+	n := float64(*histogram.SampleCount)
+	if n == 0 {
+		return 0
+	}
+
+	// NB: The 0.5 is added for rounding purposes; it helps in cases where
+	// SampleCount is small.
+	rank := uint64(((q / 100) * n) + 0.5)
+
+	// Since we are missing the +Inf bucket, CumulativeCounts may never exceed
+	// rank. By omitting the highest bucket we have from the search, the failed
+	// search will land on that last bucket and we don't have to do any special
+	// checks regarding landing on a non-existent bucket.
+	b := sort.Search(len(buckets)-1, func(i int) bool { return *buckets[i].CumulativeCount >= rank })
+
+	var (
+		bucketStart float64 // defaults to 0, which we assume is the lower bound of the smallest bucket
+		bucketEnd   = *buckets[b].UpperBound
+		count       = *buckets[b].CumulativeCount
+	)
+
+	// Calculate the linearly interpolated value within the bucket.
+	if b > 0 {
+		bucketStart = *buckets[b-1].UpperBound
+		count -= *buckets[b-1].CumulativeCount
+		rank -= *buckets[b-1].CumulativeCount
+	}
+	val := bucketStart + (bucketEnd-bucketStart)*(float64(rank)/float64(count))
+	if math.IsNaN(val) || math.IsInf(val, -1) {
+		return 0
+	}
+
+	// Should not extrapolate past the upper bound of the largest bucket.
+	//
+	// NB: SampleCount includes the implicit +Inf bucket but the
+	// buckets[len(buckets)-1].UpperBound refers to the largest bucket defined
+	// by us -- the client library doesn't give us access to the +Inf bucket
+	// which Prometheus uses under the hood. With a high enough quantile, the
+	// val computed further below surpasses the upper bound of the largest
+	// bucket. Using that interpolated value feels wrong since we'd be
+	// extrapolating. Also, for specific metrics if we see our q99 values to be
+	// hitting the top-most bucket boundary, that's an indication for us to
+	// choose better buckets for more accuracy. It's also worth noting that the
+	// prometheus client library does the same thing when the resulting value is
+	// in the +Inf bucket, whereby they return the upper bound of the second
+	// last bucket -- see [1].
+	//
+	// [1]: https://github.com/prometheus/prometheus/blob/d9162189/promql/quantile.go#L103.
+	// the buckets to provide a more accurate histogram. FWIW the Prometheus client
+	// library does the same when the resulting value is in the +Inf bucket and
+	// returns the upper bound of the second last bucket:
+	// It is cleaner/easier for them since they have access to the +Inf bucket
+	// internally.
+	// The 0.5 was added for rounding purposes. I went back and forth on whether to
+	// have it at all but thought it made sense for smaller SampleCount cases like
+	// in this test:
+	if val > *buckets[len(buckets)-1].UpperBound {
+		return *buckets[len(buckets)-1].UpperBound
+	}
+
+	return val
 }
