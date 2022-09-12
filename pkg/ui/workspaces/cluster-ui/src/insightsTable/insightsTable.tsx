@@ -17,6 +17,7 @@ import { StatementLink } from "../statementsTable";
 import IdxRecAction from "../insights/indexActionBtn";
 import {
   clusterSettings,
+  computeOrUseStmtSummary,
   Duration,
   performanceBestPractices,
   statementsRetries,
@@ -75,6 +76,7 @@ function typeCell(value: string): React.ReactElement {
 
 function descriptionCell(
   insightRec: InsightRecommendation,
+  disableStmtLink?: boolean,
 ): React.ReactElement {
   const clusterSettingsLink = (
     <>
@@ -85,6 +87,10 @@ function descriptionCell(
       {"."}
     </>
   );
+  const summary = computeOrUseStmtSummary(
+    insightRec.execution.statement,
+    insightRec.execution.summary,
+  );
   switch (insightRec.type) {
     case "CreateIndex":
     case "ReplaceIndex":
@@ -93,13 +99,25 @@ function descriptionCell(
         <>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Statement Fingerprint: </span>{" "}
-            <StatementLink
-              statementFingerprintID={insightRec.execution.fingerprintID}
-              statement={insightRec.execution.statement}
-              statementSummary={insightRec.execution.summary}
-              implicitTxn={insightRec.execution.implicit}
-              className={"inline"}
-            />
+            {disableStmtLink && (
+              <div className={cx("inline")}>
+                <Tooltip
+                  placement="bottom"
+                  content={insightRec.execution.statement}
+                >
+                  {summary}
+                </Tooltip>
+              </div>
+            )}
+            {!disableStmtLink && (
+              <StatementLink
+                statementFingerprintID={insightRec.execution.fingerprintID}
+                statement={insightRec.execution.statement}
+                statementSummary={insightRec.execution.summary}
+                implicitTxn={insightRec.execution.implicit}
+                className={"inline"}
+              />
+            )}
           </div>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Recommendation: </span>{" "}
@@ -265,6 +283,7 @@ function actionCell(
 
 export function makeInsightsColumns(
   isCockroachCloud: boolean,
+  disableStmtLink?: boolean,
 ): ColumnDescriptor<InsightRecommendation>[] {
   return [
     {
@@ -276,7 +295,8 @@ export function makeInsightsColumns(
     {
       name: "details",
       title: insightsTableTitles.details(),
-      cell: (item: InsightRecommendation) => descriptionCell(item),
+      cell: (item: InsightRecommendation) =>
+        descriptionCell(item, disableStmtLink),
       sort: (item: InsightRecommendation) => item.type,
     },
     {
