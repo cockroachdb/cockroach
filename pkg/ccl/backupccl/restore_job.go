@@ -2339,6 +2339,22 @@ func (r *restoreResumer) dropDescriptors(
 		descsCol.NotifyOfDeletedDescriptor(mutType.GetID())
 	}
 
+	for i := range details.FunctionDescs {
+		fnDesc := details.FunctionDescs[i]
+		mutFn, err := descsCol.GetMutableFunctionByID(ctx, txn, fnDesc.ID, tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidLeased:    true,
+				IncludeOffline: true,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		mutFn.SetDropped()
+		b.Del(catalogkeys.MakeDescMetadataKey(codec, fnDesc.ID))
+		descsCol.NotifyOfDeletedDescriptor(fnDesc.ID)
+	}
+
 	// Queue a GC job.
 	gcDetails := jobspb.SchemaChangeGCDetails{}
 	for _, tableID := range tablesToGC {
@@ -2371,6 +2387,9 @@ func (r *restoreResumer) dropDescriptors(
 	}
 	for _, schema := range details.SchemaDescs {
 		ignoredChildDescIDs[schema.ID] = struct{}{}
+	}
+	for _, fn := range details.FunctionDescs {
+		ignoredChildDescIDs[fn.ID] = struct{}{}
 	}
 	all, err := descsCol.GetAllDescriptors(ctx, txn)
 	if err != nil {
