@@ -638,7 +638,7 @@ export class StatementDetails extends React.Component<
                 )}
                 <SummaryCardItem label="Database" value={db} />
                 <SummaryCardItem
-                  label="App"
+                  label="Application Name"
                   value={intersperse<ReactNode>(
                     app_names.map(a => <AppLink app={a} key={a} />),
                     ", ",

@@ -41,6 +41,7 @@ import {
   calculateTotalWorkload,
   Duration,
   formatNumberForDisplay,
+  unset,
 } from "src/util";
 import { UIConfigState } from "../store";
 import SQLActivityError from "../sqlActivity/errorComponent";
@@ -393,6 +394,14 @@ export class TransactionDetails extends React.Component<
                             transactionStats?.service_lat.mean,
                             duration,
                           )}
+                        />
+                        <SummaryCardItem
+                          label="Application name"
+                          value={
+                            transaction?.stats_data?.app?.length > 0
+                              ? transaction?.stats_data?.app
+                              : unset
+                          }
                         />
                         <p
                           className={summaryCardStylesCx(
