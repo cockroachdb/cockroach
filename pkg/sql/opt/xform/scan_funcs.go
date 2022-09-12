@@ -212,6 +212,26 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
 	localScanPrivate.HardLimit = scanPrivate.HardLimit
 	localScan := c.e.f.ConstructScan(localScanPrivate)
+	if scanPrivate.HardLimit != 0 {
+		// If the local scan could never reach the hard limit, we will always have
+		// to read into remote regions, so there is no point in using
+		// locality-optimized scan.
+		if scanPrivate.HardLimit > memo.ScanLimit(localScan.Relational().Cardinality.Max) {
+			return
+		}
+	} else {
+		// When the max cardinality of the original scan is greater than the max
+		// cardinality of the local scan, a remote scan will always be required.
+		// IgnoreUniqueWithoutIndexKeys is true when we're performing a scan
+		// during an insert to verify there are no duplicates violating the
+		// uniqueness constraint. This could cause the check below to return, but
+		// by design we want to use locality-optimized search for these duplicate
+		// checks. So avoid returning if that flag is set.
+		if localScan.Relational().Cardinality.Max <
+			grp.Relational().Cardinality.Max && !tabMeta.IgnoreUniqueWithoutIndexKeys {
+			return
+		}
+	}
 
 	// Create the remote scan.
 	remoteScanPrivate := c.DuplicateScanPrivate(scanPrivate)

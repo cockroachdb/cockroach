@@ -12,6 +12,7 @@ package scheduledlogging
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"regexp"
 	"sort"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -64,6 +66,9 @@ func (s *stubDurations) getOverlapDuration() time.Duration {
 
 func TestCaptureIndexUsageStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.UnderShort(t, "#87772")
+
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
@@ -117,30 +122,47 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	db.Exec(t, "CREATE DATABASE test2")
 
 	// Test fix for #85577.
-	db.Exec(t, `CREATE DATABASE "test-hyphen"`)
+	db.Exec(t, `CREATE DATABASE "mIxEd-CaSe""woo☃"`)
+	db.Exec(t, `CREATE DATABASE "index"`)
 
 	// Create a table for each database.
 	db.Exec(t, "CREATE TABLE test.test_table (num INT PRIMARY KEY, letter char)")
 	db.Exec(t, "CREATE TABLE test2.test2_table (num INT PRIMARY KEY, letter char)")
+	db.Exec(t, `CREATE TABLE "mIxEd-CaSe""woo☃"."sPe-CiAl✔" (num INT PRIMARY KEY, "HeLlO☀" char)`)
+	db.Exec(t, `CREATE TABLE "index"."index" (num INT PRIMARY KEY, "index" char)`)
 
 	// Create an index on each created table (each table now has two indices:
 	// primary and this one)
-	db.Exec(t, "CREATE INDEX ON test.test_table (letter)")
-	db.Exec(t, "CREATE INDEX ON test2.test2_table (letter)")
+	db.Exec(t, `CREATE INDEX ON test.test_table (letter)`)
+	db.Exec(t, `CREATE INDEX ON test2.test2_table (letter)`)
+	db.Exec(t, `CREATE INDEX "IdX✏" ON "mIxEd-CaSe""woo☃"."sPe-CiAl✔" ("HeLlO☀")`)
+	db.Exec(t, `CREATE INDEX "index" ON "index"."index" ("index")`)
+
+	expectedIndexNames := []string{
+		"test2_table_letter_idx",
+		"test2_table_pkey",
+		"test_table_letter_idx",
+		"test_table_pkey",
+		"sPe-CiAl✔_pkey",
+		"IdX✏",
+		"index",
+		"index_pkey",
+	}
 
 	// Check that telemetry log file contains all the entries we're expecting, at the scheduled intervals.
 
 	// Enable capture of index usage stats.
 	telemetryCaptureIndexUsageStatsEnabled.Override(context.Background(), &s.ClusterSettings().SV, true)
 
-	expectedTotalNumEntriesInSingleInterval := 4
+	expectedTotalNumEntriesInSingleInterval := 8
 	expectedNumberOfIndividualIndexEntriesInSingleInterval := 1
 
 	// Expect index usage statistics logs once the schedule disabled interval has passed.
 	// Assert that we have the expected number of total logs and expected number
 	// of logs for each index.
 	testutils.SucceedsWithin(t, func() error {
-		return checkNumTotalEntriesAndNumIndexEntries(
+		return checkNumTotalEntriesAndNumIndexEntries(t,
+			expectedIndexNames,
 			expectedTotalNumEntriesInSingleInterval,
 			expectedNumberOfIndividualIndexEntriesInSingleInterval,
 		)
@@ -162,7 +184,8 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// Assert that we have the expected number of total logs and expected number
 	// of logs for each index.
 	testutils.SucceedsWithin(t, func() error {
-		return checkNumTotalEntriesAndNumIndexEntries(
+		return checkNumTotalEntriesAndNumIndexEntries(t,
+			expectedIndexNames,
 			expectedTotalNumEntriesAfterTwoIntervals,
 			expectedNumberOfIndividualIndexEntriesAfterTwoIntervals,
 		)
@@ -179,7 +202,8 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	// Assert that we have the expected number of total logs and expected number
 	// of logs for each index.
 	testutils.SucceedsWithin(t, func() error {
-		return checkNumTotalEntriesAndNumIndexEntries(
+		return checkNumTotalEntriesAndNumIndexEntries(t,
+			expectedIndexNames,
 			expectedTotalNumEntriesAfterThreeIntervals,
 			expectedNumberOfIndividualIndexEntriesAfterThreeIntervals,
 		)
@@ -232,12 +256,10 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 			previousTimestamp = currentTimestamp
 		}
 
-		nanoSecondDiff := currentTimestamp - previousTimestamp
-		// We allow for integer division to remove any miscellaneous nanosecond
-		// delay from the logging.
-		secondDiff := nanoSecondDiff / 1e9
-		actualDuration := time.Duration(secondDiff) * time.Second
-		require.Equal(t, expectedDuration, actualDuration)
+		actualDuration := time.Duration(currentTimestamp-previousTimestamp) * time.Nanosecond
+		// Use a time window to afford some non-determinisim in the test.
+		require.Greater(t, expectedDuration, actualDuration-time.Second)
+		require.Greater(t, actualDuration+time.Second, expectedDuration)
 		previousTimestamp = currentTimestamp
 	}
 }
@@ -247,7 +269,10 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 // log entries for each index. Also checks that each log entry contains a node_id
 // field, used to filter node-duplicate logs downstream.
 func checkNumTotalEntriesAndNumIndexEntries(
-	expectedTotalEntries int, expectedIndividualIndexEntries int,
+	t *testing.T,
+	expectedIndexNames []string,
+	expectedTotalEntries int,
+	expectedIndividualIndexEntries int,
 ) error {
 	// Fetch log entries.
 	entries, err := log.FetchEntriesFromFiles(
@@ -257,7 +282,6 @@ func checkNumTotalEntriesAndNumIndexEntries(
 		regexp.MustCompile(`"EventType":"captured_index_usage_stats"`),
 		log.WithMarkedSensitiveData,
 	)
-
 	if err != nil {
 		return err
 	}
@@ -267,45 +291,43 @@ func checkNumTotalEntriesAndNumIndexEntries(
 		return errors.Newf("expected %d total entries, got %d", expectedTotalEntries, len(entries))
 	}
 
-	var (
-		numEntriesForTestTablePrimaryKeyIndex  int
-		numEntriesForTestTableLetterIndex      int
-		numEntriesForTest2TablePrimaryKeyIndex int
-		numEntriesForTest2TableLetterIndex     int
-	)
+	countByIndex := make(map[string]int)
 
 	for _, e := range entries {
-		if strings.Contains(e.Message, `"IndexName":"test_table_pkey"`) {
-			numEntriesForTestTablePrimaryKeyIndex++
-		}
-		if strings.Contains(e.Message, `"IndexName":"test_table_letter_idx"`) {
-			numEntriesForTestTableLetterIndex++
-		}
-		if strings.Contains(e.Message, `"IndexName":"test2_table_pkey"`) {
-			numEntriesForTest2TablePrimaryKeyIndex++
-		}
-		if strings.Contains(e.Message, `"IndexName":"test2_table_letter_idx"`) {
-			numEntriesForTest2TableLetterIndex++
-		}
+		t.Logf("checking entry: %v", e)
 		// Check that the entry has a tag for a node ID of 1.
 		if !strings.Contains(e.Tags, `n1`) {
-			return errors.Newf("expected the entry's tags to include n1, but include got %s", e.Tags)
+			t.Fatalf("expected the entry's tags to include n1, but include got %s", e.Tags)
+		}
+
+		var s struct {
+			IndexName string `json:"IndexName"`
+		}
+		err := json.Unmarshal([]byte(e.Message), &s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		countByIndex[s.IndexName] = countByIndex[s.IndexName] + 1
+	}
+
+	t.Logf("found index counts: %+v", countByIndex)
+
+	if expected, actual := expectedTotalEntries/expectedIndividualIndexEntries, len(countByIndex); actual != expected {
+		return errors.Newf("expected %d indexes, got %d", expected, actual)
+	}
+
+	for idxName, c := range countByIndex {
+		if c != expectedIndividualIndexEntries {
+			return errors.Newf("for index %s: expected entry count %d, got %d",
+				idxName, expectedIndividualIndexEntries, c)
 		}
 	}
 
-	// Assert that we have the correct number index usage statistic entries for
-	// each index we created across the tables in each database.
-	if expectedIndividualIndexEntries != numEntriesForTestTablePrimaryKeyIndex {
-		return errors.Newf("expected %d test_table primary key index entries, got %d", expectedIndividualIndexEntries, numEntriesForTestTablePrimaryKeyIndex)
+	for _, idxName := range expectedIndexNames {
+		if _, ok := countByIndex[idxName]; !ok {
+			return errors.Newf("no entry found for index %s", idxName)
+		}
 	}
-	if expectedIndividualIndexEntries != numEntriesForTestTableLetterIndex {
-		return errors.Newf("expected %d test_table letter index entries, got %d", expectedIndividualIndexEntries, numEntriesForTestTableLetterIndex)
-	}
-	if expectedIndividualIndexEntries != numEntriesForTest2TablePrimaryKeyIndex {
-		return errors.Newf("expected %d test2_table primary key index entries, got %d", expectedIndividualIndexEntries, numEntriesForTest2TablePrimaryKeyIndex)
-	}
-	if expectedIndividualIndexEntries != numEntriesForTest2TableLetterIndex {
-		return errors.Newf("expected %d test2_table letter index entries, got %d", expectedIndividualIndexEntries, numEntriesForTest2TableLetterIndex)
-	}
+
 	return nil
 }
