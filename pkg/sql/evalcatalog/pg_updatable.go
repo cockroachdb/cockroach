@@ -14,8 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // UpdatableCommand matches update operations in postgres.
@@ -32,6 +35,23 @@ var (
 	nonUpdatableEvents = tree.NewDInt(0)
 	allUpdatableEvents = tree.NewDInt((1 << UpdateCommand) | (1 << InsertCommand) | (1 << DeleteCommand))
 )
+
+// RedactDescriptor takes an encoded protobuf descriptor and returns the
+// encoded protobuf after redaction.
+func (b *Builtins) RedactDescriptor(_ context.Context, encodedDescriptor []byte) ([]byte, error) {
+	var descProto descpb.Descriptor
+	if err := protoutil.Unmarshal(encodedDescriptor, &descProto); err != nil {
+		return nil, err
+	}
+	if errs := redact.Redact(&descProto); len(errs) != 0 {
+		var ret error
+		for _, err := range errs {
+			ret = errors.CombineErrors(ret, err)
+		}
+		return nil, ret
+	}
+	return protoutil.Marshal(&descProto)
+}
 
 // PGRelationIsUpdatable is part of the eval.CatalogBuiltins interface.
 func (b *Builtins) PGRelationIsUpdatable(

@@ -157,6 +157,13 @@ func TestCCLLogic_partitioning_index(
 	runCCLLogicTest(t, "partitioning_index")
 }
 
+func TestCCLLogic_redact_descriptor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "redact_descriptor")
+}
+
 func TestCCLLogic_restore(
 	t *testing.T,
 ) {
