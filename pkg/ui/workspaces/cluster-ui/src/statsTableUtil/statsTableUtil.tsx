@@ -207,12 +207,21 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       </Tooltip>
     );
   },
-  applicationName: () => {
+  applicationName: (statType?: StatisticType) => {
+    let contentModifier = "session";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transactions;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statements;
+        break;
+    }
     return (
       <Tooltip
         style="tableTitle"
         placement="bottom"
-        content={"The application that ran the session."}
+        content={`The application that ran the ${contentModifier}.`}
       >
         {getLabel("applicationName")}
       </Tooltip>

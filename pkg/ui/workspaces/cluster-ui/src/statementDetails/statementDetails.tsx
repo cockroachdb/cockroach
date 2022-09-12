@@ -660,7 +660,7 @@ export class StatementDetails extends React.Component<
                   {db}
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>App</Text>
+                  <Text>Application Name</Text>
                   <Text>
                     {intersperse<ReactNode>(
                       app_names.map(a => <AppLink app={a} key={a} />),

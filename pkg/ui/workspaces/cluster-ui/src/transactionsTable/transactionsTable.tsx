@@ -28,7 +28,7 @@ import {
 import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { transactionLink } from "./transactionsCells";
-import { Count, FixLong, longToInt, TimestampToString } from "src/util";
+import { Count, FixLong, longToInt, TimestampToString, unset } from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
   getStatementsByFingerprintId,
@@ -148,6 +148,15 @@ export function makeTransactionsColumns(
       cell: countBar,
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.count)),
+    },
+    {
+      name: "applicationName",
+      title: statisticsTableTitles.applicationName(statType),
+      className: cx("statements-table__col-app-name"),
+      cell: (item: TransactionInfo) =>
+        item.stats_data?.app?.length > 0 ? item.stats_data?.app : unset,
+      sort: (item: TransactionInfo) => item.stats_data?.app,
+      showByDefault: false,
     },
     {
       name: "rowsProcessed",
