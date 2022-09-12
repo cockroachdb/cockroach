@@ -450,6 +450,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.probe_ranges(timeout: interval, probe_type: unknown_enum) -> tuple{int AS range_id, string AS error, int AS end_to_end_latency_ms, string AS verbose_trace}`: 356,
 	`crdb_internal.range_stats(key: bytes) -> jsonb`:                                          1325,
 	`crdb_internal.read_file(uri: string) -> bytes`:                                           1274,
+	`crdb_internal.redact_descriptor(descriptor: bytes) -> bytes`:                             2036,
 	`crdb_internal.repair_ttl_table_scheduled_job(oid: oid) -> void`:                          1375,
 	`crdb_internal.replication_stream_progress(stream_id: int, frontier_ts: string) -> bytes`: 1549,
 	`crdb_internal.replication_stream_spec(stream_id: int) -> bytes`:                          1551,
