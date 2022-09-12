@@ -55,16 +55,41 @@ import (
 )
 
 type sinklessFeedFactory struct {
-	s    serverutils.TestTenantInterface
-	sink url.URL
+	s           serverutils.TestTenantInterface
+	sink        url.URL
+	sinkForUser sinkForUser
 }
 
 // makeSinklessFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeSinklessFeedFactory(
-	s serverutils.TestTenantInterface, sink url.URL,
+	s serverutils.TestTenantInterface, sink url.URL, sinkForUser sinkForUser,
 ) cdctest.TestFeedFactory {
-	return &sinklessFeedFactory{s: s, sink: sink}
+	return &sinklessFeedFactory{s: s, sink: sink, sinkForUser: sinkForUser}
+}
+
+func (f *sinklessFeedFactory) AsUser(user string, fn func()) error {
+	prevSink := f.sink
+	password := `hunter2`
+	if err := setPassword(user, password, f.sink); err != nil {
+		return err
+	}
+	defer func() { f.sink = prevSink }()
+	var cleanup func()
+	f.sink, cleanup = f.sinkForUser(user, password)
+	fn()
+	cleanup()
+	return nil
+}
+
+func setPassword(user, password string, uri url.URL) error {
+	rootDB, err := gosql.Open("postgres", uri.String())
+	if err != nil {
+		return err
+	}
+	defer rootDB.Close()
+	_, err = rootDB.Exec(fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
+	return err
 }
 
 // Feed implements the TestFeedFactory interface
@@ -602,20 +627,59 @@ func (di *depInjector) getJobFeed(jobID jobspb.JobID) *jobFeed {
 }
 
 type enterpriseFeedFactory struct {
-	s  serverutils.TestTenantInterface
-	di *depInjector
-	db *gosql.DB
+	s      serverutils.TestTenantInterface
+	di     *depInjector
+	db     *gosql.DB
+	rootDB *gosql.DB
+}
+
+func (e *enterpriseFeedFactory) jobsTableConn() *gosql.DB {
+	if e.rootDB == nil {
+		return e.db
+	}
+	return e.rootDB
+}
+
+// AsUser uses the previous (assumed to be root) connection to ensure
+// the user has the ability to authenticate, and saves it to poll
+// job status, then implements TestFeedFactory.AsUser().
+func (e *enterpriseFeedFactory) AsUser(user string, fn func()) error {
+	prevDB := e.db
+	e.rootDB = e.db
+	defer func() { e.db = prevDB }()
+	password := `password`
+	_, err := e.rootDB.Exec(fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
+	if err != nil {
+		return err
+	}
+	pgURL := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   e.s.SQLAddr(),
+		Path:   `d`,
+	}
+	db2, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		return err
+	}
+	defer db2.Close()
+	e.db = db2
+	fn()
+	return nil
 }
 
 func (e enterpriseFeedFactory) startFeedJob(f *jobFeed, create string, args ...interface{}) error {
 	log.Infof(context.Background(), "Starting feed job: %q", create)
 	e.di.prepareJob(f)
 	if err := e.db.QueryRow(create, args...).Scan(&f.jobID); err != nil {
+		e.di.pendingJob = nil
 		return err
 	}
 	e.di.startJob(f)
 	return nil
 }
+
+type sinkForUser func(username string, password ...string) (uri url.URL, cleanup func())
 
 type tableFeedFactory struct {
 	enterpriseFeedFactory
@@ -665,7 +729,7 @@ func (f *tableFeedFactory) Feed(
 	}
 
 	c := &tableFeed{
-		jobFeed:        newJobFeed(f.db, wrapSink),
+		jobFeed:        newJobFeed(f.jobsTableConn(), wrapSink),
 		ss:             ss,
 		seenTrackerMap: make(map[string]struct{}),
 		sinkDB:         sinkDB,
@@ -853,7 +917,7 @@ func (f *cloudFeedFactory) Feed(
 	}
 
 	c := &cloudFeed{
-		jobFeed:        newJobFeed(f.db, wrapSink),
+		jobFeed:        newJobFeed(f.jobsTableConn(), wrapSink),
 		ss:             ss,
 		seenTrackerMap: make(map[string]struct{}),
 		dir:            feedDir,
@@ -1330,7 +1394,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 	}
 
 	c := &kafkaFeed{
-		jobFeed:        newJobFeed(k.db, wrapSink),
+		jobFeed:        newJobFeed(k.jobsTableConn(), wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		source:         feedCh,
 		tg:             tg,
@@ -1510,7 +1574,7 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 	}
 
 	c := &webhookFeed{
-		jobFeed:        newJobFeed(f.db, wrapSink),
+		jobFeed:        newJobFeed(f.jobsTableConn(), wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
 		mockSink:       sinkDest,
@@ -1791,7 +1855,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 	}
 
 	c := &pubsubFeed{
-		jobFeed:        newJobFeed(p.db, wrapSink),
+		jobFeed:        newJobFeed(p.jobsTableConn(), wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
 		client:         client,
