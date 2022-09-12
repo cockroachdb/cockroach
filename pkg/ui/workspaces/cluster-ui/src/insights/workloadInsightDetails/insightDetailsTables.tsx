@@ -13,20 +13,33 @@ import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { DATE_FORMAT, Duration } from "src/util";
 import { EventExecution, InsightExecEnum } from "../types";
 import { insightsTableTitles, QueriesCell } from "../workloadInsights/util";
+import {Link} from "react-router-dom";
 
 interface InsightDetailsTableProps {
   data: EventExecution[];
   execType: InsightExecEnum;
+  waitingList?: string[];
 }
 
 export function makeInsightDetailsColumns(
   execType: InsightExecEnum,
+  waitingList: string[]
 ): ColumnDescriptor<EventExecution>[] {
   return [
     {
       name: "executionID",
       title: insightsTableTitles.executionID(execType),
-      cell: (item: EventExecution) => String(item.executionID),
+      cell: (item: EventExecution) => {
+        if (waitingList && item.executionID in waitingList) {
+          return(
+          <Link to={`/insights/transaction/${item.executionID}`}>
+            {String(item.executionID)}
+          </Link>)
+        }
+        else {
+          return String(item.executionID)
+        }
+      },
       sort: (item: EventExecution) => item.executionID,
     },
     {
@@ -59,7 +72,7 @@ export function makeInsightDetailsColumns(
 export const WaitTimeDetailsTable: React.FC<
   InsightDetailsTableProps
 > = props => {
-  const columns = makeInsightDetailsColumns(props.execType);
+  const columns = makeInsightDetailsColumns(props.execType, props.waitingList);
   return (
     <SortedTable className="statements-table" columns={columns} {...props} />
   );
