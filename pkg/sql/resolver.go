@@ -671,23 +671,33 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 // fully qualified names.
 func (p *planner) getFullyQualifiedTableNamesFromIDs(
 	ctx context.Context, ids []descpb.ID,
-) (fullyQualifiedNames []*tree.TableName, _ error) {
+) (fullyQualifiedNames []string, _ error) {
 	for _, id := range ids {
-		desc, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
+		desc, err := p.Descriptors().GetImmutableDescriptorByID(
+			ctx, p.txn, id,
+			tree.CommonLookupFlags{
 				AvoidLeased:    true,
 				IncludeDropped: true,
 				IncludeOffline: true,
 			},
-		})
+		)
 		if err != nil {
 			return nil, err
 		}
-		fqName, err := p.getQualifiedTableName(ctx, desc)
-		if err != nil {
-			return nil, err
+		switch t := desc.(type) {
+		case catalog.TableDescriptor:
+			tbName, err := p.getQualifiedTableName(ctx, t)
+			if err != nil {
+				return nil, err
+			}
+			fullyQualifiedNames = append(fullyQualifiedNames, tbName.FQString())
+		case catalog.FunctionDescriptor:
+			fName, err := p.getQualifiedFunctionName(ctx, t)
+			if err != nil {
+				return nil, err
+			}
+			fullyQualifiedNames = append(fullyQualifiedNames, fName.FQString())
 		}
-		fullyQualifiedNames = append(fullyQualifiedNames, fqName)
 	}
 	return fullyQualifiedNames, nil
 }
