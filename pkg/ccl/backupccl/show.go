@@ -738,6 +738,12 @@ func backupShowerDefault(
 						dbID = desc.GetParentID()
 						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
 						parentSchemaID = desc.GetParentSchemaID()
+					case catalog.FunctionDescriptor:
+						descriptorType = "function"
+						dbName = dbIDToName[desc.GetParentID()]
+						dbID = desc.GetParentID()
+						parentSchemaName = schemaIDToName[desc.GetParentSchemaID()]
+						parentSchemaID = desc.GetParentSchemaID()
 					case catalog.TableDescriptor:
 						descriptorType = "table"
 						dbName = dbIDToName[desc.GetParentID()]
