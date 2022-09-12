@@ -510,6 +510,8 @@ func descID(in descpb.Descriptor) descpb.ID {
 		return i.Type.ID
 	case *descpb.Descriptor_Schema:
 		return i.Schema.ID
+	case *descpb.Descriptor_Function:
+		return i.Function.ID
 	default:
 		panic(fmt.Sprintf("unknown desc %T", in))
 	}
