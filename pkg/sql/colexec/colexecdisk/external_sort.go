@@ -673,10 +673,13 @@ func (s *externalSorter) createMergerForPartitions(n int) *colexec.OrderedSynchr
 		)
 	}
 
-	// Calculate the limit on the output batch mem size.
+	// Calculate the limit on the output batch mem size as well as the total
+	// number of tuples to merge.
 	outputBatchMemSize := s.mergeMemoryLimit
+	var tuplesToMerge int64
 	for i := s.numPartitions - n; i < s.numPartitions; i++ {
 		outputBatchMemSize -= s.partitionsInfo.maxBatchMemSize[i]
+		tuplesToMerge += int64(s.partitionsInfo.tupleCount[i])
 		s.resetPartitionsInfo(i)
 	}
 	// It is possible that the expected usage of the dequeued batches already
@@ -689,7 +692,8 @@ func (s *externalSorter) createMergerForPartitions(n int) *colexec.OrderedSynchr
 		outputBatchMemSize = minOutputBatchMemSize
 	}
 	return colexec.NewOrderedSynchronizer(
-		s.outputUnlimitedAllocator, outputBatchMemSize, syncInputs, s.inputTypes, s.columnOrdering,
+		s.outputUnlimitedAllocator, outputBatchMemSize, syncInputs,
+		s.inputTypes, s.columnOrdering, tuplesToMerge,
 	)
 }
 

@@ -726,7 +726,7 @@ func (h *AccountingHelper) Init(allocator *Allocator, memoryLimit int64) {
 // from that point).
 //
 // - tuplesToBeSet, if positive, indicates the total number of tuples that are
-// yet to be set, use 0 if unknown.
+// yet to be set. Zero and negative values are ignored.
 //
 // NOTE: if the reallocation occurs, then the memory under the old batch is
 // released, so it is expected that the caller will lose the references to the
@@ -754,7 +754,7 @@ func (h *AccountingHelper) ResetMaybeReallocate(
 			}
 		}
 	}
-	// Protect from the misuse.
+	// Ignore the negative values.
 	if tuplesToBeSet < 0 {
 		tuplesToBeSet = 0
 	}
@@ -889,7 +889,7 @@ func (h *SetAccountingHelper) getBytesLikeTotalSize() int64 {
 // AccountingHelper.ResetMaybeReallocate (and thus has the same contract) with
 // an additional logic for memory tracking purposes.
 // - tuplesToBeSet, if positive, indicates the total number of tuples that are
-// yet to be set, use 0 if unknown.
+// yet to be set. Zero and negative values are ignored.
 func (h *SetAccountingHelper) ResetMaybeReallocate(
 	typs []*types.T, oldBatch coldata.Batch, tuplesToBeSet int,
 ) (newBatch coldata.Batch, reallocated bool) {
