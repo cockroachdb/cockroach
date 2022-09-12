@@ -52,6 +52,7 @@ const tableCx = classNames.bind(insightTableStyles);
 
 export interface TransactionInsightDetailsStateProps {
   insightEventDetails: TransactionInsightEventDetailsResponse;
+  waitingTxns: string[] | null;
   insightError: Error | null;
 }
 
@@ -187,6 +188,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
                 <WaitTimeDetailsTable
                   data={blockingExecutions}
                   execType={insightDetails.execType}
+                  waitingList={this.props.waitingTxns}
                 />
               </div>
             </Col>
@@ -219,7 +221,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
         </div>
         <section>
           <Loading
-            loading={this.props.insightEventDetails == null}
+            loading={this.props.insightEventDetails === null}
             page={"Transaction Insight details"}
             error={this.props.insightError}
             render={this.renderContent}

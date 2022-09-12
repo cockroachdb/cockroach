@@ -47,6 +47,14 @@ export const selectTransactionInsights = createSelector(
   },
 );
 
+export const selectWaitingTransactionList = createSelector(
+  selectTransactionInsights,
+  (txnInsightState): string[] => {
+    if (!txnInsightState) return [];
+    return txnInsightState.map(insight => insight.transactionID);
+  },
+);
+
 export const selectTransactionInsightDetails = createSelector(
   [
     (state: AdminUIState) => state.cachedData.transactionInsightDetails,
