@@ -5,6 +5,7 @@ go_library(
     name = "schedulerlatency",
     srcs = [
         "callbacks.go",
+        "histogram.go",
         "sampler.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/schedulerlatency",
@@ -12,23 +13,32 @@ go_library(
     deps = [
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util/metric",
         "//pkg/util/ring",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 
 go_test(
     name = "schedulerlatency_test",
-    srcs = ["scheduler_latency_test.go"],
+    srcs = [
+        "histogram_test.go",
+        "scheduler_latency_test.go",
+    ],
     args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     embed = [":schedulerlatency"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/skip",
+        "//pkg/util/metric",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )

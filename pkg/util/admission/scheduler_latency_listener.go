@@ -25,10 +25,6 @@ import (
 
 var _ metric.Struct = &schedulerLatencyListenerMetrics{}
 
-// TODO(irfansharif): There’s some discrepancy between what this struct observes
-// as p99 scheduling latencies and what prometheus/client_golang computes. Worth
-// investigating.
-
 type schedulerLatencyListener struct {
 	ctx               context.Context
 	elasticCPULimiter elasticCPULimiter
