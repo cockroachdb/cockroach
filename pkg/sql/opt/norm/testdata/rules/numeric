@@ -189,6 +189,30 @@ project
       └── i:2::DECIMAL [as="?column?":8, outer=(2), immutable]
 
 # --------------------------------------------------
+# FoldFloorDivOne
+# --------------------------------------------------
+
+# Regression test for issue #87605.
+# The floor division operator `//` should only be folded when the numerator is
+# an integer.
+norm expect=FoldFloorDivOne
+SELECT
+    a.i // 1 AS r,
+    a.f // 1 AS s,
+    a.d // 1 AS t
+FROM a
+----
+project
+ ├── columns: r:8 s:9 t:10
+ ├── immutable
+ ├── scan a
+ │    └── columns: i:2 f:3 d:4
+ └── projections
+      ├── i:2 [as=r:8, outer=(2)]
+      ├── f:3 // 1.0 [as=s:9, outer=(3), immutable]
+      └── d:4 // 1 [as=t:10, outer=(4), immutable]
+
+# --------------------------------------------------
 # InvertMinus
 # --------------------------------------------------
 norm expect=InvertMinus
