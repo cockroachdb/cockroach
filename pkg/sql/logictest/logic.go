@@ -550,6 +550,9 @@ var (
 	// writes not holding appropriate latches for range key stats update.
 	useMVCCRangeTombstonesForPointDeletes = util.ConstantWithMetamorphicTestBool(
 		"logictest-use-mvcc-range-tombstones-for-point-deletes", false)
+
+	// BackupRestoreProbability is the environment variable for `3node-backup` config.
+	backupRestoreProbability = envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0)
 )
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
@@ -1666,6 +1669,7 @@ func (t *logicTest) shutdownCluster() {
 
 // resetCluster cleans up the current cluster, and creates a fresh one.
 func (t *logicTest) resetCluster() {
+	t.traceStop()
 	t.shutdownCluster()
 	if t.serverArgs == nil {
 		// We expect the server args to be persisted to the test during test
@@ -2042,9 +2046,10 @@ func (t *logicTest) hasOpenTxns(ctx context.Context) bool {
 		existingTxnPriority := "NORMAL"
 		err := user.QueryRow("SHOW TRANSACTION PRIORITY").Scan(&existingTxnPriority)
 		if err != nil {
-			// Ignore an error if we are unable to see transaction priority.
+			// If we are unable to see transaction priority assume we're in the middle
+			// of an explicit txn.
 			log.Warningf(ctx, "failed to check txn priority with %v", err)
-			continue
+			return true
 		}
 		if _, err := user.Exec("SET TRANSACTION PRIORITY NORMAL;"); !testutils.IsError(err, "there is no transaction in progress") {
 			// Reset the txn priority to what it was before we checked for open txns.
@@ -2065,11 +2070,6 @@ func (t *logicTest) hasOpenTxns(ctx context.Context) bool {
 func (t *logicTest) maybeBackupRestore(
 	rng *rand.Rand, config logictestbase.TestClusterConfig,
 ) error {
-	if config.BackupRestoreProbability != 0 && !config.IsCCLConfig {
-		return errors.Newf("logic test config %s specifies a backup restore probability but is not CCL",
-			config.Name)
-	}
-
 	// We decide if we want to take a backup here based on a probability
 	// specified in the logic test config.
 	if rng.Float64() > config.BackupRestoreProbability {
@@ -2090,6 +2090,8 @@ func (t *logicTest) maybeBackupRestore(
 	defer func() {
 		t.setUser(oldUser, 0 /* nodeIdxOverride */)
 	}()
+
+	log.Info(context.Background(), "Running cluster backup and restore")
 
 	// To restore the same state in for the logic test, we need to restore the
 	// data and the session state. The session state includes things like session
@@ -2145,7 +2147,7 @@ func (t *logicTest) maybeBackupRestore(
 	// Perform the backup and restore as root.
 	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
 
-	if _, err := t.db.Exec(fmt.Sprintf("BACKUP TO '%s'", backupLocation)); err != nil {
+	if _, err := t.db.Exec(fmt.Sprintf("BACKUP INTO '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "backing up cluster")
 	}
 
@@ -2155,7 +2157,7 @@ func (t *logicTest) maybeBackupRestore(
 
 	// Run the restore as root.
 	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
-	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM '%s'", backupLocation)); err != nil {
+	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM LATEST IN '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "restoring cluster")
 	}
 
@@ -2877,6 +2879,10 @@ func (t *logicTest) processSubtest(
 						issue = fields[3]
 					}
 					s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, issue))
+				}
+			case "backup-restore":
+				if config.BackupRestoreProbability > 0.0 {
+					s.SetSkip("backup-restore interferes with this check")
 				}
 				continue
 			default:
@@ -3941,6 +3947,13 @@ func RunLogicTest(
 	lt.setup(
 		config, serverArgsCopy, readClusterOptions(t, path), readKnobOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
 	)
+
+	hasOverride, overriddenBackupRestoreProbability := logictestbase.ReadBackupRestoreProbabilityOverride(t, path)
+	config.BackupRestoreProbability = backupRestoreProbability
+	if hasOverride {
+		config.BackupRestoreProbability = overriddenBackupRestoreProbability
+	}
+
 	lt.runFile(path, config)
 
 	progress.total += lt.progress
