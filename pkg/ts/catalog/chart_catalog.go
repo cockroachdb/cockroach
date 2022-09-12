@@ -3503,6 +3503,12 @@ var charts = []sectionDescription{
 					"admission.granter.io_tokens_exhausted_duration.kv",
 				},
 			},
+			{
+				Title: "IO Overload - IOThreshold Score",
+				Metrics: []string{
+					"admission.io.overload",
+				},
+			},
 		},
 	},
 	{
