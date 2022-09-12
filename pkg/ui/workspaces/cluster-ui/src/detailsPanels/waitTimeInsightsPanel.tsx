@@ -52,7 +52,6 @@ type WaitTimeInsightsPanelProps = {
   schemaName?: string;
   tableName?: string;
   indexName?: string;
-  contendedKey?: string;
   waitTime?: moment.Duration;
   waitingExecutions: ContendedExecution[];
   blockingExecutions: ContendedExecution[];
@@ -65,7 +64,6 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
   schemaName,
   tableName,
   indexName,
-  contendedKey,
   waitTime,
   waitingExecutions,
   blockingExecutions,
@@ -117,12 +115,6 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
                       <SummaryCardItem
                         label={WaitTimeInsightsLabels.BLOCKED_INDEX}
                         value={indexName}
-                      />
-                    )}
-                    {contendedKey && (
-                      <SummaryCardItem
-                        label={WaitTimeInsightsLabels.CONTENDED_KEY}
-                        value={contendedKey}
                       />
                     )}
                   </SummaryCard>

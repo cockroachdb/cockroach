@@ -335,6 +335,10 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			op.RightType = transform.rightType
 		}
 	}
+	if s.disableDivision &&
+		(op.Operator.Symbol == treebin.Div || op.Operator.Symbol == treebin.FloorDiv) {
+		return nil, false
+	}
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
 	return castType(
