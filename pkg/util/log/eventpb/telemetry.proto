@@ -318,4 +318,6 @@ message RecoveryEvent {
   // created even if a backup is already present in its destination.
   bool ignore_existing_backup = 29 [(gogoproto.jsontag) = ",omitempty"];
 
+  // The application name for the session where recovery event was created.
+  string application_name = 30 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
