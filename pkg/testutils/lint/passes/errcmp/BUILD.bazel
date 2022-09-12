@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "errcmp",
@@ -7,9 +7,27 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcmp",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/testutils/lint/passes/passesutil",
         "@org_golang_x_tools//go/analysis",
         "@org_golang_x_tools//go/analysis/passes/inspect",
         "@org_golang_x_tools//go/ast/inspector",
+    ],
+)
+
+go_test(
+    name = "errcmp_test",
+    srcs = ["errcmp_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]) + [
+        "@go_sdk//:files",
+    ],
+    deps = [
+        ":errcmp",
+        "//pkg/build/bazel",
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "@com_github_cockroachdb_errors//:errors",  # keep
+        "@org_golang_x_tools//go/analysis/analysistest",
     ],
 )
 
