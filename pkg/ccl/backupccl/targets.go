@@ -618,7 +618,7 @@ func MakeBackupTableEntry(
 		nil, /*backupLocalityInfo*/
 		introducedSpanFrontier,
 		roachpb.Key{}, /*lowWaterMark*/
-		targetRestoreSpanSize,
+		0,             /* disable merging */
 	)
 	lastSchemaChangeTime := findLastSchemaChangeTime(backupManifests, tbDesc, endTime)
 
