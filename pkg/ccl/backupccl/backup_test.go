@@ -9855,6 +9855,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 		}
 	}
 
+	sqlDB.Exec(t, `SET application_name = 'backup_test'`)
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
 	sqlDB.Exec(t, `CREATE TABLE r1.foo (id INT)`)
 	sqlDB.Exec(t, `CREATE DATABASE r2`)
@@ -9879,6 +9880,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 		IsLocalityAware:         true,
 		AsOfInterval:            -1 * time.Millisecond.Nanoseconds(),
 		WithRevisionHistory:     true,
+		ApplicationName:         "backup_test",
 	}
 
 	// Also verify that there's a telemetry event corresponding to the completion
@@ -9913,6 +9915,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 		IsLocalityAware:         true,
 		AsOfInterval:            0,
 		Options:                 []string{telemetryOptionIntoDB, telemetryOptionSkipMissingFK},
+		ApplicationName:         "backup_test",
 	}
 
 	// Also verify that there's a telemetry event corresponding to the completion
