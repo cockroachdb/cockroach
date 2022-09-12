@@ -11,13 +11,13 @@
 import React from "react";
 import { EmptyTable, EmptyTableProps } from "src/empty";
 import { Anchor } from "src/anchor";
-import { transactionContention } from "src/util";
+import { insights } from "src/util";
 import magnifyingGlassImg from "src/assets/emptyState/magnifying-glass.svg";
 import emptyTableResultsImg from "src/assets/emptyState/empty-table-results.svg";
 
 const footer = (
-  <Anchor href={transactionContention} target="_blank">
-    Learn more about transaction contention.
+  <Anchor href={insights} target="_blank">
+    Learn more about insights.
   </Anchor>
 );
 
