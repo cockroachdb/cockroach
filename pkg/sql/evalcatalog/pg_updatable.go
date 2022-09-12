@@ -13,9 +13,14 @@ package evalcatalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // UpdatableCommand matches update operations in postgres.
@@ -32,6 +37,43 @@ var (
 	nonUpdatableEvents = tree.NewDInt(0)
 	allUpdatableEvents = tree.NewDInt((1 << UpdateCommand) | (1 << InsertCommand) | (1 << DeleteCommand))
 )
+
+// RedactDescriptor takes an encoded protobuf descriptor and returns the
+// encoded protobuf after redaction.
+func (b *Builtins) RedactDescriptor(ctx context.Context, encodedDescriptor []byte) ([]byte, error) {
+	var desc descpb.Descriptor
+	if err := protoutil.Unmarshal(encodedDescriptor, &desc); err != nil {
+		return nil, err
+	}
+	// The descpb package has some strict rules about the timestamps in the
+	// descriptors. The strictness was an attempt to make it difficult to read the
+	// descriptor without setting the MVCC timestamp from the descriptor. In order
+	// to make it safe to use the descriptor, we preempt the assertions by setting
+	// a non-empty timestamp if there is no timestamp set. This is always safe.
+	//
+	// A downside of setting this timestamp is that it'll be set in the returned
+	// descriptor. There is no existing uniform mechanism to reset the
+	// ModificationTime across the protobuf descriptor oneof members, and this
+	// seems like it's probably a good thing. At some point we may want to
+	// consider replacing all of this policy with something more flexible. For
+	// now, the silly sentinel timestamp should serve to make these descriptors
+	// harder to use, which seems good.
+	if mt := descpb.GetDescriptorModificationTime(&desc); mt.IsEmpty() {
+		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
+			&desc, hlc.Timestamp{Logical: 1},
+		)
+	}
+	builder := descbuilder.NewBuilder(&desc)
+	mut := builder.BuildCreatedMutable()
+	if errs := redact.Redact(mut); len(errs) != 0 {
+		var ret error
+		for _, err := range errs {
+			ret = errors.CombineErrors(ret, err)
+		}
+		return nil, ret
+	}
+	return protoutil.Marshal(mut.DescriptorProto())
+}
 
 // PGRelationIsUpdatable is part of the eval.CatalogBuiltins interface.
 func (b *Builtins) PGRelationIsUpdatable(
