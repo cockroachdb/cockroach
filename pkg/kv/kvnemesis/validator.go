@@ -544,10 +544,11 @@ func (v *validator) processOp(txnID *string, op Operation) {
 	}
 }
 
+var fakeTxnID = uuid.Nil.String()
+
 func (v *validator) checkAtomic(
 	atomicType string, result Result, optTxn *roachpb.Transaction, ops ...Operation,
 ) {
-	fakeTxnID := uuid.MakeV4().String()
 	for _, op := range ops {
 		v.processOp(&fakeTxnID, op)
 	}
