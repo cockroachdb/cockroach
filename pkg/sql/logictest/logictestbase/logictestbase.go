@@ -73,7 +73,7 @@ type TestClusterConfig struct {
 	// localities is set if nodes should be set to a particular locality.
 	// Nodes are 1-indexed.
 	Localities map[int]roachpb.Locality
-	// backupRestoreProbability will periodically backup the cluster and restore
+	// BackupRestoreProbability will periodically backup the cluster and restore
 	// it's state to a new cluster at random points during a logic test.
 	BackupRestoreProbability float64
 	// disableDeclarativeSchemaChanger will disable the declarative schema changer
@@ -574,6 +574,52 @@ func (l stdlogger) Fatalf(format string, args ...interface{}) {
 
 func (l stdlogger) Logf(format string, args ...interface{}) {
 	fmt.Printf(format, args...)
+}
+
+// ReadBackupRestoreProbabilityOverride reads any LogicTest directive at the
+// beginning of a test file. A line that starts with "#
+// BackupRestoreProbability:" specifies the probability with which we should run
+// a cluster backup + restore between lines of the test file.
+//
+// Example:
+//
+//	# BackupRestoreProbability: 0.8
+//
+// If the file doesn't contain a directive, the value of the environment
+// variable COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY is used.
+func ReadBackupRestoreProbabilityOverride(
+	t logger, path string,
+) (hasOverride bool, probability float64) {
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("failed open file %s", path)
+	}
+	defer file.Close()
+
+	s := NewLineScanner(file)
+	for s.Scan() {
+		fields := strings.Fields(s.Text())
+		if len(fields) == 0 {
+			continue
+		}
+		cmd := fields[0]
+		if !strings.HasPrefix(cmd, "#") {
+			// Stop at the first line that's not a comment (or empty).
+			break
+		}
+		if len(fields) > 1 && cmd == "#" && fields[1] == "BackupRestoreProbability:" {
+			if len(fields) == 2 {
+				t.Fatalf("%s: empty LogicTest directive", path)
+			}
+			probability, err := strconv.ParseFloat(fields[2], 64)
+			if err != nil {
+				t.Fatalf("failed to parse backup+restore probability: %+v", err)
+			}
+			return true, probability
+		}
+	}
+
+	return false, 0
 }
 
 // ReadTestFileConfigs reads any LogicTest directive at the beginning of a
