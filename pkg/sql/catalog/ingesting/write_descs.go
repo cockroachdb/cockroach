@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -53,6 +54,7 @@ func WriteDescriptors(
 	schemas []catalog.SchemaDescriptor,
 	tables []catalog.TableDescriptor,
 	types []catalog.TypeDescriptor,
+	functions []catalog.FunctionDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	extra []roachpb.KeyValue,
 	inheritParentName string,
@@ -188,6 +190,28 @@ func WriteDescriptors(
 			return err
 		}
 		b.CPut(catalogkeys.EncodeNameKey(codec, typ), typ.GetID(), nil)
+	}
+
+	for _, fn := range functions {
+		updatedPrivileges, err := GetIngestingDescriptorPrivileges(
+			ctx, txn, descsCol, fn, user, wroteDBs, wroteSchemas, descCoverage,
+		)
+		if err != nil {
+			return err
+		}
+		if updatedPrivileges != nil {
+			if mut, ok := fn.(*funcdesc.Mutable); ok {
+				mut.Privileges = updatedPrivileges
+			} else {
+				log.Fatalf(ctx, "wrong type for function %d, %T, expected funcdesc.Mutable", fn.GetID(), fn)
+			}
+		}
+		if err := descsCol.WriteDescToBatch(
+			ctx, false /* kvTrace */, fn.(catalog.MutableDescriptor), b,
+		); err != nil {
+			return err
+		}
+		// Function does not have namespace entry.
 	}
 
 	for _, kv := range extra {
