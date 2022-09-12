@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
+const noTxn = ""
+
 // Validate checks for violations of our kv api guarantees. The Steps must all
 // have been applied and the kvs the result of those applications.
 //
@@ -240,8 +242,12 @@ type observedScan struct {
 func (*observedScan) observedMarker() {}
 
 type validator struct {
-	kvs              *Engine
-	observedOpsByTxn map[string][]observedOp
+	kvs *Engine
+
+	// Ops for the current atomic unit. This is reset between units, in
+	// checkAtomic, which then calls processOp (which might recurse owing
+	// to the existence of txn closures, batches, etc).
+	curOps []observedOp
 
 	// NB: The Generator carefully ensures that each value written is unique
 	// globally over a run, so there's a 1:1 relationship between a value that was
@@ -308,7 +314,6 @@ func makeValidator(kvs *Engine) (*validator, error) {
 		kvByValue:              kvByValue,
 		tombstonesForKey:       tombstonesForKey,
 		committedDeletesForKey: make(map[string]int),
-		observedOpsByTxn:       make(map[string][]observedOp),
 	}, nil
 }
 
@@ -339,7 +344,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 				Key:   t.Key,
 				Value: roachpb.Value{RawBytes: t.Result.Value},
 			}
-			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], read)
+			v.curOps = append(v.curOps, read)
 		}
 	case *PutOperation:
 		if txnID == nil {
@@ -356,7 +361,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			if write.Materialized {
 				write.Timestamp = kv.Key.Timestamp
 			}
-			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
+			v.curOps = append(v.curOps, write)
 		}
 	case *DeleteOperation:
 		if txnID == nil {
@@ -378,7 +383,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 				Key:   t.Key,
 				Value: roachpb.Value{},
 			}
-			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], write)
+			v.curOps = append(v.curOps, write)
 		}
 	case *DeleteRangeOperation:
 		if txnID == nil {
@@ -410,8 +415,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 				}
 				deleteOps[i] = write
 			}
-			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], scan)
-			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], deleteOps...)
+			v.curOps = append(v.curOps, scan)
+			v.curOps = append(v.curOps, deleteOps...)
 		}
 	case *ScanOperation:
 		v.failIfError(op, t.Result)
@@ -436,7 +441,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 					Value: roachpb.Value{RawBytes: kv.Value},
 				}
 			}
-			v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], scan)
+			v.curOps = append(v.curOps, scan)
 		}
 	case *SplitOperation:
 		v.failIfError(op, t.Result)
@@ -544,16 +549,18 @@ func (v *validator) processOp(txnID *string, op Operation) {
 	}
 }
 
-var fakeTxnID = uuid.Nil.String()
-
 func (v *validator) checkAtomic(
 	atomicType string, result Result, optTxn *roachpb.Transaction, ops ...Operation,
 ) {
-	for _, op := range ops {
-		v.processOp(&fakeTxnID, op)
+	txnID := uuid.Nil.String() // a fake txn ID in case we're a single non-txn'al operation
+	if optTxn != nil {
+		txnID = optTxn.ID.String()
 	}
-	txnObservations := v.observedOpsByTxn[fakeTxnID]
-	delete(v.observedOpsByTxn, fakeTxnID)
+	for _, op := range ops {
+		v.processOp(&txnID, op)
+	}
+	txnObservations := v.curOps
+	v.curOps = nil
 
 	if result.Type != ResultType_Error {
 		v.checkCommittedTxn(`committed `+atomicType, txnObservations, optTxn)
