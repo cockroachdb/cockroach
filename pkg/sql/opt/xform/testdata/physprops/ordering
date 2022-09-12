@@ -2931,3 +2931,46 @@ project
  │         └── bool_and
  └── projections
       └── NULL
+
+# Regression test for #87806 - include optional columns when remapping Project
+# provided ordering.
+exec-ddl
+CREATE TABLE table87806 (
+  col1_0 TIMESTAMPTZ, col1_1 BOOL, col1_2 REGPROC, col1_3 REGNAMESPACE,
+  PRIMARY KEY (col1_1, col1_2 ASC),
+  UNIQUE (col1_1 ASC),
+  INDEX (col1_3)
+);
+----
+
+opt format=hide-all
+SELECT tab_171969.col1_3
+FROM table87806 AS tab_171967
+JOIN table87806 AS tab_171968
+JOIN table87806@table87806_col1_3_idx AS tab_171969
+ON tab_171968.col1_1 = tab_171969.col1_1
+AND tab_171968.col1_3 = tab_171969.col1_3
+AND tab_171968.col1_3 = tab_171969.tableoid
+ON tab_171967.col1_2 = tab_171968.tableoid
+AND tab_171967.col1_3 = tab_171968.col1_3
+WHERE tab_171967.col1_1
+ORDER BY tab_171969.col1_1 ASC;
+----
+project
+ └── inner-join (lookup table87806@table87806_col1_3_idx [as=tab_171967])
+      ├── lookup columns are key
+      ├── project
+      │    ├── inner-join (lookup table87806 [as=tab_171968])
+      │    │    ├── lookup columns are key
+      │    │    ├── select
+      │    │    │    ├── index-join table87806
+      │    │    │    │    └── scan table87806@table87806_col1_3_idx [as=tab_171969]
+      │    │    │    │         ├── constraint: /16/14/15: (/NULL - ]
+      │    │    │    │         └── flags: force-index=table87806_col1_3_idx
+      │    │    │    └── filters
+      │    │    │         └── tab_171969.col1_3 = tab_171969.tableoid
+      │    │    └── filters
+      │    │         └── tab_171968.col1_3 = tab_171969.col1_3
+      │    └── projections
+      │         └── true
+      └── filters (true)
