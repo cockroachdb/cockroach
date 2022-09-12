@@ -44,6 +44,7 @@ export interface StatementsSummaryData {
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
+  applicationName: string;
   stats: StatementStatistics[];
 }
 
@@ -185,6 +186,7 @@ export const selectStatements = createSelector(
           implicitTxn: stmt.implicit_txn,
           fullScan: stmt.full_scan,
           database: stmt.database,
+          applicationName: stmt.app,
           stats: [],
         };
       }
@@ -203,6 +205,7 @@ export const selectStatements = createSelector(
         implicitTxn: stmt.implicitTxn,
         fullScan: stmt.fullScan,
         database: stmt.database,
+        applicationName: stmt.applicationName,
         stats: combineStatementStats(stmt.stats),
         diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
       };
