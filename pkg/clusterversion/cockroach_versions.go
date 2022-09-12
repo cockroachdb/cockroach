@@ -478,7 +478,7 @@ const (
 	// development versions. On master it should be the minted version of the last
 	// release, while on release branches it can be set to invalidVersionKey to
 	// disable marking any versions as development versions.
-	unstableVersionsAbove = V22_1
+	unstableVersionsAbove = invalidVersionKey
 
 	// finalVersion should be set on a release branch to the minted final cluster
 	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
