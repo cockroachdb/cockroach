@@ -8057,6 +8057,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 			CREATE SCHEMA sc;
 			CREATE TABLE sc.tb (x INT);
 			CREATE TYPE sc.typ AS ENUM ('hello');
+			CREATE FUNCTION sc.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 		`)
 
 		// Back up the database.
@@ -8076,7 +8077,8 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 		<-afterPublishNotif
 		// Create a table in the database we just made public for which the RESTORE
 		// job isn't actually finished.
-		sqlDB.Exec(t, `CREATE TABLE d.public.new_table()`)
+		sqlDB.Exec(t, `USE d;`)
+		sqlDB.Exec(t, `CREATE TABLE public.new_table()`)
 		close(continueNotif)
 		require.NoError(t, g.Wait())
 
@@ -8089,6 +8091,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 			{"public", "new_table"},
 		})
 		sqlDB.CheckQueryResults(t, `SHOW TYPES`, [][]string{})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.create_function_statements`, [][]string{})
 	})
 
 	t.Run("clean-up-schema-with-table", func(t *testing.T) {
@@ -8159,6 +8162,71 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 			{"sc", "new_table"},
 		})
 	})
+
+	t.Run("clean-up-database-with-udf", func(t *testing.T) {
+		ctx := context.Background()
+		tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		for _, server := range tc.Servers {
+			registry := server.JobRegistry().(*jobs.Registry)
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.afterPublishingDescriptors = func() error {
+						notifyContinue(ctx)
+						return errors.New("injected error")
+					}
+					return r
+				},
+			}
+		}
+
+		sqlDB.Exec(t, `
+			CREATE DATABASE d;
+			USE d;
+			CREATE SCHEMA sc1;
+			CREATE FUNCTION sc1.f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+			CREATE SCHEMA sc2;
+		`)
+
+		// Back up the database.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+		// Drop the database and restore into it.
+		sqlDB.Exec(t, `DROP DATABASE d`)
+
+		afterPublishNotif, continueNotif := notifyAfterPublishing()
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			_, err := sqlDB.DB.ExecContext(ctx, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+			require.Regexp(t, "injected error", err)
+			return nil
+		})
+
+		<-afterPublishNotif
+		// Create a table in the database we just made public for which the RESTORE
+		// job isn't actually finished.
+		sqlDB.Exec(t, `
+			USE d;
+			CREATE FUNCTION sc2.f2(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a $$;`)
+		close(continueNotif)
+		require.NoError(t, g.Wait())
+
+		// Check that the restored database still exists, but only contains the new
+		// table we added.
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS FROM d] ORDER BY 1`, [][]string{
+			{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"sc2"},
+		})
+		sqlDB.CheckQueryResults(
+			t,
+			`SELECT database_name, schema_name, function_name FROM crdb_internal.create_function_statements`,
+			[][]string{{"d", "sc2", "f2"}},
+		)
+	})
+
 }
 
 func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
