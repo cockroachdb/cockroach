@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -273,6 +274,7 @@ func TestGCJobRetry(t *testing.T) {
 	failed.Store(false)
 	cs := cluster.MakeTestingClusterSettings()
 	gcjob.EmptySpanPollInterval.Override(ctx, &cs.SV, 100*time.Millisecond)
+	storage.MVCCRangeTombstonesEnabled.Override(ctx, &cs.SV, true)
 	params := base.TestServerArgs{Settings: cs}
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
