@@ -17,6 +17,10 @@
   z-index: 1;
   background-color: $colors--background;
 
+  &__white-background {
+    background-color: $colors--white
+  }
+
   &__list {
     display: flex;
     justify-content: flex-start;
