@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -128,10 +129,7 @@ func TestSQLInstanceDeadlines(t *testing.T) {
 		t,
 		func() bool {
 			_, err := sqlInstance.Session(ctx)
-			if err != nil {
-				return false
-			}
-			return true
+			return err == nil
 		},
 		10*time.Millisecond, 1*time.Millisecond,
 	)
@@ -165,12 +163,9 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 		t,
 		func() bool {
 			_, err := sqlInstance.Session(ctx)
-			if err != nil {
-				return false
-			}
-			return true
+			return err == nil
 		},
-		10*time.Millisecond, 1*time.Millisecond,
+		testutils.DefaultSucceedsSoonDuration, 1*time.Millisecond,
 	)
 
 	// verify that session is also extended successfully a few times
@@ -178,10 +173,7 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 		t,
 		func() bool {
 			_, err := sqlInstance.Session(ctx)
-			if err != nil {
-				return true
-			}
-			return false
+			return err != nil
 		},
 		10*time.Millisecond, 1*time.Millisecond,
 	)
@@ -199,11 +191,8 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 		t,
 		func() bool {
 			_, err := sqlInstance.Session(ctx)
-			if err != nil {
-				return true
-			}
-			return false
+			return err != nil
 		},
-		10*time.Millisecond, 1*time.Millisecond,
+		testutils.DefaultSucceedsSoonDuration, 1*time.Millisecond,
 	)
 }
