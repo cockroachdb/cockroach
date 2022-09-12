@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+
+go_library(
+    name = "redact",
+    srcs = ["redact.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/redact",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/parser",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+get_x_data(name = "get_x_data")
