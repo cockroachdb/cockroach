@@ -236,105 +236,105 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 // commands. The test files are in testdata/backup-restore. The following
 // syntax is provided:
 //
-// - "new-server name=<name> [args]"
-//   Create a new server with the input name.
+//   - "new-server name=<name> [args]"
+//     Create a new server with the input name.
 //
-//   Supported arguments:
+//     Supported arguments:
 //
-//   + share-io-dir: can be specified to share an IO directory with an existing
-//   server. This is useful when restoring from a backup taken in another
-//   server.
+//   - share-io-dir: can be specified to share an IO directory with an existing
+//     server. This is useful when restoring from a backup taken in another
+//     server.
 //
-//   + allow-implicit-access: can be specified to set
-//   `EnableNonAdminImplicitAndArbitraryOutbound` to true
+//   - allow-implicit-access: can be specified to set
+//     `EnableNonAdminImplicitAndArbitraryOutbound` to true
 //
-//   + disable-http: disables use of external HTTP endpoints.
+//   - disable-http: disables use of external HTTP endpoints.
 //
-//   + localities: specifies the localities that will be used when starting up
-//   the test cluster. The cluster will have len(localities) nodes, with each
-//   node assigned a locality config corresponding to the locality. Please
-//   update the `localityCfgs` map when adding new localities.
+//   - localities: specifies the localities that will be used when starting up
+//     the test cluster. The cluster will have len(localities) nodes, with each
+//     node assigned a locality config corresponding to the locality. Please
+//     update the `localityCfgs` map when adding new localities.
 //
-//   + nodes: specifies the number of nodes in the test cluster.
+//   - nodes: specifies the number of nodes in the test cluster.
 //
-//   + splits: specifies the number of ranges the bank table is split into.
+//   - splits: specifies the number of ranges the bank table is split into.
 //
-//   + control-temp-object-cleanup: sets up the server in a way that the test
-//   can control when to run the temporary object reconciliation loop using
-//   nudge-and-wait-for-temp-cleanup
+//   - control-temp-object-cleanup: sets up the server in a way that the test
+//     can control when to run the temporary object reconciliation loop using
+//     nudge-and-wait-for-temp-cleanup
 //
-// - "exec-sql [server=<name>] [user=<name>] [args]"
-//   Executes the input SQL query on the target server. By default, server is
-//   the last created server.
+//   - "exec-sql [server=<name>] [user=<name>] [args]"
+//     Executes the input SQL query on the target server. By default, server is
+//     the last created server.
 //
-//   Supported arguments:
+//     Supported arguments:
 //
-//   + expect-error-regex=<regex>: expects the query to return an error with a string
-//   matching the provided regex
+//   - expect-error-regex=<regex>: expects the query to return an error with a string
+//     matching the provided regex
 //
-//   + expect-error-ignore: expects the query to return an error, but we will
-//   ignore it.
+//   - expect-error-ignore: expects the query to return an error, but we will
+//     ignore it.
 //
-// - "query-sql [server=<name>] [user=<name>]"
-//   Executes the input SQL query and print the results.
+//   - "query-sql [server=<name>] [user=<name>]"
+//     Executes the input SQL query and print the results.
 //
-// - "reset"
-//    Clear all state associated with the test.
+//   - "reset"
+//     Clear all state associated with the test.
 //
-// - "job" [server=<name>] [user=<name>] [args]
-//   Executes job specific operations.
+//   - "job" [server=<name>] [user=<name>] [args]
+//     Executes job specific operations.
 //
-//   Supported arguments:
+//     Supported arguments:
 //
-//   + resume=<tag>: resumes the job referenced by the tag, use in conjunction
-//   with wait-for-state.
+//   - resume=<tag>: resumes the job referenced by the tag, use in conjunction
+//     with wait-for-state.
 //
-//   + cancel=<tag>: cancels the job referenced by the tag and waits for it to
-//   reach a CANCELED state.
+//   - cancel=<tag>: cancels the job referenced by the tag and waits for it to
+//     reach a CANCELED state.
 //
-//   + wait-for-state=<succeeded|paused|failed|cancelled> tag=<tag>: wait for
-//   the job referenced by the tag to reach the specified state.
+//   - wait-for-state=<succeeded|paused|failed|cancelled> tag=<tag>: wait for
+//     the job referenced by the tag to reach the specified state.
 //
-// - "save-cluster-ts" tag=<tag>
-//   Saves the `SELECT cluster_logical_timestamp()` with the tag. Can be used
-//   in the future with intstructions such as `aost`.
+//   - "save-cluster-ts" tag=<tag>
+//     Saves the `SELECT cluster_logical_timestamp()` with the tag. Can be used
+//     in the future with intstructions such as `aost`.
 //
-// - "backup" [args]
-//   Executes backup specific operations.
+//   - "backup" [args]
+//     Executes backup specific operations.
 //
-//   Supported arguments:
+//     Supported arguments:
 //
-//   + tag=<tag>: tag the backup job to reference it in the future.
+//   - tag=<tag>: tag the backup job to reference it in the future.
 //
-//   + expect-pausepoint: expects the backup job to end up in a paused state because
-//   of a pausepoint error.
+//   - expect-pausepoint: expects the backup job to end up in a paused state because
+//     of a pausepoint error.
 //
-// - "restore" [args]
-//   Executes restore specific operations.
+//   - "restore" [args]
+//     Executes restore specific operations.
 //
-//   Supported arguments:
+//     Supported arguments:
 //
-//   + tag=<tag>: tag the restore job to reference it in the future.
+//   - tag=<tag>: tag the restore job to reference it in the future.
 //
-//   + expect-pausepoint: expects the restore job to end up in a paused state because
-//   of a pausepoint error.
+//   - expect-pausepoint: expects the restore job to end up in a paused state because
+//     of a pausepoint error.
 //
-//   + aost: expects a tag referencing a previously saved cluster timestamp
-//   using `save-cluster-ts`. It then runs the restore as of the saved cluster
-//   timestamp.
+//   - aost: expects a tag referencing a previously saved cluster timestamp
+//     using `save-cluster-ts`. It then runs the restore as of the saved cluster
+//     timestamp.
 //
-// - "schema" [args]
-//   Executes schema change specific operations.
+//   - "schema" [args]
+//     Executes schema change specific operations.
 //
-//   Supported arguments:
+//     Supported arguments:
 //
-//   + tag=<tag>: tag the schema change job to reference it in the future.
+//   - tag=<tag>: tag the schema change job to reference it in the future.
 //
-//   + expect-pausepoint: expects the schema change job to end up in a paused state because
-//   of a pausepoint error.
+//   - expect-pausepoint: expects the schema change job to end up in a paused state because
+//     of a pausepoint error.
 //
-// - "nudge-and-wait-for-temp-cleanup"
-//    Nudges the temporary object reconciliation loop to run, and waits for completion.
+//   - "nudge-and-wait-for-temp-cleanup"
+//     Nudges the temporary object reconciliation loop to run, and waits for completion.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -497,6 +497,30 @@ func TestDataDriven(t *testing.T) {
 				server := lastCreatedServer
 				user := "root"
 				jobType := "BACKUP"
+
+				// First, run the backup.
+				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
+
+				// Tag the job.
+				if d.HasArg("tag") {
+					tagJob(t, server, user, jobType, ds, d)
+				}
+
+				// Check if we expect a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					expectPausepoint(t, err, jobType, server, user, ds)
+					ret := append(ds.noticeBuffer, "job paused at pausepoint")
+					return strings.Join(ret, "\n")
+				}
+
+				// All other errors are bad.
+				require.NoError(t, err)
+				return ""
+
+			case "import":
+				server := lastCreatedServer
+				user := "root"
+				jobType := "IMPORT"
 
 				// First, run the backup.
 				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
