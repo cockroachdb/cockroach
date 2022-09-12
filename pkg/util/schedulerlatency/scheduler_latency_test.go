@@ -22,12 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSchedulerLatencyCallbacks(t *testing.T) {
+// TestSchedulerLatencySampler is an integration test for the scheduler latency
+// sampler -- it verifies that scheduling latencies are measured, registered
+// callbacks are invoked, and that the prometheus metrics emitted are non-empty.
+func TestSchedulerLatencySampler(t *testing.T) {
 	skip.UnderStress(t)
 	skip.UnderShort(t)
 
@@ -71,14 +75,29 @@ func TestSchedulerLatencyCallbacks(t *testing.T) {
 	})
 	defer UnregisterCallback(slcbID)
 
-	require.NoError(t, StartSampler(ctx, st, stopper))
+	reg := metric.NewRegistry()
+	require.NoError(t, StartSampler(ctx, st, stopper, reg, 10*time.Second))
 	testutils.SucceedsSoon(t, func() error {
 		mu.Lock()
 		defer mu.Unlock()
 		if mu.p99.Nanoseconds() == 0 {
 			return fmt.Errorf("expected non-zero p99 scheduling latency")
 		}
-		return nil
+
+		var err error
+		reg.Each(func(name string, mtr interface{}) {
+			wh := mtr.(metric.WindowedHistogram)
+			count := float64(wh.TotalCountWindowed())
+			avg := wh.TotalSumWindowed() / count
+			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
+				avg = 0
+			}
+
+			if wh.ValueAtQuantileWindowed(99) == 0 || count == 0 || avg == 0 {
+				err = fmt.Errorf("expected non-zero p99 scheduling latency metrics")
+			}
+		})
+		return err
 	})
 }
 

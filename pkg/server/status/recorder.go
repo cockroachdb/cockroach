@@ -528,7 +528,7 @@ type registryRecorder struct {
 
 func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
 	switch mtr := mtr.(type) {
-	case *metric.Histogram:
+	case metric.WindowedHistogram:
 		n := float64(mtr.TotalCountWindowed())
 		fn(name+"-count", n)
 		avg := mtr.TotalSumWindowed() / n

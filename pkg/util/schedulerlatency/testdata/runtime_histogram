@@ -1,0 +1,100 @@
+# Explore how the histogram type that wraps around runtime/metrics behaves.
+# Initialize it to buckets that have a:
+# - width of 1.0 apart in the range [0, 5)
+# - width of 5.0 apart in the range [5, 20)
+# - width of 10.0 apart in the range [20, 50)
+init
+bucket=[-inf,0)
+bucket=[0,1)
+bucket=[1,2)
+bucket=[2,3)
+bucket=[3,4)
+bucket=[4,5)
+bucket=[5,10)
+bucket=[10,15)
+bucket=[15,20)
+bucket=[20,30)
+bucket=[30,40)
+bucket=[40,50)
+bucket=[50,+inf)
+----
+
+# We should see the right cumulative buckets, trimming out +/- inf.
+print
+----
+count=0 sum=0.00
+buckets:
+  upper-bound=1.00 cumulative-count=0
+  upper-bound=2.00 cumulative-count=0
+  upper-bound=3.00 cumulative-count=0
+  upper-bound=4.00 cumulative-count=0
+  upper-bound=5.00 cumulative-count=0
+  upper-bound=10.00 cumulative-count=0
+  upper-bound=15.00 cumulative-count=0
+  upper-bound=20.00 cumulative-count=0
+  upper-bound=30.00 cumulative-count=0
+  upper-bound=40.00 cumulative-count=0
+  upper-bound=50.00 cumulative-count=0
+
+# If updating within a bucket (the histogram is initialized with a subset of
+# the buckets updates can have), the right buckets are incremented. We'll
+# increment the buckets between [3, 4) by 9 across two sub-increments.
+# We'll also increment [10, 15) using data that lies within the range.
+update
+bucket=[0,1) count=0
+bucket=[1,2) count=0
+bucket=[2,3) count=0
+bucket=[3,3.5) count=5
+bucket=[3.5,4) count=4
+bucket=[4,5) count=0
+bucket=[5,10) count=0
+bucket=[10,11) count=1
+bucket=[11,15) count=0
+----
+
+# Observe how the right buckets are incremented and reduced into.
+print
+----
+count=10 sum=37.00
+buckets:
+  upper-bound=1.00 cumulative-count=0
+  upper-bound=2.00 cumulative-count=0
+  upper-bound=3.00 cumulative-count=0
+  upper-bound=4.00 cumulative-count=9
+  upper-bound=5.00 cumulative-count=9
+  upper-bound=10.00 cumulative-count=9
+  upper-bound=15.00 cumulative-count=10
+  upper-bound=20.00 cumulative-count=10
+  upper-bound=30.00 cumulative-count=10
+  upper-bound=40.00 cumulative-count=10
+  upper-bound=50.00 cumulative-count=10
+
+# Since it's a batch histogram, updating it again resets all counts.
+update
+bucket=[0,1) count=0
+bucket=[1,2) count=0
+bucket=[2,3) count=0
+bucket=[3,4) count=0
+bucket=[4,5) count=0
+bucket=[5,10) count=0
+bucket=[10,15) count=2
+bucket=[15,20) count=1
+----
+
+# Observe how the count reflects the cumulative value, while sum is an
+# underestimate, computing using start of bucket boundaries: 2*10 + 1*15.
+print
+----
+count=3 sum=35.00
+buckets:
+  upper-bound=1.00 cumulative-count=0
+  upper-bound=2.00 cumulative-count=0
+  upper-bound=3.00 cumulative-count=0
+  upper-bound=4.00 cumulative-count=0
+  upper-bound=5.00 cumulative-count=0
+  upper-bound=10.00 cumulative-count=0
+  upper-bound=15.00 cumulative-count=2
+  upper-bound=20.00 cumulative-count=3
+  upper-bound=30.00 cumulative-count=3
+  upper-bound=40.00 cumulative-count=3
+  upper-bound=50.00 cumulative-count=3
