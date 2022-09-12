@@ -232,7 +232,7 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 				// to be have like a transactional one that used the 1PC optimization.
 				// Use the timestamp at which the command wrote (and read) to set up
 				// a transaction and which will be used to verify the history.
-				o.Txn = syntheticTxnAtTime(b.RawResponse().Timestamp)
+				o.SynTxn = syntheticTxnAtTime(b.RawResponse().Timestamp)
 			}
 			o.Result.Type = ResultType_Keys
 			for _, deletedKey := range b.RawResponse().Responses[0].GetDeleteRange().Keys {

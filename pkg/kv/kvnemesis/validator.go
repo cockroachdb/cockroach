@@ -388,9 +388,9 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		// the *non-transactional* case.
 		//
 		// [^1]: see applyClientOp.
-		var optTxn *roachpb.Transaction
+		var maybeSynTxn *roachpb.Transaction
 		if txnID == nil {
-			optTxn = t.Txn
+			maybeSynTxn = t.Txn
 			s := t.Txn.ID.String()
 			txnID = &s
 		}
@@ -422,11 +422,11 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		}
 		v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], scan)
 		v.observedOpsByTxn[*txnID] = append(v.observedOpsByTxn[*txnID], deleteOps...)
-		if optTxn != nil {
-			// If this is a non-txn'al DeleteRange, in which case optTxn is a
+		if maybeSynTxn != nil {
+			// If this is a non-txn'al DeleteRange, in which case maybeSynTxn is a
 			// *synthetic txn*, verify that txn now. (Otherwise, verification happens
 			// for the surrounding ClosureTxnOperation).
-			v.checkAtomic(`deleterange`, t.Result, optTxn, op)
+			v.checkAtomic(`deleterange`, t.Result, maybeSynTxn, op)
 		}
 	case *ScanOperation:
 		v.failIfError(op, t.Result)

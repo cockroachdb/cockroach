@@ -68,7 +68,7 @@ message DeleteRangeOperation {
   bytes key = 1;
   bytes end_key = 2;
   Result result = 3 [(gogoproto.nullable) = false];
-  roachpb.Transaction txn = 4;
+  roachpb.Transaction syn_txn = 4;
 }
 
 message SplitOperation {
