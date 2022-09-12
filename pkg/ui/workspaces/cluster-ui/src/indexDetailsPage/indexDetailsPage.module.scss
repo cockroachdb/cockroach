@@ -93,3 +93,14 @@
     margin-bottom: 0;
   }
 }
+
+.index-stats__reset-btn {
+  color: $colors--primary-blue-3;
+  font-size: $font-size--medium;
+  line-height: $line-height--small;
+
+  &:hover {
+    color: $colors--primary-blue-3;
+    text-decoration: underline;
+  }
+}
