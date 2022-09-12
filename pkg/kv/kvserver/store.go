@@ -3153,6 +3153,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	uninitializedCount = int64(len(s.mu.uninitReplicas))
 	s.mu.RUnlock()
 
+	// TODO(kaisun314,kvoli): move this to a per-store admission control metrics
+	// struct when available. See pkg/util/admission/granter.go.
 	s.ioThreshold.Lock()
 	ioOverload, _ = s.ioThreshold.t.Score()
 	s.ioThreshold.Unlock()

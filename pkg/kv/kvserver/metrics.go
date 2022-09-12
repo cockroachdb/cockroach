@@ -1025,9 +1025,12 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 
 	metaIOOverload = metric.Metadata{
 		Name: "admission.io.overload",
-		Help: `1-normalized float to pause replication to raft group followers if its value is at least 1.
+		Help: `1-normalized float to pause replication to raft group followers if its value exceeds a given threshold.
 
-Composed of LSM L0 sub-level and file counts.`,
+This threshold is the admission.kv.pause_replication_io_threshold cluster setting
+(pause replication feature is disabled if this setting is 0, feature is disabled by default);
+see pkg/kv/kvserver/replica_raft_overload.go for more details. Composed of LSM L0
+sub-level and file counts.`,
 		Measurement: "Threshold",
 		Unit:        metric.Unit_COUNT,
 	}
