@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -68,7 +67,7 @@ func Validate(steps []Step, kvs *Engine) []error {
 	// timespans for a given transaction can overlap.
 	sort.Slice(steps, func(i, j int) bool { return steps[i].After.Less(steps[j].After) })
 	for _, s := range steps {
-		v.processOp(nil /* txnID */, s.Op)
+		v.processOp(false /* inTxn */, s.Op)
 	}
 
 	var extraKVs []observedOp
@@ -333,11 +332,11 @@ func (v *validator) getDeleteForKey(key string, txn *roachpb.Transaction) (stora
 	return storage.MVCCKey{}, false
 }
 
-func (v *validator) processOp(txnID *string, op Operation) {
+func (v *validator) processOp(inTxn bool, op Operation) {
 	switch t := op.GetValue().(type) {
 	case *GetOperation:
 		v.failIfError(op, t.Result)
-		if txnID == nil {
+		if !inTxn {
 			v.checkAtomic(`get`, t.Result, nil, op)
 		} else {
 			read := &observedRead{
@@ -347,7 +346,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			v.curOps = append(v.curOps, read)
 		}
 	case *PutOperation:
-		if txnID == nil {
+		if !inTxn {
 			v.checkAtomic(`put`, t.Result, nil, op)
 		} else {
 			// Accumulate all the writes for this transaction.
@@ -364,7 +363,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			v.curOps = append(v.curOps, write)
 		}
 	case *DeleteOperation:
-		if txnID == nil {
+		if !inTxn {
 			v.checkAtomic(`delete`, t.Result, nil, op)
 		} else {
 			// NB: While Put operations can be identified as having materialized
@@ -386,7 +385,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			v.curOps = append(v.curOps, write)
 		}
 	case *DeleteRangeOperation:
-		if txnID == nil {
+		if !inTxn {
 			v.checkAtomic(`deleteRange`, t.Result, nil, op)
 		} else {
 			// For the purposes of validation, DelRange operations decompose into
@@ -420,7 +419,7 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		}
 	case *ScanOperation:
 		v.failIfError(op, t.Result)
-		if txnID == nil {
+		if !inTxn {
 			atomicScanType := `scan`
 			if t.Reverse {
 				atomicScanType = `reverse scan`
@@ -530,11 +529,11 @@ func (v *validator) processOp(txnID *string, op Operation) {
 	case *BatchOperation:
 		if !resultIsRetryable(t.Result) {
 			v.failIfError(op, t.Result)
-			if txnID == nil {
+			if !inTxn {
 				v.checkAtomic(`batch`, t.Result, nil, t.Ops...)
 			} else {
 				for _, op := range t.Ops {
-					v.processOp(txnID, op)
+					v.processOp(inTxn, op)
 				}
 			}
 		}
@@ -552,12 +551,11 @@ func (v *validator) processOp(txnID *string, op Operation) {
 func (v *validator) checkAtomic(
 	atomicType string, result Result, optTxn *roachpb.Transaction, ops ...Operation,
 ) {
-	txnID := uuid.Nil.String() // a fake txn ID in case we're a single non-txn'al operation
-	if optTxn != nil {
-		txnID = optTxn.ID.String()
-	}
 	for _, op := range ops {
-		v.processOp(&txnID, op)
+		// NB: we're not really necessarily in a txn, but passing true here means that
+		// we have an atomic unit, which is also the case if we are called here by a
+		// non-transactional Put, for example.
+		v.processOp(true /* inTxn */, op)
 	}
 	txnObservations := v.curOps
 	v.curOps = nil
