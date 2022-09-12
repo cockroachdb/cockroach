@@ -246,13 +246,10 @@ func (r *Replica) checkConsistencyImpl(
 		// essentially paced by the consistency checker so we won't call this too often.
 		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
-		req := roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: args.Key},
-		}
-
 		var b kv.Batch
-		b.AddRawRequest(&req)
-
+		b.AddRawRequest(&roachpb.RecomputeStatsRequest{
+			RequestHeader: roachpb.RequestHeader{Key: args.Key},
+		})
 		err := r.store.db.Run(ctx, &b)
 		return resp, roachpb.NewError(err)
 	}
