@@ -1318,6 +1318,13 @@ func TestLogic_record(
 	runLogicTest(t, "record")
 }
 
+func TestLogic_redact_descriptor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "redact_descriptor")
+}
+
 func TestLogic_rename_atomic(
 	t *testing.T,
 ) {
