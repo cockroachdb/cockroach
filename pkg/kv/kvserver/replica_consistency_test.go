@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -53,14 +54,14 @@ func TestReplicaChecksumVersion(t *testing.T) {
 		} else {
 			cc.Version = 1
 		}
-		tc.repl.computeChecksumPostApply(ctx, cc)
+		taskErr := tc.repl.computeChecksumPostApply(ctx, cc)
 		rc, err := tc.repl.getChecksum(ctx, cc.ChecksumID)
 		if !matchingVersion {
-			if !testutils.IsError(err, "no checksum found") {
-				t.Fatal(err)
-			}
+			require.ErrorContains(t, taskErr, "incompatible versions")
+			require.ErrorContains(t, err, "checksum task failed to start")
 			require.Nil(t, rc.Checksum)
 		} else {
+			require.NoError(t, taskErr)
 			require.NoError(t, err)
 			require.NotNil(t, rc.Checksum)
 		}
@@ -78,52 +79,55 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
+	requireChecksumTaskNotStarted := func(id uuid.UUID) {
+		require.ErrorContains(t,
+			tc.repl.computeChecksumPostApply(context.Background(), kvserverpb.ComputeChecksum{
+				ChecksumID: id,
+				Mode:       roachpb.ChecksumMode_CHECK_FULL,
+				Version:    batcheval.ReplicaChecksumVersion,
+			}), "checksum collection request gave up")
+	}
+
+	// Checksum computation failed to start.
 	id := uuid.FastMakeV4()
-	notify := make(chan struct{})
-	close(notify)
-
-	// Simple condition, the checksum is notified, but not computed.
-	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{notify: notify}
-	tc.repl.mu.Unlock()
+	c, _ := tc.repl.getReplicaChecksum(id, timeutil.Now())
+	close(c.started)
 	rc, err := tc.repl.getChecksum(ctx, id)
-	if !testutils.IsError(err, "no checksum found") {
-		t.Fatal(err)
-	}
-	require.Nil(t, rc.Checksum)
-	// Next condition, the initial wait expires and checksum is not started,
-	// this will take 10ms.
-	id = uuid.FastMakeV4()
-	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{})}
-	tc.repl.mu.Unlock()
-	rc, err = tc.repl.getChecksum(ctx, id)
-	if !testutils.IsError(err, "checksum computation did not start") {
-		t.Fatal(err)
-	}
-	require.Nil(t, rc.Checksum)
-	// Next condition, initial wait expired and we found the started flag,
-	// so next step is for context deadline.
-	id = uuid.FastMakeV4()
-	tc.repl.mu.Lock()
-	tc.repl.mu.checksums[id] = replicaChecksum{notify: make(chan struct{}), started: true}
-	tc.repl.mu.Unlock()
-	rc, err = tc.repl.getChecksum(ctx, id)
-	if !testutils.IsError(err, "context deadline exceeded") {
-		t.Fatal(err)
-	}
+	require.ErrorContains(t, err, "checksum task failed to start")
 	require.Nil(t, rc.Checksum)
 
-	// Need to reset the context, since we deadlined it above.
-	ctx, cancel = context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	// Next condition, node should quiesce.
-	tc.repl.store.Stopper().Quiesce(ctx)
-	rc, err = tc.repl.getChecksum(ctx, uuid.FastMakeV4())
-	if !testutils.IsError(err, "store quiescing") {
-		t.Fatal(err)
-	}
+	// Checksum computation started, but failed.
+	id = uuid.FastMakeV4()
+	c, _ = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c.started <- func() {}
+	close(c.started)
+	close(c.result)
+	rc, err = tc.repl.getChecksum(ctx, id)
+	require.ErrorContains(t, err, "no checksum found")
 	require.Nil(t, rc.Checksum)
+
+	// The initial wait for the task start expires. This will take 10ms.
+	id = uuid.FastMakeV4()
+	rc, err = tc.repl.getChecksum(ctx, id)
+	require.ErrorContains(t, err, "checksum computation did not start")
+	require.Nil(t, rc.Checksum)
+	requireChecksumTaskNotStarted(id)
+
+	// The computation has started, but the request context timed out.
+	id = uuid.FastMakeV4()
+	c, _ = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c.started <- func() {}
+	close(c.started)
+	rc, err = tc.repl.getChecksum(ctx, id)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Nil(t, rc.Checksum)
+
+	// Context is canceled during the initial waiting.
+	id = uuid.FastMakeV4()
+	rc, err = tc.repl.getChecksum(ctx, id)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Nil(t, rc.Checksum)
+	requireChecksumTaskNotStarted(id)
 }
 
 // TestReplicaChecksumSHA512 checks that a given dataset produces the expected

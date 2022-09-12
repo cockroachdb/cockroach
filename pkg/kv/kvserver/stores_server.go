@@ -11,7 +11,6 @@
 package kvserver
 
 import (
-	"bytes"
 	"context"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/redact"
 )
 
 // Server implements PerReplicaServer.
@@ -53,29 +51,20 @@ func (is Server) execStoreCommand(
 func (is Server) CollectChecksum(
 	ctx context.Context, req *CollectChecksumRequest,
 ) (*CollectChecksumResponse, error) {
-	resp := &CollectChecksumResponse{}
+	var resp *CollectChecksumResponse
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
+			ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+			defer cancel()
 			r, err := s.GetReplica(req.RangeID)
 			if err != nil {
 				return err
 			}
-			c, err := r.getChecksum(ctx, req.ChecksumID)
+			ccr, err := r.getChecksum(ctx, req.ChecksumID)
 			if err != nil {
 				return err
 			}
-			ccr := c.CollectChecksumResponse
-			if !bytes.Equal(req.Checksum, ccr.Checksum) {
-				// If this check is false, then this request is the replica carrying out
-				// the consistency check. The message is spurious, but we want to leave the
-				// snapshot (if present) intact.
-				if len(req.Checksum) > 0 {
-					log.Errorf(ctx, "consistency check failed on range r%d: expected checksum %x, got %x",
-						req.RangeID, redact.Safe(req.Checksum), redact.Safe(ccr.Checksum))
-					// Leave resp.Snapshot alone so that the caller will receive what's
-					// in it (if anything).
-				}
-			} else {
+			if !req.WithSnapshot {
 				ccr.Snapshot = nil
 			}
 			resp = &ccr
