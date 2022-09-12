@@ -149,11 +149,11 @@ func (b *ConstraintBuilder) Build(
 	// eqFilterOrds calculated during Init would no longer be valid because the
 	// ordinals of the filters will have changed.
 	leftEq, rightEq, eqFilterOrds :=
-		memo.ExtractJoinEqualityColumns(b.leftCols, b.rightCols, onFilters)
+		memo.ExtractJoinEqualityColumnsWithFilterOrds(b.leftCols, b.rightCols, onFilters)
 	rightEqSet := rightEq.ToSet()
 
 	// Retrieve the inequality columns from onFilters.
-	_, rightCmp, inequalityFilterOrds := memo.ExtractJoinConditionColumns(
+	rightCmp, inequalityFilterOrds := memo.ExtractJoinConditionRightColumnsWithFilterOrds(
 		b.leftCols, b.rightCols, onFilters, true, /* inequality */
 	)
 
