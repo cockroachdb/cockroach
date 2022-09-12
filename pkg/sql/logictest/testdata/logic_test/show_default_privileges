@@ -166,6 +166,7 @@ root  false  functions  root  ALL         true
 root  false  schemas    root  ALL         true
 root  false  sequences  root  ALL         true
 root  false  tables     bar   BACKUP      false
+root  false  tables     bar   CHANGEFEED  false
 root  false  tables     bar   CREATE      false
 root  false  tables     bar   DELETE      false
 root  false  tables     bar   DROP        false
@@ -173,6 +174,7 @@ root  false  tables     bar   INSERT      false
 root  false  tables     bar   UPDATE      false
 root  false  tables     bar   ZONECONFIG  false
 root  false  tables     foo   BACKUP      false
+root  false  tables     foo   CHANGEFEED  false
 root  false  tables     foo   CREATE      false
 root  false  tables     foo   DELETE      false
 root  false  tables     foo   DROP        false
