@@ -233,35 +233,10 @@ func (r *Replica) checkConsistencyImpl(
 		if !haveDelta {
 			return resp, nil
 		}
-
 		if delta.ContainsEstimates <= 0 && fatalOnStatsMismatch {
 			// We just found out that the recomputation doesn't match the persisted stats,
 			// so ContainsEstimates should have been strictly positive.
-
-			var v roachpb.Version
-			if err := r.store.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return txn.GetProto(ctx, keys.BootstrapVersionKey, &v)
-			}); err != nil {
-				log.Infof(ctx, "while retrieving cluster bootstrap version: %s", err)
-				// Intentionally continue with the assumption that it's the current version.
-				v = r.store.cfg.Settings.Version.ActiveVersion(ctx).Version
-			}
-			// For clusters that ever ran <19.1, we're not so sure that the stats
-			// are consistent. Verify this only for clusters that started out on 19.1 or
-			// higher.
-			if !v.Less(roachpb.Version{Major: 19, Minor: 1}) {
-				// If version >= 19.1 but < 20.1-14 (AbortSpanBytes before its removal),
-				// we want to ignore any delta in AbortSpanBytes when comparing stats
-				// since older versions will not be tracking abort span bytes.
-				if v.Less(roachpb.Version{Major: 20, Minor: 1, Internal: 14}) {
-					delta.AbortSpanBytes = 0
-					haveDelta = delta != enginepb.MVCCStats{}
-				}
-				if !haveDelta {
-					return resp, nil
-				}
-				log.Fatalf(ctx, "found a delta of %+v", redact.Safe(delta))
-			}
+			log.Fatalf(ctx, "found a delta of %+v", redact.Safe(delta))
 		}
 
 		// We've found that there's something to correct; send an RecomputeStatsRequest. Note that this
