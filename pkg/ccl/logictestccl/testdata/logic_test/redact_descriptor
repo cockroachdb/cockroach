@@ -1,0 +1,360 @@
+# NB: "Xw==" is the byte representation of "_", which is what we use to redact fields. 
+statement ok
+CREATE TABLE collate_partition (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a) (
+    PARTITION p1 VALUES FROM ('x' COLLATE da) TO ('ü' COLLATE da)
+)
+
+# Alter the table to check that it is safe to redact descriptors which have
+# been modified.
+statement ok
+ALTER TABLE collate_partition ADD COLUMN b STRING DEFAULT 'sensitive' CHECK (b != 'top secret')
+
+statement ok
+CREATE VIEW redacted_descriptors AS
+    SELECT
+        id,
+        jsonb_pretty(
+            regexp_replace(
+                regexp_replace(
+                    (
+                        crdb_internal.pb_to_json(
+                            'desc',
+                            crdb_internal.redact_descriptor(
+                                descriptor
+                            )
+                        )
+                    )::STRING,
+                    '"createdAtNanos": "[0-9]+"',
+                    '"createdAtNanos": "0"',
+                    'g'
+                ),
+                '"wallTime": "[0-9]+"',
+                '"wallTime": "0"'
+            )::JSONB
+        )
+            AS descriptor
+    FROM
+        system.descriptor;
+
+
+query T
+SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGCLASS;
+----
+{
+    "table": {
+        "checks": [
+            {
+                "columnIds": [
+                    2
+                ],
+                "constraintId": 2,
+                "expr": "b != '_':::STRING",
+                "name": "check_b"
+            }
+        ],
+        "columns": [
+            {
+                "id": 1,
+                "name": "a",
+                "type": {
+                    "family": "CollatedStringFamily",
+                    "locale": "da",
+                    "oid": 25
+                }
+            },
+            {
+                "defaultExpr": "'_':::STRING",
+                "id": 2,
+                "name": "b",
+                "nullable": true,
+                "type": {
+                    "family": "StringFamily",
+                    "oid": 25
+                }
+            }
+        ],
+        "createAsOfTime": {
+            "wallTime": "0"
+        },
+        "families": [
+            {
+                "columnIds": [
+                    1,
+                    2
+                ],
+                "columnNames": [
+                    "a",
+                    "b"
+                ],
+                "defaultColumnId": 2,
+                "name": "primary"
+            }
+        ],
+        "formatVersion": 3,
+        "id": 106,
+        "modificationTime": {},
+        "name": "collate_partition",
+        "nextColumnId": 3,
+        "nextConstraintId": 3,
+        "nextFamilyId": 1,
+        "nextIndexId": 2,
+        "nextMutationId": 2,
+        "parentId": 104,
+        "primaryIndex": {
+            "compositeColumnIds": [
+                1
+            ],
+            "constraintId": 1,
+            "createdAtNanos": "0",
+            "encodingType": 1,
+            "foreignKey": {},
+            "geoConfig": {},
+            "id": 1,
+            "interleave": {},
+            "keyColumnDirections": [
+                "ASC"
+            ],
+            "keyColumnIds": [
+                1
+            ],
+            "keyColumnNames": [
+                "a"
+            ],
+            "name": "collate_partition_pkey",
+            "partitioning": {
+                "numColumns": 1,
+                "range": [
+                    {
+                        "fromInclusive": "Xw==",
+                        "name": "p1",
+                        "toExclusive": "Xw=="
+                    }
+                ]
+            },
+            "sharded": {},
+            "storeColumnIds": [
+                2
+            ],
+            "storeColumnNames": [
+                "b"
+            ],
+            "unique": true,
+            "version": 4
+        },
+        "privileges": {
+            "ownerProto": "root",
+            "users": [
+                {
+                    "privileges": 2,
+                    "userProto": "admin",
+                    "withGrantOption": 2
+                },
+                {
+                    "privileges": 2,
+                    "userProto": "root",
+                    "withGrantOption": 2
+                }
+            ],
+            "version": 2
+        },
+        "replacementOf": {
+            "time": {}
+        },
+        "unexposedParentSchemaId": 105,
+        "version": "5"
+    }
+}
+
+statement ok
+CREATE TABLE subpartition (
+  a INT, b INT, c INT,
+  PRIMARY KEY (a, b),
+  FAMILY "primary" (a, b, c)
+)
+  PARTITION BY LIST (a)
+    (
+      PARTITION p1
+        VALUES IN (1)
+        PARTITION BY LIST (b)
+          (
+            PARTITION p1_1 VALUES IN (1),
+            PARTITION p1_2 VALUES IN (DEFAULT)
+          ),
+      PARTITION p2
+        VALUES IN (2)
+        PARTITION BY LIST (b)
+          (PARTITION p2_1 VALUES IN (3)),
+      PARTITION p3 VALUES IN (DEFAULT)
+    )
+
+query T
+SELECT descriptor from redacted_descriptors where id = 'subpartition'::REGCLASS;
+----
+{
+    "table": {
+        "columns": [
+            {
+                "id": 1,
+                "name": "a",
+                "type": {
+                    "family": "IntFamily",
+                    "oid": 20,
+                    "width": 64
+                }
+            },
+            {
+                "id": 2,
+                "name": "b",
+                "type": {
+                    "family": "IntFamily",
+                    "oid": 20,
+                    "width": 64
+                }
+            },
+            {
+                "id": 3,
+                "name": "c",
+                "nullable": true,
+                "type": {
+                    "family": "IntFamily",
+                    "oid": 20,
+                    "width": 64
+                }
+            }
+        ],
+        "createAsOfTime": {},
+        "families": [
+            {
+                "columnIds": [
+                    1,
+                    2,
+                    3
+                ],
+                "columnNames": [
+                    "a",
+                    "b",
+                    "c"
+                ],
+                "defaultColumnId": 3,
+                "name": "primary"
+            }
+        ],
+        "formatVersion": 3,
+        "id": 108,
+        "modificationTime": {},
+        "name": "subpartition",
+        "nextColumnId": 4,
+        "nextConstraintId": 2,
+        "nextFamilyId": 1,
+        "nextIndexId": 2,
+        "nextMutationId": 1,
+        "parentId": 104,
+        "primaryIndex": {
+            "constraintId": 1,
+            "createdAtNanos": "0",
+            "encodingType": 1,
+            "foreignKey": {},
+            "geoConfig": {},
+            "id": 1,
+            "interleave": {},
+            "keyColumnDirections": [
+                "ASC",
+                "ASC"
+            ],
+            "keyColumnIds": [
+                1,
+                2
+            ],
+            "keyColumnNames": [
+                "a",
+                "b"
+            ],
+            "name": "subpartition_pkey",
+            "partitioning": {
+                "list": [
+                    {
+                        "name": "p1",
+                        "subpartitioning": {
+                            "list": [
+                                {
+                                    "name": "p1_1",
+                                    "subpartitioning": {},
+                                    "values": [
+                                        "Xw=="
+                                    ]
+                                },
+                                {
+                                    "name": "p1_2",
+                                    "subpartitioning": {},
+                                    "values": [
+                                        "Xw=="
+                                    ]
+                                }
+                            ],
+                            "numColumns": 1
+                        },
+                        "values": [
+                            "Xw=="
+                        ]
+                    },
+                    {
+                        "name": "p2",
+                        "subpartitioning": {
+                            "list": [
+                                {
+                                    "name": "p2_1",
+                                    "subpartitioning": {},
+                                    "values": [
+                                        "Xw=="
+                                    ]
+                                }
+                            ],
+                            "numColumns": 1
+                        },
+                        "values": [
+                            "Xw=="
+                        ]
+                    },
+                    {
+                        "name": "p3",
+                        "subpartitioning": {},
+                        "values": [
+                            "Xw=="
+                        ]
+                    }
+                ],
+                "numColumns": 1
+            },
+            "sharded": {},
+            "storeColumnIds": [
+                3
+            ],
+            "storeColumnNames": [
+                "c"
+            ],
+            "unique": true,
+            "version": 4
+        },
+        "privileges": {
+            "ownerProto": "root",
+            "users": [
+                {
+                    "privileges": 2,
+                    "userProto": "admin",
+                    "withGrantOption": 2
+                },
+                {
+                    "privileges": 2,
+                    "userProto": "root",
+                    "withGrantOption": 2
+                }
+            ],
+            "version": 2
+        },
+        "replacementOf": {
+            "time": {}
+        },
+        "unexposedParentSchemaId": 105,
+        "version": "1"
+    }
+}

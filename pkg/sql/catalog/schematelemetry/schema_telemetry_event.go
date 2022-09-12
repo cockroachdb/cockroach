@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -86,9 +87,8 @@ func CollectClusterSchemaForTelemetry(
 		ev := newEvent(rd.GetID())
 		redacted[rd.GetID()] = ev
 		// Redact parts of the catalog which may contain PII.
-		mut := rd.NewBuilder().BuildCreatedMutable()
-		redactErrs := Redact(mut)
-		ev.Desc = mut.DescriptorProto()
+		ev.Desc = rd.NewBuilder().BuildCreatedMutable().DescriptorProto()
+		redactErrs := redact.Redact(ev.Desc)
 		// Add all errors to the snapshot metadata event.
 		for _, err := range redactErrs {
 			err = errors.Wrapf(err, " %s %q (%d)", rd.DescriptorType(), rd.GetName(), rd.GetID())

@@ -94,6 +94,13 @@ func TestCCLLogic_partitioning_enum(
 	runCCLLogicTest(t, "partitioning_enum")
 }
 
+func TestCCLLogic_redact_descriptor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "redact_descriptor")
+}
+
 func TestCCLLogic_schema_change_in_txn(
 	t *testing.T,
 ) {
