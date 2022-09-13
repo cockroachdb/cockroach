@@ -87,6 +87,10 @@ type OrderingColumnChoice struct {
 	Descending bool
 }
 
+// MinOrderingChoice is a shared empty ordering choice used to facilitate simple
+// pointer-based equality checks of xform.groupStateKey.
+var MinOrderingChoice = &OrderingChoice{}
+
 const (
 	colChoiceRegexStr = `(?:\((\d+(?:\|\d+)*)\))`
 	ordColRegexStr    = `^(?:(?:\+|\-)(?:(\d+)|` + colChoiceRegexStr + `))$`

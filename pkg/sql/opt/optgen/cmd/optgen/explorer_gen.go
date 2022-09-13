@@ -36,6 +36,7 @@ func (g *explorerGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.nestIndent("import (\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/memo\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/props\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
 	g.w.unnest(")\n\n")
 
@@ -51,6 +52,7 @@ func (g *explorerGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 //	  state *exploreState,
 //	  member memo.RelExpr,
 //	  ordinal int,
+//	  orderingHint *props.OrderingChoice,
 //	) (_fullyExplored bool) {
 //	  switch t := member.(type) {
 //	    case *memo.ScanNode:
@@ -67,6 +69,7 @@ func (g *explorerGen) genDispatcher() {
 	g.w.writeIndent("state *exploreState,\n")
 	g.w.writeIndent("member memo.RelExpr,\n")
 	g.w.writeIndent("ordinal int,\n")
+	g.w.writeIndent("orderingHint *props.OrderingChoice,\n")
 	g.w.unnest(") (_fullyExplored bool)")
 	g.w.nest(" {\n")
 	g.w.writeIndent("switch t := member.(type) {\n")
@@ -76,7 +79,7 @@ func (g *explorerGen) genDispatcher() {
 		rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Explore")
 		if len(rules) > 0 {
 			opTyp := g.md.typeOf(define)
-			format := "case *%s: return _e.explore%s(state, t, ordinal)\n"
+			format := "case *%s: return _e.explore%s(state, t, ordinal, orderingHint)\n"
 			g.w.writeIndent(format, opTyp.name, define.Name)
 		}
 	}
@@ -94,6 +97,7 @@ func (g *explorerGen) genDispatcher() {
 //	  _rootState *exploreState,
 //	  _root *memo.ScanNode,
 //	  _rootOrd int,
+//	  _orderingHint *props.OrderingChoice,
 //	) (_fullyExplored bool) {
 //	  _fullyExplored = true
 //
@@ -114,6 +118,7 @@ func (g *explorerGen) genRuleFuncs() {
 		g.w.writeIndent("_rootState *exploreState,\n")
 		g.w.writeIndent("_root *%s,\n", opTyp.name)
 		g.w.writeIndent("_rootOrd int,\n")
+		g.w.writeIndent("_orderingHint *props.OrderingChoice,\n")
 		g.w.unnest(") (_fullyExplored bool)")
 		g.w.nest(" {\n")
 		g.w.writeIndent("_fullyExplored = true\n\n")

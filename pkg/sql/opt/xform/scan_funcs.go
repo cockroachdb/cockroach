@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -63,6 +64,9 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 			c.e.mem.AddScanToGroup(&scan, grp)
 			return
 		}
+		if scanPrivate.Flags.NoIndexJoin {
+			return
+		}
 
 		// Otherwise, if the index must be forced, then construct an IndexJoin
 		// operator that provides the columns missing from the index. Note that
@@ -72,7 +76,25 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		// be explored, even when non-covering and unconstrained, without forcing a
 		// particular index.
 		if !scanPrivate.Flags.ForceIndex && !c.e.mem.AllowUnconstrainedNonCoveringIndexScan() {
-			return
+			orderingHint := c.e.mem.OrderingHint()
+
+			// Allow unconstrained index scans to be explored if an enforcer is being
+			// optimized with an Ordering which the index can provide.
+			if orderingHint != nil && !orderingHint.Any() {
+				savedIndex := scanPrivate.Index
+				scanPrivate.Index = index.Ordinal()
+				ok, _ := ordering.ScanPrivateCanProvide(
+					c.e.mem.Metadata(),
+					scanPrivate,
+					orderingHint,
+				)
+				scanPrivate.Index = savedIndex
+				if !ok {
+					return
+				}
+			} else {
+				return
+			}
 		}
 
 		var sb indexScanBuilder

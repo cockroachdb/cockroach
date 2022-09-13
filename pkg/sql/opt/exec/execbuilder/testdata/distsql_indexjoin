@@ -108,17 +108,19 @@ EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
 distribution: full
 vectorized: true
 ·
-• top-k
-│ order: +c,+b
-│ k: 2
+• limit
+│ count: 2
 │
 └── • filter
     │ filter: (b >= 1) AND (b <= 3)
     │
-    └── • scan
-          missing stats
-          table: abc@abc_pkey
-          spans: FULL SCAN
+    └── • index join
+        │ table: abc@abc_pkey
+        │
+        └── • scan
+              missing stats
+              table: abc@abc_c_b_idx
+              spans: FULL SCAN (SOFT LIMIT)
 
 statement ok
 SET unconstrained_non_covering_index_scan_enabled = true;

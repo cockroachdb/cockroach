@@ -2507,7 +2507,7 @@ WHERE EXISTS (SELECT 1 FROM dz WHERE z = y)
 AND EXISTS (SELECT 1 FROM bx WHERE x = y)
 AND EXISTS (SELECT 1 FROM abc WHERE a = y)
 ----
-Rules Applied: 134
+Rules Applied: 136
 Groups Added: 73
 
 

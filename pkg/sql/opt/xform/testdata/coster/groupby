@@ -157,7 +157,7 @@ limit
  │    │    ├── limit hint: 10.00
  │    │    └── scan c@c_a_idx
  │    │         ├── columns: a:1 rowid:5!null
- │    │         ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    │         ├── stats: [rows=1000]
  │    │         ├── cost: 24.42
  │    │         ├── key: (5)
  │    │         ├── fd: (5)-->(1)
@@ -223,7 +223,7 @@ limit
  │    │    ├── limit hint: 10.00
  │    │    └── scan c@c_a_idx
  │    │         ├── columns: a:1 rowid:5!null
- │    │         ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
+ │    │         ├── stats: [rows=1000]
  │    │         ├── cost: 24.42
  │    │         ├── key: (5)
  │    │         ├── fd: (5)-->(1)
@@ -260,7 +260,7 @@ limit
  │    │    ├── limit hint: 10.00
  │    │    └── scan c@c_b_c_d_idx
  │    │         ├── columns: b:2 c:3 rowid:5!null
- │    │         ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
+ │    │         ├── stats: [rows=1000]
  │    │         ├── cost: 24.72
  │    │         ├── key: (5)
  │    │         ├── fd: (5)-->(2,3)

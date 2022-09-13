@@ -272,7 +272,7 @@ func (cb *cascadeBuilder) planCascade(
 		}
 	}
 
-	o.Memo().SetRoot(relExpr, &physical.Required{})
+	o.Memo().SetRoot(relExpr, physical.MinRequired)
 
 	// 3. Assign placeholders if they exist.
 	if factory.Memo().HasPlaceholders() {

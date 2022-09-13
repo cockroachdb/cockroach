@@ -13,6 +13,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -153,9 +154,11 @@ func (e *explorer) init(o *Optimizer) {
 //	    for e3 in memo-exprs($right):
 //	      if ordinal(e3) >= state.start:
 //	        ... explore (e1, e2, e3) combo ...
-func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
+func (e *explorer) exploreGroup(
+	grp memo.RelExpr, orderingHint *props.OrderingChoice,
+) *exploreState {
 	// Do nothing if this group has already been fully explored.
-	state := e.ensureExploreState(grp)
+	state := e.ensureExploreState(grp, orderingHint)
 	if state.fullyExplored {
 		return state
 	}
@@ -178,7 +181,7 @@ func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
 			continue
 		}
 
-		if memberExplored := e.exploreGroupMember(state, member, i); memberExplored {
+		if memberExplored := e.exploreGroupMember(state, member, i, orderingHint); memberExplored {
 			// No more rules can ever match this expression, so skip it in
 			// future passes.
 			state.markMemberAsFullyExplored(i)
@@ -198,15 +201,20 @@ func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
 }
 
 // lookupExploreState returns the optState struct associated with the memo
-// group.
-func (e *explorer) lookupExploreState(grp memo.RelExpr) *exploreState {
-	return &e.o.lookupOptState(grp, physical.MinRequired).explore
+// group for a given orderingHint.
+func (e *explorer) lookupExploreState(
+	grp memo.RelExpr, orderingHint *props.OrderingChoice,
+) *exploreState {
+	return &e.o.lookupOptState(grp, physical.MinRequired, orderingHint).explore
 }
 
 // ensureExploreState allocates the exploration state in the optState struct
-// associated with the memo group, with respect to the min physical props.
-func (e *explorer) ensureExploreState(grp memo.RelExpr) *exploreState {
-	return &e.o.ensureOptState(grp, physical.MinRequired).explore
+// associated with the memo group, with respect to the min physical props and
+// an ordering hint.
+func (e *explorer) ensureExploreState(
+	grp memo.RelExpr, orderingHint *props.OrderingChoice,
+) *exploreState {
+	return &e.o.ensureOptState(grp, physical.MinRequired, orderingHint).explore
 }
 
 // ----------------------------------------------------------------------

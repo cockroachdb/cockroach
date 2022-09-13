@@ -231,16 +231,26 @@ memo (optimized, ~3KB, required=[presentation: s:4,i:2,f:3] [ordering: +3])
 memo
 SELECT s, i, f FROM a ORDER BY s DESC, i
 ----
-memo (optimized, ~3KB, required=[presentation: s:4,i:2,f:3] [ordering: -4,+2])
- └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
-      ├── [presentation: s:4,i:2,f:3] [ordering: -4,+2]
-      │    ├── best: (sort G1="[ordering: -4]")
-      │    └── cost: 1321.83
+memo (optimized, ~4KB, required=[presentation: s:4,i:2,f:3] [ordering: -4,+2])
+ ├── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4)) (index-join G2 a,cols=(2-4))
+ │    ├── [presentation: s:4,i:2,f:3] [ordering: -4,+2]
+ │    │    ├── best: (sort G1="[ordering: -4]")
+ │    │    └── cost: 1321.83
+ │    ├── [ordering: -4]
+ │    │    ├── best: (scan a@s_idx,rev,cols=(2-4))
+ │    │    └── cost: 1195.37
+ │    └── []
+ │         ├── best: (scan a@s_idx,cols=(2-4))
+ │         └── cost: 1094.72
+ └── G2: (scan a@si_idx,cols=(1,2,4))
+      ├── [ordering: -4,+2]
+      │    ├── best: (sort G2="[ordering: -4]")
+      │    └── cost: 1221.18
       ├── [ordering: -4]
-      │    ├── best: (scan a@s_idx,rev,cols=(2-4))
-      │    └── cost: 1195.37
+      │    ├── best: (scan a@si_idx,cols=(1,2,4))
+      │    └── cost: 1094.72
       └── []
-           ├── best: (scan a@s_idx,cols=(2-4))
+           ├── best: (scan a@si_idx,cols=(1,2,4))
            └── cost: 1094.72
 
 # Force an index in order to ensure that an index join is created.
@@ -324,13 +334,20 @@ scan a@si_idx,rev
 memo
 SELECT s, j FROM a ORDER BY s
 ----
-memo (optimized, ~3KB, required=[presentation: s:4,j:5] [ordering: +4])
- └── G1: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
-      ├── [presentation: s:4,j:5] [ordering: +4]
-      │    ├── best: (scan a@si_idx,rev,cols=(4,5))
-      │    └── cost: 1185.27
+memo (optimized, ~4KB, required=[presentation: s:4,j:5] [ordering: +4])
+ ├── G1: (scan a,cols=(4,5)) (index-join G2 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
+ │    ├── [presentation: s:4,j:5] [ordering: +4]
+ │    │    ├── best: (scan a@si_idx,rev,cols=(4,5))
+ │    │    └── cost: 1185.27
+ │    └── []
+ │         ├── best: (scan a@si_idx,cols=(4,5))
+ │         └── cost: 1084.62
+ └── G2: (scan a@s_idx,cols=(1,4))
+      ├── [ordering: +4]
+      │    ├── best: (scan a@s_idx,cols=(1,4))
+      │    └── cost: 1084.62
       └── []
-           ├── best: (scan a@si_idx,cols=(4,5))
+           ├── best: (scan a@s_idx,cols=(1,4))
            └── cost: 1084.62
 
 # Consider three different indexes, and pick index with multiple keys.
@@ -423,6 +440,161 @@ insert fk_b
                 │    ├── key: ()
                 │    └── fd: ()-->(7)
                 └── filters (true)
+
+# Regression test for support issue #1453
+exec-ddl
+CREATE TABLE table_a (
+rand_id UUID NOT NULL DEFAULT gen_random_uuid(),
+fk_col INT8 NOT NULL,
+string_col STRING NOT NULL,
+now_col TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+CONSTRAINT "primary" PRIMARY KEY (rand_id ASC),
+INDEX table_a_fk_col_index (fk_col ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE table_b (
+pk_col INT8 NOT NULL,
+string_col STRING NULL,
+ts_col TIMESTAMPTZ NULL,
+created_at TIMESTAMPTZ NULL,
+CONSTRAINT "primary" PRIMARY KEY (pk_col ASC),
+INDEX table_b_string_col_index (string_col ASC)
+)
+----
+
+# An unconstrained index scan on table_a_fk_col_index should be used because it
+# provides the ordering of the ORDER BY clause.
+opt expect=GenerateIndexScans
+SELECT * FROM table_a a ORDER BY a.fk_col DESC LIMIT 1
+----
+index-join table_a
+ ├── columns: rand_id:1!null fk_col:2!null string_col:3!null now_col:4!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ └── scan table_a@table_a_fk_col_index,rev [as=a]
+      ├── columns: rand_id:1!null fk_col:2!null
+      ├── limit: 1(rev)
+      ├── key: ()
+      └── fd: ()-->(1,2)
+
+# An unconstrained index scan on table_a_fk_col_index should be used because it
+# provides the ordering of the ORDER BY clause.
+opt expect=GenerateIndexScans
+SELECT a.string_col,a.fk_col FROM table_a a
+INNER LOOKUP JOIN table_b b
+ON a.string_col = b.string_col
+ORDER BY a.fk_col DESC
+LIMIT 1
+----
+project
+ ├── columns: string_col:3!null fk_col:2!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2,3)
+ └── limit
+      ├── columns: fk_col:2!null a.string_col:3!null b.string_col:8!null
+      ├── internal-ordering: -2
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2,3,8), (8)==(3), (3)==(8)
+      ├── inner-join (lookup table_b@table_b_string_col_index [as=b])
+      │    ├── columns: fk_col:2!null a.string_col:3!null b.string_col:8!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [3] = [8]
+      │    ├── fd: (3)==(8), (8)==(3)
+      │    ├── ordering: -2
+      │    ├── limit hint: 1.00
+      │    ├── index-join table_a
+      │    │    ├── columns: fk_col:2!null a.string_col:3!null
+      │    │    ├── ordering: -2
+      │    │    ├── limit hint: 100.00
+      │    │    └── scan table_a@table_a_fk_col_index,rev [as=a]
+      │    │         ├── columns: rand_id:1!null fk_col:2!null
+      │    │         ├── key: (1)
+      │    │         ├── fd: (1)-->(2)
+      │    │         ├── ordering: -2
+      │    │         └── limit hint: 100.00
+      │    └── filters (true)
+      └── 1
+
+exec-ddl
+ALTER TABLE table_a INJECT STATISTICS '[
+  {
+    "columns": ["fk_col"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["string_col"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000,
+    "avg_size": 3
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE table_b INJECT STATISTICS '[
+  {
+    "columns": ["pk_col"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["string_col"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 1000000,
+    "distinct_count": 1000000,
+    "avg_size": 3
+  }
+]'
+----
+
+# With a large number of rows, index join plus nested loop join should be
+# favored over hash join.
+opt expect=GenerateIndexScans
+SELECT a.string_col,a.fk_col FROM table_a a
+INNER JOIN table_b b
+ON a.string_col = b.string_col
+ORDER BY a.fk_col DESC
+LIMIT 2
+----
+project
+ ├── columns: string_col:3!null fk_col:2!null
+ ├── cardinality: [0 - 2]
+ ├── ordering: -2
+ └── limit
+      ├── columns: fk_col:2!null a.string_col:3!null b.string_col:8!null
+      ├── internal-ordering: -2
+      ├── cardinality: [0 - 2]
+      ├── fd: (3)==(8), (8)==(3)
+      ├── ordering: -2
+      ├── inner-join (lookup table_b@table_b_string_col_index [as=b])
+      │    ├── columns: fk_col:2!null a.string_col:3!null b.string_col:8!null
+      │    ├── key columns: [3] = [8]
+      │    ├── fd: (3)==(8), (8)==(3)
+      │    ├── ordering: -2
+      │    ├── limit hint: 2.00
+      │    ├── index-join table_a
+      │    │    ├── columns: fk_col:2!null a.string_col:3!null
+      │    │    ├── ordering: -2
+      │    │    ├── limit hint: 100.00
+      │    │    └── scan table_a@table_a_fk_col_index,rev [as=a]
+      │    │         ├── columns: rand_id:1!null fk_col:2!null
+      │    │         ├── key: (1)
+      │    │         ├── fd: (1)-->(2)
+      │    │         ├── ordering: -2
+      │    │         └── limit hint: 100.00
+      │    └── filters (true)
+      └── 2
 
 # --------------------------------------------------
 # GenerateLocalityOptimizedScan
