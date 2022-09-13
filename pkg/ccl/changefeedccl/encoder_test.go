@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"testing"
 
@@ -20,13 +21,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/ledger"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/stretchr/testify/require"
@@ -840,4 +845,200 @@ func TestAvroLedger(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+func BenchmarkEncoders(b *testing.B) {
+	rng := randutil.NewTestRandWithSeed(2365865412074131521)
+
+	// Initialize column types for tests; this is done before
+	// benchmark runs so that all reruns use the same types as generated
+	// by random seed above.
+	const maxKeyCols = 4
+	const maxValCols = 2<<maxKeyCols - maxKeyCols // 28 columns for a maximum of 32 columns in a row
+	keyColTypes, valColTypes := makeTestTypes(rng, maxKeyCols, maxValCols)
+
+	const numRows = 1024
+	makeRowPool := func(numKeyCols int) (updatedRows, prevRows []cdcevent.Row, _ []*types.T) {
+		colTypes := keyColTypes[:numKeyCols]
+		colTypes = append(colTypes, valColTypes[:2<<numKeyCols-numKeyCols]...)
+		encRows := randgen.RandEncDatumRowsOfTypes(rng, numRows, colTypes)
+
+		for _, r := range encRows {
+			updatedRow := cdcevent.TestingMakeEventRowFromEncDatums(r, colTypes, numKeyCols, false)
+			updatedRows = append(updatedRows, updatedRow)
+			// Generate previous row -- use same key datums, but update other datums.
+			prevRowDatums := append(r[:numKeyCols], randgen.RandEncDatumRowOfTypes(rng, colTypes[numKeyCols:])...)
+			prevRow := cdcevent.TestingMakeEventRowFromEncDatums(prevRowDatums, colTypes, numKeyCols, false)
+			prevRows = append(prevRows, prevRow)
+		}
+		return updatedRows, prevRows, colTypes
+	}
+
+	type encodeFn func(encoder Encoder, updatedRow, prevRow cdcevent.Row) error
+	encodeKey := func(encoder Encoder, updatedRow cdcevent.Row, _ cdcevent.Row) error {
+		_, err := encoder.EncodeKey(context.Background(), updatedRow)
+		return err
+	}
+	encodeValue := func(encoder Encoder, updatedRow, prevRow cdcevent.Row) error {
+		evCtx := eventContext{
+			updated: hlc.Timestamp{WallTime: 42},
+			mvcc:    hlc.Timestamp{WallTime: 17},
+			topic:   "testtopic",
+		}
+		_, err := encoder.EncodeValue(context.Background(), evCtx, updatedRow, prevRow)
+		return err
+	}
+
+	var targets changefeedbase.Targets
+	targets.Add(changefeedbase.Target{
+		Type:              0,
+		TableID:           42,
+		FamilyName:        "primary",
+		StatementTimeName: "table",
+	})
+
+	// bench executes benchmark.
+	bench := func(b *testing.B, fn encodeFn, opts changefeedbase.EncodingOptions, updatedRows, prevRows []cdcevent.Row) {
+		b.ReportAllocs()
+		b.StopTimer()
+		encoder, err := getEncoder(opts, targets)
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.StartTimer()
+
+		for i := 0; i < b.N; i++ {
+			if err := fn(encoder, updatedRows[i%len(updatedRows)], prevRows[i%len(prevRows)]); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	rowOnly := []changefeedbase.EnvelopeType{changefeedbase.OptEnvelopeRow}
+	rowAndWrapped := []changefeedbase.EnvelopeType{
+		changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeWrapped,
+	}
+
+	for _, tc := range []struct {
+		format         changefeedbase.FormatType
+		benchEncodeKey bool
+		supportsDiff   bool
+		envelopes      []changefeedbase.EnvelopeType
+	}{
+		{
+			format:         changefeedbase.OptFormatJSON,
+			benchEncodeKey: true,
+			supportsDiff:   true,
+			envelopes:      rowAndWrapped,
+		},
+		{
+			format:         changefeedbase.OptFormatCSV,
+			benchEncodeKey: false,
+			supportsDiff:   false,
+			envelopes:      rowOnly,
+		},
+	} {
+		b.Run(string(tc.format), func(b *testing.B) {
+			for numKeyCols := 1; numKeyCols <= maxKeyCols; numKeyCols++ {
+				updatedRows, prevRows, colTypes := makeRowPool(numKeyCols)
+				b.Logf("column types: %v, keys: %v", colTypes, colTypes[:numKeyCols])
+
+				if tc.benchEncodeKey {
+					b.Run(fmt.Sprintf("encodeKey/%dcols", numKeyCols),
+						func(b *testing.B) {
+							opts := changefeedbase.EncodingOptions{Format: tc.format}
+							bench(b, encodeKey, opts, updatedRows, prevRows)
+						},
+					)
+				}
+
+				for _, envelope := range tc.envelopes {
+					for _, diff := range []bool{false, true} {
+						// Run benchmark with/without diff (unless encoder does not support
+						// diff, in which case we only run benchmark once).
+						if tc.supportsDiff || !diff {
+							b.Run(fmt.Sprintf("encodeValue/%dcols/envelope=%s/diff=%t",
+								numKeyCols, envelope, diff),
+								func(b *testing.B) {
+									opts := changefeedbase.EncodingOptions{
+										Format:            tc.format,
+										Envelope:          envelope,
+										KeyInValue:        envelope == changefeedbase.OptEnvelopeWrapped,
+										TopicInValue:      envelope == changefeedbase.OptEnvelopeWrapped,
+										UpdatedTimestamps: true,
+										MVCCTimestamps:    true,
+										Diff:              diff,
+									}
+									bench(b, encodeValue, opts, updatedRows, prevRows)
+								},
+							)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+// makeTestTypes returns list of key and column types to test against.
+func makeTestTypes(rng *rand.Rand, numKeyTypes, numColTypes int) (keyTypes, valTypes []*types.T) {
+	var allTypes []*types.T
+	for _, typ := range randgen.SeedTypes {
+		switch typ {
+		case types.AnyTuple:
+		// Ignore AnyTuple -- it's not very interesting; we'll generate test tuples below.
+		case types.RegClass, types.RegNamespace, types.RegProc, types.RegProcedure, types.RegRole, types.RegType:
+		// Ignore a bunch of pseudo-OID types (just want regular OID)
+		case types.Geometry, types.Geography:
+		// Ignore geometry/geography: these types are insanely inefficient;
+		// AsJson(Geo) -> MarshalGeo -> go JSON bytes ->  ParseJSON -> Go native -> json.JSON
+		// Benchmarking this generates too much noise.
+		// TODO: fix this.
+		case types.Void:
+		// Just not a very interesting thing to encode
+		default:
+			allTypes = append(allTypes, typ)
+		}
+	}
+
+	// Add tuple types.
+	var tupleTypes []*types.T
+	makeTupleType := func() *types.T {
+		contents := make([]*types.T, rng.Intn(6)) // Up to 6 fields
+		for i := range contents {
+			contents[i] = randgen.RandTypeFromSlice(rng, allTypes)
+		}
+		candidateTuple := types.MakeTuple(contents)
+		// Ensure tuple type is unique.
+		for _, t := range tupleTypes {
+			if t.Equal(candidateTuple) {
+				return nil
+			}
+		}
+		tupleTypes = append(tupleTypes, candidateTuple)
+		return candidateTuple
+	}
+
+	const numTupleTypes = 5
+	for i := 0; i < numTupleTypes; i++ {
+		var typ *types.T
+		for typ == nil {
+			typ = makeTupleType()
+		}
+		allTypes = append(allTypes, typ)
+	}
+
+	randTypes := func(numTypes int, mustBeKeyType bool) []*types.T {
+		typs := make([]*types.T, numTypes)
+		for i := range typs {
+			typ := randgen.RandTypeFromSlice(rng, allTypes)
+			for mustBeKeyType && colinfo.MustBeValueEncoded(typ) {
+				typ = randgen.RandTypeFromSlice(rng, allTypes)
+			}
+			typs[i] = typ
+		}
+		return typs
+	}
+
+	return randTypes(numKeyTypes, true), randTypes(numColTypes, false)
 }
