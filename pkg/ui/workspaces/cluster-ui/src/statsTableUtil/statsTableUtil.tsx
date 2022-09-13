@@ -14,14 +14,14 @@ import moment from "moment";
 
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
+  contentionTime,
+  planningExecutionTime,
+  readFromDisk,
+  readsAndWrites,
   statementDiagnostics,
   statementsRetries,
   statementsSql,
-  readFromDisk,
   writtenToDisk,
-  planningExecutionTime,
-  contentionTime,
-  readsAndWrites,
 } from "src/util";
 
 export type NodeNames = { [nodeId: string]: string };
@@ -45,7 +45,7 @@ export const statisticsColumnLabels = {
   username: "User Name",
   applicationName: "Application Name",
   bytesRead: "Bytes Read",
-  contention: "Contention",
+  contention: "Contention Time",
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
