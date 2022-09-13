@@ -500,10 +500,10 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 		// We will construct at most maxScanCount new Scans.
 		scanCount = maxScanCount
 	}
-	rowCount := scan.Relational().Stats.RowCount
+	rowCount := scan.Relational().Statistics().RowCount
 	if limit > 0 {
 		nLogN := rowCount * math.Log2(rowCount)
-		if scan.Relational().Stats.Available &&
+		if scan.Relational().Statistics().Available &&
 			float64(scanCount*randIOCostFactor+limit*seqIOCostFactor) >= nLogN {
 			// Splitting the Scan may not be worth the overhead. Creating a sequence of
 			// Scans and Unions is expensive, so we only want to create the plan if it

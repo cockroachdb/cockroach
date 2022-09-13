@@ -2015,13 +2015,13 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 		// Make sure we have estimated stats for this column.
 		colSet := opt.MakeColSet(col)
 		memo.RequestColStat(&ot.evalCtx, rel, colSet)
-		stat, ok := relProps.Stats.ColStats.Lookup(colSet)
+		stat, ok := relProps.Statistics().ColStats.Lookup(colSet)
 		if !ok {
 			return nil, fmt.Errorf("could not find statistic for column %s", colName)
 		}
 		jsonStats[i] = ot.makeStat(
 			[]string{colName},
-			uint64(int64(math.Round(relProps.Stats.RowCount))),
+			uint64(int64(math.Round(relProps.Statistics().RowCount))),
 			uint64(int64(math.Round(stat.DistinctCount))),
 			uint64(int64(math.Round(stat.NullCount))),
 		)

@@ -340,7 +340,8 @@ func makeFilters(
 	}
 
 	// Create a fake Select and input so that normalization rules are run.
-	p := &props.Relational{OutputCols: cols, Cardinality: card, Stats: stats}
+	p := &props.Relational{OutputCols: cols, Cardinality: card}
+	*p.Statistics() = stats
 	fakeRel := f.ConstructFakeRel(&memo.FakeRelPrivate{Props: p})
 	sel := f.ConstructSelect(fakeRel, filters)
 

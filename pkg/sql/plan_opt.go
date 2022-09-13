@@ -666,10 +666,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 		planTop.instrumentation.planGist = gf.PlanGist()
 	}
 	planTop.instrumentation.costEstimate = float64(mem.RootExpr().(memo.RelExpr).Cost())
-	available := mem.RootExpr().(memo.RelExpr).Relational().Stats.Available
+	available := mem.RootExpr().(memo.RelExpr).Relational().Statistics().Available
 	planTop.instrumentation.statsAvailable = available
 	if available {
-		planTop.instrumentation.outputRows = mem.RootExpr().(memo.RelExpr).Relational().Stats.RowCount
+		planTop.instrumentation.outputRows = mem.RootExpr().(memo.RelExpr).Relational().Statistics().RowCount
 	}
 
 	if stmt.ExpectedTypes != nil {
