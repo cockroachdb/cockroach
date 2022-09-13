@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package githubpost
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 )
 
 func TestListFailures(t *testing.T) {
+	require.NoError(t, os.Setenv("GIT_DISCOVERY_ACROSS_FILESYSTEM", "1"))
 	type issue struct {
 		testName   string
 		title      string
