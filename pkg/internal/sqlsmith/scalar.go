@@ -468,18 +468,15 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		})
 		if s.disableNondeterministicFns {
 			switch fn.def.Name {
-			case "lead", "lag":
-				// Lead and lag need all columns to be added to the ORDER BY because
-				// while they respect the order, they can return any value within the
-				// partition. This means we need to be consistent about which rows fall
-				// on the boundary between peer groups.
-				for _, ref := range refs {
-					addOrdCol(ref.typedExpr(), ref.typ)
-				}
+			case "rank", "dense_rank", "percent_rank":
+				// The rank functions don't need to add ordering columns because they
+				// return the same result for all rows in a given peer group.
 			default:
-				// Other window functions only need to order by the argument columns.
-				for _, arg := range args {
-					addOrdCol(arg, arg.ResolvedType())
+				// Other window functions care about the relative order of rows within
+				// each peer group, so we ensure that the ordering is deterministic by
+				// limiting each peer group to one row (by ordering on all columns).
+				for _, i := range s.rnd.Perm(len(refs)) {
+					addOrdCol(refs[i].typedExpr(), refs[i].typ)
 				}
 			}
 		}
