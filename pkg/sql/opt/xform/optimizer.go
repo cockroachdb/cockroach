@@ -100,6 +100,13 @@ type Optimizer struct {
 
 	// rng is used to deterministically perturb costs and/or disable rules.
 	rng *rand.Rand
+
+	// scratchSort is used to avoid repeated allocations during sort enforcement.
+	// It should be set to nil whenever the SortExpr is added to the memo, but
+	// otherwise can be reused (this happens when adding the sort does not produce
+	// a lower-cost expression). scratchSort should be accessed using
+	// getScratchSort to ensure that it is properly initialized.
+	scratchSort *memo.SortExpr
 }
 
 // maxGroupPasses is the maximum allowed number of optimization passes for any
@@ -647,7 +654,8 @@ func (o *Optimizer) enforceProps(
 
 	if !required.Ordering.Any() && member.Op() != opt.ExplainOp {
 		// Try Sort enforcer that requires no ordering from its input.
-		enforcer := &memo.SortExpr{Input: member}
+		enforcer := o.getScratchSort()
+		enforcer.Input = member
 		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
 		fullyOptimized = o.optimizeEnforcer(state, enforcer, required, member, memberProps)
 
@@ -658,7 +666,8 @@ func (o *Optimizer) enforceProps(
 		// the input ordering.
 		interestingOrderings := ordering.DeriveInterestingOrderings(member)
 		if lcp, ok := interestingOrderings.LongestCommonPrefix(&required.Ordering); ok {
-			enforcer := &memo.SortExpr{Input: state.best}
+			enforcer = o.getScratchSort()
+			enforcer.Input = state.best
 			enforcer.InputOrdering = lcp
 			memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
 			if o.optimizeEnforcer(state, enforcer, required, member, memberProps) {
@@ -688,7 +697,12 @@ func (o *Optimizer) optimizeEnforcer(
 	// Check whether this is the new lowest cost expression with the enforcer
 	// added.
 	cost := innerState.cost + o.coster.ComputeCost(enforcer, enforcerProps)
-	o.ratchetCost(state, enforcer, cost)
+	if o.ratchetCost(state, enforcer, cost) {
+		if _, ok := enforcer.(*memo.SortExpr); ok {
+			// The expression was added to the memo, so lose the reference.
+			o.scratchSort = nil
+		}
+	}
 
 	// Enforcer expression is fully optimized if its input expression is fully
 	// optimized.
@@ -786,11 +800,27 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 // ratchetCost computes the cost of the candidate expression, and then checks
 // whether it's lower than the cost of the existing best expression in the
 // group. If so, then the candidate becomes the new lowest cost expression.
-func (o *Optimizer) ratchetCost(state *groupState, candidate memo.RelExpr, cost memo.Cost) {
+// ratchetCost returns true if the candidate is the new lowest-cost expression.
+func (o *Optimizer) ratchetCost(state *groupState, candidate memo.RelExpr, cost memo.Cost) bool {
 	if state.best == nil || cost.Less(state.cost) {
 		state.best = candidate
 		state.cost = cost
+		return true
 	}
+	return false
+}
+
+// getScratchSort initializes and returns a SortExpr for use in enforcing order
+// for an expression.
+func (o *Optimizer) getScratchSort() *memo.SortExpr {
+	if o.scratchSort == nil {
+		// (Re)allocate the expression.
+		o.scratchSort = &memo.SortExpr{}
+	} else {
+		// Reset the expression.
+		*o.scratchSort = memo.SortExpr{}
+	}
+	return o.scratchSort
 }
 
 // lookupOptState looks up the state associated with the given group and
