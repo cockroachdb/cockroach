@@ -7,6 +7,12 @@ CREATE INVERTED INDEX ON a(t)
 statement error data type text has no default operator class for access method \"gin\"
 CREATE INDEX ON a USING GIN(t)
 
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
+CREATE INDEX ON a (t gin_trgm_ops)
+
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
+CREATE INVERTED INDEX ON a (a gin_trgm_ops, t gin_trgm_ops)
+
 statement error operator class \"blah_ops\" does not exist
 CREATE INVERTED INDEX ON a(t blah_ops)
 
@@ -194,3 +200,39 @@ query T
 SELECT * FROM b WHERE a = 'foobar 367'
 ----
 foobar 367
+
+
+# Regression tests for #84512. Do not allow opclasses for non-inverted columns.
+
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
+create table err (a int, index (a jsonb_ops));
+
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
+create table err (a int, index (a gin_trgm_ops));
+
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
+create table err (a int, index (a gist_trgm_ops));
+
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
+create table err (a int, b int, index (a gin_trgm_ops, b));
+
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
+create table err (a int, j json, inverted index (a gin_trgm_ops, j));
+
+# Regression test for #86614. Do not display opclasses for non-inverted columns
+# in SHOW CREATE TABLE.
+
+statement ok
+CREATE TABLE t86614 (a int, s STRING, INVERTED INDEX (a, s gist_trgm_ops), FAMILY (a, s))
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t86614]
+----
+CREATE TABLE public.t86614 (
+   a INT8 NULL,
+   s STRING NULL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT t86614_pkey PRIMARY KEY (rowid ASC),
+   INVERTED INDEX t86614_a_s_idx (a ASC, s gin_trgm_ops),
+   FAMILY fam_0_a_s_rowid (a, s, rowid)
+)
