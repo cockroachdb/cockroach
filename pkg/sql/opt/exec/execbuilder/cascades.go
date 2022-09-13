@@ -241,7 +241,7 @@ func (cb *cascadeBuilder) planCascade(
 			Min: uint32(numBufferedRows),
 			Max: uint32(numBufferedRows),
 		}
-		bindingProps.Stats = props.Statistics{
+		*bindingProps.Statistics() = props.Statistics{
 			Available: true,
 			RowCount:  float64(numBufferedRows),
 		}

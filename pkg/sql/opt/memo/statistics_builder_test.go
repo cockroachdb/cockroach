@@ -114,14 +114,14 @@ func TestGetStatsFromConstraint(t *testing.T) {
 
 		relProps := &props.Relational{Cardinality: props.AnyCardinality}
 		relProps.NotNullCols = cs.ExtractNotNullCols(&evalCtx)
-		s := &relProps.Stats
+		s := relProps.Statistics()
 		s.Init(relProps)
 
 		// Calculate distinct counts.
-		sb.applyConstraintSet(cs, true /* tight */, sel, relProps, &relProps.Stats)
+		sb.applyConstraintSet(cs, true /* tight */, sel, relProps, relProps.Statistics())
 
 		// Calculate row count and selectivity.
-		s.RowCount = scan.Relational().Stats.RowCount
+		s.RowCount = scan.Relational().Statistics().RowCount
 		selectivity, _ := sb.selectivityFromMultiColDistinctCounts(cols, sel, s)
 		s.ApplySelectivity(selectivity)
 
