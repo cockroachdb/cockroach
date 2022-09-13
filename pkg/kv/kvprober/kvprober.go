@@ -53,8 +53,8 @@ type Prober struct {
 	// goal of the prober IS to populate these metrics.
 	metrics Metrics
 	tracer  *tracing.Tracer
-	// quarantine pools keep track of ranges that timed/errored when probing and
-	// continually probe those ranges until killed/probe is succesful.
+	// quarantineWritePool pool keeps track of ranges that timed out/errored when
+	// probing and repeatedly probes those ranges until a probe succeeds.
 	quarantineWritePool *quarantinePool
 }
 
@@ -107,6 +107,14 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaWriteProbeQuarantineOldestDuration = metric.Metadata{
+		Name: "kv.prober.write.quarantine.oldest_duration",
+		Help: "The duration that the oldest range in the " +
+			"write quarantine pool has remained",
+		Measurement: "Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
+
 	metaProbePlanAttempts = metric.Metadata{
 		Name: "kv.prober.planning_attempts",
 		Help: "Number of attempts at planning out probes made; " +
@@ -123,13 +131,6 @@ var (
 		Measurement: "Runs",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaWriteProbeQuarantineOldestDuration = metric.Metadata{
-		Name: "kv.prober.write.quarantine.oldest_duration",
-		Help: "The duration that the oldest range in the " +
-			"write quarantine pool has remained",
-		Measurement: "Seconds",
-		Unit:        metric.Unit_SECONDS,
-	}
 	// TODO(josh): Add a histogram that captures where in the "rangespace" errors
 	// are occurring. This will allow operators to see at a glance what percentage
 	// of ranges are affected.
@@ -143,9 +144,9 @@ type Metrics struct {
 	WriteProbeAttempts                 *metric.Counter
 	WriteProbeFailures                 *metric.Counter
 	WriteProbeLatency                  *metric.Histogram
+	WriteProbeQuarantineOldestDuration *metric.Gauge
 	ProbePlanAttempts                  *metric.Counter
 	ProbePlanFailures                  *metric.Counter
-	WriteProbeQuarantineOldestDuration *metric.Gauge
 }
 
 // proberOpsI is an interface that the prober will use to run ops against some
@@ -217,6 +218,7 @@ func (p *proberTxnImpl) TxnRootKV(
 
 // NewProber creates a Prober from Opts.
 func NewProber(opts Opts) *Prober {
+	qPool := newQuarantinePool(opts.Settings)
 	return &Prober{
 		db:       opts.DB,
 		settings: opts.Settings,
@@ -235,12 +237,15 @@ func NewProber(opts Opts) *Prober {
 			WriteProbeLatency: metric.NewHistogram(
 				metaWriteProbeLatency, opts.HistogramWindowInterval, metric.NetworkLatencyBuckets,
 			),
-			ProbePlanAttempts:                  metric.NewCounter(metaProbePlanAttempts),
-			ProbePlanFailures:                  metric.NewCounter(metaProbePlanFailures),
-			WriteProbeQuarantineOldestDuration: metric.NewGauge(metaWriteProbeQuarantineOldestDuration),
+			WriteProbeQuarantineOldestDuration: metric.NewFunctionalGauge(
+				metaWriteProbeQuarantineOldestDuration,
+				func() int64 { return qPool.oldestDuration().Nanoseconds() },
+			),
+			ProbePlanAttempts: metric.NewCounter(metaProbePlanAttempts),
+			ProbePlanFailures: metric.NewCounter(metaProbePlanFailures),
 		},
 		tracer:              opts.Tracer,
-		quarantineWritePool: newQuarantinePool(opts.Settings),
+		quarantineWritePool: qPool,
 	}
 }
 
@@ -294,7 +299,9 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	return startLoop(ctx, "quarantine write probe loop", p.quarantineProbe, p.quarantineWritePool, quarantineWriteInterval)
 }
 
-// Doesn't return an error. Instead increments error type specific metrics.
+// Doesn't return an error. Instead, increments error type specific metrics.
+//
+// TODO(tbg): db parameter is unused, remove it.
 func (p *Prober) readProbe(ctx context.Context, db *kv.DB, pl planner) {
 	p.readProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, pl)
 }
@@ -386,22 +393,15 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 		return txns.TxnRootKV(ctx, f)
 	})
 	if err != nil {
-		log.Health.Errorf(ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v", step.Key, step.RangeID, err)
+		added := p.quarantineWritePool.maybeAdd(ctx, step)
+		log.Health.Errorf(
+			ctx, "kv.Txn(Put(%s); Del(-)), r=%v failed with: %v [quarantined=%t]", step.Key, step.RangeID, err, added,
+		)
 		p.metrics.WriteProbeFailures.Inc(1)
-		// Add to quarantine pool if not in the entry map.
-		if _, ok := p.quarantineWritePool.entryTimeMap[step.RangeID]; !ok {
-			p.quarantineWritePool.add(ctx, step)
-		} else {
-			duration := int64(timeutil.Since(p.quarantineWritePool.entryTimeMap[step.RangeID]).Seconds())
-			longestDuration := p.metrics.WriteProbeQuarantineOldestDuration.Value()
-			if duration > longestDuration {
-				p.metrics.WriteProbeQuarantineOldestDuration.Update(duration)
-			}
-		}
 		return
 	}
 	// This will no-op if not in the quarantine pool.
-	p.quarantineWritePool.remove(ctx, step)
+	p.quarantineWritePool.maybeRemove(ctx, step)
 
 	d := timeutil.Since(start)
 	log.Health.Infof(ctx, "kv.Txn(Put(%s); Del(-)), r=%v returned success in %v", step.Key, step.RangeID, d)
