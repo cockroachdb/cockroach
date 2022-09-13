@@ -1,32 +1,18 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
     name = "testfilter_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/testfilter",
     visibility = ["//visibility:private"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = ["//pkg/cmd/bazci/testfilter"],
 )
 
 go_binary(
     name = "testfilter",
     embed = [":testfilter_lib"],
     visibility = ["//visibility:public"],
-)
-
-go_test(
-    name = "testfilter_test",
-    size = "small",
-    srcs = ["main_test.go"],
-    args = ["-test.timeout=55s"],
-    data = glob(["testdata/**"]),
-    embed = [":testfilter_lib"],
-    deps = [
-        "//pkg/testutils",
-        "//pkg/util/leaktest",
-        "@com_github_cockroachdb_datadriven//:datadriven",
-    ],
 )
 
 get_x_data(name = "get_x_data")

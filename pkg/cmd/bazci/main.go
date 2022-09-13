@@ -39,8 +39,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := rootCmd.Execute(); err != nil {
-		log.Printf("ERROR: %v", err)
+	cmdErr := rootCmd.Execute()
+	if err := processTestJSONIfNeeded(cmdErr != nil /* shouldCreateTarball */); err != nil {
+		log.Printf("failed to process go test json output - %v", err)
+	}
+	if cmdErr != nil {
+		log.Printf("ERROR: %v", cmdErr)
 		os.Exit(1)
 	}
 }
