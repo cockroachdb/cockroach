@@ -18,14 +18,18 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alessio/shellescape"
 	bes "github.com/cockroachdb/cockroach/pkg/build/bazel/bes"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/testfilter"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
@@ -49,7 +53,10 @@ type fullTestResult struct {
 }
 
 var (
-	artifactsDir string
+	artifactsDir              string
+	goTestJSONOutputFilePath  string
+	githubPostFormatterName   string
+	shouldProcessTestFailures bool
 
 	rootCmd = &cobra.Command{
 		Use:   "bazci",
@@ -67,7 +74,20 @@ func init() {
 		&artifactsDir,
 		"artifacts_dir",
 		"/artifacts",
-		"path where artifacts should be staged")
+		"path where artifacts should be staged",
+	)
+	rootCmd.Flags().StringVar(
+		&githubPostFormatterName,
+		"formatter",
+		"default",
+		"formatter name for githubpost",
+	)
+	rootCmd.Flags().BoolVar(
+		&shouldProcessTestFailures,
+		"process_test_failures",
+		false,
+		"process failures artifacts (and post github issues for release failures)",
+	)
 }
 
 func bazciImpl(cmd *cobra.Command, args []string) error {
@@ -90,6 +110,11 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	}
 	bepLoc := filepath.Join(tmpDir, "beplog")
 	args = append(args, fmt.Sprintf("--build_event_binary_file=%s", bepLoc))
+	if shouldProcessTestFailures {
+		goTestJSONOutputFilePath = generateTestJSONOutputFilePath()
+		args = append(args, "--test_env", goTestJSONOutputFilePath)
+	}
+
 	fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(args))
 	bazelCmd := exec.Command("bazel", args...)
 	bazelCmd.Stdout = os.Stdout
@@ -267,4 +292,129 @@ func doCopy(src, dst string) error {
 		err = bazelutil.MungeTestXML(srcContent, dstF)
 	}
 	return err
+}
+
+func processFailures(goTestJSONOutputFileBuf []byte, failuresFilePath string) error {
+	pr, pw := io.Pipe()
+	written, err := testfilter.FilterAndWrite(bytes.NewReader(goTestJSONOutputFileBuf), pw, []string{"strip", "omit", "convert"})
+	if err != nil {
+		return err
+	}
+	if written > 0 {
+		f, err := os.Create(failuresFilePath)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(f, pr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func postReleaseOnlyFailures(goTestJSONOutputFileBuf []byte) error {
+	branch := os.Getenv("TC_BUILD_BRANCH#refs/heads/")
+	isReleaseBranch := strings.HasPrefix(branch, "master") || strings.HasPrefix(branch, "release") || strings.HasPrefix(branch, "provisional")
+	if isReleaseBranch {
+		// GITHUB_API_TOKEN must be in the env or github-post will barf if it's
+		// ever asked to post, so enforce that on all runs.
+		// The way this env var is made available here is quite tricky. The build
+		// calling this method is usually a build that is invoked from PRs, so it
+		// can't have secrets available to it (for the PR could modify
+		// build/teamcity-* to leak the secret). Instead, we provide the secrets
+		// to a higher-level job (Publish Bleeding Edge) and use TeamCity magic to
+		// pass that env var through when it's there. This means we won't have the
+		// env var on PR builds, but we'll have it for builds that are triggered
+		// from the release branches.
+		if os.Getenv("GITHUB_API_TOKEN") == "" {
+			return errors.New("GITHUB_API_TOKEN must be set")
+		}
+		githubpost.Post(githubPostFormatterName, bytes.NewReader(goTestJSONOutputFileBuf))
+	}
+	return nil
+}
+
+func createTarball() error {
+	buf, err := os.ReadFile(goTestJSONOutputFilePath)
+	if err != nil {
+		return err
+	}
+	f, err := os.Create(filepath.Join(artifactsDir, "test_output.txt"))
+	if err != nil {
+		return err
+	}
+	if _, err := testfilter.FilterAndWrite(bytes.NewReader(buf), f, []string{"convert"}); err != nil {
+		return err
+	}
+
+	tarArgs := []string{
+		"--strip-components=1",
+		"-czf",
+		"full_output.tgz",
+		"full_output.txt",
+		filepath.Base(goTestJSONOutputFilePath),
+	}
+	createTarballCmd := exec.Command("tar", tarArgs...)
+	createTarballCmd.Dir = artifactsDir
+	var errBuf bytes.Buffer
+	createTarballCmd.Stderr = &errBuf
+	fmt.Println("running tar w/ args: ", shellescape.QuoteCommand(tarArgs))
+	if err := createTarballCmd.Run(); err != nil {
+		return errors.Wrapf(err, "StdErr: %s", errBuf.String())
+	}
+	if err := os.Remove(filepath.Join(artifactsDir, "full_output.txt")); err != nil {
+		fmt.Printf("Failed to remove full_output.txt - %v\n", err)
+	}
+	return nil
+}
+
+// Some unit tests test automatic ballast creation. These ballasts can be
+// larger than the maximum artifact size. Remove any artifacts with the
+// EMERGENCY_BALLAST filename.
+func removeEmergencyBallasts() {
+	findCmdArgs := []string{
+		"-name",
+		artifactsDir,
+		"EMERGENCY_BALLAST",
+		"-delete",
+	}
+	findCmd := exec.Command("find", findCmdArgs...)
+	var errBuf bytes.Buffer
+	findCmd.Stderr = &errBuf
+	if err := findCmd.Run(); err != nil {
+		fmt.Println("running find w/ args: ", shellescape.QuoteCommand(findCmdArgs))
+		fmt.Printf("Failed with err %v\nStdErr: %v", err, errBuf.String())
+	}
+}
+
+func generateTestJSONOutputFilePath() string {
+	potentialPath := filepath.Join(artifactsDir, "test.json.txt")
+	if _, err := os.Stat(potentialPath); err != nil {
+		// Path doesn't exist and we can use it.
+		return potentialPath
+	}
+	return filepath.Join(artifactsDir, fmt.Sprintf("test-%d.json.txt", rand.New(rand.NewSource(time.Now().UnixNano())).Intn(10000)))
+}
+
+func processTestJSONIfNeeded(shouldCreateTarball bool) error {
+	if !shouldProcessTestFailures {
+		return nil
+	}
+	removeEmergencyBallasts()
+	buf, err := os.ReadFile(goTestJSONOutputFilePath)
+	if err != nil {
+		return err
+	}
+	if err := processFailures(buf, filepath.Join(artifactsDir, "failures.txt")); err != nil {
+		return err
+	}
+	if err := postReleaseOnlyFailures(buf); err != nil {
+		return err
+	}
+	if shouldCreateTarball {
+		if err := createTarball(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
