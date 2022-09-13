@@ -130,7 +130,7 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 		// If the batching event consumer does not have periodic flush configured,
 		// we may never be able to make forward progress.
 		// So, we issue the flush request to the consumer to ensure that we release some memory.
-		e = Event{flush: true}
+		e = Event{et: TypeFlush}
 		ok = true
 		// Ensure we notify only once.  If we're still out of quota,
 		// subsequent notifyOutOfQuota will reset this field.
@@ -206,7 +206,7 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	}
 
 	// Acquire the quota first.
-	alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.approxSize))
+	alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.ApproximateSize()))
 	if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
 		return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
 	}

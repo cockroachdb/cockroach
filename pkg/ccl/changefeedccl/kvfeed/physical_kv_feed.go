@@ -87,25 +87,18 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 }
 
 func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
-	var backfillTimestamp hlc.Timestamp
 	for {
 		select {
 		case e := <-p.eventC:
 			switch t := e.GetValue().(type) {
 			case *roachpb.RangeFeedValue:
-				kv := roachpb.KeyValue{Key: t.Key, Value: t.Value}
 				if p.cfg.Knobs.OnRangeFeedValue != nil {
-					if err := p.cfg.Knobs.OnRangeFeedValue(kv); err != nil {
+					if err := p.cfg.Knobs.OnRangeFeedValue(); err != nil {
 						return err
 					}
 				}
-				var prevVal roachpb.Value
-				if p.cfg.WithDiff {
-					prevVal = t.PrevValue
-				}
 				if err := p.memBuf.Add(
-					ctx,
-					kvevent.MakeKVEvent(kv, prevVal, backfillTimestamp),
+					ctx, kvevent.MakeKVEvent(e.RangeFeedEvent),
 				); err != nil {
 					return err
 				}
@@ -120,8 +113,7 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 					continue
 				}
 				if err := p.memBuf.Add(
-					ctx,
-					kvevent.MakeResolvedEvent(t.Span, t.ResolvedTS, jobspb.ResolvedSpan_NONE),
+					ctx, kvevent.MakeResolvedEvent(e.RangeFeedEvent, jobspb.ResolvedSpan_NONE),
 				); err != nil {
 					return err
 				}
