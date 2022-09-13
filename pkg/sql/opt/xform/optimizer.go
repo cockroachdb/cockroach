@@ -642,14 +642,21 @@ func (o *Optimizer) enforceProps(
 	if !required.Distribution.Any() && member.Op() != opt.ExplainOp {
 		enforcer := &memo.DistributeExpr{Input: member}
 		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
-		return o.optimizeEnforcer(state, enforcer, required, member, memberProps)
+		savedParentProps := o.mem.ParentProps()
+		o.mem.SetParentProps(required)
+		fullyOptimized = o.optimizeEnforcer(state, enforcer, required, member, memberProps)
+		o.mem.SetParentProps(savedParentProps)
+		return fullyOptimized
 	}
 
 	if !required.Ordering.Any() && member.Op() != opt.ExplainOp {
 		// Try Sort enforcer that requires no ordering from its input.
 		enforcer := &memo.SortExpr{Input: member}
 		memberProps := BuildChildPhysicalProps(o.mem, enforcer, 0, required)
+		savedParentProps := o.mem.ParentProps()
+		o.mem.SetParentProps(required)
 		fullyOptimized = o.optimizeEnforcer(state, enforcer, required, member, memberProps)
+		o.mem.SetParentProps(savedParentProps)
 
 		// Try Sort enforcer that requires a partial ordering from its input.
 		// Choose the interesting ordering that forms the longest common prefix

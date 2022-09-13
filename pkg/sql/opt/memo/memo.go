@@ -128,6 +128,11 @@ type Memo struct {
 	// It is set via a call to SetRoot.
 	rootProps *physical.Required
 
+	// parentProps are the physical properties required of the props enforcer, if
+	// any, which is the parent of the current child expression being optimized.
+	// It is set via a call to setParentProps.
+	parentProps *physical.Required
+
 	// memEstimate is the approximate memory usage of the memo, in bytes.
 	memEstimate int64
 
@@ -287,6 +292,18 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 // Used only for testing.
 func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
 	m.rootExpr = scalar
+}
+
+// ParentProps returns the physical properties required of the props enforcer,
+// if any, which is the parent of the current child expression being optimized.
+// Previously set via a call to SetParentProps.
+func (m *Memo) ParentProps() *physical.Required {
+	return m.parentProps
+}
+
+// SetParentProps sets the props of the enforcer being optimized.
+func (m *Memo) SetParentProps(phys *physical.Required) {
+	m.parentProps = phys
 }
 
 // HasPlaceholders returns true if the memo contains at least one placeholder

@@ -3404,7 +3404,9 @@ limit
  │         └── count-rows [as=count_rows:8]
  └── 10
 
-opt expect=GenerateLimitedGroupByScans
+# GenerateLimitedGroupByScans used to be required to generate this plan,
+# but now GenerateIndexScans can do it.
+opt expect=GenerateIndexScans
 SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY d LIMIT 10
 ----
 limit
