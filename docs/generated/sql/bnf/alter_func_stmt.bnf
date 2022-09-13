@@ -1,6 +1,6 @@
 alter_func_stmt ::=
-	alter_func_options_stmt
-	| alter_func_rename_stmt
-	| alter_func_owner_stmt
-	| alter_func_set_schema_stmt
-	| alter_func_dep_extension_stmt
+	( 'ALTER' 'FUNCTION' function_with_argtypes ( ( ( 'CALLED' 'ON' 'NULL' 'INPUT' | 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT' | 'STRICT' | 'IMMUTABLE' | 'STABLE' | 'VOLATILE' | 'LEAKPROOF' | 'NOT' 'LEAKPROOF' ) ) ( ( ( 'CALLED' 'ON' 'NULL' 'INPUT' | 'RETURNS' 'NULL' 'ON' 'NULL' 'INPUT' | 'STRICT' | 'IMMUTABLE' | 'STABLE' | 'VOLATILE' | 'LEAKPROOF' | 'NOT' 'LEAKPROOF' ) ) )* ) ( 'RESTRICT' |  ) )
+	| ( 'ALTER' 'FUNCTION' function_with_argtypes 'RENAME' 'TO' name )
+	| ( 'ALTER' 'FUNCTION' function_with_argtypes 'OWNER' 'TO' role_spec )
+	| ( 'ALTER' 'FUNCTION' function_with_argtypes 'SET' 'SCHEMA' schema_name )
+	| ( 'ALTER' 'FUNCTION' function_with_argtypes ( 'NO' |  ) 'DEPENDS' 'ON' 'EXTENSION' name )
