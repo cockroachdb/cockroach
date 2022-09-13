@@ -128,6 +128,16 @@ type Memo struct {
 	// It is set via a call to SetRoot.
 	rootProps *physical.Required
 
+	// orderingHint is the required OrderingChoice of one of the ancestors of the
+	// current memo group, which was propagated to us because the chain of
+	// operations could allow the required ordering to be provided without the
+	// need for sorting. There are some exploration rules that prevent all
+	// non-covering indexes from being explored in order to keep the plan search
+	// space small. Providing an ordering hint allows only the correct
+	// non-covering indexes to be explored, allowing the best plan to be found
+	// while preserving the small search space goal.
+	orderingHint *props.OrderingChoice
+
 	// memEstimate is the approximate memory usage of the memo, in bytes.
 	memEstimate int64
 
@@ -274,6 +284,7 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 	if m.rootProps != phys {
 		m.rootProps = m.InternPhysicalProps(phys)
 	}
+	m.SetOrderingHint(props.MinOrderingChoice)
 
 	// Once memo is optimized, release reference to the eval context and free up
 	// the memory used by the interner.
@@ -287,6 +298,95 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 // Used only for testing.
 func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
 	m.rootExpr = scalar
+}
+
+// OrderingHint returns the required OrderingChoice of one of the ancestors of
+// the current memo group, which was propagated to us because the chain of
+// operations could allow the required ordering to be provided without the need
+// for sorting.
+func (m *Memo) OrderingHint() *props.OrderingChoice {
+	if m.orderingHint.Any() {
+		return props.MinOrderingChoice
+	}
+	return m.orderingHint
+}
+
+// SetOrderingHint sets the ordering hint for the memo group currently being
+// optimized.
+func (m *Memo) SetOrderingHint(orderingHint *props.OrderingChoice) {
+	if m.orderingHint == orderingHint {
+		return
+	}
+	if orderingHint.Any() {
+		m.orderingHint = props.MinOrderingChoice
+	}
+	m.orderingHint = m.InternOrderingChoice(orderingHint)
+}
+
+// BuildChildOrderingHint builds the ordering hint to use when optimizing the
+// `nth` child of the given `parent` memo group. If childRequiredOrdering
+// has a non-empty ordering, that is used, otherwise the parent operation
+// determines if it is worthwhile propagating the `parentRequiredOrdering` as
+// a hint to the child. For example, merge join requires both inputs to be
+// sorted and preserves that ordering in the result, so it is useful to pass
+// an ordering hint to both inputs, whereas lookup join does not require
+func (m *Memo) BuildChildOrderingHint(
+	parent RelExpr,
+	nth int,
+	parentRequiredOrdering *props.OrderingChoice,
+	childRequiredOrdering *props.OrderingChoice,
+) *props.OrderingChoice {
+
+	// ScalarExprs don't support ordering; don't build an ordering hint for them.
+	if _, ok := parent.Child(nth).(opt.ScalarExpr); ok {
+		return props.MinOrderingChoice
+	}
+
+	if !childRequiredOrdering.Any() {
+		return m.InternOrderingChoice(childRequiredOrdering)
+	}
+
+	orderingHint := props.MinOrderingChoice
+	switch parent.Op() {
+	case opt.LimitOp, opt.OffsetOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp,
+		opt.OrdinalityOp, opt.ProjectSetOp, opt.DistributeOp:
+		if nth == 0 {
+			// Ops with a single input which could pass on the hint of required
+			// ordering.
+			orderingHint = parentRequiredOrdering
+		}
+	case opt.SortOp:
+		if nth == 0 {
+			sortInput := parent.Child(0)
+			// Interesting orderings are generated from Selects, but not for Scans.
+			if sortInput.Op() == opt.ScanOp {
+				orderingHint = parentRequiredOrdering
+			}
+		}
+
+	case opt.GroupByOp:
+		private := parent.Private().(*GroupingPrivate)
+		groupingColCount := private.GroupingCols.Len()
+		if groupingColCount == 0 {
+			break
+		}
+		streamingType := private.GroupingOrderType(parentRequiredOrdering)
+		if streamingType != NoStreaming {
+			if _, ok := parent.Child(nth).(RelExpr); ok {
+				// If the ordering could be useful to produce a streaming group by,
+				// add it as a hint.
+				orderingHint = parentRequiredOrdering
+			}
+		}
+
+	case opt.MergeJoinOp:
+		if nth <= 1 {
+			// Both inputs to a merge join must be sorted.
+			orderingHint = parentRequiredOrdering
+		}
+	}
+
+	return m.InternOrderingChoice(orderingHint)
 }
 
 // HasPlaceholders returns true if the memo contains at least one placeholder
@@ -357,6 +457,18 @@ func (m *Memo) IsStale(
 		return true, nil
 	}
 	return false, nil
+}
+
+// InternOrderingChoice adds the given ordering choice props to the memo if it
+// hasn't yet been added. If the ordering choice was added previously, then
+// return a pointer to the previously added one. This allows interned ordering
+// choices to be compared for equality using simple pointer comparison.
+func (m *Memo) InternOrderingChoice(orderingChoice *props.OrderingChoice) *props.OrderingChoice {
+	// Special case ordering choice that requires nothing of operator.
+	if orderingChoice.Any() {
+		return props.MinOrderingChoice
+	}
+	return m.interner.InternOrderingChoice(orderingChoice)
 }
 
 // InternPhysicalProps adds the given physical props to the memo if they haven't

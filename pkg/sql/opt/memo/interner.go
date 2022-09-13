@@ -135,6 +135,38 @@ func (in *interner) InternPhysicalProps(val *physical.Required) *physical.Requir
 	return &copy
 }
 
+var orderingChoiceType = reflect.TypeOf((*props.OrderingChoice)(nil))
+var orderingChoiceTypePtr = uint64(reflect.ValueOf(orderingChoiceType).Pointer())
+
+// InternOrderingChoice interns an ordering choice using the same
+// pattern as that used by the expression intern methods, with one difference.
+// This intern method does not force the incoming ordering choice to escape
+// to the heap. It does this by making a copy of the ordering choice before
+// adding it to the cache.
+func (in *interner) InternOrderingChoice(val *props.OrderingChoice) *props.OrderingChoice {
+	// Hash the physical.Required reflect type to distinguish it from other values.
+	in.hasher.Init()
+	in.hasher.HashUint64(orderingChoiceTypePtr)
+	in.hasher.HashOrderingChoice(*val)
+
+	// Loop over any items with the same hash value, checking for equality.
+	in.cache.Start(in.hasher.hash)
+	for in.cache.Next() {
+		// There's an existing item, so check for equality.
+		if existing, ok := in.cache.Item().(*props.OrderingChoice); ok {
+			if in.hasher.IsOrderingChoiceEqual(*val, *existing) {
+				// Found equivalent item, so return it.
+				return existing
+			}
+		}
+	}
+
+	// Shallow copy the props to prevent "val" from escaping.
+	copy := *val
+	in.cache.Add(&copy)
+	return &copy
+}
+
 // internCache is a helper class that implements the interning pattern described
 // in the comment for the interner struct. Here is a usage example:
 //

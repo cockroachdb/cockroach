@@ -480,7 +480,7 @@ func (g *newRuleGen) genMatchNameAndChildren(
 			// If the child group is not yet fully explored, then neither is the
 			// root group, since new members in any descendant group make
 			// additional matches possible.
-			g.w.writeIndent("_state := _e.lookupExploreState(%s)\n", context.code)
+			g.w.writeIndent("_state := _e.lookupExploreState(%s, _orderingHint)\n", context.code)
 			g.w.nestIndent("if !_state.fullyExplored {\n")
 			g.w.writeIndent("_fullyExplored = false\n")
 			g.w.unnest("}\n")

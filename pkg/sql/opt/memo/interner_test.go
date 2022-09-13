@@ -735,6 +735,48 @@ func TestInternerPhysProps(t *testing.T) {
 	}
 }
 
+func TestInternerOrderingChoice(t *testing.T) {
+	var in interner
+
+	orderingChoice1 := props.ParseOrderingChoice("+(1|2),+3 opt(4,5)")
+	orderingChoice2 := props.ParseOrderingChoice("+(1|2),+3 opt(4,5)")
+	orderingChoice3 := props.ParseOrderingChoice("+(1|2),+3 opt(4,5)")
+	orderingChoice4 := props.ParseOrderingChoice("+(1|2|3),+4 opt(5)")
+	orderingChoice5 := props.ParseOrderingChoice("-(1|2|3),-4 opt(5)")
+	orderingChoice6 := props.ParseOrderingChoice("-(1|2|3),+4 opt(5)")
+	orderingChoice7 := props.ParseOrderingChoice("+(1|2),+3 opt(4,5,6)")
+	orderingChoice8 := props.ParseOrderingChoice("+(1|2),+3 opt(4,5,6)")
+	orderingChoice9 := props.ParseOrderingChoice("-(1|2),-3 opt(4,5,6)")
+
+	testCases := []struct {
+		oc      *props.OrderingChoice
+		inCache bool
+	}{
+		{oc: &orderingChoice1, inCache: false},
+		{oc: &orderingChoice2, inCache: true},
+		{oc: &orderingChoice3, inCache: true},
+		{oc: &orderingChoice4, inCache: false},
+		{oc: &orderingChoice5, inCache: false},
+		{oc: &orderingChoice6, inCache: false},
+		{oc: &orderingChoice7, inCache: false},
+		{oc: &orderingChoice8, inCache: true},
+		{oc: &orderingChoice9, inCache: false},
+		{oc: &orderingChoice9, inCache: true},
+	}
+
+	inCache := make(map[*props.OrderingChoice]bool)
+
+	for _, tc := range testCases {
+		interned := in.InternOrderingChoice(tc.oc)
+		if tc.inCache && !inCache[interned] {
+			t.Errorf("expected ordering choice to already be in cache: %s", tc.oc)
+		} else if !tc.inCache && inCache[interned] {
+			t.Errorf("expected ordering choice to not yet be in cache: %s", tc.oc)
+		}
+		inCache[interned] = true
+	}
+}
+
 func TestInternerCollision(t *testing.T) {
 	var in interner
 

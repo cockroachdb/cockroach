@@ -77,6 +77,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -84,12 +85,13 @@ func (_e *explorer) exploreGroupMember(
 	state *exploreState,
 	member memo.RelExpr,
 	ordinal int,
+	orderingHint *props.OrderingChoice,
 ) (_fullyExplored bool) {
 	switch t := member.(type) {
 	case *memo.LimitExpr:
-		return _e.exploreLimit(state, t, ordinal)
+		return _e.exploreLimit(state, t, ordinal, orderingHint)
 	case *memo.InnerJoinExpr:
-		return _e.exploreInnerJoin(state, t, ordinal)
+		return _e.exploreInnerJoin(state, t, ordinal, orderingHint)
 	}
 
 	// No rules for other operator types.
@@ -100,13 +102,14 @@ func (_e *explorer) exploreLimit(
 	_rootState *exploreState,
 	_root *memo.LimitExpr,
 	_rootOrd int,
+	_orderingHint *props.OrderingChoice,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
 	// [PushLimitIntoIndexJoin]
 	{
 		_partlyExplored := _rootOrd < _rootState.start
-		_state := _e.lookupExploreState(_root.Input)
+		_state := _e.lookupExploreState(_root.Input, _orderingHint)
 		if !_state.fullyExplored {
 			_fullyExplored = false
 		}
@@ -120,7 +123,7 @@ func (_e *explorer) exploreLimit(
 			_partlyExplored := _partlyExplored && _ord < _state.start
 			_indexJoin, _ := _member.(*memo.IndexJoinExpr)
 			if _indexJoin != nil {
-				_state := _e.lookupExploreState(_indexJoin.Input)
+				_state := _e.lookupExploreState(_indexJoin.Input, _orderingHint)
 				if !_state.fullyExplored {
 					_fullyExplored = false
 				}
@@ -175,13 +178,14 @@ func (_e *explorer) exploreInnerJoin(
 	_rootState *exploreState,
 	_root *memo.InnerJoinExpr,
 	_rootOrd int,
+	_orderingHint *props.OrderingChoice,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
 	// [TestRootAccess]
 	{
 		_partlyExplored := _rootOrd < _rootState.start
-		_state := _e.lookupExploreState(_root.Left)
+		_state := _e.lookupExploreState(_root.Left, _orderingHint)
 		if !_state.fullyExplored {
 			_fullyExplored = false
 		}
@@ -263,6 +267,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -270,10 +275,11 @@ func (_e *explorer) exploreGroupMember(
 	state *exploreState,
 	member memo.RelExpr,
 	ordinal int,
+	orderingHint *props.OrderingChoice,
 ) (_fullyExplored bool) {
 	switch t := member.(type) {
 	case *memo.LimitExpr:
-		return _e.exploreLimit(state, t, ordinal)
+		return _e.exploreLimit(state, t, ordinal, orderingHint)
 	}
 
 	// No rules for other operator types.
@@ -284,6 +290,7 @@ func (_e *explorer) exploreLimit(
 	_rootState *exploreState,
 	_root *memo.LimitExpr,
 	_rootOrd int,
+	_orderingHint *props.OrderingChoice,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
@@ -291,7 +298,7 @@ func (_e *explorer) exploreLimit(
 	{
 		_partlyExplored := _rootOrd < _rootState.start
 		scan := _root.Input
-		_state := _e.lookupExploreState(scan)
+		_state := _e.lookupExploreState(scan, _orderingHint)
 		if !_state.fullyExplored {
 			_fullyExplored = false
 		}
@@ -381,6 +388,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -388,10 +396,11 @@ func (_e *explorer) exploreGroupMember(
 	state *exploreState,
 	member memo.RelExpr,
 	ordinal int,
+	orderingHint *props.OrderingChoice,
 ) (_fullyExplored bool) {
 	switch t := member.(type) {
 	case *memo.LimitExpr:
-		return _e.exploreLimit(state, t, ordinal)
+		return _e.exploreLimit(state, t, ordinal, orderingHint)
 	}
 
 	// No rules for other operator types.
@@ -402,6 +411,7 @@ func (_e *explorer) exploreLimit(
 	_rootState *exploreState,
 	_root *memo.LimitExpr,
 	_rootOrd int,
+	_orderingHint *props.OrderingChoice,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
@@ -409,7 +419,7 @@ func (_e *explorer) exploreLimit(
 	{
 		_partlyExplored := _rootOrd < _rootState.start
 		input := _root.Input
-		_state := _e.lookupExploreState(input)
+		_state := _e.lookupExploreState(input, _orderingHint)
 		if !_state.fullyExplored {
 			_fullyExplored = false
 		}
@@ -533,6 +543,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -540,10 +551,11 @@ func (_e *explorer) exploreGroupMember(
 	state *exploreState,
 	member memo.RelExpr,
 	ordinal int,
+	orderingHint *props.OrderingChoice,
 ) (_fullyExplored bool) {
 	switch t := member.(type) {
 	case *memo.UnionExpr:
-		return _e.exploreUnion(state, t, ordinal)
+		return _e.exploreUnion(state, t, ordinal, orderingHint)
 	}
 
 	// No rules for other operator types.
@@ -554,6 +566,7 @@ func (_e *explorer) exploreUnion(
 	_rootState *exploreState,
 	_root *memo.UnionExpr,
 	_rootOrd int,
+	_orderingHint *props.OrderingChoice,
 ) (_fullyExplored bool) {
 	_fullyExplored = true
 
@@ -641,7 +654,7 @@ func (_e *explorer) exploreUnion(
 	{
 		_partlyExplored := _rootOrd < _rootState.start
 		left := _root.Left
-		_state := _e.lookupExploreState(left)
+		_state := _e.lookupExploreState(left, _orderingHint)
 		if !_state.fullyExplored {
 			_fullyExplored = false
 		}

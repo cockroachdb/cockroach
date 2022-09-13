@@ -723,6 +723,9 @@ GenerateConstrainedScans (no changes)
 GenerateZigzagJoins (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 GenerateTopK (higher cost)
 --------------------------------------------------------------------------------
    explain
@@ -1243,36 +1246,36 @@ top-k
  ├── ordering: +6,+7
  └── union-all
       ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
-      ├── left columns: latitude:81 longitude:82 data1:83 data2:84
-      ├── right columns: latitude:92 longitude:93 data1:94 data2:95
+      ├── left columns: latitude:103 longitude:104 data1:105 data2:106
+      ├── right columns: latitude:114 longitude:115 data1:116 data2:117
       ├── union-all
-      │    ├── columns: latitude:81!null longitude:82!null data1:83!null data2:84!null
-      │    ├── left columns: latitude:70 longitude:71 data1:72 data2:73
-      │    ├── right columns: latitude:59 longitude:60 data1:61 data2:62
+      │    ├── columns: latitude:103!null longitude:104!null data1:105!null data2:106!null
+      │    ├── left columns: latitude:92 longitude:93 data1:94 data2:95
+      │    ├── right columns: latitude:81 longitude:82 data1:83 data2:84
       │    ├── cardinality: [0 - 30]
       │    ├── union-all
-      │    │    ├── columns: latitude:70!null longitude:71!null data1:72!null data2:73!null
-      │    │    ├── left columns: latitude:37 longitude:38 data1:39 data2:40
-      │    │    ├── right columns: latitude:48 longitude:49 data1:50 data2:51
+      │    │    ├── columns: latitude:92!null longitude:93!null data1:94!null data2:95!null
+      │    │    ├── left columns: latitude:59 longitude:60 data1:61 data2:62
+      │    │    ├── right columns: latitude:70 longitude:71 data1:72 data2:73
       │    │    ├── cardinality: [0 - 20]
       │    │    ├── scan index_tab@d
-      │    │    │    ├── columns: latitude:37!null longitude:38!null data1:39!null data2:40!null
-      │    │    │    ├── constraint: /37/38/39/40/34: [/10/11 - /10/11]
+      │    │    │    ├── columns: latitude:59!null longitude:60!null data1:61!null data2:62!null
+      │    │    │    ├── constraint: /59/60/61/62/56: [/10/11 - /10/11]
       │    │    │    ├── limit: 10
-      │    │    │    └── fd: ()-->(37,38)
+      │    │    │    └── fd: ()-->(59,60)
       │    │    └── scan index_tab@d
-      │    │         ├── columns: latitude:48!null longitude:49!null data1:50!null data2:51!null
-      │    │         ├── constraint: /48/49/50/51/45: [/10/12 - /10/12]
+      │    │         ├── columns: latitude:70!null longitude:71!null data1:72!null data2:73!null
+      │    │         ├── constraint: /70/71/72/73/67: [/10/12 - /10/12]
       │    │         ├── limit: 10
-      │    │         └── fd: ()-->(48,49)
+      │    │         └── fd: ()-->(70,71)
       │    └── scan index_tab@d
-      │         ├── columns: latitude:59!null longitude:60!null data1:61!null data2:62!null
-      │         ├── constraint: /59/60/61/62/56: [/10/13 - /10/13]
+      │         ├── columns: latitude:81!null longitude:82!null data1:83!null data2:84!null
+      │         ├── constraint: /81/82/83/84/78: [/10/13 - /10/13]
       │         ├── limit: 10
-      │         └── fd: ()-->(59,60)
+      │         └── fd: ()-->(81,82)
       └── scan index_tab@d
-           ├── columns: latitude:92!null longitude:93 data1:94!null data2:95!null
-           └── constraint: /92/93/94/95/89
+           ├── columns: latitude:114!null longitude:115 data1:116!null data2:117!null
+           └── constraint: /114/115/116/117/111
                 ├── [/-5 - /-5]
                 └── [/0 - /0]
 
@@ -1837,18 +1840,20 @@ INDEX df (d, f)
 
 # Generates an index scan on dd, dfg, and df and an index join to get all
 # columns, though these are not the best cost plans.
-memo expect=GenerateLimitedTopKScans
+# GenerateLimitedTopKScans is not needed. GenerateIndexScans can generate
+# the best plan
+memo expect=GenerateIndexScans
 SELECT d, e FROM defg ORDER BY d, e LIMIT 10
 ----
-memo (optimized, ~14KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
- ├── G1: (limit G2 G3 ordering=+1,+2) (top-k G2 &{10 +1,+2 }) (top-k G4 &{10 +1,+2 }) (top-k G5 &{10 +1,+2 }) (top-k G6 &{10 +1,+2 }) (top-k G2 &{10 +1,+2 +1}) (top-k G4 &{10 +1,+2 +1}) (top-k G5 &{10 +1,+2 +1}) (top-k G6 &{10 +1,+2 +1})
+memo (optimized, ~9KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
+ ├── G1: (limit G2 G3 ordering=+1,+2) (top-k G2 &{10 +1,+2 }) (top-k G2 &{10 +1,+2 +1})
  │    ├── [presentation: d:1,e:2] [ordering: +1,+2]
  │    │    ├── best: (top-k G2 &{10 +1,+2 })
  │    │    └── cost: 1185.69
  │    └── []
  │         ├── best: (top-k G2 &{10 +1,+2 })
  │         └── cost: 1185.69
- ├── G2: (scan defg,cols=(1,2))
+ ├── G2: (scan defg,cols=(1,2)) (index-join G4 defg,cols=(1,2)) (index-join G5 defg,cols=(1,2)) (index-join G6 defg,cols=(1,2))
  │    ├── [ordering: +1,+2] [limit hint: 10.00]
  │    │    ├── best: (sort G2)
  │    │    └── cost: 1345.17
@@ -1862,37 +1867,7 @@ memo (optimized, ~14KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
  │         ├── best: (scan defg,cols=(1,2))
  │         └── cost: 1094.72
  ├── G3: (const 10)
- ├── G4: (index-join G7 defg,cols=(1,2))
- │    ├── [ordering: +1]
- │    │    ├── best: (index-join G7="[ordering: +1]" defg,cols=(1,2))
- │    │    └── cost: 7134.44
- │    ├── [ordering: +1] [limit hint: 104.58]
- │    │    ├── best: (index-join G7="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
- │    │    └── cost: 1336.81
- │    └── []
- │         ├── best: (index-join G7 defg,cols=(1,2))
- │         └── cost: 7134.44
- ├── G5: (index-join G8 defg,cols=(1,2))
- │    ├── [ordering: +1]
- │    │    ├── best: (index-join G8="[ordering: +1]" defg,cols=(1,2))
- │    │    └── cost: 7154.64
- │    ├── [ordering: +1] [limit hint: 104.58]
- │    │    ├── best: (index-join G8="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
- │    │    └── cost: 1338.90
- │    └── []
- │         ├── best: (index-join G8 defg,cols=(1,2))
- │         └── cost: 7154.64
- ├── G6: (index-join G9 defg,cols=(1,2))
- │    ├── [ordering: +1]
- │    │    ├── best: (index-join G9="[ordering: +1]" defg,cols=(1,2))
- │    │    └── cost: 7144.54
- │    ├── [ordering: +1] [limit hint: 104.58]
- │    │    ├── best: (index-join G9="[ordering: +1] [limit hint: 104.58]" defg,cols=(1,2))
- │    │    └── cost: 1337.85
- │    └── []
- │         ├── best: (index-join G9 defg,cols=(1,2))
- │         └── cost: 7144.54
- ├── G7: (scan defg@dd,cols=(1,5))
+ ├── G4: (scan defg@dd,cols=(1,5))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan defg@dd,cols=(1,5))
  │    │    └── cost: 1064.42
@@ -1902,7 +1877,7 @@ memo (optimized, ~14KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
  │    └── []
  │         ├── best: (scan defg@dd,cols=(1,5))
  │         └── cost: 1064.42
- ├── G8: (scan defg@dfg,cols=(1,5))
+ ├── G5: (scan defg@dfg,cols=(1,5))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan defg@dfg,cols=(1,5))
  │    │    └── cost: 1084.62
@@ -1912,7 +1887,7 @@ memo (optimized, ~14KB, required=[presentation: d:1,e:2] [ordering: +1,+2])
  │    └── []
  │         ├── best: (scan defg@dfg,cols=(1,5))
  │         └── cost: 1084.62
- └── G9: (scan defg@df,cols=(1,5))
+ └── G6: (scan defg@df,cols=(1,5))
       ├── [ordering: +1]
       │    ├── best: (scan defg@df,cols=(1,5))
       │    └── cost: 1074.52
@@ -2002,15 +1977,15 @@ memo (optimized, ~4KB, required=[presentation: d:1,f:3,e:2] [ordering: +1,+3,+2]
 memo expect=GeneratePartialOrderTopK
 SELECT * FROM defg ORDER BY d, f, e LIMIT 10
 ----
-memo (optimized, ~14KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2])
- ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G4 &{10 +1,+3,+2 }) (top-k G5 &{10 +1,+3,+2 }) (top-k G6 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1}) (top-k G5 &{10 +1,+3,+2 +1,+3}) (top-k G6 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1,+3})
+memo (optimized, ~11KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2])
+ ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G4 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1}) (top-k G4 &{10 +1,+3,+2 +1,+3})
  │    ├── [presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2]
- │    │    ├── best: (top-k G6="[ordering: +1,+3] [limit hint: 100.00]" &{10 +1,+3,+2 +1,+3})
+ │    │    ├── best: (top-k G2="[ordering: +1,+3] [limit hint: 100.00]" &{10 +1,+3,+2 +1,+3})
  │    │    └── cost: 737.57
  │    └── []
  │         ├── best: (top-k G2 &{10 +1,+3,+2 })
  │         └── cost: 1206.52
- ├── G2: (scan defg,cols=(1-4))
+ ├── G2: (scan defg,cols=(1-4)) (index-join G5 defg,cols=(1-4)) (index-join G6 defg,cols=(1-4))
  │    ├── [ordering: +1,+3,+2] [limit hint: 10.00]
  │    │    ├── best: (sort G2)
  │    │    └── cost: 1386.46
@@ -2018,8 +1993,8 @@ memo (optimized, ~14KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+
  │    │    ├── best: (sort G2)
  │    │    └── cost: 1385.37
  │    ├── [ordering: +1,+3] [limit hint: 100.00]
- │    │    ├── best: (sort G2)
- │    │    └── cost: 1385.37
+ │    │    ├── best: (index-join G6="[ordering: +1,+3] [limit hint: 100.00]" defg,cols=(1-4))
+ │    │    └── cost: 728.04
  │    └── []
  │         ├── best: (scan defg,cols=(1-4))
  │         └── cost: 1114.92
@@ -2040,37 +2015,7 @@ memo (optimized, ~14KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+
  │    └── []
  │         ├── best: (index-join G7 defg,cols=(1-4))
  │         └── cost: 7154.44
- ├── G5: (index-join G8 defg,cols=(1-4))
- │    ├── [ordering: +1,+3]
- │    │    ├── best: (index-join G8="[ordering: +1,+3]" defg,cols=(1-4))
- │    │    └── cost: 7174.84
- │    ├── [ordering: +1,+3] [limit hint: 100.00]
- │    │    ├── best: (index-join G8="[ordering: +1,+3] [limit hint: 100.00]" defg,cols=(1-4))
- │    │    └── cost: 729.04
- │    └── []
- │         ├── best: (index-join G8 defg,cols=(1-4))
- │         └── cost: 7174.84
- ├── G6: (index-join G9 defg,cols=(1-4))
- │    ├── [ordering: +1,+3]
- │    │    ├── best: (index-join G9="[ordering: +1,+3]" defg,cols=(1-4))
- │    │    └── cost: 7164.64
- │    ├── [ordering: +1,+3] [limit hint: 100.00]
- │    │    ├── best: (index-join G9="[ordering: +1,+3] [limit hint: 100.00]" defg,cols=(1-4))
- │    │    └── cost: 728.04
- │    └── []
- │         ├── best: (index-join G9 defg,cols=(1-4))
- │         └── cost: 7164.64
- ├── G7: (scan defg@dd,cols=(1,5))
- │    ├── [ordering: +1]
- │    │    ├── best: (scan defg@dd,cols=(1,5))
- │    │    └── cost: 1064.42
- │    ├── [ordering: +1] [limit hint: 104.58]
- │    │    ├── best: (scan defg@dd,cols=(1,5))
- │    │    └── cost: 122.79
- │    └── []
- │         ├── best: (scan defg@dd,cols=(1,5))
- │         └── cost: 1064.42
- ├── G8: (scan defg@dfg,cols=(1,3-5))
+ ├── G5: (scan defg@dfg,cols=(1,3-5))
  │    ├── [ordering: +1,+3]
  │    │    ├── best: (scan defg@dfg,cols=(1,3-5))
  │    │    └── cost: 1104.82
@@ -2080,22 +2025,32 @@ memo (optimized, ~14KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+
  │    └── []
  │         ├── best: (scan defg@dfg,cols=(1,3-5))
  │         └── cost: 1104.82
- └── G9: (scan defg@df,cols=(1,3,5))
-      ├── [ordering: +1,+3]
-      │    ├── best: (scan defg@df,cols=(1,3,5))
-      │    └── cost: 1084.62
-      ├── [ordering: +1,+3] [limit hint: 100.00]
-      │    ├── best: (scan defg@df,cols=(1,3,5))
-      │    └── cost: 120.02
+ ├── G6: (scan defg@df,cols=(1,3,5))
+ │    ├── [ordering: +1,+3]
+ │    │    ├── best: (scan defg@df,cols=(1,3,5))
+ │    │    └── cost: 1084.62
+ │    ├── [ordering: +1,+3] [limit hint: 100.00]
+ │    │    ├── best: (scan defg@df,cols=(1,3,5))
+ │    │    └── cost: 120.02
+ │    └── []
+ │         ├── best: (scan defg@df,cols=(1,3,5))
+ │         └── cost: 1084.62
+ └── G7: (scan defg@dd,cols=(1,5))
+      ├── [ordering: +1]
+      │    ├── best: (scan defg@dd,cols=(1,5))
+      │    └── cost: 1064.42
+      ├── [ordering: +1] [limit hint: 104.58]
+      │    ├── best: (scan defg@dd,cols=(1,5))
+      │    └── cost: 122.79
       └── []
-           ├── best: (scan defg@df,cols=(1,3,5))
-           └── cost: 1084.62
+           ├── best: (scan defg@dd,cols=(1,5))
+           └── cost: 1064.42
 
 # Only index ordering dfg can be used for the topk.
 memo expect=GeneratePartialOrderTopK disable=GenerateLimitedTopKScans
 SELECT d, f, g FROM defg ORDER BY d, g LIMIT 10
 ----
-memo (optimized, ~5KB, required=[presentation: d:1,f:3,g:4] [ordering: +1,+4])
+memo (optimized, ~8KB, required=[presentation: d:1,f:3,g:4] [ordering: +1,+4])
  ├── G1: (limit G2 G3 ordering=+1,+4) (top-k G2 &{10 +1,+4 }) (top-k G2 &{10 +1,+4 +1})
  │    ├── [presentation: d:1,f:3,g:4] [ordering: +1,+4]
  │    │    ├── best: (top-k G2="[ordering: +1] [limit hint: 104.58]" &{10 +1,+4 +1})
@@ -2103,7 +2058,7 @@ memo (optimized, ~5KB, required=[presentation: d:1,f:3,g:4] [ordering: +1,+4])
  │    └── []
  │         ├── best: (top-k G2 &{10 +1,+4 })
  │         └── cost: 1185.79
- ├── G2: (scan defg,cols=(1,3,4)) (scan defg@dfg,cols=(1,3,4))
+ ├── G2: (scan defg,cols=(1,3,4)) (scan defg@dfg,cols=(1,3,4)) (index-join G4 defg,cols=(1,3,4)) (index-join G5 defg,cols=(1,3,4))
  │    ├── [ordering: +1,+4] [limit hint: 10.00]
  │    │    ├── best: (sort G2="[ordering: +1]")
  │    │    └── cost: 1221.18
@@ -2116,7 +2071,27 @@ memo (optimized, ~5KB, required=[presentation: d:1,f:3,g:4] [ordering: +1,+4])
  │    └── []
  │         ├── best: (scan defg@dfg,cols=(1,3,4))
  │         └── cost: 1094.72
- └── G3: (const 10)
+ ├── G3: (const 10)
+ ├── G4: (scan defg@dd,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 1064.42
+ │    ├── [ordering: +1] [limit hint: 104.58]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 122.79
+ │    └── []
+ │         ├── best: (scan defg@dd,cols=(1,5))
+ │         └── cost: 1064.42
+ └── G5: (scan defg@df,cols=(1,3,5))
+      ├── [ordering: +1]
+      │    ├── best: (scan defg@df,cols=(1,3,5))
+      │    └── cost: 1084.62
+      ├── [ordering: +1] [limit hint: 104.58]
+      │    ├── best: (scan defg@df,cols=(1,3,5))
+      │    └── cost: 124.88
+      └── []
+           ├── best: (scan defg@df,cols=(1,3,5))
+           └── cost: 1084.62
 
 # Ensure that we don't incorrectly use orderings that don't match the direction.
 memo expect-not=GeneratePartialOrderTopK

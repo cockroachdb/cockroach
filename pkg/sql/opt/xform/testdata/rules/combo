@@ -160,6 +160,40 @@ New expression 1 of 1:
    └── filters (true)
 
 ================================================================================
+GenerateIndexScans
+================================================================================
+Source expression:
+  inner-join (hash)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
+   ├── scan abc
+   │    └── columns: a:1 b:2 c:3
+   ├── scan xyz
+   │    └── columns: x:7 y:8 z:9
+   └── filters
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+No new expressions.
+
+================================================================================
+GenerateIndexScans
+================================================================================
+Source expression:
+  inner-join (hash)
+   ├── columns: a:1!null b:2!null c:3 x:7!null y:8!null z:9
+   ├── fd: (1)==(7), (7)==(1), (2)==(8), (8)==(2)
+   ├── scan abc
+   │    └── columns: a:1 b:2 c:3
+   ├── scan xyz
+   │    └── columns: x:7 y:8 z:9
+   └── filters
+        ├── a:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+        └── b:2 = y:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+
+No new expressions.
+
+================================================================================
 GenerateMergeJoins
 ================================================================================
 Source expression:

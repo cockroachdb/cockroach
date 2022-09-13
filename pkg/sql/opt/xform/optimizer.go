@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -84,6 +85,10 @@ type Optimizer struct {
 	// This state could be discarded once optimization is complete.
 	stateMap   map[groupStateKey]*groupState
 	stateAlloc groupStateAlloc
+
+	// redundantGroupStateKeys is the deduped list of redundant groupStateKeys
+	// which may be cleaned from the stateMap after optimization is complete.
+	redundantGroupStateKeys map[groupStateKey]struct{}
 
 	// matchedRule is the callback function that is invoked each time an
 	// optimization rule (Normalize or Explore) has been matched by the optimizer.
@@ -258,12 +263,17 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	// Now optimize the entire expression tree.
 	root := o.mem.RootExpr().(memo.RelExpr)
 	rootProps := o.mem.RootProps()
-	o.optimizeGroup(root, rootProps)
+	o.mem.SetOrderingHint(&rootProps.Ordering)
+	orderingHint := o.mem.OrderingHint()
+	o.optimizeGroup(root, rootProps, orderingHint)
+	o.removeRedundantGroupStateKeys()
 
 	// Walk the tree from the root, updating child pointers so that the memo
 	// root points to the lowest cost tree by default (rather than the normalized
 	// tree by default.
-	root = o.setLowestCostTree(root, rootProps).(memo.RelExpr)
+	o.mem.SetOrderingHint(&rootProps.Ordering)
+	orderingHint = o.mem.OrderingHint()
+	root = o.setLowestCostTree(root, rootProps, orderingHint).(memo.RelExpr)
 	o.mem.SetRoot(root, rootProps)
 
 	// Validate there are no dangling references.
@@ -284,11 +294,11 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 // optimizeExpr calls either optimizeGroup or optimizeScalarExpr depending on
 // the type of the expression (relational or scalar).
 func (o *Optimizer) optimizeExpr(
-	e opt.Expr, required *physical.Required,
+	e opt.Expr, required *physical.Required, orderingHint *props.OrderingChoice,
 ) (cost memo.Cost, fullyOptimized bool) {
 	switch t := e.(type) {
 	case memo.RelExpr:
-		state := o.optimizeGroup(t, required)
+		state := o.optimizeGroup(t, required, orderingHint)
 		return state.cost, state.fullyOptimized
 
 	case memo.ScalarPropsExpr:
@@ -464,13 +474,18 @@ func (o *Optimizer) optimizeExpr(
 //	      └── eq [type=bool]
 //	           ├── variable: a.x [type=int]
 //	           └── const: 1 [type=int]
-func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required) *groupState {
+func (o *Optimizer) optimizeGroup(
+	grp memo.RelExpr, required *physical.Required, orderingHint *props.OrderingChoice,
+) *groupState {
 	// Always start with the first expression in the group.
 	grp = grp.FirstExpr()
 
+	o.mem.SetOrderingHint(orderingHint)
+	orderingHint = o.mem.OrderingHint()
+
 	// If this group is already fully optimized, then return the already prepared
 	// best expression (won't ever get better than this).
-	state := o.ensureOptState(grp, required)
+	state := o.ensureOptState(grp, required, orderingHint)
 	if state.fullyOptimized {
 		return state
 	}
@@ -512,7 +527,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 			}
 
 			// Optimize the group member with respect to the required properties.
-			memberOptimized := o.optimizeGroupMember(state, member, required)
+			memberOptimized := o.optimizeGroupMember(state, member, required, orderingHint)
 
 			// If any of the group members have not yet been fully optimized, then
 			// the group is not yet fully optimized.
@@ -522,15 +537,26 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 				fullyOptimized = false
 			}
 		}
+		// optimizeGroupMember could change parentRequiredOrdering, so reset it.
+		o.mem.SetOrderingHint(orderingHint)
+		orderingHint = o.mem.OrderingHint()
 
 		// Now try to generate new expressions that are logically equivalent to
 		// other expressions in this group.
-		if o.shouldExplore(required) && !o.explorer.exploreGroup(grp).fullyExplored {
+		shouldExplore := o.shouldExplore(required)
+		if shouldExplore && !o.explorer.exploreGroup(grp, orderingHint).fullyExplored {
 			fullyOptimized = false
 		}
 
 		if fullyOptimized {
 			state.fullyOptimized = true
+			// If we're done optimizing this group, make sure the state with no
+			// ordering hint is populated in case this group is explored elsewhere
+			// in the memo without a hint. Mark the redundant entry in the stateMap
+			// for later removal.
+			if shouldExplore && required == physical.MinRequired && !orderingHint.Any() {
+				o.markRedundantGroupStateKey(grp, required, orderingHint)
+			}
 			break
 		}
 	}
@@ -545,7 +571,10 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 // can provide the required properties at a lower cost. The lowest cost
 // expression is saved to groupState.
 func (o *Optimizer) optimizeGroupMember(
-	state *groupState, member memo.RelExpr, required *physical.Required,
+	state *groupState,
+	member memo.RelExpr,
+	required *physical.Required,
+	orderingHint *props.OrderingChoice,
 ) (fullyOptimized bool) {
 	// Compute the cost for enforcers to provide the required properties. This
 	// may be lower than the expression providing the properties itself. For
@@ -565,9 +594,11 @@ func (o *Optimizer) optimizeGroupMember(
 			// Given required parent properties, get the properties required from
 			// the nth child.
 			childRequired := BuildChildPhysicalProps(o.mem, member, i, required)
+			localOrderingHint := o.mem.BuildChildOrderingHint(member, i, orderingHint, &childRequired.Ordering)
+			o.mem.SetOrderingHint(localOrderingHint)
 
 			// Optimize the child with respect to those properties.
-			childCost, childOptimized := o.optimizeExpr(member.Child(i), childRequired)
+			childCost, childOptimized := o.optimizeExpr(member.Child(i), childRequired, localOrderingHint)
 
 			// Accumulate cost of children.
 			cost += childCost
@@ -597,7 +628,7 @@ func (o *Optimizer) optimizeScalarExpr(
 	fullyOptimized = true
 	for i, n := 0, scalar.ChildCount(); i < n; i++ {
 		childProps := BuildChildPhysicalPropsScalar(o.mem, scalar, i)
-		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), childProps)
+		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), childProps, props.MinOrderingChoice)
 
 		// Accumulate cost of children.
 		cost += childCost
@@ -682,7 +713,8 @@ func (o *Optimizer) optimizeEnforcer(
 ) (fullyOptimized bool) {
 	// Recursively optimize the member group with respect to a subset of the
 	// enforcer properties.
-	innerState := o.optimizeGroup(member, memberProps)
+	orderingHint := o.mem.BuildChildOrderingHint(enforcer, 0, &enforcerProps.Ordering, &memberProps.Ordering)
+	innerState := o.optimizeGroup(member, memberProps, orderingHint)
 	fullyOptimized = innerState.fullyOptimized
 
 	// Check whether this is the new lowest cost expression with the enforcer
@@ -732,12 +764,14 @@ func (o *Optimizer) shouldExplore(required *physical.Required) bool {
 // because there is never a case where a relational expression is referenced
 // multiple times in the final tree, but with different physical properties
 // required by each of those references.
-func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Required) opt.Expr {
+func (o *Optimizer) setLowestCostTree(
+	parent opt.Expr, parentProps *physical.Required, orderingHint *props.OrderingChoice,
+) opt.Expr {
 	var relParent memo.RelExpr
 	var relCost memo.Cost
 	switch t := parent.(type) {
 	case memo.RelExpr:
-		state := o.lookupOptState(t.FirstExpr(), parentProps)
+		state := o.lookupOptState(t.FirstExpr(), parentProps, orderingHint)
 		relParent, relCost = state.best, state.cost
 		parent = relParent
 
@@ -757,12 +791,15 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 	var childProps *physical.Required
 	for i, n := 0, parent.ChildCount(); i < n; i++ {
 		before := parent.Child(i)
+		localOrderingHint := props.MinOrderingChoice
 		if relParent != nil {
 			childProps = BuildChildPhysicalProps(o.mem, relParent, i, parentProps)
+			localOrderingHint = o.mem.BuildChildOrderingHint(relParent, i, orderingHint, &childProps.Ordering)
 		} else {
 			childProps = BuildChildPhysicalPropsScalar(o.mem, parent, i)
 		}
-		after := o.setLowestCostTree(before, childProps)
+
+		after := o.setLowestCostTree(before, childProps, localOrderingHint)
 		if after != before {
 			if mutable == nil {
 				mutable = parent.(opt.MutableExpr)
@@ -793,17 +830,49 @@ func (o *Optimizer) ratchetCost(state *groupState, candidate memo.RelExpr, cost 
 	}
 }
 
-// lookupOptState looks up the state associated with the given group and
-// properties. If no state exists yet, then lookupOptState returns nil.
-func (o *Optimizer) lookupOptState(grp memo.RelExpr, required *physical.Required) *groupState {
-	return o.stateMap[groupStateKey{group: grp, required: required}]
+// lookupOptState looks up the state associated with the given group, properties
+// and ordering hint. If no state exists, then lookupOptState looks up the state
+// associated with the given group and properties with no ordering hint. If
+// neither of these exists, it returns nil.
+func (o *Optimizer) lookupOptState(
+	grp memo.RelExpr, required *physical.Required, orderingHint *props.OrderingChoice,
+) *groupState {
+	// If there is a required ordering, orderingHint will equal the required
+	// ordering and we want to collect the best results for this group into the
+	// same bucket, regardless of the passed-in orderingHint.
+	if !required.Ordering.Any() {
+		orderingHint = props.MinOrderingChoice
+	}
+	state := o.stateMap[groupStateKey{group: grp, required: required, orderingHint: orderingHint}]
+	// During exploration we may check the optimization state of a group that
+	// did not originally have an orderingHint propagated to it via
+	// BuildChildOrderingHint. For example, the GenerateLookupJoins rule has:
+	// `_state := _e.lookupExploreState(_root.Right, _orderingHint)`, but since
+	// the ordering of the output of lookup join is determined by the Left input,
+	// BuildChildOrderingHint did not assign an orderingHint when optimizing the
+	// Right input, so the state with no orderingHint needs to be checked as well.
+	if state != nil {
+		return state
+	}
+	if orderingHint != props.MinOrderingChoice {
+		state = o.stateMap[groupStateKey{group: grp, required: required, orderingHint: props.MinOrderingChoice}]
+	}
+	return state
 }
 
-// ensureOptState looks up the state associated with the given group and
-// properties. If none is associated yet, then ensureOptState allocates new
-// state and returns it.
-func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *physical.Required) *groupState {
-	key := groupStateKey{group: grp, required: required}
+// ensureOptState looks up the state associated with the given group, properties
+// and ordering hint. If none is associated yet, then ensureOptState allocates
+// new state and returns it.
+func (o *Optimizer) ensureOptState(
+	grp memo.RelExpr, required *physical.Required, orderingHint *props.OrderingChoice,
+) *groupState {
+	// If there is a required ordering, orderingHint will equal the required
+	// ordering and we want to collect the best results for this group into the
+	// same bucket, regardless of the passed-in orderingHint.
+	if !required.Ordering.Any() {
+		orderingHint = props.MinOrderingChoice
+	}
+	key := groupStateKey{group: grp, required: required, orderingHint: orderingHint}
 	state, ok := o.stateMap[key]
 	if !ok {
 		state = o.stateAlloc.allocate()
@@ -811,6 +880,50 @@ func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *physical.Required
 		o.stateMap[key] = state
 	}
 	return state
+}
+
+// markRedundantGroupStateKey prepares to consolidate the state associated with
+// the given group, properties and ordering hint into a map entry associated
+// with the given group, properties and empty ordering hint if the latter is
+// empty or matches the former (same best cost relation). It does this by
+// placing such a key in the redundantGroupStateKeys map.
+func (o *Optimizer) markRedundantGroupStateKey(
+	grp memo.RelExpr, required *physical.Required, orderingHint *props.OrderingChoice,
+) {
+	key := groupStateKey{group: grp, required: required, orderingHint: orderingHint}
+	newKey := groupStateKey{group: grp, required: required, orderingHint: props.MinOrderingChoice}
+	state := o.stateMap[key]
+	newState := o.stateMap[newKey]
+	if state == nil {
+		return
+	}
+	if newState != nil {
+		if !state.equals(newState) {
+			return
+		}
+	} else {
+		newState = o.stateAlloc.allocate()
+		*newState = *state
+		o.stateMap[newKey] = newState
+	}
+
+	if o.redundantGroupStateKeys == nil {
+		o.redundantGroupStateKeys = make(map[groupStateKey]struct{})
+	}
+	o.redundantGroupStateKeys[key] = struct{}{}
+}
+
+// removeRedundantGroupStateKeys removes groupStateKeys previously marked as
+// redundant from the stateMap.
+func (o *Optimizer) removeRedundantGroupStateKeys() {
+	if o.redundantGroupStateKeys != nil {
+		for key := range o.redundantGroupStateKeys {
+			delete(o.stateMap, key)
+			// Assist garbage collection.
+			delete(o.redundantGroupStateKeys, key)
+		}
+	}
+	o.redundantGroupStateKeys = nil
 }
 
 // optimizeRootWithProps tries to simplify the root operator based on the
@@ -873,10 +986,11 @@ func (o *Optimizer) optimizeRootWithProps() {
 }
 
 // groupStateKey associates groupState with a group that is being optimized with
-// respect to a set of physical properties.
+// respect to a set of physical properties. An ordering
 type groupStateKey struct {
-	group    memo.RelExpr
-	required *physical.Required
+	group        memo.RelExpr
+	required     *physical.Required
+	orderingHint *props.OrderingChoice
 }
 
 // groupState is temporary storage that's associated with each group that's
@@ -940,6 +1054,21 @@ func (os *groupState) markMemberAsFullyOptimized(ord int) {
 		panic(errors.AssertionFailedf("memo expression is already fully optimized for required physical properties"))
 	}
 	os.fullyOptimizedExprs.Add(ord)
+}
+
+// equals returns true if two group states are fully optimized and contain the
+// same best cost relation.
+func (os *groupState) equals(other *groupState) bool {
+	if os.best != other.best {
+		return false
+	}
+	if os.cost != other.cost {
+		return false
+	}
+	if os.fullyOptimized != other.fullyOptimized {
+		return false
+	}
+	return true
 }
 
 // groupStateAlloc allocates pages of groupState structs. This is preferable to

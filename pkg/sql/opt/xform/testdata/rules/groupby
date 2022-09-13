@@ -2172,7 +2172,7 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
 memo
 SELECT (SELECT w FROM kuvw WHERE v=1 AND x=u) FROM xyz ORDER BY x+1, x
 ----
-memo (optimized, ~24KB, required=[presentation: w:12] [ordering: +13,+1])
+memo (optimized, ~25KB, required=[presentation: w:12] [ordering: +13,+1])
  ├── G1: (project G2 G3 x)
  │    ├── [presentation: w:12] [ordering: +13,+1]
  │    │    ├── best: (sort G1)
@@ -2202,7 +2202,7 @@ memo (optimized, ~24KB, required=[presentation: w:12] [ordering: +13,+1])
  │    └── []
  │         ├── best: (scan xyz@xy,cols=(1))
  │         └── cost: 1054.32
- ├── G9: (select G16 G17) (scan kuvw@vw,cols=(7-9),constrained)
+ ├── G9: (select G16 G17) (scan kuvw@vw,cols=(7-9),constrained) (scan kuvw@vw,cols=(7-9),constrained)
  │    ├── [ordering: +7 opt(8)]
  │    │    ├── best: (sort G9)
  │    │    └── cost: 25.90
@@ -2295,7 +2295,7 @@ memo (optimized, ~25KB, required=[])
 memo
 INSERT INTO xyz SELECT v, w, 1.0 FROM kuvw ON CONFLICT (x) DO UPDATE SET z=2.0
 ----
-memo (optimized, ~26KB, required=[])
+memo (optimized, ~27KB, required=[])
  ├── G1: (upsert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (upsert G2 G3 G4 xyz)
@@ -2318,50 +2318,57 @@ memo (optimized, ~26KB, required=[])
  │    └── []
  │         ├── best: (ensure-upsert-distinct-on G13="[ordering: +8 opt(12)]" G14 cols=(8),ordering=+8 opt(12))
  │         └── cost: 1144.67
- ├── G8: (scan xyz,cols=(13-15)) (scan xyz@zyx,cols=(13-15))
+ ├── G8: (scan xyz,cols=(13-15)) (scan xyz@zyx,cols=(13-15)) (index-join G15 xyz,cols=(13-15))
  │    ├── [ordering: +13]
  │    │    ├── best: (scan xyz,cols=(13-15))
  │    │    └── cost: 1084.62
  │    └── []
  │         ├── best: (scan xyz,cols=(13-15))
  │         └── cost: 1084.62
- ├── G9: (filters G15)
+ ├── G9: (filters G16)
  ├── G10: (filters)
  ├── G11: (lookup-join G7 G10 xyz@xy,keyCols=[8],outCols=(8,9,12-14))
  │    └── []
  │         ├── best: (lookup-join G7 G10 xyz@xy,keyCols=[8],outCols=(8,9,12-14))
  │         └── cost: 7194.69
- ├── G12: (case G16 G17 G18)
- ├── G13: (project G19 G20 v w)
+ ├── G12: (case G17 G18 G19)
+ ├── G13: (project G20 G21 v w)
  │    ├── [ordering: +8 opt(12)]
- │    │    ├── best: (project G19="[ordering: +8]" G20 v w)
+ │    │    ├── best: (project G20="[ordering: +8]" G21 v w)
  │    │    └── cost: 1104.64
  │    └── []
- │         ├── best: (project G19 G20 v w)
+ │         ├── best: (project G20 G21 v w)
  │         └── cost: 1104.64
- ├── G14: (aggregations G21 G22)
- ├── G15: (eq G23 G24)
- ├── G16: (true)
- ├── G17: (scalar-list G25)
- ├── G18: (const 2.0)
- ├── G19: (scan kuvw,cols=(8,9)) (scan kuvw@uvw,cols=(8,9)) (scan kuvw@wvu,cols=(8,9)) (scan kuvw@vw,cols=(8,9)) (scan kuvw@w,cols=(8,9))
+ ├── G14: (aggregations G22 G23)
+ ├── G15: (scan xyz@xy,cols=(13,14))
+ │    ├── [ordering: +13]
+ │    │    ├── best: (scan xyz@xy,cols=(13,14))
+ │    │    └── cost: 1064.42
+ │    └── []
+ │         ├── best: (scan xyz@xy,cols=(13,14))
+ │         └── cost: 1064.42
+ ├── G16: (eq G24 G25)
+ ├── G17: (true)
+ ├── G18: (scalar-list G26)
+ ├── G19: (const 2.0)
+ ├── G20: (scan kuvw,cols=(8,9)) (scan kuvw@uvw,cols=(8,9)) (scan kuvw@wvu,cols=(8,9)) (scan kuvw@vw,cols=(8,9)) (scan kuvw@w,cols=(8,9))
  │    ├── [ordering: +8]
  │    │    ├── best: (scan kuvw@vw,cols=(8,9))
  │    │    └── cost: 1084.62
  │    └── []
  │         ├── best: (scan kuvw,cols=(8,9))
  │         └── cost: 1084.62
- ├── G20: (projections G26)
- ├── G21: (first-agg G27)
+ ├── G21: (projections G27)
  ├── G22: (first-agg G28)
- ├── G23: (variable v)
- ├── G24: (variable x)
- ├── G25: (when G29 G28)
- ├── G26: (const 1.0)
- ├── G27: (variable w)
- ├── G28: (variable "?column?")
- ├── G29: (is G24 G30)
- └── G30: (null)
+ ├── G23: (first-agg G29)
+ ├── G24: (variable v)
+ ├── G25: (variable x)
+ ├── G26: (when G30 G29)
+ ├── G27: (const 1.0)
+ ├── G28: (variable w)
+ ├── G29: (variable "?column?")
+ ├── G30: (is G25 G31)
+ └── G31: (null)
 
 # ------------------------------------------------------------------------
 # SplitGroupByScanIntoUnionScans + SplitGroupByFilteredScanIntoUnionScans
@@ -3305,79 +3312,46 @@ INDEX gg (g)
 memo
 SELECT d, e, count(*) FROM defg GROUP BY d, e LIMIT 10
 ----
-memo (optimized, ~19KB, required=[presentation: d:1,e:2,count:8])
- ├── G1: (limit G2 G3) (limit G4 G3) (limit G5 G3) (limit G6 G3)
+memo (optimized, ~10KB, required=[presentation: d:1,e:2,count:8])
+ ├── G1: (limit G2 G3)
  │    └── [presentation: d:1,e:2,count:8]
- │         ├── best: (limit G4="[limit hint: 10.00]" G3)
+ │         ├── best: (limit G2="[limit hint: 10.00]" G3)
  │         └── cost: 641.98
- ├── G2: (group-by G7 G8 cols=(1,2)) (group-by G7 G8 cols=(1,2),ordering=+1)
+ ├── G2: (group-by G4 G5 cols=(1,2)) (group-by G4 G5 cols=(1,2),ordering=+1)
  │    └── [limit hint: 10.00]
- │         ├── best: (group-by G7 G8 cols=(1,2))
- │         └── cost: 1144.90
- ├── G3: (const 10)
- ├── G4: (group-by G9 G8 cols=(1,2)) (group-by G9 G8 cols=(1,2),ordering=+1)
- │    └── [limit hint: 10.00]
- │         ├── best: (group-by G9="[ordering: +1] [limit hint: 10.00]" G8 cols=(1,2),ordering=+1)
+ │         ├── best: (group-by G4="[ordering: +1] [limit hint: 10.00]" G5 cols=(1,2),ordering=+1)
  │         └── cost: 641.87
- ├── G5: (group-by G10 G8 cols=(1,2)) (group-by G10 G8 cols=(1,2),ordering=+1)
- │    └── [limit hint: 10.00]
- │         ├── best: (group-by G10="[ordering: +1] [limit hint: 10.00]" G8 cols=(1,2),ordering=+1)
- │         └── cost: 642.07
- ├── G6: (group-by G11 G8 cols=(1,2)) (group-by G11 G8 cols=(1,2),ordering=+1)
- │    └── [limit hint: 10.00]
- │         ├── best: (group-by G11="[ordering: +1] [limit hint: 10.00]" G8 cols=(1,2),ordering=+1)
- │         └── cost: 641.97
- ├── G7: (scan defg,cols=(1,2))
+ ├── G3: (const 10)
+ ├── G4: (scan defg,cols=(1,2)) (index-join G6 defg,cols=(1,2)) (index-join G7 defg,cols=(1,2)) (index-join G8 defg,cols=(1,2))
  │    ├── [ordering: +1] [limit hint: 10.00]
- │    │    ├── best: (sort G7)
- │    │    └── cost: 1334.20
+ │    │    ├── best: (index-join G6="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
+ │    │    └── cost: 631.44
  │    └── []
  │         ├── best: (scan defg,cols=(1,2))
  │         └── cost: 1094.72
- ├── G8: (aggregations G12)
- ├── G9: (index-join G13 defg,cols=(1,2))
- │    ├── [ordering: +1] [limit hint: 10.00]
- │    │    ├── best: (index-join G13="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
- │    │    └── cost: 631.44
- │    └── []
- │         ├── best: (index-join G13 defg,cols=(1,2))
- │         └── cost: 7134.44
- ├── G10: (index-join G14 defg,cols=(1,2))
- │    ├── [ordering: +1] [limit hint: 10.00]
- │    │    ├── best: (index-join G14="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
- │    │    └── cost: 631.64
- │    └── []
- │         ├── best: (index-join G14 defg,cols=(1,2))
- │         └── cost: 7154.64
- ├── G11: (index-join G15 defg,cols=(1,2))
- │    ├── [ordering: +1] [limit hint: 10.00]
- │    │    ├── best: (index-join G15="[ordering: +1] [limit hint: 10.00]" defg,cols=(1,2))
- │    │    └── cost: 631.54
- │    └── []
- │         ├── best: (index-join G15 defg,cols=(1,2))
- │         └── cost: 7144.54
- ├── G12: (count-rows)
- ├── G13: (scan defg@dd,cols=(1,5))
+ ├── G5: (aggregations G9)
+ ├── G6: (scan defg@dd,cols=(1,5))
  │    ├── [ordering: +1] [limit hint: 10.00]
  │    │    ├── best: (scan defg@dd,cols=(1,5))
  │    │    └── cost: 24.42
  │    └── []
  │         ├── best: (scan defg@dd,cols=(1,5))
  │         └── cost: 1064.42
- ├── G14: (scan defg@dfg,cols=(1,5))
+ ├── G7: (scan defg@dfg,cols=(1,5))
  │    ├── [ordering: +1] [limit hint: 10.00]
  │    │    ├── best: (scan defg@dfg,cols=(1,5))
  │    │    └── cost: 24.62
  │    └── []
  │         ├── best: (scan defg@dfg,cols=(1,5))
  │         └── cost: 1084.62
- └── G15: (scan defg@df,cols=(1,5))
-      ├── [ordering: +1] [limit hint: 10.00]
-      │    ├── best: (scan defg@df,cols=(1,5))
-      │    └── cost: 24.52
-      └── []
-           ├── best: (scan defg@df,cols=(1,5))
-           └── cost: 1074.52
+ ├── G8: (scan defg@df,cols=(1,5))
+ │    ├── [ordering: +1] [limit hint: 10.00]
+ │    │    ├── best: (scan defg@df,cols=(1,5))
+ │    │    └── cost: 24.52
+ │    └── []
+ │         ├── best: (scan defg@df,cols=(1,5))
+ │         └── cost: 1074.52
+ └── G9: (count-rows)
 
 # Rule will trigger, but because no order is specified and an index matches,
 # this will result in a streaming group by.
@@ -3404,7 +3378,9 @@ limit
  │         └── count-rows [as=count_rows:8]
  └── 10
 
-opt expect=GenerateLimitedGroupByScans
+# GenerateLimitedGroupByScans used to be required to generate this plan,
+# but now GenerateIndexScans can do it.
+opt expect=GenerateIndexScans
 SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY d LIMIT 10
 ----
 limit
@@ -3463,7 +3439,7 @@ top-k
 memo
 SELECT d, e, count(*) FROM defg GROUP BY d, e ORDER BY count(*) LIMIT 10
 ----
-memo (optimized, ~6KB, required=[presentation: d:1,e:2,count:8] [ordering: +8])
+memo (optimized, ~10KB, required=[presentation: d:1,e:2,count:8] [ordering: +8])
  ├── G1: (limit G2 G3 ordering=+8) (top-k G2 &{10 +8 })
  │    ├── [presentation: d:1,e:2,count:8] [ordering: +8]
  │    │    ├── best: (top-k G2 &{10 +8 })
@@ -3479,15 +3455,36 @@ memo (optimized, ~6KB, required=[presentation: d:1,e:2,count:8] [ordering: +8])
  │         ├── best: (group-by G4 G5 cols=(1,2))
  │         └── cost: 1144.90
  ├── G3: (const 10)
- ├── G4: (scan defg,cols=(1,2))
+ ├── G4: (scan defg,cols=(1,2)) (index-join G6 defg,cols=(1,2)) (index-join G7 defg,cols=(1,2)) (index-join G8 defg,cols=(1,2))
  │    ├── [ordering: +1]
  │    │    ├── best: (sort G4)
  │    │    └── cost: 1334.20
  │    └── []
  │         ├── best: (scan defg,cols=(1,2))
  │         └── cost: 1094.72
- ├── G5: (aggregations G6)
- └── G6: (count-rows)
+ ├── G5: (aggregations G9)
+ ├── G6: (scan defg@dd,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dd,cols=(1,5))
+ │    │    └── cost: 1064.42
+ │    └── []
+ │         ├── best: (scan defg@dd,cols=(1,5))
+ │         └── cost: 1064.42
+ ├── G7: (scan defg@dfg,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@dfg,cols=(1,5))
+ │    │    └── cost: 1084.62
+ │    └── []
+ │         ├── best: (scan defg@dfg,cols=(1,5))
+ │         └── cost: 1084.62
+ ├── G8: (scan defg@df,cols=(1,5))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan defg@df,cols=(1,5))
+ │    │    └── cost: 1074.52
+ │    └── []
+ │         ├── best: (scan defg@df,cols=(1,5))
+ │         └── cost: 1074.52
+ └── G9: (count-rows)
 
 # Rule does not apply because the grouping columns are not the first columns of
 # an index.

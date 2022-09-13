@@ -92,7 +92,7 @@ top-k
  ├── ordering: +2,+3
  └── index-join a
       ├── columns: x:1!null y:2 z:3 s:4!null
-      ├── stats: [rows=10000]
+      ├── stats: [rows=10000, distinct(2)=1000, null(2)=0]
       ├── cost: 7744.81875
       ├── key: (1)
       ├── fd: (1)-->(2-4)
