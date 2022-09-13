@@ -1182,8 +1182,18 @@ func createImportingDescriptors(
 					return err
 				}
 				for _, tenant := range details.Tenants {
-					// Mark the tenant info as adding.
-					tenant.State = descpb.TenantInfo_ADD
+					switch tenant.State {
+					case descpb.TenantInfo_ACTIVE:
+						// If the tenant was backed up in an `ACTIVE` state then we create
+						// the restored record in an `ADDING` state and mark it `ACTIVE` at
+						// the end of the restore.
+						tenant.State = descpb.TenantInfo_ADD
+					case descpb.TenantInfo_DROP, descpb.TenantInfo_ADD:
+					// If the tenant was backed up in a `DROP` or `ADD` state then we must
+					// create the restored tenant record in that state as well.
+					default:
+						return errors.AssertionFailedf("unknown tenant state %v", tenant)
+					}
 					if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, &tenant, initialTenantZoneConfig); err != nil {
 						return err
 					}
@@ -2085,8 +2095,19 @@ func (r *restoreResumer) publishDescriptors(
 	}
 
 	for _, tenant := range details.Tenants {
-		if err := sql.ActivateTenant(ctx, r.execCfg, txn, tenant.ID); err != nil {
-			return err
+		switch tenant.State {
+		case descpb.TenantInfo_ACTIVE:
+			// If the tenant was backed up in an `ACTIVE` state then we must activate
+			// the tenant as the final step of the restore. The tenant has already
+			// been created at an earlier stage in the restore in an `ADD` state.
+			if err := sql.ActivateTenant(ctx, r.execCfg, txn, tenant.ID); err != nil {
+				return err
+			}
+		case descpb.TenantInfo_DROP, descpb.TenantInfo_ADD:
+		// If the tenant was backed up in a `DROP` or `ADD` state then we do not
+		// want to activate the tenant.
+		default:
+			return errors.AssertionFailedf("unknown tenant state %v", tenant)
 		}
 	}
 
