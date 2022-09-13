@@ -1265,7 +1265,7 @@ New expression 2 of 2:
 memo
 SELECT s, i, f FROM kifs WHERE s='foo' ORDER BY s DESC, i
 ----
-memo (optimized, ~7KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
+memo (optimized, ~9KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)])
  ├── G1: (select G2 G3) (scan kifs@s_idx,cols=(2-4),constrained) (index-join G4 kifs,cols=(2-4))
  │    ├── [presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]
  │    │    ├── best: (sort G1)
@@ -1273,7 +1273,7 @@ memo (optimized, ~7KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(2-4),constrained)
  │         └── cost: 24.72
- ├── G2: (scan kifs,cols=(2-4)) (scan kifs@s_idx,cols=(2-4))
+ ├── G2: (scan kifs,cols=(2-4)) (scan kifs@s_idx,cols=(2-4)) (index-join G5 kifs,cols=(2-4))
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (sort G2="[ordering: +4]")
  │    │    └── cost: 1177.96
@@ -1283,7 +1283,7 @@ memo (optimized, ~7KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
  │    └── []
  │         ├── best: (scan kifs@s_idx,cols=(2-4))
  │         └── cost: 1094.72
- ├── G3: (filters G5)
+ ├── G3: (filters G6)
  ├── G4: (scan kifs@si_idx,cols=(1,2,4),constrained)
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (scan kifs@si_idx,rev,cols=(1,2,4),constrained)
@@ -1291,9 +1291,22 @@ memo (optimized, ~7KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
  │    └── []
  │         ├── best: (scan kifs@si_idx,cols=(1,2,4),constrained)
  │         └── cost: 24.72
- ├── G5: (eq G6 G7)
- ├── G6: (variable s)
- └── G7: (const 'foo')
+ ├── G5: (scan kifs@si_idx,cols=(1,2,4))
+ │    ├── [ordering: +2 opt(4)]
+ │    │    ├── best: (sort G5="[ordering: -4]")
+ │    │    └── cost: 1177.96
+ │    ├── [ordering: +4]
+ │    │    ├── best: (scan kifs@si_idx,rev,cols=(1,2,4))
+ │    │    └── cost: 1195.37
+ │    ├── [ordering: -4]
+ │    │    ├── best: (scan kifs@si_idx,cols=(1,2,4))
+ │    │    └── cost: 1094.72
+ │    └── []
+ │         ├── best: (scan kifs@si_idx,cols=(1,2,4))
+ │         └── cost: 1094.72
+ ├── G6: (eq G7 G8)
+ ├── G7: (variable s)
+ └── G8: (const 'foo')
 
 memo
 SELECT j FROM kifs WHERE s = 'foo'
@@ -8201,7 +8214,7 @@ JOIN t61795 AS t2 ON t1.c = t1.b AND t1.b = t2.b
 WHERE t1.a = 10 OR t2.b != abs(t2.b)
 ORDER BY t1.b ASC
 ----
-memo (optimized, ~33KB, required=[presentation: a:1] [ordering: +2])
+memo (optimized, ~35KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)
@@ -8217,142 +8230,149 @@ memo (optimized, ~33KB, required=[presentation: a:1] [ordering: +2])
  │         ├── best: (select G4 G5)
  │         └── cost: 1094.66
  ├── G3: (projections)
- ├── G4: (scan t61795 [as=t1],cols=(1-3))
+ ├── G4: (scan t61795 [as=t1],cols=(1-3)) (index-join G10 t61795,cols=(1-3))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G4)
  │    │    └── cost: 1334.10
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(1-3))
  │         └── cost: 1084.62
- ├── G5: (filters G10 G11)
- ├── G6: (index-join G12 t61795,cols=(1-3))
+ ├── G5: (filters G11 G12)
+ ├── G6: (index-join G13 t61795,cols=(1-3))
  │    ├── [ordering: +2]
- │    │    ├── best: (index-join G12="[ordering: +2]" t61795,cols=(1-3))
+ │    │    ├── best: (index-join G13="[ordering: +2]" t61795,cols=(1-3))
  │    │    └── cost: 3050.07
  │    └── []
- │         ├── best: (index-join G12 t61795,cols=(1-3))
+ │         ├── best: (index-join G13 t61795,cols=(1-3))
  │         └── cost: 3050.07
- ├── G7: (filters G10)
- ├── G8: (union-all G13 G14)
+ ├── G7: (filters G11)
+ ├── G8: (union-all G14 G15)
  │    ├── [ordering: +(2|3)]
- │    │    ├── best: (union-all G13 G14="[ordering: +(17|18)]")
+ │    │    ├── best: (union-all G14 G15="[ordering: +(17|18)]")
  │    │    └── cost: 1099.83
  │    ├── [ordering: +1]
- │    │    ├── best: (union-all G13 G14="[ordering: +16]")
+ │    │    ├── best: (union-all G14 G15="[ordering: +16]")
  │    │    └── cost: 1099.79
  │    └── []
- │         ├── best: (union-all G13 G14)
+ │         ├── best: (union-all G14 G15)
  │         └── cost: 1099.79
- ├── G9: (aggregations G15 G16)
- ├── G10: (eq G17 G18)
- ├── G11: (or G19 G20)
- ├── G12: (select G21 G22)
+ ├── G9: (aggregations G16 G17)
+ ├── G10: (scan t61795@t61795_b_key [as=t1],cols=(1,2))
  │    ├── [ordering: +2]
- │    │    ├── best: (select G21="[ordering: +2]" G22)
+ │    │    ├── best: (scan t61795@t61795_b_key [as=t1],cols=(1,2))
+ │    │    └── cost: 1064.42
+ │    └── []
+ │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(1,2))
+ │         └── cost: 1064.42
+ ├── G11: (eq G18 G19)
+ ├── G12: (or G20 G21)
+ ├── G13: (select G22 G23)
+ │    ├── [ordering: +2]
+ │    │    ├── best: (select G22="[ordering: +2]" G23)
  │    │    └── cost: 1053.55
  │    └── []
- │         ├── best: (select G21 G22)
+ │         ├── best: (select G22 G23)
  │         └── cost: 1053.55
- ├── G13: (select G23 G24) (select G25 G26) (select G27 G26)
+ ├── G14: (select G24 G25) (select G26 G27) (select G28 G27)
  │    └── []
- │         ├── best: (select G25 G26)
+ │         ├── best: (select G26 G27)
  │         └── cost: 5.10
- ├── G14: (select G28 G29) (select G30 G31)
+ ├── G15: (select G29 G30) (select G31 G32)
  │    ├── [ordering: +(17|18)]
- │    │    ├── best: (sort G14)
+ │    │    ├── best: (sort G15)
  │    │    └── cost: 1094.70
  │    ├── [ordering: +16]
- │    │    ├── best: (select G28="[ordering: +16]" G29)
+ │    │    ├── best: (select G29="[ordering: +16]" G30)
  │    │    └── cost: 1094.66
  │    └── []
- │         ├── best: (select G28 G29)
+ │         ├── best: (select G29 G30)
  │         └── cost: 1094.66
- ├── G15: (const-agg G18)
- ├── G16: (const-agg G17)
- ├── G17: (variable t1.c)
- ├── G18: (variable t1.b)
- ├── G19: (eq G32 G33)
- ├── G20: (ne G18 G34)
- ├── G21: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
+ ├── G16: (const-agg G19)
+ ├── G17: (const-agg G18)
+ ├── G18: (variable t1.c)
+ ├── G19: (variable t1.b)
+ ├── G20: (eq G33 G34)
+ ├── G21: (ne G19 G35)
+ ├── G22: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
  │    ├── [ordering: +2]
  │    │    ├── best: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
  │    │    └── cost: 1043.62
  │    └── []
  │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(1,2),constrained)
  │         └── cost: 1043.62
- ├── G22: (filters G11)
- ├── G23: (scan t61795 [as=t1],cols=(11-13))
+ ├── G23: (filters G12)
+ ├── G24: (scan t61795 [as=t1],cols=(11-13))
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(11-13))
  │         └── cost: 1084.62
- ├── G24: (filters G35 G36)
- ├── G25: (scan t61795 [as=t1],cols=(11-13),constrained)
+ ├── G25: (filters G36 G37)
+ ├── G26: (scan t61795 [as=t1],cols=(11-13),constrained)
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(11-13),constrained)
  │         └── cost: 5.07
- ├── G26: (filters G35)
- ├── G27: (index-join G37 t61795,cols=(11-13))
+ ├── G27: (filters G36)
+ ├── G28: (index-join G38 t61795,cols=(11-13))
  │    └── []
- │         ├── best: (index-join G37 t61795,cols=(11-13))
+ │         ├── best: (index-join G38 t61795,cols=(11-13))
  │         └── cost: 1059.60
- ├── G28: (scan t61795 [as=t1],cols=(16-18))
+ ├── G29: (scan t61795 [as=t1],cols=(16-18))
  │    ├── [ordering: +16]
  │    │    ├── best: (scan t61795 [as=t1],cols=(16-18))
  │    │    └── cost: 1084.62
  │    ├── [ordering: +17]
- │    │    ├── best: (sort G28)
+ │    │    ├── best: (sort G29)
  │    │    └── cost: 1334.10
  │    └── []
  │         ├── best: (scan t61795 [as=t1],cols=(16-18))
  │         └── cost: 1084.62
- ├── G29: (filters G38 G39)
- ├── G30: (index-join G40 t61795,cols=(16-18))
+ ├── G30: (filters G39 G40)
+ ├── G31: (index-join G41 t61795,cols=(16-18))
  │    ├── [ordering: +16]
- │    │    ├── best: (index-join G40="[ordering: +16]" t61795,cols=(16-18))
+ │    │    ├── best: (index-join G41="[ordering: +16]" t61795,cols=(16-18))
  │    │    └── cost: 3118.52
  │    ├── [ordering: +17]
- │    │    ├── best: (index-join G40="[ordering: +17]" t61795,cols=(16-18))
+ │    │    ├── best: (index-join G41="[ordering: +17]" t61795,cols=(16-18))
  │    │    └── cost: 3050.07
  │    └── []
- │         ├── best: (index-join G40 t61795,cols=(16-18))
+ │         ├── best: (index-join G41 t61795,cols=(16-18))
  │         └── cost: 3050.07
- ├── G31: (filters G38)
- ├── G32: (variable t1.a)
- ├── G33: (const 10)
- ├── G34: (function G41 abs)
- ├── G35: (eq G42 G43)
- ├── G36: (eq G44 G33)
- ├── G37: (select G45 G46)
+ ├── G32: (filters G39)
+ ├── G33: (variable t1.a)
+ ├── G34: (const 10)
+ ├── G35: (function G42 abs)
+ ├── G36: (eq G43 G44)
+ ├── G37: (eq G45 G34)
+ ├── G38: (select G46 G47)
  │    └── []
- │         ├── best: (select G45 G46)
+ │         ├── best: (select G46 G47)
  │         └── cost: 1053.54
- ├── G38: (eq G47 G48)
- ├── G39: (ne G48 G49)
- ├── G40: (select G50 G51)
+ ├── G39: (eq G48 G49)
+ ├── G40: (ne G49 G50)
+ ├── G41: (select G51 G52)
  │    ├── [ordering: +16]
- │    │    ├── best: (sort G40)
+ │    │    ├── best: (sort G41)
  │    │    └── cost: 1122.00
  │    ├── [ordering: +17]
- │    │    ├── best: (select G50="[ordering: +17]" G51)
+ │    │    ├── best: (select G51="[ordering: +17]" G52)
  │    │    └── cost: 1053.55
  │    └── []
- │         ├── best: (select G50 G51)
+ │         ├── best: (select G51 G52)
  │         └── cost: 1053.55
- ├── G41: (scalar-list G18)
- ├── G42: (variable t1.c)
- ├── G43: (variable t1.b)
- ├── G44: (variable t1.a)
- ├── G45: (scan t61795@t61795_b_key [as=t1],cols=(11,12),constrained)
+ ├── G42: (scalar-list G19)
+ ├── G43: (variable t1.c)
+ ├── G44: (variable t1.b)
+ ├── G45: (variable t1.a)
+ ├── G46: (scan t61795@t61795_b_key [as=t1],cols=(11,12),constrained)
  │    └── []
  │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(11,12),constrained)
  │         └── cost: 1043.62
- ├── G46: (filters G36)
- ├── G47: (variable t1.c)
- ├── G48: (variable t1.b)
- ├── G49: (function G52 abs)
- ├── G50: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
+ ├── G47: (filters G37)
+ ├── G48: (variable t1.c)
+ ├── G49: (variable t1.b)
+ ├── G50: (function G53 abs)
+ ├── G51: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
  │    ├── [ordering: +16]
- │    │    ├── best: (sort G50)
+ │    │    ├── best: (sort G51)
  │    │    └── cost: 1280.42
  │    ├── [ordering: +17]
  │    │    ├── best: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
@@ -8360,8 +8380,8 @@ memo (optimized, ~33KB, required=[presentation: a:1] [ordering: +2])
  │    └── []
  │         ├── best: (scan t61795@t61795_b_key [as=t1],cols=(16,17),constrained)
  │         └── cost: 1043.62
- ├── G51: (filters G39)
- └── G52: (scalar-list G48)
+ ├── G52: (filters G40)
+ └── G53: (scalar-list G49)
 
 # --------------------------------------------------
 # SplitDisjunctionAddKey

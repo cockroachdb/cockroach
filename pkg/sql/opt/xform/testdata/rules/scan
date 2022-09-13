@@ -324,13 +324,20 @@ scan a@si_idx,rev
 memo
 SELECT s, j FROM a ORDER BY s
 ----
-memo (optimized, ~3KB, required=[presentation: s:4,j:5] [ordering: +4])
- └── G1: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
-      ├── [presentation: s:4,j:5] [ordering: +4]
-      │    ├── best: (scan a@si_idx,rev,cols=(4,5))
-      │    └── cost: 1185.27
+memo (optimized, ~4KB, required=[presentation: s:4,j:5] [ordering: +4])
+ ├── G1: (scan a,cols=(4,5)) (index-join G2 a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
+ │    ├── [presentation: s:4,j:5] [ordering: +4]
+ │    │    ├── best: (scan a@si_idx,rev,cols=(4,5))
+ │    │    └── cost: 1185.27
+ │    └── []
+ │         ├── best: (scan a@si_idx,cols=(4,5))
+ │         └── cost: 1084.62
+ └── G2: (scan a@s_idx,cols=(1,4))
+      ├── [ordering: +4]
+      │    ├── best: (scan a@s_idx,cols=(1,4))
+      │    └── cost: 1084.62
       └── []
-           ├── best: (scan a@si_idx,cols=(4,5))
+           ├── best: (scan a@s_idx,cols=(1,4))
            └── cost: 1084.62
 
 # Consider three different indexes, and pick index with multiple keys.
@@ -423,6 +430,85 @@ insert fk_b
                 │    ├── key: ()
                 │    └── fd: ()-->(7)
                 └── filters (true)
+
+# Regression test for support issue #1453
+exec-ddl
+CREATE TABLE table_a (
+id UUID NOT NULL DEFAULT gen_random_uuid(),
+seq INT8 NOT NULL,
+checksum STRING NOT NULL,
+created_at TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+CONSTRAINT "primary" PRIMARY KEY (id ASC),
+INDEX table_a_seq_index (seq ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE table_b (
+seq INT8 NOT NULL,
+checksum STRING NULL,
+tstamp TIMESTAMPTZ NULL,
+created_at TIMESTAMPTZ NULL,
+CONSTRAINT "primary" PRIMARY KEY (seq ASC),
+INDEX table_b_checksum_index (checksum ASC)
+)
+----
+
+# An unconstrained index scan on table_a_seq_index should be used because it
+# provides the ordering of the ORDER BY clause.
+opt
+SELECT * FROM table_a a ORDER BY a.seq DESC LIMIT 1
+----
+index-join table_a
+ ├── columns: id:1!null seq:2!null checksum:3!null created_at:4!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ └── scan table_a@table_a_seq_index,rev [as=a]
+      ├── columns: id:1!null seq:2!null
+      ├── limit: 1(rev)
+      ├── key: ()
+      └── fd: ()-->(1,2)
+
+# An unconstrained index scan on table_a_seq_index should be used because it
+# provides the ordering of the ORDER BY clause.
+opt
+SELECT a.checksum,a.seq FROM table_a a
+INNER LOOKUP JOIN table_b b
+ON a.checksum = b.checksum
+ORDER BY a.seq DESC
+LIMIT 1
+----
+project
+ ├── columns: checksum:3!null seq:2!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2,3)
+ └── limit
+      ├── columns: a.seq:2!null a.checksum:3!null b.checksum:8!null
+      ├── internal-ordering: -2
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2,3,8), (8)==(3), (3)==(8)
+      ├── inner-join (lookup table_b@table_b_checksum_index [as=b])
+      │    ├── columns: a.seq:2!null a.checksum:3!null b.checksum:8!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [3] = [8]
+      │    ├── fd: (3)==(8), (8)==(3)
+      │    ├── ordering: -2
+      │    ├── limit hint: 1.00
+      │    ├── index-join table_a
+      │    │    ├── columns: a.seq:2!null a.checksum:3!null
+      │    │    ├── ordering: -2
+      │    │    ├── limit hint: 100.00
+      │    │    └── scan table_a@table_a_seq_index,rev [as=a]
+      │    │         ├── columns: id:1!null a.seq:2!null
+      │    │         ├── key: (1)
+      │    │         ├── fd: (1)-->(2)
+      │    │         ├── ordering: -2
+      │    │         └── limit hint: 100.00
+      │    └── filters (true)
+      └── 1
 
 # --------------------------------------------------
 # GenerateLocalityOptimizedScan
