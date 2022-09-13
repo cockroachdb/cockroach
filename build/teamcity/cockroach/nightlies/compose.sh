@@ -8,7 +8,7 @@ source "$dir/teamcity-bazel-support.sh"
 
 tc_start_block "Run compose tests"
 
-bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
+bazel build //pkg/cmd/bazci --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 BAZCI=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci
 
@@ -21,7 +21,7 @@ mkdir -p $ARTIFACTS_DIR
 GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 
 exit_status=0
-$BAZCI --artifacts_dir=$ARTIFACTS_DIR -- \
+$BAZCI --go_test_json_output_file=$GO_TEST_JSON_OUTPUT_FILE --artifacts_dir=$ARTIFACTS_DIR -- \
        test --config=ci //pkg/compose:compose_test \
        "--sandbox_writable_path=$ARTIFACTSDIR" \
        "--test_tmpdir=$ARTIFACTSDIR" \
@@ -30,12 +30,6 @@ $BAZCI --artifacts_dir=$ARTIFACTS_DIR -- \
        --test_arg -cockroach --test_arg $COCKROACH \
        --test_arg -compare --test_arg $COMPAREBIN \
        --test_timeout=1800 || exit_status=$?
-process_test_json \
-        $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
-        $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
-        $ARTIFACTS_DIR \
-        $GO_TEST_JSON_OUTPUT_FILE \
-        $exit_status
 
 tc_end_block "Run compose tests"
 exit $exit_status

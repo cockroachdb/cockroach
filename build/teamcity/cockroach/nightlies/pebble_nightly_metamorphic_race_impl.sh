@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
-source "$dir/teamcity-bazel-support.sh"  # For process_test_json
 
 set -euxo pipefail
 ARTIFACTS_DIR=/artifacts/meta
@@ -10,7 +9,7 @@ GO_TEST_JSON_OUTPUT_FILE=/artifacts/test.json.txt
 
 echo "TC_SERVER_URL is $TC_SERVER_URL"
 
-bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
+bazel build //pkg/cmd/bazci --config=ci
 
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
 
@@ -18,7 +17,7 @@ exit_status=0
 # NB: If adjusting the metamorphic test flags below, be sure to also update
 # pkg/cmd/github-post/main.go to ensure the GitHub issue poster includes the
 # correct flags in the reproduction command.
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- --config=race --config=ci test \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --go_test_json_output_file=$GO_TEST_JSON_OUTPUT_FILE --formatter=pebble-metamorphic -- --config=race --config=ci test \
                                       @com_github_cockroachdb_pebble//internal/metamorphic:metamorphic_test \
                                       --test_timeout=14400 '--test_filter=TestMeta$' \
                                       --define gotags=bazel,invariants \
@@ -28,10 +27,5 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- --config=race --config=ci test \
                                       --test_arg -ops --test_arg "uniform:5000-10000" \
                                       --test_output streamed \
     || exit_status=$?
-
-BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS=--formatter=pebble-metamorphic process_test_json \
-    $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
-    $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
-    /artifacts $GO_TEST_JSON_OUTPUT_FILE $exit_status
 
 exit $exit_status

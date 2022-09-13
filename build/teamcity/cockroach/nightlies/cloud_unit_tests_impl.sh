@@ -3,10 +3,9 @@
 set -xeuo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
-source "$dir/teamcity-bazel-support.sh"  # For process_test_json
 source "$dir/teamcity-support.sh"  # For log_into_gcloud
 
-bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
+bazel build //pkg/cmd/bazci --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 
 ARTIFACTS_DIR=/artifacts
@@ -25,7 +24,7 @@ export AWS_CONFIG_FILE="$PWD/.aws/config"
 log_into_aws
 
 exit_status=0
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- --config=ci \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --go_test_json_output_file=$GO_TEST_JSON_OUTPUT_FILE -- --config=ci \
     test //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test //pkg/ccl/cloudccl/gcp:gcp_test //pkg/ccl/cloudccl/amazon:amazon_test \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
@@ -50,12 +49,5 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- --config=ci \
     --test_env=AWS_CONFIG_FILE="$AWS_CONFIG_FILE" \
     --test_timeout=900 \
     || exit_status=$?
-
-process_test_json \
-  $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
-  $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
-  $ARTIFACTS_DIR \
-  $GO_TEST_JSON_OUTPUT_FILE \
-  $exit_status
 
 exit $exit_status
