@@ -503,15 +503,10 @@ func (p *pebbleIterator) NextKey() {
 
 // UnsafeKey implements the MVCCIterator interface.
 func (p *pebbleIterator) UnsafeKey() MVCCKey {
-	if valid, err := p.Valid(); err != nil || !valid {
-		return MVCCKey{}
-	}
-
 	mvccKey, err := DecodeMVCCKey(p.iter.Key())
 	if err != nil {
 		return MVCCKey{}
 	}
-
 	return mvccKey
 }
 
