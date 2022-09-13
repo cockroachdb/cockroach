@@ -498,7 +498,7 @@ func (b *Builder) buildArrayFlatten(
 	typ := b.mem.Metadata().ColumnMeta(af.RequestedCol).Type
 	e := b.addSubquery(
 		exec.SubqueryAllRows, typ, root.root, af.OriginalExpr,
-		int64(af.Input.Relational().Stats.RowCountIfAvailable()),
+		int64(af.Input.Relational().Statistics().RowCountIfAvailable()),
 	)
 
 	return tree.NewTypedArrayFlattenExpr(e), nil
@@ -555,7 +555,7 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	typs := types.MakeTuple(contents)
 	subqueryExpr := b.addSubquery(
 		exec.SubqueryAnyRows, typs, plan.root, any.OriginalExpr,
-		int64(any.Input.Relational().Stats.RowCountIfAvailable()),
+		int64(any.Input.Relational().Statistics().RowCountIfAvailable()),
 	)
 
 	// Build the scalar value that is compared against each row.
@@ -591,7 +591,7 @@ func (b *Builder) buildExistsSubquery(
 
 	return b.addSubquery(
 		exec.SubqueryExists, types.Bool, plan.root, exists.OriginalExpr,
-		int64(exists.Input.Relational().Stats.RowCountIfAvailable()),
+		int64(exists.Input.Relational().Statistics().RowCountIfAvailable()),
 	), nil
 }
 
@@ -621,7 +621,7 @@ func (b *Builder) buildSubquery(
 
 	return b.addSubquery(
 		exec.SubqueryOneRow, subquery.Typ, plan.root, subquery.OriginalExpr,
-		int64(input.Relational().Stats.RowCountIfAvailable()),
+		int64(input.Relational().Statistics().RowCountIfAvailable()),
 	), nil
 }
 
