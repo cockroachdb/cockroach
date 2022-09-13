@@ -184,6 +184,7 @@ go_test(
         "function_name_test.go",
         "indexed_vars_test.go",
         "interval_test.go",
+        "json_test.go",
         "main_test.go",
         "name_part_test.go",
         "name_resolution_test.go",
