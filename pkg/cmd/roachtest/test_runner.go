@@ -104,8 +104,10 @@ type testRunner struct {
 // newTestRunner constructs a testRunner.
 //
 // cr: The cluster registry with which all clusters will be registered. The
-//   caller provides this as the caller needs to be able to shut clusters down
-//   on Ctrl+C.
+//
+//	caller provides this as the caller needs to be able to shut clusters down
+//	on Ctrl+C.
+//
 // buildVersion: The version of the Cockroach binary against which tests will run.
 func newTestRunner(
 	cr *clusterRegistry, stopper *stop.Stopper, buildVersion version.Version,
@@ -169,9 +171,11 @@ type testOpts struct {
 // tests: The tests to run.
 // count: How many times to run each test selected by filter.
 // parallelism: How many workers to use for running tests. Tests are run
-//   locally (although generally they run against remote roachprod clusters).
-//   parallelism bounds the maximum number of tests that run concurrently. Note
-//   that the concurrency is also affected by cpuQuota.
+//
+//	locally (although generally they run against remote roachprod clusters).
+//	parallelism bounds the maximum number of tests that run concurrently. Note
+//	that the concurrency is also affected by cpuQuota.
+//
 // clusterOpt: Options for the clusters to use by tests.
 // lopt: Options for logging.
 func (r *testRunner) Run(
@@ -419,11 +423,17 @@ type clusterAllocatorFn func(
 // Args:
 // name: The worker's name, to be used as a prefix for log messages.
 // artifactsRootDir: The artifacts dir. Each test's logs are going to be under a
-//   run_<n> dir. If empty, test log files will not be created.
+//
+//	run_<n> dir. If empty, test log files will not be created.
+//
 // literalArtifactsDir: The literal on-agent path where artifacts are stored.
-//      Only used for teamcity[publishArtifacts] messages.
+//
+//	Only used for teamcity[publishArtifacts] messages.
+//
 // stdout: The Writer to use for messages that need to go to stdout (e.g. the
-// 	 "=== RUN" and "--- FAIL" lines).
+//
+//	"=== RUN" and "--- FAIL" lines).
+//
 // teeOpt: The teeing option for future test loggers.
 // l: The logger to use for more verbose messages.
 func (r *testRunner) runWorker(
@@ -543,6 +553,13 @@ func (r *testRunner) runWorker(
 				testToRun.canReuseCluster = false
 			}
 		}
+
+		// Verify that required native libraries are available.
+		if err = VerifyLibraries(testToRun.spec.NativeLibs); err != nil {
+			shout(ctx, l, stdout, "Library verification failed: %s", err)
+			return err
+		}
+
 		var clusterCreateErr error
 
 		if !testToRun.canReuseCluster {
@@ -611,28 +628,32 @@ func (r *testRunner) runWorker(
 			t.spec.Name = oldName
 			t.spec.Owner = oldOwner
 		} else {
-			// Tell the cluster that, from now on, it will be run "on behalf of this
-			// test".
-			c.status("running test")
 			c.setTest(t)
+			err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
 
-			switch t.Spec().(*registry.TestSpec).EncryptionSupport {
-			case registry.EncryptionAlwaysEnabled:
-				c.encAtRest = true
-			case registry.EncryptionAlwaysDisabled:
-				c.encAtRest = false
-			case registry.EncryptionMetamorphic:
-				// when tests opted-in to metamorphic testing, encryption will
-				// be enabled according to the probability passed to
-				// --metamorphic-encryption-probability
-				c.encAtRest = prng.Float64() < encryptionProbability
+			if err == nil {
+				// Tell the cluster that, from now on, it will be run "on behalf of this
+				// test".
+				c.status("running test")
+
+				switch t.Spec().(*registry.TestSpec).EncryptionSupport {
+				case registry.EncryptionAlwaysEnabled:
+					c.encAtRest = true
+				case registry.EncryptionAlwaysDisabled:
+					c.encAtRest = false
+				case registry.EncryptionMetamorphic:
+					// when tests opted-in to metamorphic testing, encryption will
+					// be enabled according to the probability passed to
+					// --metamorphic-encryption-probability
+					c.encAtRest = prng.Float64() < encryptionProbability
+				}
+
+				wStatus.SetCluster(c)
+				wStatus.SetTest(t, testToRun)
+				wStatus.SetStatus("running test")
+
+				err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL)
 			}
-
-			wStatus.SetCluster(c)
-			wStatus.SetTest(t, testToRun)
-			wStatus.SetStatus("running test")
-
-			err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL)
 		}
 
 		if err != nil {
@@ -735,7 +756,8 @@ func allStacks() []byte {
 //
 // Args:
 // c: The cluster on which the test will run. runTest() does not wipe or destroy
-//    the cluster.
+//
+//	the cluster.
 func (r *testRunner) runTest(
 	ctx context.Context,
 	t *testImpl,
@@ -770,11 +792,9 @@ func (r *testRunner) runTest(
 		t.end = timeutil.Now()
 
 		// We only have to record panics if the panic'd value is not the sentinel
-		// produced by t.Fatal*().
-		//
-		// TODO(test-eng): we shouldn't be seeing errTestFatal here unless this
-		// goroutine accidentally ends up calling t.Fatal; the test runs in a
-		// different goroutine.
+		// produced by t.Fatal*(). We may see calls to t.Fatal from this goroutine
+		// during the post-flight checks; the test itself runs on a different
+		// goroutine and has similar code to terminate errTestFatal.
 		if err := recover(); err != nil && err != errTestFatal {
 			t.mu.Lock()
 			t.mu.failed = true
@@ -1191,7 +1211,6 @@ type getWorkCallbacks struct {
 // getWork takes in a cluster; if not nil, tests that can reuse it are
 // preferred. If a test that can reuse it is not found (or if there's no more
 // work), the cluster is destroyed (and so its resources are released).
-//
 func (r *testRunner) getWork(
 	ctx context.Context,
 	work *workPool,
@@ -1243,7 +1262,8 @@ func (r *testRunner) removeWorker(ctx context.Context, name string) {
 // runHTTPServer starts a server running in the background.
 //
 // httpPort: The port on which to serve the web interface. Pass 0 for allocating
-// 	 a port automatically (which will be printed to stdout).
+//
+//	a port automatically (which will be printed to stdout).
 func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer) error {
 	http.HandleFunc("/", r.serveHTTP)
 	// Run an http server in the background.

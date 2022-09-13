@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -721,6 +722,24 @@ ORDER BY table_name
 			data:     `dog,{some,thing}`,
 			err:      "error parsing row 1: expected 2 fields, got 3",
 			rejected: "dog,{some,thing}\n",
+		},
+		{
+			name:     "hint for quoted string matching nullif when allow_quoted_null is not set",
+			create:   `a string, b bool`,
+			with:     `WITH nullif = 'NULL'`,
+			typ:      "CSV",
+			data:     `dog,"NULL"`,
+			err:      "null value is quoted but allow_quoted_null option is not set",
+			rejected: "dog,\"NULL\"\n",
+		},
+		{
+			name:     "hint for extra leading whitespace in string matching nullif",
+			create:   `a string, b bool`,
+			with:     `WITH nullif = 'NULL'`,
+			typ:      "CSV",
+			data:     `dog, NULL`,
+			err:      "null value must not have extra whitespace",
+			rejected: "dog, NULL\n",
 		},
 
 		// PG COPY
@@ -1980,7 +1999,10 @@ func TestFailedImportGC(t *testing.T) {
 		SQLMemoryPoolSize:        256 << 20,
 		ExternalIODir:            baseDir,
 		Knobs: base.TestingKnobs{
-			GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
+			GCJob: &sql.GCJobTestingKnobs{
+				RunBeforeResume:      func(_ jobspb.JobID) error { <-blockGC; return nil },
+				SkipWaitingForMVCCGC: true,
+			},
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
@@ -5106,7 +5128,6 @@ func TestImportControlJobRBAC(t *testing.T) {
 // worker node.
 func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 73546, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	allowResponse := make(chan struct{})
@@ -5121,6 +5142,11 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Lower the initial buffering adder ingest size to allow import jobs to run
+	// without exceeding the test memory monitor.
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.index_buffer_size = '16MiB'`)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -6051,12 +6077,19 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	const nodes = 1
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "pgdump")
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+	mkArgs := func() base.TestServerArgs {
+		s := cluster.MakeTestingClusterSettings()
+		storage.MVCCRangeTombstonesEnabled.Override(ctx, &s.SV, true)
+		return base.TestServerArgs{
+			Settings:      s,
+			ExternalIODir: baseDir,
+		}
+	}
 
 	// Simple schema test which creates 3 schemas with a single `test` table in
 	// each schema.
 	t.Run("schema.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6109,7 +6142,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	})
 
 	t.Run("target-table-schema.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6154,6 +6187,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 		// Test fails within a test tenant. More investigation is required.
 		// Tracked with #76378.
+		args := mkArgs()
 		args.DisableDefaultTestTenant = true
 		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)

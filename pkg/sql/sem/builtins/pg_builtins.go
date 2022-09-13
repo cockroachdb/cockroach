@@ -96,7 +96,7 @@ func PGIOBuiltinPrefix(typ *types.T) string {
 }
 
 // initPGBuiltins adds all of the postgres builtins to the builtins map.
-func initPGBuiltins() {
+func init() {
 	for k, v := range pgBuiltins {
 		v.props.Category = builtinconstants.CategoryCompatibility
 		registerBuiltin(k, v)

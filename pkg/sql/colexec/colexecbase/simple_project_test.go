@@ -91,9 +91,9 @@ func TestSimpleProjectOp(t *testing.T) {
 // TestSimpleProjectOpWithUnorderedSynchronizer sets up the following
 // structure:
 //
-//  input 1 --
-//            | --> unordered synchronizer --> simpleProjectOp --> constInt64Op
-//  input 2 --
+//	input 1 --
+//	          | --> unordered synchronizer --> simpleProjectOp --> constInt64Op
+//	input 2 --
 //
 // and makes sure that the output is as expected. The idea is to test
 // simpleProjectOp in case when it receives multiple "different internally"

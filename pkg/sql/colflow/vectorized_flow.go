@@ -950,7 +950,7 @@ func (s *vectorizedFlowCreator) setupInput(
 			os := colexec.NewOrderedSynchronizer(
 				colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 				execinfra.GetWorkMemLimit(flowCtx), inputStreamOps,
-				input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering),
+				input.ColumnTypes, execinfrapb.ConvertToColumnOrdering(input.Ordering), 0, /* tuplesToMerge */
 			)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            os,

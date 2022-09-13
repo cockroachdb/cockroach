@@ -241,3 +241,31 @@ func (hi *hypotheticalIndex) PartitionCount() int {
 func (hi *hypotheticalIndex) Partition(i int) cat.Partition {
 	return nil
 }
+
+// hasSameExplicitCols checks whether the given existing index has identical
+// explicit columns as the hypothetical index. To be identical, they need to
+// have the exact same list, length, and order. If the index is inverted, it
+// also checks to make sure that the inverted column has the same source column.
+// If so, it returns true.
+func (hi *hypotheticalIndex) hasSameExplicitCols(existingIndex cat.Index, isInverted bool) bool {
+	indexCols := hi.cols
+	if existingIndex.ExplicitColumnCount() != len(indexCols) {
+		return false
+	}
+	for j, m := 0, existingIndex.ExplicitColumnCount(); j < m; j++ {
+		// Compare every existingIndex columns with indexCols.
+		existingIndexCol := existingIndex.Column(j)
+		indexCol := indexCols[j]
+
+		if isInverted && existingIndex.IsInverted() && j == m-1 {
+			// If the column is inverted, compare the source columns.
+			if existingIndexCol.InvertedSourceColumnOrdinal() != indexCol.InvertedSourceColumnOrdinal() {
+				return false
+			}
+		} else if existingIndexCol != indexCol {
+			// Otherwise, compare every column directly.
+			return false
+		}
+	}
+	return true
+}

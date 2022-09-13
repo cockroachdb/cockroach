@@ -459,13 +459,13 @@ func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig
 // limit if needed. Returns an error if the hard limit is too low. Returns the
 // value to set maxOpenFiles to for each store.
 //
-// Minimum - 1700 per store, 256 saved for networking
+// # Minimum - 1700 per store, 256 saved for networking
 //
-// Constrained - 256 saved for networking, rest divided evenly per store
+// # Constrained - 256 saved for networking, rest divided evenly per store
 //
-// Constrained (network only) - 10000 per store, rest saved for networking
+// # Constrained (network only) - 10000 per store, rest saved for networking
 //
-// Recommended - 10000 per store, 5000 for network
+// # Recommended - 10000 per store, 5000 for network
 //
 // Please note that current and max limits are commonly referred to as the soft
 // and hard limits respectively.
@@ -537,7 +537,7 @@ func (cfg *Config) Report(ctx context.Context) {
 	} else {
 		log.Infof(ctx, "system total memory: %s", humanizeutil.IBytes(memSize))
 	}
-	log.Infof(ctx, "server configuration:\n%s", cfg)
+	log.Infof(ctx, "server configuration:\n%s", log.SafeManaged(cfg))
 }
 
 // Engines is a container of engines, allowing convenient closing.
@@ -545,6 +545,7 @@ type Engines []storage.Engine
 
 // Close closes all the Engines.
 // This method has a pointer receiver so that the following pattern works:
+//
 //	func f() {
 //		engines := Engines(engineSlice)
 //		defer engines.Close()  // make sure the engines are Closed if this
@@ -731,7 +732,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 
 	log.Infof(ctx, "%d storage engine%s initialized",
-		len(engines), util.Pluralize(int64(len(engines))))
+		len(engines), redact.Safe(util.Pluralize(int64(len(engines)))))
 	for _, s := range details {
 		log.Infof(ctx, "%v", s)
 	}

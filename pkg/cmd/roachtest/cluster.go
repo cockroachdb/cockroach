@@ -35,6 +35,7 @@ import (
 	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -184,6 +185,36 @@ func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
 		return "", errBinaryOrLibraryNotFound{name}
 	}
 	return filepathAbs(path)
+}
+
+// VerifyLibraries verifies that the required libraries, specified by name, are
+// available for the target environment.
+func VerifyLibraries(requiredLibs []string) error {
+	for _, requiredLib := range requiredLibs {
+		if !contains(libraryFilePaths, libraryNameFromPath, requiredLib) {
+			return errors.Wrap(errors.Errorf("missing required library %s", requiredLib), "cluster.VerifyLibraries")
+		}
+	}
+	return nil
+}
+
+// libraryNameFromPath returns the name of a library without the extension, for a
+// given path.
+func libraryNameFromPath(path string) string {
+	filename := filepath.Base(path)
+	return strings.TrimSuffix(filename, filepath.Ext(filename))
+}
+
+func contains(list []string, transformString func(s string) string, str string) bool {
+	if transformString == nil {
+		transformString = func(s string) string { return s }
+	}
+	for _, element := range list {
+		if transformString(element) == str {
+			return true
+		}
+	}
+	return false
 }
 
 func initBinariesAndLibraries() {
@@ -1303,53 +1334,8 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) {
 	}
 }
 
-// CheckReplicaDivergenceOnDB runs a fast consistency check of the whole keyspace
-// against the provided db. If an inconsistency is found, it returns it in the
-// error. Note that this will swallow errors returned directly from the consistency
-// check since we know that such spurious errors are possibly without any relation
-// to the check having failed.
-func (c *clusterImpl) CheckReplicaDivergenceOnDB(
-	ctx context.Context, l *logger.Logger, db *gosql.DB,
-) error {
-	// NB: we set a statement_timeout since context cancellation won't work here,
-	// see:
-	// https://github.com/cockroachdb/cockroach/pull/34520
-	//
-	// We've seen the consistency checks hang indefinitely in some cases.
-	rows, err := db.QueryContext(ctx, `
-SET statement_timeout = '5m';
-SELECT t.range_id, t.start_key_pretty, t.status, t.detail
-FROM
-crdb_internal.check_consistency(true, '', '') as t
-WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
-	if err != nil {
-		// TODO(tbg): the checks can fail for silly reasons like missing gossiped
-		// descriptors, etc. -- not worth failing the test for. Ideally this would
-		// be rock solid.
-		l.Printf("consistency check failed with %v; ignoring", err)
-		return nil
-	}
-	defer rows.Close()
-	var finalErr error
-	for rows.Next() {
-		var rangeID int32
-		var prettyKey, status, detail string
-		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); scanErr != nil {
-			l.Printf("consistency check failed with %v; ignoring", scanErr)
-			return nil
-		}
-		finalErr = errors.CombineErrors(finalErr,
-			errors.Newf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail))
-	}
-	if err := rows.Err(); err != nil {
-		l.Printf("consistency check failed with %v; ignoring", err)
-		return nil
-	}
-	return finalErr
-}
-
 // FailOnReplicaDivergence fails the test if
-// crdb_internal.check_consistency(true, '', '') indicates that any ranges'
+// crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
 // replicas are inconsistent with each other. It uses the first node that
 // is up to run the query.
 func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) {
@@ -1385,7 +1371,7 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) 
 	if err := contextutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
-			return c.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
+			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},
 	); err != nil {
 		t.Errorf("consistency check failed: %v", err)
@@ -1648,13 +1634,17 @@ func (c *clusterImpl) PutE(
 	return errors.Wrap(roachprod.Put(ctx, l, c.MakeNodes(nodes...), src, dest, true /* useTreeDist */), "cluster.PutE")
 }
 
-// PutLibraries inserts all available library files into all nodes on the cluster
+// PutLibraries inserts the specified libraries, by name, into all nodes on the cluster
 // at the specified location.
-func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error {
+func (c *clusterImpl) PutLibraries(
+	ctx context.Context, libraryDir string, libraries []string,
+) error {
+	if len(libraries) == 0 {
+		return nil
+	}
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Put")
 	}
-
 	c.status("uploading library files")
 	defer c.status("")
 
@@ -1662,6 +1652,9 @@ func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error
 		return err
 	}
 	for _, libraryFilePath := range libraryFilePaths {
+		if !contains(libraries, nil, libraryNameFromPath(libraryFilePath)) {
+			continue
+		}
 		putPath := filepath.Join(libraryDir, filepath.Base(libraryFilePath))
 		if err := c.PutE(
 			ctx,

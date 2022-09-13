@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,7 +34,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func initProbeRangesBuiltins() {
+func init() {
 	// Add all windows to the Builtins map after a few sanity checks.
 	for k, v := range probeRangesGenerators {
 		if v.props.Class != tree.GeneratorClass {
@@ -47,7 +48,9 @@ func initProbeRangesBuiltins() {
 var probeRangesGenerators = map[string]builtinDefinition{
 	"crdb_internal.probe_ranges": makeBuiltin(
 		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
+			Category:     builtinconstants.CategorySystemInfo,
+			Class:        tree.GeneratorClass,
+			Undocumented: true,
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{

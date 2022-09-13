@@ -34,8 +34,9 @@ type dropViewNode struct {
 
 // DropView drops a view.
 // Privileges: DROP on view.
-//   Notes: postgres allows only the view owner to DROP a view.
-//          mysql requires the DROP privilege on the view.
+//
+//	Notes: postgres allows only the view owner to DROP a view.
+//	       mysql requires the DROP privilege on the view.
 func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,

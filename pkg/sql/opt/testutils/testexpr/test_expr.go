@@ -21,11 +21,10 @@ import (
 // extracted via that interface. It can be initialized with whatever subset of
 // fields are required for the particular test; for example:
 //
-//   e := &testexpr.Instance{
-//     Rel: &props.Relational{...},
-//     Provided: &physical.Provided{...},
-//   }
-//
+//	e := &testexpr.Instance{
+//	  Rel: &props.Relational{...},
+//	  Provided: &physical.Provided{...},
+//	}
 type Instance struct {
 	Rel      *props.Relational
 	Required *physical.Required

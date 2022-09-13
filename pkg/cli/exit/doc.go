@@ -39,11 +39,10 @@
 //
 // This package accommodates this as follows:
 //
-// - exit codes common to all commands should be allocated
-//   incrementally starting from the last defined common error
-//   in codes.go.
+//   - exit codes common to all commands should be allocated
+//     incrementally starting from the last defined common error
+//     in codes.go.
 //
-// - exit codes specific to one command should be allocated downwards
-//   starting from 125.
-//
+//   - exit codes specific to one command should be allocated downwards
+//     starting from 125.
 package exit

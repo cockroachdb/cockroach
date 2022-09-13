@@ -82,7 +82,8 @@ import (
 // stmt: The statement to execute.
 // res: Used to produce query results.
 // pinfo: The values to use for the statement's placeholders. If nil is passed,
-// 	 then the statement cannot have any placeholder.
+//
+//	then the statement cannot have any placeholder.
 func (ex *connExecutor) execStmt(
 	ctx context.Context,
 	parserStmt parser.Statement,
@@ -978,9 +979,11 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	// Now that we've committed, if we modified any descriptor we need to make sure
 	// to release the leases for them so that the schema change can proceed and
 	// we don't block the client.
-	if descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(); descs != nil {
-		ex.extraTxnState.descCollection.ReleaseLeases(ctx)
+	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil || withNewVersion == nil {
+		return err
 	}
+	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 	return nil
 }
 
@@ -1681,9 +1684,9 @@ func (ex *connExecutor) beginImplicitTxn(
 
 // execStmtInAbortedState executes a statement in a txn that's in state
 // Aborted or RestartWait. All statements result in error events except:
-// - COMMIT / ROLLBACK: aborts the current transaction.
-// - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
-//   allowing it to be retried.
+//   - COMMIT / ROLLBACK: aborts the current transaction.
+//   - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
+//     allowing it to be retried.
 func (ex *connExecutor) execStmtInAbortedState(
 	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
 ) (_ fsm.Event, payload fsm.EventPayload) {

@@ -41,6 +41,7 @@ import {
   calculateTotalWorkload,
   Duration,
   formatNumberForDisplay,
+  unset,
 } from "src/util";
 import { UIConfigState } from "../store";
 import SQLActivityError from "../sqlActivity/errorComponent";
@@ -394,6 +395,14 @@ export class TransactionDetails extends React.Component<
                             duration,
                           )}
                         />
+                        <SummaryCardItem
+                          label="Application name"
+                          value={
+                            transaction?.stats_data?.app?.length > 0
+                              ? transaction?.stats_data?.app
+                              : unset
+                          }
+                        />
                         <p
                           className={summaryCardStylesCx(
                             "summary--card__divider",
@@ -451,7 +460,7 @@ export class TransactionDetails extends React.Component<
                         "transactionDetails",
                         isTenant,
                         hasViewActivityRedactedRole,
-                      )}
+                      ).filter(c => !(isTenant && c.hideIfTenant))}
                       className={cx("statements-table")}
                       sortSetting={sortSetting}
                       onChangeSortSetting={this.onChangeSortSetting}

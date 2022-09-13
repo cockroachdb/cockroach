@@ -1010,11 +1010,11 @@ func (s *Server) Start(ctx context.Context) error {
 // underinitialized services. This is avoided with some additional
 // complexity that can be summarized as follows:
 //
-// - before blocking trying to connect to the Gossip network, we already open
-//   the admin UI (so that its diagnostics are available)
-// - we also allow our Gossip and our connection health Ping service
-// - everything else returns Unavailable errors (which are retryable)
-// - once the node has started, unlock all RPCs.
+//   - before blocking trying to connect to the Gossip network, we already open
+//     the admin UI (so that its diagnostics are available)
+//   - we also allow our Gossip and our connection health Ping service
+//   - everything else returns Unavailable errors (which are retryable)
+//   - once the node has started, unlock all RPCs.
 //
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
@@ -1518,14 +1518,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 	logPendingLossOfQuorumRecoveryEvents(ctx, s.node.stores)
 
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
-		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
+		redact.Safe(s.cfg.HTTPRequestScheme()), log.SafeManaged(s.cfg.HTTPAddr), log.SafeManaged(s.cfg.HTTPAdvertiseAddr))
 	rpcConnType := redact.SafeString("grpc/postgres")
 	if s.cfg.SplitListenSQL {
 		rpcConnType = "grpc"
-		log.Ops.Infof(ctx, "starting postgres server at %s (use: %s)", s.cfg.SQLAddr, s.cfg.SQLAdvertiseAddr)
+		log.Ops.Infof(ctx, "starting postgres server at %s (use: %s)",
+			log.SafeManaged(s.cfg.SQLAddr), log.SafeManaged(s.cfg.SQLAdvertiseAddr))
 	}
-	log.Ops.Infof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
-	log.Ops.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
+	log.Ops.Infof(ctx, "starting %s server at %s", log.SafeManaged(rpcConnType), log.SafeManaged(s.cfg.Addr))
+	log.Ops.Infof(ctx, "advertising CockroachDB node at %s", log.SafeManaged(s.cfg.AdvertiseAddr))
 
 	log.Event(ctx, "accepting connections")
 

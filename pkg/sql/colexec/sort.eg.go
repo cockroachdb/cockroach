@@ -339,6 +339,7 @@ func (s *sortBoolAscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortBoolAscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -432,6 +433,7 @@ func (s *sortBytesAscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortBytesAscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -518,6 +520,7 @@ func (s *sortDecimalAscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortDecimalAscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -595,6 +598,7 @@ func (s *sortInt16AscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortInt16AscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -683,6 +687,7 @@ func (s *sortInt32AscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortInt32AscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -771,6 +776,7 @@ func (s *sortInt64AscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortInt64AscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -859,6 +865,7 @@ func (s *sortFloat64AscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortFloat64AscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -955,6 +962,7 @@ func (s *sortTimestampAscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortTimestampAscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1039,6 +1047,7 @@ func (s *sortIntervalAscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortIntervalAscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1116,6 +1125,7 @@ func (s *sortJSONAscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortJSONAscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1199,6 +1209,7 @@ func (s *sortDatumAscWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortDatumAscWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1278,6 +1289,7 @@ func (s *sortBoolDescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortBoolDescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1371,6 +1383,7 @@ func (s *sortBytesDescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortBytesDescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1457,6 +1470,7 @@ func (s *sortDecimalDescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortDecimalDescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1534,6 +1548,7 @@ func (s *sortInt16DescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortInt16DescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1622,6 +1637,7 @@ func (s *sortInt32DescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortInt32DescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1710,6 +1726,7 @@ func (s *sortInt64DescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortInt64DescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1798,6 +1815,7 @@ func (s *sortFloat64DescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortFloat64DescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1894,6 +1912,7 @@ func (s *sortTimestampDescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortTimestampDescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -1978,6 +1997,7 @@ func (s *sortIntervalDescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortIntervalDescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -2055,6 +2075,7 @@ func (s *sortJSONDescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortJSONDescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -2138,6 +2159,7 @@ func (s *sortDatumDescWithNullsOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortDatumDescWithNullsOp) Less(i, j int) bool {
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
 	n2 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[j])
@@ -2217,6 +2239,7 @@ func (s *sortBoolAscOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortBoolAscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -2300,6 +2323,7 @@ func (s *sortBytesAscOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortBytesAscOp) Less(i, j int) bool {
 
 	// If the type can be abbreviated as a uint64, compare the abbreviated
@@ -2376,6 +2400,7 @@ func (s *sortDecimalAscOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortDecimalAscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -2444,7 +2469,6 @@ func (s *sortInt16AscOp) sortPartitions(partitions []int) {
 }
 
 //gcassert:inline
-//
 func (s *sortInt16AscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -2524,7 +2548,6 @@ func (s *sortInt32AscOp) sortPartitions(partitions []int) {
 }
 
 //gcassert:inline
-//
 func (s *sortInt32AscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -2604,7 +2627,6 @@ func (s *sortInt64AscOp) sortPartitions(partitions []int) {
 }
 
 //gcassert:inline
-//
 func (s *sortInt64AscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -2683,6 +2705,7 @@ func (s *sortFloat64AscOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortFloat64AscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -2769,6 +2792,7 @@ func (s *sortTimestampAscOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortTimestampAscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -2843,6 +2867,7 @@ func (s *sortIntervalAscOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortIntervalAscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -2910,6 +2935,7 @@ func (s *sortJSONAscOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortJSONAscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -2983,6 +3009,7 @@ func (s *sortDatumAscOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortDatumAscOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3052,6 +3079,7 @@ func (s *sortBoolDescOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortBoolDescOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3135,6 +3163,7 @@ func (s *sortBytesDescOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortBytesDescOp) Less(i, j int) bool {
 
 	// If the type can be abbreviated as a uint64, compare the abbreviated
@@ -3211,6 +3240,7 @@ func (s *sortDecimalDescOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortDecimalDescOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3279,7 +3309,6 @@ func (s *sortInt16DescOp) sortPartitions(partitions []int) {
 }
 
 //gcassert:inline
-//
 func (s *sortInt16DescOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3359,7 +3388,6 @@ func (s *sortInt32DescOp) sortPartitions(partitions []int) {
 }
 
 //gcassert:inline
-//
 func (s *sortInt32DescOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3439,7 +3467,6 @@ func (s *sortInt64DescOp) sortPartitions(partitions []int) {
 }
 
 //gcassert:inline
-//
 func (s *sortInt64DescOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3518,6 +3545,7 @@ func (s *sortFloat64DescOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortFloat64DescOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3604,6 +3632,7 @@ func (s *sortTimestampDescOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortTimestampDescOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3678,6 +3707,7 @@ func (s *sortIntervalDescOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortIntervalDescOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3745,6 +3775,7 @@ func (s *sortJSONDescOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortJSONDescOp) Less(i, j int) bool {
 
 	var lt bool
@@ -3818,6 +3849,7 @@ func (s *sortDatumDescOp) sortPartitions(partitions []int) {
 	}
 }
 
+//gcassert:inline
 func (s *sortDatumDescOp) Less(i, j int) bool {
 
 	var lt bool

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,6 +61,9 @@ func CollectionAndSubdir(path string, subdir string) (string, string) {
 func FindPriorBackups(
 	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
 ) ([]string, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupdest.FindPriorBackups")
+	defer sp.Finish()
+
 	var prev []string
 	if err := store.List(ctx, "", listingDelimDataSlash, func(p string) error {
 		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p); err != nil {
@@ -92,6 +96,9 @@ func FindPriorBackups(
 func backupsFromLocation(
 	ctx context.Context, user username.SQLUsername, execCfg *sql.ExecutorConfig, loc string,
 ) ([]string, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupdest.backupsFromLocation")
+	defer sp.Finish()
+
 	mkStore := execCfg.DistSQLSrv.ExternalStorageFromURI
 	store, err := mkStore(ctx, loc, user)
 	if err != nil {
@@ -100,6 +107,35 @@ func backupsFromLocation(
 	defer store.Close()
 	prev, err := FindPriorBackups(ctx, store, false)
 	return prev, err
+}
+
+// MakeBackupDestinationStores makes ExternalStorage handles to the passed in
+// destinationDirs, and returns a cleanup function that closes this stores. It
+// is the callers responsibility to call the returned cleanup function.
+func MakeBackupDestinationStores(
+	ctx context.Context,
+	user username.SQLUsername,
+	mkStore cloud.ExternalStorageFromURIFactory,
+	destinationDirs []string,
+) ([]cloud.ExternalStorage, func() error, error) {
+	incStores := make([]cloud.ExternalStorage, len(destinationDirs))
+	for i := range destinationDirs {
+		store, err := mkStore(ctx, destinationDirs[i], user)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "failed to open backup storage location")
+		}
+		incStores[i] = store
+	}
+
+	return incStores, func() error {
+		// Close all the incremental stores in the returned cleanup function.
+		for _, store := range incStores {
+			if err := store.Close(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, nil
 }
 
 // ResolveIncrementalsBackupLocation returns the resolved locations of
@@ -114,6 +150,9 @@ func ResolveIncrementalsBackupLocation(
 	fullBackupCollections []string,
 	subdir string,
 ) ([]string, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupdest.ResolveIncrementalsBackupLocation")
+	defer sp.Finish()
+
 	if len(explicitIncrementalCollections) > 0 {
 		incPaths, err := backuputils.AppendPaths(explicitIncrementalCollections, subdir)
 		if err != nil {

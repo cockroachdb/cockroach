@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -95,7 +94,7 @@ func TestCloudStorageSink(t *testing.T) {
 		var folders []string
 
 		hasChildDirs := func(path string) bool {
-			files, err := ioutil.ReadDir(path)
+			files, err := os.ReadDir(path)
 			if err != nil {
 				return false
 			}

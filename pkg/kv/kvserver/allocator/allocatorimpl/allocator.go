@@ -1432,11 +1432,11 @@ func (a Allocator) RebalanceTarget(
 //
 // The return values are, in order:
 //
-// 1. The target on which to add a new replica,
-// 2. An existing replica to remove,
-// 3. a JSON string for use in the range log, and
-// 4. a boolean indicationg whether 1-3 were populated (i.e. whether a rebalance
-//    opportunity was found).
+//  1. The target on which to add a new replica,
+//  2. An existing replica to remove,
+//  3. a JSON string for use in the range log, and
+//  4. a boolean indicationg whether 1-3 were populated (i.e. whether a rebalance
+//     opportunity was found).
 func (a Allocator) RebalanceVoter(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
@@ -2152,22 +2152,22 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 // #13232 or the leaseholder_locality.md RFC for more details), but the general
 // logic behind each part of the formula is as follows:
 //
-// * LeaseRebalancingAggressiveness: Allow the aggressiveness to be tuned via
-//   a cluster setting.
-// * 0.1: Constant factor to reduce aggressiveness by default
-// * math.Log10(remoteWeight/sourceWeight): Comparison of the remote replica's
-//   weight to the local replica's weight. Taking the log of the ratio instead
-//   of using the ratio directly makes things symmetric -- i.e. r1 comparing
-//   itself to r2 will come to the same conclusion as r2 comparing itself to r1.
-// * math.Log1p(remoteLatencyMillis): This will be 0 if there's no latency,
-//   removing the weight/latency factor from consideration. Otherwise, it grows
-//   the aggressiveness for stores that are farther apart. Note that Log1p grows
-//   faster than Log10 as its argument gets larger, which is intentional to
-//   increase the importance of latency.
-// * overfullScore and underfullScore: rebalanceThreshold helps us get an idea
-//   of the ideal number of leases on each store. We then calculate these to
-//   compare how close each node is to its ideal state and use the differences
-//   from the ideal state on each node to compute a final score.
+//   - LeaseRebalancingAggressiveness: Allow the aggressiveness to be tuned via
+//     a cluster setting.
+//   - 0.1: Constant factor to reduce aggressiveness by default
+//   - math.Log10(remoteWeight/sourceWeight): Comparison of the remote replica's
+//     weight to the local replica's weight. Taking the log of the ratio instead
+//     of using the ratio directly makes things symmetric -- i.e. r1 comparing
+//     itself to r2 will come to the same conclusion as r2 comparing itself to r1.
+//   - math.Log1p(remoteLatencyMillis): This will be 0 if there's no latency,
+//     removing the weight/latency factor from consideration. Otherwise, it grows
+//     the aggressiveness for stores that are farther apart. Note that Log1p grows
+//     faster than Log10 as its argument gets larger, which is intentional to
+//     increase the importance of latency.
+//   - overfullScore and underfullScore: rebalanceThreshold helps us get an idea
+//     of the ideal number of leases on each store. We then calculate these to
+//     compare how close each node is to its ideal state and use the differences
+//     from the ideal state on each node to compute a final score.
 //
 // Returns a total score for the replica that takes into account the number of
 // leases already on each store. Also returns the raw "adjustment" value that's

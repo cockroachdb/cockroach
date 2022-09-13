@@ -370,8 +370,7 @@ func fallBackIfRegionalByRowTable(b BuildCtx, t alterPrimaryKeySpec, tableID cat
 // error if the table is a (row-level-ttl table && (it has a descending
 // key column || it has any inbound/outbound FK constraint)).
 func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t alterPrimaryKeySpec) {
-	_, _, rowLevelTTLElem := scpb.FindRowLevelTTL(b.QueryByID(tableID))
-	if rowLevelTTLElem == nil {
+	if _, _, rowLevelTTLElem := scpb.FindRowLevelTTL(b.QueryByID(tableID)); rowLevelTTLElem == nil {
 		return
 	}
 
@@ -384,18 +383,15 @@ func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t al
 	}
 
 	_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
-	hasFKConstraintError := scerrors.NotImplementedErrorf(t.n,
-		`foreign keys to/from table with TTL %q are not permitted`, ns.Name)
 	// Panic if there is any inbound/outbound FK constraints.
-	_, _, inboundFKElem := scpb.FindForeignKeyConstraint(b.BackReferences(tableID))
-	if inboundFKElem != nil {
-		panic(hasFKConstraintError)
+	if _, _, inboundFKElem := scpb.FindForeignKeyConstraint(b.BackReferences(tableID)); inboundFKElem != nil {
+		panic(scerrors.NotImplementedErrorf(t.n,
+			`foreign keys to table with TTL %q are not permitted`, ns.Name))
 	}
-	scpb.ForEachForeignKeyConstraint(b.QueryByID(tableID), func(
-		current scpb.Status, target scpb.TargetStatus, e *scpb.ForeignKeyConstraint,
-	) {
-		panic(hasFKConstraintError)
-	})
+	if _, _, outboundFKElem := scpb.FindForeignKeyConstraint(b.QueryByID(tableID)); outboundFKElem != nil {
+		panic(scerrors.NotImplementedErrorf(t.n,
+			`foreign keys from table with TTL %q are not permitted`, ns.Name))
+	}
 }
 
 func mustRetrievePrimaryIndexElement(b BuildCtx, tableID catid.DescID) (res *scpb.PrimaryIndex) {

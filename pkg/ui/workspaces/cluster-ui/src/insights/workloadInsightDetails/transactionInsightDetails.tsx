@@ -20,7 +20,6 @@ import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { Duration } from "src/util";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { getMatchParamByName } from "src/util/query";
 import {
@@ -120,11 +119,11 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
     }
 
     const tableData = insightsTableData();
-    const waitingExecutions: EventExecution[] = [
+    const blockingExecutions: EventExecution[] = [
       {
-        executionID: insightDetails.waitingExecutionID,
-        fingerprintID: insightDetails.waitingFingerprintID,
-        queries: insightDetails.waitingQueries,
+        executionID: insightDetails.blockingExecutionID,
+        fingerprintID: insightDetails.blockingFingerprintID,
+        queries: insightDetails.blockingQueries,
         startTime: insightDetails.startTime,
         elapsedTime: insightDetails.elapsedTime,
         execType: insightDetails.execType,
@@ -145,10 +144,6 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
                   label="Start Time"
                   value={insightDetails.startTime.format(DATE_FORMAT_24_UTC)}
                 />
-                <SummaryCardItem
-                  label="Elapsed Time"
-                  value={Duration(insightDetails.elapsedTime * 1e6)}
-                />
               </SummaryCard>
             </Col>
             <Col className="gutter-row" span={12}>
@@ -161,7 +156,11 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
             </Col>
           </Row>
           <Row gutter={24} className={tableCx("margin-bottom")}>
-            <InsightsSortedTable columns={insightsColumns} data={tableData} />
+            {/* TO DO (ericharmeling): We might want this table to span the entire page when other types of insights
+            are added*/}
+            <Col className="gutter-row" span={12}>
+              <InsightsSortedTable columns={insightsColumns} data={tableData} />
+            </Col>
           </Row>
         </section>
         <section className={tableCx("section")}>
@@ -172,27 +171,24 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
             tableName={insightDetails.tableName}
             indexName={insightDetails.indexName}
             databaseName={insightDetails.databaseName}
-            contendedKey={String(insightDetails.contendedKey)}
             waitTime={moment.duration(insightDetails.elapsedTime)}
             waitingExecutions={[]}
             blockingExecutions={[]}
           />
           <Row gutter={24}>
-            <Col>
-              <Row>
-                <Heading type="h5">
-                  {WaitTimeInsightsLabels.WAITED_TXNS_TABLE_TITLE(
-                    insightDetails.executionID,
-                    insightDetails.execType,
-                  )}
-                </Heading>
-                <div className={tableCx("margin-bottom-large")}>
-                  <WaitTimeDetailsTable
-                    data={waitingExecutions}
-                    execType={insightDetails.execType}
-                  />
-                </div>
-              </Row>
+            <Col className="gutter-row">
+              <Heading type="h5">
+                {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
+                  insightDetails.executionID,
+                  insightDetails.execType,
+                )}
+              </Heading>
+              <div className={tableCx("margin-bottom-large")}>
+                <WaitTimeDetailsTable
+                  data={blockingExecutions}
+                  execType={insightDetails.execType}
+                />
+              </div>
             </Col>
           </Row>
         </section>

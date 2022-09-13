@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 )
@@ -43,7 +44,12 @@ func (ie intervalSpan) Range() interval.Range {
 // a granular unit of work distribution and progress tracking. If progress were
 // tracked within restore spans, this could become dynamic and much larger (e.g.
 // totalSize/numNodes*someConstant).
-const targetRestoreSpanSize = 384 << 20
+var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"backup.restore_span.target_size",
+	"target size to which base spans of a restore are merged to produce a restore span (0 disables)",
+	0, //TODO(dt): make this something like 384 << 20,
+)
 
 // makeSimpleImportSpans partitions the spans of requiredSpans into a covering
 // of RestoreSpanEntry's which each have all overlapping files from the passed
@@ -51,20 +57,23 @@ const targetRestoreSpanSize = 384 << 20
 // based on the lowWaterMark before the covering for them is generated. Consider
 // a chain of backups with files f1, f2… which cover spans as follows:
 //
-//  backup
-//  0|     a___1___c c__2__e          h__3__i
-//  1|         b___4___d           g____5___i
-//  2|     a___________6______________h         j_7_k
-//  3|                                  h_8_i              l_9_m
-//   keys--a---b---c---d---e---f---g---h----i---j---k---l----m------p---->
+//	backup
+//	0|     a___1___c c__2__e          h__3__i
+//	1|         b___4___d           g____5___i
+//	2|     a___________6______________h         j_7_k
+//	3|                                  h_8_i              l_9_m
+//	 keys--a---b---c---d---e---f---g---h----i---j---k---l----m------p---->
+//
 // spans: |-------span1-------||---span2---|           |---span3---|
 //
 // The cover for those spans would look like:
-//  [a, c): 1, 4, 6
-//  [c, e): 2, 4, 6
-//  [e, f): 6
-//  [f, i): 3, 5, 6, 8
-//  [l, m): 9
+//
+//	[a, c): 1, 4, 6
+//	[c, e): 2, 4, 6
+//	[e, f): 6
+//	[f, i): 3, 5, 6, 8
+//	[l, m): 9
+//
 // This example is tested in TestRestoreEntryCoverExample.
 //
 // If targetSize > 0, then spans which would be added to the right-hand side of

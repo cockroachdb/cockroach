@@ -47,11 +47,11 @@ import (
 // structs.
 //
 // Corollaries:
-// - it would be a programming error to access these variables directly
-//   outside of this file (flags.go)
-// - the underlying context parameters must receive defaults in
-//   initCLIDefaults() even when they are otherwise overridden by the
-//   flags logic, because some tests to not use the flag logic at all.
+//   - it would be a programming error to access these variables directly
+//     outside of this file (flags.go)
+//   - the underlying context parameters must receive defaults in
+//     initCLIDefaults() even when they are otherwise overridden by the
+//     flags logic, because some tests to not use the flag logic at all.
 var serverListenPort, serverSocketDir string
 var serverAdvertiseAddr, serverAdvertisePort string
 var serverSQLAddr, serverSQLPort string
@@ -1056,17 +1056,19 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.SplitListenSQL = changed(fs, cliflags.ListenSQLAddr.Name)
 
 	// Fill in the defaults for --advertise-sql-addr, if the flag exists on `cmd`.
-	advSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
+	advHostSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
 		changed(fs, cliflags.AdvertiseHost.Name)
+	advPortSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
+		changed(fs, cliflags.AdvertisePort.Name)
 	if serverSQLAdvertiseAddr == "" {
-		if advSpecified {
+		if advHostSpecified {
 			serverSQLAdvertiseAddr = serverAdvertiseAddr
 		} else {
 			serverSQLAdvertiseAddr = serverSQLAddr
 		}
 	}
 	if serverSQLAdvertisePort == "" {
-		if advSpecified && !serverCfg.SplitListenSQL {
+		if advPortSpecified && !serverCfg.SplitListenSQL {
 			serverSQLAdvertisePort = serverAdvertisePort
 		} else {
 			serverSQLAdvertisePort = serverSQLPort
@@ -1104,7 +1106,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 
 	if serverHTTPAdvertiseAddr == "" {
-		if advSpecified {
+		if advHostSpecified || advPortSpecified {
 			serverHTTPAdvertiseAddr = serverAdvertiseAddr
 		} else {
 			serverHTTPAdvertiseAddr = serverHTTPAddr

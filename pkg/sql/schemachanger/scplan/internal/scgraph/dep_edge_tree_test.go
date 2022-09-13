@@ -68,9 +68,10 @@ func TestDepEdgeTree(t *testing.T) {
 
 	// testCaseState is used for each queryCase in a testCase.
 	type testCaseState struct {
-		tree      *depEdgeTree
+		depEdges  depEdges
 		nodes     []*screl.Node // nodes with lower indexes sort lower
 		nodesToID map[*screl.Node]nodeID
+		order     edgeTreeOrder
 	}
 	makeTestCaseState := func(tc testCase) testCaseState {
 		tcs := testCaseState{
@@ -89,22 +90,28 @@ func TestDepEdgeTree(t *testing.T) {
 			}
 			return tcs.nodes[i]
 		}
-		tcs.tree = newDepEdgeTree(tc.order, func(a, b *screl.Node) (less, eq bool) {
-			ai, bi := tcs.nodesToID[a], tcs.nodesToID[b]
-			return ai < bi, ai == bi
+		tcs.depEdges = makeDepEdges(func(n *screl.Node) targetIdx {
+			return targetIdx(tcs.nodesToID[n])
 		})
 		for _, e := range tc.edges {
-			tcs.tree.insert(&DepEdge{
-				from: getNode(e[0]),
-				to:   getNode(e[1]),
-			})
+			require.NoError(t, tcs.depEdges.insertOrUpdate(
+				Rule{Name: "test", Kind: Precedence},
+				Precedence,
+				getNode(e[0]),
+				getNode(e[1]),
+			))
 		}
+		tcs.order = tc.order
 		return tcs
 	}
 	runQueryCase := func(t *testing.T, tcs testCaseState, qc queryCase) {
 		i := 0
 		var res []edge
-		require.NoError(t, tcs.tree.iterateSourceNode(tcs.nodes[qc.q], func(de *DepEdge) error {
+		it := tcs.depEdges.iterateFromNode
+		if tcs.order == toFrom {
+			it = tcs.depEdges.iterateToNode
+		}
+		require.NoError(t, it(tcs.nodes[qc.q], func(de *DepEdge) error {
 			if i++; qc.take > 0 && i > qc.take {
 				return iterutil.StopIteration()
 			}
@@ -125,62 +132,6 @@ func TestDepEdgeTree(t *testing.T) {
 					runQueryCase(t, tcs, qc)
 				})
 			}
-		})
-	}
-}
-
-// TestGraphCompareNodes ensures the semantics of (*Graph).compareNodes is sane.
-func TestGraphCompareNodes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ts := scpb.TargetState{
-		Targets: []scpb.Target{
-			scpb.MakeTarget(scpb.ToPublic, &scpb.Table{TableID: 1}, nil),
-			scpb.MakeTarget(scpb.ToAbsent, &scpb.Table{TableID: 2}, nil),
-		},
-	}
-	t1 := &ts.Targets[0]
-	t2 := &ts.Targets[1]
-	mkNode := func(t *scpb.Target, s scpb.Status) *screl.Node {
-		return &screl.Node{Target: t, CurrentStatus: s}
-	}
-	t1ABSENT := mkNode(t1, scpb.Status_ABSENT)
-	t2PUBLIC := mkNode(t2, scpb.Status_PUBLIC)
-	g, err := New(scpb.CurrentState{TargetState: ts, Current: []scpb.Status{scpb.Status_ABSENT, scpb.Status_PUBLIC}})
-	targetStr := func(target *scpb.Target) string {
-		switch target {
-		case t1:
-			return "t1"
-		case t2:
-			return "t2"
-		default:
-			panic("unexpected target")
-		}
-	}
-	nodeStr := func(n *screl.Node) string {
-		if n == nil {
-			return "nil"
-		}
-		return fmt.Sprintf("%s:%s", targetStr(n.Target), n.CurrentStatus.String())
-	}
-
-	require.NoError(t, err)
-	for _, tc := range []struct {
-		a, b     *screl.Node
-		less, eq bool
-	}{
-		{a: nil, b: nil, less: false, eq: true},
-		{a: t1ABSENT, b: nil, less: false, eq: false},
-		{a: nil, b: t1ABSENT, less: true, eq: false},
-		{a: t1ABSENT, b: t1ABSENT, less: false, eq: true},
-		{a: t2PUBLIC, b: t1ABSENT, less: false, eq: false},
-		{a: t1ABSENT, b: t2PUBLIC, less: true, eq: false},
-		{a: t1ABSENT, b: mkNode(t1, scpb.Status_PUBLIC), less: true, eq: false},
-		{a: mkNode(t1, scpb.Status_PUBLIC), b: t1ABSENT, less: false, eq: false},
-	} {
-		t.Run(fmt.Sprintf("cmp(%s,%s)", nodeStr(tc.a), nodeStr(tc.b)), func(t *testing.T) {
-			less, eq := g.compareNodes(tc.a, tc.b)
-			require.Equal(t, tc.less, less, "less")
-			require.Equal(t, tc.eq, eq, "eq")
 		})
 	}
 }

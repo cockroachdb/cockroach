@@ -123,9 +123,8 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return ids, nil
 }
 
-// ValidateCrossReferences validates that each reference to another table is
-// resolvable and that the necessary back references exist.
-func (desc *wrapper) ValidateCrossReferences(
+// ValidateForwardReferences implements the catalog.Descriptor interface.
+func (desc *wrapper) ValidateForwardReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Check that parent DB exists.
@@ -188,7 +187,7 @@ func (desc *wrapper) ValidateCrossReferences(
 		}
 		switch depDesc.DescriptorType() {
 		case catalog.Table:
-			vea.Report(desc.validateOutboundTableRef(id, vdg))
+			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
 		case catalog.Function:
 			vea.Report(desc.validateOutboundFuncRef(id, vdg))
 		default:
@@ -197,30 +196,21 @@ func (desc *wrapper) ValidateCrossReferences(
 		}
 	}
 
-	for _, by := range desc.DependedOnBy {
-		depDesc, err := vdg.GetDescriptor(by.ID)
-		if err != nil {
-			vea.Report(errors.NewAssertionErrorWithWrappedErrf(err, "invalid depended-on-by relation back reference"))
-			continue
-		}
-		switch depDesc.DescriptorType() {
-		case catalog.Table:
-			vea.Report(desc.validateInboundTableRef(by, vdg))
-		case catalog.Function:
-			vea.Report(desc.validateInboundFunctionRef(by, vdg))
-		default:
-			vea.Report(errors.AssertionFailedf("table is depended on by unexpected %s %s (%d)",
-				depDesc.DescriptorType(), depDesc.GetName(), depDesc.GetID()))
-		}
-	}
-
-	// For row-level TTL, no FKs are allowed.
+	// Row-level TTL is not compatible with foreign keys.
+	// This check should be in ValidateSelf but interferes with AllocateIDs.
 	if desc.HasRowLevelTTL() {
-		if len(desc.OutboundFKs) > 0 || len(desc.InboundFKs) > 0 {
+		if len(desc.OutboundFKs) > 0 {
 			vea.Report(unimplemented.NewWithIssuef(
 				76407,
-				`foreign keys to/from table with TTL "%s" are not permitted`,
-				desc.Name,
+				`foreign keys from table with TTL %q are not permitted`,
+				desc.GetName(),
+			))
+		}
+		if len(desc.InboundFKs) > 0 {
+			vea.Report(unimplemented.NewWithIssuef(
+				76407,
+				`foreign keys to table with TTL %q are not permitted`,
+				desc.GetName(),
 			))
 		}
 	}
@@ -228,9 +218,6 @@ func (desc *wrapper) ValidateCrossReferences(
 	// Check foreign keys.
 	for i := range desc.OutboundFKs {
 		vea.Report(desc.validateOutboundFK(&desc.OutboundFKs[i], vdg))
-	}
-	for i := range desc.InboundFKs {
-		vea.Report(desc.validateInboundFK(&desc.InboundFKs[i], vdg))
 	}
 
 	// Check partitioning is correctly set.
@@ -250,10 +237,63 @@ func (desc *wrapper) ValidateCrossReferences(
 	}
 }
 
-func (desc *wrapper) validateOutboundTableRef(
-	id descpb.ID, vdg catalog.ValidationDescGetter,
-) error {
-	return catalog.ValidateOutboundTableRef(desc.GetID(), id, vdg)
+// ValidateBackReferences implements the catalog.Descriptor interface.
+func (desc *wrapper) ValidateBackReferences(
+	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+) {
+	// Check that outbound foreign keys have matching back-references.
+	for i := range desc.OutboundFKs {
+		vea.Report(desc.validateOutboundFKBackReference(&desc.OutboundFKs[i], vdg))
+	}
+
+	// Check foreign key back-references.
+	for i := range desc.InboundFKs {
+		vea.Report(desc.validateInboundFK(&desc.InboundFKs[i], vdg))
+	}
+
+	// For views, check dependent relations.
+	if desc.IsView() {
+		for _, id := range desc.DependsOnTypes {
+			typ, _ := vdg.GetTypeDescriptor(id)
+			vea.Report(desc.validateOutboundTypeRefBackReference(typ))
+		}
+	}
+
+	for _, id := range desc.DependsOn {
+		ref, _ := vdg.GetDescriptor(id)
+		if ref == nil {
+			// Don't follow up on backward references for invalid or irrelevant
+			// forward references.
+			continue
+		}
+		switch refDesc := ref.(type) {
+		case catalog.TableDescriptor:
+			vea.Report(catalog.ValidateOutboundTableRefBackReference(desc.GetID(), refDesc))
+		case catalog.FunctionDescriptor:
+			vea.Report(desc.validateOutboundFuncRefBackReference(refDesc))
+		}
+	}
+
+	// Check relation back-references to relations and functions.
+	for _, by := range desc.DependedOnBy {
+		depDesc, err := vdg.GetDescriptor(by.ID)
+		if err != nil {
+			vea.Report(errors.NewAssertionErrorWithWrappedErrf(err, "invalid depended-on-by relation back reference"))
+			continue
+		}
+		switch depDesc.DescriptorType() {
+		case catalog.Table:
+			// If this is a table, it may be referenced by a view, otherwise if this
+			// is a sequence, then it may be also be referenced by a table.
+			vea.Report(desc.validateInboundTableRef(by, vdg))
+		case catalog.Function:
+			// This relation may be referenced by a function.
+			vea.Report(desc.validateInboundFunctionRef(by, vdg))
+		default:
+			vea.Report(errors.AssertionFailedf("table is depended on by unexpected %s %s (%d)",
+				depDesc.DescriptorType(), depDesc.GetName(), depDesc.GetID()))
+		}
+	}
 }
 
 func (desc *wrapper) validateOutboundTypeRef(id descpb.ID, vdg catalog.ValidationDescGetter) error {
@@ -265,25 +305,30 @@ func (desc *wrapper) validateOutboundTypeRef(id descpb.ID, vdg catalog.Validatio
 		return errors.AssertionFailedf("depends-on type %q (%d) is dropped",
 			typ.GetName(), typ.GetID())
 	}
+	return nil
+}
+
+func (desc *wrapper) validateOutboundTypeRefBackReference(ref catalog.TypeDescriptor) error {
 	// TODO(postamar): maintain back-references in type, and validate these.
-	//                 use catalog.ValidateOutboundTypeRef function.
 	return nil
 }
 
 func (desc *wrapper) validateOutboundFuncRef(id descpb.ID, vdg catalog.ValidationDescGetter) error {
-	refFunc, err := vdg.GetFunctionDescriptor(id)
+	_, err := vdg.GetFunctionDescriptor(id)
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on function back reference")
 	}
+	return nil
+}
 
-	for _, dep := range refFunc.GetDependedOnBy() {
-		if dep.ID == id {
+func (desc *wrapper) validateOutboundFuncRefBackReference(ref catalog.FunctionDescriptor) error {
+	for _, dep := range ref.GetDependedOnBy() {
+		if dep.ID == desc.GetID() {
 			return nil
 		}
 	}
-
 	return errors.AssertionFailedf("depends-on function %q (%d) has no corresponding depended-on-by back reference",
-		refFunc.GetName(), refFunc.GetID())
+		ref.GetName(), ref.GetID())
 }
 
 func (desc *wrapper) validateInboundFunctionRef(
@@ -377,6 +422,19 @@ func (desc *wrapper) validateOutboundFK(
 		return errors.AssertionFailedf("referenced table %q (%d) is dropped",
 			referencedTable.GetName(), referencedTable.GetID())
 	}
+	return nil
+}
+
+func (desc *wrapper) validateOutboundFKBackReference(
+	fk *descpb.ForeignKeyConstraint, vdg catalog.ValidationDescGetter,
+) error {
+	referencedTable, _ := vdg.GetTableDescriptor(fk.ReferencedTableID)
+	if referencedTable == nil || referencedTable.Dropped() {
+		// Don't follow up on backward references for invalid or irrelevant forward
+		// references.
+		return nil
+	}
+
 	found := false
 	_ = referencedTable.ForeachInboundFK(func(backref *descpb.ForeignKeyConstraint) error {
 		if !found && backref.OriginTableID == desc.ID && backref.Name == fk.Name {
@@ -746,14 +804,8 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// because it can only be called on an initialized table descriptor.
 	// ValidateRowLevelTTL is also used before the table descriptor is fully
 	// initialized to validate the storage parameters.
-	if err := ValidateTTLExpirationExpr(desc); err != nil {
-		vea.Report(err)
-		return
-	}
-	if err := ValidateTTLExpirationColumn(desc); err != nil {
-		vea.Report(err)
-		return
-	}
+	vea.Report(ValidateTTLExpirationExpr(desc))
+	vea.Report(ValidateTTLExpirationColumn(desc))
 
 	// Validate that there are no column with both a foreign key ON UPDATE and an
 	// ON UPDATE expression. This check is made to ensure that we know which ON

@@ -2298,7 +2298,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
-				for _, name := range builtins.AllBuiltinNames {
+				for _, name := range builtins.AllBuiltinNames() {
 					// parser.Builtins contains duplicate uppercase and lowercase keys.
 					// Only return the lowercase ones for compatibility with postgres.
 					var first rune
@@ -4295,7 +4295,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				for _, name := range builtins.AllAggregateBuiltinNames {
+				for _, name := range builtins.AllAggregateBuiltinNames() {
 					if name == builtins.AnyNotNull {
 						// any_not_null is treated as a special case.
 						continue
@@ -4391,16 +4391,15 @@ func init() {
 // are 32 bits and that they are stable across accesses.
 //
 // The type has a few layers of methods:
-// - write<go_type> methods write concrete types to the underlying running hash.
-// - write<db_object> methods account for single database objects like TableDescriptors
-//   or IndexDescriptors in the running hash. These methods aim to write information
-//   that would uniquely fingerprint the object to the hash using the first layer of
-//   methods.
-// - <DB_Object>Oid methods use the second layer of methods to construct a unique
-//   object identifier for the provided database object. This object identifier will
-//   be returned as a *tree.DInt, and the running hash will be reset. These are the
-//   only methods that are part of the oidHasher's external facing interface.
-//
+//   - write<go_type> methods write concrete types to the underlying running hash.
+//   - write<db_object> methods account for single database objects like TableDescriptors
+//     or IndexDescriptors in the running hash. These methods aim to write information
+//     that would uniquely fingerprint the object to the hash using the first layer of
+//     methods.
+//   - <DB_Object>Oid methods use the second layer of methods to construct a unique
+//     object identifier for the provided database object. This object identifier will
+//     be returned as a *tree.DInt, and the running hash will be reset. These are the
+//     only methods that are part of the oidHasher's external facing interface.
 type oidHasher struct {
 	h hash.Hash32
 }

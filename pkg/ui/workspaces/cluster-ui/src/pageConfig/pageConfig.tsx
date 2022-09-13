@@ -30,7 +30,9 @@ export function PageConfig(props: PageConfigProps): React.ReactElement {
 
   return (
     <div
-      className={cx("page-config", { "page-config__white-background": isCockroachCloud })}
+      className={cx("page-config", {
+        "page-config__white-background": isCockroachCloud,
+      })}
     >
       <ul className={classes}>{props.children}</ul>
     </div>

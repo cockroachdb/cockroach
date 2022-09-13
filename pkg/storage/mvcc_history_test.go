@@ -134,16 +134,18 @@ var (
 //
 // Additionally, the pseudo-command `with` enables sharing
 // a group of arguments between multiple commands, for example:
-//   with t=A
-//     txn_begin
-//     with k=a
-//       put v=b
-//       resolve_intent
-// Really means:
-//   txn_begin          t=A
-//   put v=b        k=a t=A
-//   resolve_intent k=a t=A
 //
+//	with t=A
+//	  txn_begin
+//	  with k=a
+//	    put v=b
+//	    resolve_intent
+//
+// Really means:
+//
+//	txn_begin          t=A
+//	put v=b        k=a t=A
+//	resolve_intent k=a t=A
 func TestMVCCHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1099,8 +1101,9 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
 		// Some tests will submit invalid MVCC range keys, where e.g. the end key is
-		// before the start key -- ignore them to avoid iterator panics.
-		if key.Compare(endKey) < 0 {
+		// before the start key -- don't attempt to compute covered stats for these
+		// to avoid iterator panics.
+		if key.Compare(endKey) < 0 && key.Compare(keys.LocalMax) >= 0 {
 			ms, err := ComputeStats(e.engine, key, endKey, ts.WallTime)
 			if err != nil {
 				return err

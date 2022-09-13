@@ -96,10 +96,10 @@ type StringListBuilder struct {
 // MakeStringListBuilder creates a StringListBuilder, which is used to print out
 // lists of items. Sample usage:
 //
-//   b := MakeStringListBuilder("(", ", ", ")")
-//   b.Add(&buf, "x")
-//   b.Add(&buf, "y")
-//   b.Finish(&buf) // By now, we wrote "(x, y)".
+//	b := MakeStringListBuilder("(", ", ", ")")
+//	b.Add(&buf, "x")
+//	b.Add(&buf, "y")
+//	b.Finish(&buf) // By now, we wrote "(x, y)".
 //
 // If Add is not called, nothing is written.
 func MakeStringListBuilder(begin, separator, end string) StringListBuilder {

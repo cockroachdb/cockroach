@@ -10,7 +10,10 @@
 
 package clusterversion
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+)
 
 // Key is a unique identifier for a version of CockroachDB.
 type Key int
@@ -19,97 +22,100 @@ type Key int
 // migrations. Before you add a version or consider removing one, please
 // familiarize yourself with the rules below.
 //
-// Adding Versions
+// # Adding Versions
 //
 // You'll want to add a new one in the following cases:
 //
 // (a) When introducing a backwards incompatible feature. Broadly, by this we
-//     mean code that's structured as follows:
 //
-//      if (specific-version is active) {
-//          // Implies that all nodes in the cluster are running binaries that
-//          // have this code. We can "enable" the new feature knowing that
-//          // outbound RPCs, requests, etc. will be handled by nodes that know
-//          // how to do so.
-//      } else {
-//          // There may be some nodes running older binaries without this code.
-//          // To be safe, we'll want to behave as we did before introducing
-//          // this feature.
-//      }
+//	 mean code that's structured as follows:
 //
-//     Authors of migrations need to be careful in ensuring that end-users
-//     aren't able to enable feature gates before they're active. This is fine:
+//	  if (specific-version is active) {
+//	      // Implies that all nodes in the cluster are running binaries that
+//	      // have this code. We can "enable" the new feature knowing that
+//	      // outbound RPCs, requests, etc. will be handled by nodes that know
+//	      // how to do so.
+//	  } else {
+//	      // There may be some nodes running older binaries without this code.
+//	      // To be safe, we'll want to behave as we did before introducing
+//	      // this feature.
+//	  }
 //
-//      func handleSomeNewStatement() error {
-//          if !(specific-version is active) {
-//              return errors.New("cluster version needs to be bumped")
-//          }
-//          // ...
-//      }
+//	 Authors of migrations need to be careful in ensuring that end-users
+//	 aren't able to enable feature gates before they're active. This is fine:
 //
-//     At the same time, with requests/RPCs originating at other crdb nodes, the
-//     initiator of the request gets to decide what's supported. A node should
-//     not refuse functionality on the grounds that its view of the version gate
-//     is as yet inactive. Consider the sender:
+//	  func handleSomeNewStatement() error {
+//	      if !(specific-version is active) {
+//	          return errors.New("cluster version needs to be bumped")
+//	      }
+//	      // ...
+//	  }
 //
-//      func invokeSomeRPC(req) {
-//          if (specific-version is active) {
-//              // Like mentioned above, this implies that all nodes in the
-//              // cluster are running binaries that can handle this new
-//              // feature. We may have learned about this fact before the
-//              // node on the other end. This is due to the fact that migration
-//              // manager informs each node about the specific-version being
-//              // activated active concurrently. See BumpClusterVersion for
-//              // where that happens. Still, it's safe for us to enable the new
-//              // feature flags as we trust the recipient to know how to deal
-//              // with it.
-//            req.NewFeatureFlag = true
-//          }
-//          send(req)
-//      }
+//	 At the same time, with requests/RPCs originating at other crdb nodes, the
+//	 initiator of the request gets to decide what's supported. A node should
+//	 not refuse functionality on the grounds that its view of the version gate
+//	 is as yet inactive. Consider the sender:
 //
-//    And consider the recipient:
+//	  func invokeSomeRPC(req) {
+//	      if (specific-version is active) {
+//	          // Like mentioned above, this implies that all nodes in the
+//	          // cluster are running binaries that can handle this new
+//	          // feature. We may have learned about this fact before the
+//	          // node on the other end. This is due to the fact that migration
+//	          // manager informs each node about the specific-version being
+//	          // activated active concurrently. See BumpClusterVersion for
+//	          // where that happens. Still, it's safe for us to enable the new
+//	          // feature flags as we trust the recipient to know how to deal
+//	          // with it.
+//	        req.NewFeatureFlag = true
+//	      }
+//	      send(req)
+//	  }
 //
-//     func someRPC(req) {
-//         if !req.NewFeatureFlag {
-//             // Legacy behavior...
-//         }
-//         // There's no need to even check if the specific-version is active.
-//         // If the flag is enabled, the specific-version must have been
-//         // activated, even if we haven't yet heard about it (we will pretty
-//         // soon).
-//     }
+//	And consider the recipient:
 //
-//     See clusterversion.Handle.IsActive and usage of some existing versions
-//     below for more clues on the matter.
+//	 func someRPC(req) {
+//	     if !req.NewFeatureFlag {
+//	         // Legacy behavior...
+//	     }
+//	     // There's no need to even check if the specific-version is active.
+//	     // If the flag is enabled, the specific-version must have been
+//	     // activated, even if we haven't yet heard about it (we will pretty
+//	     // soon).
+//	 }
+//
+//	 See clusterversion.Handle.IsActive and usage of some existing versions
+//	 below for more clues on the matter.
 //
 // (b) When cutting a major release branch. When cutting release-20.2 for
-//     example, you'll want to introduce the following to `master`.
 //
-//       (i)  V20_2 (keyed to v20.2.0-0})
-//       (ii) Start21_1 (keyed to v20.2.0-1})
+//	 example, you'll want to introduce the following to `master`.
 //
-//    You'll then want to backport (i) to the release branch itself (i.e.
-//    release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
-//    example above, you'll set it to V20_2. This indicates that the
-//    minimum binary version required in a cluster with nodes running
-//    v21.1 binaries (including pre-release alphas) is v20.2, i.e. that an
-//    upgrade into such a binary must start out from at least v20.2 nodes.
+//	   (i)  V20_2 (keyed to v20.2.0-0})
+//	   (ii) Start21_1 (keyed to v20.2.0-1})
 //
-//    Aside: At the time of writing, the binary min supported version is the
-//    last major release, though we may consider relaxing this in the future
-//    (i.e. for example could skip up to one major release) as we move to a more
-//    frequent release schedule.
+//	You'll then want to backport (i) to the release branch itself (i.e.
+//	release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
+//	example above, you'll set it to V20_2. This indicates that the
+//	minimum binary version required in a cluster with nodes running
+//	v21.1 binaries (including pre-release alphas) is v20.2, i.e. that an
+//	upgrade into such a binary must start out from at least v20.2 nodes.
+//
+//	Aside: At the time of writing, the binary min supported version is the
+//	last major release, though we may consider relaxing this in the future
+//	(i.e. for example could skip up to one major release) as we move to a more
+//	frequent release schedule.
 //
 // When introducing a version constant, you'll want to:
-//   (1) Add it at the end of this block. For versions introduced during and
-//       after the 21.1 release, Internal versions must be even-numbered. The
-//       odd versions are used for internal book-keeping. The Internal version
-//       should be the previous Internal version for the same minor release plus
-//       two.
-//   (2) Add it at the end of the `versionsSingleton` block below.
 //
-// Migrations
+//	(1) Add it at the end of this block. For versions introduced during and
+//	    after the 21.1 release, Internal versions must be even-numbered. The
+//	    odd versions are used for internal book-keeping. The Internal version
+//	    should be the previous Internal version for the same minor release plus
+//	    two.
+//	(2) Add it at the end of the `versionsSingleton` block below.
+//
+// # Migrations
 //
 // Migrations are idempotent functions that can be attached to versions and will
 // be rolled out before the respective cluster version gets rolled out. They are
@@ -119,7 +125,7 @@ type Key int
 // their own documentation in ./pkg/upgrade, which you should peruse should you
 // feel that a migration is necessary for your use case.
 //
-// Phasing out Versions and Migrations
+// # Phasing out Versions and Migrations
 //
 // Versions and Migrations can be removed once they are no longer going to be
 // exercised. This is primarily driven by the BinaryMinSupportedVersion, which
@@ -469,13 +475,10 @@ var rawVersionsSingleton = keyedVersions{
 }
 
 const (
-	// unstableVersionsAbove is a cluster version Key above which any upgrades in
-	// this version are considered unstable development-only versions if it is not
-	// negative, and upgrading to them should permanently move a cluster to
-	// development versions. On master it should be the minted version of the last
-	// release, while on release branches it can be set to invalidVersionKey to
-	// disable marking any versions as development versions.
-	unstableVersionsAbove = V22_1
+	// developmentBranch should be toggled to false on a release branch once the
+	// set of versions becomes append-only and associated upgrade implementations
+	// are frozen. It is always true on the main development branch.
+	developmentBranch = true
 
 	// finalVersion should be set on a release branch to the minted final cluster
 	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
@@ -483,14 +486,27 @@ const (
 	finalVersion = invalidVersionKey
 )
 
+// devVersionsAbove is the version key above which all versions are offset to be
+// development version when developmentBranch is true. By default this is all
+// versions, by setting this to -1, but an env var can override this, to leave
+// the first version un-offset. Doing so means that that version, which is
+// generally minBinaryVersion as well, is unchanged, and thus allows upgrading a
+// stable release data-dir to a dev version if desired.
+var devVersionsAbove Key = func() Key {
+	if envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false) {
+		return invalidVersionKey + 1
+	}
+	return invalidVersionKey
+}()
+
 var versionsSingleton = func() keyedVersions {
-	if unstableVersionsAbove > invalidVersionKey {
+	if developmentBranch {
 		const devOffset = 1000000
 		// Throw every version above the last release (which will be none on a release
 		// branch) 1 million major versions into the future, so any "upgrade" to a
 		// release branch build will be a downgrade and thus blocked.
 		for i := range rawVersionsSingleton {
-			if rawVersionsSingleton[i].Key > unstableVersionsAbove {
+			if rawVersionsSingleton[i].Key > devVersionsAbove {
 				rawVersionsSingleton[i].Major += devOffset
 			}
 		}

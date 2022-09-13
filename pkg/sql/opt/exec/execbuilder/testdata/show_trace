@@ -50,11 +50,11 @@ SET tracing = on,kv,results; CREATE DATABASE t; SET tracing = off
 query TT
 $trace_query
 ----
-batch flow coordinator  CPut /NamespaceTable/30/1/106/0/"public"/4/1 -> 107
-batch flow coordinator  CPut /Table/3/1/107/2/1 -> schema:<name:"public" id:107 state:PUBLIC offline_reason:"" modification_time:<> version:1 parent_id:106 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:516 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"admin" version:2 > >
-batch flow coordinator  CPut /NamespaceTable/30/1/0/0/"t"/4/1 -> 106
-batch flow coordinator  CPut /Table/3/1/106/2/1 -> database:<name:"t" id:106 modification_time:<> version:1 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:2048 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > schemas:<key:"public" value:<id:107 > > state:PUBLIC offline_reason:"" default_privileges:<type:DATABASE > >
-sql query               rows affected: 0
+create database  CPut /NamespaceTable/30/1/106/0/"public"/4/1 -> 107
+create database  CPut /Table/3/1/107/2/1 -> schema:<name:"public" id:107 state:PUBLIC offline_reason:"" modification_time:<> version:1 parent_id:106 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:516 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"admin" version:2 > >
+create database  CPut /NamespaceTable/30/1/0/0/"t"/4/1 -> 106
+create database  CPut /Table/3/1/106/2/1 -> database:<name:"t" id:106 modification_time:<> version:1 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:2048 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > schemas:<key:"public" value:<id:107 > > state:PUBLIC offline_reason:"" default_privileges:<type:DATABASE > >
+sql query        rows affected: 0
 
 
 # More KV operations.
@@ -64,9 +64,9 @@ SET tracing = on,kv,results; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY 
 query TT
 $trace_query
 ----
-batch flow coordinator  CPut /NamespaceTable/30/1/106/107/"kv"/4/1 -> 108
-batch flow coordinator  CPut /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:1 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 not_visible:false > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:2 import_start_wall_time:0 >
-sql query               rows affected: 0
+create table  CPut /NamespaceTable/30/1/106/107/"kv"/4/1 -> 108
+create table  CPut /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:1 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 not_visible:false > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:2 import_start_wall_time:0 >
+sql query     rows affected: 0
 
 # We avoid using the full trace output, because that would make the
 # ensuing trace especially chatty, as it traces the index backfill at
@@ -80,8 +80,8 @@ SET tracing = on,kv,results; CREATE UNIQUE INDEX woo ON t.kv(v); SET tracing = o
 query TT
 $trace_query
 ----
-batch flow coordinator  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:2 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 not_visible:false > next_index_id:4 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:2 not_visible:false > state:BACKFILLING direction:ADD mutation_id:1 rollback:false > mutations:<index:<name:"kv_v_crdb_internal_dpe_key" id:3 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:true created_at_nanos:... constraint_id:3 not_visible:false > state:DELETE_ONLY direction:ADD mutation_id:1 rollback:false > next_mutation_id:2 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:4 import_start_wall_time:0 >
-sql query               rows affected: 0
+create index  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:2 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 not_visible:false > next_index_id:4 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:2 not_visible:false > state:BACKFILLING direction:ADD mutation_id:1 rollback:false > mutations:<index:<name:"kv_v_crdb_internal_dpe_key" id:3 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:true created_at_nanos:... constraint_id:3 not_visible:false > state:DELETE_ONLY direction:ADD mutation_id:1 rollback:false > next_mutation_id:2 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:4 import_start_wall_time:0 >
+sql query     rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
@@ -89,10 +89,10 @@ SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = 
 query TT
 $trace_query
 ----
-batch flow coordinator  CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
-batch flow coordinator  InitPut /Table/108/2/2/0 -> /BYTES/0x89
-batch flow coordinator  fast path completed
-sql query               rows affected: 1
+count      CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
+count      InitPut /Table/108/2/2/0 -> /BYTES/0x89
+count      fast path completed
+sql query  rows affected: 1
 
 
 statement error duplicate key value
@@ -102,9 +102,9 @@ query TT
 set tracing=off;
 $trace_query
 ----
-batch flow coordinator  CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
-batch flow coordinator  InitPut /Table/108/2/2/0 -> /BYTES/0x89
-sql query               execution failed after 0 rows: duplicate key value violates unique constraint "kv_pkey"
+count      CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
+count      InitPut /Table/108/2/2/0 -> /BYTES/0x89
+sql query  execution failed after 0 rows: duplicate key value violates unique constraint "kv_pkey"
 
 statement error duplicate key value
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -113,9 +113,9 @@ query TT
 set tracing=off;
 $trace_query
 ----
-batch flow coordinator  CPut /Table/108/1/2/0 -> /TUPLE/2:2:Int/2
-batch flow coordinator  InitPut /Table/108/2/2/0 -> /BYTES/0x8a
-sql query               execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+count      CPut /Table/108/1/2/0 -> /TUPLE/2:2:Int/2
+count      InitPut /Table/108/2/2/0 -> /BYTES/0x8a
+sql query  execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 statement ok
 SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv;
@@ -126,9 +126,9 @@ SET tracing = off
 query TT
 $trace_query
 ----
-batch flow coordinator  CPut /NamespaceTable/30/1/106/107/"kv2"/4/1 -> 109
-batch flow coordinator  CPut /Table/3/1/109/2/1 -> table:<name:"kv2" id:109 version:1 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false default_expr:"unique_rowid()" hidden:true inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"kv2_pkey" id:1 unique:true version:4 key_column_names:"rowid" key_column_directions:ASC store_column_names:"k" store_column_names:"v" key_column_ids:3 store_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 not_visible:false > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:ADD offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:2 import_start_wall_time:0 >
-sql query               rows affected: 0
+create table  CPut /NamespaceTable/30/1/106/107/"kv2"/4/1 -> 109
+create table  CPut /Table/3/1/109/2/1 -> table:<name:"kv2" id:109 version:1 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false default_expr:"unique_rowid()" hidden:true inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"kv2_pkey" id:1 unique:true version:4 key_column_names:"rowid" key_column_directions:ASC store_column_names:"k" store_column_names:"v" key_column_ids:3 store_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 not_visible:false > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:ADD offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:2 import_start_wall_time:0 >
+sql query     rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; UPDATE t.kv2 SET v = v + 2;
@@ -139,11 +139,11 @@ SET tracing = off
 query TT
 $trace_query
 ----
-colbatchscan            Scan /Table/109/{1-2}
-colbatchscan            fetched: /kv2/kv2_pkey/-9222809086901354496/k/v -> /1/2
-batch flow coordinator  Put /Table/109/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
-batch flow coordinator  fast path completed
-sql query               rows affected: 1
+colbatchscan  Scan /Table/109/{1-2}
+colbatchscan  fetched: /kv2/kv2_pkey/-9222809086901354496/k/v -> /1/2
+count         Put /Table/109/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
+count         fast path completed
+sql query     rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; DELETE FROM t.kv2; SET tracing = off
@@ -151,9 +151,9 @@ SET tracing = on,kv,results; DELETE FROM t.kv2; SET tracing = off
 query TT
 $trace_query
 ----
-batch flow coordinator  DelRange /Table/109/1 - /Table/109/2
-batch flow coordinator  fast path completed
-sql query               rows affected: 1
+delete range  DelRange /Table/109/1 - /Table/109/2
+delete range  fast path completed
+sql query     rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; DROP TABLE t.kv2
@@ -177,12 +177,12 @@ SET tracing = off
 query TT
 $trace_query
 ----
-colbatchscan            Scan /Table/108/{1-2}
-colbatchscan            fetched: /kv/kv_pkey/1/v -> /2
-batch flow coordinator  Del /Table/108/2/2/0
-batch flow coordinator  Del /Table/108/1/1/0
-batch flow coordinator  fast path completed
-sql query               rows affected: 1
+colbatchscan  Scan /Table/108/{1-2}
+colbatchscan  fetched: /kv/kv_pkey/1/v -> /2
+count         Del /Table/108/2/2/0
+count         Del /Table/108/1/1/0
+count         fast path completed
+sql query     rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; DROP INDEX t.kv@woo CASCADE
@@ -193,8 +193,8 @@ SET tracing = off
 query TT
 $trace_query
 ----
-batch flow coordinator  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:8 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 not_visible:false > next_index_id:4 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:2 not_visible:false > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 rollback:false > next_mutation_id:3 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:4 import_start_wall_time:0 >
-sql query               rows affected: 0
+drop index  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:8 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 not_visible:false > next_index_id:4 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:2 not_visible:false > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 rollback:false > next_mutation_id:3 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false refresh_view_required:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:4 import_start_wall_time:0 >
+sql query   rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; DROP TABLE t.kv

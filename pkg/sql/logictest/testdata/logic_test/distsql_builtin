@@ -1,0 +1,16 @@
+# LogicTest: 5node-default-configs
+
+statement ok
+CREATE TABLE t (c INT);
+
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 2)
+
+# Regression test for not propagating the type annotation on the builtin
+# function with multiple overloads when serializing the expression for DistSQL
+# (#86009).
+statement ok
+SELECT c FROM t
+WHERE
+	localtimestamp(7::INT8):::TIMESTAMPTZ
+	IN ('1975-04-24 08:08:35.000071+00:00':::TIMESTAMPTZ, '1980-10-15 12:17:59.000616+00:00':::TIMESTAMPTZ);

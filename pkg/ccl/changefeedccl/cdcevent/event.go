@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -21,10 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -522,6 +525,25 @@ func TestingMakeEventRow(
 	}
 }
 
+// TestingMakeEventRowFromDatums initializes a Row that will return the provided datums when
+// ForEachColumn is called. If anything else needs to be hydrated, use TestingMakeEventRow
+// instead.
+func TestingMakeEventRowFromDatums(datums tree.Datums) Row {
+	var desc EventDescriptor
+	var encRow rowenc.EncDatumRow
+	var alloc tree.DatumAlloc
+	for i, d := range datums {
+		desc.cols = append(desc.cols, ResultColumn{ord: i})
+		desc.valueCols = append(desc.valueCols, i)
+		encRow = append(encRow, rowenc.DatumToEncDatum(d.ResolvedType(), d))
+	}
+	return Row{
+		EventDescriptor: &desc,
+		datums:          encRow,
+		alloc:           &alloc,
+	}
+}
+
 // TestingGetFamilyIDFromKey returns family ID encoded in the specified roachpb.Key.
 // Exposed for testing.
 func TestingGetFamilyIDFromKey(
@@ -529,4 +551,30 @@ func TestingGetFamilyIDFromKey(
 ) (descpb.FamilyID, error) {
 	_, familyID, err := decoder.(*eventDecoder).rfCache.tableDescForKey(context.Background(), key, ts)
 	return familyID, err
+}
+
+// MakeRowFromTuple converts a SQL datum produced by, for example, SELECT ROW(foo.*),
+// into the same kind of cdcevent.Row you'd get as a result of an insert, but without
+// the primary key.
+func MakeRowFromTuple(evalCtx *eval.Context, t *tree.DTuple) Row {
+	r := Projection{EventDescriptor: &EventDescriptor{}}
+	names := t.ResolvedType().TupleLabels()
+	for i, d := range t.D {
+		var name string
+		if names == nil {
+			name = fmt.Sprintf("col%d", i+1)
+		} else {
+			name = names[i]
+		}
+		r.AddValueColumn(name, d.ResolvedType())
+		if err := r.SetValueDatumAt(evalCtx, i, d); err != nil {
+			if build.IsRelease() {
+				log.Warningf(context.Background(), "failed to set row value from tuple due to error %v", err)
+				_ = r.SetValueDatumAt(evalCtx, i, tree.DNull)
+			} else {
+				panic(err)
+			}
+		}
+	}
+	return Row(r)
 }

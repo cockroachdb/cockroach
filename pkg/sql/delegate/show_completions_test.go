@@ -87,6 +87,16 @@ func TestCompletions(t *testing.T) {
 			expectedCompletions: []string{"SELECT"},
 			offset:              12,
 		},
+		{
+			stmt:                "😋😋😋 😋😋😋",
+			expectedCompletions: []string{},
+			offset:              25,
+		},
+		{
+			stmt:                "Jalapeño",
+			expectedCompletions: []string{},
+			offset:              9,
+		},
 	}
 	for _, tc := range tests {
 		offset := tc.offset

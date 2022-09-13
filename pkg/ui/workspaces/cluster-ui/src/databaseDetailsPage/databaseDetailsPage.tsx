@@ -23,10 +23,11 @@ import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import {
   ColumnDescriptor,
   ISortedTablePagination,
-  SortSetting,
   SortedTable,
+  SortSetting,
 } from "src/sortedtable";
 import * as format from "src/util/format";
+import { DATE_FORMAT } from "src/util/format";
 import { mvccGarbage, syncHistory } from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
@@ -37,7 +38,6 @@ import {
 } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment";
 import { Caution } from "@cockroachlabs/icons";
-import { DATE_FORMAT } from "src/util/format";
 import { Anchor } from "../anchor";
 
 const cx = classNames.bind(styles);
@@ -378,7 +378,7 @@ export class DatabaseDetailsPage extends React.Component<
         title: (
           <Tooltip
             placement="bottom"
-            title="Regions/nodes on which the table data is stored."
+            title="Regions/Nodes on which the table data is stored."
           >
             Regions
           </Tooltip>

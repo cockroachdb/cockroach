@@ -62,6 +62,8 @@ func splitPreApply(
 		// We're in the rare case where we know that the RHS has been removed
 		// and re-added with a higher replica ID (and then maybe removed again).
 		//
+		// If rightRepl is not nil, we are *not* holding raftMu.
+		//
 		// To apply the split, we need to "throw away" the data that would belong to
 		// the RHS, i.e. we clear the user data the RHS would have inherited from the
 		// LHS due to the split and additionally clear all of the range ID local state
@@ -80,8 +82,16 @@ func splitPreApply(
 		// the HardState and tombstone. Note that we only do this if rightRepl
 		// exists; if it doesn't, there's no Raft state to massage (when rightRepl
 		// was removed, a tombstone was written instead).
+		//
+		// TODO(tbg): it would be cleaner to teach clearRangeData to only remove
+		// the replicated state if rightRepl != nil, as opposed to writing back
+		// internal raft state. As is, it's going to break with any new piece of
+		// local state that we add, and it introduces locking between two Replicas
+		// that don't ever need to interact.
 		var hs raftpb.HardState
 		if rightRepl != nil {
+			rightRepl.raftMu.Lock()
+			defer rightRepl.raftMu.Unlock()
 			// Assert that the rightRepl is not initialized. We're about to clear out
 			// the data of the RHS of the split; we cannot have already accepted a
 			// snapshot to initialize this newer RHS.
