@@ -43,7 +43,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	leftProps := left.Relational()
 	rightProps := right.Relational()
 
-	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
 		leftProps.OutputCols, rightProps.OutputCols, on,
 	)
 	n := len(leftEq)
@@ -326,7 +326,7 @@ func canGenerateLookupJoins(
 	if joinFlags.Has(memo.DisallowLookupJoinIntoRight) {
 		return false
 	}
-	if leftEq, _, _ := memo.ExtractJoinEqualityColumns(leftCols, rightCols, on); len(leftEq) > 0 {
+	if memo.HasJoinCondition(leftCols, rightCols, on, false /* inequality */) {
 		// There is at least one valid equality between left and right columns.
 		return true
 	}
@@ -336,8 +336,7 @@ func canGenerateLookupJoins(
 	// when the input has one row, or if a lookup join is forced.
 	if input.Relational().Cardinality.IsZeroOrOne() ||
 		joinFlags.Has(memo.AllowOnlyLookupJoinIntoRight) {
-		cmp, _, _ := memo.ExtractJoinConditionColumns(leftCols, rightCols, on, true /* inequality */)
-		return len(cmp) > 0
+		return memo.HasJoinCondition(leftCols, rightCols, on, true /* inequality */)
 	}
 	return false
 }
@@ -753,7 +752,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 			// filters if there is a multi-column inverted index.
 			if !eqColsAndOptionalFiltersCalculated {
 				inputProps := input.Relational()
-				leftEqCols, rightEqCols, _ = memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, onFilters)
+				leftEqCols, rightEqCols = memo.ExtractJoinEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, onFilters)
 
 				// Generate implicit filters from CHECK constraints and computed
 				// columns as optional filters. We build the computed column
