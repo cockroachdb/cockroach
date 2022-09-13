@@ -43,6 +43,10 @@ tc_end_block "Compile C dependencies"
 TESTTIMEOUT=${TESTTIMEOUT:-45m}
 
 for pkg in $pkgspec; do
+  # Skip known-bad tests (generally Bazel-specific ones).
+  if [[ "$pkg" == "./pkg/cmd/bazci" ]]; then
+    continue
+  fi
   tc_start_block "Run ${pkg} under race detector"
   run_json_test build/builder.sh env \
     COCKROACH_LOGIC_TESTS_SKIP=true \

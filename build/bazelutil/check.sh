@@ -53,7 +53,7 @@ pkg/util/timeutil/zoneinfo.go://go:generate go run gen/main.go
 EXISTING_BROKEN_TESTS_IN_BAZEL="
 pkg/acceptance/BUILD.bazel
 pkg/cmd/cockroach-oss/BUILD.bazel
-pkg/cmd/github-post/BUILD.bazel
+pkg/cmd/bazci/githubpost/BUILD.bazel
 pkg/cmd/prereqs/BUILD.bazel
 pkg/cmd/roachtest/BUILD.bazel
 pkg/cmd/teamcity-trigger/BUILD.bazel
