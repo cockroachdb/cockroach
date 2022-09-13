@@ -9,7 +9,7 @@ bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 
 ARTIFACTS_DIR=/artifacts
-GO_TEST_JSON_OUTPUT_FILE=/artifacts/test.json.txt
+GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 exit_status=0
 
 for config in local multiregion-9node-3region-3azs; do
@@ -27,6 +27,6 @@ process_test_json \
   $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
   $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
   $ARTIFACTS_DIR \
-  $GO_TEST_JSON_OUTPUT_FILE \
+  $GO_TEST_JSON_OUTPUT_FILE.$config \
   $exit_status
 done

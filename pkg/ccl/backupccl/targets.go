@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -276,7 +277,7 @@ func fullClusterTargets(
 }
 
 func fullClusterTargetsRestore(
-	allDescs []catalog.Descriptor, lastBackupManifest backuppb.BackupManifest,
+	ctx context.Context, allDescs []catalog.Descriptor, lastBackupManifest backuppb.BackupManifest,
 ) (
 	[]catalog.Descriptor,
 	[]catalog.DatabaseDescriptor,
@@ -284,6 +285,10 @@ func fullClusterTargetsRestore(
 	[]descpb.TenantInfoWithUsage,
 	error,
 ) {
+	ctx, span := tracing.ChildSpan(ctx, "backupccl.fullClusterTargetsRestore")
+	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
+	defer span.Finish()
+
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	var filteredDescs []catalog.Descriptor
 	var filteredDBs []catalog.DatabaseDescriptor
@@ -354,10 +359,12 @@ func selectTargets(
 	[]descpb.TenantInfoWithUsage,
 	error,
 ) {
+	ctx, span := tracing.ChildSpan(ctx, "backupccl.selectTargets")
+	defer span.Finish()
 	allDescs, lastBackupManifest := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
-		return fullClusterTargetsRestore(allDescs, lastBackupManifest)
+		return fullClusterTargetsRestore(ctx, allDescs, lastBackupManifest)
 	}
 
 	if descriptorCoverage == tree.SystemUsers {
