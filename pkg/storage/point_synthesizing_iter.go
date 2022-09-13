@@ -589,7 +589,7 @@ func (i *pointSynthesizingIter) Valid() (bool, error) {
 
 // Key implements MVCCIterator.
 func (i *pointSynthesizingIter) Key() MVCCKey {
-	return i.iterKey.Clone()
+	return i.UnsafeKey().Clone()
 }
 
 // UnsafeKey implements MVCCIterator.
@@ -611,7 +611,7 @@ func (i *pointSynthesizingIter) UnsafeRawKey() []byte {
 	if i.atPoint {
 		return i.iter.UnsafeRawKey()
 	}
-	return EncodeMVCCKeyPrefix(i.rangeKeysPos)
+	return EncodeMVCCKey(i.UnsafeKey())
 }
 
 // UnsafeRawMVCCKey implements MVCCIterator.
