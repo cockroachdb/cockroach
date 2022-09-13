@@ -1460,7 +1460,11 @@ func assertSimpleMVCCIteratorInvariants(iter SimpleMVCCIterator) error {
 	// Any valid position must have either a point and/or range key.
 	hasPoint, hasRange := iter.HasPointAndRange()
 	if !hasPoint && !hasRange {
-		return errors.AssertionFailedf("valid iterator without point/range keys at %s", key)
+		// NB: MVCCIncrementalIterator can return hasPoint=false,hasRange=false
+		// following a NextIgnoringTime() call. We explicitly allow this here.
+		if incrIter, ok := iter.(*MVCCIncrementalIterator); !ok || !incrIter.ignoringTime {
+			return errors.AssertionFailedf("valid iterator without point/range keys at %s", key)
+		}
 	}
 
 	// Range key assertions.
