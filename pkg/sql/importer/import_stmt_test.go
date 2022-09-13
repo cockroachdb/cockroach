@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1998,7 +1999,10 @@ func TestFailedImportGC(t *testing.T) {
 		SQLMemoryPoolSize:        256 << 20,
 		ExternalIODir:            baseDir,
 		Knobs: base.TestingKnobs{
-			GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
+			GCJob: &sql.GCJobTestingKnobs{
+				RunBeforeResume:      func(_ jobspb.JobID) error { <-blockGC; return nil },
+				SkipWaitingForMVCCGC: true,
+			},
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
@@ -6073,12 +6077,19 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	const nodes = 1
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "pgdump")
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+	mkArgs := func() base.TestServerArgs {
+		s := cluster.MakeTestingClusterSettings()
+		storage.MVCCRangeTombstonesEnabled.Override(ctx, &s.SV, true)
+		return base.TestServerArgs{
+			Settings:      s,
+			ExternalIODir: baseDir,
+		}
+	}
 
 	// Simple schema test which creates 3 schemas with a single `test` table in
 	// each schema.
 	t.Run("schema.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6131,7 +6142,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	})
 
 	t.Run("target-table-schema.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6176,6 +6187,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 		// Test fails within a test tenant. More investigation is required.
 		// Tracked with #76378.
+		args := mkArgs()
 		args.DisableDefaultTestTenant = true
 		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
