@@ -1619,6 +1619,7 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
+		batch.Close()
 		if err := eng.Flush(); err != nil {
 			b.Fatal(err)
 		}
@@ -1635,21 +1636,23 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 			endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(numKeys)))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				it := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
-					EndKey:    endKey,
-					StartTime: hlc.Timestamp{},
-					EndTime:   hlc.Timestamp{WallTime: baseTimestamp},
-				})
-				it.SeekGE(MVCCKey{Key: startKey})
-				for {
-					if ok, err := it.Valid(); err != nil {
-						b.Fatalf("failed incremental iteration: %+v", err)
-					} else if !ok {
-						break
+				func() {
+					it := NewMVCCIncrementalIterator(eng, MVCCIncrementalIterOptions{
+						EndKey:    endKey,
+						StartTime: hlc.Timestamp{},
+						EndTime:   hlc.Timestamp{WallTime: baseTimestamp},
+					})
+					defer it.Close()
+					it.SeekGE(MVCCKey{Key: startKey})
+					for {
+						if ok, err := it.Valid(); err != nil {
+							b.Fatalf("failed incremental iteration: %+v", err)
+						} else if !ok {
+							break
+						}
+						it.Next()
 					}
-					it.Next()
-				}
-				it.Close()
+				}()
 			}
 		})
 		eng.Close()

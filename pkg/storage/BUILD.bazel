@@ -63,6 +63,7 @@ go_library(
         "//pkg/storage/fs",
         "//pkg/util",
         "//pkg/util/bufalloc",
+        "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
