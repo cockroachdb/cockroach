@@ -166,7 +166,7 @@ func TestIndexUsageStatisticsSubsystem(t *testing.T) {
 	t.Run("clear", func(t *testing.T) {
 		actualEntryCount := 0
 		expectedEntryCount := 0
-		localIndexUsage.clear()
+		localIndexUsage.clear(timeutil.Now())
 		err := localIndexUsage.ForEach(IteratorOptions{}, func(_ *roachpb.IndexUsageKey, _ *roachpb.IndexUsageStatistics) error {
 			actualEntryCount++
 			return nil

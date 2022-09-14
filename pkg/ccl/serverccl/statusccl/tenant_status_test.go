@@ -494,6 +494,14 @@ WHERE
 			require.NoError(t, err)
 			require.True(t, resp.LastReset.After(timePreReset))
 
+			// IndexUsageStatistics fan-out returns cluster-wide last reset time.
+			// Compare the cluster-wide last reset time from two different node
+			// responses, ensure they are equal.
+			first := testingCluster.TenantStatusSrv(0)
+			firstResp, err := first.IndexUsageStatistics(ctx, &serverpb.IndexUsageStatisticsRequest{})
+			require.NoError(t, err)
+			require.Equal(t, firstResp.LastReset, resp.LastReset)
+
 			// Ensure tenant data isolation.
 			// Check that last reset time was not updated for control cluster.
 			status = controlCluster.TenantStatusSrv(serverccl.RandomServer)

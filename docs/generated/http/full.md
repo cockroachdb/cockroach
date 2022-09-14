@@ -4656,6 +4656,7 @@ Request object for issuing a index usage stats reset request.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.ResetIndexUsageStatsRequest-string) |  |  | [reserved](#support-status) |
+| cluster_reset_start_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.ResetIndexUsageStatsRequest-google.protobuf.Timestamp) |  | Timestamp for the start time of the latest reset index usage statistics request on the cluster. | [reserved](#support-status) |
 
 
 
@@ -4715,7 +4716,7 @@ Response object returned by TableIndexStatsResponse.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | statistics | [TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.server.serverpb.TableIndexStatsResponse.ExtendedCollectedIndexUsageStatistics) | repeated |  | [reserved](#support-status) |
-| last_reset | [google.protobuf.Timestamp](#cockroach.server.serverpb.TableIndexStatsResponse-google.protobuf.Timestamp) |  | Timestamp of the last index usage stats reset. | [reserved](#support-status) |
+| last_reset | [google.protobuf.Timestamp](#cockroach.server.serverpb.TableIndexStatsResponse-google.protobuf.Timestamp) |  | Timestamp of the latest reset index usage statistics request. | [reserved](#support-status) |
 | index_recommendations | [cockroach.sql.IndexRecommendation](#cockroach.server.serverpb.TableIndexStatsResponse-cockroach.sql.IndexRecommendation) | repeated |  | [reserved](#support-status) |
 
 
