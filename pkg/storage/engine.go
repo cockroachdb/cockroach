@@ -520,19 +520,6 @@ type Reader interface {
 	// that they are not using a closed engine. Intended for use within package
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
-	// MVCCGet returns the value for the given key, nil otherwise. Semantically, it
-	// behaves as if an iterator with MVCCKeyAndIntentsIterKind was used.
-	//
-	// Deprecated: use storage.MVCCGet instead.
-	MVCCGet(key MVCCKey) ([]byte, error)
-	// MVCCGetProto fetches the value at the specified key and unmarshals it
-	// using a protobuf decoder. Returns true on success or false if the
-	// key was not found. On success, returns the length in bytes of the
-	// key and the value. Semantically, it behaves as if an iterator with
-	// MVCCKeyAndIntentsIterKind was used.
-	//
-	// Deprecated: use MVCCIterator.ValueProto instead.
-	MVCCGetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
 	// MVCCIterate scans from the start key to the end key (exclusive), invoking
 	// the function f on each key value pair. The inputs are copies, and safe to
 	// retain beyond the function call. It supports interleaved iteration over
