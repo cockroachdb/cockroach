@@ -424,36 +424,6 @@ func (s spanSetReader) Closed() bool {
 	return s.r.Closed()
 }
 
-func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: key.Key}, s.ts); err != nil {
-			return nil, err
-		}
-	}
-	//lint:ignore SA1019 implementing deprecated interface function (Get) is OK
-	return s.r.MVCCGet(key)
-}
-
-func (s spanSetReader) MVCCGetProto(
-	key storage.MVCCKey, msg protoutil.Message,
-) (bool, int64, int64, error) {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
-			return false, 0, 0, err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: key.Key}, s.ts); err != nil {
-			return false, 0, 0, err
-		}
-	}
-	//lint:ignore SA1019 implementing deprecated interface function (MVCCGetProto) is OK
-	return s.r.MVCCGetProto(key, msg)
-}
-
 func (s spanSetReader) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind storage.MVCCIterKind,

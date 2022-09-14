@@ -457,6 +457,8 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	DisableMetamorphicSimpleValueEncoding(t)
+
 	ctx := context.Background()
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
@@ -466,10 +468,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 			if _, err := MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
-			// Verify nothing is written to the engine.
-			if val, err := engine.MVCCGet(mvccKey(testKey1)); err != nil || val != nil {
-				t.Fatalf("expected no mvcc metadata after delete of a missing key; got %q: %+v", val, err)
-			}
+			require.Empty(t, mvccGetRaw(t, engine, mvccKey(testKey1)))
 		})
 	}
 }
@@ -3071,11 +3070,7 @@ func TestMVCCAbortTxn(t *testing.T) {
 			} else if value != nil {
 				t.Fatalf("expected the value to be empty: %s", value)
 			}
-			if meta, err := engine.MVCCGet(mvccKey(testKey1)); err != nil {
-				t.Fatal(err)
-			} else if len(meta) != 0 {
-				t.Fatalf("expected no more MVCCMetadata, got: %s", meta)
-			}
+			require.Empty(t, mvccGetRaw(t, engine, mvccKey(testKey1)))
 		})
 	}
 }
@@ -3110,10 +3105,12 @@ func TestMVCCAbortTxnWithPreviousVersion(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if meta, err := engine.MVCCGet(mvccKey(testKey1)); err != nil {
+			if _, intent, err := MVCCGet(ctx, engine, testKey1, hlc.MaxTimestamp, MVCCGetOptions{
+				Inconsistent: true,
+			}); err != nil {
 				t.Fatal(err)
-			} else if len(meta) != 0 {
-				t.Fatalf("expected no more MVCCMetadata, got: %s", meta)
+			} else if intent != nil {
+				t.Fatalf("expected no intent, got: %s", intent)
 			}
 
 			if value, _, err := MVCCGet(
@@ -6046,13 +6043,13 @@ func TestResolveIntentWithLowerEpoch(t *testing.T) {
 			}
 
 			// Check that the intent was not cleared.
-			metaKey := mvccKey(testKey1)
-			meta := &enginepb.MVCCMetadata{}
-			ok, _, _, err := engine.MVCCGetProto(metaKey, meta)
+			_, intent, err := MVCCGet(ctx, engine, testKey1, hlc.MaxTimestamp, MVCCGetOptions{
+				Inconsistent: true,
+			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !ok {
+			if intent == nil {
 				t.Fatal("intent should not be cleared by resolve intent request with lower epoch")
 			}
 		})
@@ -6553,4 +6550,21 @@ func TestMVCCExportToSSTSErrorsOnLargeKV(t *testing.T) {
 	require.Equal(t, int64(0), summary.DataSize)
 	expectedErr := &ExceedMaxSizeError{}
 	require.ErrorAs(t, err, &expectedErr)
+}
+
+// mvccGetRaw fetches a raw MVCC value, for use in tests.
+func mvccGetRaw(t *testing.T, r Reader, key MVCCKey) []byte {
+	value, err := mvccGetRawWithError(t, r, key)
+	require.NoError(t, err)
+	return value
+}
+
+func mvccGetRawWithError(t *testing.T, r Reader, key MVCCKey) ([]byte, error) {
+	iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
+	defer iter.Close()
+	iter.SeekGE(key)
+	if ok, err := iter.Valid(); err != nil || !ok {
+		return nil, err
+	}
+	return iter.Value(), nil
 }

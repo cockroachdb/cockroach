@@ -1065,8 +1065,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators())
 	// Returns the value found or nil.
 	checkGetAndIter := func(reader Reader) []byte {
-		v, err := reader.MVCCGet(k)
-		require.NoError(t, err)
+		v := mvccGetRaw(t, reader, k)
 		iter := reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: k.Key.Next()})
 		defer iter.Close()
 		iter.SeekGE(k)

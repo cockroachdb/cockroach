@@ -361,20 +361,19 @@ func getTxn(ctx context.Context, txn *kv.Txn) (*roachpb.Transaction, *roachpb.Er
 func verifyCleanup(
 	key roachpb.Key, eng storage.Engine, t *testing.T, coords ...*kvcoord.TxnCoordSender,
 ) {
+	ctx := context.Background()
 	testutils.SucceedsSoon(t, func() error {
 		for _, coord := range coords {
 			if coord.IsTracking() {
 				return fmt.Errorf("expected no heartbeat")
 			}
 		}
-		meta := &enginepb.MVCCMetadata{}
-		//lint:ignore SA1019 historical usage of deprecated eng.MVCCGetProto is OK
-		ok, _, _, err := eng.MVCCGetProto(storage.MakeMVCCMetadataKey(key), meta)
-		if err != nil {
-			return errors.Wrap(err, "error getting MVCC metadata")
-		}
-		if ok && meta.Txn != nil {
-			return fmt.Errorf("found unexpected write intent: %s", meta)
+		_, intent, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
+			Inconsistent: true,
+		})
+		require.NoError(t, err)
+		if intent != nil {
+			return fmt.Errorf("found unexpected write intent: %s", intent)
 		}
 		return nil
 	})

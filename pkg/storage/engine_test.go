@@ -92,7 +92,7 @@ func TestEngineBatchCommit(t *testing.T) {
 						case <-writesDone:
 							return nil
 						default:
-							val, err := e.MVCCGet(key)
+							val, err := mvccGetRawWithError(t, e, key)
 							if err != nil {
 								return err
 							}
@@ -262,10 +262,7 @@ func TestEngineBatch(t *testing.T) {
 			}
 
 			get := func(rw ReadWriter, key MVCCKey) []byte {
-				b, err := rw.MVCCGet(key)
-				if err != nil {
-					t.Fatal(err)
-				}
+				b := mvccGetRaw(t, rw, key)
 				var m enginepb.MVCCMetadata
 				if err := protoutil.Unmarshal(b, &m); err != nil {
 					t.Fatal(err)
@@ -365,15 +362,7 @@ func TestEnginePutGetDelete(t *testing.T) {
 			for i, err := range []error{
 				engine.PutUnversioned(mvccKey("").Key, []byte("")),
 				engine.PutUnversioned(NilKey.Key, []byte("")),
-				func() error {
-					_, err := engine.MVCCGet(mvccKey(""))
-					return err
-				}(),
 				engine.ClearUnversioned(NilKey.Key),
-				func() error {
-					_, err := engine.MVCCGet(NilKey)
-					return err
-				}(),
 				engine.ClearUnversioned(NilKey.Key),
 				engine.ClearUnversioned(mvccKey("").Key),
 			} {
@@ -394,30 +383,21 @@ func TestEnginePutGetDelete(t *testing.T) {
 				{mvccKey("server"), []byte("42")},
 			}
 			for _, c := range testCases {
-				val, err := engine.MVCCGet(c.key)
-				if err != nil {
-					t.Errorf("get: expected no error, but got %s", err)
-				}
+				val := mvccGetRaw(t, engine, c.key)
 				if len(val) != 0 {
 					t.Errorf("expected key %q value.Bytes to be nil: got %+v", c.key, val)
 				}
 				if err := engine.PutUnversioned(c.key.Key, c.value); err != nil {
 					t.Errorf("put: expected no error, but got %s", err)
 				}
-				val, err = engine.MVCCGet(c.key)
-				if err != nil {
-					t.Errorf("get: expected no error, but got %s", err)
-				}
+				val = mvccGetRaw(t, engine, c.key)
 				if !bytes.Equal(val, c.value) {
 					t.Errorf("expected key value %s to be %+v: got %+v", c.key, c.value, val)
 				}
 				if err := engine.ClearUnversioned(c.key.Key); err != nil {
 					t.Errorf("delete: expected no error, but got %s", err)
 				}
-				val, err = engine.MVCCGet(c.key)
-				if err != nil {
-					t.Errorf("get: expected no error, but got %s", err)
-				}
+				val = mvccGetRaw(t, engine, c.key)
 				if len(val) != 0 {
 					t.Errorf("expected key %s value.Bytes to be nil: got %+v", c.key, val)
 				}
@@ -541,7 +521,7 @@ func TestEngineMerge(t *testing.T) {
 						t.Fatalf("%d: %+v", i, err)
 					}
 				}
-				result, _ := engine.MVCCGet(tc.testKey)
+				result := mvccGetRaw(t, engine, tc.testKey)
 				engineBytes[engineIndex][tcIndex] = result
 				var resultV, expectedV enginepb.MVCCMetadata
 				if err := protoutil.Unmarshal(result, &resultV); err != nil {
@@ -928,7 +908,7 @@ func TestSnapshot(t *testing.T) {
 			if err := engine.PutUnversioned(key.Key, val1); err != nil {
 				t.Fatal(err)
 			}
-			val, _ := engine.MVCCGet(key)
+			val := mvccGetRaw(t, engine, key)
 			if !bytes.Equal(val, val1) {
 				t.Fatalf("the value %s in get result does not match the value %s in request",
 					val, val1)
@@ -941,11 +921,8 @@ func TestSnapshot(t *testing.T) {
 			if err := engine.PutUnversioned(key.Key, val2); err != nil {
 				t.Fatal(err)
 			}
-			val, _ = engine.MVCCGet(key)
-			valSnapshot, error := snap.MVCCGet(key)
-			if error != nil {
-				t.Fatalf("error : %s", error)
-			}
+			val = mvccGetRaw(t, engine, key)
+			valSnapshot := mvccGetRaw(t, snap, key)
 			if !bytes.Equal(val, val2) {
 				t.Fatalf("the value %s in get result does not match the value %s in request",
 					val, val2)
@@ -989,9 +966,8 @@ func TestSnapshotMethods(t *testing.T) {
 				if err := engine.PutUnversioned(keys[i].Key, vals[i]); err != nil {
 					t.Fatal(err)
 				}
-				if val, err := engine.MVCCGet(keys[i]); err != nil {
-					t.Fatal(err)
-				} else if !bytes.Equal(vals[i], val) {
+				val := mvccGetRaw(t, engine, keys[i])
+				if !bytes.Equal(vals[i], val) {
 					t.Fatalf("expected %s, but found %s", vals[i], val)
 				}
 			}
@@ -1000,10 +976,7 @@ func TestSnapshotMethods(t *testing.T) {
 
 			// Verify Get.
 			for i := range keys {
-				valSnapshot, err := snap.MVCCGet(keys[i])
-				if err != nil {
-					t.Fatal(err)
-				}
+				valSnapshot := mvccGetRaw(t, snap, keys[i])
 				if !bytes.Equal(vals[i], valSnapshot) {
 					t.Fatalf("the value %s in get result does not match the value %s in snapshot",
 						vals[i], valSnapshot)
