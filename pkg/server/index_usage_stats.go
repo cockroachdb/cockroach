@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -134,8 +135,21 @@ func (s *statusServer) ResetIndexUsageStats(
 		return nil, err
 	}
 
+	var resetTime time.Time
+	// If the reset time is empty in the request, set the reset time to the
+	// current time. Otherwise, use the reset time in the request. This
+	// conditional allows us to propagate a single reset time value to all nodes.
+	// The propagated reset time represents the time at which the reset was
+	// requested.
+	if req.ResetTime.IsZero() {
+		resetTime = timeutil.Now()
+	} else {
+		resetTime = req.ResetTime
+	}
+
 	localReq := &serverpb.ResetIndexUsageStatsRequest{
-		NodeID: "local",
+		NodeID:    "local",
+		ResetTime: resetTime,
 	}
 	resp := &serverpb.ResetIndexUsageStatsResponse{}
 
@@ -145,7 +159,7 @@ func (s *statusServer) ResetIndexUsageStats(
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset()
+			s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset(resetTime)
 			return resp, nil
 		}
 
