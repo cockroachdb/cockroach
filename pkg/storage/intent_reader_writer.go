@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -103,9 +102,6 @@ func (idw intentDemuxWriter) ClearMVCCRange(
 // code probably uses an MVCCIterator.
 type wrappableReader interface {
 	Reader
-	// rawMVCCGet is only used for Reader.MVCCGet which is deprecated and not
-	// performance sensitive.
-	rawMVCCGet(key []byte) (value []byte, err error)
 }
 
 // wrapReader wraps the provided reader, to return an implementation of MVCCIterator
@@ -126,33 +122,6 @@ var intentInterleavingReaderPool = sync.Pool{
 	New: func() interface{} {
 		return &intentInterleavingReader{}
 	},
-}
-
-// Get implements the Reader interface.
-func (imr *intentInterleavingReader) MVCCGet(key MVCCKey) ([]byte, error) {
-	val, err := imr.wrappableReader.rawMVCCGet(EncodeMVCCKey(key))
-	if val != nil || err != nil || !key.Timestamp.IsEmpty() {
-		return val, err
-	}
-	// The meta could be in the lock table. Constructing an Iterator for each
-	// Get is not efficient, but this function is deprecated and only used for
-	// tests, so we don't care.
-	ltKey, _ := keys.LockTableSingleKey(key.Key, nil)
-	iter := imr.wrappableReader.NewEngineIterator(IterOptions{Prefix: true, LowerBound: ltKey})
-	defer iter.Close()
-	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: ltKey})
-	if !valid || err != nil {
-		return nil, err
-	}
-	val = iter.Value()
-	return val, nil
-}
-
-// MVCCGetProto implements the Reader interface.
-func (imr *intentInterleavingReader) MVCCGetProto(
-	key MVCCKey, msg protoutil.Message,
-) (ok bool, keyBytes, valBytes int64, err error) {
-	return pebbleGetProto(imr, key, msg)
 }
 
 // NewMVCCIterator implements the Reader interface. The
