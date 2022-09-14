@@ -20,26 +20,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	clusterFlag = "cluster"
-)
-
-func makeRoachprodStressCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
-	roachprodStressCmd := &cobra.Command{
-		Use:     "roachprod-stress <pkg>",
-		Short:   "stress the given tests on the given roachprod cluster",
-		Long:    "stress the given tests on the given roachprod cluster.",
-		Example: `dev roachprod-stress ./pkg/sql/importer --cluster my_cluster --stress-args '-arg1 -arg2' -- -test.run="TestMultiNodeExportStmt"`,
-		Args:    cobra.MinimumNArgs(1),
-		RunE:    runE,
-	}
-	roachprodStressCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
-	roachprodStressCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
-	roachprodStressCmd.Flags().String(clusterFlag, "", "the name of the cluster (must be set)")
-	roachprodStressCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
-	return roachprodStressCmd
-}
-
 func (d *dev) roachprodStress(cmd *cobra.Command, commandLine []string) error {
 	ctx := cmd.Context()
 	var (
@@ -76,7 +56,7 @@ func (d *dev) roachprodStress(cmd *cobra.Command, commandLine []string) error {
 		for _, line := range strings.Split(strings.TrimSpace(string(labelKind)), "\n") {
 			fields := strings.Fields(line)
 			if testTarget != "" {
-				return fmt.Errorf("expected a single test target; got both %s and %s. Please specify in your command, like `dev roachprod-stress %s", testTarget, fields[len(fields)-1], testTarget)
+				return fmt.Errorf("expected a single test target; got both %s and %s. Please specify in your command, like `dev test %s", testTarget, fields[len(fields)-1], testTarget)
 			}
 			testTarget = fields[len(fields)-1]
 			if fields[0] != "go_test" {

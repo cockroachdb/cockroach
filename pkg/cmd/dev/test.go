@@ -41,6 +41,7 @@ const (
 	testArgsFlag     = "test-args"
 	vModuleFlag      = "vmodule"
 	showDiffFlag     = "show-diff"
+	clusterFlag      = "cluster"
 )
 
 func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -76,6 +77,10 @@ pkg/kv/kvserver:kvserver_test) instead.`,
         Stress for 1m until a test runs longer than 5s
 
     dev test pkg/server -f=TestSpanStatsResponse -v --count=5 --vmodule='raft=1'
+
+    dev test pkg/sql/importer --cluster my_cluster --stress-args '-arg1 -arg2' -- -test.run="TestMultiNodeExportStmt"
+        Run a test under stress in the given roachprod cluster. Valid flags are: {volume,cluster,race,stress-args}
+        Flags to the test binary can be added after --
 `,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -105,12 +110,20 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to the go test binary")
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
 	testCmd.Flags().Bool(showDiffFlag, false, "generate a diff for expectation mismatches when possible")
+	testCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for roachprod-stress cross builds)")
+	testCmd.Flags().String(clusterFlag, "", "the name of the roachprod cluster to use with roachprod-stress")
 	return testCmd
 }
 
 func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
+
+	roachprodCluster := mustGetFlagString(cmd, clusterFlag)
+	stress := mustGetFlagBool(cmd, stressFlag)
+	if stress && roachprodCluster != "" {
+		return d.roachprodStress(cmd, commandLine)
+	}
 	var (
 		filter        = mustGetFlagString(cmd, filterFlag)
 		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
@@ -119,7 +132,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		streamOutput  = mustGetFlagBool(cmd, streamOutputFlag)
 		testArgs      = mustGetFlagString(cmd, testArgsFlag)
 		short         = mustGetFlagBool(cmd, shortFlag)
-		stress        = mustGetFlagBool(cmd, stressFlag)
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
 		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose       = mustGetFlagBool(cmd, vFlag)
