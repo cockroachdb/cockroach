@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -100,7 +101,7 @@ func (s *statusServer) IndexUsageStatistics(
 	}
 
 	// Append last reset time.
-	resp.LastReset = s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().GetLastReset()
+	resp.LastReset = s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().GetClusterLastReset()
 
 	return resp, nil
 }
@@ -134,8 +135,21 @@ func (s *statusServer) ResetIndexUsageStats(
 		return nil, err
 	}
 
+	var clusterResetStartTime time.Time
+	// If the reset time is empty in the request, set the reset time to the
+	// current time. Otherwise, use the reset time in the request. This
+	// conditional allows us to propagate a single reset time value to all nodes.
+	// The propagated reset time represents the time at which the reset was
+	// requested.
+	if req.ClusterResetStartTime.IsZero() {
+		clusterResetStartTime = timeutil.Now()
+	} else {
+		clusterResetStartTime = req.ClusterResetStartTime
+	}
+
 	localReq := &serverpb.ResetIndexUsageStatsRequest{
-		NodeID: "local",
+		NodeID:                "local",
+		ClusterResetStartTime: clusterResetStartTime,
 	}
 	resp := &serverpb.ResetIndexUsageStatsResponse{}
 
@@ -145,7 +159,7 @@ func (s *statusServer) ResetIndexUsageStats(
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset()
+			s.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset(clusterResetStartTime)
 			return resp, nil
 		}
 
@@ -319,7 +333,7 @@ func getTableIndexUsageStats(
 		idxUsageStats = append(idxUsageStats, idxStatsRow)
 	}
 
-	lastReset := idxUsageStatsProvider.GetLastReset()
+	lastReset := idxUsageStatsProvider.GetClusterLastReset()
 
 	resp := &serverpb.TableIndexStatsResponse{
 		Statistics:           idxUsageStats,

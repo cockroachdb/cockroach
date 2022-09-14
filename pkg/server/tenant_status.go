@@ -963,7 +963,7 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 	}
 
 	// Append last reset time.
-	resp.LastReset = t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().GetLastReset()
+	resp.LastReset = t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().GetClusterLastReset()
 
 	return resp, nil
 }
@@ -984,8 +984,21 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
+	var clusterResetStartTime time.Time
+	// If the reset time is empty in the request, set the reset time to the
+	// current time. Otherwise, use the reset time in the request. This
+	// conditional allows us to propagate a single reset time value to all nodes.
+	// The propagated reset time represents the time at which the reset was
+	// requested.
+	if req.ClusterResetStartTime.IsZero() {
+		clusterResetStartTime = timeutil.Now()
+	} else {
+		clusterResetStartTime = req.ClusterResetStartTime
+	}
+
 	localReq := &serverpb.ResetIndexUsageStatsRequest{
-		NodeID: "local",
+		NodeID:                "local",
+		ClusterResetStartTime: clusterResetStartTime,
 	}
 	resp := &serverpb.ResetIndexUsageStatsResponse{}
 
@@ -995,7 +1008,7 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset()
+			t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset(clusterResetStartTime)
 			return resp, nil
 		}
 
