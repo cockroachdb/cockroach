@@ -686,6 +686,11 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "sink", "option", "value"},
 	},
 	{
+		name:    "create_external_connection_stmt",
+		replace: map[string]string{"label_spec": "connection_name", "string_or_placeholder": "connection_URI"},
+		unlink:  []string{"connection_name", "connection_URI"},
+	},
+	{
 		name:   "create_index_stmt",
 		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_index_access_method", "opt_hash_sharded", "opt_concurrently", "opt_with_storage_parameter_list", "storage_parameter_list"},
 		replace: map[string]string{
@@ -825,6 +830,11 @@ var specs = []stmtSpec{
 		stmt:   "drop_database_stmt",
 		inline: []string{"opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'DATABASE'")},
+	},
+	{
+		name:    "drop_external_connection_stmt",
+		replace: map[string]string{"string_or_placeholder": "connection_name"},
+		unlink:  []string{"connection_name"},
 	},
 	{
 		name:   "drop_index",
@@ -1281,6 +1291,11 @@ var specs = []stmtSpec{
 		name:    "show_create_stmt",
 		replace: map[string]string{"table_name": "object_name"},
 		unlink:  []string{"object_name"},
+	},
+	{
+		name:    "show_create_external_connections_stmt",
+		replace: map[string]string{"string_or_placeholder": "connection_name"},
+		unlink:  []string{"connection_name"},
 	},
 	{
 		name:   "show_databases_stmt",
