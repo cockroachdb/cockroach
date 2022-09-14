@@ -2779,7 +2779,10 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	//
 	// We use an EngineIterator to ensure that there are no keys that cannot be
 	// parsed as MVCCKeys (e.g. lock table keys) in the engine.
-	iter := eng.NewEngineIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+	iter := eng.NewEngineIterator(storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		UpperBound: roachpb.KeyMax,
+	})
 	defer iter.Close()
 	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
 	if !valid {
@@ -2789,6 +2792,13 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		return err
 	}
 	getMVCCKey := func() (storage.MVCCKey, error) {
+		if _, hasRange := iter.HasPointAndRange(); hasRange {
+			bounds, err := iter.EngineRangeBounds()
+			if err != nil {
+				return storage.MVCCKey{}, err
+			}
+			return storage.MVCCKey{}, errors.Errorf("found mvcc range key: %s", bounds)
+		}
 		var k storage.EngineKey
 		k, err = iter.EngineKey()
 		if err != nil {
