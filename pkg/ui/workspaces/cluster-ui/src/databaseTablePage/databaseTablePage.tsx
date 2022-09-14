@@ -241,11 +241,16 @@ export class DatabaseTablePage extends React.Component<
 
   private getLastResetString() {
     const lastReset = this.props.indexStats.lastReset;
+    let resetString;
     if (lastReset.isSame(this.minDate)) {
-      return "Last reset: Never";
+      resetString = "Last reset: Never";
     } else {
-      return "Last reset: " + lastReset.format(DATE_FORMAT_24_UTC);
+      resetString = "Last reset: " + lastReset.format(DATE_FORMAT_24_UTC);
     }
+    return (
+      resetString +
+      ". Note the last reset time is the timestamp at which the reset was last requested."
+    );
   }
 
   private getLastUsedString(indexStat: IndexStat) {

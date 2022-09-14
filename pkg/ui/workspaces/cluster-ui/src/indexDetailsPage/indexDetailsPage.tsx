@@ -124,11 +124,16 @@ export class IndexDetailsPage extends React.Component<
 
   private getTimestampString(timestamp: Moment): string {
     const minDate = moment.utc("0001-01-01"); // minimum value as per UTC
+    let resetString;
     if (timestamp.isSame(minDate)) {
-      return "Never";
+      resetString = "Never";
     } else {
-      return timestamp.format(DATE_FORMAT_24_UTC);
+      resetString = timestamp.format(DATE_FORMAT_24_UTC);
     }
+    return (
+      resetString +
+      ". Note the last reset time is the timestamp at which the reset was last requested."
+    );
   }
 
   private renderIndexRecommendations(

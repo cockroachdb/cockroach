@@ -1787,7 +1787,7 @@ message TableIndexStatsResponse {
   }
 
   repeated ExtendedCollectedIndexUsageStatistics statistics = 1;
-  // Timestamp of the last index usage stats reset.
+  // Timestamp of the latest reset index usage statistics request.
   google.protobuf.Timestamp last_reset = 2 [(gogoproto.stdtime) = true];
   repeated cockroach.sql.IndexRecommendation index_recommendations = 3;
 }
@@ -1795,6 +1795,8 @@ message TableIndexStatsResponse {
 // Request object for issuing a index usage stats reset request.
 message ResetIndexUsageStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // Timestamp of the latest reset index usage statistics request.
+  google.protobuf.Timestamp reset_time = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
 // Response object returned by ResetIndexUsageStatsRequest.
