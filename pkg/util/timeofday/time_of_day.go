@@ -11,12 +11,12 @@
 package timeofday
 
 import (
-	"fmt"
+	"bytes"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -52,12 +52,23 @@ func New(hour, min, sec, micro int) TimeOfDay {
 }
 
 func (t TimeOfDay) String() string {
+	return string(t.AppendFormat(nil))
+}
+
+// AppendFormat appends this TimeOfDay format to the specified buffer.
+func (t TimeOfDay) AppendFormat(buf []byte) []byte {
+	buf = strutil.AppendInt(buf, t.Hour(), 2)
+	buf = append(buf, ':')
+	buf = strutil.AppendInt(buf, t.Minute(), 2)
+	buf = append(buf, ':')
+	buf = strutil.AppendInt(buf, t.Second(), 2)
 	micros := t.Microsecond()
 	if micros > 0 {
-		s := fmt.Sprintf("%02d:%02d:%02d.%06d", t.Hour(), t.Minute(), t.Second(), micros)
-		return strings.TrimRight(s, "0")
+		buf = append(buf, '.')
+		buf = strutil.AppendInt(buf, micros, 6)
+		buf = bytes.TrimRight(buf, "0")
 	}
-	return fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second())
+	return buf
 }
 
 // FromInt constructs a TimeOfDay from an int64, representing microseconds since
