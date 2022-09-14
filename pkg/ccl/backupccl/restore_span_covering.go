@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 )
@@ -43,7 +44,12 @@ func (ie intervalSpan) Range() interval.Range {
 // a granular unit of work distribution and progress tracking. If progress were
 // tracked within restore spans, this could become dynamic and much larger (e.g.
 // totalSize/numNodes*someConstant).
-const targetRestoreSpanSize = 384 << 20
+var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"backup.restore_span.target_size",
+	"target size to which base spans of a restore are merged to produce a restore span (0 disables)",
+	0, //TODO(dt): make this something like 384 << 20,
+)
 
 // makeSimpleImportSpans partitions the spans of requiredSpans into a covering
 // of RestoreSpanEntry's which each have all overlapping files from the passed
