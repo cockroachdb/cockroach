@@ -273,6 +273,9 @@ type FmtCtx struct {
 	// indexedTypeFormatter is an optional interceptor for formatting
 	// IDTypeReferences differently than normal.
 	indexedTypeFormatter func(*FmtCtx, *OIDTypeReference)
+	// small scratch buffer to reduce allocations.
+	// Make sure this is larger than uuid.RFC4122StrSize (36) bytes.
+	scratch [64]byte
 }
 
 // FmtCtxOption is an option to pass into NewFmtCtx.
