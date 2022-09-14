@@ -2087,7 +2087,7 @@ func fetchDescVersionModificationTime(
 		t.Fatal(pErr.GoError())
 	}
 	for _, file := range res.(*roachpb.ExportResponse).Files {
-		it, err := storage.NewPebbleMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
+		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
 			LowerBound: keys.MinKey,
 			UpperBound: keys.MaxKey,
