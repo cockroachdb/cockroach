@@ -13,6 +13,8 @@ package amazon
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/url"
@@ -588,6 +590,18 @@ func (s *s3Storage) putUploader(ctx context.Context, basename string) (io.WriteC
 	}, nil
 }
 
+func computeMD5Hash(r io.Reader) (string, error) {
+	h := md5.New()
+	_, err := io.Copy(h, r)
+	if err != nil {
+		return "", err
+	}
+
+	// encode the md5 checksum in base64.
+	v := base64.StdEncoding.EncodeToString(h.Sum(nil))
+	return v, nil
+}
+
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	if usePutObject.Get(&s.settings.SV) {
 		return s.putUploader(ctx, basename)
@@ -604,15 +618,62 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 		defer sp.Finish()
 		// Upload the file to S3.
 		// TODO(dt): test and tune the uploader parameters.
-		_, err := uploader.UploadWithContext(ctx, &s3manager.UploadInput{
+		var buf bytes.Buffer
+		tee := io.TeeReader(r, &buf)
+		hash, err := computeMD5Hash(bytes.NewReader(buf.Bytes()))
+		if err != nil {
+			return errors.Wrap(err, "failed to compute MD5 hash before uploading file")
+		}
+
+		_, uploadErr := uploader.UploadWithContext(ctx, &s3manager.UploadInput{
 			Bucket:               s.bucket,
 			Key:                  aws.String(path.Join(s.prefix, basename)),
-			Body:                 r,
+			Body:                 tee,
+			ContentMD5:           aws.String(hash),
 			ServerSideEncryption: nilIfEmpty(s.conf.ServerEncMode),
 			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
 			StorageClass:         nilIfEmpty(s.conf.StorageClass),
 		})
-		return errors.Wrap(err, "upload failed")
+		if uploadErr != nil {
+			uploadErr = errors.Wrap(uploadErr, "upload failed")
+			log.Warningf(ctx, "upload failed with %v; checking if the error can be ignored",
+				uploadErr.Error())
+
+			// The upload has failed but there are some cases in which the failure is
+			// not fatal. One such example is if the AWS SDK retries a
+			// `CompleteMultipartUpload` after the Multipart upload already been
+			// completed. In such a case the SDK returns a `NoSuchUpload` error even
+			// though the upload has succeeded.
+			//
+			// To combat against such failures we perform a "sanity check" by reading
+			// the file we attempted to upload. The file will only exist if the upload
+			// was successful. Furthermore, we compare the checksum of the written and
+			// read files to ensure the content is the same.
+			r, err := s.ReadFile(ctx, basename)
+			if err != nil {
+				if errors.Is(err, cloud.ErrFileDoesNotExist) {
+					return uploadErr
+				}
+				return errors.Wrap(errors.CombineErrors(err, uploadErr), "failed to check uploaded file")
+			}
+
+			// We did find the file so its possible the upload succeeded even though
+			// we received an error.
+			hashForReadFile, err := computeMD5Hash(ioctx.ReaderCtxAdapter(ctx, r))
+			if err != nil {
+				return errors.CombineErrors(
+					errors.Wrap(err, "failed to compute MD5 hash of read file"), uploadErr)
+			}
+
+			if strings.Compare(hashForReadFile, hash) != 0 {
+				return errors.CombineErrors(errors.New("hashes of the uploaded and read file do not match"), uploadErr)
+			}
+
+			// The hashes match, so we can *safely* ignore the upload error.
+			log.Warningf(ctx, "ignoring upload error %v", uploadErr)
+			return nil
+		}
+		return uploadErr
 	}), nil
 }
 
