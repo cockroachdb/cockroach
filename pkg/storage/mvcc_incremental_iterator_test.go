@@ -241,7 +241,7 @@ func assertExportedKVs(
 		require.Nil(t, expected)
 		return
 	}
-	sst, err := NewPebbleMemSSTIterator(data, false, IterOptions{
+	sst, err := NewMemSSTIterator(data, false, IterOptions{
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
 	})

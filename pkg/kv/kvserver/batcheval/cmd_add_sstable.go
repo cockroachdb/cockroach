@@ -238,7 +238,7 @@ func EvalAddSSTable(
 	// Verify that the keys in the sstable are within the range specified by the
 	// request header, and if the request did not include pre-computed stats,
 	// compute the expected MVCC stats delta of ingesting the SST.
-	sstIter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+	sstIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
@@ -393,7 +393,7 @@ func EvalAddSSTable(
 		log.VEventf(ctx, 2, "ingesting SST (%d keys/%d bytes) via regular write batch", stats.KeyCount, len(sst))
 
 		// Ingest point keys.
-		pointIter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+		pointIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsOnly,
 			UpperBound: keys.MaxKey,
 		})
@@ -427,7 +427,7 @@ func EvalAddSSTable(
 		}
 
 		// Ingest range keys.
-		rangeIter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+		rangeIter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypeRangesOnly,
 			UpperBound: keys.MaxKey,
 		})
@@ -492,7 +492,7 @@ func EvalAddSSTable(
 func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.MVCCStats) error {
 
 	// Check SST point keys.
-	iter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+	iter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		UpperBound: keys.MaxKey,
 	})
@@ -527,7 +527,7 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 	}
 
 	// Check SST range keys.
-	iter, err = storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+	iter, err = storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		UpperBound: keys.MaxKey,
 	})
@@ -573,7 +573,7 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 	// same timestamp as the given statistics, since they may contain
 	// timing-dependent values (typically MVCC garbage, i.e. multiple versions).
 	if stats != nil {
-		iter, err = storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+		iter, err = storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypePointsAndRanges,
 			LowerBound: keys.MinKey,
 			UpperBound: keys.MaxKey,

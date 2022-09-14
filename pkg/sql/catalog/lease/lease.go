@@ -276,7 +276,7 @@ func getDescriptorsFromStoreForInterval(
 	subsequentModificationTime := upperBound
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
-			it, err := kvstorage.NewPebbleMemSSTIterator(file.SST, false, /* verify */
+			it, err := kvstorage.NewMemSSTIterator(file.SST, false, /* verify */
 				kvstorage.IterOptions{
 					// NB: We assume there will be no MVCC range tombstones here.
 					KeyTypes:   kvstorage.IterKeyTypePointsOnly,
