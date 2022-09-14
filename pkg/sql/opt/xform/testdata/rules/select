@@ -2791,6 +2791,19 @@ project
       │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
       └── key: (1)
 
+opt expect=ConvertJSONSubscriptToFetchValue
+SELECT k FROM b WHERE j['a'] = '"b"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── scan b@j_inv_idx
+      ├── columns: k:1!null
+      ├── inverted constraint: /7/1
+      │    └── spans: ["7a\x00\x01\x12b\x00\x01", "7a\x00\x01\x12b\x00\x01"]
+      └── key: (1)
+
 # Chained fetch val operators.
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->'a'->'b' = '"c"'
@@ -3044,6 +3057,30 @@ project
 # Chained fetch val operators and containment operator.
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->'a'->'b' @> '"c"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /7
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:7!null
+           ├── inverted constraint: /7/1
+           │    └── spans
+           │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+           │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+           ├── key: (1)
+           └── fd: (1)-->(7)
+
+opt expect=ConvertJSONSubscriptToFetchValue
+SELECT k FROM b WHERE j['a']['b'] @> '"c"'
 ----
 project
  ├── columns: k:1!null
