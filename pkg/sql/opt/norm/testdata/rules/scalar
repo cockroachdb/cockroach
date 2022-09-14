@@ -18,6 +18,24 @@ exec-ddl
 CREATE TABLE c (c CHAR PRIMARY KEY)
 ----
 
+exec-ddl
+CREATE TABLE b
+(
+    k INT PRIMARY KEY,
+    u INT,
+    v INT,
+    j JSONB,
+    arr STRING[],
+    INDEX u(u),
+    UNIQUE INDEX v(v),
+    INVERTED INDEX j_inv_idx(j)
+)
+----
+
+exec-ddl
+CREATE TABLE d (j INT[])
+----
+
 # --------------------------------------------------
 # CommuteVar
 # --------------------------------------------------
@@ -2130,3 +2148,77 @@ project
  │    └── columns: geom1:2 geom2:3
  └── projections
       └── NOT st_intersects(geom1:2, geom2:3) [as="?column?":8, outer=(2,3), immutable]
+
+# --------------------------------------------------
+# TransformJSONBSubscriptToFetchValue
+# --------------------------------------------------
+
+norm expect=TransformJSONBSubscriptToFetchValue
+SELECT j['c'] FROM b WHERE j['a'] = '"b"'
+----
+project
+ ├── columns: j:9
+ ├── immutable
+ ├── select
+ │    ├── columns: b.j:4
+ │    ├── immutable
+ │    ├── scan b
+ │    │    └── columns: b.j:4
+ │    └── filters
+ │         └── (b.j:4->'a') = '"b"' [outer=(4), immutable]
+ └── projections
+      └── b.j:4->'c' [as=j:9, outer=(4), immutable]
+
+norm expect=TransformJSONBSubscriptToFetchValue
+SELECT j->'a'->'b', j['a']['b'] FROM b WHERE j['c'] = '1'
+----
+project
+ ├── columns: "?column?":9 j:10
+ ├── immutable
+ ├── select
+ │    ├── columns: b.j:4
+ │    ├── immutable
+ │    ├── scan b
+ │    │    └── columns: b.j:4
+ │    └── filters
+ │         └── (b.j:4->'c') = '1' [outer=(4), immutable]
+ └── projections
+      ├── (b.j:4->'a')->'b' [as="?column?":9, outer=(4), immutable]
+      └── (b.j:4->'a')->'b' [as=j:10, outer=(4), immutable]
+
+norm expect=TransformJSONBSubscriptToFetchValue
+SELECT arr[1], j['e'] FROM b
+----
+project
+ ├── columns: arr:9 j:10
+ ├── immutable
+ ├── scan b
+ │    └── columns: b.j:4 b.arr:5
+ └── projections
+      ├── b.arr:5[1] [as=arr:9, outer=(5)]
+      └── b.j:4->'e' [as=j:10, outer=(4), immutable]
+
+norm expect-not=TransformJSONBSubscriptToFetchValue
+SELECT arr[1] FROM b WHERE arr[2] = 'a'
+----
+project
+ ├── columns: arr:9
+ ├── select
+ │    ├── columns: b.arr:5
+ │    ├── scan b
+ │    │    └── columns: b.arr:5
+ │    └── filters
+ │         └── b.arr:5[2] = 'a' [outer=(5)]
+ └── projections
+      └── b.arr:5[1] [as=arr:9, outer=(5)]
+
+norm expect-not=TransformJSONBSubscriptToFetchValue
+SELECT arr[1],arr[2] FROM b;
+----
+project
+ ├── columns: arr:9 arr:10
+ ├── scan b
+ │    └── columns: b.arr:5
+ └── projections
+      ├── b.arr:5[1] [as=arr:9, outer=(5)]
+      └── b.arr:5[2] [as=arr:10, outer=(5)]
