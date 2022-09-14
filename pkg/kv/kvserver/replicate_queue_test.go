@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -162,6 +163,175 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		// on our tracked ranges. If we don't have atomic changes, we can't avoid
 		// it.
 		t.Error(info)
+	}
+}
+
+// TestReplicateQueueRebalanceMultiStore creates a test cluster with and without
+// multiple stores, splits some ranges, and then waits until the replicate queue
+// rebalances the replicas and leases.
+func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	testCases := []struct {
+		name          string
+		nodes         int
+		storesPerNode int
+	}{
+		{"simple", 5, 1},
+		{"multi-store", 4, 2},
+	}
+
+	// Speed up the test.
+	allocatorimpl.MinLeaseTransferStatsDuration = 1 * time.Millisecond
+	allocatorimpl.LeaseRebalanceThreshold = 0.01
+	allocatorimpl.LeaseRebalanceThresholdMin = 0.0
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			// Set up a test cluster with multiple stores per node if needed.
+			serverArgs := base.TestServerArgs{
+				ScanMinIdleTime: time.Millisecond,
+				ScanMaxIdleTime: time.Millisecond,
+			}
+			if testCase.storesPerNode > 1 {
+				serverArgs.StoreSpecs = make([]base.StoreSpec, testCase.storesPerNode)
+				for i := range serverArgs.StoreSpecs {
+					serverArgs.StoreSpecs[i] = base.DefaultTestStoreSpec
+				}
+			}
+			tc := testcluster.StartTestCluster(t, testCase.nodes,
+				base.TestClusterArgs{
+					ReplicationMode: base.ReplicationAuto,
+					ServerArgs:      serverArgs,
+				})
+			defer tc.Stopper().Stop(context.Background())
+			ctx := context.Background()
+			for _, server := range tc.Servers {
+				st := server.ClusterSettings()
+				st.Manual.Store(true)
+			}
+
+			// Add a few ranges per store.
+			numStores := testCase.nodes * testCase.storesPerNode
+			newRanges := numStores * 2
+			trackedRanges := map[roachpb.RangeID]struct{}{}
+			for i := 0; i < newRanges; i++ {
+				tableID := bootstrap.TestingUserDescID(uint32(i))
+				splitKey := keys.SystemSQLCodec.TablePrefix(tableID)
+				// Retry the splits on descriptor errors which are likely as the replicate
+				// queue is already hard at work.
+				testutils.SucceedsSoon(t, func() error {
+					desc := tc.LookupRangeOrFatal(t, splitKey)
+					if i > 0 && len(desc.Replicas().VoterDescriptors()) > 3 {
+						// Some system ranges have five replicas but user ranges only three,
+						// so we'll see downreplications early in the startup process which
+						// we want to ignore. Delay the splits so that we don't create
+						// more over-replicated ranges.
+						// We don't do this for i=0 since that range stays at five replicas.
+						return errors.Errorf("still downreplicating: %s", &desc)
+					}
+					_, rightDesc, err := tc.SplitRange(splitKey)
+					if err != nil {
+						return err
+					}
+					t.Logf("split off %s", &rightDesc)
+					if i > 0 {
+						trackedRanges[rightDesc.RangeID] = struct{}{}
+					}
+					return nil
+				})
+			}
+
+			countReplicas := func() (total int, perStore []int) {
+				perStore = make([]int, numStores)
+				for _, s := range tc.Servers {
+					err := s.Stores().VisitStores(func(s *kvserver.Store) error {
+						require.Zero(t, perStore[s.StoreID()-1])
+						perStore[s.StoreID()-1] = s.ReplicaCount()
+						total += s.ReplicaCount()
+						return nil
+					})
+					require.NoError(t, err)
+				}
+				return total, perStore
+			}
+			countLeases := func() (total int, perStore []int) {
+				perStore = make([]int, numStores)
+				for _, s := range tc.Servers {
+					err := s.Stores().VisitStores(func(s *kvserver.Store) error {
+						c, err := s.Capacity(ctx, false)
+						require.NoError(t, err)
+						leases := int(c.LeaseCount)
+						require.Zero(t, perStore[s.StoreID()-1])
+						perStore[s.StoreID()-1] = leases
+						total += leases
+						return nil
+					})
+					require.NoError(t, err)
+				}
+				return total, perStore
+			}
+			totalReplicas, _ := countReplicas()
+			totalLeases, _ := countLeases()
+
+			// The requirement for minimum leases is low because of the following: in
+			// the case of 8 stores we create 8*2=16 ranges, we also have another 52
+			// ranges in the cluster which brings us up to 68 leases (ranges) total.
+			// Each store should have around 68/8=8.5 leases. With a leasesThreshold
+			// of 70% the test expects floor(8.5*0.7)=5 leases per store. The
+			// allocator should allow up to ceil(8.5)=9 leases per store, meaning,
+			// that in the worst case 7 stores can have up to 9 leases each, which
+			// leaves us with 68-7*9=5 leases on the 8th store, which is exactly what
+			// the test expects (and therefore should not be flaky). Note that without
+			// setting LeaseRebalanceThreshold and LeaseRebalanceThresholdMin above we
+			// would need more than 100 ranges per store, which will make this test
+			// significantly slower (5-10 minutes). Currently this test should succeed
+			// within a minute normally.
+			const replicasThreshold = 0.9
+			const leasesThreshold = 0.7
+			minReplicas := int(math.Floor(replicasThreshold * (float64(totalReplicas) / float64(numStores))))
+			minLeases := int(math.Floor(leasesThreshold * (float64(totalLeases) / float64(numStores))))
+			testutils.SucceedsWithin(t, func() error {
+				_, replicasPerStore := countReplicas()
+				t.Logf("current replica state (want at least %d replicas on all stores): %d", minReplicas, replicasPerStore)
+				for _, c := range replicasPerStore {
+					if c < minReplicas {
+						err := errors.Errorf(
+							"not balanced (want at least %d replicas on all stores): %d", minReplicas, replicasPerStore)
+						log.Infof(ctx, "%v", err)
+						return err
+					}
+				}
+				_, leasesPerStore := countLeases()
+				t.Logf("current lease state (want at least %d leases on all stores): %d", minLeases, leasesPerStore)
+				for _, c := range leasesPerStore {
+					if c < minLeases {
+						err := errors.Errorf(
+							"not balanced (want at least %d leases on all stores): %d", minLeases, leasesPerStore)
+						log.Infof(ctx, "%v", err)
+						return err
+					}
+				}
+				return nil
+			}, 4*time.Minute)
+
+			// Query the range log to see if anything unexpected happened. Concretely,
+			// we'll make sure that our tracked ranges never had >3 replicas.
+			infos, err := queryRangeLog(tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
+			require.NoError(t, err)
+			for _, info := range infos {
+				if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().VoterDescriptors()) <= 3 {
+					continue
+				}
+				// If we have atomic changes enabled, we expect to never see four replicas
+				// on our tracked ranges. If we don't have atomic changes, we can't avoid
+				// it.
+				t.Error(info)
+			}
+		})
 	}
 }
 
