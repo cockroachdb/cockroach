@@ -984,8 +984,21 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
+	var resetTime time.Time
+	// If the reset time is empty in the request, set the reset time to the
+	// current time. Otherwise, use the reset time in the request. This
+	// conditional allows us to propagate a single reset time value to all nodes.
+	// The propagated reset time represents the time at which the reset was
+	// requested.
+	if req.ResetTime.Equal(time.Time{}) {
+		resetTime = timeutil.Now()
+	} else {
+		resetTime = req.ResetTime
+	}
+
 	localReq := &serverpb.ResetIndexUsageStatsRequest{
-		NodeID: "local",
+		NodeID:    "local",
+		ResetTime: resetTime,
 	}
 	resp := &serverpb.ResetIndexUsageStatsResponse{}
 
@@ -995,7 +1008,7 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset()
+			t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics().Reset(resetTime)
 			return resp, nil
 		}
 

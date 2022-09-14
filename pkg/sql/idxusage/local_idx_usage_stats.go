@@ -218,20 +218,20 @@ func (s *LocalIndexUsageStats) batchInsertLocked(
 	}
 }
 
-func (s *LocalIndexUsageStats) clear() {
+func (s *LocalIndexUsageStats) clear(t time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for _, tableStats := range s.mu.usageStats {
 		tableStats.clear()
 	}
-	s.mu.lastReset = timeutil.Now()
+	s.mu.lastReset = t
 }
 
 // Reset resets read info for index usage metrics, although leaves the
 // table and index mappings in place.
-func (s *LocalIndexUsageStats) Reset() {
-	s.clear()
+func (s *LocalIndexUsageStats) Reset(t time.Time) {
+	s.clear(t)
 }
 
 func (s *LocalIndexUsageStats) insertIndexUsage(key roachpb.IndexUsageKey, usageTyp usageType) {
