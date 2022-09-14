@@ -237,7 +237,7 @@ const (
 	// `storeStatusSuspect`.
 	storeStatusSuspect
 	// The store is alive but is currently marked as draining, so it is not a
-	// candidate for lease transfers or replica rebalancing.
+	// candidate for lease transfers.
 	storeStatusDraining
 )
 
@@ -929,11 +929,9 @@ func (sp *StorePool) getStoreListFromIDsLocked(
 			if filter != StoreFilterThrottled {
 				storeDescriptors = append(storeDescriptors, *detail.Desc)
 			}
-		case storeStatusAvailable:
+		case storeStatusAvailable, storeStatusDraining:
 			aliveStoreCount++
 			storeDescriptors = append(storeDescriptors, *detail.Desc)
-		case storeStatusDraining:
-			throttled = append(throttled, fmt.Sprintf("s%d: draining", storeID))
 		case storeStatusSuspect:
 			aliveStoreCount++
 			throttled = append(throttled, fmt.Sprintf("s%d: suspect", storeID))
@@ -1050,11 +1048,11 @@ func (sp *StorePool) isStoreReadyForRoutineReplicaTransferInternal(
 		return false
 	}
 	switch status {
-	case storeStatusThrottled, storeStatusAvailable:
+	case storeStatusThrottled, storeStatusAvailable, storeStatusDraining:
 		log.VEventf(ctx, 3,
 			"s%d is a live target, candidate for rebalancing", targetStoreID)
 		return true
-	case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning, storeStatusSuspect, storeStatusDraining:
+	case storeStatusDead, storeStatusUnknown, storeStatusDecommissioning, storeStatusSuspect:
 		log.VEventf(ctx, 3,
 			"not considering non-live store s%d (%v)", targetStoreID, status)
 		return false

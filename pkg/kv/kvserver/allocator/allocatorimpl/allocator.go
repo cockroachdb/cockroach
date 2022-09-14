@@ -1716,13 +1716,6 @@ func (a *Allocator) TransferLeaseTarget(
 		excludeLeaseRepl = true
 	}
 
-	allStoresList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterNone)
-	storeDescMap := allStoresList.ToMap()
-	sl, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterSuspect)
-	sl = sl.ExcludeInvalid(conf.Constraints)
-	sl = sl.ExcludeInvalid(conf.VoterConstraints)
-	candidateLeasesMean := sl.CandidateLeases.Mean
-
 	source, ok := a.StorePool.GetStoreDescriptor(leaseRepl.StoreID())
 	if !ok {
 		return roachpb.ReplicaDescriptor{}
@@ -1734,6 +1727,17 @@ func (a *Allocator) TransferLeaseTarget(
 		log.KvDistribution.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
 		return roachpb.ReplicaDescriptor{}
 	}
+
+	allStoresList, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterNone)
+	storeDescMap := allStoresList.ToMap()
+	candidateStoreIDs := make(roachpb.StoreIDSlice, len(existing))
+	for i, exist := range existing {
+		candidateStoreIDs[i] = exist.StoreID
+	}
+	sl, _, _ := a.StorePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterSuspect)
+	sl = sl.ExcludeInvalid(conf.Constraints)
+	sl = sl.ExcludeInvalid(conf.VoterConstraints)
+	candidateLeasesMean := sl.CandidateLeases.Mean
 
 	switch g := opts.Goal; g {
 	case allocator.FollowTheWorkload:
@@ -1975,7 +1979,11 @@ func (a *Allocator) ShouldTransferLease(
 		return false
 	}
 
-	sl, _, _ := a.StorePool.GetStoreList(storepool.StoreFilterSuspect)
+	candidateStoreIDs := make(roachpb.StoreIDSlice, len(existing))
+	for i, exist := range existing {
+		candidateStoreIDs[i] = exist.StoreID
+	}
+	sl, _, _ := a.StorePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterSuspect)
 	sl = sl.ExcludeInvalid(conf.Constraints)
 	sl = sl.ExcludeInvalid(conf.VoterConstraints)
 	log.KvDistribution.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=s%d):\n%s", leaseRepl.StoreID(), sl)

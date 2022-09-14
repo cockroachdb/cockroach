@@ -2382,7 +2382,7 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 		{leaseholder: 4, existing: nil, expected: false},
 		{leaseholder: 3, existing: replicas(1), expected: true},
 		{leaseholder: 3, existing: replicas(1, 2), expected: true},
-		{leaseholder: 3, existing: replicas(2), expected: false},
+		{leaseholder: 3, existing: replicas(2), expected: true},
 		{leaseholder: 3, existing: replicas(3), expected: false},
 		{leaseholder: 3, existing: replicas(4), expected: false},
 		{leaseholder: 4, existing: replicas(1), expected: true},
@@ -2403,7 +2403,7 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 				nil, /* replicaStats */
 			)
 			if c.expected != result {
-				t.Fatalf("expected %v, but found %v", c.expected, result)
+				t.Errorf("expected %v, but found %v", c.expected, result)
 			}
 		})
 	}
@@ -2435,8 +2435,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(stores, t)
 
-	// UNAVAILABLE is the node liveness status used for a node that's draining.
-	nl.SetNodeStatus(1, livenesspb.NodeLivenessStatus_UNAVAILABLE)
+	nl.SetNodeStatus(1, livenesspb.NodeLivenessStatus_DRAINING)
 
 	testCases := []struct {
 		leaseholder roachpb.StoreID
@@ -2449,7 +2448,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		{leaseholder: 4, existing: nil, expected: false},
 		{leaseholder: 2, existing: replicas(1), expected: false},
 		{leaseholder: 3, existing: replicas(1), expected: false},
-		{leaseholder: 3, existing: replicas(1, 2), expected: false},
+		{leaseholder: 3, existing: replicas(1, 2), expected: true},
 		{leaseholder: 3, existing: replicas(1, 2, 4), expected: false},
 		{leaseholder: 4, existing: replicas(1), expected: false},
 		{leaseholder: 4, existing: replicas(1, 2), expected: true},
@@ -2753,8 +2752,8 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 		// When `excludeLeaseRepl` = false, we'd expect either store 2 or 3
 		// to be produced by `TransferLeaseTarget` (since both of them have
 		// less-than-mean leases). In this case, the rng should produce 3.
-		{1, replicas(1, 2, 3), preferEast, 0, 3},
-		{3, replicas(1, 3, 5), preferEast, 0, 1},
+		{1, replicas(1, 2, 3), preferEast, 0, 2},
+		{3, replicas(1, 3, 5), preferEast, 1, 1},
 		{5, replicas(1, 4, 5), preferEast, 1, 1},
 		{5, replicas(3, 4, 5), preferEast, 3, 3},
 		{1, replicas(1, 5, 6), preferEast, 0, 5},

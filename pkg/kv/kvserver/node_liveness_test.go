@@ -877,8 +877,8 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 }
 
 // TestNodeLivenessSetDraining verifies that when draining, a node's liveness
-// record is updated and the node will not be present in the store list of other
-// nodes once they are aware of its draining state.
+// record is updated but the node continues to be present in the store list of
+// other nodes once they are aware of its draining state.
 func TestNodeLivenessSetDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -943,7 +943,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 
 	// Draining node disappears from store lists.
 	{
-		const expectedLive = 2
+		const expectedLive = 3
 		// Executed in a retry loop to wait until the new liveness record has
 		// been gossiped to the rest of the cluster.
 		testutils.SucceedsSoon(t, func() error {
@@ -958,9 +958,9 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 						curNodeID,
 					)
 				}
-				if nodeIDAppearsInStoreList(drainingNodeID, sl) {
+				if !nodeIDAppearsInStoreList(drainingNodeID, sl) {
 					return errors.Errorf(
-						"expected node %d not to appear in node %d's store list",
+						"expected node %d to appear in node %d's store list",
 						drainingNodeID,
 						curNodeID,
 					)

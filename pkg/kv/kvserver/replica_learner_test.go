@@ -644,8 +644,8 @@ func drain(ctx context.Context, t *testing.T, client serverpb.AdminClient, drain
 	require.NoError(t, err)
 }
 
-// TestSnapshotsToDrainingNodes tests that rebalancing snapshots to draining
-// receivers are rejected, but Raft snapshots aren't.
+// TestSnapshotsToDrainingNodes tests that both rebalancing and raft snapshots
+// to draining receivers are accepted.
 func TestSnapshotsToDrainingNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -669,7 +669,7 @@ func TestSnapshotsToDrainingNodes(t *testing.T) {
 		// Now, we try to add a replica to it, we expect that to fail.
 		scratchKey := tc.ScratchRange(t)
 		_, err = tc.AddVoters(scratchKey, makeReplicationTargets(drainingNodeID)...)
-		require.Regexp(t, "store is draining", err)
+		require.NoError(t, err)
 	})
 
 	t.Run("raft snapshots", func(t *testing.T) {

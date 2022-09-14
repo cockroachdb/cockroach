@@ -2516,29 +2516,6 @@ func TestRangeInfoAfterSplit(t *testing.T) {
 	}
 }
 
-// TestDrainRangeRejection verifies that an attempt to transfer a range to a
-// draining store fails.
-func TestDrainRangeRejection(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	key := tc.ScratchRange(t)
-	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
-
-	drainingIdx := 1
-	tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
-	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(drainingIdx))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
-		t.Fatalf("unexpected error: %+v", err)
-	}
-}
-
 func TestChangeReplicasGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
