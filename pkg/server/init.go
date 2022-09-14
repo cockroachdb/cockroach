@@ -560,6 +560,7 @@ func assertEnginesEmpty(engines []storage.Engine) error {
 	for _, engine := range engines {
 		err := func() error {
 			iter := engine.NewEngineIterator(storage.IterOptions{
+				KeyTypes:   storage.IterKeyTypePointsAndRanges,
 				UpperBound: roachpb.KeyMax,
 			})
 			defer iter.Close()
@@ -570,11 +571,12 @@ func assertEnginesEmpty(engines []storage.Engine) error {
 				if err != nil {
 					return err
 				}
+				hasPoint, hasRange := iter.HasPointAndRange()
 
 				// The store cluster version key is written multiple times,
 				// including before bootstrapping or joining a cluster.
 				// Skip it if it exists.
-				if storeClusterVersionKey.Equal(k.Key) {
+				if hasPoint && !hasRange && storeClusterVersionKey.Equal(k.Key) {
 					continue
 				}
 				return errors.New("engine is not empty")
