@@ -166,8 +166,8 @@ type avroMetadata map[string]interface{}
 
 // avroEnvelopeOpts controls which fields in avroEnvelopeRecord are set.
 type avroEnvelopeOpts struct {
-	beforeField, afterField     bool
-	updatedField, resolvedField bool
+	beforeField, afterField, recordField bool
+	updatedField, resolvedField          bool
 }
 
 // avroEnvelopeRecord is an `avroRecord` that wraps a changed SQL row and some
@@ -175,8 +175,8 @@ type avroEnvelopeOpts struct {
 type avroEnvelopeRecord struct {
 	avroRecord
 
-	opts          avroEnvelopeOpts
-	before, after *avroDataRecord
+	opts                  avroEnvelopeOpts
+	before, after, record *avroDataRecord
 }
 
 // typeToAvroSchema converts a database type to an avro field
@@ -862,8 +862,9 @@ func (r *avroDataRecord) rowFromNative(native interface{}) (rowenc.EncDatumRow, 
 
 // envelopeToAvroSchema creates an avro record schema for an envelope containing
 // before and after versions of a row change and metadata about that row change.
+// before is optional, and after can instead be record.
 func envelopeToAvroSchema(
-	topic string, opts avroEnvelopeOpts, before, after *avroDataRecord, namespace string,
+	topic string, opts avroEnvelopeOpts, before, after, record *avroDataRecord, namespace string,
 ) (*avroEnvelopeRecord, error) {
 	schema := &avroEnvelopeRecord{
 		avroRecord: avroRecord{
@@ -908,6 +909,15 @@ func envelopeToAvroSchema(
 		}
 		schema.Fields = append(schema.Fields, resolvedField)
 	}
+	if opts.recordField {
+		schema.record = record
+		recordField := &avroSchemaField{
+			Name:       `record`,
+			SchemaType: []avroSchemaType{avroSchemaNull, record},
+			Default:    nil,
+		}
+		schema.Fields = append(schema.Fields, recordField)
+	}
 
 	schemaJSON, err := json.Marshal(schema)
 	if err != nil {
@@ -923,7 +933,7 @@ func envelopeToAvroSchema(
 // BinaryFromRow encodes the given metadata and row data into avro's defined
 // binary format.
 func (r *avroEnvelopeRecord) BinaryFromRow(
-	buf []byte, meta avroMetadata, beforeRow, afterRow cdcevent.Row,
+	buf []byte, meta avroMetadata, beforeRow, afterRow, recordRow cdcevent.Row,
 ) ([]byte, error) {
 	native := map[string]interface{}{}
 	if r.opts.beforeField {
@@ -947,6 +957,18 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 			native[`after`] = goavro.Union(avroUnionKey(&r.after.avroRecord), afterNative)
 		} else {
 			native[`after`] = nil
+		}
+	}
+
+	if r.opts.recordField {
+		if recordRow.HasValues() {
+			recordNative, err := r.record.nativeFromRow(recordRow.ForEachColumn())
+			if err != nil {
+				return nil, err
+			}
+			native[`record`] = goavro.Union(avroUnionKey(&r.record.avroRecord), recordNative)
+		} else {
+			native[`record`] = nil
 		}
 	}
 
