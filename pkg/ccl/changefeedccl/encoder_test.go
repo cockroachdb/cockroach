@@ -230,7 +230,7 @@ func TestEncoders(t *testing.T) {
 				return
 			}
 			require.NoError(t, o.Validate())
-			e, err := getEncoder(o, targets)
+			e, err := getEncoder(o, targets, nil, nil)
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -370,7 +370,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 		})
 
-		e, err := getEncoder(opts, targets)
+		e, err := getEncoder(opts, targets, nil, nil)
 		require.NoError(t, err)
 
 		rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -402,7 +402,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		defer noCertReg.Close()
 		opts.SchemaRegistryURI = noCertReg.URL()
 
-		enc, err := getEncoder(opts, targets)
+		enc, err := getEncoder(opts, targets, nil, nil)
 		require.NoError(t, err)
 		_, err = enc.EncodeKey(context.Background(), rowInsert)
 		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: "+
@@ -417,7 +417,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		defer wrongCertReg.Close()
 		opts.SchemaRegistryURI = wrongCertReg.URL()
 
-		enc, err = getEncoder(opts, targets)
+		enc, err = getEncoder(opts, targets, nil, nil)
 		require.NoError(t, err)
 		_, err = enc.EncodeKey(context.Background(), rowInsert)
 		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: "+
