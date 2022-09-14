@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -135,47 +134,6 @@ func (p *pebbleBatch) Close() {
 // Closed implements the Batch interface.
 func (p *pebbleBatch) Closed() bool {
 	return p.closed
-}
-
-// Get implements the Batch interface.
-func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
-	if len(key.Key) == 0 {
-		return nil, emptyKeyError()
-	}
-	r := wrapReader(p)
-	// Doing defer r.Free() does not inline.
-	v, err := r.MVCCGet(key)
-	r.Free()
-	return v, err
-}
-
-func (p *pebbleBatch) rawMVCCGet(key []byte) ([]byte, error) {
-	r := pebble.Reader(p.batch)
-	if p.writeOnly {
-		panic("write-only batch")
-	}
-	if !p.batch.Indexed() {
-		r = p.db
-	}
-
-	ret, closer, err := r.Get(key)
-	if closer != nil {
-		retCopy := make([]byte, len(ret))
-		copy(retCopy, ret)
-		ret = retCopy
-		closer.Close()
-	}
-	if errors.Is(err, pebble.ErrNotFound) || len(ret) == 0 {
-		return nil, nil
-	}
-	return ret, err
-}
-
-// MVCCGetProto implements the Batch interface.
-func (p *pebbleBatch) MVCCGetProto(
-	key MVCCKey, msg protoutil.Message,
-) (ok bool, keyBytes, valBytes int64, err error) {
-	return pebbleGetProto(p, key, msg)
 }
 
 // MVCCIterate implements the Batch interface.
