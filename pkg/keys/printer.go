@@ -44,7 +44,7 @@ const (
 // DictEntry contains info on pretty-printing and pretty-scanning keys in a
 // region of the key space.
 type DictEntry struct {
-	Name   string
+	Name   redact.SafeString
 	prefix roachpb.Key
 	// print the key's pretty value, key has been removed prefix data
 	ppFunc func(valDirs []encoding.Direction, key roachpb.Key) string
@@ -66,7 +66,7 @@ func parseUnsupported(_ string) (string, roachpb.Key) {
 // KeyComprehensionTable contains information about how to decode pretty-printed
 // keys, split by key spans.
 type KeyComprehensionTable []struct {
-	Name    string
+	Name    redact.SafeString
 	start   roachpb.Key
 	end     roachpb.Key
 	Entries []DictEntry
@@ -80,7 +80,7 @@ var (
 	// ConstKeyOverrides provides overrides that define how to translate specific
 	// pretty-printed keys.
 	ConstKeyOverrides = []struct {
-		Name  string
+		Name  redact.SafeString
 		Value roachpb.Key
 	}{
 		{"/Max", MaxKey},
@@ -92,7 +92,7 @@ var (
 	// keyofKeyDict means the key of suffix which is itself a key,
 	// should recursively pretty print it, see issue #3228
 	keyOfKeyDict = []struct {
-		name   string
+		name   redact.SafeString
 		prefix []byte
 	}{
 		{name: "/Meta2", prefix: Meta2Prefix},
@@ -589,7 +589,7 @@ func prettyPrintInternal(
 	if !skipOverrides {
 		for _, k := range ConstKeyOverrides {
 			if key.Equal(k.Value) {
-				return k.Name
+				return string(k.Name)
 			}
 		}
 	}
@@ -598,7 +598,7 @@ func prettyPrintInternal(
 		var b strings.Builder
 		for _, k := range KeyDict {
 			if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
-				b.WriteString(k.Name)
+				b.WriteString(string(k.Name))
 				if k.end != nil && k.end.Compare(key) == 0 {
 					b.WriteString("/Max")
 					return b.String(), true
@@ -609,7 +609,7 @@ func prettyPrintInternal(
 					if bytes.HasPrefix(key, e.prefix) {
 						hasPrefix = true
 						key = key[len(e.prefix):]
-						b.WriteString(e.Name)
+						b.WriteString(string(e.Name))
 						b.WriteString(e.ppFunc(valDirs, key))
 						break
 					}
@@ -641,9 +641,9 @@ func prettyPrintInternal(
 			key = key[len(k.prefix):]
 			str, formatted := helper(key)
 			if formatted {
-				return k.name + str
+				return string(k.name) + str
 			}
-			return k.name + "/" + str
+			return string(k.name) + "/" + str
 		}
 	}
 	str, _ := helper(key)
@@ -737,7 +737,7 @@ func SafeFormat(w redact.SafeWriter, valDirs []encoding.Direction, key roachpb.K
 func safeFormatInternal(valDirs []encoding.Direction, key roachpb.Key) redact.RedactableString {
 	for _, k := range ConstKeyOverrides {
 		if key.Equal(k.Value) {
-			return redact.Sprint(redact.Safe(k.Name))
+			return redact.Sprint(k.Name)
 		}
 	}
 
@@ -746,16 +746,16 @@ func safeFormatInternal(valDirs []encoding.Direction, key roachpb.Key) redact.Re
 		for _, k := range KeyDict {
 			if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
 				if k.end != nil && k.end.Compare(key) == 0 {
-					b.Print(redact.Safe(k.Name))
+					b.Print(k.Name)
 					b.Print(redact.Safe("/Max"))
 					return b.RedactableString()
 				}
 
 				for _, e := range k.Entries {
 					if bytes.HasPrefix(key, e.prefix) && e.sfFunc != nil {
-						b.Print(redact.Safe(k.Name))
+						b.Print(k.Name)
 						key = key[len(e.prefix):]
-						b.Print(redact.Safe(e.Name))
+						b.Print(e.Name)
 						b.Print(e.sfFunc(valDirs, key))
 						return b.RedactableString()
 					}
@@ -776,9 +776,9 @@ func safeFormatInternal(valDirs []encoding.Direction, key roachpb.Key) redact.Re
 			key = key[len(k.prefix):]
 			str := helper(key, true /* isRemainder */)
 			if len(str) > 0 && strings.Index(str.StripMarkers(), "/") != 0 {
-				return redact.Sprintf("%v/%v", redact.Sprint(k.name), str)
+				return redact.Sprintf("%v/%v", k.name, str)
 			}
-			return redact.Sprintf("%v%v", redact.Sprint(k.name), str)
+			return redact.Sprintf("%v%v", k.name, str)
 		}
 	}
 	return helper(key, false /* isRemainder */)
