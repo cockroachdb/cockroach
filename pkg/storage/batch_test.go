@@ -172,10 +172,7 @@ func TestReadOnlyBasics(t *testing.T) {
 				t.Fatal("read-only is expectedly found to be closed")
 			}
 			a := mvccKey("a")
-			getVal := &roachpb.Value{}
 			successTestCases := []func(){
-				func() { _, _ = ro.MVCCGet(a) },
-				func() { _, _, _, _ = ro.MVCCGetProto(a, getVal) },
 				func() {
 					_ = ro.MVCCIterate(a.Key, a.Key, MVCCKeyIterKind, IterKeyTypePointsOnly,
 						func(MVCCKeyValue, MVCCRangeKeyStack) error { return iterutil.StopIteration() })
@@ -374,11 +371,7 @@ func TestApplyBatchRepr(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if b, err := e.MVCCGet(key); err != nil {
-					t.Fatal(err)
-				} else if !reflect.DeepEqual(b, val) {
-					t.Fatalf("read %q from engine, expected %q", b, val)
-				}
+				require.Equal(t, val, mvccGetRaw(t, e, key))
 			}
 		})
 	}
@@ -429,14 +422,8 @@ func TestBatchGet(t *testing.T) {
 				{Key: mvccKey("c"), Value: appender("foobar")},
 				{Key: mvccKey("d"), Value: []byte("after")},
 			}
-			for i, expKV := range expValues {
-				kv, err := b.MVCCGet(expKV.Key)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !bytes.Equal(kv, expKV.Value) {
-					t.Errorf("%d: expected \"value\", got %q", i, kv)
-				}
+			for _, expKV := range expValues {
+				require.Equal(t, expKV.Value, mvccGetRaw(t, b, expKV.Key))
 			}
 		})
 	}
@@ -488,83 +475,19 @@ func TestBatchMerge(t *testing.T) {
 			}
 
 			// Verify values.
-			val, err := b.MVCCGet(mvccKey("a"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			val := mvccGetRaw(t, b, mvccKey("a"))
 			if !compareMergedValues(t, val, appender("a-valueappend")) {
 				t.Error("mismatch of \"a\"")
 			}
 
-			val, err = b.MVCCGet(mvccKey("b"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			val = mvccGetRaw(t, b, mvccKey("b"))
 			if !compareMergedValues(t, val, appender("append")) {
 				t.Error("mismatch of \"b\"")
 			}
 
-			val, err = b.MVCCGet(mvccKey("c"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			val = mvccGetRaw(t, b, mvccKey("c"))
 			if !compareMergedValues(t, val, appender("c-valueappend")) {
 				t.Error("mismatch of \"c\"")
-			}
-		})
-	}
-}
-
-func TestBatchGetProto(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			e := engineImpl.create()
-			defer e.Close()
-
-			b := e.NewBatch()
-			defer b.Close()
-
-			val := roachpb.MakeValueFromString("value")
-			data, err := protoutil.Marshal(&val)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := b.PutUnversioned(mvccKey("proto").Key, data); err != nil {
-				t.Fatal(err)
-			}
-
-			getVal := &roachpb.Value{}
-			ok, keySize, valSize, err := b.MVCCGetProto(mvccKey("proto"), getVal)
-			if !ok || err != nil {
-				t.Fatalf("expected MVCCGetProto to success ok=%t: %+v", ok, err)
-			}
-			if keySize != 6 {
-				t.Errorf("expected key size 6; got %d", keySize)
-			}
-			if valSize != int64(len(data)) {
-				t.Errorf("expected value size %d; got %d", len(data), valSize)
-			}
-			if !reflect.DeepEqual(getVal, &val) {
-				t.Errorf("expected %v; got %v", &val, getVal)
-			}
-			// Before commit, proto will not be available via engine.
-			fmt.Printf("before\n")
-			if ok, _, _, err := e.MVCCGetProto(mvccKey("proto"), getVal); ok || err != nil {
-				fmt.Printf("after\n")
-				t.Fatalf("expected MVCCGetProto to fail ok=%t: %+v", ok, err)
-			}
-			// Commit and verify the proto can be read directly from the engine.
-			if err := b.Commit(false /* sync */); err != nil {
-				t.Fatal(err)
-			}
-			if ok, _, _, err := e.MVCCGetProto(mvccKey("proto"), getVal); !ok || err != nil {
-				t.Fatalf("expected MVCCGetProto to success ok=%t: %+v", ok, err)
-			}
-			if !reflect.DeepEqual(getVal, &val) {
-				t.Errorf("expected %v; got %v", &val, getVal)
 			}
 		})
 	}
@@ -736,49 +659,6 @@ func TestBatchScanMaxWithDeleted(t *testing.T) {
 	}
 }
 
-// TestBatchConcurrency verifies operation of batch when the
-// underlying engine has concurrent modifications to overlapping
-// keys. This should never happen with the way Cockroach uses
-// batches, but worth verifying.
-func TestBatchConcurrency(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			e := engineImpl.create()
-			defer e.Close()
-
-			b := e.NewBatch()
-			defer b.Close()
-
-			// Write a merge to the batch.
-			if err := b.Merge(mvccKey("a"), appender("bar")); err != nil {
-				t.Fatal(err)
-			}
-			val, err := b.MVCCGet(mvccKey("a"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !compareMergedValues(t, val, appender("bar")) {
-				t.Error("mismatch of \"a\"")
-			}
-			// Write an engine value.
-			if err := e.PutUnversioned(mvccKey("a").Key, appender("foo")); err != nil {
-				t.Fatal(err)
-			}
-			// Now, read again and verify that the merge happens on top of the mod.
-			val, err = b.MVCCGet(mvccKey("a"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(val, appender("foobar")) {
-				t.Error("mismatch of \"a\"")
-			}
-		})
-	}
-}
-
 func TestBatchVisibleAfterApplyBatchRepr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -805,11 +685,7 @@ func TestBatchVisibleAfterApplyBatchRepr(t *testing.T) {
 			assert.NoError(t, batch.ApplyBatchRepr(wb, false /* sync */))
 
 			// The batch can see the earlier write.
-			v, err := batch.MVCCGet(mvccKey("batchkey"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			assert.Equal(t, []byte("b"), v)
+			require.Equal(t, []byte("b"), mvccGetRaw(t, batch, mvccKey("batchkey")))
 		})
 	}
 }
@@ -845,19 +721,9 @@ func TestUnindexedBatchThatSupportsReader(t *testing.T) {
 			}
 			iter.Close()
 
-			if v, err := b.MVCCGet(mvccKey("b")); err != nil {
-				t.Fatal(err)
-			} else if string(v) != "b" {
-				t.Fatalf("expected b, but got %s", v)
-			}
-			if err := b.Commit(true); err != nil {
-				t.Fatal(err)
-			}
-			if v, err := e.MVCCGet(mvccKey("b")); err != nil {
-				t.Fatal(err)
-			} else if string(v) != "c" {
-				t.Fatalf("expected c, but got %s", v)
-			}
+			require.Equal(t, []byte("b"), mvccGetRaw(t, b, mvccKey("b")))
+			require.NoError(t, b.Commit(true))
+			require.Equal(t, []byte("c"), mvccGetRaw(t, e, mvccKey("b")))
 		})
 	}
 }
@@ -878,8 +744,6 @@ func TestUnindexedBatchThatDoesNotSupportReaderPanics(t *testing.T) {
 			a := mvccKey("a")
 			b := mvccKey("b")
 			testCases := []func(){
-				func() { _, _ = batch.MVCCGet(a) },
-				func() { _, _, _, _ = batch.MVCCGetProto(a, nil) },
 				func() { _ = batch.MVCCIterate(a.Key, b.Key, MVCCKeyIterKind, IterKeyTypePointsOnly, nil) },
 				func() { _ = batch.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax}) },
 			}
@@ -1039,7 +903,7 @@ func TestBatchCombine(t *testing.T) {
 						}
 
 						// Verify we can read the key we just wrote immediately.
-						if v, err := e.MVCCGet(mvccKey(k)); err != nil {
+						if v, err := mvccGetRawWithError(t, e, mvccKey(k)); err != nil {
 							errs <- errors.Wrap(err, "get failed")
 							return
 						} else if string(v) != k {
