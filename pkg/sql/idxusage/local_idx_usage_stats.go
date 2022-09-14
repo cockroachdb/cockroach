@@ -55,8 +55,12 @@ type LocalIndexUsageStats struct {
 		// usageStats stores index usage statistics per unique roachpb.TableID.
 		usageStats map[roachpb.TableID]*tableIndexStats
 
-		// lastReset is the last time the index usage statistics were reset.
+		// lastReset is the last time the node reset its index usage statistics.
 		lastReset time.Time
+
+		// clusterLastReset is the start time of the latest reset index usage statistics
+		// request on the cluster.
+		clusterLastReset time.Time
 	}
 }
 
@@ -218,7 +222,7 @@ func (s *LocalIndexUsageStats) batchInsertLocked(
 	}
 }
 
-func (s *LocalIndexUsageStats) clear() {
+func (s *LocalIndexUsageStats) clear(t time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -226,12 +230,13 @@ func (s *LocalIndexUsageStats) clear() {
 		tableStats.clear()
 	}
 	s.mu.lastReset = timeutil.Now()
+	s.mu.clusterLastReset = t
 }
 
 // Reset resets read info for index usage metrics, although leaves the
 // table and index mappings in place.
-func (s *LocalIndexUsageStats) Reset() {
-	s.clear()
+func (s *LocalIndexUsageStats) Reset(t time.Time) {
+	s.clear(t)
 }
 
 func (s *LocalIndexUsageStats) insertIndexUsage(key roachpb.IndexUsageKey, usageTyp usageType) {
@@ -343,11 +348,19 @@ func (t *tableIndexStats) getStatsForIndexIDLocked(
 	return nil
 }
 
-// GetLastReset returns the last time the table was reset.
+// GetLastReset returns the last time the node reset the table.
 func (s *LocalIndexUsageStats) GetLastReset() time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.lastReset
+}
+
+// GetClusterLastReset returns the start time of the latest reset index usage statistics
+// request on the cluster.
+func (s *LocalIndexUsageStats) GetClusterLastReset() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.clusterLastReset
 }
 
 func (t *tableIndexStats) iterateIndexStats(
