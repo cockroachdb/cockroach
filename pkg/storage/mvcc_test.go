@@ -6323,7 +6323,7 @@ func exportAllData(t *testing.T, engine Engine, limits queryLimits) []MVCCKey {
 
 func sstToKeys(t *testing.T, data []byte) []MVCCKey {
 	var results []MVCCKey
-	it, err := NewPebbleMemSSTIterator(data, false, IterOptions{
+	it, err := NewMemSSTIterator(data, false, IterOptions{
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
 	})

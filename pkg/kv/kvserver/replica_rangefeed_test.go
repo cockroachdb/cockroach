@@ -225,14 +225,14 @@ func TestReplicaRangefeed(t *testing.T) {
 			require.Equal(t, expEvents, events)
 
 			for _, sst := range ssts {
-				expIter, err := storage.NewPebbleMemSSTIterator(sst.expect, false, storage.IterOptions{
+				expIter, err := storage.NewMemSSTIterator(sst.expect, false, storage.IterOptions{
 					LowerBound: keys.MinKey,
 					UpperBound: keys.MaxKey,
 				})
 				require.NoError(t, err)
 				defer expIter.Close()
 
-				sstIter, err := storage.NewPebbleMemSSTIterator(sst.actual, false, storage.IterOptions{
+				sstIter, err := storage.NewMemSSTIterator(sst.actual, false, storage.IterOptions{
 					LowerBound: keys.MinKey,
 					UpperBound: keys.MaxKey,
 				})

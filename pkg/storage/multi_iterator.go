@@ -47,6 +47,9 @@ var _ SimpleMVCCIterator = &multiIterator{}
 // If two iterators have an entry with exactly the same key and timestamp, the
 // one with a higher index in this constructor arg is preferred. The other is
 // skipped.
+//
+// Deprecated, use NewSSTIterator() instead. See:
+// https://github.com/cockroachdb/cockroach/issues/87943
 func MakeMultiIterator(iters []SimpleMVCCIterator) SimpleMVCCIterator {
 	return &multiIterator{
 		iters:                        iters,

@@ -75,7 +75,7 @@ func CheckSSTConflicts(
 	//
 	// TODO(bilal): Expose reader.Properties.NumRangeKeys() here, so we don't
 	// need to read the SST to figure out if it has range keys.
-	rkIter, err := NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
+	rkIter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypeRangesOnly,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
@@ -138,7 +138,7 @@ func CheckSSTConflicts(
 	})
 	defer extIter.Close()
 
-	sstIter, err := NewPebbleMemSSTIterator(sst, false, IterOptions{
+	sstIter, err := NewMemSSTIterator(sst, false, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: end.Key,
 	})
@@ -929,7 +929,7 @@ func UpdateSSTTimestamps(
 	defer writer.Close()
 
 	// Rewrite point keys.
-	iter, err := NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
+	iter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypePointsOnly,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
@@ -957,7 +957,7 @@ func UpdateSSTTimestamps(
 	}
 
 	// Rewrite range keys.
-	iter, err = NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
+	iter, err = NewMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypeRangesOnly,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,

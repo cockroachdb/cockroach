@@ -82,7 +82,7 @@ func TestExportCmd(t *testing.T) {
 				LowerBound: keys.LocalMax,
 				UpperBound: keys.MaxKey,
 			}
-			sst, err := storage.NewPebbleMemSSTIterator(file.SST, true, iterOpts)
+			sst, err := storage.NewMemSSTIterator(file.SST, true, iterOpts)
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
@@ -510,7 +510,7 @@ func loadSST(t *testing.T, data []byte, start, end roachpb.Key) []storage.MVCCKe
 		LowerBound: start,
 		UpperBound: end,
 	}
-	sst, err := storage.NewPebbleMemSSTIterator(data, true, iterOpts)
+	sst, err := storage.NewMemSSTIterator(data, true, iterOpts)
 	if err != nil {
 		t.Fatal(err)
 	}
