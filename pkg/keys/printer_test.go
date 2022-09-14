@@ -105,6 +105,14 @@ func TestSafeFormatKey_SystemTenant(t *testing.T) {
 			makeKey(tenSysCodec.TablePrefix(42), []byte{0x12, 'a', 0x00, 0x03}),
 			`/Table/42/‹???›`,
 		},
+		{
+			"marks safe reserved key prefix",
+			makeKey(keys.Meta1Prefix,
+				tenSysCodec.TablePrefix(42),
+				encoding.EncodeStringAscending(nil, "California"),
+				encoding.EncodeStringAscending(nil, "Los Angeles")),
+			`/Meta1/Table/42/‹"California"›/‹"Los Angeles"›`,
+		},
 	}
 
 	for _, test := range testCases {

@@ -776,9 +776,9 @@ func safeFormatInternal(valDirs []encoding.Direction, key roachpb.Key) redact.Re
 			key = key[len(k.prefix):]
 			str := helper(key, true /* isRemainder */)
 			if len(str) > 0 && strings.Index(str.StripMarkers(), "/") != 0 {
-				return redact.Sprintf("%v/%v", redact.Sprint(k.name), str)
+				return redact.Sprintf("%v/%v", redact.Sprint(redact.Safe(k.name)), str)
 			}
-			return redact.Sprintf("%v%v", redact.Sprint(k.name), str)
+			return redact.Sprintf("%v%v", redact.Sprint(redact.Safe(k.name)), str)
 		}
 	}
 	return helper(key, false /* isRemainder */)
