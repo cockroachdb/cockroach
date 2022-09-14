@@ -38,15 +38,21 @@ func NewCartesianBoundingBox() *CartesianBoundingBox {
 
 // Repr is the string representation of the CartesianBoundingBox.
 func (b *CartesianBoundingBox) Repr() string {
-	// fmt.Sprintf with %f does not truncate leading zeroes, so use
-	// FormatFloat instead.
-	return fmt.Sprintf(
-		"BOX(%s %s,%s %s)",
-		strconv.FormatFloat(b.LoX, 'f', -1, 64),
-		strconv.FormatFloat(b.LoY, 'f', -1, 64),
-		strconv.FormatFloat(b.HiX, 'f', -1, 64),
-		strconv.FormatFloat(b.HiY, 'f', -1, 64),
-	)
+	return string(b.AppendFormat(nil))
+}
+
+// AppendFormat appends string representation of the CartesianBoundingBox
+// to the buffer, and returns modified buffer.
+func (b *CartesianBoundingBox) AppendFormat(buf []byte) []byte {
+	buf = append(buf, "BOX("...)
+	buf = strconv.AppendFloat(buf, b.LoX, 'f', -1, 64)
+	buf = append(buf, ' ')
+	buf = strconv.AppendFloat(buf, b.LoY, 'f', -1, 64)
+	buf = append(buf, ',')
+	buf = strconv.AppendFloat(buf, b.HiX, 'f', -1, 64)
+	buf = append(buf, ' ')
+	buf = strconv.AppendFloat(buf, b.HiY, 'f', -1, 64)
+	return append(buf, ')')
 }
 
 // ParseCartesianBoundingBox parses a box2d string into a bounding box.
