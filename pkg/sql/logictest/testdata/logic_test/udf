@@ -168,9 +168,9 @@ query TTTTTBBBTITTTTT
 SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
 ----
-100118  proc_f    4101115737  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
-100119  proc_f    4101115737  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
-100121  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
+100118  proc_f    105  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
+100119  proc_f    105  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
+100121  proc_f_2  120  1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
 
 statement ok
 USE defaultdb;
