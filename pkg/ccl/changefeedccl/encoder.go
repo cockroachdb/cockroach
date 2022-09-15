@@ -46,7 +46,7 @@ func getEncoder(
 ) (Encoder, error) {
 	switch opts.Format {
 	case changefeedbase.OptFormatJSON:
-		return makeJSONEncoder(opts, targets)
+		return makeJSONEncoder(opts)
 	case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
 		return newConfluentAvroEncoder(opts, targets)
 	case changefeedbase.OptFormatCSV:

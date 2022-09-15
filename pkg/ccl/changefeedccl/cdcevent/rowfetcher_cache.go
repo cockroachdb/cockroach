@@ -57,20 +57,6 @@ type watchedFamily struct {
 	familyName string
 }
 
-var defaultCacheConfig = cache.Config{
-	Policy: cache.CacheFIFO,
-	// TODO: If we find ourselves thrashing here in changefeeds on many tables,
-	// we can improve performance by eagerly evicting versions using Resolved notifications.
-	// A old version with a timestamp entirely before a notification can be safely evicted.
-	ShouldEvict: func(size int, _ interface{}, _ interface{}) bool { return size > 1024 },
-}
-
-type idVersion struct {
-	id      descpb.ID
-	version descpb.DescriptorVersion
-	family  descpb.FamilyID
-}
-
 // newRowFetcherCache constructs row fetcher cache.
 func newRowFetcherCache(
 	ctx context.Context,
@@ -96,7 +82,7 @@ func newRowFetcherCache(
 		leaseMgr:        leaseMgr,
 		collection:      cf.NewCollection(ctx, nil /* TemporarySchemaProvider */, nil /* monitor */),
 		db:              db,
-		fetchers:        cache.NewUnorderedCache(defaultCacheConfig),
+		fetchers:        cache.NewUnorderedCache(DefaultCacheConfig),
 		watchedFamilies: watchedFamilies,
 	}, err
 }
@@ -192,7 +178,7 @@ var ErrUnwatchedFamily = errors.New("watched table but unwatched family")
 func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	tableDesc catalog.TableDescriptor, family descpb.FamilyID,
 ) (*row.Fetcher, *descpb.ColumnFamilyDescriptor, error) {
-	idVer := idVersion{id: tableDesc.GetID(), version: tableDesc.GetVersion(), family: family}
+	idVer := CacheKey{ID: tableDesc.GetID(), Version: tableDesc.GetVersion(), FamilyID: family}
 	if v, ok := c.fetchers.Get(idVer); ok {
 		f := v.(*cachedFetcher)
 		if f.skip {
