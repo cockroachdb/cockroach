@@ -183,8 +183,8 @@ CREATE TABLE data2.foo (a int);
 
 	doneRestore := make(chan struct{})
 	go func() {
+		defer close(doneRestore)
 		sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
-		close(doneRestore)
 	}()
 
 	// Check that zones are restored during pre-restore.

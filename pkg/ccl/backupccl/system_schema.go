@@ -563,16 +563,53 @@ func rekeySystemTable(
 		sort.Sort(toRekey)
 
 		executor := execCtx.InternalExecutor
-		q := strings.Builder{}
-		fmt.Fprintf(&q, "UPDATE %s SET %s = CASE\n", tempTableName, colName)
 
-		for _, old := range toRekey {
-			fmt.Fprintf(&q, "WHEN %s = %d THEN %d\n", colName, old, rekeys[old].ID)
+		// We will update every ID in the table from an old value to a new value
+		// below, but as we do so there could be yet-to-be-updated rows with old-IDs
+		// at the new IDs which would cause a uniqueness violation before we proceed
+		// to update the row that is in the way. Instead, we will initially offset
+		// the new ID to be +2B, to be up above existing IDs, then when we're done
+		// remapping all of them to their new but offset IDs, we'll slide everything
+		// down to remove the offset at once. We could query the current max, but
+		// just guessing that 2^31 is above it works just as well. In the event this
+		// guess doesn't hold, i.e. a cluster with more than 2^31 descriptors, then
+		// we don't have room in a uint32 OUD for the offset IDs anyway before it
+		// overflows anyway.
+		const offset = 1 << 31
+
+		// Some of the tables use oid columns to store desc IDs rather than ints; in
+		// these tables we will need to cast to int to do the addition/subtraction
+		// of the offset, and then cast back to the desired type determined here.
+		typ := "int"
+		switch tempTableName {
+		case "crdb_temp_system.database_role_settings":
+			typ = "oid"
 		}
-		fmt.Fprintf(&q, "ELSE %s END", colName)
 
-		_, err := executor.Exec(ctx, fmt.Sprintf("remap-%s", tempTableName), txn, q.String())
-		return errors.Wrapf(err, "remapping %s", tempTableName)
+		// We'll build one big UPDATE that moves all the IDs to their intermediate
+		// new values, which is new+offset, or just +offset for IDs which do not
+		// have a remapping, since we will unconditionally slide everything down by
+		// the offset at the end.
+		q := strings.Builder{}
+		fmt.Fprintf(&q, "UPDATE %s SET %s = (CASE\n", tempTableName, colName)
+		for _, old := range toRekey {
+			fmt.Fprintf(&q, "WHEN %s = %d THEN %d\n", colName, old, rekeys[old].ID+offset)
+		}
+		fmt.Fprintf(&q, "ELSE %s::int + %d END)::%s", colName, offset, typ)
+		if _, err := executor.Exec(ctx, fmt.Sprintf("remap-%s", tempTableName), txn, q.String()); err != nil {
+			return errors.Wrapf(err, "remapping IDs %s", tempTableName)
+		}
+
+		// Now slide all the IDs back down by the offset to their intended values.
+		if _, err := executor.Exec(ctx,
+			fmt.Sprintf("remap-%s-deoffset", tempTableName),
+			txn,
+			fmt.Sprintf("UPDATE %s SET %s = (%s::int - %d)::%s", tempTableName, colName, colName, offset, typ),
+		); err != nil {
+			return errors.Wrapf(err, "remapping %s; removing offset", tempTableName)
+		}
+
+		return nil
 	}
 }
 
