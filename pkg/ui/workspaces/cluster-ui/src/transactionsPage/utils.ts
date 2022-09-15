@@ -107,6 +107,7 @@ export const aggregateStatements = (
         aggregationInterval: s.aggregation_interval,
         implicitTxn: s.implicit_txn,
         database: s.database,
+        applicationName: s.app,
         fullScan: s.full_scan,
         stats: s.stats,
       };
