@@ -1273,7 +1273,7 @@ func cmdIsSpanEmpty(e *evalCtx) error {
 	if err != nil {
 		return err
 	}
-	e.results.buf.Print(isEmpty)
+	e.results.buf.Printf("%t\n", isEmpty)
 	return nil
 }
 
