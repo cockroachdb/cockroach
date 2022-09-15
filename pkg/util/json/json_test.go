@@ -501,6 +501,17 @@ func TestNewObjectBuilderWithCounter(t *testing.T) {
 }
 
 func TestBuildJSONObject(t *testing.T) {
+	checkJSONObjectsEqual := func(t *testing.T, expected, found JSON) {
+		t.Helper()
+		c, err := found.Compare(expected)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c != 0 {
+			t.Fatalf("expected %v to equal %v", found, expectError)
+		}
+	}
+
 	testCases := []struct {
 		input []string
 	}{
@@ -523,15 +534,50 @@ func TestBuildJSONObject(t *testing.T) {
 				t.Fatal(err)
 			}
 			result := b.Build()
-			c, err := result.Compare(expectedResult)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if c != 0 {
-				t.Fatalf("expected %v to equal %v", result, expectedResult)
-			}
+			checkJSONObjectsEqual(t, expectedResult, result)
+
+			t.Run("fixedKeys", func(t *testing.T) {
+				uniqueKeys := func() (keys []string) {
+					for k := range m {
+						keys = append(keys, k)
+					}
+					return keys
+				}()
+
+				fkb, err := NewFixedKeysObjectBuilder(uniqueKeys)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for i := 0; i < 5; i++ {
+					for k, v := range m {
+						if err := fkb.Set(k, v.(JSON)); err != nil {
+							t.Fatal(err)
+						}
+					}
+					result, err := fkb.Build()
+					if err != nil {
+						t.Fatal(err)
+					}
+					checkJSONObjectsEqual(t, expectedResult, result)
+				}
+			})
 		})
 	}
+}
+
+func TestBuildFixedKeysJSONObjectErrors(t *testing.T) {
+	t.Run("require_unique_keys", func(t *testing.T) {
+		_, err := NewFixedKeysObjectBuilder([]string{"a", "b", "c", "a", "d"})
+		require.Error(t, err)
+	})
+	t.Run("requires_all_keys_set", func(t *testing.T) {
+		b, err := NewFixedKeysObjectBuilder([]string{"a", "b", "c"})
+		require.NoError(t, err)
+		require.NoError(t, b.Set("a", jsonNull{}))
+		require.NoError(t, b.Set("b", jsonNull{}))
+		_, err = b.Build()
+		require.Error(t, err)
+	})
 }
 
 func jsonTestShorthand(s string) JSON {

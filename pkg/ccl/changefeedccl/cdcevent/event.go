@@ -349,7 +349,7 @@ func getEventDescriptorCached(
 	schemaTS hlc.Timestamp,
 	cache *cache.UnorderedCache,
 ) (*EventDescriptor, error) {
-	idVer := idVersion{id: desc.GetID(), version: desc.GetVersion(), family: family.ID}
+	idVer := CacheKey{ID: desc.GetID(), Version: desc.GetVersion(), FamilyID: family.ID}
 
 	if v, ok := cache.Get(idVer); ok {
 		ed := v.(*EventDescriptor)
@@ -385,7 +385,7 @@ func NewEventDecoder(
 		return nil, err
 	}
 
-	eventDescriptorCache := cache.NewUnorderedCache(defaultCacheConfig)
+	eventDescriptorCache := cache.NewUnorderedCache(DefaultCacheConfig)
 	getEventDescriptor := func(
 		desc catalog.TableDescriptor,
 		family *descpb.ColumnFamilyDescriptor,
