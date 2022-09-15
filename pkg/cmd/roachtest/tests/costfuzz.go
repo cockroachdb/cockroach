@@ -26,13 +26,16 @@ import (
 
 func registerCostFuzz(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:            "costfuzz",
-		Owner:           registry.OwnerSQLQueries,
-		Timeout:         time.Hour * 1,
-		RequiresLicense: true,
-		Tags:            nil,
-		Cluster:         r.MakeClusterSpec(1),
-		Run:             runCostFuzz,
+		Name:    "costfuzz",
+		Owner:   registry.OwnerSQLQueries,
+		Timeout: time.Hour * 1,
+		// The tests aren't yet stable, so the issues shouldn't be release
+		// blockers until someone looks at them.
+		NonReleaseBlocker: true,
+		RequiresLicense:   true,
+		Tags:              nil,
+		Cluster:           r.MakeClusterSpec(1),
+		Run:               runCostFuzz,
 	})
 }
 
