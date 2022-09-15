@@ -92,6 +92,7 @@ func optimizePuts(
 	// don't need to see intents for this purpose since intents also have
 	// provisional values that we will see.
 	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		KeyTypes: storage.IterKeyTypePointsAndRanges,
 		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
 		// need to set it to the key after maxKey.
 		UpperBound: maxKey.Next(),
