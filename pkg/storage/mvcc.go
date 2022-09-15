@@ -5309,8 +5309,9 @@ func CanGCEntireRange(
 }
 
 // MVCCFindSplitKey finds a key from the given span such that the left side of
-// the split is roughly targetSize bytes. The returned key will never be chosen
-// from the key ranges listed in keys.NoSplitSpans.
+// the split is roughly targetSize bytes. It only considers MVCC point keys, not
+// range keys. The returned key will never be chosen from the key ranges listed
+// in keys.NoSplitSpans.
 func MVCCFindSplitKey(
 	_ context.Context, reader Reader, key, endKey roachpb.RKey, targetSize int64,
 ) (roachpb.Key, error) {
