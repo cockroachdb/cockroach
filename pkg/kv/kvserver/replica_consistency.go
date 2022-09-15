@@ -66,9 +66,11 @@ const replicaChecksumGCInterval = time.Hour
 //   - ContainsEstimates==false, i.e. the stats claimed they were correct.
 //
 // Before issuing the fatal error, the cluster bootstrap version is verified.
-// We know that old versions of CockroachDB sometimes violated this invariant,
-// but we want to exclude these violations, focusing only on cases in which we
-// know old CRDB versions (<19.1 at time of writing) were not involved.
+// Note that on clusters that originally got bootstrapped on older releases
+// (definitely 19.1, and likely also more recent ones) we know of the existence
+// of stats bugs, so it has to be expected to see the assertion fire there.
+//
+// This env var is intended solely for use in Cockroach Labs testing.
 var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTENT_STATS", false)
 
 // replicaChecksum contains progress on a replica checksum computation.
@@ -233,35 +235,10 @@ func (r *Replica) checkConsistencyImpl(
 		if !haveDelta {
 			return resp, nil
 		}
-
 		if delta.ContainsEstimates <= 0 && fatalOnStatsMismatch {
 			// We just found out that the recomputation doesn't match the persisted stats,
 			// so ContainsEstimates should have been strictly positive.
-
-			var v roachpb.Version
-			if err := r.store.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return txn.GetProto(ctx, keys.BootstrapVersionKey, &v)
-			}); err != nil {
-				log.Infof(ctx, "while retrieving cluster bootstrap version: %s", err)
-				// Intentionally continue with the assumption that it's the current version.
-				v = r.store.cfg.Settings.Version.ActiveVersion(ctx).Version
-			}
-			// For clusters that ever ran <19.1, we're not so sure that the stats
-			// are consistent. Verify this only for clusters that started out on 19.1 or
-			// higher.
-			if !v.Less(roachpb.Version{Major: 19, Minor: 1}) {
-				// If version >= 19.1 but < 20.1-14 (AbortSpanBytes before its removal),
-				// we want to ignore any delta in AbortSpanBytes when comparing stats
-				// since older versions will not be tracking abort span bytes.
-				if v.Less(roachpb.Version{Major: 20, Minor: 1, Internal: 14}) {
-					delta.AbortSpanBytes = 0
-					haveDelta = delta != enginepb.MVCCStats{}
-				}
-				if !haveDelta {
-					return resp, nil
-				}
-				log.Fatalf(ctx, "found a delta of %+v", redact.Safe(delta))
-			}
+			log.Fatalf(ctx, "found a delta of %+v", redact.Safe(delta))
 		}
 
 		// We've found that there's something to correct; send an RecomputeStatsRequest. Note that this
@@ -271,13 +248,10 @@ func (r *Replica) checkConsistencyImpl(
 		// essentially paced by the consistency checker so we won't call this too often.
 		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
-		req := roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: args.Key},
-		}
-
 		var b kv.Batch
-		b.AddRawRequest(&req)
-
+		b.AddRawRequest(&roachpb.RecomputeStatsRequest{
+			RequestHeader: roachpb.RequestHeader{Key: args.Key},
+		})
 		err := r.store.db.Run(ctx, &b)
 		return resp, roachpb.NewError(err)
 	}
