@@ -124,7 +124,7 @@ array_in  array_in  array_in  array_in
 query OO
 SELECT 'public'::REGNAMESPACE, 'public'::REGNAMESPACE::OID
 ----
-public  4101115737
+public  105
 
 query OO
 SELECT 'root'::REGROLE, 'root'::REGROLE::OID
