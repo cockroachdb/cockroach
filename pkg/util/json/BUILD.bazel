@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/syncutil",
         "//pkg/util/unique",

@@ -504,7 +504,8 @@ func createChangefeedJobRecord(
 	//   the default error to avoid claiming the user set an option they didn't
 	//   explicitly set. Fortunately we know the only way to cause this is to
 	//   set envelope.
-	if isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink) {
+	if (isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink)) &&
+		encodingOpts.Envelope != changefeedbase.OptEnvelopeBare {
 		if err = opts.ForceKeyInValue(); err != nil {
 			return nil, errors.Errorf(`this sink is incompatible with envelope=%s`, encodingOpts.Envelope)
 		}

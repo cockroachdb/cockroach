@@ -405,7 +405,7 @@ func makeCloudStorageSink(
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	if !encodingOpts.KeyInValue {
+	if encodingOpts.Envelope != changefeedbase.OptEnvelopeBare && !encodingOpts.KeyInValue {
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
