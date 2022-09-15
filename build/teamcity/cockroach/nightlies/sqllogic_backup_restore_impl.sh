@@ -12,7 +12,7 @@ ARTIFACTS_DIR=/artifacts
 GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 exit_status=0
 
-for config in local multiregion-9node-3region-3azs; do
+for config in local multiregion-9node-3region-3azs 5node multiregion-9node-3region-3azs-no-los multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-vec-off multiregion-15node-5region-3azs 3node-tenant 3node-tenant-multiregion; do
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
     //pkg/ccl/logictestccl/tests/$config/... \
     --test_arg=-show-sql \
@@ -20,7 +20,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE.$config \
-    --test_timeout=7200 \
+    --test_timeout=14400 \
     || exit_status=$?
 
 process_test_json \
