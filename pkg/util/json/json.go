@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	uniq "github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
@@ -387,6 +388,61 @@ func (b *ObjectBuilder) Build() JSON {
 	sort.Sort(&sorter)
 	sorter.unique()
 	return jsonObject(sorter.pairs)
+}
+
+// FixedKeysObjectBuilder is a JSON object builder that builds
+// an object for the specified fixed set of unique keys.
+// This object can be reused to build multiple instances of JSON object.
+type FixedKeysObjectBuilder struct {
+	pairs   []jsonKeyValuePair
+	keyOrd  map[string]int
+	updated util.FastIntSet
+}
+
+// NewFixedKeysObjectBuilder creates JSON object builder for the specified
+// set of fixed, unique keys.
+func NewFixedKeysObjectBuilder(keys []string) (*FixedKeysObjectBuilder, error) {
+	sort.Strings(keys)
+	pairs := make([]jsonKeyValuePair, len(keys))
+	keyOrd := make(map[string]int, len(keys))
+
+	for i, k := range keys {
+		if _, exists := keyOrd[k]; exists {
+			return nil, errors.AssertionFailedf("expected unique keys, found %v", keys)
+		}
+		pairs[i] = jsonKeyValuePair{k: jsonString(keys[i])}
+		keyOrd[k] = i
+	}
+
+	return &FixedKeysObjectBuilder{
+		pairs:  pairs,
+		keyOrd: keyOrd,
+	}, nil
+}
+
+// Set sets the value for the specified key.
+// All previously configured keys must be set before calling Build.
+func (b *FixedKeysObjectBuilder) Set(k string, v JSON) error {
+	ord, ok := b.keyOrd[k]
+	if !ok {
+		return errors.AssertionFailedf("unknown key %s", k)
+	}
+
+	b.pairs[ord].v = v
+	b.updated.Add(ord)
+	return nil
+}
+
+// Build builds JSON object.
+func (b *FixedKeysObjectBuilder) Build() (JSON, error) {
+	if b.updated.Len() != len(b.pairs) {
+		return nil, errors.AssertionFailedf(
+			"expected all %d keys to be updated, %d updated",
+			len(b.pairs), b.updated.Len())
+	}
+	b.updated = util.FastIntSet{}
+	// Must copy b.pairs in case builder is reused.
+	return jsonObject(append([]jsonKeyValuePair(nil), b.pairs...)), nil
 }
 
 // pairSorter sorts and uniqueifies JSON pairs. In order to keep

@@ -2482,8 +2482,9 @@ func TestChangefeedBareJSON(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
 		foo := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy=stop AS SELECT * FROM foo`)
 		defer closeFeed(t, foo)
+		// __crdb__ is forced by test feed implementation.
 		assertPayloads(t, foo, []string{
-			`foo: [0]->{"a": 0, "b": "dog"}`,
+			`foo: [0]->{"__crdb__": {"key": [0]}, "a": 0, "b": "dog"}`,
 		})
 	}
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
