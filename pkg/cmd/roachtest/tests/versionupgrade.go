@@ -432,6 +432,15 @@ func upgradeNodes(
 		binary := uploadVersion(ctx, t, c, c.Node(node), newVersion)
 		settings := install.MakeClusterSettings(install.BinaryOption(binary))
 		c.Start(ctx, t.L(), startOpts, settings, c.Node(node))
+
+		// We have seen cases where a transient error could occur when this
+		// newly upgraded node serves as a gateway for a distributed query due
+		// to remote nodes not being able to dial back to the gateway for some
+		// reason (investigation of it is tracked in #87634). For now, we're
+		// papering over these flakes by this sleep. For more context, see
+		// #87104.
+		// TODO(yuzefovich): remove this sleep once #87634 is fixed.
+		time.Sleep(4 * time.Second)
 	}
 }
 
