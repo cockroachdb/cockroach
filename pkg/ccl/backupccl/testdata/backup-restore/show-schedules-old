@@ -1,0 +1,23 @@
+# This test imports rows of `system.scheduled_jobs` that were exported in older
+# versions to ensure that they can unmarshalled correctly in the current
+# version.
+
+new-server name=s1
+----
+
+link-backup server=s1 src-path=show_schedules_old,system_scheduled_jobs_22_1 dest-path=system_scheduled_jobs_22_1
+----
+
+exec-sql
+CREATE TABLE scratch (LIKE system.scheduled_jobs);
+----
+
+exec-sql
+IMPORT INTO scratch CSV DATA ('nodelocal://0/system_scheduled_jobs_22_1/rows/export*-n*.0.csv');
+----
+
+query-sql
+SELECT crdb_internal.pb_to_json('cockroach.jobs.jobspb.ExecutionArguments', execution_args, false, true)->'args' from scratch;
+----
+{"@type": "type.googleapis.com/cockroach.sql.ScheduledSQLStatsCompactorExecutionArgs"}
+{"@type": "type.googleapis.com/cockroach.ccl.backupccl.ScheduledBackupExecutionArgs", "backup_statement": "BACKUP INTO 'nodelocal://1/foo' WITH detached"}
