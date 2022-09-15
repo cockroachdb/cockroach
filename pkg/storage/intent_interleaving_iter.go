@@ -1220,10 +1220,6 @@ func (i *intentInterleavingIter) IsPrefix() bool {
 	return i.prefix
 }
 
-func (i *intentInterleavingIter) SupportsPrev() bool {
-	return true
-}
-
 // assertInvariants asserts internal iterator invariants, returning an
 // AssertionFailedf for any violations. It must be called on a valid iterator
 // after a complete state transition.

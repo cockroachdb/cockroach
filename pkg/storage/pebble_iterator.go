@@ -908,11 +908,6 @@ func (p *pebbleIterator) IsPrefix() bool {
 	return p.prefix
 }
 
-// SupportsPrev implements the MVCCIterator interface.
-func (p *pebbleIterator) SupportsPrev() bool {
-	return true
-}
-
 // GetRawIter is part of the EngineIterator interface.
 func (p *pebbleIterator) GetRawIter() *pebble.Iterator {
 	return p.iter

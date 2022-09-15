@@ -4803,16 +4803,6 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 	toHLC := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
-	engineBatchIteratorSupportsPrev := func(engine Engine) bool {
-		batch := engine.NewBatch()
-		defer batch.Close()
-		it := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-			UpperBound: TestingUserTableDataMin(),
-			LowerBound: keys.MaxKey,
-		})
-		defer it.Close()
-		return it.SupportsPrev()
-	}
 	runTestCase := func(t *testing.T, tc testCase, engine Engine) {
 		ctx := context.Background()
 		ms := &enginepb.MVCCStats{}
@@ -4826,8 +4816,6 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 			}
 		}
 
-		supportsPrev := engineBatchIteratorSupportsPrev(engine)
-
 		var keys []roachpb.GCRequest_GCKey
 		var expectedSeekLTs int
 		for _, key := range tc.keys {
@@ -4835,7 +4823,7 @@ func TestMVCCGarbageCollectUsesSeekLTAppropriately(t *testing.T) {
 				Key:       roachpb.Key(key.key),
 				Timestamp: toHLC(key.gcTimestamp),
 			})
-			if supportsPrev && key.expSeekLT {
+			if key.expSeekLT {
 				expectedSeekLTs++
 			}
 		}
