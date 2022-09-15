@@ -34,11 +34,8 @@ import TerminateQueryModal, {
 import { Button } from "../button";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Text, TextTypes } from "../text";
-import { SqlBox } from "src/sql/box";
-import {
-  NodeLink,
-  StatementLinkTarget,
-} from "src/statementsTable/statementsTableContent";
+import { SqlBox, SqlBoxSize } from "src/sql/box";
+import { NodeLink } from "src/statementsTable/statementsTableContent";
 
 import {
   ICancelQueryRequest,
@@ -302,7 +299,10 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
         </Row>
       );
     }
-    let curStmtInfo = (
+
+    let curStmtInfo = session.last_active_query ? (
+      <SqlBox value={session.last_active_query} size={SqlBoxSize.small} />
+    ) : (
       <SummaryCard className={cx("details-section")}>
         No Active Statement
       </SummaryCard>
