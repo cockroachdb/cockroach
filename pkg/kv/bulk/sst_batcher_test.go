@@ -77,7 +77,7 @@ func TestDuplicateHandling(t *testing.T) {
 				LowerBound: keys.LocalMax,
 				UpperBound: keys.MaxKey,
 			}
-			it, err := storage.NewPebbleMemSSTIterator(file.SST, false /* verify */, iterOpts)
+			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, iterOpts)
 			require.NoError(t, err)
 			defer it.Close()
 			for it.SeekGE(storage.NilKey); ; it.Next() {

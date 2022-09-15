@@ -1793,7 +1793,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	}
 
 	// Run sanity checks on last produced SST.
-	it, err := NewPebbleMemSSTIterator(
+	it, err := NewMemSSTIterator(
 		buf.Bytes(), true /* verify */, IterOptions{
 			LowerBound: keys.LocalMax,
 			UpperBound: roachpb.KeyMax,
@@ -1913,11 +1913,11 @@ func runSSTIterator(b *testing.B, variant string, numKeys int, verify bool) {
 	switch variant {
 	case "legacy":
 		makeSSTIterator = func(data []byte, verify bool) (SimpleMVCCIterator, error) {
-			return NewMemSSTIterator(data, verify)
+			return NewLegacyMemSSTIterator(data, verify)
 		}
 	case "pebble":
 		makeSSTIterator = func(data []byte, verify bool) (SimpleMVCCIterator, error) {
-			return NewPebbleMemSSTIterator(data, verify, IterOptions{
+			return NewMemSSTIterator(data, verify, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: keys.MinKey,
 				UpperBound: keys.MaxKey,

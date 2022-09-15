@@ -241,7 +241,10 @@ func assertExportedKVs(
 		require.Nil(t, expected)
 		return
 	}
-	sst, err := NewMemSSTIterator(data, false)
+	sst, err := NewMemSSTIterator(data, false, IterOptions{
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
 	require.NoError(t, err)
 	defer sst.Close()
 

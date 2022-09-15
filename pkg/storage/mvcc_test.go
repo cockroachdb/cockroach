@@ -6320,7 +6320,10 @@ func exportAllData(t *testing.T, engine Engine, limits queryLimits) []MVCCKey {
 
 func sstToKeys(t *testing.T, data []byte) []MVCCKey {
 	var results []MVCCKey
-	it, err := NewMemSSTIterator(data, false)
+	it, err := NewMemSSTIterator(data, false, IterOptions{
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
 	require.NoError(t, err, "Failed to read exported data")
 	defer it.Close()
 	for it.SeekGE(MVCCKey{Key: []byte{}}); ; {

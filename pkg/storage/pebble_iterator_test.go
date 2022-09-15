@@ -118,7 +118,7 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	b := f.Bytes()
 	b[rng.Intn(len(b))]++
 
-	it, err := NewPebbleSSTIterator([][]sstable.ReadableFile{{vfs.NewMemFile(b)}},
+	it, err := NewSSTIterator([][]sstable.ReadableFile{{vfs.NewMemFile(b)}},
 		IterOptions{UpperBound: roachpb.KeyMax}, false)
 
 	// We may error early, while opening the iterator.

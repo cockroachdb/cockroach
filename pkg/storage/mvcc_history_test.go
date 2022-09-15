@@ -1309,7 +1309,7 @@ func cmdExport(e *evalCtx) error {
 	}
 	e.results.buf.Printf("\n")
 
-	iter, err := NewPebbleMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
+	iter, err := NewMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})
@@ -1733,7 +1733,7 @@ func cmdSSTIterNew(e *evalCtx) error {
 	for i, sst := range e.ssts {
 		ssts[len(ssts)-i-1] = sst
 	}
-	iter, err := NewPebbleMultiMemSSTIterator(ssts, sstIterVerify, IterOptions{
+	iter, err := NewMultiMemSSTIterator(ssts, sstIterVerify, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})

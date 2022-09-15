@@ -6131,8 +6131,8 @@ type MVCCExportOptions struct {
 	// which covers the point key at c, but resuming from c@2 will contain the
 	// MVCC range tombstone [c-f)@5 which overlaps with the MVCC range tombstone
 	// in the previous response in the interval [c-c\0)@5. This overlap will not
-	// cause problems with multiplexed iteration using NewPebbleSSTIterator(),
-	// nor when ingesting the SSTs via `AddSSTable`.
+	// cause problems with multiplexed iteration using NewSSTIterator(), nor when
+	// ingesting the SSTs via `AddSSTable`.
 	StopMidKey bool
 	// ResourceLimiter limits how long iterator could run until it exhausts allocated
 	// resources. Export queries limiter in its iteration loop to break out once

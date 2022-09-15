@@ -538,13 +538,12 @@ methods as the main Pebble engine, notably `PutMVCCRangeKey()`. Refer to the
 
 However, the old `SSTIterator` does not support range keys, as it is built on a
 more primitive SST iterator infrastructure that e.g. does not support combined
-point/range key iteration. `NewPebbleSSTIterator()` can be used instead to
-construct a new `MVCCIterator` for SSTs using the same `pebbleIterator`
-implementation that is used for Pebble itself, supporting the same options and
-functionality, including MVCC range keys. Notably, this also supports iteration
-across several multiplexed SSTs, replacing the current `multiIterator` with a
-much more capable implementation that will be particularly useful for backup
-restoration.
+point/range key iteration. `NewSSTIterator()` can be used instead to construct a
+new `MVCCIterator` for SSTs using the same `pebbleIterator` implementation that
+is used for Pebble itself, supporting the same options and functionality,
+including MVCC range keys. Notably, this also supports iteration across several
+multiplexed SSTs, replacing the current `multiIterator` with a much more capable
+implementation that will be particularly useful for backup restoration.
 
 ### Exports
 
@@ -569,7 +568,7 @@ example, if there is a range tombstone `[b-d)@5`, and iteration stops between
 contain `[b-c\0)@5` and the next SST will contain `[c-d)@5`. This ensures that
 the range tombstones in each SST cover `c`, but the range tombstones in the
 SSTs overlap at `[c-c\0)@5`. This will not present a problem with multiplexed
-iteration using `NewPebbleSSTIterator()`, nor with `AddSSTable`.
+iteration using `NewSSTIterator()`, nor with `AddSSTable`.
 
 ### `AddSSTable` Ingestion
 

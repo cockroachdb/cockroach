@@ -43,7 +43,7 @@ func ScanSST(
 
 	// We iterate points and ranges separately on the SST for clarity
 	// and simplicity.
-	pointIter, err := storage.NewPebbleMemSSTIterator(sst.Data, true,
+	pointIter, err := storage.NewMemSSTIterator(sst.Data, true,
 		storage.IterOptions{
 			KeyTypes: storage.IterKeyTypePointsOnly,
 			// Only care about upper bound as we are iterating forward.
@@ -68,7 +68,7 @@ func ScanSST(
 		}
 	}
 
-	rangeIter, err := storage.NewPebbleMemSSTIterator(sst.Data, true,
+	rangeIter, err := storage.NewMemSSTIterator(sst.Data, true,
 		storage.IterOptions{
 			KeyTypes:   storage.IterKeyTypeRangesOnly,
 			UpperBound: scanWithin.EndKey,

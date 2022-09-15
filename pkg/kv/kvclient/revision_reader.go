@@ -53,7 +53,7 @@ func GetAllRevisions(
 			LowerBound: file.Span.Key,
 			UpperBound: file.Span.EndKey,
 		}
-		iter, err := storage.NewPebbleMemSSTIterator(file.SST, true, iterOpts)
+		iter, err := storage.NewMemSSTIterator(file.SST, true, iterOpts)
 		if err != nil {
 			return nil, err
 		}
