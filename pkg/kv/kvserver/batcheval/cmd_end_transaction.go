@@ -947,7 +947,10 @@ func splitTrigger(
 	// TODO(nvanbenschoten): this is a simple heuristic. If we had a cheap way to
 	// determine the relative sizes of the LHS and RHS, we could be more
 	// sophisticated here and always choose to scan the cheaper side.
-	emptyRHS, err := isGlobalKeyspaceEmpty(batch, &split.RightDesc)
+	emptyRHS, err := storage.MVCCIsSpanEmpty(ctx, batch, storage.MVCCIsSpanEmptyOptions{
+		StartKey: split.RightDesc.StartKey.AsRawKey(),
+		EndKey:   split.RightDesc.EndKey.AsRawKey(),
+	})
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrapf(err,
 			"unable to determine whether right hand side of split is empty")
@@ -977,21 +980,6 @@ func splitTrigger(
 // LHS ranges. However, to improve test coverage, we use a metamorphic value.
 var splitScansRightForStatsFirst = util.ConstantWithMetamorphicTestBool(
 	"split-scans-right-for-stats-first", false)
-
-// isGlobalKeyspaceEmpty returns whether the global keyspace of the provided
-// range is entirely empty. The function returns false if the global keyspace
-// contains at least one key.
-func isGlobalKeyspaceEmpty(reader storage.Reader, d *roachpb.RangeDescriptor) (bool, error) {
-	span := d.KeySpan().AsRawSpanWithNoLocals()
-	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: span.EndKey})
-	defer iter.Close()
-	iter.SeekGE(storage.MakeMVCCMetadataKey(span.Key))
-	ok, err := iter.Valid()
-	if err != nil {
-		return false, err
-	}
-	return !ok /* empty */, nil
-}
 
 // makeScanStatsFn constructs a splitStatsScanFn for the provided post-split
 // range descriptor which computes the range's statistics.
