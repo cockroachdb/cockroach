@@ -265,10 +265,11 @@ type MVCCIterator interface {
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
-	// FindSplitKey finds a key from the given span such that the left side of
-	// the split is roughly targetSize bytes. The returned key will never be
-	// chosen from the key ranges listed in keys.NoSplitSpans and will always
-	// sort equal to or after minSplitKey.
+	// FindSplitKey finds a key from the given span such that the left side of the
+	// split is roughly targetSize bytes. It only considers MVCC point keys, not
+	// range keys. The returned key will never be chosen from the key ranges
+	// listed in keys.NoSplitSpans and will always sort equal to or after
+	// minSplitKey.
 	//
 	// DO NOT CALL directly (except in wrapper MVCCIterator implementations). Use the
 	// package-level MVCCFindSplitKey instead. For correct operation, the caller
@@ -1114,11 +1115,13 @@ func GetIntent(reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
 	return &intent, nil
 }
 
-// Scan returns up to max key/value objects starting from start (inclusive)
-// and ending at end (non-inclusive). Specify max=0 for unbounded scans. Since
-// this code may use an intentInterleavingIter, the caller should not attempt
-// a single scan to span local and global keys. See the comment in the
-// declaration of intentInterleavingIter for details.
+// Scan returns up to max point key/value objects from start (inclusive) to end
+// (non-inclusive). Specify max=0 for unbounded scans. Since this code may use
+// an intentInterleavingIter, the caller should not attempt a single scan to
+// span local and global keys. See the comment in the declaration of
+// intentInterleavingIter for details.
+//
+// NB: This function ignores MVCC range keys. It should only be used for tests.
 func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
 	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
