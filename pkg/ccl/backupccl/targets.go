@@ -270,6 +270,8 @@ func fullClusterTargets(
 			fullClusterDescs = append(fullClusterDescs, desc)
 		case catalog.TypeDescriptor:
 			fullClusterDescs = append(fullClusterDescs, desc)
+		case catalog.FunctionDescriptor:
+			fullClusterDescs = append(fullClusterDescs, desc)
 		}
 	}
 	return fullClusterDescs, fullClusterDBs, nil
@@ -333,12 +335,12 @@ func fullClusterTargetsBackup(
 // filters the descriptors based on the targets specified in the restore, and
 // calculates the max descriptor ID in the backup.
 // Post filtering, the method returns:
-//   - A list of all descriptors (table, type, database, schema) along with their
-//     parent databases.
+//   - A list of all descriptors (table, type, database, schema, function) along with
+//     their parent databases.
 //   - A list of database descriptors IFF the user is restoring on the cluster or
 //     database level.
 //   - A map of table patterns to the resolved descriptor IFF the user is
-//     restoring on the table leve.
+//     restoring on the table level.
 //   - A list of tenants to restore, if applicable.
 func selectTargets(
 	ctx context.Context,

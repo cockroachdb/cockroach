@@ -467,6 +467,10 @@ func checkPrivilegesForBackup(
 			if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
 				return errors.WithHint(err, notice)
 			}
+		case catalog.FunctionDescriptor:
+			if err := p.CheckPrivilege(ctx, desc, privilege.EXECUTE); err != nil {
+				return errors.WithHint(err, notice)
+			}
 		}
 	}
 

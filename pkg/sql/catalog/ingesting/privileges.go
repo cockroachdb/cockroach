@@ -85,6 +85,10 @@ func GetIngestingDescriptorPrivileges(
 		if descCoverage == tree.RequestedDescriptors {
 			updatedPrivileges = catpb.NewBaseDatabasePrivilegeDescriptor(user)
 		}
+	case catalog.FunctionDescriptor:
+		if descCoverage == tree.RequestedDescriptors {
+			updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
+		}
 	}
 	return updatedPrivileges, nil
 }

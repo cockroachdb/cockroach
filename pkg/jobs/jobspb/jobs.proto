@@ -319,6 +319,9 @@ message RestoreDetails {
   // Like TypeDescs, it does not include existing schema descriptors in the
   // cluster that backed up schemas are remapped to.
   repeated sqlbase.SchemaDescriptor schema_descs = 15;
+  // FunctionDescs contains function descriptors written as part of this
+  // restore.
+  repeated sqlbase.FunctionDescriptor function_descs = 27;
   reserved 13;
   repeated sqlbase.TenantInfoWithUsage tenants = 21 [(gogoproto.nullable) = false];
 
@@ -387,7 +390,7 @@ message RestoreDetails {
 
   bool VerifyData = 26;
 
-  // NEXT ID: 27.
+  // NEXT ID: 28.
 }
 
 

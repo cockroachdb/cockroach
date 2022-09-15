@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -709,6 +710,8 @@ func createImportingDescriptors(
 	var writtenTypes []catalog.TypeDescriptor
 	var schemas []*schemadesc.Mutable
 	var types []*typedesc.Mutable
+	var functions []*funcdesc.Mutable
+
 	// Store the tables as both the concrete mutable structs and the interface
 	// to deal with the lack of slice covariance in go. We want the slice of
 	// mutable descriptors for rewriting but ultimately want to return the
@@ -780,6 +783,10 @@ func createImportingDescriptors(
 		case catalog.TypeDescriptor:
 			mut := typedesc.NewBuilder(desc.TypeDesc()).BuildCreatedMutableType()
 			types = append(types, mut)
+			allMutableDescs = append(allMutableDescs, mut)
+		case catalog.FunctionDescriptor:
+			mut := funcdesc.NewBuilder(desc.FuncDesc()).BuildCreatedMutableFunction()
+			functions = append(functions, mut)
 			allMutableDescs = append(allMutableDescs, mut)
 		}
 	}
@@ -882,6 +889,24 @@ func createImportingDescriptors(
 		return nil, nil, nil, err
 	}
 
+	// TODO(chengxiong): for now, we know that functions are not referenced by any
+	// other objects, so that function descriptors are only restored when
+	// restoring databases. This means that all function descriptors are not
+	// remaps. Which means that we don't need resolve collisions between functions
+	// being restored and existing functions in target DB However, this won't be
+	// true when we start supporting udf references from other objects. For
+	// example, we need extra logic to handle remaps for udfs used by a table when
+	// backup/restore is on table level.
+	functionsToWrite := make([]*funcdesc.Mutable, len(functions))
+	writtenFunctions := make([]catalog.FunctionDescriptor, len(functions))
+	for i, fn := range functions {
+		functionsToWrite[i] = fn
+		writtenFunctions[i] = fn
+	}
+	if err := rewrite.FunctionDescs(functions, details.DescriptorRewrites, details.OverrideDB); err != nil {
+		return nil, nil, nil, err
+	}
+
 	// Finally, clean up / update any schema changer state inside descriptors
 	// globally.
 	if err := rewrite.MaybeClearSchemaChangerStateInDescs(allMutableDescs); err != nil {
@@ -899,6 +924,9 @@ func createImportingDescriptors(
 		desc.SetOffline("restoring")
 	}
 	for _, desc := range mutableDatabases {
+		desc.SetOffline("restoring")
+	}
+	for _, desc := range functionsToWrite {
 		desc.SetOffline("restoring")
 	}
 
@@ -1007,7 +1035,8 @@ func createImportingDescriptors(
 
 			// Write the new descriptors which are set in the OFFLINE state.
 			if err := ingesting.WriteDescriptors(
-				ctx, p.ExecCfg().Codec, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
+				ctx, p.ExecCfg().Codec, txn, p.User(), descsCol,
+				databases, writtenSchemas, tables, writtenTypes, writtenFunctions,
 				details.DescriptorCoverage, nil /* extra */, restoreTempSystemDB,
 			); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
@@ -1171,6 +1200,10 @@ func createImportingDescriptors(
 			details.SchemaDescs = make([]*descpb.SchemaDescriptor, len(schemasToWrite))
 			for i := range schemasToWrite {
 				details.SchemaDescs[i] = schemasToWrite[i].SchemaDesc()
+			}
+			details.FunctionDescs = make([]*descpb.FunctionDescriptor, len(functionsToWrite))
+			for i, fn := range functionsToWrite {
+				details.FunctionDescs[i] = fn.FuncDesc()
 			}
 
 			// Update the job once all descs have been prepared for ingestion.
@@ -1941,6 +1974,7 @@ func (r *restoreResumer) publishDescriptors(
 	newTypes := make([]*descpb.TypeDescriptor, 0, len(details.TypeDescs))
 	newSchemas := make([]*descpb.SchemaDescriptor, 0, len(details.SchemaDescs))
 	newDBs := make([]*descpb.DatabaseDescriptor, 0, len(details.DatabaseDescs))
+	newFunctions := make([]*descpb.FunctionDescriptor, 0, len(details.FunctionDescs))
 
 	// Go through the descriptors and find any declarative schema change jobs
 	// affecting them.
@@ -2027,6 +2061,10 @@ func (r *restoreResumer) publishDescriptors(
 		db := all.LookupDescriptorEntry(details.DatabaseDescs[i].GetID()).(catalog.DatabaseDescriptor)
 		newDBs = append(newDBs, db.DatabaseDesc())
 	}
+	for i := range details.FunctionDescs {
+		fn := all.LookupDescriptorEntry(details.FunctionDescs[i].GetID()).(catalog.FunctionDescriptor)
+		newFunctions = append(newFunctions, fn.FuncDesc())
+	}
 	b := txn.NewBatch()
 	if err := all.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
 		d := desc.(catalog.MutableDescriptor)
@@ -2053,6 +2091,7 @@ func (r *restoreResumer) publishDescriptors(
 	details.TypeDescs = newTypes
 	details.SchemaDescs = newSchemas
 	details.DatabaseDescs = newDBs
+	details.FunctionDescs = newFunctions
 	if err := r.job.SetDetails(ctx, txn, details); err != nil {
 		return errors.Wrap(err,
 			"updating job details after publishing tables")
@@ -2088,6 +2127,10 @@ func prefetchDescriptors(
 	for i := range details.DatabaseDescs {
 		expVersion[details.DatabaseDescs[i].GetID()] = details.DatabaseDescs[i].GetVersion()
 		allDescIDs.Add(details.DatabaseDescs[i].GetID())
+	}
+	for i := range details.FunctionDescs {
+		expVersion[details.FunctionDescs[i].GetID()] = details.FunctionDescs[i].GetVersion()
+		allDescIDs.Add(details.FunctionDescs[i].GetID())
 	}
 	// Note that no maximum size is put on the batch here because,
 	// in general, we assume that we can fit all of the descriptors
@@ -2296,6 +2339,22 @@ func (r *restoreResumer) dropDescriptors(
 		descsCol.NotifyOfDeletedDescriptor(mutType.GetID())
 	}
 
+	for i := range details.FunctionDescs {
+		fnDesc := details.FunctionDescs[i]
+		mutFn, err := descsCol.GetMutableFunctionByID(ctx, txn, fnDesc.ID, tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidLeased:    true,
+				IncludeOffline: true,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		mutFn.SetDropped()
+		b.Del(catalogkeys.MakeDescMetadataKey(codec, fnDesc.ID))
+		descsCol.NotifyOfDeletedDescriptor(fnDesc.ID)
+	}
+
 	// Queue a GC job.
 	gcDetails := jobspb.SchemaChangeGCDetails{}
 	for _, tableID := range tablesToGC {
@@ -2328,6 +2387,9 @@ func (r *restoreResumer) dropDescriptors(
 	}
 	for _, schema := range details.SchemaDescs {
 		ignoredChildDescIDs[schema.ID] = struct{}{}
+	}
+	for _, fn := range details.FunctionDescs {
+		ignoredChildDescIDs[fn.ID] = struct{}{}
 	}
 	all, err := descsCol.GetAllDescriptors(ctx, txn)
 	if err != nil {

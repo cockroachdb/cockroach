@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
@@ -149,6 +150,7 @@ func allocateDescriptorRewrites(
 	schemasByID map[descpb.ID]*schemadesc.Mutable,
 	tablesByID map[descpb.ID]*tabledesc.Mutable,
 	typesByID map[descpb.ID]*typedesc.Mutable,
+	functionsByID map[descpb.ID]*funcdesc.Mutable,
 	restoreDBs []catalog.DatabaseDescriptor,
 	descriptorCoverage tree.DescriptorCoverage,
 	opts tree.RestoreOptions,
@@ -538,6 +540,29 @@ func allocateDescriptorRewrites(
 			}
 		}
 
+		// TODO(chengxiong): we need to handle the cases of restoring tables when we
+		// start supporting udf references from other objects. Namely, we need to do
+		// collision checks similar to tables and types. However, there would be a
+		// bit shift since there is not namespace entry for functions. That means we
+		// need some function resolution for it.
+		for _, function := range functionsByID {
+			// User-defined functions are not allowed in tables, so restoring specific
+			// tables shouldn't match any udf descriptors.
+			if _, ok := descriptorRewrites[function.ID]; ok {
+				return errors.AssertionFailedf("function descriptors seen when restoring tables")
+			}
+
+			targetDB, err := resolveTargetDB(ctx, txn, p, databasesByID, intoDB, descriptorCoverage, function)
+			if err != nil {
+				return err
+			}
+
+			if _, ok := restoreDBNames[targetDB]; ok {
+				needsNewParentIDs[targetDB] = append(needsNewParentIDs[targetDB], function.ID)
+			} else {
+				return errors.AssertionFailedf("function descriptor seen when restoring tables")
+			}
+		}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -611,6 +636,11 @@ func allocateDescriptorRewrites(
 		}
 	}
 
+	// Remap function descriptor IDs.
+	for _, fn := range functionsByID {
+		descriptorsToRemap = append(descriptorsToRemap, fn)
+	}
+
 	sort.Sort(catalog.Descriptors(descriptorsToRemap))
 
 	// Generate new IDs for the schemas, tables, and types that need to be
@@ -644,6 +674,9 @@ func allocateDescriptorRewrites(
 	}
 	for _, typ := range typesByID {
 		rewriteObject(typ)
+	}
+	for _, fn := range functionsByID {
+		rewriteObject(fn)
 	}
 
 	return descriptorRewrites, nil
@@ -1633,6 +1666,7 @@ func doRestorePlan(
 	schemasByID := make(map[descpb.ID]*schemadesc.Mutable)
 	tablesByID := make(map[descpb.ID]*tabledesc.Mutable)
 	typesByID := make(map[descpb.ID]*typedesc.Mutable)
+	functionsByID := make(map[descpb.ID]*funcdesc.Mutable)
 
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
@@ -1644,6 +1678,8 @@ func doRestorePlan(
 			tablesByID[desc.ID] = desc
 		case *typedesc.Mutable:
 			typesByID[desc.ID] = desc
+		case *funcdesc.Mutable:
+			functionsByID[desc.ID] = desc
 		}
 	}
 
@@ -1700,6 +1736,7 @@ func doRestorePlan(
 		schemasByID,
 		filteredTablesByID,
 		typesByID,
+		functionsByID,
 		restoreDBs,
 		restoreStmt.DescriptorCoverage,
 		restoreStmt.Options,
@@ -1745,10 +1782,18 @@ func doRestorePlan(
 	for _, desc := range typesByID {
 		types = append(types, desc)
 	}
+	var functions []*funcdesc.Mutable
+	for _, desc := range functionsByID {
+		functions = append(functions, desc)
+	}
 
 	// We attempt to rewrite ID's in the collected type and table descriptors
 	// to catch errors during this process here, rather than in the job itself.
-	if err := rewrite.TableDescs(tables, descriptorRewrites, intoDB); err != nil {
+	overrideDBName := intoDB
+	if newDBName != "" {
+		overrideDBName = newDBName
+	}
+	if err := rewrite.TableDescs(tables, descriptorRewrites, overrideDBName); err != nil {
 		return err
 	}
 	if err := rewrite.DatabaseDescs(databases, descriptorRewrites, map[descpb.ID]struct{}{}); err != nil {
@@ -1758,6 +1803,9 @@ func doRestorePlan(
 		return err
 	}
 	if err := rewrite.TypeDescs(types, descriptorRewrites); err != nil {
+		return err
+	}
+	if err := rewrite.FunctionDescs(functions, descriptorRewrites, overrideDBName); err != nil {
 		return err
 	}
 	for i := range revalidateIndexes {
@@ -1776,7 +1824,7 @@ func doRestorePlan(
 		BackupLocalityInfo: localityInfo,
 		TableDescs:         encodedTables,
 		Tenants:            tenants,
-		OverrideDB:         intoDB,
+		OverrideDB:         overrideDBName,
 		DescriptorCoverage: restoreStmt.DescriptorCoverage,
 		Encryption:         encryption,
 		RevalidateIndexes:  revalidateIndexes,

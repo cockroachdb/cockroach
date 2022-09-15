@@ -90,6 +90,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.5.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
+	github.com/guptarohit/asciigraph v0.5.5
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
 	github.com/jackc/pgconn v1.12.1
 	github.com/jackc/pgproto3/v2 v2.3.0

@@ -249,3 +249,57 @@ select object_name from [show backup latest in 'nodelocal://1/test-nonroot-table
 pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI
 
 subtest end
+
+subtest udf-permission
+
+exec-sql
+CREATE DATABASE d_test_fn;
+USE d_test_fn;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+USE d;
+----
+
+# Cluster backup should succeed as a root user.
+exec-sql
+BACKUP INTO 'userfile:///test-root/'
+----
+
+# Backups should succeed as a non-root user with admin role.
+exec-sql
+GRANT ADMIN TO testuser;
+----
+
+exec-sql user=testuser
+BACKUP INTO 'userfile:///test-nonroot-cluster';
+----
+
+exec-sql user=testuser
+BACKUP DATABASE d_test_fn INTO 'userfile:///test-nonroot-db';
+----
+
+exec-sql
+REVOKE ADMIN FROM testuser
+----
+
+# Grant system backup privilege and re-run the backup.
+exec-sql
+GRANT SYSTEM BACKUP TO testuser;
+----
+
+exec-sql user=testuser
+BACKUP INTO 'userfile:///test-nonroot-cluster';
+----
+
+# System privilege BACKUP does not allow a user to run database/table backups by
+# default.
+exec-sql user=testuser
+BACKUP DATABASE d_test_fn INTO 'userfile:///test-nonroot-db';
+----
+pq: user testuser does not have EXECUTE privilege on function f
+HINT: The existing privileges are being deprecated in favour of a fine-grained privilege model explained here <link>. In a future release, to run BACKUP DATABASE, user testuser will exclusively require the BACKUP privilege on database d_test_fn.
+
+exec-sql
+REVOKE SYSTEM BACKUP FROM testuser;
+----
+
+subtest end
