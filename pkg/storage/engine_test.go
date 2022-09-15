@@ -1271,35 +1271,6 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 	}
 }
 
-// TestSupportPrev tests that SupportsPrev works as expected.
-func TestSupportsPrev(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	eng, err := Open(context.Background(), InMemory(), CacheSize(1<<20 /* 1 MiB */))
-	require.NoError(t, err)
-	defer eng.Close()
-	opts := IterOptions{LowerBound: keys.LocalMax, UpperBound: keys.MaxKey}
-	t.Run("engine", func(t *testing.T) {
-		it := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts)
-		defer it.Close()
-		require.Equal(t, true, it.SupportsPrev())
-	})
-	t.Run("batch", func(t *testing.T) {
-		batch := eng.NewBatch()
-		defer batch.Close()
-		batchIt := batch.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts)
-		defer batchIt.Close()
-		require.Equal(t, true, batchIt.SupportsPrev())
-	})
-	t.Run("snapshot", func(t *testing.T) {
-		snap := eng.NewSnapshot()
-		defer snap.Close()
-		snapIt := snap.NewMVCCIterator(MVCCKeyAndIntentsIterKind, opts)
-		defer snapIt.Close()
-		require.Equal(t, true, snapIt.SupportsPrev())
-	})
-}
-
 func TestFS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
