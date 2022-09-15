@@ -1,0 +1,85 @@
+# Explore how elastic CPU limits stay within the [min,max] bounds, and that we
+# observe a faster decrease in CPU limit than an increase (due to the factor
+# term).
+init limit=40%
+----
+
+params min-util=10% max-util=40% factor=3.0
+----
+target-p99       = 1ms
+min-util         = 10.00%
+max-util         = 40.00%
+inactive-util    = 13.00%
+adjustment-delta = 0.10%
+factor           = 3.00
+inactive-factor  = 0.25
+
+# Set up an increasing workload (+1% every tick).
+tick
+p99=1ms ticks=1 util-fraction=1.0 util-lag=5
+----
+
+# Set a set-point (5%) lower than the controller is allowed to go (10%).
+# We'll not be able to bring scheduling latencies down to where it needs to be.
+auto set-point=5% ticks=200
+----
+
+# Set a set-point (45%) higher than the controller is allowed to go (40%).
+# We'll not be able to bring elastic work utilization as high as it could be;
+# our latencies were allowed to go higher so we're leaving headroom.
+auto set-point=45% ticks=400
+----
+
+plot width=70 height=20
+----
+----
+ 1869 ┤╭╮
+ 1790 ┤││
+ 1711 ┤││
+ 1631 ┤│╰╮
+ 1552 ┤│ ╰─╮╭╮
+ 1472 ┤│   ╰╯╰╮
+ 1393 ┤│      ╰╮
+ 1314 ┤│       │
+ 1234 ┤│       │╭─╮    ╭╮
+ 1155 ┤│       ╰╯ │  ╭╮││╭╮
+ 1076 ┤│          ╰──╯││╰╯╰─╮
+  996 ┼─────────────────────────────────────────────────────────────────────
+  917 ┤                     ╰─╮                        ╭─╮     ╭─╮   ╭─╮
+  838 ┤                       │                        │ │ ╭╮  │ ╰╮╭╮│ │╭─╮
+  758 ┤                       │                     ╭╮ │ │╭╯╰╮ │  ╰╯││ ╰╯ ╰─
+  679 ┤                       │                  ╭╮ │╰╮│ ││  ╰╮│    ╰╯
+  600 ┤                       │            ╭─╮  ╭╯│╭╯ ╰╯ ╰╯   ╰╯
+  520 ┤                       │    ╭╮ ╭╮╭╮ │ │ ╭╯ ╰╯
+  441 ┤                       │    ││ │╰╯│╭╯ ╰─╯
+  362 ┤                       │ ╭──╯│ │  ╰╯
+  282 ┤                       ╰─╯   ╰─╯
+                           p99 scheduler latencies (μs)
+
+
+ 40.0 ┼╭╮                                                       ╭╮╭─────────
+ 38.0 ┤│╰╮                                                  ╭╭──╯╰╯
+ 36.0 ┤│╰╰╮                                               ╭╭─╯
+ 34.0 ┤│ ╰│                                             ╭╭─╯
+ 32.0 ┤│  ╰╮                                          ╭──╯
+ 30.0 ┤│   ╰╮                                      ╭╭─╯
+ 28.0 ┤│   ╰╰╮                                   ╭╭─╯
+ 26.0 ┤│    ╰╰╮                                ╭──╯
+ 24.0 ┤│     ╰│                             ╭╭─╯
+ 22.0 ┤│      ╰╮                          ╭╭─╯
+ 20.0 ┤│      ╰╰╮                       ╭──╯
+ 18.0 ┤│       ╰╰╮                   ╭╭─╯
+ 16.0 ┤│        ╰│                 ╭╭─╯
+ 14.0 ┤│         ╰╮              ╭╭─╯
+ 12.0 ┤│         ╰╰╮           ╭──╯
+ 10.0 ┤│          ╰╰───────────╯
+  8.0 ┤│
+  6.0 ┤│
+  4.0 ┤│
+  2.0 ┤│
+  0.0 ┼╯
+                       elastic cpu utilization and limit (%)
+----
+----
+
+# vim:ft=sh

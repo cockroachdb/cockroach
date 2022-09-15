@@ -86,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/ptp"
@@ -709,6 +710,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		stores,
 		cfg.ClusterIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork),
+		gcoords.Elastic,
 		gcoords.Stores,
 		tenantUsage,
 		tenantSettingsWatcher,
@@ -718,6 +720,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
+
+	{ // wire up admission control's scheduler latency listener
+		slcbID := schedulerlatency.RegisterCallback(
+			node.storeCfg.SchedulerLatencyListener.SchedulerLatency,
+		)
+		stopper.AddCloser(stop.CloserFn(func() {
+			schedulerlatency.UnregisterCallback(slcbID)
+		}))
+	}
 
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor, systemConfigWatcher,
@@ -1387,6 +1398,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 		case <-s.stopper.ShouldQuiesce():
 		}
 	})
+
+	if err := schedulerlatency.StartSampler(ctx, s.st, s.stopper); err != nil {
+		return err
+	}
 
 	hlcUpperBoundExists, err := s.checkHLCUpperBoundExistsAndEnsureMonotonicity(ctx, initialStart)
 	if err != nil {

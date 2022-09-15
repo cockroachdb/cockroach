@@ -1,0 +1,42 @@
+# Make sure that db names are rewritten in a view restored to a new db name.
+new-server name=s
+----
+
+exec-sql
+CREATE DATABASE db1;
+USE db1;
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+CREATE VIEW sc1.v1 AS SELECT a FROM sc1.tbl1;
+----
+
+exec-sql
+INSERT INTO sc1.tbl1 VALUES (123);
+----
+
+query-sql
+SELECT * FROM sc1.v1;
+----
+123
+
+query-sql
+SHOW CREATE VIEW sc1.v1;
+----
+sc1.v1 CREATE VIEW sc1.v1 (
+	a
+) AS SELECT a FROM db1.sc1.tbl1
+
+exec-sql
+BACKUP DATABASE db1 INTO 'nodelocal://0/test/'
+----
+
+exec-sql
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://0/test/' WITH new_db_name = db1_new
+----
+
+query-sql
+SHOW CREATE VIEW db1_new.sc1.v1;
+----
+db1_new.sc1.v1 CREATE VIEW sc1.v1 (
+	a
+) AS SELECT a FROM db1_new.sc1.tbl1

@@ -1,0 +1,36 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "schedulerlatency",
+    srcs = [
+        "callbacks.go",
+        "sampler.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/schedulerlatency",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/ring",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "schedulerlatency_test",
+    srcs = ["scheduler_latency_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":schedulerlatency"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
