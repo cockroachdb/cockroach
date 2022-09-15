@@ -900,11 +900,20 @@ func cmdCheckIntent(e *evalCtx) error {
 	if e.hasArg("none") {
 		wantIntent = false
 	}
-	metaKey := mvccKey(key)
+
 	var meta enginepb.MVCCMetadata
-	ok, _, _, err := e.engine.MVCCGetProto(metaKey, &meta)
+	iter := e.engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: key})
+	ok, err := iter.Valid()
 	if err != nil {
 		return err
+	}
+	ok = ok && iter.UnsafeKey().Timestamp.IsEmpty()
+	if ok {
+		if err = iter.ValueProto(&meta); err != nil {
+			return err
+		}
 	}
 	if !ok && wantIntent {
 		return errors.Newf("meta: %v -> expected intent, found none", key)
@@ -1300,7 +1309,7 @@ func cmdExport(e *evalCtx) error {
 	}
 	e.results.buf.Printf("\n")
 
-	iter, err := NewPebbleMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
+	iter, err := NewMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})
@@ -1724,7 +1733,7 @@ func cmdSSTIterNew(e *evalCtx) error {
 	for i, sst := range e.ssts {
 		ssts[len(ssts)-i-1] = sst
 	}
-	iter, err := NewPebbleMultiMemSSTIterator(ssts, sstIterVerify, IterOptions{
+	iter, err := NewMultiMemSSTIterator(ssts, sstIterVerify, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})

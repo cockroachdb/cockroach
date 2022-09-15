@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -377,28 +378,35 @@ func (p *pebbleIterator) Valid() (bool, error) {
 	}
 	// NB: A Pebble Iterator always returns Valid()==false when an error is
 	// present. If Valid() is true, there is no error.
-	if ok := p.iter.Valid(); ok {
-		// The MVCCIterator interface is broken in that it silently discards
-		// the error when UnsafeKey(), Key() are unable to parse the key as
-		// an MVCCKey. This is especially problematic if the caller is
-		// accidentally iterating into the lock table key space, since that
-		// parsing will fail. We do a cheap check here to make sure we are
-		// not in the lock table key space.
-		//
-		// TODO(sumeer): fix this properly by changing those method signatures.
-		k := p.iter.Key()
-		if len(k) == 0 {
-			return false, errors.Errorf("iterator encountered 0 length key")
-		}
-		// Last byte is the version length + 1 or 0.
-		versionLen := int(k[len(k)-1])
-		if versionLen == engineKeyVersionLockTableLen+1 {
-			p.mvccDone = true
-			return false, nil
-		}
-		return ok, nil
+	if !p.iter.Valid() {
+		return false, p.iter.Error()
 	}
-	return false, p.iter.Error()
+
+	// The MVCCIterator interface is broken in that it silently discards
+	// the error when UnsafeKey(), Key() are unable to parse the key as
+	// an MVCCKey. This is especially problematic if the caller is
+	// accidentally iterating into the lock table key space, since that
+	// parsing will fail. We do a cheap check here to make sure we are
+	// not in the lock table key space.
+	//
+	// TODO(sumeer): fix this properly by changing those method signatures.
+	k := p.iter.Key()
+	if len(k) == 0 {
+		return false, errors.Errorf("iterator encountered 0 length key")
+	}
+	// Last byte is the version length + 1 or 0.
+	versionLen := int(k[len(k)-1])
+	if versionLen == engineKeyVersionLockTableLen+1 {
+		p.mvccDone = true
+		return false, nil
+	}
+
+	if util.RaceEnabled {
+		if err := p.assertMVCCInvariants(); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // Next implements the MVCCIterator interface.
@@ -503,15 +511,10 @@ func (p *pebbleIterator) NextKey() {
 
 // UnsafeKey implements the MVCCIterator interface.
 func (p *pebbleIterator) UnsafeKey() MVCCKey {
-	if valid, err := p.Valid(); err != nil || !valid {
-		return MVCCKey{}
-	}
-
 	mvccKey, err := DecodeMVCCKey(p.iter.Key())
 	if err != nil {
 		return MVCCKey{}
 	}
-
 	return mvccKey
 }
 
@@ -960,4 +963,47 @@ func (p *pebbleIterator) destroy() {
 		rangeKeyMaskingBuf: p.rangeKeyMaskingBuf,
 		reusable:           p.reusable,
 	}
+}
+
+// assertMVCCInvariants asserts internal MVCC iterator invariants, returning an
+// AssertionFailedf on any failures. It must be called on a valid iterator after
+// a complete state transition.
+func (p *pebbleIterator) assertMVCCInvariants() error {
+	// Assert general MVCCIterator API invariants.
+	if err := assertMVCCIteratorInvariants(p); err != nil {
+		return err
+	}
+
+	// The underlying iterator must be valid, with !mvccDone.
+	if !p.iter.Valid() {
+		errMsg := p.iter.Error().Error()
+		return errors.AssertionFailedf("underlying iter is invalid, with err=%s", errMsg)
+	}
+	if p.mvccDone {
+		return errors.AssertionFailedf("valid iter with mvccDone set")
+	}
+
+	// The position must match the underlying iter.
+	if key, iterKey := p.UnsafeKey(), p.iter.Key(); !bytes.Equal(EncodeMVCCKey(key), iterKey) {
+		return errors.AssertionFailedf("UnsafeKey %s does not match iterator key %x", key, iterKey)
+	}
+
+	// The iterator must be marked as in use.
+	if !p.inuse {
+		return errors.AssertionFailedf("valid iter with inuse=false")
+	}
+
+	// Prefix must be exposed.
+	if p.prefix != p.IsPrefix() {
+		return errors.AssertionFailedf("IsPrefix() does not match prefix=%v", p.prefix)
+	}
+
+	// Ensure !supportsRangeKeys never exposes range keys.
+	if !p.supportsRangeKeys {
+		if _, hasRange := p.HasPointAndRange(); hasRange {
+			return errors.AssertionFailedf("hasRange=true but supportsRangeKeys=false")
+		}
+	}
+
+	return nil
 }

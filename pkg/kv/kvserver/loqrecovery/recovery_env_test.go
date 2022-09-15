@@ -416,7 +416,9 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 	wrapped := e.stores[storeID]
 	if wrapped.nodeID == 0 {
 		var err error
-		eng, err := storage.Open(ctx, storage.InMemory(), storage.CacheSize(1<<20 /* 1 MiB */))
+		eng, err := storage.Open(ctx,
+			storage.InMemory(),
+			storage.CacheSize(1<<20 /* 1 MiB */))
 		if err != nil {
 			t.Fatalf("failed to crate in mem store: %v", err)
 		}
@@ -574,6 +576,13 @@ func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData)
 	ctx := context.Background()
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
 	nodes := e.groupStoresByNodeStore(t, stores)
+	defer func() {
+		for _, storeBatches := range nodes {
+			for _, b := range storeBatches {
+				b.Close()
+			}
+		}
+	}()
 	updateTime := timeutil.Now()
 	for nodeID, stores := range nodes {
 		_, err := PrepareUpdateReplicas(ctx, e.plan, uuid.DefaultGenerator, updateTime, nodeID, stores)
