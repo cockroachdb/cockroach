@@ -302,7 +302,10 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
         </Row>
       );
     }
-    let curStmtInfo = (
+
+    let curStmtInfo = session.last_active_query ? (
+      <SqlBox value={session.last_active_query} size={SqlBoxSize.custom} />
+    ) : (
       <SummaryCard className={cx("details-section")}>
         No Active Statement
       </SummaryCard>
