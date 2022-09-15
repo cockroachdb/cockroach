@@ -43,6 +43,8 @@ func init() {
 // noted. SimpleMVCCIterator is a subset of the functionality offered by
 // MVCCIterator.
 //
+// API invariants are asserted via assertSimpleMVCCIteratorInvariants().
+//
 // The iterator exposes both point keys and range keys. Range keys are only
 // emitted when enabled via IterOptions.KeyTypes. Currently, all range keys are
 // MVCC range tombstones, and this is enforced during writes.
@@ -215,7 +217,8 @@ type IteratorStats struct {
 // over the key space that never has multiple versions (i.e.,
 // MVCCKey.Timestamp.IsEmpty()).
 //
-// MVCCIterator implementations are thread safe unless otherwise noted.
+// MVCCIterator implementations are thread safe unless otherwise noted. API
+// invariants are asserted via assertMVCCIteratorInvariants().
 //
 // For details on range keys and iteration, see comment on SimpleMVCCIterator.
 type MVCCIterator interface {
@@ -1421,5 +1424,158 @@ func iterateOnReader(
 			return iterutil.Map(err)
 		}
 	}
+	return nil
+}
+
+// assertSimpleMVCCIteratorInvariants asserts invariants in the
+// SimpleMVCCIterator interface that should hold for all implementations,
+// returning errors.AssertionFailedf for any violations. The iterator
+// must be valid.
+func assertSimpleMVCCIteratorInvariants(iter SimpleMVCCIterator) error {
+	key := iter.UnsafeKey()
+
+	// Keys can't be empty.
+	if len(key.Key) == 0 {
+		return errors.AssertionFailedf("valid iterator returned empty key")
+	}
+
+	// Can't be positioned in the lock table.
+	if bytes.HasPrefix(key.Key, keys.LocalRangeLockTablePrefix) {
+		return errors.AssertionFailedf("MVCC iterator positioned in lock table at %s", key)
+	}
+
+	// Any valid position must have either a point and/or range key.
+	hasPoint, hasRange := iter.HasPointAndRange()
+	if !hasPoint && !hasRange {
+		// NB: MVCCIncrementalIterator can return hasPoint=false,hasRange=false
+		// following a NextIgnoringTime() call. We explicitly allow this here.
+		if incrIter, ok := iter.(*MVCCIncrementalIterator); !ok || !incrIter.ignoringTime {
+			return errors.AssertionFailedf("valid iterator without point/range keys at %s", key)
+		}
+	}
+
+	// Range key assertions.
+	if hasRange {
+		// Must have bounds. The MVCCRangeKey.Validate() call below will make
+		// further bounds assertions.
+		bounds := iter.RangeBounds()
+		if len(bounds.Key) == 0 && len(bounds.EndKey) == 0 {
+			return errors.AssertionFailedf("hasRange=true but empty range bounds at %s", key)
+		}
+
+		// Iterator position must be within range key bounds.
+		if !bounds.ContainsKey(key.Key) {
+			return errors.AssertionFailedf("iterator position %s outside range bounds %s", key, bounds)
+		}
+
+		// Bounds must match range key stack.
+		rangeKeys := iter.RangeKeys()
+		if !rangeKeys.Bounds.Equal(bounds) {
+			return errors.AssertionFailedf("range bounds %s does not match range key %s",
+				bounds, rangeKeys.Bounds)
+		}
+
+		// Must have range keys.
+		if rangeKeys.IsEmpty() {
+			return errors.AssertionFailedf("hasRange=true but no range key versions at %s", key)
+		}
+
+		for i, v := range rangeKeys.Versions {
+			// Range key must be valid.
+			rangeKey := rangeKeys.AsRangeKey(v)
+			if err := rangeKey.Validate(); err != nil {
+				return errors.NewAssertionErrorWithWrappedErrf(err, "invalid range key at %s", key)
+			}
+			// Range keys must be in descending timestamp order.
+			if i > 0 && !v.Timestamp.Less(rangeKeys.Versions[i-1].Timestamp) {
+				return errors.AssertionFailedf("range key %s not below version %s",
+					rangeKey, rangeKeys.Versions[i-1].Timestamp)
+			}
+			// Range keys must currently be tombstones.
+			if value, err := DecodeMVCCValue(v.Value); err != nil {
+				return errors.NewAssertionErrorWithWrappedErrf(err, "invalid range key value at %s",
+					rangeKey)
+			} else if !value.IsTombstone() {
+				return errors.AssertionFailedf("non-tombstone range key %s with value %x",
+					rangeKey, value.Value.RawBytes)
+			}
+		}
+
+	} else {
+		// Bounds and range keys must be empty.
+		if bounds := iter.RangeBounds(); !bounds.Equal(roachpb.Span{}) {
+			return errors.AssertionFailedf("hasRange=false but RangeBounds=%s", bounds)
+		}
+		if r := iter.RangeKeys(); !r.IsEmpty() || !r.Bounds.Equal(roachpb.Span{}) {
+			return errors.AssertionFailedf("hasRange=false but RangeKeys=%s", r)
+		}
+	}
+
+	return nil
+}
+
+// assertMVCCIteratorInvariants asserts invariants in the MVCCIterator interface
+// that should hold for all implementations, returning errors.AssertionFailedf
+// for any violations. It calls through to assertSimpleMVCCIteratorInvariants().
+// The iterator must be valid.
+func assertMVCCIteratorInvariants(iter MVCCIterator) error {
+	// Assert SimpleMVCCIterator invariants.
+	if err := assertSimpleMVCCIteratorInvariants(iter); err != nil {
+		return err
+	}
+
+	key := iter.Key()
+
+	// Key must equal UnsafeKey.
+	if u := iter.UnsafeKey(); !key.Equal(u) {
+		return errors.AssertionFailedf("Key %s does not match UnsafeKey %s", key, u)
+	}
+
+	// UnsafeRawMVCCKey must match Key.
+	if r, err := DecodeMVCCKey(iter.UnsafeRawMVCCKey()); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode UnsafeRawMVCCKey at %s",
+			key)
+	} else if !r.Equal(key) {
+		return errors.AssertionFailedf("UnsafeRawMVCCKey %s does not match Key %s", r, key)
+	}
+
+	// UnsafeRawKey must either be an MVCC key matching Key, or a lock table key
+	// that refers to it.
+	if engineKey, ok := DecodeEngineKey(iter.UnsafeRawKey()); !ok {
+		return errors.AssertionFailedf("failed to decode UnsafeRawKey as engine key at %s", key)
+	} else if engineKey.IsMVCCKey() {
+		if k, err := engineKey.ToMVCCKey(); err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "invalid UnsafeRawKey at %s", key)
+		} else if !k.Equal(key) {
+			return errors.AssertionFailedf("UnsafeRawKey %s does not match Key %s", k, key)
+		}
+	} else if engineKey.IsLockTableKey() {
+		if k, err := engineKey.ToLockTableKey(); err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "invalid UnsafeRawKey at %s", key)
+		} else if !k.Key.Equal(key.Key) {
+			return errors.AssertionFailedf("UnsafeRawKey lock table key %s does not match Key %s", k, key)
+		} else if !key.Timestamp.IsEmpty() {
+			return errors.AssertionFailedf(
+				"UnsafeRawKey lock table key %s for Key %s with non-zero timestamp", k, key)
+		}
+	} else {
+		return errors.AssertionFailedf("unknown type for engine key %s", engineKey)
+	}
+
+	// Value must equal UnsafeValue.
+	if v, u := iter.Value(), iter.UnsafeValue(); !bytes.Equal(v, u) {
+		return errors.AssertionFailedf("Value %x does not match UnsafeValue %x at %s", v, u, key)
+	}
+
+	// For prefix iterators, any range keys must be point-sized. We've already
+	// asserted that the range key covers the iterator position.
+	if iter.IsPrefix() {
+		if _, hasRange := iter.HasPointAndRange(); hasRange {
+			if bounds := iter.RangeBounds(); !bounds.EndKey.Equal(bounds.Key.Next()) {
+				return errors.AssertionFailedf("prefix iterator with wide range key %s", bounds)
+			}
+		}
+	}
+
 	return nil
 }
