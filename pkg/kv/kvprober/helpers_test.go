@@ -29,11 +29,11 @@ var (
 )
 
 func (p *Prober) ReadProbe(ctx context.Context, db *kv.DB) {
-	p.readProbe(ctx, db, p.readPlanner)
+	p.readProbe(ctx, p.readPlanner)
 }
 
 func (p *Prober) WriteProbe(ctx context.Context, db *kv.DB) {
-	p.writeProbe(ctx, db, p.writePlanner)
+	p.writeProbe(ctx, p.writePlanner)
 }
 
 type recordingPlanner struct {
@@ -50,7 +50,7 @@ func (rp *recordingPlanner) next(ctx context.Context) (Step, error) {
 func (p *Prober) WriteProbeReturnLastStep(ctx context.Context, db *kv.DB) *Step {
 	rp := &recordingPlanner{}
 	rp.pl = p.writePlanner
-	p.writeProbe(ctx, db, rp)
+	p.writeProbe(ctx, rp)
 	return &rp.last
 }
 
