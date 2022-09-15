@@ -107,7 +107,7 @@ func ScanRange(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) KVs
 func ScanSST(t *testing.T, sst []byte) KVs {
 	t.Helper()
 
-	iter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+	iter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,

@@ -2087,7 +2087,11 @@ func fetchDescVersionModificationTime(
 		t.Fatal(pErr.GoError())
 	}
 	for _, file := range res.(*roachpb.ExportResponse).Files {
-		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
+		it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: keys.MinKey,
+			UpperBound: keys.MaxKey,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2099,6 +2103,9 @@ func fetchDescVersionModificationTime(
 				continue
 			}
 			k := it.UnsafeKey()
+			if _, hasRange := it.HasPointAndRange(); hasRange {
+				t.Fatalf("unexpected MVCC range key at %s", k)
+			}
 			remaining, _, _, err := s.Codec.DecodeIndexPrefix(k.Key)
 			if err != nil {
 				t.Fatal(err)

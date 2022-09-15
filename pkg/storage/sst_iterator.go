@@ -19,8 +19,8 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-// NewPebbleSSTIterator returns an `MVCCIterator` for the provided "levels" of
-// SST files.  The SSTs are merged during iteration. Each subslice's sstables
+// NewSSTIterator returns an MVCCIterator for the provided "levels" of
+// SST files. The SSTs are merged during iteration. Each subslice's sstables
 // must have non-overlapping point keys, and be ordered by point key in
 // ascending order. Range keys may overlap arbitrarily, including within a
 // subarray. The outer slice of levels must be sorted in reverse chronological
@@ -29,33 +29,26 @@ import (
 //
 // If the iterator is only going to be used for forward iteration, the caller
 // may pass forwardOnly=true for better performance.
-//
-// TODO(erikgrinaker): This currently has significant performance overhead
-// compared with sstIterator. This must be optimized, and then replace (or be
-// used in) NewSSTIterator and NewMemSSTIterator. It should also replace
-// MultiIterator.
-func NewPebbleSSTIterator(
+func NewSSTIterator(
 	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
 ) (MVCCIterator, error) {
 	return newPebbleSSTIterator(files, opts, forwardOnly)
 }
 
-// NewPebbleMemSSTIterator returns an `MVCCIterator` for the provided SST data,
-// similarly to NewPebbleSSTIterator().
-func NewPebbleMemSSTIterator(sst []byte, verify bool, opts IterOptions) (MVCCIterator, error) {
-	return NewPebbleMultiMemSSTIterator([][]byte{sst}, verify, opts)
+// NewMemSSTIterator returns an MVCCIterator for the provided SST data,
+// similarly to NewSSTIterator().
+func NewMemSSTIterator(sst []byte, verify bool, opts IterOptions) (MVCCIterator, error) {
+	return NewMultiMemSSTIterator([][]byte{sst}, verify, opts)
 }
 
-// NewPebbleMultiMemSSTIterator returns an `MVCCIterator` for the provided SST
-// data, similarly to NewPebbleSSTIterator().
-func NewPebbleMultiMemSSTIterator(
-	ssts [][]byte, verify bool, opts IterOptions,
-) (MVCCIterator, error) {
+// NewMultiMemSSTIterator returns an MVCCIterator for the provided SST data,
+// similarly to NewSSTIterator().
+func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCIterator, error) {
 	files := make([]sstable.ReadableFile, 0, len(ssts))
 	for _, sst := range ssts {
 		files = append(files, vfs.NewMemFile(sst))
 	}
-	iter, err := NewPebbleSSTIterator([][]sstable.ReadableFile{files}, opts, false /* forwardOnly */)
+	iter, err := NewSSTIterator([][]sstable.ReadableFile{files}, opts, false /* forwardOnly */)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +58,7 @@ func NewPebbleMultiMemSSTIterator(
 	return iter, nil
 }
 
-type sstIterator struct {
+type legacySSTIterator struct {
 	sst  *sstable.Reader
 	iter sstable.Iterator
 
@@ -85,44 +78,38 @@ type sstIterator struct {
 	seekGELastOp bool
 }
 
-// NewSSTIterator returns a `SimpleMVCCIterator` for the provided file, which it
-// assumes was written by pebble `sstable.Writer`and contains keys which use
-// Cockroach's MVCC format.
+// NewLegacySSTIterator returns a `SimpleMVCCIterator` for the provided file,
+// which it assumes was written by pebble `sstable.Writer`and contains keys
+// which use Cockroach's MVCC format.
 //
-// NewSSTIterator will be deprecated. Callers should use NewPebbleSSTIterator
-// instead. It is worthwhile to run a benchmark after the refactor, to ensure
-// the PebbleSSTIterator doesn't cause a significant regression.
-func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
+// Deprecated: Use NewSSTIterator instead.
+func NewLegacySSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(file, sstable.ReaderOptions{
 		Comparer: EngineComparer,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &sstIterator{sst: sst}, nil
+	return &legacySSTIterator{sst: sst}, nil
 }
 
-// NewMemSSTIterator returns a `SimpleMVCCIterator` for an in-memory sstable.
-// It's compatible with sstables written by `RocksDBSstFileWriter` and
-// Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
-// format.
+// NewLegacyMemSSTIterator returns a `SimpleMVCCIterator` for an in-memory
+// sstable.  It's compatible with sstables written by `RocksDBSstFileWriter` and
+// Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC format.
 //
-// NewMemSSTIterator will be deprecated. Callers should use
-// NewPebbleMemSSTIterator instead. It is worthwhile to run a benchmark after
-// the refactor, to ensure the PebbleSSTIterator doesn't cause a significant
-// regression.
-func NewMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
+// Deprecated: Use NewMemSSTIterator instead.
+func NewLegacyMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(vfs.NewMemFile(data), sstable.ReaderOptions{
 		Comparer: EngineComparer,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &sstIterator{sst: sst, verify: verify}, nil
+	return &legacySSTIterator{sst: sst, verify: verify}, nil
 }
 
 // Close implements the SimpleMVCCIterator interface.
-func (r *sstIterator) Close() {
+func (r *legacySSTIterator) Close() {
 	if r.iter != nil {
 		r.err = errors.Wrap(r.iter.Close(), "closing sstable iterator")
 	}
@@ -132,7 +119,7 @@ func (r *sstIterator) Close() {
 }
 
 // SeekGE implements the SimpleMVCCIterator interface.
-func (r *sstIterator) SeekGE(key MVCCKey) {
+func (r *legacySSTIterator) SeekGE(key MVCCKey) {
 	if r.err != nil {
 		return
 	}
@@ -170,12 +157,12 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 }
 
 // Valid implements the SimpleMVCCIterator interface.
-func (r *sstIterator) Valid() (bool, error) {
+func (r *legacySSTIterator) Valid() (bool, error) {
 	return r.iterValid && r.err == nil, r.err
 }
 
 // Next implements the SimpleMVCCIterator interface.
-func (r *sstIterator) Next() {
+func (r *legacySSTIterator) Next() {
 	r.seekGELastOp = false
 	if !r.iterValid || r.err != nil {
 		return
@@ -194,7 +181,7 @@ func (r *sstIterator) Next() {
 }
 
 // NextKey implements the SimpleMVCCIterator interface.
-func (r *sstIterator) NextKey() {
+func (r *legacySSTIterator) NextKey() {
 	r.seekGELastOp = false
 	if !r.iterValid || r.err != nil {
 		return
@@ -205,17 +192,17 @@ func (r *sstIterator) NextKey() {
 }
 
 // UnsafeKey implements the SimpleMVCCIterator interface.
-func (r *sstIterator) UnsafeKey() MVCCKey {
+func (r *legacySSTIterator) UnsafeKey() MVCCKey {
 	return r.mvccKey
 }
 
 // UnsafeValue implements the SimpleMVCCIterator interface.
-func (r *sstIterator) UnsafeValue() []byte {
+func (r *legacySSTIterator) UnsafeValue() []byte {
 	return r.value
 }
 
 // verifyValue verifies the checksum of the current value.
-func (r *sstIterator) verifyValue() {
+func (r *legacySSTIterator) verifyValue() {
 	mvccValue, ok, err := tryDecodeSimpleMVCCValue(r.value)
 	if !ok && err == nil {
 		mvccValue, err = decodeExtendedMVCCValue(r.value)
@@ -230,21 +217,21 @@ func (r *sstIterator) verifyValue() {
 // HasPointAndRange implements SimpleMVCCIterator.
 //
 // TODO(erikgrinaker): implement range key support.
-func (r *sstIterator) HasPointAndRange() (bool, bool) {
+func (r *legacySSTIterator) HasPointAndRange() (bool, bool) {
 	return true, false
 }
 
 // RangeBounds implements SimpleMVCCIterator.
-func (r *sstIterator) RangeBounds() roachpb.Span {
+func (r *legacySSTIterator) RangeBounds() roachpb.Span {
 	return roachpb.Span{}
 }
 
 // RangeKeys implements SimpleMVCCIterator.
-func (r *sstIterator) RangeKeys() MVCCRangeKeyStack {
+func (r *legacySSTIterator) RangeKeys() MVCCRangeKeyStack {
 	return MVCCRangeKeyStack{}
 }
 
 // RangeKeyChanged implements SimpleMVCCIterator.
-func (r *sstIterator) RangeKeyChanged() bool {
+func (r *legacySSTIterator) RangeKeyChanged() bool {
 	return false
 }
