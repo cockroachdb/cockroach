@@ -685,11 +685,6 @@ func (i *pointSynthesizingIter) IsPrefix() bool {
 	return i.prefix
 }
 
-// SupportsPrev implements MVCCIterator.
-func (i *pointSynthesizingIter) SupportsPrev() bool {
-	return i.iter.SupportsPrev()
-}
-
 // assertInvariants asserts iterator invariants. The iterator must be valid.
 func (i *pointSynthesizingIter) assertInvariants() error {
 	// Check general MVCCIterator API invariants.
