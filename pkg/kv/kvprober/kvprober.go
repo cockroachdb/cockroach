@@ -258,7 +258,7 @@ func (p *Prober) Metrics() Metrics {
 // returns an error only if stopper.RunAsyncTask returns an error.
 func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = logtags.AddTag(ctx, "kvprober", nil /* value */)
-	startLoop := func(ctx context.Context, opName string, probe func(context.Context, *kv.DB, planner), pl planner, interval *settings.DurationSetting) error {
+	startLoop := func(ctx context.Context, opName string, probe func(context.Context, planner), pl planner, interval *settings.DurationSetting) error {
 		return stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: opName, SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 			defer logcrash.RecoverAndReportNonfatalPanic(ctx, &p.settings.SV)
 
@@ -284,7 +284,7 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 
 				probeCtx, sp := tracing.EnsureChildSpan(ctx, p.tracer, opName+" - probe")
-				probe(probeCtx, p.db, pl)
+				probe(probeCtx, pl)
 				sp.Finish()
 			}
 		})
@@ -302,7 +302,7 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 // Doesn't return an error. Instead, increments error type specific metrics.
 //
 // TODO(tbg): db parameter is unused, remove it.
-func (p *Prober) readProbe(ctx context.Context, db *kv.DB, pl planner) {
+func (p *Prober) readProbe(ctx context.Context, pl planner) {
 	p.readProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, pl)
 }
 
@@ -360,7 +360,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 }
 
 // Doesn't return an error. Instead increments error type specific metrics.
-func (p *Prober) writeProbe(ctx context.Context, db *kv.DB, pl planner) {
+func (p *Prober) writeProbe(ctx context.Context, pl planner) {
 	p.writeProbeImpl(ctx, &ProberOps{}, &proberTxnImpl{db: p.db}, pl)
 }
 
@@ -411,12 +411,12 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 }
 
 // Wrapper function for probing the quarantine pool.
-func (p *Prober) quarantineProbe(ctx context.Context, db *kv.DB, pl planner) {
+func (p *Prober) quarantineProbe(ctx context.Context, pl planner) {
 	if !quarantineWriteEnabled.Get(&p.settings.SV) {
 		return
 	}
 
-	p.writeProbe(ctx, db, pl)
+	p.writeProbe(ctx, pl)
 }
 
 // Returns a random duration pulled from the uniform distribution given below:
