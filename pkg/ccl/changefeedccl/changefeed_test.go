@@ -6993,6 +6993,7 @@ func (s *memoryHoggingSink) Close() error {
 func TestChangefeedFlushesSinkToReleaseMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "takes >1 min under normal conditions. takes longer under race")
 
 	s, stopServer := makeServer(t)
 	defer stopServer()
