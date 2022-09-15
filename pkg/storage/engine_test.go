@@ -1213,83 +1213,61 @@ func TestEngineFS(t *testing.T) {
 	}
 }
 
-type engineImpl struct {
-	name   string
-	create func(*testing.T, string) Engine
-}
-
-// These FS implementations are not in-memory.
-var engineRealFSImpls = []engineImpl{
-	{"pebble", func(t *testing.T, dir string) Engine {
-		db, err := Open(
-			context.Background(),
-			Filesystem(dir),
-			CacheSize(testCacheSize))
-		if err != nil {
-			t.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
-		}
-		return db
-	}},
-}
-
 func TestEngineFSFileNotFoundError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for _, engineImpl := range engineRealFSImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			dir, dirCleanup := testutils.TempDir(t)
-			defer dirCleanup()
-			db := engineImpl.create(t, dir)
-			defer db.Close()
+	dir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+	db, err := Open(context.Background(), Filesystem(dir), CacheSize(testCacheSize))
+	require.NoError(t, err)
+	defer db.Close()
 
-			// Verify Remove returns os.ErrNotExist if file does not exist.
-			if err := db.Remove("/non/existent/file"); !oserror.IsNotExist(err) {
-				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
-			}
+	// Verify Remove returns os.ErrNotExist if file does not exist.
+	if err := db.Remove("/non/existent/file"); !oserror.IsNotExist(err) {
+		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+	}
 
-			// Verify RemoveAll returns nil if path does not exist.
-			if err := db.RemoveAll("/non/existent/file"); err != nil {
-				t.Fatalf("expected nil, but got %v (%T)", err, err)
-			}
+	// Verify RemoveAll returns nil if path does not exist.
+	if err := db.RemoveAll("/non/existent/file"); err != nil {
+		t.Fatalf("expected nil, but got %v (%T)", err, err)
+	}
 
-			fname := filepath.Join(dir, "random.file")
-			data := "random data"
-			if f, err := db.Create(fname); err != nil {
-				t.Fatalf("unable to open file with filename %s, got err %v", fname, err)
-			} else {
-				// Write data to file so we can read it later.
-				if _, err := f.Write([]byte(data)); err != nil {
-					t.Fatalf("error writing data: '%s' to file %s, got err %v", data, fname, err)
-				}
-				if err := f.Sync(); err != nil {
-					t.Fatalf("error syncing data, got err %v", err)
-				}
-				if err := f.Close(); err != nil {
-					t.Fatalf("error closing file %s, got err %v", fname, err)
-				}
-			}
+	fname := filepath.Join(dir, "random.file")
+	data := "random data"
+	if f, err := db.Create(fname); err != nil {
+		t.Fatalf("unable to open file with filename %s, got err %v", fname, err)
+	} else {
+		// Write data to file so we can read it later.
+		if _, err := f.Write([]byte(data)); err != nil {
+			t.Fatalf("error writing data: '%s' to file %s, got err %v", data, fname, err)
+		}
+		if err := f.Sync(); err != nil {
+			t.Fatalf("error syncing data, got err %v", err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatalf("error closing file %s, got err %v", fname, err)
+		}
+	}
 
-			if b, err := db.ReadFile(fname); err != nil {
-				t.Errorf("unable to read file with filename %s, got err %v", fname, err)
-			} else if string(b) != data {
-				t.Errorf("expected content in %s is '%s', got '%s'", fname, data, string(b))
-			}
+	if b, err := db.ReadFile(fname); err != nil {
+		t.Errorf("unable to read file with filename %s, got err %v", fname, err)
+	} else if string(b) != data {
+		t.Errorf("expected content in %s is '%s', got '%s'", fname, data, string(b))
+	}
 
-			if err := db.Remove(fname); err != nil {
-				t.Errorf("unable to delete file with filename %s, got err %v", fname, err)
-			}
+	if err := db.Remove(fname); err != nil {
+		t.Errorf("unable to delete file with filename %s, got err %v", fname, err)
+	}
 
-			// Verify ReadFile returns os.ErrNotExist if reading an already deleted file.
-			if _, err := db.ReadFile(fname); !oserror.IsNotExist(err) {
-				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
-			}
+	// Verify ReadFile returns os.ErrNotExist if reading an already deleted file.
+	if _, err := db.ReadFile(fname); !oserror.IsNotExist(err) {
+		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+	}
 
-			// Verify Remove returns os.ErrNotExist if deleting an already deleted file.
-			if err := db.Remove(fname); !oserror.IsNotExist(err) {
-				t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
-			}
-		})
+	// Verify Remove returns os.ErrNotExist if deleting an already deleted file.
+	if err := db.Remove(fname); !oserror.IsNotExist(err) {
+		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 	}
 }
 
@@ -1326,21 +1304,17 @@ func TestFS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var engineImpls []engineImpl
-	engineImpls = append(engineImpls, engineRealFSImpls...)
-	engineImpls = append(engineImpls,
-		engineImpl{
-			name: "pebble_mem",
-			create: func(_ *testing.T, _ string) Engine {
-				return createTestPebbleEngine()
-			},
-		})
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
 
-	for _, impl := range engineImpls {
-		t.Run(impl.name, func(t *testing.T) {
-			dir, cleanupDir := testutils.TempDir(t)
-			defer cleanupDir()
-			fs := impl.create(t, dir)
+	engineDest := map[string]Location{
+		"in_memory":  InMemory(),
+		"filesystem": Filesystem(dir),
+	}
+	for name, loc := range engineDest {
+		t.Run(name, func(t *testing.T) {
+			fs, err := Open(context.Background(), loc, CacheSize(testCacheSize), ForTesting)
+			require.NoError(t, err)
 			defer fs.Close()
 
 			path := func(rel string) string {
@@ -1370,7 +1344,7 @@ func TestFS(t *testing.T) {
 			expectLS(path("a"), []string{"b"})
 			expectLS(path("a/b"), []string{"c"})
 			expectLS(path("a/b/c"), []string{})
-			_, err := fs.Stat(path("a/b/c"))
+			_, err = fs.Stat(path("a/b/c"))
 			require.NoError(t, err)
 
 			// Create a file at a/b/c/foo.
