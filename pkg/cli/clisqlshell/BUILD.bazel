@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "api.go",
         "context.go",
+        "describe.go",
         "doc.go",
         "parser.go",
         "sql.go",
