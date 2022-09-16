@@ -13,6 +13,7 @@ package colexec
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"testing"
 
@@ -87,7 +88,7 @@ func TestValues(t *testing.T) {
 					if err != nil {
 						return nil, err
 					}
-					return NewValuesOp(testAllocator, &spec), nil
+					return NewValuesOp(testAllocator, &spec, math.MaxInt64), nil
 				})
 		}
 	}
@@ -142,7 +143,7 @@ func BenchmarkValues(b *testing.B) {
 			// Measure the vectorized values operator.
 			subBenchmarkValues(ctx, b, numRows, numCols, "valuesOpNative",
 				func(spec *execinfrapb.ValuesCoreSpec) (colexecop.Operator, error) {
-					return NewValuesOp(testAllocator, spec), nil
+					return NewValuesOp(testAllocator, spec, math.MaxInt64), nil
 				})
 
 			// For comparison, also measure the row-based values processor wrapped in

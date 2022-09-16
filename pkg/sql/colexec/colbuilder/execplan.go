@@ -65,7 +65,7 @@ func wrapRowSources(
 	flowCtx *execinfra.FlowCtx,
 	inputs []colexecargs.OpWithMetaInfo,
 	inputTypes [][]*types.T,
-	streamingMemAccount *mon.BoundAccount,
+	monitorRegistry *colexecargs.MonitorRegistry,
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 	materializerSafeToRelease bool,
@@ -113,6 +113,7 @@ func wrapRowSources(
 	if !isProcessor {
 		return nil, nil, errors.AssertionFailedf("unexpectedly %T is not an execinfra.Processor", toWrap)
 	}
+	streamingMemAccount := monitorRegistry.NewStreamingMemAccount(flowCtx)
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
 		c = colexec.NewStreamingColumnarizer(
@@ -562,7 +563,7 @@ func (r opResult) createAndWrapRowSource(
 		flowCtx,
 		inputs,
 		inputTypes,
-		args.StreamingMemAccount,
+		args.MonitorRegistry,
 		spec.ProcessorID,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
 			// We provide a slice with a single nil as 'outputs' parameter
@@ -722,7 +723,9 @@ func NewColOperator(
 					getStreamingAllocator(ctx, args), int(core.Values.NumRows), nil, /* opToInitialize */
 				)
 			} else {
-				result.Root = colexec.NewValuesOp(getStreamingAllocator(ctx, args), core.Values)
+				result.Root = colexec.NewValuesOp(
+					getStreamingAllocator(ctx, args), core.Values, execinfra.GetWorkMemLimit(flowCtx),
+				)
 			}
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
