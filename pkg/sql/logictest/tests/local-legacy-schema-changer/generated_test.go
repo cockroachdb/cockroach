@@ -1717,6 +1717,13 @@ func TestLogic_statement_source(
 	runLogicTest(t, "statement_source")
 }
 
+func TestLogic_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "stats")
+}
+
 func TestLogic_storing(
 	t *testing.T,
 ) {
