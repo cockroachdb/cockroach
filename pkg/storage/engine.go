@@ -918,8 +918,6 @@ type Engine interface {
 	fs.FS
 	// ReadFile reads the content from the file with the given filename int this RocksDB's env.
 	ReadFile(filename string) ([]byte, error)
-	// WriteFile writes data to a file in this RocksDB's env.
-	WriteFile(filename string, data []byte) error
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.
