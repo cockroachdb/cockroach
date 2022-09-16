@@ -49,9 +49,9 @@ func (tb *TokenBucket) Init(rate TokensPerSecond, burst Tokens, timeSource timeu
 	}
 }
 
-// update moves the time forward, accounting for the replenishment since the
+// Update moves the time forward, accounting for the replenishment since the
 // last update.
-func (tb *TokenBucket) update() {
+func (tb *TokenBucket) Update() {
 	now := tb.timeSource.Now()
 	if since := now.Sub(tb.lastUpdated); since > 0 {
 		tb.current += Tokens(float64(tb.rate) * since.Seconds())
@@ -70,7 +70,7 @@ func (tb *TokenBucket) update() {
 // current quota will decrease accordingly, potentially putting the limiter into
 // debt.
 func (tb *TokenBucket) UpdateConfig(rate TokensPerSecond, burst Tokens) {
-	tb.update()
+	tb.Update()
 
 	burstDelta := burst - tb.burst
 	tb.rate = rate
@@ -82,7 +82,7 @@ func (tb *TokenBucket) UpdateConfig(rate TokensPerSecond, burst Tokens) {
 // Adjust returns tokens to the bucket (positive delta) or accounts for a debt
 // of tokens (negative delta).
 func (tb *TokenBucket) Adjust(delta Tokens) {
-	tb.update()
+	tb.Update()
 	tb.current += delta
 	if tb.current > tb.burst {
 		tb.current = tb.burst
@@ -92,7 +92,7 @@ func (tb *TokenBucket) Adjust(delta Tokens) {
 // TryToFulfill either removes the given amount if is available, or returns a
 // time after which the request should be retried.
 func (tb *TokenBucket) TryToFulfill(amount Tokens) (fulfilled bool, tryAgainAfter time.Duration) {
-	tb.update()
+	tb.Update()
 
 	// Deal with the case where the request is larger than the burst size. In
 	// this case we'll allow the acquisition to complete if and when the current
@@ -113,4 +113,12 @@ func (tb *TokenBucket) TryToFulfill(amount Tokens) (fulfilled bool, tryAgainAfte
 
 	tb.current -= amount
 	return true, 0
+}
+
+// TestingInternalParameters returns the refill rate (configured), burst tokens
+// (configured), and number of available tokens where available <= burst. It's
+// used in tests.
+func (tb *TokenBucket) TestingInternalParameters() (rate TokensPerSecond, burst, available Tokens) {
+	tb.Update()
+	return tb.rate, tb.burst, tb.current
 }

@@ -1,0 +1,89 @@
+# Test the basics of admitting elastic work; look at metrics, what the
+# underlying work queue observes, and the handle returned.
+init
+----
+
+# Verify that admitting 50ms of work translates to just that much in the
+# underlying work queue, metrics, and the work handle itself.
+admit duration=50ms
+----
+granter:
+work-queue:  admitted=50ms
+metrics:     acquired=50ms returned=0s max-available=8s
+handle:      50ms
+
+# Verify that requested durations are clamped between [10ms, 100ms].
+admit duration=101ms
+----
+granter:
+work-queue:  admitted=100ms
+metrics:     acquired=150ms returned=0s max-available=8s
+handle:      100ms
+
+admit duration=1ms
+----
+granter:
+work-queue:  admitted=10ms
+metrics:     acquired=160ms returned=0s max-available=8s
+handle:      10ms
+
+# Verify that if the underlying queue is disabled, nothing happens (handle is
+# empty, metrics stay as is).
+admit duration=10ms disabled=true
+----
+granter:
+work-queue:
+metrics:     acquired=160ms returned=0s max-available=8s
+handle:      n/a
+
+# Verify that re-enabling the underlying queue works as expected.
+admit duration=10ms disabled=false
+----
+granter:
+work-queue:  admitted=10ms
+metrics:     acquired=170ms returned=0s max-available=8s
+handle:      10ms
+
+
+
+# Test the basics of invoking work-completion functions; ensure the accounting
+# (metrics) and grant-forwarding is done correctly.
+init
+----
+
+admit duration=50ms
+----
+granter:
+work-queue:  admitted=50ms
+metrics:     acquired=50ms returned=0s max-available=8s
+handle:      50ms
+
+# If we've acquired more than needed, we should be returning the difference
+# back to the granter and updating the right metric (returned nanos).
+admitted-work-done running=10ms allotted=50ms
+----
+granter:    return-grant=40ms
+work-queue: 
+metrics:    acquired=50ms returned=40ms max-available=8s
+
+# Repeat the same but this time simulate what happens if we've taken less than
+# what we ended up needing.
+init
+----
+
+admit duration=50ms
+----
+granter:
+work-queue:  admitted=50ms
+metrics:     acquired=50ms returned=0s max-available=8s
+handle:      50ms
+
+# We should subtract the overage from the granter without blocking and count
+# the difference towards the right metric (acquired)
+admitted-work-done running=70ms allotted=50ms
+----
+granter:    took-without-permission=20ms
+work-queue: 
+metrics:    acquired=70ms returned=0s max-available=8s
+
+# vim:ft=sh
