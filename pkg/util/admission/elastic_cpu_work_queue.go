@@ -32,8 +32,8 @@ var (
 	elasticCPUControlEnabled = settings.RegisterBoolSetting(
 		settings.SystemOnly,
 		"admission.elastic_cpu.enabled",
-		"when true, backup work performed by the KV layer is subject to admission control",
-		false,
+		"when true, elastic work (like backups) performed by the KV layer is subject to admission control",
+		true,
 	)
 )
 
