@@ -15,13 +15,17 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/alessio/shellescape"
 	bes "github.com/cockroachdb/cockroach/pkg/build/bazel/bes"
@@ -29,8 +33,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/testfilter"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/proto"
+	ptypes "github.com/gogo/protobuf/types"
 	"github.com/spf13/cobra"
+	// We're using auto-generated protos here, not building our own. We can
+	// switch to building our own if there appears to be an advantage (maybe
+	// there is if we use our own grpc client?)
+	build "google.golang.org/genproto/googleapis/devtools/build/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -51,9 +61,10 @@ type fullTestResult struct {
 }
 
 var (
+	port                      int
 	artifactsDir              string
-	githubPostFormatterName   string
 	shouldProcessTestFailures bool
+	githubPostFormatterName   string
 
 	rootCmd = &cobra.Command{
 		Use:   "bazci",
@@ -65,6 +76,185 @@ tests in Teamcity as painless as possible.`,
 		RunE:          bazciImpl,
 	}
 )
+
+type monitorBuildServer struct {
+	action           string // "build" or "test".
+	namedSetsOfFiles map[string][]builtArtifact
+	testResults      map[string][]fullTestResult
+	builtTargets     map[string]*bes.TargetComplete
+	// Send a bool value to this channel when it's time to tear down the
+	// server.
+	finished chan bool
+	wg       sync.WaitGroup
+}
+
+func newMonitorBuildServer(action string) *monitorBuildServer {
+	return &monitorBuildServer{
+		action:           action,
+		namedSetsOfFiles: make(map[string][]builtArtifact),
+		testResults:      make(map[string][]fullTestResult),
+		builtTargets:     make(map[string]*bes.TargetComplete),
+		finished:         make(chan bool, 1),
+	}
+}
+
+func (s *monitorBuildServer) Start() error {
+	conn, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+	if err != nil {
+		return err
+	}
+	srv := grpc.NewServer()
+	build.RegisterPublishBuildEventServer(srv, s)
+	s.wg.Add(2)
+	go func() {
+		// This worker gracefully stops the server when the build is finished.
+		defer s.wg.Done()
+		<-s.finished
+		srv.GracefulStop()
+	}()
+	go func() {
+		// This worker runs the server.
+		defer s.wg.Done()
+		if err := srv.Serve(conn); err != nil {
+			panic(err)
+		}
+	}()
+	return nil
+}
+
+func (s *monitorBuildServer) Wait() {
+	s.wg.Wait()
+}
+
+// This function is needed to implement PublishBuildEventServer. We just use the
+// BuildEvent_BuildFinished event to tell us when the server needs to be torn
+// down.
+func (s *monitorBuildServer) PublishLifecycleEvent(
+	ctx context.Context, req *build.PublishLifecycleEventRequest,
+) (*emptypb.Empty, error) {
+	switch req.BuildEvent.Event.Event.(type) {
+	case *build.BuildEvent_BuildFinished_:
+		s.finished <- true
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *monitorBuildServer) PublishBuildToolEventStream(
+	stream build.PublishBuildEvent_PublishBuildToolEventStreamServer,
+) error {
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		response, err := s.handleBuildEvent(stream.Context(), in)
+		if err != nil {
+			return err
+		}
+		if err := stream.Send(response); err != nil {
+			return err
+		}
+	}
+	return s.Finalize()
+}
+
+// Handle the given build event and return an appropriate response.
+func (s *monitorBuildServer) handleBuildEvent(
+	ctx context.Context, in *build.PublishBuildToolEventStreamRequest,
+) (*build.PublishBuildToolEventStreamResponse, error) {
+	switch event := in.OrderedBuildEvent.Event.Event.(type) {
+	case *build.BuildEvent_BazelEvent:
+		var bazelBuildEvent bes.BuildEvent
+		any := &ptypes.Any{
+			TypeUrl: event.BazelEvent.TypeUrl,
+			Value:   event.BazelEvent.Value,
+		}
+		if err := ptypes.UnmarshalAny(any, &bazelBuildEvent); err != nil {
+			return nil, err
+		}
+		switch id := bazelBuildEvent.Id.Id.(type) {
+		case *bes.BuildEventId_NamedSet:
+			namedSetID := id.NamedSet.Id
+			namedSet := bazelBuildEvent.GetNamedSetOfFiles()
+			var files []builtArtifact
+			for _, file := range namedSet.Files {
+				uri := file.GetUri()
+				files = append(files, builtArtifact{src: strings.TrimPrefix(uri, "file://"), dst: file.Name})
+			}
+			for _, set := range namedSet.FileSets {
+				files = append(files, s.namedSetsOfFiles[set.Id]...)
+			}
+			s.namedSetsOfFiles[namedSetID] = files
+		case *bes.BuildEventId_TestResult:
+			res := fullTestResult{
+				run:        id.TestResult.Run,
+				shard:      id.TestResult.Shard,
+				attempt:    id.TestResult.Attempt,
+				testResult: bazelBuildEvent.GetTestResult(),
+			}
+			s.testResults[id.TestResult.Label] = append(s.testResults[id.TestResult.Label], res)
+		case *bes.BuildEventId_TargetCompleted:
+			s.builtTargets[id.TargetCompleted.Label] = bazelBuildEvent.GetCompleted()
+		case *bes.BuildEventId_TestSummary:
+			label := id.TestSummary.Label
+			outputDir := strings.TrimPrefix(label, "//")
+			outputDir = strings.ReplaceAll(outputDir, ":", "/")
+			outputDir = filepath.Join("bazel-testlogs", outputDir)
+			summary := bazelBuildEvent.GetTestSummary()
+			for _, testResult := range s.testResults[label] {
+				outputDir := outputDir
+				if testResult.run > 1 {
+					outputDir = filepath.Join(outputDir, fmt.Sprintf("run_%d", testResult.run))
+				}
+				if summary.ShardCount > 1 {
+					outputDir = filepath.Join(outputDir, fmt.Sprintf("shard_%d_of_%d", testResult.shard, summary.ShardCount))
+				}
+				if testResult.attempt > 1 {
+					outputDir = filepath.Join(outputDir, fmt.Sprintf("attempt_%d", testResult.attempt))
+				}
+				for _, output := range testResult.testResult.TestActionOutput {
+					if output.Name == "test.log" || output.Name == "test.xml" {
+						src := strings.TrimPrefix(output.GetUri(), "file://")
+						dst := filepath.Join(artifactsDir, outputDir, filepath.Base(src))
+						if err := doCopy(src, dst); err != nil {
+							return nil, err
+						}
+					} else {
+						panic(output)
+					}
+				}
+			}
+		}
+	}
+
+	return &build.PublishBuildToolEventStreamResponse{
+		StreamId:       in.OrderedBuildEvent.StreamId,
+		SequenceNumber: in.OrderedBuildEvent.SequenceNumber,
+	}, nil
+}
+
+func (s *monitorBuildServer) Finalize() error {
+	if s.action == "build" {
+		for _, target := range s.builtTargets {
+			for _, outputGroup := range target.OutputGroup {
+				if outputGroup.Incomplete {
+					continue
+				}
+				for _, set := range outputGroup.FileSets {
+					for _, artifact := range s.namedSetsOfFiles[set.Id] {
+						if err := doCopy(artifact.src, filepath.Join(artifactsDir, "bazel-bin", artifact.dst)); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
 
 func init() {
 	rootCmd.Flags().StringVar(
@@ -84,6 +274,12 @@ func init() {
 		"process_test_failures",
 		false,
 		"process failures artifacts (and post github issues for release failures)",
+	)
+	rootCmd.Flags().IntVar(
+		&port,
+		"port",
+		8998,
+		"port to run the bazci server on",
 	)
 }
 
@@ -111,36 +307,21 @@ func bazciImpl(cmd *cobra.Command, args []string) (retErr error) {
 		return
 	}
 
-	tmpDir, retErr := os.MkdirTemp("", "")
-	if retErr != nil {
+	server := newMonitorBuildServer(args[0])
+	if err := server.Start(); err != nil {
+		retErr = err
 		return
 	}
-	bepLoc := filepath.Join(tmpDir, "beplog")
-	args = append(args, fmt.Sprintf("--build_event_binary_file=%s", bepLoc))
-	if shouldProcessTestFailures {
-		f, createTempErr := os.CreateTemp(artifactsDir, "test.json.txt")
-		if createTempErr != nil {
-			retErr = createTempErr
-			return
-		}
-		goTestJSONOutputFilePath = f.Name()
-		// Closing the file because we will not use the file pointer.
-		if retErr = f.Close(); retErr != nil {
-			return
-		}
-		args = append(args, "--test_env", goTestJSONOutputFilePath)
-	}
-
+	args = append(args, fmt.Sprintf("--bes_backend=grpc://127.0.0.1:%d", port))
 	fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(args))
 	bazelCmd := exec.Command("bazel", args...)
 	bazelCmd.Stdout = os.Stdout
 	bazelCmd.Stderr = os.Stderr
-	bazelCmdErr := bazelCmd.Run()
-	if bazelCmdErr != nil {
-		fmt.Printf("got error %+v from bazel run\n", bazelCmdErr)
-		fmt.Println("WARNING: the beplog file may not have been created")
+	err := bazelCmd.Run()
+	if err != nil {
+		fmt.Printf("got error %+v from bazel run\n", err)
 	}
-	retErr = processBuildEventProtocolLog(args[0], bepLoc)
+	server.Wait()
 	return
 }
 
@@ -178,101 +359,6 @@ func mergeTestXMLs(args []string) error {
 		xmlsToMerge = append(xmlsToMerge, testSuites)
 	}
 	return bazelutil.MergeTestXMLs(xmlsToMerge, os.Stdout)
-}
-
-func processBuildEventProtocolLog(action, bepLoc string) error {
-	contents, err := os.ReadFile(bepLoc)
-	if err != nil {
-		return err
-	}
-	namedSetsOfFiles := make(map[string][]builtArtifact)
-	testResults := make(map[string][]fullTestResult)
-	builtTargets := make(map[string]*bes.TargetComplete)
-	buf := proto.NewBuffer(contents)
-	var event bes.BuildEvent
-	for {
-		err := buf.DecodeMessage(&event)
-		if err != nil {
-			return err
-		}
-		// Capture the output binaries/files.
-		switch id := event.Id.Id.(type) {
-		case *bes.BuildEventId_NamedSet:
-			namedSetID := id.NamedSet.Id
-			namedSet := event.GetNamedSetOfFiles()
-			var files []builtArtifact
-			for _, file := range namedSet.Files {
-				uri := file.GetUri()
-				files = append(files, builtArtifact{src: strings.TrimPrefix(uri, "file://"), dst: file.Name})
-			}
-			for _, set := range namedSet.FileSets {
-				files = append(files, namedSetsOfFiles[set.Id]...)
-			}
-			namedSetsOfFiles[namedSetID] = files
-		case *bes.BuildEventId_TestResult:
-			res := fullTestResult{
-				run:        id.TestResult.Run,
-				shard:      id.TestResult.Shard,
-				attempt:    id.TestResult.Attempt,
-				testResult: event.GetTestResult(),
-			}
-			testResults[id.TestResult.Label] = append(testResults[id.TestResult.Label], res)
-		case *bes.BuildEventId_TargetCompleted:
-			builtTargets[id.TargetCompleted.Label] = event.GetCompleted()
-		case *bes.BuildEventId_TestSummary:
-			label := id.TestSummary.Label
-			outputDir := strings.TrimPrefix(label, "//")
-			outputDir = strings.ReplaceAll(outputDir, ":", "/")
-			outputDir = filepath.Join("bazel-testlogs", outputDir)
-			summary := event.GetTestSummary()
-			for _, testResult := range testResults[label] {
-				outputDir := outputDir
-				if testResult.run > 1 {
-					outputDir = filepath.Join(outputDir, fmt.Sprintf("run_%d", testResult.run))
-				}
-				if summary.ShardCount > 1 {
-					outputDir = filepath.Join(outputDir, fmt.Sprintf("shard_%d_of_%d", testResult.shard, summary.ShardCount))
-				}
-				if testResult.attempt > 1 {
-					outputDir = filepath.Join(outputDir, fmt.Sprintf("attempt_%d", testResult.attempt))
-				}
-				for _, output := range testResult.testResult.TestActionOutput {
-					if output.Name == "test.log" || output.Name == "test.xml" {
-						src := strings.TrimPrefix(output.GetUri(), "file://")
-						dst := filepath.Join(artifactsDir, outputDir, filepath.Base(src))
-						if err := doCopy(src, dst); err != nil {
-							return err
-						}
-					} else {
-						panic(output)
-					}
-				}
-			}
-		}
-
-		if event.LastMessage {
-			break
-		}
-	}
-
-	if action == "build" {
-		for _, target := range builtTargets {
-			for _, outputGroup := range target.OutputGroup {
-				if outputGroup.Incomplete {
-					continue
-				}
-				for _, set := range outputGroup.FileSets {
-					for _, artifact := range namedSetsOfFiles[set.Id] {
-						if err := doCopy(artifact.src, filepath.Join(artifactsDir, "bazel-bin", artifact.dst)); err != nil {
-							return err
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return nil
 }
 
 // doCopy copies from the src file to the destination. Note that we will
