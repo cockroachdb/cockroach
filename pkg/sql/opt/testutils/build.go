@@ -36,7 +36,7 @@ func BuildQuery(
 
 	ctx := context.Background()
 	semaCtx := tree.MakeSemaContext()
-	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */, false /* fromSQL */); err != nil {
+	if err := semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
 		t.Fatal(err)
 	}
 	semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
