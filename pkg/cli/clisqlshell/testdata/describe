@@ -1,0 +1,2615 @@
+common
+sql
+-e
+\set echo
+-e
+\set display_format csv
+-e
+----
+ok
+
+# Note: add comments on views / sequences when this issue is fixed:
+# https://github.com/cockroachdb/cockroach/issues/44135
+sql
+create database mydb;
+comment on database mydb is 'my awesome db comment';
+create table mytable(mycolumn int, check (mycolumn > 123));
+comment on table mytable is 'my awesome tb comment';
+create index myidx on mytable(mycolumn);
+comment on index mytable@myidx is 'my awesome idx comment';
+create materialized view mymview as select mycolumn from mytable;
+create view myview as select mycolumn from mytable;
+create table ftable1(x int unique);
+create table ftable2(x int references ftable1(x));
+create sequence myseq;
+create type mytyp as enum('hello');
+create user myuser; grant admin to myuser;
+create function myfunc(val int) returns int language sql as $$ select val $$;
+----
+ok
+
+subtest list_dbs
+
+cli
+\l
+----
+sql -e \set echo -e \set display_format csv -e \l
+List of databases:
+> SELECT d.datname AS "Name",
+       pg_catalog.pg_get_userbyid(d.datdba) AS "Owner",
+       pg_catalog.pg_encoding_to_char(d.encoding) AS "Encoding",
+       d.datcollate AS "Collate",
+       d.datctype AS "Ctype",
+       COALESCE(pg_catalog.array_to_string(d.datacl, e'\n'), '') AS "Access privileges"
+  FROM pg_catalog.pg_database d
+ORDER BY 1
+Name,Owner,Encoding,Collate,Ctype,Access privileges
+defaultdb,root,UTF8,en_US.utf8,en_US.utf8,
+mydb,root,UTF8,en_US.utf8,en_US.utf8,
+postgres,root,UTF8,en_US.utf8,en_US.utf8,
+system,unknown (OID=3233629770),UTF8,en_US.utf8,en_US.utf8,
+
+cli
+\l+
+----
+sql -e \set echo -e \set display_format csv -e \l+
+List of databases:
+> SELECT d.datname AS "Name",
+       pg_catalog.pg_get_userbyid(d.datdba) AS "Owner",
+       pg_catalog.pg_encoding_to_char(d.encoding) AS "Encoding",
+       d.datcollate AS "Collate",
+       d.datctype AS "Ctype",
+       COALESCE(pg_catalog.array_to_string(d.datacl, e'\n'), '') AS "Access privileges",
+       CASE
+       WHEN pg_catalog.has_database_privilege(d.datname, 'CONNECT')
+       THEN IF(d.datconnlimit < 0, 'Unlimited', d.datconnlimit::STRING)
+       ELSE 'No Access'
+       END AS "Connections",
+       COALESCE(pg_catalog.shobj_description(d.oid, 'pg_database'), '') AS "Description"
+  FROM pg_catalog.pg_database d
+ORDER BY 1
+Name,Owner,Encoding,Collate,Ctype,Access privileges,Connections,Description
+defaultdb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,
+mydb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,my awesome db comment
+postgres,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,
+system,unknown (OID=3233629770),UTF8,en_US.utf8,en_US.utf8,,Unlimited,
+
+cli
+\l my%
+----
+sql -e \set echo -e \set display_format csv -e \l my%
+List of databases:
+> SELECT d.datname AS "Name",
+       pg_catalog.pg_get_userbyid(d.datdba) AS "Owner",
+       pg_catalog.pg_encoding_to_char(d.encoding) AS "Encoding",
+       d.datcollate AS "Collate",
+       d.datctype AS "Ctype",
+       COALESCE(pg_catalog.array_to_string(d.datacl, e'\n'), '') AS "Access privileges"
+  FROM pg_catalog.pg_database d
+ WHERE d.datname LIKE 'my%'
+ORDER BY 1
+Name,Owner,Encoding,Collate,Ctype,Access privileges
+mydb,root,UTF8,en_US.utf8,en_US.utf8,
+
+subtest end
+
+subtest list_schemas
+
+cli
+\dn
+----
+sql -e \set echo -e \set display_format csv -e \dn
+List of schemas:
+> SELECT n.nspname AS "Name",
+       pg_catalog.pg_get_userbyid(n.nspowner) AS "Owner"
+  FROM pg_catalog.pg_namespace n
+ WHERE TRUE
+   AND n.nspname !~ '^pg_'
+   AND n.nspname <> 'crdb_internal'
+   AND n.nspname <> 'information_schema'
+ORDER BY 1
+Name,Owner
+public,admin
+
+cli
+\dn p%
+----
+sql -e \set echo -e \set display_format csv -e \dn p%
+List of schemas:
+> SELECT n.nspname AS "Name",
+       pg_catalog.pg_get_userbyid(n.nspowner) AS "Owner"
+  FROM pg_catalog.pg_namespace n
+ WHERE TRUE AND n.nspname LIKE 'p%'
+ORDER BY 1
+Name,Owner
+pg_catalog,NULL
+pg_extension,NULL
+public,admin
+
+cli
+\dn+
+----
+sql -e \set echo -e \set display_format csv -e \dn+
+List of schemas:
+> SELECT n.nspname AS "Name",
+       pg_catalog.pg_get_userbyid(n.nspowner) AS "Owner",
+       COALESCE(pg_catalog.array_to_string(n.nspacl, e'\n'), '') AS "Access privileges",
+       COALESCE(pg_catalog.obj_description(n.oid, 'pg_namespace'), '') AS "Description"
+  FROM pg_catalog.pg_namespace n
+ WHERE TRUE
+   AND n.nspname !~ '^pg_'
+   AND n.nspname <> 'crdb_internal'
+   AND n.nspname <> 'information_schema'
+ORDER BY 1
+Name,Owner,Access privileges,Description
+public,admin,,
+
+cli
+\dn+ p%
+----
+sql -e \set echo -e \set display_format csv -e \dn+ p%
+List of schemas:
+> SELECT n.nspname AS "Name",
+       pg_catalog.pg_get_userbyid(n.nspowner) AS "Owner",
+       COALESCE(pg_catalog.array_to_string(n.nspacl, e'\n'), '') AS "Access privileges",
+       COALESCE(pg_catalog.obj_description(n.oid, 'pg_namespace'), '') AS "Description"
+  FROM pg_catalog.pg_namespace n
+ WHERE TRUE AND n.nspname LIKE 'p%'
+ORDER BY 1
+Name,Owner,Access privileges,Description
+pg_catalog,NULL,,
+pg_extension,NULL,,
+public,admin,,
+
+cli
+\dnS
+----
+sql -e \set echo -e \set display_format csv -e \dnS
+List of schemas:
+> SELECT n.nspname AS "Name",
+       pg_catalog.pg_get_userbyid(n.nspowner) AS "Owner"
+  FROM pg_catalog.pg_namespace n
+ WHERE TRUE
+ORDER BY 1
+Name,Owner
+crdb_internal,NULL
+information_schema,NULL
+pg_catalog,NULL
+pg_extension,NULL
+public,admin
+
+cli
+\dnS+
+----
+sql -e \set echo -e \set display_format csv -e \dnS+
+List of schemas:
+> SELECT n.nspname AS "Name",
+       pg_catalog.pg_get_userbyid(n.nspowner) AS "Owner",
+       COALESCE(pg_catalog.array_to_string(n.nspacl, e'\n'), '') AS "Access privileges",
+       COALESCE(pg_catalog.obj_description(n.oid, 'pg_namespace'), '') AS "Description"
+  FROM pg_catalog.pg_namespace n
+ WHERE TRUE
+ORDER BY 1
+Name,Owner,Access privileges,Description
+crdb_internal,NULL,,
+information_schema,NULL,,
+pg_catalog,NULL,,
+pg_extension,NULL,,
+public,admin,,
+
+subtest end
+
+subtest list_objects
+
+cli
+\d
+----
+sql -e \set echo -e \set display_format csv -e \d
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          c2.relname AS "Table"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
+    WHERE c.relkind IN ('r','p','v','m','i','S','f','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Table
+public,ftable1,table,root,NULL
+public,ftable1_pkey,index,root,ftable1
+public,ftable1_x_key,index,root,ftable1
+public,ftable2,table,root,NULL
+public,ftable2_pkey,index,root,ftable2
+public,myidx,index,root,mytable
+public,mymview,materialized view,root,NULL
+public,mymview_pkey,index,root,mymview
+public,myseq,sequence,root,NULL
+public,mytable,table,root,NULL
+public,mytable_pkey,index,root,mytable
+public,myview,view,root,NULL
+
+cli
+\dS
+----
+sql -e \set echo -e \set display_format csv -e \dS
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          c2.relname AS "Table"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
+    WHERE c.relkind IN ('r','p','t','v','m','i','S','s','f','')
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Table
+pg_catalog,pg_aggregate,table,admin,NULL
+pg_catalog,pg_am,table,admin,NULL
+pg_catalog,pg_amop,table,admin,NULL
+pg_catalog,pg_amproc,table,admin,NULL
+pg_catalog,pg_attrdef,table,admin,NULL
+pg_catalog,pg_attrdef_adrelid_idx,index,admin,NULL
+pg_catalog,pg_attribute,table,admin,NULL
+pg_catalog,pg_attribute_attrelid_idx,index,admin,NULL
+pg_catalog,pg_auth_members,table,admin,NULL
+pg_catalog,pg_authid,table,admin,NULL
+pg_catalog,pg_available_extension_versions,table,admin,NULL
+pg_catalog,pg_available_extensions,table,admin,NULL
+pg_catalog,pg_cast,table,admin,NULL
+pg_catalog,pg_class,table,admin,NULL
+pg_catalog,pg_class_oid_idx,index,admin,NULL
+pg_catalog,pg_collation,table,admin,NULL
+pg_catalog,pg_config,table,admin,NULL
+pg_catalog,pg_constraint,table,admin,NULL
+pg_catalog,pg_constraint_conrelid_idx,index,admin,NULL
+pg_catalog,pg_conversion,table,admin,NULL
+pg_catalog,pg_cursors,table,admin,NULL
+pg_catalog,pg_database,table,admin,NULL
+pg_catalog,pg_db_role_setting,table,admin,NULL
+pg_catalog,pg_default_acl,table,admin,NULL
+pg_catalog,pg_depend,table,admin,NULL
+pg_catalog,pg_description,table,admin,NULL
+pg_catalog,pg_enum,table,admin,NULL
+pg_catalog,pg_event_trigger,table,admin,NULL
+pg_catalog,pg_extension,table,admin,NULL
+pg_catalog,pg_file_settings,table,admin,NULL
+pg_catalog,pg_foreign_data_wrapper,table,admin,NULL
+pg_catalog,pg_foreign_server,table,admin,NULL
+pg_catalog,pg_foreign_table,table,admin,NULL
+pg_catalog,pg_group,table,admin,NULL
+pg_catalog,pg_hba_file_rules,table,admin,NULL
+pg_catalog,pg_index,table,admin,NULL
+pg_catalog,pg_indexes,table,admin,NULL
+pg_catalog,pg_inherits,table,admin,NULL
+pg_catalog,pg_init_privs,table,admin,NULL
+pg_catalog,pg_language,table,admin,NULL
+pg_catalog,pg_largeobject,table,admin,NULL
+pg_catalog,pg_largeobject_metadata,table,admin,NULL
+pg_catalog,pg_locks,table,admin,NULL
+pg_catalog,pg_matviews,table,admin,NULL
+pg_catalog,pg_namespace,table,admin,NULL
+pg_catalog,pg_namespace_oid_idx,index,admin,NULL
+pg_catalog,pg_opclass,table,admin,NULL
+pg_catalog,pg_operator,table,admin,NULL
+pg_catalog,pg_opfamily,table,admin,NULL
+pg_catalog,pg_partitioned_table,table,admin,NULL
+pg_catalog,pg_policies,table,admin,NULL
+pg_catalog,pg_policy,table,admin,NULL
+pg_catalog,pg_prepared_statements,table,admin,NULL
+pg_catalog,pg_prepared_xacts,table,admin,NULL
+pg_catalog,pg_proc,table,admin,NULL
+pg_catalog,pg_proc_oid_idx,index,admin,NULL
+pg_catalog,pg_publication,table,admin,NULL
+pg_catalog,pg_publication_rel,table,admin,NULL
+pg_catalog,pg_publication_tables,table,admin,NULL
+pg_catalog,pg_range,table,admin,NULL
+pg_catalog,pg_replication_origin,table,admin,NULL
+pg_catalog,pg_replication_origin_status,table,admin,NULL
+pg_catalog,pg_replication_slots,table,admin,NULL
+pg_catalog,pg_rewrite,table,admin,NULL
+pg_catalog,pg_roles,table,admin,NULL
+pg_catalog,pg_rules,table,admin,NULL
+pg_catalog,pg_seclabel,table,admin,NULL
+pg_catalog,pg_seclabels,table,admin,NULL
+pg_catalog,pg_sequence,table,admin,NULL
+pg_catalog,pg_sequences,table,admin,NULL
+pg_catalog,pg_settings,table,admin,NULL
+pg_catalog,pg_shadow,table,admin,NULL
+pg_catalog,pg_shdepend,table,admin,NULL
+pg_catalog,pg_shdescription,table,admin,NULL
+pg_catalog,pg_shmem_allocations,table,admin,NULL
+pg_catalog,pg_shseclabel,table,admin,NULL
+pg_catalog,pg_stat_activity,table,admin,NULL
+pg_catalog,pg_stat_all_indexes,table,admin,NULL
+pg_catalog,pg_stat_all_tables,table,admin,NULL
+pg_catalog,pg_stat_archiver,table,admin,NULL
+pg_catalog,pg_stat_bgwriter,table,admin,NULL
+pg_catalog,pg_stat_database,table,admin,NULL
+pg_catalog,pg_stat_database_conflicts,table,admin,NULL
+pg_catalog,pg_stat_gssapi,table,admin,NULL
+pg_catalog,pg_stat_progress_analyze,table,admin,NULL
+pg_catalog,pg_stat_progress_basebackup,table,admin,NULL
+pg_catalog,pg_stat_progress_cluster,table,admin,NULL
+pg_catalog,pg_stat_progress_create_index,table,admin,NULL
+pg_catalog,pg_stat_progress_vacuum,table,admin,NULL
+pg_catalog,pg_stat_replication,table,admin,NULL
+pg_catalog,pg_stat_slru,table,admin,NULL
+pg_catalog,pg_stat_ssl,table,admin,NULL
+pg_catalog,pg_stat_subscription,table,admin,NULL
+pg_catalog,pg_stat_sys_indexes,table,admin,NULL
+pg_catalog,pg_stat_sys_tables,table,admin,NULL
+pg_catalog,pg_stat_user_functions,table,admin,NULL
+pg_catalog,pg_stat_user_indexes,table,admin,NULL
+pg_catalog,pg_stat_user_tables,table,admin,NULL
+pg_catalog,pg_stat_wal_receiver,table,admin,NULL
+pg_catalog,pg_stat_xact_all_tables,table,admin,NULL
+pg_catalog,pg_stat_xact_sys_tables,table,admin,NULL
+pg_catalog,pg_stat_xact_user_functions,table,admin,NULL
+pg_catalog,pg_stat_xact_user_tables,table,admin,NULL
+pg_catalog,pg_statio_all_indexes,table,admin,NULL
+pg_catalog,pg_statio_all_sequences,table,admin,NULL
+pg_catalog,pg_statio_all_tables,table,admin,NULL
+pg_catalog,pg_statio_sys_indexes,table,admin,NULL
+pg_catalog,pg_statio_sys_sequences,table,admin,NULL
+pg_catalog,pg_statio_sys_tables,table,admin,NULL
+pg_catalog,pg_statio_user_indexes,table,admin,NULL
+pg_catalog,pg_statio_user_sequences,table,admin,NULL
+pg_catalog,pg_statio_user_tables,table,admin,NULL
+pg_catalog,pg_statistic,table,admin,NULL
+pg_catalog,pg_statistic_ext,table,admin,NULL
+pg_catalog,pg_statistic_ext_data,table,admin,NULL
+pg_catalog,pg_stats,table,admin,NULL
+pg_catalog,pg_stats_ext,table,admin,NULL
+pg_catalog,pg_subscription,table,admin,NULL
+pg_catalog,pg_subscription_rel,table,admin,NULL
+pg_catalog,pg_tables,table,admin,NULL
+pg_catalog,pg_tablespace,table,admin,NULL
+pg_catalog,pg_timezone_abbrevs,table,admin,NULL
+pg_catalog,pg_timezone_names,table,admin,NULL
+pg_catalog,pg_timezone_names_name_idx,index,admin,NULL
+pg_catalog,pg_transform,table,admin,NULL
+pg_catalog,pg_trigger,table,admin,NULL
+pg_catalog,pg_ts_config,table,admin,NULL
+pg_catalog,pg_ts_config_map,table,admin,NULL
+pg_catalog,pg_ts_dict,table,admin,NULL
+pg_catalog,pg_ts_parser,table,admin,NULL
+pg_catalog,pg_ts_template,table,admin,NULL
+pg_catalog,pg_type,table,admin,NULL
+pg_catalog,pg_type_oid_idx,index,admin,NULL
+pg_catalog,pg_user,table,admin,NULL
+pg_catalog,pg_user_mapping,table,admin,NULL
+pg_catalog,pg_user_mappings,table,admin,NULL
+pg_catalog,pg_views,table,admin,NULL
+pg_extension,geography_columns,table,admin,NULL
+pg_extension,geometry_columns,table,admin,NULL
+pg_extension,spatial_ref_sys,table,admin,NULL
+public,ftable1,table,root,NULL
+public,ftable1_pkey,index,root,ftable1
+public,ftable1_x_key,index,root,ftable1
+public,ftable2,table,root,NULL
+public,ftable2_pkey,index,root,ftable2
+public,myidx,index,root,mytable
+public,mymview,materialized view,root,NULL
+public,mymview_pkey,index,root,mymview
+public,myseq,sequence,root,NULL
+public,mytable,table,root,NULL
+public,mytable_pkey,index,root,mytable
+public,myview,view,root,NULL
+
+cli
+\d+
+----
+sql -e \set echo -e \set display_format csv -e \d+
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          c2.relname AS "Table",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          am.amname AS "Access Method",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
+    WHERE c.relkind IN ('r','p','v','m','i','S','f','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Table,Persistence,Access Method,Description
+public,ftable1,table,root,NULL,permanent,prefix,
+public,ftable1_pkey,index,root,ftable1,permanent,prefix,
+public,ftable1_x_key,index,root,ftable1,permanent,prefix,
+public,ftable2,table,root,NULL,permanent,prefix,
+public,ftable2_pkey,index,root,ftable2,permanent,prefix,
+public,myidx,index,root,mytable,permanent,prefix,my awesome idx comment
+public,mymview,materialized view,root,NULL,permanent,NULL,
+public,mymview_pkey,index,root,mymview,permanent,prefix,
+public,myseq,sequence,root,NULL,permanent,NULL,
+public,mytable,table,root,NULL,permanent,prefix,my awesome tb comment
+public,mytable_pkey,index,root,mytable,permanent,prefix,
+public,myview,view,root,NULL,permanent,NULL,
+
+cli
+\dS+
+----
+sql -e \set echo -e \set display_format csv -e \dS+
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          c2.relname AS "Table",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          am.amname AS "Access Method",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
+    WHERE c.relkind IN ('r','p','t','v','m','i','S','s','f','')
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Table,Persistence,Access Method,Description
+pg_catalog,pg_aggregate,table,admin,NULL,permanent,prefix,"aggregated built-in functions (incomplete)
+https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html"
+pg_catalog,pg_am,table,admin,NULL,permanent,prefix,"index access methods (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-am.html"
+pg_catalog,pg_amop,table,admin,NULL,permanent,prefix,pg_amop was created for compatibility and is currently unimplemented
+pg_catalog,pg_amproc,table,admin,NULL,permanent,prefix,pg_amproc was created for compatibility and is currently unimplemented
+pg_catalog,pg_attrdef,table,admin,NULL,permanent,prefix,"column default values
+https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html"
+pg_catalog,pg_attrdef_adrelid_idx,index,admin,NULL,permanent,prefix,
+pg_catalog,pg_attribute,table,admin,NULL,permanent,prefix,"table columns (incomplete - see also information_schema.columns)
+https://www.postgresql.org/docs/12/catalog-pg-attribute.html"
+pg_catalog,pg_attribute_attrelid_idx,index,admin,NULL,permanent,prefix,
+pg_catalog,pg_auth_members,table,admin,NULL,permanent,prefix,"role membership
+https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html"
+pg_catalog,pg_authid,table,admin,NULL,permanent,prefix,"authorization identifiers - differs from postgres as we do not display passwords, 
+and thus do not require admin privileges for access. 
+https://www.postgresql.org/docs/9.5/catalog-pg-authid.html"
+pg_catalog,pg_available_extension_versions,table,admin,NULL,permanent,prefix,pg_available_extension_versions was created for compatibility and is currently unimplemented
+pg_catalog,pg_available_extensions,table,admin,NULL,permanent,prefix,"available extensions
+https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html"
+pg_catalog,pg_cast,table,admin,NULL,permanent,prefix,"casts (empty - needs filling out)
+https://www.postgresql.org/docs/9.6/catalog-pg-cast.html"
+pg_catalog,pg_class,table,admin,NULL,permanent,prefix,"tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
+https://www.postgresql.org/docs/9.5/catalog-pg-class.html"
+pg_catalog,pg_class_oid_idx,index,admin,NULL,permanent,prefix,
+pg_catalog,pg_collation,table,admin,NULL,permanent,prefix,"available collations (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-collation.html"
+pg_catalog,pg_config,table,admin,NULL,permanent,prefix,pg_config was created for compatibility and is currently unimplemented
+pg_catalog,pg_constraint,table,admin,NULL,permanent,prefix,"table constraints (incomplete - see also information_schema.table_constraints)
+https://www.postgresql.org/docs/9.5/catalog-pg-constraint.html"
+pg_catalog,pg_constraint_conrelid_idx,index,admin,NULL,permanent,prefix,
+pg_catalog,pg_conversion,table,admin,NULL,permanent,prefix,"encoding conversions (empty - unimplemented)
+https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html"
+pg_catalog,pg_cursors,table,admin,NULL,permanent,prefix,"contains currently active SQL cursors created with DECLARE
+https://www.postgresql.org/docs/14/view-pg-cursors.html"
+pg_catalog,pg_database,table,admin,NULL,permanent,prefix,"available databases (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-database.html"
+pg_catalog,pg_db_role_setting,table,admin,NULL,permanent,prefix,"contains the default values that have been configured for session variables
+https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html"
+pg_catalog,pg_default_acl,table,admin,NULL,permanent,prefix,"default ACLs; these are the privileges that will be assigned to newly created objects
+https://www.postgresql.org/docs/13/catalog-pg-default-acl.html"
+pg_catalog,pg_depend,table,admin,NULL,permanent,prefix,"dependency relationships (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-depend.html"
+pg_catalog,pg_description,table,admin,NULL,permanent,prefix,"object comments
+https://www.postgresql.org/docs/9.5/catalog-pg-description.html"
+pg_catalog,pg_enum,table,admin,NULL,permanent,prefix,"enum types and labels (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-enum.html"
+pg_catalog,pg_event_trigger,table,admin,NULL,permanent,prefix,"event triggers (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/catalog-pg-event-trigger.html"
+pg_catalog,pg_extension,table,admin,NULL,permanent,prefix,"installed extensions (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-extension.html"
+pg_catalog,pg_file_settings,table,admin,NULL,permanent,prefix,pg_file_settings was created for compatibility and is currently unimplemented
+pg_catalog,pg_foreign_data_wrapper,table,admin,NULL,permanent,prefix,"foreign data wrappers (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-foreign-data-wrapper.html"
+pg_catalog,pg_foreign_server,table,admin,NULL,permanent,prefix,"foreign servers (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-foreign-server.html"
+pg_catalog,pg_foreign_table,table,admin,NULL,permanent,prefix,"foreign tables (empty  - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-foreign-table.html"
+pg_catalog,pg_group,table,admin,NULL,permanent,prefix,pg_group was created for compatibility and is currently unimplemented
+pg_catalog,pg_hba_file_rules,table,admin,NULL,permanent,prefix,pg_hba_file_rules was created for compatibility and is currently unimplemented
+pg_catalog,pg_index,table,admin,NULL,permanent,prefix,"indexes (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-index.html"
+pg_catalog,pg_indexes,table,admin,NULL,permanent,prefix,"index creation statements
+https://www.postgresql.org/docs/9.5/view-pg-indexes.html"
+pg_catalog,pg_inherits,table,admin,NULL,permanent,prefix,"table inheritance hierarchy (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-inherits.html"
+pg_catalog,pg_init_privs,table,admin,NULL,permanent,prefix,pg_init_privs was created for compatibility and is currently unimplemented
+pg_catalog,pg_language,table,admin,NULL,permanent,prefix,"available languages (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-language.html"
+pg_catalog,pg_largeobject,table,admin,NULL,permanent,prefix,pg_largeobject was created for compatibility and is currently unimplemented
+pg_catalog,pg_largeobject_metadata,table,admin,NULL,permanent,prefix,pg_largeobject_metadata was created for compatibility and is currently unimplemented
+pg_catalog,pg_locks,table,admin,NULL,permanent,prefix,"locks held by active processes (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/view-pg-locks.html"
+pg_catalog,pg_matviews,table,admin,NULL,permanent,prefix,"available materialized views (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/view-pg-matviews.html"
+pg_catalog,pg_namespace,table,admin,NULL,permanent,prefix,"available namespaces
+https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html"
+pg_catalog,pg_namespace_oid_idx,index,admin,NULL,permanent,prefix,
+pg_catalog,pg_opclass,table,admin,NULL,permanent,prefix,"opclass (empty - Operator classes not supported yet)
+https://www.postgresql.org/docs/12/catalog-pg-opclass.html"
+pg_catalog,pg_operator,table,admin,NULL,permanent,prefix,"operators (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-operator.html"
+pg_catalog,pg_opfamily,table,admin,NULL,permanent,prefix,pg_opfamily was created for compatibility and is currently unimplemented
+pg_catalog,pg_partitioned_table,table,admin,NULL,permanent,prefix,pg_partitioned_table was created for compatibility and is currently unimplemented
+pg_catalog,pg_policies,table,admin,NULL,permanent,prefix,pg_policies was created for compatibility and is currently unimplemented
+pg_catalog,pg_policy,table,admin,NULL,permanent,prefix,pg_policy was created for compatibility and is currently unimplemented
+pg_catalog,pg_prepared_statements,table,admin,NULL,permanent,prefix,"prepared statements
+https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html"
+pg_catalog,pg_prepared_xacts,table,admin,NULL,permanent,prefix,"prepared transactions (empty - feature does not exist)
+https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html"
+pg_catalog,pg_proc,table,admin,NULL,permanent,prefix,"built-in functions (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-proc.html"
+pg_catalog,pg_proc_oid_idx,index,admin,NULL,permanent,prefix,
+pg_catalog,pg_publication,table,admin,NULL,permanent,prefix,pg_publication was created for compatibility and is currently unimplemented
+pg_catalog,pg_publication_rel,table,admin,NULL,permanent,prefix,pg_publication_rel was created for compatibility and is currently unimplemented
+pg_catalog,pg_publication_tables,table,admin,NULL,permanent,prefix,pg_publication_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_range,table,admin,NULL,permanent,prefix,"range types (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-range.html"
+pg_catalog,pg_replication_origin,table,admin,NULL,permanent,prefix,pg_replication_origin was created for compatibility and is currently unimplemented
+pg_catalog,pg_replication_origin_status,table,admin,NULL,permanent,prefix,pg_replication_origin_status was created for compatibility and is currently unimplemented
+pg_catalog,pg_replication_slots,table,admin,NULL,permanent,prefix,pg_replication_slots was created for compatibility and is currently unimplemented
+pg_catalog,pg_rewrite,table,admin,NULL,permanent,prefix,"rewrite rules (only for referencing on pg_depend for table-view dependencies)
+https://www.postgresql.org/docs/9.5/catalog-pg-rewrite.html"
+pg_catalog,pg_roles,table,admin,NULL,permanent,prefix,"database roles
+https://www.postgresql.org/docs/9.5/view-pg-roles.html"
+pg_catalog,pg_rules,table,admin,NULL,permanent,prefix,pg_rules was created for compatibility and is currently unimplemented
+pg_catalog,pg_seclabel,table,admin,NULL,permanent,prefix,"security labels (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-seclabel.html"
+pg_catalog,pg_seclabels,table,admin,NULL,permanent,prefix,"security labels (empty)
+https://www.postgresql.org/docs/9.6/view-pg-seclabels.html"
+pg_catalog,pg_sequence,table,admin,NULL,permanent,prefix,"sequences (see also information_schema.sequences)
+https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html"
+pg_catalog,pg_sequences,table,admin,NULL,permanent,prefix,"pg_sequences is very similar as pg_sequence.
+https://www.postgresql.org/docs/13/view-pg-sequences.html
+"
+pg_catalog,pg_settings,table,admin,NULL,permanent,prefix,"session variables (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-settings.html"
+pg_catalog,pg_shadow,table,admin,NULL,permanent,prefix,"pg_shadow lists properties for roles that are marked as rolcanlogin in pg_authid
+https://www.postgresql.org/docs/13/view-pg-shadow.html"
+pg_catalog,pg_shdepend,table,admin,NULL,permanent,prefix,"Shared Dependencies (Roles depending on objects). 
+https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html"
+pg_catalog,pg_shdescription,table,admin,NULL,permanent,prefix,"shared object comments
+https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html"
+pg_catalog,pg_shmem_allocations,table,admin,NULL,permanent,prefix,pg_shmem_allocations was created for compatibility and is currently unimplemented
+pg_catalog,pg_shseclabel,table,admin,NULL,permanent,prefix,"shared security labels (empty - feature not supported)
+https://www.postgresql.org/docs/9.5/catalog-pg-shseclabel.html"
+pg_catalog,pg_stat_activity,table,admin,NULL,permanent,prefix,"backend access statistics (empty - monitoring works differently in CockroachDB)
+https://www.postgresql.org/docs/9.6/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW"
+pg_catalog,pg_stat_all_indexes,table,admin,NULL,permanent,prefix,pg_stat_all_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_all_tables,table,admin,NULL,permanent,prefix,pg_stat_all_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_archiver,table,admin,NULL,permanent,prefix,pg_stat_archiver was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_bgwriter,table,admin,NULL,permanent,prefix,pg_stat_bgwriter was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_database,table,admin,NULL,permanent,prefix,pg_stat_database was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_database_conflicts,table,admin,NULL,permanent,prefix,pg_stat_database_conflicts was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_gssapi,table,admin,NULL,permanent,prefix,pg_stat_gssapi was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_analyze,table,admin,NULL,permanent,prefix,pg_stat_progress_analyze was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_basebackup,table,admin,NULL,permanent,prefix,pg_stat_progress_basebackup was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_cluster,table,admin,NULL,permanent,prefix,pg_stat_progress_cluster was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_create_index,table,admin,NULL,permanent,prefix,pg_stat_progress_create_index was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_progress_vacuum,table,admin,NULL,permanent,prefix,pg_stat_progress_vacuum was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_replication,table,admin,NULL,permanent,prefix,pg_stat_replication was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_slru,table,admin,NULL,permanent,prefix,pg_stat_slru was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_ssl,table,admin,NULL,permanent,prefix,pg_stat_ssl was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_subscription,table,admin,NULL,permanent,prefix,pg_stat_subscription was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_sys_indexes,table,admin,NULL,permanent,prefix,pg_stat_sys_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_sys_tables,table,admin,NULL,permanent,prefix,pg_stat_sys_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_user_functions,table,admin,NULL,permanent,prefix,pg_stat_user_functions was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_user_indexes,table,admin,NULL,permanent,prefix,pg_stat_user_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_user_tables,table,admin,NULL,permanent,prefix,pg_stat_user_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_wal_receiver,table,admin,NULL,permanent,prefix,pg_stat_wal_receiver was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_xact_all_tables,table,admin,NULL,permanent,prefix,pg_stat_xact_all_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_xact_sys_tables,table,admin,NULL,permanent,prefix,pg_stat_xact_sys_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_xact_user_functions,table,admin,NULL,permanent,prefix,pg_stat_xact_user_functions was created for compatibility and is currently unimplemented
+pg_catalog,pg_stat_xact_user_tables,table,admin,NULL,permanent,prefix,pg_stat_xact_user_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_all_indexes,table,admin,NULL,permanent,prefix,pg_statio_all_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_all_sequences,table,admin,NULL,permanent,prefix,pg_statio_all_sequences was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_all_tables,table,admin,NULL,permanent,prefix,pg_statio_all_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_sys_indexes,table,admin,NULL,permanent,prefix,pg_statio_sys_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_sys_sequences,table,admin,NULL,permanent,prefix,pg_statio_sys_sequences was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_sys_tables,table,admin,NULL,permanent,prefix,pg_statio_sys_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_user_indexes,table,admin,NULL,permanent,prefix,pg_statio_user_indexes was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_user_sequences,table,admin,NULL,permanent,prefix,pg_statio_user_sequences was created for compatibility and is currently unimplemented
+pg_catalog,pg_statio_user_tables,table,admin,NULL,permanent,prefix,pg_statio_user_tables was created for compatibility and is currently unimplemented
+pg_catalog,pg_statistic,table,admin,NULL,permanent,prefix,pg_statistic was created for compatibility and is currently unimplemented
+pg_catalog,pg_statistic_ext,table,admin,NULL,permanent,prefix,"pg_statistic_ext has the statistics objects created with CREATE STATISTICS
+https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html"
+pg_catalog,pg_statistic_ext_data,table,admin,NULL,permanent,prefix,pg_statistic_ext_data was created for compatibility and is currently unimplemented
+pg_catalog,pg_stats,table,admin,NULL,permanent,prefix,pg_stats was created for compatibility and is currently unimplemented
+pg_catalog,pg_stats_ext,table,admin,NULL,permanent,prefix,pg_stats_ext was created for compatibility and is currently unimplemented
+pg_catalog,pg_subscription,table,admin,NULL,permanent,prefix,pg_subscription was created for compatibility and is currently unimplemented
+pg_catalog,pg_subscription_rel,table,admin,NULL,permanent,prefix,pg_subscription_rel was created for compatibility and is currently unimplemented
+pg_catalog,pg_tables,table,admin,NULL,permanent,prefix,"tables summary (see also information_schema.tables, pg_catalog.pg_class)
+https://www.postgresql.org/docs/9.5/view-pg-tables.html"
+pg_catalog,pg_tablespace,table,admin,NULL,permanent,prefix,"available tablespaces (incomplete; concept inapplicable to CockroachDB)
+https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html"
+pg_catalog,pg_timezone_abbrevs,table,admin,NULL,permanent,prefix,pg_timezone_abbrevs was created for compatibility and is currently unimplemented
+pg_catalog,pg_timezone_names,table,admin,NULL,permanent,prefix,pg_timezone_names lists all the timezones that are supported by SET timezone
+pg_catalog,pg_timezone_names_name_idx,index,admin,NULL,permanent,prefix,
+pg_catalog,pg_transform,table,admin,NULL,permanent,prefix,pg_transform was created for compatibility and is currently unimplemented
+pg_catalog,pg_trigger,table,admin,NULL,permanent,prefix,"triggers (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-trigger.html"
+pg_catalog,pg_ts_config,table,admin,NULL,permanent,prefix,pg_ts_config was created for compatibility and is currently unimplemented
+pg_catalog,pg_ts_config_map,table,admin,NULL,permanent,prefix,pg_ts_config_map was created for compatibility and is currently unimplemented
+pg_catalog,pg_ts_dict,table,admin,NULL,permanent,prefix,pg_ts_dict was created for compatibility and is currently unimplemented
+pg_catalog,pg_ts_parser,table,admin,NULL,permanent,prefix,pg_ts_parser was created for compatibility and is currently unimplemented
+pg_catalog,pg_ts_template,table,admin,NULL,permanent,prefix,pg_ts_template was created for compatibility and is currently unimplemented
+pg_catalog,pg_type,table,admin,NULL,permanent,prefix,"scalar types (incomplete)
+https://www.postgresql.org/docs/9.5/catalog-pg-type.html"
+pg_catalog,pg_type_oid_idx,index,admin,NULL,permanent,prefix,
+pg_catalog,pg_user,table,admin,NULL,permanent,prefix,"database users
+https://www.postgresql.org/docs/9.5/view-pg-user.html"
+pg_catalog,pg_user_mapping,table,admin,NULL,permanent,prefix,"local to remote user mapping (empty - feature does not exist)
+https://www.postgresql.org/docs/9.5/catalog-pg-user-mapping.html"
+pg_catalog,pg_user_mappings,table,admin,NULL,permanent,prefix,pg_user_mappings was created for compatibility and is currently unimplemented
+pg_catalog,pg_views,table,admin,NULL,permanent,prefix,"view definitions (incomplete - see also information_schema.views)
+https://www.postgresql.org/docs/9.5/view-pg-views.html"
+pg_extension,geography_columns,table,admin,NULL,permanent,prefix,Shows all defined geography columns. Matches PostGIS' geography_columns functionality.
+pg_extension,geometry_columns,table,admin,NULL,permanent,prefix,Shows all defined geometry columns. Matches PostGIS' geometry_columns functionality.
+pg_extension,spatial_ref_sys,table,admin,NULL,permanent,prefix,Shows all defined Spatial Reference Identifiers (SRIDs). Matches PostGIS' spatial_ref_sys table.
+public,ftable1,table,root,NULL,permanent,prefix,
+public,ftable1_pkey,index,root,ftable1,permanent,prefix,
+public,ftable1_x_key,index,root,ftable1,permanent,prefix,
+public,ftable2,table,root,NULL,permanent,prefix,
+public,ftable2_pkey,index,root,ftable2,permanent,prefix,
+public,myidx,index,root,mytable,permanent,prefix,my awesome idx comment
+public,mymview,materialized view,root,NULL,permanent,NULL,
+public,mymview_pkey,index,root,mymview,permanent,prefix,
+public,myseq,sequence,root,NULL,permanent,NULL,
+public,mytable,table,root,NULL,permanent,prefix,my awesome tb comment
+public,mytable_pkey,index,root,mytable,permanent,prefix,
+public,myview,view,root,NULL,permanent,NULL,
+
+subtest end
+
+subtest list_tables
+
+cli
+\dt
+----
+sql -e \set echo -e \set display_format csv -e \dt
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+    WHERE c.relkind IN ('r','p','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner
+public,ftable1,table,root
+public,ftable2,table,root
+public,mytable,table,root
+
+subtest end
+
+subtest list_indexes
+
+cli
+\di
+----
+sql -e \set echo -e \set display_format csv -e \di
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          c2.relname AS "Table"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
+    WHERE c.relkind IN ('i','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Table
+public,ftable1_pkey,index,root,ftable1
+public,ftable1_x_key,index,root,ftable1
+public,ftable2_pkey,index,root,ftable2
+public,myidx,index,root,mytable
+public,mymview_pkey,index,root,mymview
+public,mytable_pkey,index,root,mytable
+
+cli
+\di+
+----
+sql -e \set echo -e \set display_format csv -e \di+
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          c2.relname AS "Table",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          am.amname AS "Access Method",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
+    WHERE c.relkind IN ('i','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Table,Persistence,Access Method,Description
+public,ftable1_pkey,index,root,ftable1,permanent,prefix,
+public,ftable1_x_key,index,root,ftable1,permanent,prefix,
+public,ftable2_pkey,index,root,ftable2,permanent,prefix,
+public,myidx,index,root,mytable,permanent,prefix,my awesome idx comment
+public,mymview_pkey,index,root,mymview,permanent,prefix,
+public,mytable_pkey,index,root,mytable,permanent,prefix,
+
+cli
+\di myidx
+----
+sql -e \set echo -e \set display_format csv -e \di myidx
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          c2.relname AS "Table"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
+    WHERE c.relkind IN ('i','s','')
+      AND c.relname LIKE 'myidx'
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Table
+public,myidx,index,root,mytable
+
+cli
+\di+ myidx
+----
+sql -e \set echo -e \set display_format csv -e \di+ myidx
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          c2.relname AS "Table",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          am.amname AS "Access Method",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
+    WHERE c.relkind IN ('i','s','')
+      AND c.relname LIKE 'myidx'
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Table,Persistence,Access Method,Description
+public,myidx,index,root,mytable,permanent,prefix,my awesome idx comment
+
+subtest end
+
+subtest list_materialized_views
+
+cli
+\dm
+----
+sql -e \set echo -e \set display_format csv -e \dm
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+    WHERE c.relkind IN ('m','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner
+public,mymview,materialized view,root
+
+cli
+\dm mymview
+----
+sql -e \set echo -e \set display_format csv -e \dm mymview
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+    WHERE c.relkind IN ('m','s','')
+      AND c.relname LIKE 'mymview'
+ ORDER BY 1,2
+Schema,Name,Type,Owner
+public,mymview,materialized view,root
+
+cli
+\dm+
+----
+sql -e \set echo -e \set display_format csv -e \dm+
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          am.amname AS "Access Method",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+    WHERE c.relkind IN ('m','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Persistence,Access Method,Description
+public,mymview,materialized view,root,permanent,NULL,
+
+cli
+\dm+ mymview
+----
+sql -e \set echo -e \set display_format csv -e \dm+ mymview
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          am.amname AS "Access Method",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+    WHERE c.relkind IN ('m','s','')
+      AND c.relname LIKE 'mymview'
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Persistence,Access Method,Description
+public,mymview,materialized view,root,permanent,NULL,
+
+subtest end
+
+
+subtest list_views
+
+cli
+\dv
+----
+sql -e \set echo -e \set display_format csv -e \dv
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    WHERE c.relkind IN ('v','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner
+public,myview,view,root
+
+cli
+\dv myview
+----
+sql -e \set echo -e \set display_format csv -e \dv myview
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    WHERE c.relkind IN ('v','s','')
+      AND c.relname LIKE 'myview'
+ ORDER BY 1,2
+Schema,Name,Type,Owner
+public,myview,view,root
+
+cli
+\dv+
+----
+sql -e \set echo -e \set display_format csv -e \dv+
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    WHERE c.relkind IN ('v','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Persistence,Description
+public,myview,view,root,permanent,
+
+cli
+\dv+ myview
+----
+sql -e \set echo -e \set display_format csv -e \dv+ myview
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    WHERE c.relkind IN ('v','s','')
+      AND c.relname LIKE 'myview'
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Persistence,Description
+public,myview,view,root,permanent,
+
+subtest end
+
+subtest list_sequences
+
+cli
+\ds
+----
+sql -e \set echo -e \set display_format csv -e \ds
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    WHERE c.relkind IN ('S','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner
+public,myseq,sequence,root
+
+cli
+\ds+
+----
+sql -e \set echo -e \set display_format csv -e \ds+
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    WHERE c.relkind IN ('S','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Persistence,Description
+public,myseq,sequence,root,permanent,
+
+cli
+\ds mys%
+----
+sql -e \set echo -e \set display_format csv -e \ds mys%
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    WHERE c.relkind IN ('S','s','')
+      AND c.relname LIKE 'mys%'
+ ORDER BY 1,2
+Schema,Name,Type,Owner
+public,myseq,sequence,root
+
+cli
+\ds+ mys%
+----
+sql -e \set echo -e \set display_format csv -e \ds+ mys%
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+          CASE c.relpersistence
+          WHEN 'p' THEN 'permanent'
+          WHEN 't' THEN 'temporary'
+          WHEN 'u' THEN 'unlogged' END AS "Persistence",
+          COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    WHERE c.relkind IN ('S','s','')
+      AND c.relname LIKE 'mys%'
+ ORDER BY 1,2
+Schema,Name,Type,Owner,Persistence,Description
+public,myseq,sequence,root,permanent,
+
+subtest end
+
+subtest multiple_types
+
+cli
+\dvs
+----
+sql -e \set echo -e \set display_format csv -e \dvs
+List of relations:
+>    SELECT n.nspname as "Schema",
+          c.relname as "Name",
+          CASE c.relkind
+          WHEN 'r' THEN 'table'
+          WHEN 'v' THEN 'view'
+          WHEN 'm' THEN 'materialized view'
+          WHEN 'i' THEN 'index'
+          WHEN 'S' THEN 'sequence'
+          WHEN 's' THEN 'special'
+          WHEN 't' THEN 'TOAST table'
+          WHEN 'f' THEN 'foreign table'
+          WHEN 'p' THEN 'partitioned table'
+          WHEN 'I' THEN 'partitioned index'
+          END as "Type",
+          pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    WHERE c.relkind IN ('v','S','')
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_table_is_visible(c.oid)
+ ORDER BY 1,2
+Schema,Name,Type,Owner
+public,myseq,sequence,root
+public,myview,view,root
+
+subtest end
+
+subtest list_table_details
+
+cli
+\d mytable
+----
+sql -e \set echo -e \set display_format csv -e \d mytable
+>    SELECT c.oid,
+          n.nspname,
+          c.relname,
+          c.relkind,
+          c.relpersistence,
+          c.relchecks > 0,
+          c.relhasindex,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname LIKE 'mytable'
+ ORDER BY 2,3
+Table "public.mytable"
+> WITH cols AS (
+ SELECT a.attname,
+        pg_catalog.format_type(a.atttypid, a.atttypmod) AS typname,
+ (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)
+    FROM pg_catalog.pg_attrdef d
+   WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef) AS defexpr,
+         a.attnotnull,
+ (SELECT c.collname
+    FROM pg_catalog.pg_collation c, pg_catalog.pg_type t
+   WHERE c.oid = a.attcollation
+     AND t.oid = a.atttypid
+     AND a.attcollation <> t.typcollation) AS attcollation,
+         a.attidentity,
+         a.attgenerated
+    FROM pg_catalog.pg_attribute a
+   WHERE a.attrelid = 106 AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum)
+SELECT attname AS "Column",
+       typname AS "Type",
+       COALESCE(attcollation, '') AS "Collation",
+       IF(attnotnull, 'not null', '') AS "Nullable",
+       COALESCE(
+         CASE attidentity
+         WHEN 'a' THEN 'generated always as identity'
+         WHEN 'd' THEN 'generated by default as identity'
+         ELSE CASE attgenerated
+              WHEN 's' THEN 'generated always as ('||defexpr||') stored'
+              ELSE defexpr
+              END
+         END, '') AS "Default"
+  FROM cols
+Column,Type,Collation,Nullable,Default
+mycolumn,bigint,,,
+rowid,bigint,,not null,unique_rowid()
+> WITH idx AS (
+   SELECT c2.relname AS idxname,
+          i.indisprimary, i.indisunique, i.indisclustered,
+          i.indisvalid,
+          pg_catalog.pg_get_indexdef(i.indexrelid, 0, true) as indexdef,
+          pg_catalog.pg_get_constraintdef(con.oid, true) as condef,
+          contype, condeferrable, condeferred,
+          i.indisreplident
+     FROM pg_catalog.pg_class c,
+          pg_catalog.pg_class c2,
+          pg_catalog.pg_index i
+LEFT JOIN pg_catalog.pg_constraint con
+       ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))
+    WHERE c.oid = 106
+      AND c.oid = i.indrelid
+      AND i.indexrelid = c2.oid)
+SELECT pg_catalog.quote_ident(idxname) ||
+       IF(contype = 'x', ' ' || condef,
+          IF(indisprimary, ' PRIMARY KEY,',
+             IF(indisunique,
+                IF(contype = 'u', ' UNIQUE CONSTRAINT,', ' UNIQUE,'), ''))||
+          ' ' || substring(indexdef FROM position(' USING ' IN indexdef)+7) ||
+          IF(condeferrable, ' DEFERRABLE', '')||
+          IF(condeferred, ' INITIALLY DEFERRED', ''))||
+       IF(indisclustered, ' CLUSTER', '')||
+       IF(NOT indisvalid, ' INVALID', '')||
+       IF(indisreplident, ' REPLICA IDENTITY', '')
+       AS "Indexes"
+  FROM idx
+ORDER BY indisprimary DESC, idxname
+Indexes
+"mytable_pkey PRIMARY KEY, btree (rowid ASC)"
+myidx btree (mycolumn ASC)
+> WITH cons AS (
+SELECT r.conname,
+       pg_catalog.pg_get_constraintdef(r.oid, true) AS condef
+  FROM pg_catalog.pg_constraint r
+ WHERE r.conrelid = 106 AND r.contype = 'c'
+)
+  SELECT pg_catalog.quote_ident(conname) || ' ' || condef
+         AS "Check constraints"
+    FROM cons
+ORDER BY conname
+Check constraints
+check_mycolumn CHECK ((mycolumn > 123))
+
+subtest end
+
+subtest view_details
+
+cli
+\d+ myview
+----
+sql -e \set echo -e \set display_format csv -e \d+ myview
+>    SELECT c.oid,
+          n.nspname,
+          c.relname,
+          c.relkind,
+          c.relpersistence,
+          c.relchecks > 0,
+          c.relhasindex,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname LIKE 'myview'
+ ORDER BY 2,3
+View "public.myview"
+> WITH cols AS (
+ SELECT a.attname,
+        pg_catalog.format_type(a.atttypid, a.atttypmod) AS typname,
+ (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)
+    FROM pg_catalog.pg_attrdef d
+   WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef) AS defexpr,
+         a.attnotnull,
+ (SELECT c.collname
+    FROM pg_catalog.pg_collation c, pg_catalog.pg_type t
+   WHERE c.oid = a.attcollation
+     AND t.oid = a.atttypid
+     AND a.attcollation <> t.typcollation) AS attcollation,
+         a.attidentity,
+         a.attgenerated,
+         pg_catalog.col_description(a.attrelid, a.attnum) AS description
+    FROM pg_catalog.pg_attribute a
+   WHERE a.attrelid = 108 AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum)
+SELECT attname AS "Column",
+       typname AS "Type",
+       COALESCE(attcollation, '') AS "Collation",
+       IF(attnotnull, 'not null', '') AS "Nullable",
+       COALESCE(
+         CASE attidentity
+         WHEN 'a' THEN 'generated always as identity'
+         WHEN 'd' THEN 'generated by default as identity'
+         ELSE CASE attgenerated
+              WHEN 's' THEN 'generated always as ('||defexpr||') stored'
+              ELSE defexpr
+              END
+         END, '') AS "Default",
+       COALESCE(description,'') AS "Description"
+  FROM cols
+Column,Type,Collation,Nullable,Default,Description
+mycolumn,bigint,,,,
+> SELECT pg_catalog.pg_get_viewdef(108::pg_catalog.oid, true) AS "View definition"
+View definition
+SELECT mycolumn FROM defaultdb.public.mytable
+
+subtest end
+
+subtest materialized_view_details
+
+cli
+\d+ mymview
+----
+sql -e \set echo -e \set display_format csv -e \d+ mymview
+>    SELECT c.oid,
+          n.nspname,
+          c.relname,
+          c.relkind,
+          c.relpersistence,
+          c.relchecks > 0,
+          c.relhasindex,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname LIKE 'mymview'
+ ORDER BY 2,3
+?m? "public.mymview"
+> WITH cols AS (
+ SELECT a.attname,
+        pg_catalog.format_type(a.atttypid, a.atttypmod) AS typname,
+ (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)
+    FROM pg_catalog.pg_attrdef d
+   WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef) AS defexpr,
+         a.attnotnull,
+ (SELECT c.collname
+    FROM pg_catalog.pg_collation c, pg_catalog.pg_type t
+   WHERE c.oid = a.attcollation
+     AND t.oid = a.atttypid
+     AND a.attcollation <> t.typcollation) AS attcollation,
+         a.attidentity,
+         a.attgenerated,
+         pg_catalog.col_description(a.attrelid, a.attnum) AS description
+    FROM pg_catalog.pg_attribute a
+   WHERE a.attrelid = 107 AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum)
+SELECT attname AS "Column",
+       typname AS "Type",
+       COALESCE(attcollation, '') AS "Collation",
+       IF(attnotnull, 'not null', '') AS "Nullable",
+       COALESCE(
+         CASE attidentity
+         WHEN 'a' THEN 'generated always as identity'
+         WHEN 'd' THEN 'generated by default as identity'
+         ELSE CASE attgenerated
+              WHEN 's' THEN 'generated always as ('||defexpr||') stored'
+              ELSE defexpr
+              END
+         END, '') AS "Default",
+       COALESCE(description,'') AS "Description"
+  FROM cols
+Column,Type,Collation,Nullable,Default,Description
+mycolumn,bigint,,,,
+rowid,bigint,,not null,unique_rowid(),
+> WITH idx AS (
+   SELECT c2.relname AS idxname,
+          i.indisprimary, i.indisunique, i.indisclustered,
+          i.indisvalid,
+          pg_catalog.pg_get_indexdef(i.indexrelid, 0, true) as indexdef,
+          pg_catalog.pg_get_constraintdef(con.oid, true) as condef,
+          contype, condeferrable, condeferred,
+          i.indisreplident
+     FROM pg_catalog.pg_class c,
+          pg_catalog.pg_class c2,
+          pg_catalog.pg_index i
+LEFT JOIN pg_catalog.pg_constraint con
+       ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))
+    WHERE c.oid = 107
+      AND c.oid = i.indrelid
+      AND i.indexrelid = c2.oid)
+SELECT pg_catalog.quote_ident(idxname) ||
+       IF(contype = 'x', ' ' || condef,
+          IF(indisprimary, ' PRIMARY KEY,',
+             IF(indisunique,
+                IF(contype = 'u', ' UNIQUE CONSTRAINT,', ' UNIQUE,'), ''))||
+          ' ' || substring(indexdef FROM position(' USING ' IN indexdef)+7) ||
+          IF(condeferrable, ' DEFERRABLE', '')||
+          IF(condeferred, ' INITIALLY DEFERRED', ''))||
+       IF(indisclustered, ' CLUSTER', '')||
+       IF(NOT indisvalid, ' INVALID', '')||
+       IF(indisreplident, ' REPLICA IDENTITY', '')
+       AS "Indexes"
+  FROM idx
+ORDER BY indisprimary DESC, idxname
+Indexes
+"mymview_pkey PRIMARY KEY, btree (rowid ASC)"
+> SELECT pg_catalog.pg_get_viewdef(107::pg_catalog.oid, true) AS "View definition"
+View definition
+SELECT mycolumn FROM defaultdb.public.mytable
+
+subtest end
+
+subtest fkey_details
+
+cli
+\d ftable1
+----
+sql -e \set echo -e \set display_format csv -e \d ftable1
+>    SELECT c.oid,
+          n.nspname,
+          c.relname,
+          c.relkind,
+          c.relpersistence,
+          c.relchecks > 0,
+          c.relhasindex,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname LIKE 'ftable1'
+ ORDER BY 2,3
+Table "public.ftable1"
+> WITH cols AS (
+ SELECT a.attname,
+        pg_catalog.format_type(a.atttypid, a.atttypmod) AS typname,
+ (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)
+    FROM pg_catalog.pg_attrdef d
+   WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef) AS defexpr,
+         a.attnotnull,
+ (SELECT c.collname
+    FROM pg_catalog.pg_collation c, pg_catalog.pg_type t
+   WHERE c.oid = a.attcollation
+     AND t.oid = a.atttypid
+     AND a.attcollation <> t.typcollation) AS attcollation,
+         a.attidentity,
+         a.attgenerated
+    FROM pg_catalog.pg_attribute a
+   WHERE a.attrelid = 109 AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum)
+SELECT attname AS "Column",
+       typname AS "Type",
+       COALESCE(attcollation, '') AS "Collation",
+       IF(attnotnull, 'not null', '') AS "Nullable",
+       COALESCE(
+         CASE attidentity
+         WHEN 'a' THEN 'generated always as identity'
+         WHEN 'd' THEN 'generated by default as identity'
+         ELSE CASE attgenerated
+              WHEN 's' THEN 'generated always as ('||defexpr||') stored'
+              ELSE defexpr
+              END
+         END, '') AS "Default"
+  FROM cols
+Column,Type,Collation,Nullable,Default
+x,bigint,,,
+rowid,bigint,,not null,unique_rowid()
+> WITH idx AS (
+   SELECT c2.relname AS idxname,
+          i.indisprimary, i.indisunique, i.indisclustered,
+          i.indisvalid,
+          pg_catalog.pg_get_indexdef(i.indexrelid, 0, true) as indexdef,
+          pg_catalog.pg_get_constraintdef(con.oid, true) as condef,
+          contype, condeferrable, condeferred,
+          i.indisreplident
+     FROM pg_catalog.pg_class c,
+          pg_catalog.pg_class c2,
+          pg_catalog.pg_index i
+LEFT JOIN pg_catalog.pg_constraint con
+       ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))
+    WHERE c.oid = 109
+      AND c.oid = i.indrelid
+      AND i.indexrelid = c2.oid)
+SELECT pg_catalog.quote_ident(idxname) ||
+       IF(contype = 'x', ' ' || condef,
+          IF(indisprimary, ' PRIMARY KEY,',
+             IF(indisunique,
+                IF(contype = 'u', ' UNIQUE CONSTRAINT,', ' UNIQUE,'), ''))||
+          ' ' || substring(indexdef FROM position(' USING ' IN indexdef)+7) ||
+          IF(condeferrable, ' DEFERRABLE', '')||
+          IF(condeferred, ' INITIALLY DEFERRED', ''))||
+       IF(indisclustered, ' CLUSTER', '')||
+       IF(NOT indisvalid, ' INVALID', '')||
+       IF(indisreplident, ' REPLICA IDENTITY', '')
+       AS "Indexes"
+  FROM idx
+ORDER BY indisprimary DESC, idxname
+Indexes
+"ftable1_pkey PRIMARY KEY, btree (rowid ASC)"
+"ftable1_x_key UNIQUE CONSTRAINT, btree (x ASC)"
+> WITH cons AS (
+SELECT conname,
+       pg_catalog.pg_get_constraintdef(r.oid, true) as condef,
+       conrelid::pg_catalog.regclass AS ontable
+  FROM pg_catalog.pg_constraint r
+ WHERE r.confrelid = 109
+   AND r.contype = 'f')
+  SELECT 'TABLE ' || pg_catalog.quote_ident(ontable::STRING) ||
+         ' CONSTRAINT ' || pg_catalog.quote_ident(conname) || ' ' || condef
+         AS "Referenced by"
+    FROM cons
+ORDER BY conname
+Referenced by
+TABLE ftable2 CONSTRAINT ftable2_x_fkey FOREIGN KEY (x) REFERENCES ftable1(x)
+
+cli
+\d ftable2
+----
+sql -e \set echo -e \set display_format csv -e \d ftable2
+>    SELECT c.oid,
+          n.nspname,
+          c.relname,
+          c.relkind,
+          c.relpersistence,
+          c.relchecks > 0,
+          c.relhasindex,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = c.oid AND contype = 'f') AS relhasfkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_constraint WHERE confrelid = c.oid AND contype = 'f') AS relhasifkey,
+          EXISTS(SELECT 1 FROM pg_catalog.pg_statistic_ext WHERE stxrelid = c.oid)
+     FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname LIKE 'ftable2'
+ ORDER BY 2,3
+Table "public.ftable2"
+> WITH cols AS (
+ SELECT a.attname,
+        pg_catalog.format_type(a.atttypid, a.atttypmod) AS typname,
+ (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)
+    FROM pg_catalog.pg_attrdef d
+   WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef) AS defexpr,
+         a.attnotnull,
+ (SELECT c.collname
+    FROM pg_catalog.pg_collation c, pg_catalog.pg_type t
+   WHERE c.oid = a.attcollation
+     AND t.oid = a.atttypid
+     AND a.attcollation <> t.typcollation) AS attcollation,
+         a.attidentity,
+         a.attgenerated
+    FROM pg_catalog.pg_attribute a
+   WHERE a.attrelid = 110 AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum)
+SELECT attname AS "Column",
+       typname AS "Type",
+       COALESCE(attcollation, '') AS "Collation",
+       IF(attnotnull, 'not null', '') AS "Nullable",
+       COALESCE(
+         CASE attidentity
+         WHEN 'a' THEN 'generated always as identity'
+         WHEN 'd' THEN 'generated by default as identity'
+         ELSE CASE attgenerated
+              WHEN 's' THEN 'generated always as ('||defexpr||') stored'
+              ELSE defexpr
+              END
+         END, '') AS "Default"
+  FROM cols
+Column,Type,Collation,Nullable,Default
+x,bigint,,,
+rowid,bigint,,not null,unique_rowid()
+> WITH idx AS (
+   SELECT c2.relname AS idxname,
+          i.indisprimary, i.indisunique, i.indisclustered,
+          i.indisvalid,
+          pg_catalog.pg_get_indexdef(i.indexrelid, 0, true) as indexdef,
+          pg_catalog.pg_get_constraintdef(con.oid, true) as condef,
+          contype, condeferrable, condeferred,
+          i.indisreplident
+     FROM pg_catalog.pg_class c,
+          pg_catalog.pg_class c2,
+          pg_catalog.pg_index i
+LEFT JOIN pg_catalog.pg_constraint con
+       ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))
+    WHERE c.oid = 110
+      AND c.oid = i.indrelid
+      AND i.indexrelid = c2.oid)
+SELECT pg_catalog.quote_ident(idxname) ||
+       IF(contype = 'x', ' ' || condef,
+          IF(indisprimary, ' PRIMARY KEY,',
+             IF(indisunique,
+                IF(contype = 'u', ' UNIQUE CONSTRAINT,', ' UNIQUE,'), ''))||
+          ' ' || substring(indexdef FROM position(' USING ' IN indexdef)+7) ||
+          IF(condeferrable, ' DEFERRABLE', '')||
+          IF(condeferred, ' INITIALLY DEFERRED', ''))||
+       IF(indisclustered, ' CLUSTER', '')||
+       IF(NOT indisvalid, ' INVALID', '')||
+       IF(indisreplident, ' REPLICA IDENTITY', '')
+       AS "Indexes"
+  FROM idx
+ORDER BY indisprimary DESC, idxname
+Indexes
+"ftable2_pkey PRIMARY KEY, btree (rowid ASC)"
+> WITH cons AS (
+SELECT conname,
+       pg_catalog.pg_get_constraintdef(r.oid, true) as condef,
+       conrelid::pg_catalog.regclass AS ontable
+  FROM pg_catalog.pg_constraint r
+ WHERE r.conrelid = 110
+   AND r.contype = 'f' AND (r.conparentid = 0 OR r.conparentid IS NULL))
+  SELECT 'TABLE ' || pg_catalog.quote_ident(ontable::STRING) ||
+         ' CONSTRAINT ' || pg_catalog.quote_ident(conname) || ' ' || condef
+         AS "Foreign-key constraints"
+    FROM cons
+ORDER BY conname
+Foreign-key constraints
+TABLE ftable2 CONSTRAINT ftable2_x_fkey FOREIGN KEY (x) REFERENCES ftable1(x)
+
+subtest end
+
+subtest list_types
+
+cli
+\dT
+----
+sql -e \set echo -e \set display_format csv -e \dT
+List of data types:
+>    SELECT n.nspname AS "Schema",
+          pg_catalog.format_type(t.oid, NULL) AS "Name",
+          COALESCE(pg_catalog.obj_description(t.oid, 'pg_type'),'') AS "Description"
+     FROM pg_catalog.pg_type t
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+    WHERE (t.typrelid = 0
+          OR (SELECT c.relkind = 'c'
+                FROM pg_catalog.pg_class c
+               WHERE c.oid = t.typrelid))
+      AND (NOT EXISTS(
+          SELECT 1
+            FROM pg_catalog.pg_type el
+           WHERE el.oid = t.typelem AND el.typarray = t.oid))
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_type_is_visible(t.oid)
+ORDER BY 1, 2
+Schema,Name,Description
+public,mytyp,
+
+cli
+\dT %int[]
+----
+sql -e \set echo -e \set display_format csv -e \dT %int[]
+List of data types:
+>    SELECT n.nspname AS "Schema",
+          pg_catalog.format_type(t.oid, NULL) AS "Name",
+          COALESCE(pg_catalog.obj_description(t.oid, 'pg_type'),'') AS "Description"
+     FROM pg_catalog.pg_type t
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+    WHERE (t.typrelid = 0
+          OR (SELECT c.relkind = 'c'
+                FROM pg_catalog.pg_class c
+               WHERE c.oid = t.typrelid))
+      AND ('%int[]' LIKE '%[]%' OR NOT EXISTS(
+          SELECT 1
+            FROM pg_catalog.pg_type el
+           WHERE el.oid = t.typelem AND el.typarray = t.oid))
+      AND (t.typname LIKE '%int[]'
+          OR pg_catalog.format_type(t.oid, NULL) LIKE '%int[]')
+ORDER BY 1, 2
+Schema,Name,Description
+pg_catalog,bigint[],
+pg_catalog,smallint[],
+
+cli
+\dT int%
+----
+sql -e \set echo -e \set display_format csv -e \dT int%
+List of data types:
+>    SELECT n.nspname AS "Schema",
+          pg_catalog.format_type(t.oid, NULL) AS "Name",
+          COALESCE(pg_catalog.obj_description(t.oid, 'pg_type'),'') AS "Description"
+     FROM pg_catalog.pg_type t
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+    WHERE (t.typrelid = 0
+          OR (SELECT c.relkind = 'c'
+                FROM pg_catalog.pg_class c
+               WHERE c.oid = t.typrelid))
+      AND ('int%' LIKE '%[]%' OR NOT EXISTS(
+          SELECT 1
+            FROM pg_catalog.pg_type el
+           WHERE el.oid = t.typelem AND el.typarray = t.oid))
+      AND (t.typname LIKE 'int%'
+          OR pg_catalog.format_type(t.oid, NULL) LIKE 'int%')
+ORDER BY 1, 2
+Schema,Name,Description
+pg_catalog,bigint,
+pg_catalog,int2vector,
+pg_catalog,integer,
+pg_catalog,interval,
+pg_catalog,smallint,
+
+subtest end
+
+subtest list_users
+
+cli
+\du
+----
+sql -e \set echo -e \set display_format csv -e \du
+List of roles:
+> WITH roles AS (
+SELECT r.rolname, r.rolsuper, r.rolinherit,
+       r.rolcreaterole, r.rolcreatedb, r.rolcanlogin,
+       r.rolconnlimit, r.rolvaliduntil,
+       ARRAY(SELECT b.rolname
+             FROM pg_catalog.pg_auth_members m
+             JOIN pg_catalog.pg_roles b ON (m.roleid = b.oid)
+             WHERE m.member = r.oid) as memberof,
+       r.rolreplication, r.rolbypassrls
+  FROM pg_catalog.pg_roles r
+ WHERE r.rolname !~ '^pg_')
+SELECT rolname AS "Role name",
+       array_to_string(ARRAY(
+         SELECT a FROM (VALUES
+          (IF(rolsuper,        'Superuser', NULL)),
+          (IF(NOT rolinherit,  'No inheritance', NULL)),
+          (IF(rolcreaterole,   'Create role', NULL)),
+          (IF(rolcreatedb,     'Create DB', NULL)),
+          (IF(NOT rolcanlogin, 'Cannot login', NULL)),
+          (IF(rolconnlimit = 0,
+              'No connections',
+              IF(rolconnlimit > 0,
+                 rolconnlimit::STRING || ' connection' || IF(rolconnlimit>1, 's',''),
+                 NULL))),
+          (IF(rolreplication,  'Replication', NULL)),
+          (IF(rolbypassrls,    'Bypass RLS', NULL)),
+          ('Password valid until ' || rolvaliduntil)
+         ) AS v(a) WHERE v.a IS NOT NULL),
+         ', ') AS "Attributes",
+       memberof AS "Member of"
+  FROM roles
+Role name,Attributes,Member of
+myuser,Superuser,{admin}
+root,"Superuser, Create role, Create DB",{admin}
+admin,"Superuser, Create role, Create DB",{}
+
+cli
+\du myuser
+----
+sql -e \set echo -e \set display_format csv -e \du myuser
+List of roles:
+> WITH roles AS (
+SELECT r.rolname, r.rolsuper, r.rolinherit,
+       r.rolcreaterole, r.rolcreatedb, r.rolcanlogin,
+       r.rolconnlimit, r.rolvaliduntil,
+       ARRAY(SELECT b.rolname
+             FROM pg_catalog.pg_auth_members m
+             JOIN pg_catalog.pg_roles b ON (m.roleid = b.oid)
+             WHERE m.member = r.oid) as memberof,
+       r.rolreplication, r.rolbypassrls
+  FROM pg_catalog.pg_roles r
+ WHERE r.rolname LIKE 'myuser')
+SELECT rolname AS "Role name",
+       array_to_string(ARRAY(
+         SELECT a FROM (VALUES
+          (IF(rolsuper,        'Superuser', NULL)),
+          (IF(NOT rolinherit,  'No inheritance', NULL)),
+          (IF(rolcreaterole,   'Create role', NULL)),
+          (IF(rolcreatedb,     'Create DB', NULL)),
+          (IF(NOT rolcanlogin, 'Cannot login', NULL)),
+          (IF(rolconnlimit = 0,
+              'No connections',
+              IF(rolconnlimit > 0,
+                 rolconnlimit::STRING || ' connection' || IF(rolconnlimit>1, 's',''),
+                 NULL))),
+          (IF(rolreplication,  'Replication', NULL)),
+          (IF(rolbypassrls,    'Bypass RLS', NULL)),
+          ('Password valid until ' || rolvaliduntil)
+         ) AS v(a) WHERE v.a IS NOT NULL),
+         ', ') AS "Attributes",
+       memberof AS "Member of"
+  FROM roles
+Role name,Attributes,Member of
+myuser,Superuser,{admin}
+
+subtest end
+
+
+subtest list_descriptions
+
+cli
+\dd
+----
+sql -e \set echo -e \set display_format csv -e \dd
+Object descriptions:
+> SELECT DISTINCT
+       tt.nspname AS "Schema",
+       tt.name AS "Name",
+       tt.object AS "Object",
+       d.description AS "Description"
+  FROM (
+    SELECT pgc.oid as oid, pgc.conrelid AS tableoid,
+           n.nspname as nspname,
+           CAST(pgc.conname AS pg_catalog.text) as name,
+           CAST('table constraint' AS pg_catalog.text) as object
+      FROM pg_catalog.pg_constraint pgc
+      JOIN pg_catalog.pg_class c ON c.oid = pgc.conrelid
+ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+ WHERE TRUE
+       AND n.nspname !~ '^pg_'
+       AND n.nspname <> 'crdb_internal'
+       AND n.nspname <> 'information_schema' AND pg_catalog.pg_table_is_visible(c.oid)
+UNION ALL
+    SELECT pgc.oid as oid, pgc.conrelid AS tableoid,
+           n.nspname as nspname,
+           CAST(pgc.conname AS pg_catalog.text) AS name,
+           CAST('domain constraint' AS pg_catalog.text) AS object
+      FROM pg_catalog.pg_constraint pgc
+      JOIN pg_catalog.pg_type t ON t.oid = pgc.contypid
+ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+ WHERE TRUE
+       AND n.nspname !~ '^pg_'
+       AND n.nspname <> 'crdb_internal'
+       AND n.nspname <> 'information_schema' AND pg_catalog.pg_type_is_visible(t.oid)) AS tt
+  JOIN pg_catalog.pg_description d
+    ON (tt.oid = d.objoid AND tt.tableoid = d.classoid AND d.objsubid = 0)
+ORDER BY 1,2,3
+Schema,Name,Object,Description
+
+cli
+\dd mytable
+----
+sql -e \set echo -e \set display_format csv -e \dd mytable
+Object descriptions:
+> SELECT DISTINCT
+       tt.nspname AS "Schema",
+       tt.name AS "Name",
+       tt.object AS "Object",
+       d.description AS "Description"
+  FROM (
+    SELECT pgc.oid as oid, pgc.conrelid AS tableoid,
+           n.nspname as nspname,
+           CAST(pgc.conname AS pg_catalog.text) as name,
+           CAST('table constraint' AS pg_catalog.text) as object
+      FROM pg_catalog.pg_constraint pgc
+      JOIN pg_catalog.pg_class c ON c.oid = pgc.conrelid
+ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+ WHERE TRUE AND pgc.conname LIKE 'mytable'
+UNION ALL
+    SELECT pgc.oid as oid, pgc.conrelid AS tableoid,
+           n.nspname as nspname,
+           CAST(pgc.conname AS pg_catalog.text) AS name,
+           CAST('domain constraint' AS pg_catalog.text) AS object
+      FROM pg_catalog.pg_constraint pgc
+      JOIN pg_catalog.pg_type t ON t.oid = pgc.contypid
+ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+ WHERE TRUE AND pgc.conname LIKE 'mytable') AS tt
+  JOIN pg_catalog.pg_description d
+    ON (tt.oid = d.objoid AND tt.tableoid = d.classoid AND d.objsubid = 0)
+ORDER BY 1,2,3
+Schema,Name,Object,Description
+
+subtest end
+
+subtest list_functions
+
+cli
+\df
+----
+sql -e \set echo -e \set display_format csv -e \df
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE 
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_function_is_visible(p.oid) ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type
+public,myfunc,int8,int8,func
+
+cli
+\df abs
+----
+sql -e \set echo -e \set display_format csv -e \df abs
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE  AND p.proname LIKE 'abs' ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type
+pg_catalog,abs,float8,float8,func
+pg_catalog,abs,int8,int8,func
+pg_catalog,abs,numeric,numeric,func
+
+cli
+\df+ abs
+----
+sql -e \set echo -e \set display_format csv -e \df+ abs
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type", CASE p.provolatile
+        WHEN 'i' THEN 'immutable'
+        WHEN 's' THEN 'stable'
+        WHEN 'v' THEN 'volatile'
+        ELSE p.provolatile
+        END AS "Volatility",
+        pg_catalog.pg_get_userbyid(p.proowner) AS "Owner",
+        CASE WHEN p.prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
+       COALESCE(pg_catalog.array_to_string(p.proacl, e'\n'), '') AS "Access privileges",
+       p.prosrc AS "Source code",
+       pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE  AND p.proname LIKE 'abs' ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
+pg_catalog,abs,float8,float8,func,i,NULL,invoker,,abs,Calculates the absolute value of `val`.
+pg_catalog,abs,int8,int8,func,i,NULL,invoker,,abs,Calculates the absolute value of `val`.
+pg_catalog,abs,numeric,numeric,func,i,NULL,invoker,,abs,Calculates the absolute value of `val`.
+
+cli
+\dfw %rank%
+----
+sql -e \set echo -e \set display_format csv -e \dfw %rank%
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE  AND (FALSE OR p.proiswindow) AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type
+pg_catalog,dense_rank,int8,,window
+pg_catalog,percent_rank,float8,,window
+pg_catalog,rank,int8,,window
+
+cli
+\dfw+ %rank%
+----
+sql -e \set echo -e \set display_format csv -e \dfw+ %rank%
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type", CASE p.provolatile
+        WHEN 'i' THEN 'immutable'
+        WHEN 's' THEN 'stable'
+        WHEN 'v' THEN 'volatile'
+        ELSE p.provolatile
+        END AS "Volatility",
+        pg_catalog.pg_get_userbyid(p.proowner) AS "Owner",
+        CASE WHEN p.prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
+       COALESCE(pg_catalog.array_to_string(p.proacl, e'\n'), '') AS "Access privileges",
+       p.prosrc AS "Source code",
+       pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE  AND (FALSE OR p.proiswindow) AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
+pg_catalog,dense_rank,int8,,window,i,NULL,invoker,,dense_rank,Calculates the rank of the current row without gaps; this function counts peer groups.
+pg_catalog,percent_rank,float8,,window,i,NULL,invoker,,percent_rank,Calculates the relative rank of the current row: (rank - 1) / (total rows - 1).
+pg_catalog,rank,int8,,window,i,NULL,invoker,,rank,Calculates the rank of the current row with gaps; same as row_number of its first peer.
+
+cli
+\dfa xor%
+----
+sql -e \set echo -e \set display_format csv -e \dfa xor%
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE  AND (FALSE OR p.proisagg) AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type
+pg_catalog,xor_agg,bytea,bytea,agg
+pg_catalog,xor_agg,int8,int8,agg
+
+cli
+\dfa+ xor%
+----
+sql -e \set echo -e \set display_format csv -e \dfa+ xor%
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type", CASE p.provolatile
+        WHEN 'i' THEN 'immutable'
+        WHEN 's' THEN 'stable'
+        WHEN 'v' THEN 'volatile'
+        ELSE p.provolatile
+        END AS "Volatility",
+        pg_catalog.pg_get_userbyid(p.proowner) AS "Owner",
+        CASE WHEN p.prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
+       COALESCE(pg_catalog.array_to_string(p.proacl, e'\n'), '') AS "Access privileges",
+       p.prosrc AS "Source code",
+       pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE  AND (FALSE OR p.proisagg) AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
+pg_catalog,xor_agg,bytea,bytea,agg,i,NULL,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
+pg_catalog,xor_agg,int8,int8,agg,i,NULL,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
+
+cli
+\dfn
+----
+sql -e \set echo -e \set display_format csv -e \dfn
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE  AND NOT p.proisagg AND (p.prokind IS NULL OR p.prokind <> 'p') AND NOT p.proiswindow
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_function_is_visible(p.oid) ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type
+public,myfunc,int8,int8,func
+
+cli
+\dfn+
+----
+sql -e \set echo -e \set display_format csv -e \dfn+
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type", CASE p.provolatile
+        WHEN 'i' THEN 'immutable'
+        WHEN 's' THEN 'stable'
+        WHEN 'v' THEN 'volatile'
+        ELSE p.provolatile
+        END AS "Volatility",
+        pg_catalog.pg_get_userbyid(p.proowner) AS "Owner",
+        CASE WHEN p.prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
+       COALESCE(pg_catalog.array_to_string(p.proacl, e'\n'), '') AS "Access privileges",
+       p.prosrc AS "Source code",
+       pg_catalog.obj_description(p.oid, 'pg_proc') AS "Description"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE  AND NOT p.proisagg AND (p.prokind IS NULL OR p.prokind <> 'p') AND NOT p.proiswindow
+      AND n.nspname !~ '^pg_'
+      AND n.nspname <> 'information_schema'
+      AND n.nspname <> 'crdb_internal'
+      AND pg_catalog.pg_function_is_visible(p.oid) ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
+public,myfunc,int8,int8,func,v,root,invoker,,SELECT val;,NULL
+
+cli
+\dfwa %tile%
+----
+sql -e \set echo -e \set display_format csv -e \dfwa %tile%
+List of functions:
+>    SELECT n.nspname AS "Schema",
+         p.proname AS "Name",
+         pg_catalog.pg_get_function_result(p.oid) AS "Result data type",
+         pg_catalog.pg_get_function_arguments(p.oid) AS "Argument data types",
+         CASE p.prokind
+         WHEN 'a' THEN 'agg'
+         WHEN 'w' THEN 'window'
+         WHEN 'p' THEN 'proc'
+         ELSE 'func'
+         END AS "Type"
+     FROM pg_catalog.pg_proc p
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    WHERE TRUE  AND (FALSE OR p.proisagg OR p.proiswindow) AND p.proname LIKE '%tile%' ORDER BY 1, 2, 4
+Schema,Name,Result data type,Argument data types,Type
+pg_catalog,ntile,int8,int8,window
+pg_catalog,percentile_cont,_interval,_float8,agg
+pg_catalog,percentile_cont,_float8,_float8,agg
+pg_catalog,percentile_cont,interval,float8,agg
+pg_catalog,percentile_cont,float8,float8,agg
+pg_catalog,percentile_disc,anyelement,_float8,agg
+pg_catalog,percentile_disc,anyelement,float8,agg
+
+subtest end
+
+subtest list_casts
+
+cli
+\dC
+----
+sql -e \set echo -e \set display_format csv -e \dC
+List of casts:
+>    SELECT pg_catalog.format_type(castsource, NULL) AS "Source type",
+          pg_catalog.format_type(casttarget, NULL) AS "Target type",
+          CASE WHEN c.castmethod = 'b' THEN '(binary coercible)'
+               WHEN c.castmethod = 'i' THEN '(with inout)'
+               ELSE p.proname
+          END AS "Function",
+          CASE WHEN c.castcontext = 'e' THEN 'no'
+               WHEN c.castcontext = 'a' THEN 'in assignment'
+               ELSE 'yes'
+          END AS "Implicit?"
+     FROM pg_catalog.pg_cast c
+LEFT JOIN pg_catalog.pg_proc p       ON c.castfunc = p.oid
+LEFT JOIN pg_catalog.pg_type ts      ON c.castsource = ts.oid
+LEFT JOIN pg_catalog.pg_namespace ns ON ns.oid = ts.typnamespace
+LEFT JOIN pg_catalog.pg_type tt      ON c.casttarget = tt.oid
+LEFT JOIN pg_catalog.pg_namespace nt ON nt.oid = tt.typnamespace
+    WHERE ((true
+          AND pg_catalog.pg_type_is_visible(ts.oid))
+       OR (true
+          AND pg_catalog.pg_type_is_visible(tt.oid)))
+ORDER BY 1, 2
+Source type,Target type,Function,Implicit?
+"""char""",character,NULL,in assignment
+"""char""",character varying,NULL,in assignment
+"""char""",integer,NULL,no
+"""char""",text,NULL,yes
+bigint,bit,NULL,no
+bigint,double precision,NULL,yes
+bigint,integer,NULL,in assignment
+bigint,numeric,NULL,yes
+bigint,oid,NULL,yes
+bigint,real,NULL,yes
+bigint,regclass,NULL,yes
+bigint,regnamespace,NULL,yes
+bigint,regproc,NULL,yes
+bigint,regprocedure,NULL,yes
+bigint,regrole,NULL,yes
+bigint,regtype,NULL,yes
+bigint,smallint,NULL,in assignment
+bit,bigint,NULL,no
+bit,bit,NULL,yes
+bit,bit varying,NULL,yes
+bit,integer,NULL,no
+bit varying,bit,NULL,yes
+bit varying,bit varying,NULL,yes
+boolean,character,NULL,in assignment
+boolean,character varying,NULL,in assignment
+boolean,integer,NULL,no
+boolean,text,NULL,in assignment
+box2d,geometry,NULL,yes
+bytea,geography,NULL,yes
+bytea,geometry,NULL,yes
+character,"""char""",NULL,in assignment
+character,character,NULL,yes
+character,character varying,NULL,yes
+character,name,NULL,yes
+character,text,NULL,yes
+character varying,"""char""",NULL,in assignment
+character varying,character,NULL,yes
+character varying,character varying,NULL,yes
+character varying,name,NULL,yes
+character varying,regclass,NULL,yes
+character varying,text,NULL,yes
+date,timestamp with time zone,NULL,yes
+date,timestamp without time zone,NULL,yes
+double precision,bigint,NULL,in assignment
+double precision,integer,NULL,in assignment
+double precision,numeric,NULL,in assignment
+double precision,real,NULL,in assignment
+double precision,smallint,NULL,in assignment
+geography,bytea,NULL,yes
+geography,geography,NULL,yes
+geography,geometry,NULL,no
+geometry,box2d,NULL,yes
+geometry,bytea,NULL,yes
+geometry,geography,NULL,yes
+geometry,geometry,NULL,yes
+geometry,jsonb,NULL,no
+geometry,text,NULL,yes
+inet,character,NULL,in assignment
+inet,character varying,NULL,in assignment
+inet,text,NULL,in assignment
+integer,"""char""",NULL,no
+integer,bigint,NULL,yes
+integer,bit,NULL,no
+integer,boolean,NULL,no
+integer,double precision,NULL,yes
+integer,numeric,NULL,yes
+integer,oid,NULL,yes
+integer,real,NULL,yes
+integer,regclass,NULL,yes
+integer,regnamespace,NULL,yes
+integer,regproc,NULL,yes
+integer,regprocedure,NULL,yes
+integer,regrole,NULL,yes
+integer,regtype,NULL,yes
+integer,smallint,NULL,in assignment
+interval,interval,NULL,yes
+interval,time without time zone,NULL,in assignment
+jsonb,bigint,NULL,no
+jsonb,boolean,NULL,no
+jsonb,double precision,NULL,no
+jsonb,integer,NULL,no
+jsonb,numeric,NULL,no
+jsonb,real,NULL,no
+jsonb,smallint,NULL,no
+name,character,NULL,in assignment
+name,character varying,NULL,in assignment
+name,text,NULL,yes
+numeric,bigint,NULL,in assignment
+numeric,double precision,NULL,yes
+numeric,integer,NULL,in assignment
+numeric,numeric,NULL,yes
+numeric,real,NULL,yes
+numeric,smallint,NULL,in assignment
+oid,bigint,NULL,in assignment
+oid,integer,NULL,in assignment
+oid,regclass,NULL,yes
+oid,regnamespace,NULL,yes
+oid,regproc,NULL,yes
+oid,regprocedure,NULL,yes
+oid,regrole,NULL,yes
+oid,regtype,NULL,yes
+real,bigint,NULL,in assignment
+real,double precision,NULL,yes
+real,integer,NULL,in assignment
+real,numeric,NULL,in assignment
+real,smallint,NULL,in assignment
+regclass,bigint,NULL,in assignment
+regclass,integer,NULL,in assignment
+regclass,oid,NULL,yes
+regnamespace,bigint,NULL,in assignment
+regnamespace,integer,NULL,in assignment
+regnamespace,oid,NULL,yes
+regproc,bigint,NULL,in assignment
+regproc,integer,NULL,in assignment
+regproc,oid,NULL,yes
+regproc,regprocedure,NULL,yes
+regprocedure,bigint,NULL,in assignment
+regprocedure,integer,NULL,in assignment
+regprocedure,oid,NULL,yes
+regprocedure,regproc,NULL,yes
+regrole,bigint,NULL,in assignment
+regrole,integer,NULL,in assignment
+regrole,oid,NULL,yes
+regtype,bigint,NULL,in assignment
+regtype,integer,NULL,in assignment
+regtype,oid,NULL,yes
+smallint,bigint,NULL,yes
+smallint,double precision,NULL,yes
+smallint,integer,NULL,yes
+smallint,numeric,NULL,yes
+smallint,oid,NULL,yes
+smallint,real,NULL,yes
+smallint,regclass,NULL,yes
+smallint,regnamespace,NULL,yes
+smallint,regproc,NULL,yes
+smallint,regprocedure,NULL,yes
+smallint,regrole,NULL,yes
+smallint,regtype,NULL,yes
+text,"""char""",NULL,in assignment
+text,character,NULL,yes
+text,character varying,NULL,yes
+text,geometry,NULL,yes
+text,name,NULL,yes
+text,regclass,NULL,yes
+text,text,NULL,yes
+time with time zone,time with time zone,NULL,yes
+time with time zone,time without time zone,NULL,in assignment
+time without time zone,interval,NULL,yes
+time without time zone,time with time zone,NULL,yes
+time without time zone,time without time zone,NULL,yes
+timestamp with time zone,date,NULL,in assignment
+timestamp with time zone,time with time zone,NULL,in assignment
+timestamp with time zone,time without time zone,NULL,in assignment
+timestamp with time zone,timestamp with time zone,NULL,yes
+timestamp with time zone,timestamp without time zone,NULL,in assignment
+timestamp without time zone,date,NULL,in assignment
+timestamp without time zone,time without time zone,NULL,in assignment
+timestamp without time zone,timestamp with time zone,NULL,yes
+timestamp without time zone,timestamp without time zone,NULL,yes
+
+cli
+\dC bi%
+----
+sql -e \set echo -e \set display_format csv -e \dC bi%
+List of casts:
+>    SELECT pg_catalog.format_type(castsource, NULL) AS "Source type",
+          pg_catalog.format_type(casttarget, NULL) AS "Target type",
+          CASE WHEN c.castmethod = 'b' THEN '(binary coercible)'
+               WHEN c.castmethod = 'i' THEN '(with inout)'
+               ELSE p.proname
+          END AS "Function",
+          CASE WHEN c.castcontext = 'e' THEN 'no'
+               WHEN c.castcontext = 'a' THEN 'in assignment'
+               ELSE 'yes'
+          END AS "Implicit?"
+     FROM pg_catalog.pg_cast c
+LEFT JOIN pg_catalog.pg_proc p       ON c.castfunc = p.oid
+LEFT JOIN pg_catalog.pg_type ts      ON c.castsource = ts.oid
+LEFT JOIN pg_catalog.pg_namespace ns ON ns.oid = ts.typnamespace
+LEFT JOIN pg_catalog.pg_type tt      ON c.casttarget = tt.oid
+LEFT JOIN pg_catalog.pg_namespace nt ON nt.oid = tt.typnamespace
+    WHERE ((true
+          AND (ts.typname LIKE 'bi%'
+           OR pg_catalog.format_type(ts.oid, NULL) LIKE 'bi%'))
+       OR (true
+          AND (tt.typname LIKE 'bi%'
+           OR pg_catalog.format_type(tt.oid, NULL) LIKE 'bi%')))
+ORDER BY 1, 2
+Source type,Target type,Function,Implicit?
+bigint,bit,NULL,no
+bigint,double precision,NULL,yes
+bigint,integer,NULL,in assignment
+bigint,numeric,NULL,yes
+bigint,oid,NULL,yes
+bigint,real,NULL,yes
+bigint,regclass,NULL,yes
+bigint,regnamespace,NULL,yes
+bigint,regproc,NULL,yes
+bigint,regprocedure,NULL,yes
+bigint,regrole,NULL,yes
+bigint,regtype,NULL,yes
+bigint,smallint,NULL,in assignment
+bit,bigint,NULL,no
+bit,bit,NULL,yes
+bit,bit varying,NULL,yes
+bit,integer,NULL,no
+bit varying,bit,NULL,yes
+bit varying,bit varying,NULL,yes
+double precision,bigint,NULL,in assignment
+integer,bigint,NULL,yes
+integer,bit,NULL,no
+jsonb,bigint,NULL,no
+numeric,bigint,NULL,in assignment
+oid,bigint,NULL,in assignment
+real,bigint,NULL,in assignment
+regclass,bigint,NULL,in assignment
+regnamespace,bigint,NULL,in assignment
+regproc,bigint,NULL,in assignment
+regprocedure,bigint,NULL,in assignment
+regrole,bigint,NULL,in assignment
+regtype,bigint,NULL,in assignment
+smallint,bigint,NULL,yes
+
+subtest end

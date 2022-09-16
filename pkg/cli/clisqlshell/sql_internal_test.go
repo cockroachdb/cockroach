@@ -91,41 +91,11 @@ func TestIsEndOfStatement(t *testing.T) {
 	}
 }
 
-// Test handleCliCmd cases for client-side commands that are aliases for sql
-// statements.
-func TestHandleCliCmdSqlAlias(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	clientSideCommandTestsTable := []struct {
-		commandString string
-		wantSQLStmt   string
-	}{
-		{`\l`, `SHOW DATABASES`},
-		{`\dt`, `SHOW TABLES`},
-		{`\dT`, `SHOW TYPES`},
-		{`\du`, `SHOW USERS`},
-		{`\du myuser`, `SELECT * FROM [SHOW USERS] WHERE username = 'myuser'`},
-		{`\d mytable`, `SHOW COLUMNS FROM mytable`},
-		{`\d`, `SHOW TABLES`},
-		{`\df`, `SHOW FUNCTIONS`},
-	}
-
-	for _, tt := range clientSideCommandTestsTable {
-		c := setupTestCliState()
-		c.lastInputLine = tt.commandString
-		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
-
-		assert.Equal(t, cliRunStatement, gotState)
-		assert.Equal(t, tt.wantSQLStmt, c.concatLines)
-	}
-}
-
 func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	clientSideCommandTests := []string{`\d goodarg badarg`, `\dz`}
+	clientSideCommandTests := []string{`\d goodarg badarg`}
 
 	for _, tt := range clientSideCommandTests {
 		c := setupTestCliState()
@@ -133,7 +103,6 @@ func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 		gotState := c.doHandleCliCmd(cliStateEnum(0), cliStateEnum(1))
 
 		assert.Equal(t, cliStateEnum(0), gotState)
-		assert.Equal(t, errInvalidSyntax, c.exitErr)
 	}
 }
 
