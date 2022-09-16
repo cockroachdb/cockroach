@@ -431,9 +431,9 @@ func TestBackupManifestFileCount(t *testing.T) {
 
 func TestBackupRestoreAppend(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 54599, "flaky test")
-	skip.UnderRace(t, "flaky test. Issues #50984, #54599")
 	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "test is too large to run under stress race")
 
 	const numAccounts = 1000
 	ctx := context.Background()
@@ -454,46 +454,34 @@ func TestBackupRestoreAppend(t *testing.T) {
 			return err
 		})
 	}
-	const localFoo1, localFoo2, localFoo3 = localFoo + "/1", localFoo + "/2", localFoo + "/3"
-	const userfileFoo1, userfileFoo2, userfileFoo3 = `userfile:///bar/1`, `userfile:///bar/2`,
-		`userfile:///bar/3`
-	makeBackups := func(b1, b2, b3 string) []interface{} {
-		return []interface{}{
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b1, url.QueryEscape("default")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b2, url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b3, url.QueryEscape("dc=dc2")),
-		}
-	}
 	makeCollections := func(c1, c2, c3 string) []interface{} {
 		return []interface{}{
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c1, url.QueryEscape("default")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c2, url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c3, url.QueryEscape("dc=dc2")),
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c1, url.QueryEscape("default")),
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c2, url.QueryEscape("dc=dc1")),
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s", c3, url.QueryEscape("dc=dc2")),
 		}
 	}
 
 	makeCollectionsWithSubdir := func(c1, c2, c3 string) []interface{} {
 		return []interface{}{
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c1, "foo", url.QueryEscape("default")),
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c2, "foo", url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c3, "foo", url.QueryEscape("dc=dc2")),
+			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s", c1, "foo", url.QueryEscape("default")),
+			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s", c2, "foo", url.QueryEscape("dc=dc1")),
+			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s", c3, "foo", url.QueryEscape("dc=dc2")),
 		}
 	}
 
 	// for testing backup *into* with specified subdirectory.
-	const specifiedSubdir, newSpecifiedSubdir = `subdir`, `subdir2`
+	const specifiedSubdir = `subdir`
 
-	var full1, full2, subdirFull1, subdirFull2 string
+	var full1, full2 string
 
 	for _, test := range []struct {
 		name                  string
-		backups               []interface{}
 		collections           []interface{}
 		collectionsWithSubdir []interface{}
 	}{
 		{
 			"nodelocal",
-			makeBackups(localFoo1, localFoo2, localFoo3),
 			// for testing backup *into* collection, pick collection shards on each
 			// node.
 			makeCollections(`nodelocal://0/`, `nodelocal://1/`, `nodelocal://2/`),
@@ -501,56 +489,40 @@ func TestBackupRestoreAppend(t *testing.T) {
 		},
 		{
 			"userfile",
-			makeBackups(userfileFoo1, userfileFoo2, userfileFoo3),
 			makeCollections(`userfile:///0`, `userfile:///1`, `userfile:///2`),
 			makeCollectionsWithSubdir(`userfile:///0`, `userfile:///1`, `userfile:///2`),
 		},
 	} {
 		var tsBefore, ts1, ts1again, ts2 string
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
-		sqlDB.Exec(t, "BACKUP TO ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore,
-			test.backups...)
 		sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore, test.collections...)
-		sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore,
-			append(test.collectionsWithSubdir, specifiedSubdir)...)
+
+		// We cannot run `BACKUP INTO subdir` when a pre-existing backup does not
+		// exist at that location.
+		sqlDB.ExpectErr(t, "A full backup cannot be written to \"/subdir\", a user defined subdirectory",
+			"BACKUP INTO $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+tsBefore, append(test.collectionsWithSubdir, specifiedSubdir)...)
 
 		sqlDB.QueryRow(t, "UPDATE data.bank SET balance = 100 RETURNING cluster_logical_timestamp()").Scan(&ts1)
-		sqlDB.Exec(t, "BACKUP TO ($1, $2, $3) AS OF SYSTEM TIME "+ts1, test.backups...)
 		sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1, test.collections...)
-		// This should be an incremental as we already have a manifest in specifiedSubdir.
-		sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1,
-			append(test.collectionsWithSubdir, specifiedSubdir)...)
 
 		// Append to latest again, just to prove we can append to an appended one and
 		// that appended didn't e.g. mess up LATEST.
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&ts1again)
 		sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1again, test.collections...)
-		// Ensure that LATEST was created (and can be resolved) even when you backed
-		// up into a specified subdir to begin with.
-		sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3) AS OF SYSTEM TIME "+ts1again,
-			test.collectionsWithSubdir...)
 
 		sqlDB.QueryRow(t, "UPDATE data.bank SET balance = 200 RETURNING cluster_logical_timestamp()").Scan(&ts2)
 		rowsTS2 := sqlDB.QueryStr(t, "SELECT * from data.bank ORDER BY id")
-		sqlDB.Exec(t, "BACKUP TO ($1, $2, $3) AS OF SYSTEM TIME "+ts2, test.backups...)
+
 		// Start a new full-backup in the collection version.
 		sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3) AS OF SYSTEM TIME "+ts2, test.collections...)
-		// Write to a new subdirectory thereby triggering a full-backup.
-		sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3) AS OF SYSTEM TIME "+ts2,
-			append(test.collectionsWithSubdir, newSpecifiedSubdir)...)
 
 		sqlDB.Exec(t, "ALTER TABLE data.bank RENAME TO data.renamed")
-		sqlDB.Exec(t, "BACKUP TO ($1, $2, $3)", test.backups...)
 		sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", test.collections...)
-		sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3)", append(test.collectionsWithSubdir,
-			newSpecifiedSubdir)...)
 
-		sqlDB.ExpectErr(t, "cannot append a backup of specific", "BACKUP system.users TO ($1, $2, "+
-			"$3)", test.backups...)
 		// TODO(dt): prevent backing up different targets to same collection?
 
 		sqlDB.Exec(t, "DROP DATABASE data CASCADE")
-		sqlDB.Exec(t, "RESTORE DATABASE data FROM ($1, $2, $3)", test.backups...)
+		sqlDB.Exec(t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, $3)", test.collections...)
 		sqlDB.ExpectErr(t, "relation \"data.bank\" does not exist", "SELECT * FROM data.bank ORDER BY id")
 		sqlDB.CheckQueryResults(t, "SELECT * from data.renamed ORDER BY id", rowsTS2)
 
@@ -613,37 +585,13 @@ func TestBackupRestoreAppend(t *testing.T) {
 			}))
 			full1 = strings.TrimSuffix(files[0], backupbase.BackupManifestName)
 			full2 = strings.TrimSuffix(files[1], backupbase.BackupManifestName)
-
-			// Find the full-backups written to the specified subdirectories, and within
-			// each also check if we can restore to individual times captured with
-			// incremental backups that were appended to that backup.
-			var subdirFiles []string
-			require.NoError(t, store.List(ctx, "foo/", "", func(f string) error {
-				ok, err := path.Match(specifiedSubdir+"*/"+backupbase.BackupManifestName, f)
-				if ok {
-					subdirFiles = append(subdirFiles, f)
-				}
-				return err
-			}))
-			require.NoError(t, err)
-			subdirFull1 = strings.TrimSuffix(strings.TrimPrefix(subdirFiles[0], "foo"),
-				backupbase.BackupManifestName)
-			subdirFull2 = strings.TrimSuffix(strings.TrimPrefix(subdirFiles[1], "foo"),
-				backupbase.BackupManifestName)
 		} else {
 			// Find the backup times in the collection and try RESTORE'ing to each, and
 			// within each also check if we can restore to individual times captured with
 			// incremental backups that were appended to that backup.
 			full1, full2 = findFullBackupPaths(tmpDir, path.Join(tmpDir, "*/*/*/"+backupbase.BackupManifestName))
-
-			// Find the full-backups written to the specified subdirectories, and within
-			// each also check if we can restore to individual times captured with
-			// incremental backups that were appended to that backup.
-			subdirFull1, subdirFull2 = findFullBackupPaths(path.Join(tmpDir, "foo"),
-				path.Join(tmpDir, "foo", fmt.Sprintf("%s*", specifiedSubdir), backupbase.BackupManifestName))
 		}
 		runRestores(test.collections, full1, full2)
-		runRestores(test.collectionsWithSubdir, subdirFull1, subdirFull2)
 
 		// TODO(dt): test restoring to other backups via AOST.
 	}
@@ -1464,8 +1412,8 @@ WHERE
 		}
 	}
 
-	do(`BACKUP DATABASE data TO $1`, checkBackup)
-	do(`RESTORE data.* FROM $1 WITH OPTIONS (into_db='restoredb')`, checkRestore)
+	do(`BACKUP DATABASE data INTO $1`, checkBackup)
+	do(`RESTORE data.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb')`, checkRestore)
 }
 
 func TestBackupRestoreSystemJobsProgress(t *testing.T) {
@@ -6030,177 +5978,6 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	})
 }
 
-func getTableID(db *kv.DB, dbName, tableName string) descpb.ID {
-	desc := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, dbName, tableName)
-	return desc.GetID()
-}
-
-// TestSpanSelectionDuringBackup tests the method spansForAllTableIndexes which
-// is used to resolve the spans which will be backed up, and spans for which
-// protected ts records will be created.
-func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 63209, "flaky test")
-	defer log.Scope(t).Close(t)
-
-	skip.UnderStressRace(t,
-		"not worth starting/stopping the server for each subtest as they all rely on the shared"+
-			" variable `actualResolvedSpan`")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	dir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
-	params := base.TestClusterArgs{}
-	params.ServerArgs.ExternalIODir = dir
-	var actualResolvedSpans []string
-	params.ServerArgs.Knobs.BackupRestore = &sql.BackupRestoreTestingKnobs{
-		CaptureResolvedTableDescSpans: func(mergedSpans []roachpb.Span) {
-			for _, span := range mergedSpans {
-				actualResolvedSpans = append(actualResolvedSpans, span.String())
-			}
-		},
-	}
-	tc := testcluster.StartTestCluster(t, 3, params)
-	defer tc.Stopper().Stop(ctx)
-
-	tc.WaitForNodeLiveness(t)
-	require.NoError(t, tc.WaitForFullReplication())
-
-	conn := tc.ServerConn(0)
-	runner := sqlutils.MakeSQLRunner(conn)
-	db := tc.Server(0).DB()
-	baseBackupURI := "nodelocal://0/foo/"
-
-	t.Run("contiguous-span-merge", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
-			"INDEX baz(name), INDEX bar (v))")
-
-		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		tableID := getTableID(db, "test", "foo")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-4}", tableID)}, actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-
-	t.Run("drop-index-span-merge", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
-			"INDEX baz(name), INDEX bar (v))")
-		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'testuser')")
-		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=60")
-		runner.Exec(t, "DROP INDEX foo@baz")
-
-		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		tableID := getTableID(db, "test", "foo")
-		require.Equal(t, []string{
-			fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{3-4}", tableID),
-		}, actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-
-	t.Run("drop-index-gced-span-merge", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
-			"INDEX baz(name), INDEX bar (v))")
-		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'testuser')")
-		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=1")
-		runner.Exec(t, "DROP INDEX foo@baz")
-		time.Sleep(time.Second * 2)
-
-		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		tableID := getTableID(db, "test", "foo")
-		require.Equal(t, []string{
-			fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{3-4}", tableID),
-		}, actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-
-	t.Run("revs-span-merge", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
-			"INDEX baz(name), INDEX bar (v))")
-		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'testuser')")
-		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=60")
-		runner.Exec(t, "DROP INDEX foo@baz")
-
-		runner.Exec(t, `BACKUP DATABASE test TO 'nodelocal://0/fooz' WITH revision_history`)
-
-		// The BACKUP with revision history will pickup the dropped index baz as
-		// well because it existed in a non-drop state at some point in the interval
-		// covered by this BACKUP.
-		tableID := getTableID(db, "test", "foo")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-4}", tableID)}, actualResolvedSpans)
-		actualResolvedSpans = nil
-		runner.Exec(t, "DROP TABLE foo")
-
-		runner.Exec(t, "CREATE TABLE foo2 (k INT PRIMARY KEY, v BYTES, name STRING, "+
-			"INDEX baz(name), INDEX bar (v))")
-		runner.Exec(t, "INSERT INTO foo2 VALUES (1, NULL, 'testuser')")
-		runner.Exec(t, "ALTER TABLE foo2 CONFIGURE ZONE USING gc.ttlseconds=60")
-		runner.Exec(t, "DROP INDEX foo2@baz")
-
-		runner.Exec(t, `BACKUP DATABASE test TO 'nodelocal://0/fooz' WITH revision_history`)
-		// We expect to see only the non-drop indexes of table foo in this
-		// incremental backup with revision history. We also expect to see both drop
-		// and non-drop indexes of table foo2 as all the indexes were live at some
-		// point in the interval covered by this BACKUP.
-		tableID2 := getTableID(db, "test", "foo2")
-		require.Equal(t, []string{
-			fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{3-4}", tableID), fmt.Sprintf("/Table/%d/{1-4}", tableID2),
-		},
-			actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-
-	t.Run("last-index-dropped", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
-		runner.Exec(t, "CREATE TABLE foo2 (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
-		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=60")
-		runner.Exec(t, "DROP INDEX foo@baz")
-
-		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		tableID := getTableID(db, "test", "foo")
-		tableID2 := getTableID(db, "test", "foo2")
-		require.Equal(t, []string{
-			fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{1-3}", tableID2),
-		}, actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-
-	t.Run("last-index-gced", func(t *testing.T) {
-		runner.Exec(t, "CREATE DATABASE test; USE test;")
-		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
-		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'test')")
-		runner.Exec(t, "CREATE TABLE foo2 (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
-		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=1")
-		runner.Exec(t, "DROP INDEX foo@baz")
-		time.Sleep(time.Second * 2)
-		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=60")
-
-		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		tableID := getTableID(db, "test", "foo")
-		tableID2 := getTableID(db, "test", "foo2")
-		require.Equal(t, []string{
-			fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{1-3}", tableID2),
-		}, actualResolvedSpans)
-		runner.Exec(t, "DROP DATABASE test;")
-		actualResolvedSpans = nil
-	})
-}
-
 func getMockIndexDesc(indexID descpb.IndexID) descpb.IndexDescriptor {
 	mockIndexDescriptor := descpb.IndexDescriptor{ID: indexID}
 	return mockIndexDescriptor
@@ -8670,11 +8447,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 
 func TestBackupWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 64773, "flaky test")
 	defer log.Scope(t).Close(t)
-
-	skip.UnderStress(t, "under stress the test unexpectedly surfaces non-retryable errors on"+
-		" backup failure")
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
@@ -8693,7 +8466,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 
 	var expectedCount int
 	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&expectedCount)
-	query := `BACKUP DATABASE data TO 'userfile:///worker-failure'`
+	query := `BACKUP DATABASE data INTO 'userfile:///worker-failure'`
 	errCh := make(chan error)
 	go func() {
 		_, err := conn.Exec(query)
@@ -8722,7 +8495,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 
 	// Drop database and restore to ensure that the backup was successful.
 	sqlDB.Exec(t, `DROP DATABASE data`)
-	sqlDB.Exec(t, `RESTORE DATABASE data FROM 'userfile:///worker-failure'`)
+	sqlDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN 'userfile:///worker-failure'`)
 	var actualCount int
 	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&actualCount)
 	require.Equal(t, expectedCount, actualCount)
@@ -9016,8 +8789,6 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "takes >1 min under race")
-
 	aboutToGC := make(chan struct{})
 	allowGC := make(chan struct{})
 	var gcJobID jobspb.JobID
@@ -9041,6 +8812,7 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 				},
 				SkipWaitingForMVCCGC: true,
 			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
