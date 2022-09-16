@@ -126,6 +126,7 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 	numTestStatementsObserved := 0
 	var setupStmts parser.Statements
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+		sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
 		stmts, err := parser.Parse(d.Input)
 		require.NoError(t, err)
 		require.NotEmpty(t, stmts)
