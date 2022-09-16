@@ -1708,18 +1708,6 @@ func (p *Pebble) ReadFile(filename string) ([]byte, error) {
 	return io.ReadAll(file)
 }
 
-// WriteFile writes data to a file in this RocksDB's env.
-func (p *Pebble) WriteFile(filename string, data []byte) error {
-	file, err := p.fs.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	_, err = io.Copy(file, bytes.NewReader(data))
-	return err
-}
-
 // Remove implements the FS interface.
 func (p *Pebble) Remove(filename string) error {
 	return p.fs.Remove(filename)
