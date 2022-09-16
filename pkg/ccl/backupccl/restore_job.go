@@ -1890,6 +1890,11 @@ func insertStats(
 	latestStats []*stats.TableStatisticProto,
 ) error {
 	details := job.Details().(jobspb.RestoreDetails)
+
+	if details.SchemaOnly {
+		// Only insert table stats from the backup manifest if actual data was restored.
+		return nil
+	}
 	if details.StatsInserted {
 		return nil
 	}

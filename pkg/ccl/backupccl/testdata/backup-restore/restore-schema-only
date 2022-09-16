@@ -122,6 +122,13 @@ exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d2';
 ----
 
+
+## ensure no table statistics are inserted on behalf of all previous schema_only restores
+query-sql
+SELECT * FROM system.table_statistics;
+----
+
+
 # There should be no data in the user tables.
 query-sql
 SELECT * FROM d2.t1;

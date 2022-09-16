@@ -279,25 +279,12 @@ func (rd *restoreDataProcessor) openSSTs(
 		}
 	}()
 
-	var recoverFromIterPanic bool
-	if restoreKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
-		recoverFromIterPanic = restoreKnobs.RecoverFromIterPanic
-	}
-
 	// sendIter sends a multiplexed iterator covering the currently accumulated files over the
 	// channel.
 	sendIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) error {
 		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
 
 		cleanup := func() {
-			if recoverFromIterPanic {
-				defer func() {
-					if r := recover(); r != nil {
-						log.Errorf(ctx, "recovered from Iter panic %v", r)
-					}
-				}()
-			}
-
 			readAsOfIter.Close()
 
 			for _, dir := range dirsToSend {
