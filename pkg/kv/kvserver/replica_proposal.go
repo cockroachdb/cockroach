@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"time"
 	"unsafe"
@@ -488,64 +487,47 @@ func addSSTablePreApply(
 	eng.PreIngestDelay(ctx)
 	tEndDelayed = timeutil.Now()
 
-	copied := false
-	if eng.InMem() {
-		// Ingest a copy of the SST. Otherwise, Pebble will claim and mutate the
-		// sst.Data byte slice, which will also be used later by e.g. rangefeeds.
-		data := make([]byte, len(sst.Data))
-		copy(data, sst.Data)
-		path = fmt.Sprintf("%x", checksum)
-		if err := eng.WriteFile(path, data); err != nil {
-			log.Fatalf(ctx, "unable to write sideloaded SSTable at term %d, index %d: %s", term, index, err)
-		}
-	} else {
-		ingestPath := path + ".ingested"
+	ingestPath := path + ".ingested"
 
-		// The SST may already be on disk, thanks to the sideloading
-		// mechanism.  If so we can try to add that file directly, via a new
-		// hardlink if the filesystem supports it, rather than writing a new
-		// copy of it.  We cannot pass it the path in the sideload store as
-		// the engine deletes the passed path on success.
-		if linkErr := eng.Link(path, ingestPath); linkErr == nil {
-			ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
-			if ingestErr != nil {
-				log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
-			}
-			// Adding without modification succeeded, no copy necessary.
-			log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
-			return false
+	// The SST may already be on disk, thanks to the sideloading mechanism.  If
+	// so we can try to add that file directly, via a new hardlink if the
+	// filesystem supports it, rather than writing a new copy of it.  We cannot
+	// pass it the path in the sideload store as the engine deletes the passed
+	// path on success.
+	if linkErr := eng.Link(path, ingestPath); linkErr == nil {
+		ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
+		if ingestErr != nil {
+			log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
 		}
-
-		path = ingestPath
-
-		log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, path)
-
-		// TODO(tschottdorf): remove this once sideloaded storage guarantees its
-		// existence.
-		if err := eng.MkdirAll(filepath.Dir(path)); err != nil {
-			panic(err)
-		}
-		if _, err := eng.Stat(path); err == nil {
-			// The file we want to ingest exists. This can happen since the
-			// ingestion may apply twice (we ingest before we mark the Raft
-			// command as committed). Just unlink the file (the storage engine
-			// created a hard link); after that we're free to write it again.
-			if err := eng.Remove(path); err != nil {
-				log.Fatalf(ctx, "while removing existing file during ingestion of %s: %+v", path, err)
-			}
-		}
-
-		if err := writeFileSyncing(ctx, path, sst.Data, eng, 0600, st, limiter); err != nil {
-			log.Fatalf(ctx, "while ingesting %s: %+v", path, err)
-		}
-		copied = true
+		// Adding without modification succeeded, no copy necessary.
+		log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
+		return false /* copied */
 	}
 
-	if err := eng.IngestExternalFiles(ctx, []string{path}); err != nil {
-		log.Fatalf(ctx, "while ingesting %s: %+v", path, err)
+	log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, ingestPath)
+
+	// TODO(tschottdorf): remove this once sideloaded storage guarantees its
+	// existence.
+	if err := eng.MkdirAll(filepath.Dir(ingestPath)); err != nil {
+		panic(err)
 	}
-	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, path)
-	return copied
+	if _, err := eng.Stat(ingestPath); err == nil {
+		// The file we want to ingest exists. This can happen since the
+		// ingestion may apply twice (we ingest before we mark the Raft
+		// command as committed). Just unlink the file (the storage engine
+		// created a hard link); after that we're free to write it again.
+		if err := eng.Remove(ingestPath); err != nil {
+			log.Fatalf(ctx, "while removing existing file during ingestion of %s: %+v", ingestPath, err)
+		}
+	}
+	if err := writeFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter); err != nil {
+		log.Fatalf(ctx, "while ingesting %s: %+v", ingestPath, err)
+	}
+	if err := eng.IngestExternalFiles(ctx, []string{ingestPath}); err != nil {
+		log.Fatalf(ctx, "while ingesting %s: %+v", ingestPath, err)
+	}
+	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
+	return true /* copied */
 }
 
 func (r *Replica) handleReadWriteLocalEvalResult(ctx context.Context, lResult result.LocalResult) {

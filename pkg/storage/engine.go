@@ -907,13 +907,6 @@ type Engine interface {
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(start, end roachpb.Key) error
-	// InMem returns true if the receiver is an in-memory engine and false
-	// otherwise.
-	//
-	// TODO(peter): This is a bit of a wart in the interface. It is used by
-	// addSSTablePreApply to select alternate code paths, but really there should
-	// be a unified code path there.
-	InMem() bool
 	// RegisterFlushCompletedCallback registers a callback that will be run for
 	// every successful flush. Only one callback can be registered at a time, so
 	// registering again replaces the previous callback. The callback must
