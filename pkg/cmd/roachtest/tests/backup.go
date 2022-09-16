@@ -128,7 +128,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:              fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
-		Owner:             registry.OwnerBulkIO,
+		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           backupNodeRestartSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -149,7 +149,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 	})
 	r.Add(registry.TestSpec{
 		Name:              fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
-		Owner:             registry.OwnerBulkIO,
+		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           backupNodeRestartSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -429,7 +429,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 	// that require careful consideration of mixed version states.
 	r.Add(registry.TestSpec{
 		Name:              "backup/mixed-version-basic",
-		Owner:             registry.OwnerBulkIO,
+		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           r.MakeClusterSpec(4),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
@@ -577,7 +577,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 	// BACKUP-CHECKPOINT to lock their location.
 	r.Add(registry.TestSpec{
 		Name:              "backup/mixed-version-concurrent-backups",
-		Owner:             registry.OwnerBulkIO,
+		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           r.MakeClusterSpec(4),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
@@ -680,7 +680,7 @@ func registerBackup(r registry.Registry) {
 	backup2TBSpec := r.MakeClusterSpec(10)
 	r.Add(registry.TestSpec{
 		Name:              fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
-		Owner:             registry.OwnerBulkIO,
+		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           backup2TBSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -728,7 +728,7 @@ func registerBackup(r registry.Registry) {
 		item := item
 		r.Add(registry.TestSpec{
 			Name:              fmt.Sprintf("backup/KMS/%s/%s", item.kmsProvider, KMSSpec.String()),
-			Owner:             registry.OwnerBulkIO,
+			Owner:             registry.OwnerDisasterRecovery,
 			Cluster:           KMSSpec,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -861,7 +861,7 @@ func registerBackup(r registry.Registry) {
 	// verifies them with a fingerprint.
 	r.Add(registry.TestSpec{
 		Name:              `backupTPCC`,
-		Owner:             registry.OwnerBulkIO,
+		Owner:             registry.OwnerDisasterRecovery,
 		Cluster:           r.MakeClusterSpec(3),
 		Timeout:           1 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
