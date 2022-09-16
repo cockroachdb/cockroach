@@ -1690,12 +1690,6 @@ func (p *Pebble) CompactRange(start, end roachpb.Key) error {
 	return p.db.Compact(bufStart, bufEnd, true /* parallel */)
 }
 
-// InMem returns true if the receiver is an in-memory engine and false
-// otherwise.
-func (p *Pebble) InMem() bool {
-	return p.path == ""
-}
-
 // RegisterFlushCompletedCallback implements the Engine interface.
 func (p *Pebble) RegisterFlushCompletedCallback(cb func()) {
 	p.mu.Lock()
