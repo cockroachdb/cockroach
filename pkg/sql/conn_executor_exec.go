@@ -1520,6 +1520,14 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 
 	var evalCtxFactory func() *extendedEvalContext
+	if len(planner.curPlan.subqueryPlans) != 0 {
+		if ct, ok := planner.curPlan.main.planNode.(*createTableNode); ok {
+			// We don't want to execute the subqueries if we are running the
+			// CREATE TABLE AS statement - the subqueries will be executed in
+			// the asynchronous backfill instead.
+			planCtx.doNotRunSubqueries = ct.n.As()
+		}
+	}
 	if len(planner.curPlan.subqueryPlans) != 0 ||
 		len(planner.curPlan.cascades) != 0 ||
 		len(planner.curPlan.checkPlans) != 0 {

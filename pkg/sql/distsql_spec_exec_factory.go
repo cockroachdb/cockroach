@@ -1016,6 +1016,8 @@ func (e *distSQLSpecExecFactory) ConstructCreateTable(
 func (e *distSQLSpecExecFactory) ConstructCreateTableAs(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
+	// TODO(yuzefovich): make sure this doesn't execute the subqueries twice
+	// when implemented (see #78457).
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: create table")
 }
 

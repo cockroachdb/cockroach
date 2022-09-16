@@ -765,6 +765,12 @@ type PlanningCtx struct {
 	// mode.
 	planDepth int
 
+	// doNotRunSubqueries, when set, indicates that the subqueries should not be
+	// run before running the main query. This is needed when evaluating CREATE
+	// TABLE AS statements in order to not run the same subqueries twice (the
+	// backfill of CTAS will execute them).
+	doNotRunSubqueries bool
+
 	// If set, the DistSQL diagram is **not** generated and not added to the
 	// trace (when the tracing is enabled). We generally want to include it, but
 	// on the main query path the overhead becomes too large while we also have

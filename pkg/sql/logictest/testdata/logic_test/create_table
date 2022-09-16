@@ -986,3 +986,35 @@ tbl  CREATE TABLE public.tbl (
      CONSTRAINT tbl_pkey PRIMARY KEY (i ASC),
      FAMILY f1 (i, j)
 )
+
+# Regression tests for executing the subqueries of the CTAS source twice
+# (#78457).
+statement ok
+CREATE TABLE t78457_1 (c INT);
+CREATE TABLE t78457_2 AS WITH t AS (INSERT INTO t78457_1 VALUES (1) RETURNING 1) SELECT * FROM t78457_1;
+
+# We need a retry since the backfill process is asynchronous.
+query I retry
+SELECT * FROM t78457_1
+----
+1
+
+query I
+SELECT * FROM t78457_2
+----
+1
+
+statement ok
+CREATE TABLE t78457_3 (c INT PRIMARY KEY);
+CREATE TABLE t78457_4 AS WITH t AS (INSERT INTO t78457_3 VALUES (1) RETURNING 1) SELECT * FROM t78457_3;
+
+# We need a retry since the backfill process is asynchronous.
+query I retry
+SELECT * FROM t78457_3
+----
+1
+
+query I
+SELECT * FROM t78457_4
+----
+1

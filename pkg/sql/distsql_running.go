@@ -1313,7 +1313,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	recv *DistSQLReceiver,
 	evalCtxFactory func() *extendedEvalContext,
 ) error {
-	if len(planner.curPlan.subqueryPlans) != 0 {
+	if len(planner.curPlan.subqueryPlans) != 0 && !planCtx.doNotRunSubqueries {
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).

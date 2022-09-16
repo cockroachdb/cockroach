@@ -81,11 +81,20 @@ type scanBufferNode struct {
 }
 
 func (n *scanBufferNode) startExec(params runParams) error {
-	n.iterator = newRowContainerIterator(params.ctx, n.buffer.rows, n.buffer.typs)
+	if n.buffer.rows.rows != nil {
+		// The buffer node might not have been started (which can happen if we
+		// are running the main query of the CREATE TABLE AS statement), in
+		// which case the row container is nil.
+		n.iterator = newRowContainerIterator(params.ctx, n.buffer.rows, n.buffer.typs)
+	}
 	return nil
 }
 
 func (n *scanBufferNode) Next(runParams) (bool, error) {
+	if n.iterator == nil {
+		// If the buffer node didn't execute, then we have no rows to return.
+		return false, nil
+	}
 	var err error
 	n.currentRow, err = n.iterator.Next()
 	if n.currentRow == nil || err != nil {

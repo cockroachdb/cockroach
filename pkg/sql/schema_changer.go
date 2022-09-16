@@ -305,6 +305,14 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		}
 		defer localPlanner.curPlan.close(ctx)
 
+		// There should be no postqueries.
+		if plan := localPlanner.curPlan; len(plan.checkPlans) != 0 || len(plan.cascades) != 0 {
+			return errors.AssertionFailedf(
+				"unexpectedly CTAS has %d checks and %d cascades (none expected)",
+				len(plan.checkPlans), len(plan.cascades),
+			)
+		}
+
 		res := roachpb.BulkOpSummary{}
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			// TODO(adityamaru): Use the BulkOpSummary for either telemetry or to
