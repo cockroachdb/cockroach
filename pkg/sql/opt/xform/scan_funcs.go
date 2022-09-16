@@ -11,6 +11,7 @@
 package xform
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -211,6 +212,10 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	localConstraint.Columns = localConstraint.Columns.RemapColumns(scanPrivate.Table, localScanPrivate.Table)
 	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
 	localScanPrivate.HardLimit = scanPrivate.HardLimit
+	if scanPrivate.InvertedConstraint != nil {
+		localScanPrivate.InvertedConstraint = make(inverted.Spans, len(scanPrivate.InvertedConstraint))
+		copy(localScanPrivate.InvertedConstraint, scanPrivate.InvertedConstraint)
+	}
 	localScan := c.e.f.ConstructScan(localScanPrivate)
 	if scanPrivate.HardLimit != 0 {
 		// If the local scan could never reach the hard limit, we will always have
@@ -239,6 +244,10 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	remoteConstraint.Columns = remoteConstraint.Columns.RemapColumns(scanPrivate.Table, remoteScanPrivate.Table)
 	remoteScanPrivate.SetConstraint(c.e.evalCtx, &remoteConstraint)
 	remoteScanPrivate.HardLimit = scanPrivate.HardLimit
+	if scanPrivate.InvertedConstraint != nil {
+		remoteScanPrivate.InvertedConstraint = make(inverted.Spans, len(scanPrivate.InvertedConstraint))
+		copy(remoteScanPrivate.InvertedConstraint, scanPrivate.InvertedConstraint)
+	}
 	remoteScan := c.e.f.ConstructScan(remoteScanPrivate)
 
 	// Add the LocalityOptimizedSearchExpr to the same group as the original scan.
