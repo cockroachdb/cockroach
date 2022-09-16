@@ -225,7 +225,7 @@ func enqueueAddIndexMutation(
 
 func enqueueDropIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor) error {
 	if err := tbl.AddIndexMutation(
-		idx, descpb.DescriptorMutation_DROP, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		idx, descpb.DescriptorMutation_DROP, descpb.DescriptorMutation_WRITE_ONLY,
 	); err != nil {
 		return err
 	}

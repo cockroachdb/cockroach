@@ -10,7 +10,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
     [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 104
+      DescriptorID: 104
 PreCommitPhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -21,7 +21,7 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
     [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 104
+      DescriptorID: 104
     *scop.RemoveAllTableComments
       TableID: 104
     *scop.DrainDescriptorName
@@ -62,7 +62,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
+    *scop.CreateGCJobForTable
       StatementForDropJob:
         Statement: DROP SEQUENCE defaultdb.public.sq1
       TableID: 104
@@ -86,7 +86,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
     [[Sequence:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 104
+      DescriptorID: 104
 PreCommitPhase stage 1 of 1 with 11 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -99,7 +99,7 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
     [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 104
+      DescriptorID: 104
     *scop.RemoveAllTableComments
       TableID: 104
     *scop.RemoveColumnDefaultExpression
@@ -164,7 +164,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
+    *scop.CreateGCJobForTable
       StatementForDropJob:
         Statement: DROP SEQUENCE defaultdb.public.sq1 CASCADE
       TableID: 104

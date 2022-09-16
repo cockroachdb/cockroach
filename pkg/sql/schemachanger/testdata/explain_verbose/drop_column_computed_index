@@ -81,7 +81,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │       │
 │       └── • 12 Mutation operations
 │           │
-│           ├── • MakeDroppedColumnDeleteAndWriteOnly
+│           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 2
 │           │     TableID: 104
 │           │
@@ -106,7 +106,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │           │     Name: crdb_internal_column_2_name_placeholder
 │           │     TableID: 104
 │           │
-│           ├── • MakeDroppedNonPrimaryIndexDeleteAndWriteOnly
+│           ├── • MakePublicSecondaryIndexWriteOnly
 │           │     IndexID: 2
 │           │     TableID: 104
 │           │
@@ -115,7 +115,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │           │     Name: crdb_internal_index_2_name_placeholder
 │           │     TableID: 104
 │           │
-│           ├── • MakeAddedIndexBackfilling
+│           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
 │           │       ConstraintID: 2
 │           │       IndexID: 3
@@ -129,7 +129,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │           │     IndexID: 3
 │           │     TableID: 104
 │           │
-│           ├── • MakeAddedTempIndexDeleteOnly
+│           ├── • MakeAbsentTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 3
 │           │       IndexID: 4
@@ -142,7 +142,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │           │     IndexID: 4
 │           │     TableID: 104
 │           │
-│           ├── • MakeDroppedColumnDeleteAndWriteOnly
+│           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 3
 │           │     TableID: 104
 │           │
@@ -207,7 +207,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 4
 │   │       │     TableID: 104
 │   │       │
@@ -339,7 +339,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
 │       │
 │       └── • 1 Validation operation
 │           │
-│           └── • ValidateUniqueIndex
+│           └── • ValidateIndex
 │                 IndexID: 3
 │                 TableID: 104
 │
@@ -461,15 +461,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │   │
     │   └── • 10 Mutation operations
     │       │
-    │       ├── • MakeDroppedColumnDeleteOnly
+    │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 2
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedColumnDeleteOnly
+    │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    │       ├── • MakePublicPrimaryIndexWriteOnly
     │       │     IndexID: 1
     │       │     TableID: 104
     │       │
@@ -483,15 +483,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       │     Name: t_pkey
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
-    │       ├── • MakeAddedPrimaryIndexPublic
+    │       ├── • MakeValidatedPrimaryIndexPublic
     │       │     EventBase:
     │       │       Authorization:
     │       │         UserName: root
@@ -589,7 +589,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       │         SubWorkID: 1
     │       │     TargetStatus: 1
     │       │
-    │       ├── • CreateGcJobForIndex
+    │       ├── • CreateGCJobForIndex
     │       │     IndexID: 2
     │       │     StatementForDropJob:
     │       │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
@@ -599,7 +599,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
-    │       ├── • CreateGcJobForIndex
+    │       ├── • CreateGCJobForIndex
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
@@ -607,11 +607,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 1
     │       │     TableID: 104
     │       │
-    │       ├── • MakeColumnAbsent
+    │       ├── • MakeDeleteOnlyColumnAbsent
     │       │     ColumnID: 3
     │       │     EventBase:
     │       │       Authorization:
@@ -677,7 +677,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
         │
         └── • 5 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
             │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
@@ -695,7 +695,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
             │     IndexID: 1
             │     TableID: 104
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
             │     EventBase:
             │       Authorization:

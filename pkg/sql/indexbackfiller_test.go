@@ -71,7 +71,7 @@ func TestIndexBackfiller(t *testing.T) {
 			RunBeforePublishWriteAndDelete: func() {
 				// Signal that we've moved into DELETE_ONLY.
 				moveToTDelete <- true
-				// Wait until we get a signal to move to DELETE_AND_WRITE_ONLY.
+				// Wait until we get a signal to move to WRITE_ONLY.
 				<-moveToTWrite
 			},
 			RunBeforeBackfill: func() error {
@@ -132,13 +132,13 @@ func TestIndexBackfiller(t *testing.T) {
 	execOrFail("INSERT INTO t.kv VALUES (9, 'h')") // new_index: nothing, temp_index: nothing
 
 	// Move to WRITE_ONLY mode.
-	// tempIndex: DELETE_AND_WRITE_ONLY
+	// tempIndex: WRITE_ONLY
 	// newIndex   BACKFILLING
 	moveToTWrite <- true
 	execOrFail("INSERT INTO t.kv VALUES (2, 'b')") // new_index: nothing, temp_index: sees insert
 
 	// Pick our scan timestamp.
-	// tempIndex: DELETE_AND_WRITE_ONLY
+	// tempIndex: WRITE_ONLY
 	// newIndex   BACKFILLING
 	moveToTScan <- true
 	execOrFail("UPDATE t.kv SET v = 'd' WHERE k = 3")
@@ -301,8 +301,8 @@ INSERT INTO foo VALUES (1), (10), (100);
 				}
 				mut.NextColumnID++
 				mut.AddColumnMutation(&columnWithDefault, descpb.DescriptorMutation_ADD)
-				// Cheat and jump right to DELETE_AND_WRITE_ONLY.
-				mut.Mutations[len(mut.Mutations)-1].State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+				// Cheat and jump right to WRITE_ONLY.
+				mut.Mutations[len(mut.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
 				computedColumnNotInPrimaryIndex := descpb.ColumnDescriptor{
 					Name:           "comp",
 					ID:             mut.NextColumnID,
@@ -314,8 +314,8 @@ INSERT INTO foo VALUES (1), (10), (100);
 				}
 				mut.NextColumnID++
 				mut.AddColumnMutation(&computedColumnNotInPrimaryIndex, descpb.DescriptorMutation_ADD)
-				// Cheat and jump right to DELETE_AND_WRITE_ONLY.
-				mut.Mutations[len(mut.Mutations)-1].State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+				// Cheat and jump right to WRITE_ONLY.
+				mut.Mutations[len(mut.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
 
 				mut.Families[0].ColumnIDs = append(mut.Families[0].ColumnIDs,
 					columnWithDefault.ID,
