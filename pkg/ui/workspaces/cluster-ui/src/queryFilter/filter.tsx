@@ -409,7 +409,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
     const appFilter = (
       <div>
-        <div className={filterLabel.margin}>App</div>
+        <div className={filterLabel.margin}>Application Name</div>
         <MultiSelectCheckbox
           options={appsOptions}
           placeholder="All"
