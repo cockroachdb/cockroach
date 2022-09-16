@@ -328,6 +328,10 @@ func createChangefeedJobRecord(
 	}
 	var initialHighWater hlc.Timestamp
 	evalTimestamp := func(s string) (hlc.Timestamp, error) {
+		knobs := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+		if knobs.OverrideCursor != nil {
+			s = knobs.OverrideCursor(&statementTime)
+		}
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(s)}
 		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
 		if err != nil {
