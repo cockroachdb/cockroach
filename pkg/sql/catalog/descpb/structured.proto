@@ -667,8 +667,8 @@ message DescriptorMutation {
     //
     // When adding a descriptor, all descriptor related data
     // (column default or index data) can only be backfilled once
-    // all nodes have transitioned into the DELETE_AND_WRITE_ONLY state.
-    DELETE_AND_WRITE_ONLY = 2;
+    // all nodes have transitioned into the WRITE_ONLY state.
+    WRITE_ONLY = 2;
 
     // Operations other than non-transactional backfilling must not
     // use this descriptor.
@@ -690,7 +690,7 @@ message DescriptorMutation {
     // this state is a programming error.
     //
     // Index: INSERT, UPDATE and DELETE treat this index like a
-    // DELETE_AND_WRITE_ONLY index, but use Put in instead of CPut or
+    // WRITE_ONLY index, but use Put in instead of CPut or
     // InitPut, effectively ignoring unique constraints.
     MERGING = 4;
 

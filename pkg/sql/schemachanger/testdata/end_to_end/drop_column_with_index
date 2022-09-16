@@ -78,7 +78,7 @@ upsert descriptor #104
   +      sharded: {}
   +      version: 3
   +    mutationId: 1
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 2
@@ -136,7 +136,7 @@ upsert descriptor #104
   +        width: 64
   +    direction: DROP
   +    mutationId: 1
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: t
      nextColumnId: 3
   -  nextConstraintId: 2
@@ -204,7 +204,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - column:
          id: 2
   ...
@@ -287,7 +287,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: MERGING
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
@@ -321,7 +321,7 @@ upsert descriptor #104
   ...
          version: 3
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
   +  - direction: DROP
@@ -348,7 +348,7 @@ upsert descriptor #104
   +      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
   +  - column:
@@ -391,7 +391,7 @@ upsert descriptor #104
   -      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-       state: DELETE_AND_WRITE_ONLY
+       state: WRITE_ONLY
   -  - column:
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
@@ -402,7 +402,7 @@ upsert descriptor #104
   -        width: 64
   -    direction: DROP
   -    mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
      name: t
      nextColumnId: 3
   ...
@@ -497,7 +497,7 @@ upsert descriptor #104
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 3

@@ -82,10 +82,10 @@ const (
 	// the cluster to converge to seeing the schema element in the DELETE_ONLY
 	// state.
 	RunningStatusDeleteOnly jobs.RunningStatus = "waiting in DELETE-ONLY"
-	// RunningStatusDeleteAndWriteOnly is for jobs that are currently waiting on
+	// RunningStatusWriteOnly is for jobs that are currently waiting on
 	// the cluster to converge to seeing the schema element in the
-	// DELETE_AND_WRITE_ONLY state.
-	RunningStatusDeleteAndWriteOnly jobs.RunningStatus = "waiting in DELETE-AND-WRITE_ONLY"
+	// WRITE_ONLY state.
+	RunningStatusWriteOnly jobs.RunningStatus = "waiting in WRITE_ONLY"
 	// RunningStatusMerging is for jobs that are currently waiting on
 	// the cluster to converge to seeing the schema element in the
 	// MERGING state.
@@ -892,7 +892,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 			if mutation.Adding() && mutation.DeleteOnly() {
 				runStatus = RunningStatusDeleteOnly
 			} else if mutation.Dropped() && mutation.WriteAndDeleteOnly() {
-				runStatus = RunningStatusDeleteAndWriteOnly
+				runStatus = RunningStatusWriteOnly
 			}
 		}
 		if runStatus != "" && !desc.Dropped() {
@@ -1114,12 +1114,12 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 					// it will be better to run the backfill of a unique index
 					// twice: once in the DELETE_ONLY state to confirm that
 					// the index can indeed be created, and subsequently in the
-					// DELETE_AND_WRITE_ONLY state to fill in the missing elements of the
+					// WRITE_ONLY state to fill in the missing elements of the
 					// index (INSERT and UPDATE that happened in the interim).
-					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-					runStatus = RunningStatusDeleteAndWriteOnly
+					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_WRITE_ONLY
+					runStatus = RunningStatusWriteOnly
 				}
-				// else if DELETE_AND_WRITE_ONLY, then the state change has already moved forward.
+				// else if WRITE_ONLY, then the state change has already moved forward.
 			} else if m.Dropped() {
 				if m.WriteAndDeleteOnly() || m.Merging() {
 					tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_ONLY
@@ -2266,7 +2266,7 @@ func (sc *SchemaChanger) reverseMutation(
 		}
 
 		mutation.Direction = descpb.DescriptorMutation_ADD
-		if notStarted && mutation.State != descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+		if notStarted && mutation.State != descpb.DescriptorMutation_WRITE_ONLY {
 			panic(errors.AssertionFailedf("mutation in bad state: %+v", mutation))
 		}
 	}

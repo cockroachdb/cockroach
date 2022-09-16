@@ -20,10 +20,10 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
       │    │    └── PUBLIC      → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
       │    └── 7 Mutation operations
-      │         ├── MakeDroppedColumnDeleteOnly {"ColumnID":2,"TableID":106}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":106}
       │         ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":3,"TableID":106}
-      │         ├── CreateGcJobForIndex {"IndexID":2,"TableID":106}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":106}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
@@ -35,8 +35,8 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
            └── 6 Mutation operations
                 ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
-                ├── CreateGcJobForIndex {"IndexID":3,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}
-                ├── MakeColumnAbsent {"ColumnID":2,"TableID":106}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

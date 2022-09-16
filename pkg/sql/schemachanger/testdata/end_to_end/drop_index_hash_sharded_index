@@ -102,7 +102,7 @@ upsert descriptor #104
   +        shardBuckets: 16
   +      version: 3
   +    mutationId: 2
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
   +  - column:
   +      computeExpr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 16:::INT8)
   +      hidden: true
@@ -115,7 +115,7 @@ upsert descriptor #104
   +      virtual: true
   +    direction: DROP
   +    mutationId: 2
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: t
      nextColumnId: 4
   ...
@@ -180,14 +180,14 @@ upsert descriptor #104
   ...
          version: 3
        mutationId: 2
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - column:
          computeExpr: mod(fnv32(crdb_internal.datums_to_bytes(j)), 16:::INT8)
   ...
        direction: DROP
        mutationId: 2
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 4

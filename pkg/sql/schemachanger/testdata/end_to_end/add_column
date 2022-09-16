@@ -165,14 +165,14 @@ upsert descriptor #106
        direction: ADD
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: tbl
      nextColumnId: 3
   ...
@@ -255,7 +255,7 @@ upsert descriptor #106
          version: 4
        mutationId: 1
   -    state: MERGING
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
@@ -309,7 +309,7 @@ upsert descriptor #106
   -        width: 64
   -    direction: ADD
   -    mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +  - direction: DROP
        index:
@@ -336,7 +336,7 @@ upsert descriptor #106
   +      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
   +  - direction: DROP
@@ -443,7 +443,7 @@ upsert descriptor #106
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: tbl
      nextColumnId: 3

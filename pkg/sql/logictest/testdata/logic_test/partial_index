@@ -1467,7 +1467,7 @@ SELECT * FROM virt@idx WHERE c > 10
 8  8  18
 
 # Regression tests for #52318. Mutations on partial indexes in the
-# DELETE_AND_WRITE_ONLY state should update the indexes correctly.
+# WRITE_ONLY state should update the indexes correctly.
 subtest regression_52318
 
 statement ok

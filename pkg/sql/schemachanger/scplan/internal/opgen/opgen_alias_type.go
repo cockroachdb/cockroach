@@ -28,7 +28,7 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.AliasType) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
-						DescID: this.TypeID,
+						DescriptorID: this.TypeID,
 					}
 				}),
 			),
@@ -38,7 +38,7 @@ func init() {
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.AliasType, md *targetsWithElementMap) *scop.MarkDescriptorAsSyntheticallyDropped {
 					return &scop.MarkDescriptorAsSyntheticallyDropped{
-						DescID: this.TypeID,
+						DescriptorID: this.TypeID,
 					}
 				}),
 			),
@@ -46,7 +46,7 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.AliasType) *scop.MarkDescriptorAsDropped {
 					return &scop.MarkDescriptorAsDropped{
-						DescID: this.TypeID,
+						DescriptorID: this.TypeID,
 					}
 				}),
 			),

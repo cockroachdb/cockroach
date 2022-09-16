@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-func (m *visitor) MakeAddedIndexBackfilling(
-	ctx context.Context, op scop.MakeAddedIndexBackfilling,
+func (m *visitor) MakeAbsentIndexBackfilling(
+	ctx context.Context, op scop.MakeAbsentIndexBackfilling,
 ) error {
 	return addNewIndexMutation(
 		ctx, m, op.Index, op.IsSecondaryIndex, op.IsDeletePreserving,
@@ -35,8 +35,8 @@ func (m *visitor) MakeAddedIndexBackfilling(
 	)
 }
 
-func (m *visitor) MakeAddedTempIndexDeleteOnly(
-	ctx context.Context, op scop.MakeAddedTempIndexDeleteOnly,
+func (m *visitor) MakeAbsentTempIndexDeleteOnly(
+	ctx context.Context, op scop.MakeAbsentTempIndexDeleteOnly,
 ) error {
 	const isDeletePreserving = true // temp indexes are always delete preserving
 	return addNewIndexMutation(
@@ -132,8 +132,8 @@ func (m *visitor) MakeBackfillingIndexDeleteOnly(
 	)
 }
 
-func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
-	ctx context.Context, op scop.MakeAddedIndexDeleteAndWriteOnly,
+func (m *visitor) MakeDeleteOnlyIndexWriteOnly(
+	ctx context.Context, op scop.MakeDeleteOnlyIndexWriteOnly,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -143,7 +143,7 @@ func (m *visitor) MakeAddedIndexDeleteAndWriteOnly(
 		tbl,
 		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_DELETE_ONLY,
-		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		descpb.DescriptorMutation_WRITE_ONLY,
 		descpb.DescriptorMutation_ADD,
 	)
 }
@@ -175,13 +175,13 @@ func (m *visitor) MakeMergedIndexWriteOnly(
 		tbl,
 		MakeIndexIDMutationSelector(op.IndexID),
 		descpb.DescriptorMutation_MERGING,
-		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		descpb.DescriptorMutation_WRITE_ONLY,
 		descpb.DescriptorMutation_ADD,
 	)
 }
 
-func (m *visitor) MakeAddedPrimaryIndexPublic(
-	ctx context.Context, op scop.MakeAddedPrimaryIndexPublic,
+func (m *visitor) MakeValidatedPrimaryIndexPublic(
+	ctx context.Context, op scop.MakeValidatedPrimaryIndexPublic,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -198,15 +198,15 @@ func (m *visitor) MakeAddedPrimaryIndexPublic(
 		Tag:             op.StatementTag,
 		ApplicationName: op.Authorization.AppName,
 		User:            op.Authorization.UserName,
-	}, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY); err != nil {
+	}, descpb.DescriptorMutation_WRITE_ONLY); err != nil {
 		return err
 	}
 	tbl.PrimaryIndex = indexDesc
 	return nil
 }
 
-func (m *visitor) MakeAddedSecondaryIndexPublic(
-	ctx context.Context, op scop.MakeAddedSecondaryIndexPublic,
+func (m *visitor) MakeValidatedSecondaryIndexPublic(
+	ctx context.Context, op scop.MakeValidatedSecondaryIndexPublic,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -233,8 +233,8 @@ func (m *visitor) MakeAddedSecondaryIndexPublic(
 	return nil
 }
 
-func (m *visitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
-	ctx context.Context, op scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly,
+func (m *visitor) MakePublicPrimaryIndexWriteOnly(
+	ctx context.Context, op scop.MakePublicPrimaryIndexWriteOnly,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -248,8 +248,8 @@ func (m *visitor) MakeDroppedPrimaryIndexDeleteAndWriteOnly(
 	return enqueueDropIndexMutation(tbl, &desc)
 }
 
-func (m *visitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
-	ctx context.Context, op scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly,
+func (m *visitor) MakePublicSecondaryIndexWriteOnly(
+	ctx context.Context, op scop.MakePublicSecondaryIndexWriteOnly,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -265,8 +265,8 @@ func (m *visitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
 	return errors.AssertionFailedf("failed to find secondary index %d in descriptor %v", op.IndexID, tbl)
 }
 
-func (m *visitor) MakeDroppedIndexDeleteOnly(
-	ctx context.Context, op scop.MakeDroppedIndexDeleteOnly,
+func (m *visitor) MakeWriteOnlyIndexDeleteOnly(
+	ctx context.Context, op scop.MakeWriteOnlyIndexDeleteOnly,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -277,7 +277,7 @@ func (m *visitor) MakeDroppedIndexDeleteOnly(
 		return err
 	}
 	// It's okay if the index is in MERGING.
-	exp := descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+	exp := descpb.DescriptorMutation_WRITE_ONLY
 	if idx.Merging() {
 		exp = descpb.DescriptorMutation_MERGING
 	}

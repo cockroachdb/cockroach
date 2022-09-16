@@ -18,7 +18,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 4294967294}
  │         │    └── PUBLIC → VALIDATED   PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         └── 1 Mutation operation
- │              └── MarkDescriptorAsSyntheticallyDropped {"DescID":108}
+ │              └── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":108}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         ├── 26 elements transitioning toward ABSENT
@@ -49,7 +49,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC      → ABSENT      IndexPartitioning:{DescID: 108, IndexID: 1}
  │         │    └── PUBLIC      → ABSENT      IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
  │         └── 11 Mutation operations
- │              ├── MarkDescriptorAsDropped {"DescID":108}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveAllTableComments {"TableID":108}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
@@ -71,11 +71,11 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
            │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
            └── 10 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGcJobForTable {"TableID":108}
-                ├── MakeColumnAbsent {"ColumnID":1,"TableID":108}
-                ├── MakeColumnAbsent {"ColumnID":2,"TableID":108}
-                ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":108}
-                ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":108}
+                ├── CreateGCJobForTable {"TableID":108}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":108}

@@ -52,7 +52,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 4
 │   │       │     TableID: 104
 │   │       │
@@ -187,7 +187,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │
 │   │   └── • 1 Validation operation
 │   │       │
-│   │       └── • ValidateUniqueIndex
+│   │       └── • ValidateIndex
 │   │             IndexID: 3
 │   │             TableID: 104
 │   │
@@ -280,7 +280,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │
 │   │   └── • 12 Mutation operations
 │   │       │
-│   │       ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
+│   │       ├── • MakePublicPrimaryIndexWriteOnly
 │   │       │     IndexID: 1
 │   │       │     TableID: 104
 │   │       │
@@ -294,7 +294,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │       │     Name: t_pkey
 │   │       │     TableID: 104
 │   │       │
-│   │       ├── • MakeAddedPrimaryIndexPublic
+│   │       ├── • MakeValidatedPrimaryIndexPublic
 │   │       │     EventBase:
 │   │       │       Authorization:
 │   │       │         UserName: root
@@ -306,7 +306,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │       │     IndexID: 3
 │   │       │     TableID: 104
 │   │       │
-│   │       ├── • MakeAddedIndexBackfilling
+│   │       ├── • MakeAbsentIndexBackfilling
 │   │       │     Index:
 │   │       │       ConstraintID: 4
 │   │       │       IndexID: 5
@@ -316,7 +316,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │       │       TemporaryIndexID: 6
 │   │       │     IsSecondaryIndex: true
 │   │       │
-│   │       ├── • MakeAddedTempIndexDeleteOnly
+│   │       ├── • MakeAbsentTempIndexDeleteOnly
 │   │       │     Index:
 │   │       │       ConstraintID: 4
 │   │       │       IndexID: 6
@@ -366,7 +366,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 6
 │   │       │     TableID: 104
 │   │       │
@@ -501,7 +501,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │       │
 │       └── • 1 Validation operation
 │           │
-│           └── • ValidateUniqueIndex
+│           └── • ValidateIndex
 │                 IndexID: 5
 │                 TableID: 104
 │
@@ -647,15 +647,15 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │   │
     │   └── • 10 Mutation operations
     │       │
-    │       ├── • MakeDroppedColumnDeleteOnly
+    │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 2
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedColumnDeleteOnly
+    │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 4
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
@@ -664,19 +664,19 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │       │     Name: idx
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 6
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 1
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
-    │       ├── • MakeAddedSecondaryIndexPublic
+    │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 5
     │       │     TableID: 104
     │       │
@@ -801,7 +801,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
         │
         └── • 13 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
             │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
@@ -834,7 +834,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
             │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
@@ -844,7 +844,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │     IndexID: 2
             │     TableID: 104
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 4
             │     TableID: 104
             │
@@ -852,7 +852,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │     IndexID: 4
             │     TableID: 104
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 6
             │     TableID: 104
             │
@@ -860,7 +860,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │     IndexID: 6
             │     TableID: 104
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
             │     EventBase:
             │       Authorization:
@@ -872,7 +872,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │         SubWorkID: 1
             │     TableID: 104
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 4
             │     EventBase:
             │       Authorization:

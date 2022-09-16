@@ -33,7 +33,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
-    *scop.MakeDroppedColumnDeleteAndWriteOnly
+    *scop.MakePublicColumnWriteOnly
       ColumnID: 2
       TableID: 107
     *scop.LogEvent
@@ -55,7 +55,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       ColumnID: 2
       Name: crdb_internal_column_2_name_placeholder
       TableID: 107
-    *scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly
+    *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 2
       TableID: 107
     *scop.SetIndexName
@@ -63,8 +63,8 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       Name: crdb_internal_index_2_name_placeholder
       TableID: 107
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 108
-    *scop.MakeAddedIndexBackfilling
+      DescriptorID: 108
+    *scop.MakeAbsentIndexBackfilling
       Index:
         ConstraintID: 3
         IndexID: 3
@@ -81,7 +81,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       IndexID: 3
       Kind: 2
       TableID: 107
-    *scop.MakeAddedTempIndexDeleteOnly
+    *scop.MakeAbsentTempIndexDeleteOnly
       Index:
         ConstraintID: 4
         IndexID: 4
@@ -130,7 +130,7 @@ PostCommitPhase stage 1 of 7 with 6 MutationType ops
   transitions:
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
   ops:
-    *scop.MakeAddedIndexDeleteAndWriteOnly
+    *scop.MakeDeleteOnlyIndexWriteOnly
       IndexID: 4
       TableID: 107
     *scop.SetJobStateOnDescriptor
@@ -214,7 +214,7 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
   transitions:
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
-    *scop.ValidateUniqueIndex
+    *scop.ValidateIndex
       IndexID: 3
       TableID: 107
 PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
@@ -256,10 +256,10 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
-    *scop.MakeDroppedColumnDeleteOnly
+    *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
       TableID: 107
-    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    *scop.MakePublicPrimaryIndexWriteOnly
       IndexID: 1
       TableID: 107
     *scop.SetIndexName
@@ -267,9 +267,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
       Name: crdb_internal_index_1_name_placeholder
       TableID: 107
     *scop.MarkDescriptorAsDropped
-      DescID: 108
+      DescriptorID: 108
     *scop.RemoveBackReferenceInTypes
-      BackReferencedDescID: 108
+      BackReferencedDescriptorID: 108
       TypeIDs:
       - 104
     *scop.RemoveViewBackReferencesInRelations
@@ -290,10 +290,10 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
       IndexID: 3
       Name: foo_pkey
       TableID: 107
-    *scop.MakeDroppedIndexDeleteOnly
+    *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 4
       TableID: 107
-    *scop.MakeDroppedIndexDeleteOnly
+    *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 107
     *scop.DrainDescriptorName
@@ -302,7 +302,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
-    *scop.MakeAddedPrimaryIndexPublic
+    *scop.MakeValidatedPrimaryIndexPublic
       EventBase:
         Authorization:
           UserName: root
@@ -352,7 +352,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForIndex
+    *scop.CreateGCJobForIndex
       IndexID: 2
       StatementForDropJob:
         Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
@@ -385,7 +385,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -396,7 +396,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -407,7 +407,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
         Authorization:
@@ -418,7 +418,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -429,7 +429,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -440,13 +440,13 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.CreateGcJobForIndex
+    *scop.CreateGCJobForIndex
       IndexID: 4
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 4
       TableID: 107
-    *scop.MakeDroppedIndexDeleteOnly
+    *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 107
     *scop.SetJobStateOnDescriptor
@@ -466,7 +466,7 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 9 MutationType ops
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
-    *scop.CreateGcJobForIndex
+    *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
         Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
@@ -490,7 +490,7 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 9 MutationType ops
       TypeIDs:
       - 104
       - 105
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -960,7 +960,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
-    *scop.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly
+    *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 2
       TableID: 107
     *scop.SetIndexName
@@ -968,8 +968,8 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       Name: crdb_internal_index_2_name_placeholder
       TableID: 107
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 108
-    *scop.MakeAddedIndexBackfilling
+      DescriptorID: 108
+    *scop.MakeAbsentIndexBackfilling
       Index:
         ConstraintID: 3
         IndexID: 3
@@ -986,7 +986,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       IndexID: 3
       Kind: 2
       TableID: 107
-    *scop.MakeAddedTempIndexDeleteOnly
+    *scop.MakeAbsentTempIndexDeleteOnly
       Index:
         ConstraintID: 4
         IndexID: 4
@@ -1002,7 +1002,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
       IndexID: 4
       Kind: 2
       TableID: 107
-    *scop.MakeDroppedColumnDeleteAndWriteOnly
+    *scop.MakePublicColumnWriteOnly
       ColumnID: 3
       TableID: 107
     *scop.LogEvent
@@ -1061,7 +1061,7 @@ PostCommitPhase stage 1 of 7 with 7 MutationType ops
   transitions:
     [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
   ops:
-    *scop.MakeAddedIndexDeleteAndWriteOnly
+    *scop.MakeDeleteOnlyIndexWriteOnly
       IndexID: 4
       TableID: 107
     *scop.SetJobStateOnDescriptor
@@ -1153,7 +1153,7 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
   transitions:
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
-    *scop.ValidateUniqueIndex
+    *scop.ValidateIndex
       IndexID: 3
       TableID: 107
 PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
@@ -1195,10 +1195,10 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 4}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
-    *scop.MakeDroppedColumnDeleteOnly
+    *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 3
       TableID: 107
-    *scop.MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    *scop.MakePublicPrimaryIndexWriteOnly
       IndexID: 1
       TableID: 107
     *scop.SetIndexName
@@ -1206,9 +1206,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
       Name: crdb_internal_index_1_name_placeholder
       TableID: 107
     *scop.MarkDescriptorAsDropped
-      DescID: 108
+      DescriptorID: 108
     *scop.RemoveBackReferenceInTypes
-      BackReferencedDescID: 108
+      BackReferencedDescriptorID: 108
       TypeIDs:
       - 104
     *scop.RemoveViewBackReferencesInRelations
@@ -1229,10 +1229,10 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
       IndexID: 3
       Name: foo_pkey
       TableID: 107
-    *scop.MakeDroppedIndexDeleteOnly
+    *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 4
       TableID: 107
-    *scop.MakeDroppedIndexDeleteOnly
+    *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 107
     *scop.DrainDescriptorName
@@ -1241,7 +1241,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
-    *scop.MakeAddedPrimaryIndexPublic
+    *scop.MakeValidatedPrimaryIndexPublic
       EventBase:
         Authorization:
           UserName: root
@@ -1293,7 +1293,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForIndex
+    *scop.CreateGCJobForIndex
       IndexID: 2
       StatementForDropJob:
         Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
@@ -1326,7 +1326,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -1337,7 +1337,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -1348,7 +1348,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
         Authorization:
@@ -1359,7 +1359,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -1370,7 +1370,7 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -1381,13 +1381,13 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
-    *scop.CreateGcJobForIndex
+    *scop.CreateGCJobForIndex
       IndexID: 4
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 4
       TableID: 107
-    *scop.MakeDroppedIndexDeleteOnly
+    *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
       TableID: 107
     *scop.SetJobStateOnDescriptor
@@ -1410,7 +1410,7 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 10 MutationType ops
     [[ColumnDefaultExpression:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
-    *scop.CreateGcJobForIndex
+    *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
         Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
@@ -1434,7 +1434,7 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 10 MutationType ops
       BackReferencedTableID: 107
       SequenceIDs:
       - 106
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
         Authorization:

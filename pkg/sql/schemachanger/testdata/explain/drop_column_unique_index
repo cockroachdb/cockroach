@@ -24,14 +24,14 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 106, ColumnID: 3}
  │         │    └── PUBLIC → ABSENT        ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
  │         └── 11 Mutation operations
- │              ├── MakeDroppedColumnDeleteAndWriteOnly {"ColumnID":3,"TableID":106}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":106}
  │              ├── LogEvent {"TargetStatus":1}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":106}
- │              ├── MakeAddedIndexBackfilling {"Index":{"ConstraintID":5,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":106,"TemporaryIndexID":5}}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":5,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":106,"TemporaryIndexID":5}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":4,"Kind":2,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":4,"IndexID":4,"Kind":2,"Ordinal":1,"TableID":106}
- │              ├── MakeAddedTempIndexDeleteOnly {"Index":{"ConstraintID":6,"IndexID":5,"IsUnique":true,"SourceIndexID":1,"TableID":106}}
+ │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":6,"IndexID":5,"IsUnique":true,"SourceIndexID":1,"TableID":106}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":5,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":5,"Kind":2,"TableID":106}
  │              └── AddColumnToIndex {"ColumnID":4,"IndexID":5,"Kind":2,"Ordinal":1,"TableID":106}
@@ -45,7 +45,7 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
  │    │    └── 3 Mutation operations
- │    │         ├── MakeAddedIndexDeleteAndWriteOnly {"IndexID":5,"TableID":106}
+ │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":5,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 2 of 7 in PostCommitPhase
@@ -83,7 +83,7 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
  │         └── 1 Validation operation
- │              └── ValidateUniqueIndex {"IndexID":4,"TableID":106}
+ │              └── ValidateIndex {"IndexID":4,"TableID":106}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC
@@ -103,12 +103,12 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
       │    │    ├── PUBLIC     → VALIDATED             PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
       │    │    └── PUBLIC     → ABSENT                IndexName:{DescID: 106, Name: test_pkey, IndexID: 1}
       │    └── 8 Mutation operations
-      │         ├── MakeDroppedColumnDeleteOnly {"ColumnID":3,"TableID":106}
-      │         ├── MakeDroppedPrimaryIndexDeleteAndWriteOnly {"IndexID":1,"TableID":106}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":106}
+      │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":106}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":106}
       │         ├── SetIndexName {"IndexID":4,"Name":"test_pkey","TableID":106}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":5,"TableID":106}
-      │         ├── MakeAddedPrimaryIndexPublic {"IndexID":4,"TableID":106}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":106}
+      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":4,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
@@ -117,9 +117,9 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
       │    ├── 1 element transitioning toward ABSENT
       │    │    └── VALIDATED             → DELETE_ONLY      PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
       │    └── 5 Mutation operations
-      │         ├── CreateGcJobForIndex {"IndexID":5,"TableID":106}
+      │         ├── CreateGCJobForIndex {"IndexID":5,"TableID":106}
       │         ├── MakeIndexAbsent {"IndexID":5,"TableID":106}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":1,"TableID":106}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
@@ -129,9 +129,9 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
            │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
            │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
            └── 6 Mutation operations
-                ├── CreateGcJobForIndex {"IndexID":1,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":1,"TableID":106}
                 ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":106}
-                ├── MakeColumnAbsent {"ColumnID":3,"TableID":106}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

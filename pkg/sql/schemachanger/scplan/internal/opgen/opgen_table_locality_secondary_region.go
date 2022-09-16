@@ -34,8 +34,8 @@ func init() {
 				// TODO(postamar): implement table locality update
 				emit(func(this *scpb.TableLocalitySecondaryRegion) *scop.RemoveBackReferenceInTypes {
 					return &scop.RemoveBackReferenceInTypes{
-						TypeIDs:              []catid.DescID{this.RegionEnumTypeID},
-						BackReferencedDescID: this.TableID,
+						TypeIDs:                    []catid.DescID{this.RegionEnumTypeID},
+						BackReferencedDescriptorID: this.TableID,
 					}
 				}),
 			),

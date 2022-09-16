@@ -106,11 +106,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 15;
     │       │     Name: rowid
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeColumnPublic
+    │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 2
     │       │     EventBase:
     │       │       Authorization:
@@ -125,7 +125,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 15;
     │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
-    │       ├── • CreateGcJobForIndex
+    │       ├── • CreateGCJobForIndex
     │       │     IndexID: 2
     │       │     StatementForDropJob:
     │       │       Rollback: true
@@ -144,7 +144,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 15;
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
-    │       ├── • CreateGcJobForIndex
+    │       ├── • CreateGCJobForIndex
     │       │     IndexID: 4
     │       │     StatementForDropJob:
     │       │       Rollback: true
@@ -189,7 +189,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 15;
         │
         └── • 4 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     TableID: 104
             │

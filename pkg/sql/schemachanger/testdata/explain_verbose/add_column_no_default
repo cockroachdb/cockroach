@@ -41,7 +41,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │       │
 │       └── • 5 Mutation operations
 │           │
-│           ├── • MakeAddedColumnDeleteOnly
+│           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
 │           │       ColumnID: 2
 │           │       PgAttributeNum: 2
@@ -121,7 +121,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
     │   │
     │   └── • 3 Mutation operations
     │       │
-    │       ├── • MakeAddedColumnDeleteAndWriteOnly
+    │       ├── • MakeDeleteOnlyColumnWriteOnly
     │       │     ColumnID: 2
     │       │     TableID: 106
     │       │
@@ -153,7 +153,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
         │
         └── • 4 Mutation operations
             │
-            ├── • MakeColumnPublic
+            ├── • MakeWriteOnlyColumnPublic
             │     ColumnID: 2
             │     EventBase:
             │       Authorization:

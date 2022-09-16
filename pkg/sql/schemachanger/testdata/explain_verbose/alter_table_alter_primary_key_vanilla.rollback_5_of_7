@@ -87,19 +87,19 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │   │
     │   └── • 6 Mutation operations
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 5
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
@@ -171,7 +171,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
         │
         └── • 11 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
@@ -190,7 +190,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
             │     IndexID: 2
             │     TableID: 104
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     TableID: 104
             │
@@ -217,7 +217,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 4
             │     StatementForDropJob:
             │       Rollback: true
@@ -228,7 +228,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
             │     IndexID: 4
             │     TableID: 104
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 5
             │     TableID: 104
             │

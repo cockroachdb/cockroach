@@ -118,7 +118,7 @@ func TestGraphRanks(t *testing.T) {
 					scpb.Status_ABSENT,
 					scpb.Status_PUBLIC,
 					revertible, canFail,
-					&scop.MakeColumnAbsent{},
+					&scop.MakeDeleteOnlyColumnAbsent{},
 				))
 			} else {
 				require.NoError(t, graph.AddOpEdges(
@@ -126,7 +126,7 @@ func TestGraphRanks(t *testing.T) {
 					scpb.Status_PUBLIC,
 					scpb.Status_ABSENT,
 					revertible, canFail,
-					&scop.MakeColumnAbsent{},
+					&scop.MakeDeleteOnlyColumnAbsent{},
 				))
 			}
 		}

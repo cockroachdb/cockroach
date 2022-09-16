@@ -34,7 +34,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
     │   │
     │   └── • 5 Mutation operations
     │       │
-    │       ├── • MakeDroppedColumnDeleteOnly
+    │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 2
     │       │     TableID: 106
     │       │
@@ -85,7 +85,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 2;
         │
         └── • 3 Mutation operations
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
             │     EventBase:
             │       Authorization:

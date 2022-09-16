@@ -53,7 +53,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │
 │       └── • 6 Mutation operations
 │           │
-│           ├── • MakeAddedIndexBackfilling
+│           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
 │           │       IndexID: 2
 │           │       SourceIndexID: 1
@@ -61,7 +61,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │           │       TemporaryIndexID: 3
 │           │     IsSecondaryIndex: true
 │           │
-│           ├── • MakeAddedTempIndexDeleteOnly
+│           ├── • MakeAbsentTempIndexDeleteOnly
 │           │     Index:
 │           │       IndexID: 3
 │           │       SourceIndexID: 1
@@ -127,7 +127,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 3
 │   │       │     TableID: 106
 │   │       │
@@ -262,7 +262,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │
 │       └── • 1 Validation operation
 │           │
-│           └── • ValidateUniqueIndex
+│           └── • ValidateIndex
 │                 IndexID: 2
 │                 TableID: 106
 │
@@ -309,11 +309,11 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
     │       │     Name: idx1
     │       │     TableID: 106
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
-    │       ├── • MakeAddedSecondaryIndexPublic
+    │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 2
     │       │     TableID: 106
     │       │
@@ -337,7 +337,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
         │
         └── • 4 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     TableID: 106
             │

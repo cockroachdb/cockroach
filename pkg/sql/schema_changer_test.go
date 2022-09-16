@@ -175,7 +175,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 			t.Fatal(err)
 		}
 		// The expected end state.
-		expectedState := descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+		expectedState := descpb.DescriptorMutation_WRITE_ONLY
 		if direction == descpb.DescriptorMutation_DROP {
 			expectedState = descpb.DescriptorMutation_DELETE_ONLY
 		}
@@ -2366,7 +2366,7 @@ ALTER TABLE t.test DROP column v`)
 	// Unfortunately this is the same failure present when an index drop
 	// fails, so the rollback never completes and leaves orphaned kvs.
 	// TODO(erik): Ignore errors or individually drop indexes in
-	// DELETE_AND_WRITE_ONLY which failed during the creation backfill
+	// WRITE_ONLY which failed during the creation backfill
 	// as a rollback from a drop.
 	if e := 1; e != len(tableDesc.PublicColumns()) {
 		t.Fatalf("e = %d, v = %d, columns = %+v", e, len(tableDesc.PublicColumns()), tableDesc.PublicColumns())
@@ -3105,7 +3105,7 @@ CREATE TABLE t.test (
 	}()
 
 	// Wait for the temporary indexes for the new primary indexes
-	// to move to the DELETE_AND_WRITE_ONLY state, which happens
+	// to move to the WRITE_ONLY state, which happens
 	// right before backfilling of the index begins.
 	<-backfillNotification
 

@@ -21,11 +21,11 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 4294967294}
  │         │    └── PUBLIC → VALIDATED   PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         └── 5 Mutation operations
- │              ├── MarkDescriptorAsSyntheticallyDropped {"DescID":104}
- │              ├── MarkDescriptorAsSyntheticallyDropped {"DescID":106}
- │              ├── MarkDescriptorAsSyntheticallyDropped {"DescID":105}
- │              ├── MarkDescriptorAsSyntheticallyDropped {"DescID":107}
- │              └── MarkDescriptorAsSyntheticallyDropped {"DescID":108}
+ │              ├── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":104}
+ │              ├── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":106}
+ │              ├── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":105}
+ │              ├── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":107}
+ │              └── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":108}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         ├── 52 elements transitioning toward ABSENT
@@ -82,15 +82,15 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── VALIDATED   → DELETE_ONLY PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC      → ABSENT      IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
  │         └── 20 Mutation operations
- │              ├── MarkDescriptorAsDropped {"DescID":104}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveDatabaseRoleSettings {"DatabaseID":104}
- │              ├── MarkDescriptorAsDropped {"DescID":106}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
- │              ├── MarkDescriptorAsDropped {"DescID":105}
- │              ├── MarkDescriptorAsDropped {"DescID":107}
- │              ├── MarkDescriptorAsDropped {"DescID":108}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveAllTableComments {"TableID":108}
- │              ├── RemoveBackReferenceInTypes {"BackReferencedDescID":108}
+ │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DescriptorID":104,"Name":"multi_region_tes..."}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"public"}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"crdb_internal_re...","SchemaID":106}}
@@ -116,7 +116,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
            │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
            └── 20 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGcJobForDatabase {"DatabaseID":104}
+                ├── CreateGCJobForDatabase {"DatabaseID":104}
                 ├── DeleteDescriptor {"DescriptorID":104}
                 ├── LogEvent {"TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":106}
@@ -125,10 +125,10 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
                 ├── LogEvent {"TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":107}
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGcJobForTable {"TableID":108}
-                ├── MakeColumnAbsent {"ColumnID":1,"TableID":108}
-                ├── MakeColumnAbsent {"ColumnID":4294967295,"TableID":108}
-                ├── MakeColumnAbsent {"ColumnID":4294967294,"TableID":108}
+                ├── CreateGCJobForTable {"TableID":108}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}

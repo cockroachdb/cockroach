@@ -150,7 +150,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: t1
      nextColumnId: 4
   ...
@@ -233,7 +233,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: MERGING
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
@@ -326,7 +326,7 @@ upsert descriptor #104
   -      - money
   -      version: 4
   -    mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   -    index:
   -      createdExplicitly: true
@@ -337,7 +337,7 @@ upsert descriptor #104
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t1
      nextColumnId: 4

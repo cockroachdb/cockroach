@@ -92,7 +92,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │
 │       └── • 11 Mutation operations
 │           │
-│           ├── • MakeAddedColumnDeleteOnly
+│           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
 │           │       ColumnID: 2
 │           │       PgAttributeNum: 2
@@ -137,7 +137,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │         Expr: 42:::INT8
 │           │       TableID: 106
 │           │
-│           ├── • MakeAddedIndexBackfilling
+│           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
 │           │       ConstraintID: 2
 │           │       IndexID: 2
@@ -157,7 +157,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │     Kind: 2
 │           │     TableID: 106
 │           │
-│           ├── • MakeAddedTempIndexDeleteOnly
+│           ├── • MakeAbsentTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 3
 │           │       IndexID: 3
@@ -233,11 +233,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │
 │   │   └── • 4 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedColumnDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyColumnWriteOnly
 │   │       │     ColumnID: 2
 │   │       │     TableID: 106
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 3
 │   │       │     TableID: 106
 │   │       │
@@ -372,7 +372,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │
 │       └── • 1 Validation operation
 │           │
-│           └── • ValidateUniqueIndex
+│           └── • ValidateIndex
 │                 IndexID: 2
 │                 TableID: 106
 │
@@ -476,7 +476,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │
     │   └── • 9 Mutation operations
     │       │
-    │       ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    │       ├── • MakePublicPrimaryIndexWriteOnly
     │       │     IndexID: 1
     │       │     TableID: 106
     │       │
@@ -490,11 +490,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       │     Name: tbl_pkey
     │       │     TableID: 106
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
-    │       ├── • MakeAddedPrimaryIndexPublic
+    │       ├── • MakeValidatedPrimaryIndexPublic
     │       │     EventBase:
     │       │       Authorization:
     │       │         UserName: root
@@ -507,7 +507,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       │     IndexID: 2
     │       │     TableID: 106
     │       │
-    │       ├── • MakeColumnPublic
+    │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 2
     │       │     EventBase:
     │       │       Authorization:
@@ -557,7 +557,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │
     │   └── • 5 Mutation operations
     │       │
-    │       ├── • CreateGcJobForIndex
+    │       ├── • CreateGCJobForIndex
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
@@ -565,7 +565,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 1
     │       │     TableID: 106
     │       │
@@ -595,7 +595,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
         │
         └── • 4 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
             │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42

@@ -52,11 +52,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │   │
     │   └── • 4 Mutation operations
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 106
     │       │
@@ -118,7 +118,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
@@ -129,7 +129,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
             │     IndexID: 2
             │     TableID: 106
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     TableID: 106
             │

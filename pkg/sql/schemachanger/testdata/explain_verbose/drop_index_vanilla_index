@@ -27,7 +27,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │
 │       └── • 2 Mutation operations
 │           │
-│           ├── • MakeDroppedNonPrimaryIndexDeleteAndWriteOnly
+│           ├── • MakePublicSecondaryIndexWriteOnly
 │           │     IndexID: 2
 │           │     TableID: 104
 │           │
@@ -93,7 +93,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │
     │   └── • 3 Mutation operations
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
@@ -142,7 +142,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
             │       Statement: DROP INDEX defaultdb.public.t@idx CASCADE

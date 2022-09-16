@@ -54,7 +54,7 @@ func (mm maybeMutation) MutationID() descpb.MutationID {
 // WriteAndDeleteOnly returns true iff the table element is in a mutation in
 // the delete-and-write-only state.
 func (mm maybeMutation) WriteAndDeleteOnly() bool {
-	return mm.mutationState == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+	return mm.mutationState == descpb.DescriptorMutation_WRITE_ONLY
 }
 
 // DeleteOnly returns true iff the table element is in a mutation in the
