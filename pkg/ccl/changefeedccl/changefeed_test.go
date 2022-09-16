@@ -678,17 +678,13 @@ func TestChangefeedCursor(t *testing.T) {
 		time.Sleep(10 * time.Microsecond)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'after')`)
 
-		powInt := func(a int, b int) int64 {
-			return int64(math.Pow(float64(a), float64(b)))
-		}
-
 		// The below function is currently used to test negative timestamp in cursor i.e of the form
 		// "-3us".
 		// Using this function we can calculate the difference with the time that was before
 		// the insert statement, which is set as the new cursor value inside createChangefeedJobRecord
 		calculateCursor := func(currentTime *hlc.Timestamp) string {
 			//  Should convert to microseconds as that is the maximum precision we support
-			diff := (before.WallTime - currentTime.WallTime) / powInt(10, 3)
+			diff := (before.WallTime - currentTime.WallTime) / 1000
 			diffStr := strconv.FormatInt(diff, 10) + "us"
 			return diffStr
 		}
