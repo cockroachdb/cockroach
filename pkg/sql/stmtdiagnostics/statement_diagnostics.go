@@ -479,6 +479,12 @@ func (r *Registry) InsertStatementDiagnostics(
 	collectionErr error,
 ) (CollectedInstanceID, error) {
 	var diagID CollectedInstanceID
+	if ctx.Err() != nil {
+		// If the context was canceled (likely due to a statement timeout), we
+		// still want to save the statement bundle, so we override the canceled
+		// context with a background one.
+		ctx = context.Background()
+	}
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if requestID != 0 {
 			row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-completed", txn,
