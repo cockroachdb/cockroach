@@ -531,7 +531,11 @@ func TestAdjustCounts(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			actual := histogram{buckets: make([]cat.HistogramBucket, len(tc.h))}
 			copy(actual.buckets, tc.h)
-			actual.adjustCounts(&evalCtx, tc.rowCount, tc.distinctCount)
+			colType := types.Int
+			if len(tc.h) > 0 {
+				colType = tc.h[0].UpperBound.ResolvedType()
+			}
+			actual.adjustCounts(&evalCtx, colType, tc.rowCount, tc.distinctCount)
 			roundHistogram(&actual)
 			if !reflect.DeepEqual(actual.buckets, tc.expected) {
 				t.Fatalf("expected %v but found %v", tc.expected, actual.buckets)
@@ -541,7 +545,7 @@ func TestAdjustCounts(t *testing.T) {
 
 	t.Run("random", func(t *testing.T) {
 		// randHist returns a random histogram with anywhere from 1-200 buckets.
-		randHist := func() histogram {
+		randHist := func() (histogram, *types.T) {
 			numBuckets := rand.Intn(200) + 1
 			buckets := make([]cat.HistogramBucket, numBuckets)
 			ub := rand.Intn(100000000)
@@ -549,6 +553,7 @@ func TestAdjustCounts(t *testing.T) {
 			if rand.Intn(2) == 0 {
 				ub = -ub
 			}
+			colType := types.Int
 			buckets[0].UpperBound = tree.NewDInt(tree.DInt(ub))
 			buckets[0].NumEq = float64(rand.Intn(1000)) + 1
 			for i := 1; i < len(buckets); i++ {
@@ -561,17 +566,18 @@ func TestAdjustCounts(t *testing.T) {
 			}
 			// Half the time, use floats instead of ints.
 			if rand.Intn(2) == 0 {
+				colType = types.Float
 				for i := range buckets {
 					buckets[i].UpperBound = tree.NewDFloat(tree.DFloat(*buckets[i].UpperBound.(*tree.DInt)))
 				}
 			}
-			return histogram{buckets: buckets}
+			return histogram{buckets: buckets}, colType
 		}
 
 		// Create 100 random histograms, and check that we can correctly adjust the
 		// counts to match a random row count and distinct count.
 		for trial := 0; trial < 100; trial++ {
-			h := randHist()
+			h, colType := randHist()
 			rowCount := rand.Intn(1000000)
 			distinctCount := rand.Intn(rowCount + 1)
 
@@ -581,7 +587,7 @@ func TestAdjustCounts(t *testing.T) {
 			distinctCount = max(distinctCount, len(h.buckets))
 
 			// Adjust the counts in the histogram to match the provided counts.
-			h.adjustCounts(&evalCtx, float64(rowCount), float64(distinctCount))
+			h.adjustCounts(&evalCtx, colType, float64(rowCount), float64(distinctCount))
 
 			// Check that the resulting histogram is valid.
 			if h.buckets[0].NumRange > 0 || h.buckets[0].DistinctRange > 0 {
