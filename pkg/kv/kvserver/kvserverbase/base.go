@@ -39,7 +39,7 @@ type CmdIDKey string
 
 // SafeFormat implements redact.SafeFormatter.
 func (s CmdIDKey) SafeFormat(sp redact.SafePrinter, verb rune) {
-	sp.Printf("%q", redact.SafeString(s))
+	sp.Printf("%x", redact.SafeString(s))
 }
 
 func (s CmdIDKey) String() string {
