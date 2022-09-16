@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -3880,7 +3881,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		var mismatchedSstsIdx []int
 		// Iterate over all the tested SSTs and check that they're byte-by-byte equal.
 		for i := range sstNamesSubset {
-			actualSST, err := receivingEng.ReadFile(sstNamesSubset[i])
+			actualSST, err := fs.ReadFile(receivingEng, sstNamesSubset[i])
 			if err != nil {
 				return err
 			}
