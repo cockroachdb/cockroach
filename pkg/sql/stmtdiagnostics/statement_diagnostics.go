@@ -531,6 +531,23 @@ func (r *Registry) InsertStatementDiagnostics(
 	collectionErr error,
 ) (CollectedInstanceID, error) {
 	var diagID CollectedInstanceID
+	if ctx.Err() != nil {
+		// The only two possible errors on the context are the context
+		// cancellation or the context deadline being exceeded. The former seems
+		// more likely, and the cancellation is most likely to have occurred due
+		// to a statement timeout, so we still want to proceed with saving the
+		// statement bundle. Thus, we override the canceled context, but first
+		// we'll log the error as a warning.
+		log.Warningf(
+			ctx, "context has an error when saving the bundle, proceeding "+
+				"with the background one (with deadline of 10 seconds): %v", ctx.Err(),
+		)
+		// We want to be conservative, so we add a deadline of 10 seconds on top
+		// of the background context.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second) // nolint:context
+		defer cancel()
+	}
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if requestID != 0 {
 			row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-completed", txn,
