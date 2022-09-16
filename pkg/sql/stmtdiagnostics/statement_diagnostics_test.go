@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -135,6 +137,27 @@ func TestDiagnosticsRequest(t *testing.T) {
 		_, err = db.Exec("EXECUTE stmt(1)")
 		require.NoError(t, err)
 		checkCompleted(id)
+	})
+
+	// Verify that if the traced query times out, the bundle is still saved.
+	t.Run("timeout", func(t *testing.T) {
+		reqID, err := registry.InsertRequestInternal(ctx, "SELECT pg_sleep(_)", samplingProbability, minExecutionLatency, expiresAfter)
+		require.NoError(t, err)
+		checkNotCompleted(reqID)
+
+		// Set the statement timeout (as well as clean it up in a defer).
+		_, err = db.Exec("SET statement_timeout = '100ms';")
+		require.NoError(t, err)
+		defer func() {
+			_, err = db.Exec("RESET statement_timeout;")
+			require.NoError(t, err)
+		}()
+
+		// Run the query that times out.
+		_, err = db.Exec("SELECT pg_sleep(999999)")
+		require.Error(t, err)
+		require.True(t, strings.Contains(err.Error(), sqlerrors.QueryTimeoutError.Error()))
+		checkCompleted(reqID)
 	})
 
 	// Verify that the bundle for a conditional request is only created when the
