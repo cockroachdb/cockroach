@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "api.go",
         "context.go",
+        "describe.go",
         "doc.go",
         "parser.go",
         "sql.go",
@@ -40,6 +41,7 @@ go_test(
     name = "clisqlshell_test",
     srcs = [
         "main_test.go",
+	"describe_test.go",
         "sql_internal_test.go",
         "sql_test.go",
     ],
