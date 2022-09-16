@@ -68,12 +68,12 @@
 
 /pkg/cli/                    @cockroachdb/cli-prs
 # last-rule-wins so bulk i/o takes userfile.go even though cli-prs takes pkg/cli
-/pkg/cli/userfile.go         @cockroachdb/bulk-io
+/pkg/cli/userfile.go         @cockroachdb/disaster-recovery
 /pkg/cli/demo*.go            @cockroachdb/cli-prs @cockroachdb/sql-experience @cockroachdb/server-prs
 /pkg/cli/debug*.go           @cockroachdb/cli-prs @cockroachdb/kv-prs
-/pkg/cli/debug_job_trace*.go @cockroachdb/bulk-io
+/pkg/cli/debug_job_trace*.go @cockroachdb/disaster-recovery
 /pkg/cli/doctor*.go          @cockroachdb/cli-prs @cockroachdb/sql-schema
-/pkg/cli/import_test.go      @cockroachdb/cli-prs @cockroachdb/bulk-io
+/pkg/cli/import_test.go      @cockroachdb/cli-prs @cockroachdb/disaster-recovery
 /pkg/cli/sql*.go             @cockroachdb/cli-prs @cockroachdb/sql-experience
 /pkg/cli/start*.go           @cockroachdb/cli-prs @cockroachdb/server-prs
 /pkg/cli/mt_proxy.go         @cockroachdb/sqlproxy-prs @cockroachdb/server-prs
@@ -88,14 +88,14 @@
 
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 /pkg/ccl/streamingccl/       @cockroachdb/cdc-prs
-# last-rule-wins so *after* CDC takes most of streamingccl bulk-io takes ingest pkg.
-/pkg/ccl/streamingccl/streamingest @cockroachdb/bulk-io
+# last-rule-wins so *after* CDC takes most of streamingccl disaster-recovery takes ingest pkg.
+/pkg/ccl/streamingccl/streamingest @cockroachdb/disaster-recovery
 
-/pkg/ccl/backupccl/          @cockroachdb/bulk-io
-/pkg/ccl/importccl/          @cockroachdb/bulk-io
-/pkg/ccl/storageccl/         @cockroachdb/bulk-io
-/pkg/cloud/                  @cockroachdb/bulk-io
-/pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-io
+/pkg/ccl/backupccl/          @cockroachdb/disaster-recovery
+/pkg/ccl/importccl/          @cockroachdb/disaster-recovery
+/pkg/ccl/storageccl/         @cockroachdb/disaster-recovery
+/pkg/cloud/                  @cockroachdb/disaster-recovery
+/pkg/sql/distsql_plan_csv.go @cockroachdb/disaster-recovery
 
 /pkg/geo/                    @cockroachdb/geospatial
 
@@ -117,7 +117,7 @@
 /pkg/base/                   @cockroachdb/server-prs
 /pkg/bench/                  @cockroachdb/sql-queries
 /pkg/bench/rttanalysis       @cockroachdb/sql-schema
-/pkg/blobs/                  @cockroachdb/bulk-io
+/pkg/blobs/                  @cockroachdb/disaster-recovery
 /pkg/build/                  @cockroachdb/dev-inf
 /pkg/ccl/baseccl/            @cockroachdb/cli-prs
 /pkg/ccl/buildccl/           @cockroachdb/dev-inf
@@ -219,12 +219,12 @@
 /pkg/roachpb/                @cockroachdb/kv-prs
 /pkg/roachprod/              @cockroachdb/dev-inf
 /pkg/rpc/                    @cockroachdb/server-prs
-/pkg/scheduledjobs/          @cockroachdb/bulk-io
+/pkg/scheduledjobs/          @cockroachdb/disaster-recovery
 /pkg/security/               @cockroachdb/server-prs
 /pkg/settings/               @cockroachdb/server-prs
 /pkg/spanconfig/             @cockroachdb/multiregion
 /pkg/startupmigrations/      @cockroachdb/server-prs @cockroachdb/sql-schema
-/pkg/streaming/              @cockroachdb/bulk-io
+/pkg/streaming/              @cockroachdb/disaster-recovery
 /pkg/testutils/              @cockroachdb/test-eng-noreview
 /pkg/testutils/reduce/       @cockroachdb/sql-queries
 /pkg/testutils/sqlutils/     @cockroachdb/sql-queries

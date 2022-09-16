@@ -292,7 +292,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "restore/nodeShutdown/worker",
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -306,7 +306,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "restore/nodeShutdown/coordinator",
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -441,7 +441,7 @@ func registerRestore(r registry.Registry) {
 
 		r.Add(registry.TestSpec{
 			Name:    testName,
-			Owner:   registry.OwnerBulkIO,
+			Owner:   registry.OwnerDisasterRecovery,
 			Cluster: r.MakeClusterSpec(item.nodes, clusterOpts...),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -513,7 +513,7 @@ func registerRestore(r registry.Registry) {
 	withPauseTimeout := 3 * time.Hour
 	r.Add(registry.TestSpec{
 		Name:    withPauseTestName,
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: r.MakeClusterSpec(10),
 		Timeout: withPauseTimeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
