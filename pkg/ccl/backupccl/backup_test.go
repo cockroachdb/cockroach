@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -78,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -8055,6 +8057,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 			CREATE SCHEMA sc;
 			CREATE TABLE sc.tb (x INT);
 			CREATE TYPE sc.typ AS ENUM ('hello');
+			CREATE FUNCTION sc.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 		`)
 
 		// Back up the database.
@@ -8074,7 +8077,8 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 		<-afterPublishNotif
 		// Create a table in the database we just made public for which the RESTORE
 		// job isn't actually finished.
-		sqlDB.Exec(t, `CREATE TABLE d.public.new_table()`)
+		sqlDB.Exec(t, `USE d;`)
+		sqlDB.Exec(t, `CREATE TABLE public.new_table()`)
 		close(continueNotif)
 		require.NoError(t, g.Wait())
 
@@ -8087,6 +8091,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 			{"public", "new_table"},
 		})
 		sqlDB.CheckQueryResults(t, `SHOW TYPES`, [][]string{})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.create_function_statements`, [][]string{})
 	})
 
 	t.Run("clean-up-schema-with-table", func(t *testing.T) {
@@ -8157,6 +8162,71 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 			{"sc", "new_table"},
 		})
 	})
+
+	t.Run("clean-up-database-with-udf", func(t *testing.T) {
+		ctx := context.Background()
+		tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		for _, server := range tc.Servers {
+			registry := server.JobRegistry().(*jobs.Registry)
+			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+				jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+					r := raw.(*restoreResumer)
+					r.testingKnobs.afterPublishingDescriptors = func() error {
+						notifyContinue(ctx)
+						return errors.New("injected error")
+					}
+					return r
+				},
+			}
+		}
+
+		sqlDB.Exec(t, `
+			CREATE DATABASE d;
+			USE d;
+			CREATE SCHEMA sc1;
+			CREATE FUNCTION sc1.f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+			CREATE SCHEMA sc2;
+		`)
+
+		// Back up the database.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+		// Drop the database and restore into it.
+		sqlDB.Exec(t, `DROP DATABASE d`)
+
+		afterPublishNotif, continueNotif := notifyAfterPublishing()
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			_, err := sqlDB.DB.ExecContext(ctx, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+			require.Regexp(t, "injected error", err)
+			return nil
+		})
+
+		<-afterPublishNotif
+		// Create a table in the database we just made public for which the RESTORE
+		// job isn't actually finished.
+		sqlDB.Exec(t, `
+			USE d;
+			CREATE FUNCTION sc2.f2(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a $$;`)
+		close(continueNotif)
+		require.NoError(t, g.Wait())
+
+		// Check that the restored database still exists, but only contains the new
+		// table we added.
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS FROM d] ORDER BY 1`, [][]string{
+			{"crdb_internal"}, {"information_schema"}, {"pg_catalog"}, {"pg_extension"}, {"public"}, {"sc2"},
+		})
+		sqlDB.CheckQueryResults(
+			t,
+			`SELECT database_name, schema_name, function_name FROM crdb_internal.create_function_statements`,
+			[][]string{{"d", "sc2", "f2"}},
+		)
+	})
+
 }
 
 func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
@@ -10302,4 +10372,294 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 	// This statement should succeed as we are not backing up the span for dbview,
 	// but would fail if it was backed up.
 	sqlDB.Exec(t, `BACKUP database db into latest in 'userfile:///a' with revision_history;`)
+}
+
+func TestBackupRestoreDBWithUDFs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tempDir, tempDirCleanupFn := testutils.TempDir(t)
+	defer tempDirCleanupFn()
+
+	srcCluster, sqlDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	srcServer := srcCluster.Server(0)
+	defer srcClusterCleanupFn()
+
+	sqlDB.Exec(t, `
+CREATE DATABASE db1;
+USE db1;
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+CREATE SEQUENCE sc1.sq1;
+CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sc1.tbl1;
+  SELECT nextval('sc1.sq1');
+$$;
+`)
+
+	rows := sqlDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
+	require.Equal(t, 1, len(rows))
+	require.Equal(t, 1, len(rows[0]))
+	udfID, err := strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1", tree.DatabaseLookupFlags{Required: true})
+		require.NoError(t, err)
+		require.Equal(t, 104, int(dbDesc.GetID()))
+
+		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		require.NoError(t, err)
+		require.Equal(t, 106, int(scDesc.GetID()))
+
+		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
+		_, tbDesc, err := col.GetImmutableTableByName(
+			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, 107, int(tbDesc.GetID()))
+
+		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
+		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, 108, int(typDesc.GetID()))
+
+		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
+		_, tbDesc, err = col.GetImmutableTableByName(
+			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, 110, int(tbDesc.GetID()))
+
+		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, 111, int(fnDesc.GetID()))
+		require.Equal(t, 104, int(fnDesc.GetParentID()))
+		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
+		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, 100108, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
+		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
+
+		fnDef, _ := scDesc.GetFunction("f1")
+		require.Equal(t, 111, int(fnDef.Overloads[0].ID))
+		require.Equal(t, 100108, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Bakcup and restore into a new db name.
+	sqlDB.Exec(t, `BACKUP DATABASE db1 INTO $1`, localFoo)
+	sqlDB.Exec(t, `RESTORE DATABASE db1 FROM LATEST IN $1 WITH new_db_name = db1_new`, localFoo)
+	sqlDB.Exec(t, `USE db1_new`)
+
+	// Verify that all IDs are correctly rewritten.
+	rows = sqlDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
+	require.Equal(t, 1, len(rows))
+	require.Equal(t, 1, len(rows[0]))
+	udfID, err = strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1_new", tree.DatabaseLookupFlags{Required: true})
+		require.NoError(t, err)
+		require.Equal(t, 112, int(dbDesc.GetID()))
+
+		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		require.NoError(t, err)
+		require.Equal(t, 114, int(scDesc.GetID()))
+
+		tbName := tree.MakeTableNameWithSchema("db1_new", "sc1", "tbl1")
+		_, tbDesc, err := col.GetImmutableTableByName(
+			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, 115, int(tbDesc.GetID()))
+
+		typName := tree.MakeQualifiedTypeName("db1_new", "sc1", "enum1")
+		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, 116, int(typDesc.GetID()))
+
+		tbName = tree.MakeTableNameWithSchema("db1_new", "sc1", "sq1")
+		_, tbDesc, err = col.GetImmutableTableByName(
+			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, 118, int(tbDesc.GetID()))
+
+		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, 119, int(fnDesc.GetID()))
+		require.Equal(t, 112, int(fnDesc.GetParentID()))
+		require.Equal(t, 114, int(fnDesc.GetParentSchemaID()))
+		// Make sure db name and IDs are rewritten in function body.
+		require.Equal(t, "SELECT a FROM db1_new.sc1.tbl1;\nSELECT nextval(118:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, 100116, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, []descpb.ID{115, 118}, fnDesc.GetDependsOn())
+		require.Equal(t, []descpb.ID{116, 117}, fnDesc.GetDependsOnTypes())
+
+		fnDef, _ := scDesc.GetFunction("f1")
+		require.Equal(t, 119, int(fnDef.Overloads[0].ID))
+		require.Equal(t, 100116, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		return nil
+	})
+
+	// Make sure function actually works.
+	rows = sqlDB.QueryStr(t, `SELECT sc1.f1('Good'::sc1.enum1)`)
+	require.Equal(t, 1, len(rows))
+	require.Equal(t, 1, len(rows[0]))
+	require.Equal(t, "1", rows[0][0])
+	require.NoError(t, err)
+}
+
+func TestBackupRestoreClusterWithUDFs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tempDir, tempDirCleanupFn := testutils.TempDir(t)
+	defer tempDirCleanupFn()
+
+	srcCluster, srcSQLDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
+	)
+	srcServer := srcCluster.Server(0)
+	defer srcClusterCleanupFn()
+
+	tgtCluster, tgtSQLDB, tgtClusterCleanupFn := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
+	)
+	tgtServer := tgtCluster.Server(0)
+	defer tgtClusterCleanupFn()
+
+	srcSQLDB.Exec(t, `
+CREATE DATABASE db1;
+USE db1;
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+CREATE SEQUENCE sc1.sq1;
+CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sc1.tbl1;
+  SELECT nextval('sc1.sq1');
+$$;
+`)
+
+	rows := srcSQLDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
+	require.Equal(t, 1, len(rows))
+	require.Equal(t, 1, len(rows[0]))
+	udfID, err := strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1", tree.DatabaseLookupFlags{Required: true})
+		require.NoError(t, err)
+		require.Equal(t, 104, int(dbDesc.GetID()))
+
+		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		require.NoError(t, err)
+		require.Equal(t, 106, int(scDesc.GetID()))
+
+		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
+		_, tbDesc, err := col.GetImmutableTableByName(
+			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, 107, int(tbDesc.GetID()))
+
+		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
+		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, 108, int(typDesc.GetID()))
+
+		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
+		_, tbDesc, err = col.GetImmutableTableByName(
+			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, 110, int(tbDesc.GetID()))
+
+		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, 111, int(fnDesc.GetID()))
+		require.Equal(t, 104, int(fnDesc.GetParentID()))
+		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
+		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, 100108, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
+		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
+
+		fnDef, _ := scDesc.GetFunction("f1")
+		require.Equal(t, 111, int(fnDef.Overloads[0].ID))
+		require.Equal(t, 100108, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Bakcup the whole src cluster.
+	srcSQLDB.Exec(t, `BACKUP INTO $1`, localFoo)
+
+	// Restore into target cluster.
+	tgtSQLDB.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
+	tgtSQLDB.Exec(t, `USE db1`)
+
+	// Verify that all IDs are correctly rewritten.
+	rows = tgtSQLDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
+	require.Equal(t, 1, len(rows))
+	require.Equal(t, 1, len(rows[0]))
+	udfID, err = strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+	err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1", tree.DatabaseLookupFlags{Required: true})
+		require.NoError(t, err)
+		require.Equal(t, 107, int(dbDesc.GetID()))
+
+		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		require.NoError(t, err)
+		require.Equal(t, 125, int(scDesc.GetID()))
+
+		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
+		_, tbDesc, err := col.GetImmutableTableByName(
+			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, 126, int(tbDesc.GetID()))
+
+		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
+		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, 127, int(typDesc.GetID()))
+
+		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
+		_, tbDesc, err = col.GetImmutableTableByName(
+			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
+		)
+		require.NoError(t, err)
+		require.Equal(t, 129, int(tbDesc.GetID()))
+
+		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		require.NoError(t, err)
+		require.Equal(t, 130, int(fnDesc.GetID()))
+		require.Equal(t, 107, int(fnDesc.GetParentID()))
+		require.Equal(t, 125, int(fnDesc.GetParentSchemaID()))
+		// Make sure db name and IDs are rewritten in function body.
+		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(129:::REGCLASS);", fnDesc.GetFunctionBody())
+		require.Equal(t, 100127, int(fnDesc.GetArgs()[0].Type.Oid()))
+		require.Equal(t, []descpb.ID{126, 129}, fnDesc.GetDependsOn())
+		require.Equal(t, []descpb.ID{127, 128}, fnDesc.GetDependsOnTypes())
+
+		fnDef, _ := scDesc.GetFunction("f1")
+		require.Equal(t, 130, int(fnDef.Overloads[0].ID))
+		require.Equal(t, 100127, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Make sure function actually works on the target cluster.
+	rows = tgtSQLDB.QueryStr(t, `SELECT sc1.f1('Good'::sc1.enum1)`)
+	require.Equal(t, 1, len(rows))
+	require.Equal(t, 1, len(rows[0]))
+	require.Equal(t, "1", rows[0][0])
+	require.NoError(t, err)
+
 }
