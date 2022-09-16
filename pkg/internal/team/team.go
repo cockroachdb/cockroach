@@ -33,7 +33,7 @@ type Team struct {
 	// them. The purpose "other" indicates a team that exists but which has no
 	// particular purpose as far as `teams` is concerned (for example, teams like
 	// the @cockroachdb/bulk-prs team which exists primarily to route, via
-	// CODEOWNERS, code reviews for the @cockroachdb/bulk-io team). This map
+	// CODEOWNERS, code reviews for the @cockroachdb/disaster-recovery team). This map
 	// does not contain TeamName.
 	Aliases map[Alias]Purpose `yaml:"aliases"`
 	// TriageColumnID is the GitHub Column ID to assign issues to.
