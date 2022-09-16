@@ -87,7 +87,7 @@ upsert descriptor #104
   +        width: 64
   +    direction: DROP
   +    mutationId: 1
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
   +  - direction: DROP
   +    index:
   +      createdAtNanos: "1640995200000000000"
@@ -111,7 +111,7 @@ upsert descriptor #104
   +      sharded: {}
   +      version: 3
   +    mutationId: 1
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 2
@@ -178,7 +178,7 @@ upsert descriptor #104
   +      virtual: true
   +    direction: DROP
   +    mutationId: 1
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: t
      nextColumnId: 5
   -  nextConstraintId: 2
@@ -253,7 +253,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - column:
          computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
   ...
@@ -336,7 +336,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: MERGING
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
@@ -387,7 +387,7 @@ upsert descriptor #104
   +      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-       state: DELETE_AND_WRITE_ONLY
+       state: WRITE_ONLY
   -  - direction: ADD
   +  - column:
   +      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
@@ -402,7 +402,7 @@ upsert descriptor #104
   +      virtual: true
   +    direction: DROP
   +    mutationId: 1
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
   +  - direction: DROP
        index:
   -      constraintId: 3
@@ -433,7 +433,7 @@ upsert descriptor #104
   -      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
-       state: DELETE_AND_WRITE_ONLY
+       state: WRITE_ONLY
   -  - column:
   -      computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
   -      id: 4
@@ -470,7 +470,7 @@ upsert descriptor #104
   +      unique: true
   +      version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
@@ -549,7 +549,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: t
      nextColumnId: 5
   ...
@@ -632,7 +632,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: MERGING
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
@@ -689,14 +689,14 @@ upsert descriptor #104
   ...
        direction: DROP
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - direction: DROP
        index:
   ...
          version: 3
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
   +  - direction: DROP
@@ -705,21 +705,21 @@ upsert descriptor #104
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - column:
          computeExpr: crdb_internal_column_2_name_placeholder + 1:::INT8
   ...
        direction: DROP
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - direction: DROP
        index:
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
   +  - direction: DROP
@@ -746,7 +746,7 @@ upsert descriptor #104
   -      unique: true
   -      version: 4
   -    mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   -    index:
   -      constraintId: 4
@@ -758,7 +758,7 @@ upsert descriptor #104
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 5

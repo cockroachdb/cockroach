@@ -17,6 +17,6 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            └── 5 Mutation operations
                 ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
                 ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
-                ├── MakeColumnAbsent {"ColumnID":2,"TableID":106}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

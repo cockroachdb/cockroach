@@ -42,7 +42,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │
 │       └── • 5 Mutation operations
 │           │
-│           ├── • MakeDroppedNonPrimaryIndexDeleteAndWriteOnly
+│           ├── • MakePublicSecondaryIndexWriteOnly
 │           │     IndexID: 2
 │           │     TableID: 104
 │           │
@@ -51,7 +51,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     Name: crdb_internal_index_2_name_placeholder
 │           │     TableID: 104
 │           │
-│           ├── • MakeDroppedColumnDeleteAndWriteOnly
+│           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 3
 │           │     TableID: 104
 │           │
@@ -168,11 +168,11 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │
     │   └── • 4 Mutation operations
     │       │
-    │       ├── • MakeDroppedColumnDeleteOnly
+    │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
@@ -255,7 +255,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
             │       Statement: DROP INDEX defaultdb.public.t@idx CASCADE
@@ -265,7 +265,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
             │     IndexID: 2
             │     TableID: 104
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 3
             │     EventBase:
             │       Authorization:

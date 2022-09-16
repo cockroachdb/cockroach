@@ -110,7 +110,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     Name: crdb_internal_column_2_name_placeholder
             │     TableID: 106
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
@@ -129,7 +129,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     IndexID: 2
             │     TableID: 106
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     TableID: 106
             │
@@ -141,7 +141,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     ColumnID: 2
             │     TableID: 106
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
             │     EventBase:
             │       Authorization:

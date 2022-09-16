@@ -64,11 +64,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │       │     Name: j
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeColumnPublic
+    │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 2
     │       │     EventBase:
     │       │       Authorization:
@@ -83,7 +83,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
     │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
@@ -122,7 +122,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
         │
         └── • 6 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
@@ -141,7 +141,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
             │     IndexID: 2
             │     TableID: 104
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     TableID: 104
             │

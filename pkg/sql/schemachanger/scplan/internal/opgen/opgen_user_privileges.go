@@ -32,8 +32,8 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.UserPrivileges) *scop.RemoveUserPrivileges {
 					return &scop.RemoveUserPrivileges{
-						DescID: this.DescriptorID,
-						User:   this.UserName,
+						DescriptorID: this.DescriptorID,
+						User:         this.UserName,
 					}
 				}),
 			),

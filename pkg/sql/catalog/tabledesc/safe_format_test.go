@@ -80,7 +80,7 @@ func TestSafeMessage(t *testing.T) {
 				`{MutationID: 3, JobID: 1234}` +
 				`], ` +
 				`Mutations: [` +
-				`{MutationID: 1, Direction: ADD, State: DELETE_AND_WRITE_ONLY, ConstraintType: FOREIGN_KEY, ForeignKey: {OriginTableID: 112, OriginColumns: [2], ReferencedTableID: 2, ReferencedColumnIDs: [3], Validity: Unvalidated, State: ADD, MutationID: 1}}, ` +
+				`{MutationID: 1, Direction: ADD, State: WRITE_ONLY, ConstraintType: FOREIGN_KEY, ForeignKey: {OriginTableID: 112, OriginColumns: [2], ReferencedTableID: 2, ReferencedColumnIDs: [3], Validity: Unvalidated, State: ADD, MutationID: 1}}, ` +
 				`{MutationID: 2, Direction: ADD, State: DELETE_ONLY, Column: {ID: 5, TypeID: 20, Null: false, State: ADD, MutationID: 2}}, ` +
 				`{MutationID: 3, Direction: ADD, State: DELETE_ONLY, ConstraintType: CHECK, NotNullColumn: 2, Check: {Columns: [2], Validity: Unvalidated, State: ADD, MutationID: 3}}, ` +
 				`{MutationID: 3, Direction: ADD, State: DELETE_ONLY, Index: {ID: 3, Unique: false, KeyColumns: [{ID: 3, Dir: ASC}, {ID: 2, Dir: DESC}], KeySuffixColumns: [1], StoreColumns: [5], State: ADD, MutationID: 3}}` +
@@ -146,7 +146,7 @@ func TestSafeMessage(t *testing.T) {
 				})
 
 				mutable.Mutations = append(mutable.Mutations, descpb.DescriptorMutation{
-					State: descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+					State: descpb.DescriptorMutation_WRITE_ONLY,
 					Descriptor_: &descpb.DescriptorMutation_Constraint{
 						Constraint: &descpb.ConstraintToUpdate{
 							ConstraintType: descpb.ConstraintToUpdate_FOREIGN_KEY,
