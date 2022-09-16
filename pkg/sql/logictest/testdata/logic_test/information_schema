@@ -1983,25 +1983,25 @@ SELECT *
 FROM information_schema.table_constraints
 ORDER BY TABLE_NAME, CONSTRAINT_TYPE, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name            table_catalog  table_schema  table_name  constraint_type  is_deferrable  initially_deferred
-constraint_db       public             3864823197_118_1_not_null  constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             c2                         constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             check_a                    constraint_db  public        t1          CHECK            NO             NO
-constraint_db       public             t1_pkey                    constraint_db  public        t1          PRIMARY KEY      NO             NO
-constraint_db       public             t1_a_key                   constraint_db  public        t1          UNIQUE           NO             NO
-constraint_db       public             3864823197_119_2_not_null  constraint_db  public        t2          CHECK            NO             NO
-constraint_db       public             fk                         constraint_db  public        t2          FOREIGN KEY      NO             NO
-constraint_db       public             t2_pkey                    constraint_db  public        t2          PRIMARY KEY      NO             NO
+constraint_catalog  constraint_schema  constraint_name     table_catalog  table_schema  table_name  constraint_type  is_deferrable  initially_deferred
+constraint_db       public             117_118_1_not_null  constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             c2                  constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             check_a             constraint_db  public        t1          CHECK            NO             NO
+constraint_db       public             t1_pkey             constraint_db  public        t1          PRIMARY KEY      NO             NO
+constraint_db       public             t1_a_key            constraint_db  public        t1          UNIQUE           NO             NO
+constraint_db       public             117_119_2_not_null  constraint_db  public        t2          CHECK            NO             NO
+constraint_db       public             fk                  constraint_db  public        t2          FOREIGN KEY      NO             NO
+constraint_db       public             t2_pkey             constraint_db  public        t2          PRIMARY KEY      NO             NO
 
 query TTTT colnames
 SELECT *
 FROM information_schema.check_constraints
 ORDER BY CONSTRAINT_CATALOG, CONSTRAINT_NAME
 ----
-constraint_catalog  constraint_schema  constraint_name            check_clause
-constraint_db       public             3864823197_118_1_not_null  p IS NOT NULL
-constraint_db       public             c2                         ((a < 99:::INT8))
-constraint_db       public             check_a                    ((a > 4:::INT8))
+constraint_catalog  constraint_schema  constraint_name     check_clause
+constraint_db       public             117_118_1_not_null  p IS NOT NULL
+constraint_db       public             c2                  ((a < 99:::INT8))
+constraint_db       public             check_a             ((a > 4:::INT8))
 
 query TTTTTTT colnames
 SELECT *
@@ -2026,10 +2026,10 @@ USING (constraint_catalog, constraint_schema, constraint_name)
 WHERE tc.table_schema in ('public')
 ORDER BY tc.table_schema, tc.table_name, cc.constraint_name
 ----
-table_schema  table_name  constraint_name            check_clause
-public        t1          3864823197_118_1_not_null  p IS NOT NULL
-public        t1          c2                         ((a < 99:::INT8))
-public        t1          check_a                    ((a > 4:::INT8))
+table_schema  table_name  constraint_name     check_clause
+public        t1          117_118_1_not_null  p IS NOT NULL
+public        t1          c2                  ((a < 99:::INT8))
+public        t1          check_a             ((a > 4:::INT8))
 
 statement ok
 DROP DATABASE constraint_db CASCADE
