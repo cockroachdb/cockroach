@@ -133,7 +133,6 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/redact"
 )
 
 // requester is an interface implemented by an object that orders admission
@@ -500,7 +499,7 @@ const (
 	numWorkKinds
 )
 
-func workKindString(workKind WorkKind) redact.RedactableString {
+func workKindString(workKind WorkKind) string {
 	switch workKind {
 	case KVWork:
 		return "kv"
