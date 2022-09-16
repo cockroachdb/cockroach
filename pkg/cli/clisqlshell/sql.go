@@ -1186,6 +1186,34 @@ func (c *cliState) setupChangefeedOutput() (undo func(), err error) {
 
 }
 
+func (c *cliState) handleDescribe(cmd []string, loopState, errState cliStateEnum) cliStateEnum {
+	var sql string
+	var qargs []interface{}
+	sql, qargs, c.exitErr = pgInspect(cmd)
+	if c.exitErr != nil {
+		clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		return errState
+	}
+	c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		q := clisqlclient.MakeQuery(fmt.Sprintf(sql, qargs...))
+		return c.sqlExecCtx.RunQueryAndFormatResults(
+			ctx,
+			c.conn,
+			c.iCtx.queryOutput, // query output.
+			c.iCtx.stdout,      // timings.
+			c.iCtx.stderr,
+			q,
+		)
+	})
+	if c.exitErr != nil {
+		if !c.singleStatement {
+			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
+		return errState
+	}
+	return loopState
+}
+
 func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnum {
 	if len(c.lastInputLine) == 0 || c.lastInputLine[0] != '\\' {
 		return nextState
@@ -1207,6 +1235,17 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 	line := strings.TrimRight(c.lastInputLine, "; ")
 
 	cmd := strings.Fields(line)
+	if cmd[0] == `\z` {
+		// psql compatibility.
+		cmd[0] = `\dp`
+	}
+	if cmd[0] == `\sf` || cmd[0] == `\sf+` ||
+		cmd[0] == `\sv` || cmd[0] == `\sv+` ||
+		cmd[0] == `\l` || cmd[0] == `\l+` ||
+		(strings.HasPrefix(cmd[0], `\d`) && cmd[0] != `\demo`) {
+		return c.handleDescribe(cmd, loopState, errState)
+	}
+
 	switch cmd[0] {
 	case `\q`, `\quit`, `\exit`:
 		return cliStop
@@ -1275,14 +1314,6 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		}
 		return c.handleFunctionHelp(cmd[1:], loopState, errState)
 
-	case `\l`:
-		c.concatLines = `SHOW DATABASES`
-		return cliRunStatement
-
-	case `\dt`:
-		c.concatLines = `SHOW TABLES`
-		return cliRunStatement
-
 	case `\copy`:
 		c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
 			// Strip out the starting \ in \copy.
@@ -1305,35 +1336,6 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		}
 		return c.invalidSyntax(errState)
 
-	case `\dT`:
-		c.concatLines = `SHOW TYPES`
-		return cliRunStatement
-
-	case `\du`:
-		if len(cmd) == 1 {
-			c.concatLines = `SHOW USERS`
-			return cliRunStatement
-		} else if len(cmd) == 2 {
-			c.concatLines = fmt.Sprintf(`SELECT * FROM [SHOW USERS] WHERE username = %s`, lexbase.EscapeSQLString(cmd[1]))
-			return cliRunStatement
-		}
-		return c.invalidSyntax(errState)
-
-	case `\d`:
-		if len(cmd) == 1 {
-			c.concatLines = `SHOW TABLES`
-			return cliRunStatement
-		} else if len(cmd) == 2 {
-			c.concatLines = `SHOW COLUMNS FROM ` + cmd[1]
-			return cliRunStatement
-		}
-		return c.invalidSyntax(errState)
-	case `\dd`:
-		if len(cmd) == 2 {
-			c.concatLines = `SHOW CONSTRAINTS FROM ` + cmd[1] + ` WITH COMMENT`
-			return cliRunStatement
-		}
-		return c.invalidSyntax(errState)
 	case `\connect`, `\c`:
 		return c.handleConnect(cmd[1:], loopState, errState)
 
@@ -1366,10 +1368,6 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.handleStatementDiag(cmd[1:], loopState, errState)
 
 	default:
-		if strings.HasPrefix(cmd[0], `\d`) {
-			// Unrecognized command for now, but we want to be helpful.
-			fmt.Fprint(c.iCtx.stderr, "Suggestion: use the SQL SHOW statement to inspect your schema.\n")
-		}
 		return c.invalidSyntax(errState)
 	}
 

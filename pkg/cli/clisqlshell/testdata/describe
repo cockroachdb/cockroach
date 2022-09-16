@@ -1,0 +1,122 @@
+common
+sql
+-e
+\set echo
+-e
+----
+ok
+
+subtest list_dbs
+
+sql
+create database mydb
+----
+ok
+
+cli
+\l
+----
+sql -e \set echo -e \l
+> SHOW DATABASES
+database_name	owner	primary_region	secondary_region	regions	survival_goal
+defaultdb	root	NULL	NULL	{}	NULL
+mydb	root	NULL	NULL	{}	NULL
+postgres	root	NULL	NULL	{}	NULL
+system	node	NULL	NULL	{}	NULL
+
+subtest end
+
+sql
+create table mytable(mycolumn int);
+----
+ok
+
+subtest list_tables
+
+cli
+\d
+----
+sql -e \set echo -e \d
+> SHOW TABLES
+schema_name	table_name	type	owner	estimated_row_count	locality
+public	mytable	table	root	NULL	NULL
+
+cli
+\dt
+----
+sql -e \set echo -e \dt
+> SHOW TABLES
+schema_name	table_name	type	owner	estimated_row_count	locality
+public	mytable	table	root	NULL	NULL
+
+subtest end
+
+subtest list_columns
+
+cli
+\d mytable
+----
+sql -e \set echo -e \d mytable
+> SHOW COLUMNS FROM mytable
+column_name	data_type	is_nullable	column_default	generation_expression	indices	is_hidden
+mycolumn	INT8	t	NULL		{mytable_pkey}	f
+rowid	INT8	f	unique_rowid()		{mytable_pkey}	t
+
+subtest end
+
+sql
+create type mytyp as enum('hello')
+----
+ok
+
+subtest list_types
+
+cli
+\dT
+----
+sql -e \set echo -e \dT
+> SHOW TYPES
+schema	name	owner
+public	mytyp	root
+
+subtest end
+
+sql
+create user myuser; grant admin to myuser
+----
+ok
+
+subtest list_users
+
+cli
+\du
+----
+sql -e \set echo -e \du
+> SHOW USERS
+username	options	member_of
+admin		{}
+myuser		{admin}
+root		{admin}
+
+cli
+\du myuser
+----
+sql -e \set echo -e \du myuser
+> SELECT * FROM [SHOW USERS] WHERE username = 'myuser'
+username	options	member_of
+myuser		{admin}
+
+subtest end
+
+
+subtest list_constraints
+
+cli
+\dd mytable
+----
+sql -e \set echo -e \dd mytable
+> SHOW CONSTRAINTS FROM mytable WITH COMMENT
+table_name	constraint_name	constraint_type	details	validated	comment
+mytable	mytable_pkey	PRIMARY KEY	PRIMARY KEY (rowid ASC)	t	NULL
+
+subtest end
