@@ -1221,7 +1221,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 
 			// Set maxBytes to something small so we can exceed the maximum split
 			// size without adding 2x64MB of data.
-			const maxBytes = 1 << 16
+			const maxBytes = 1 << 17
 			zoneConfig := zonepb.DefaultZoneConfig()
 			zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
 
@@ -2539,7 +2539,7 @@ func TestUnsplittableRange(t *testing.T) {
 
 	ctx := context.Background()
 	ttl := 1 * time.Hour
-	const maxBytes = 1 << 16
+	const maxBytes = 1 << 17
 	manualClock := hlc.NewHybridManualClock()
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
