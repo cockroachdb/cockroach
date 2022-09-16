@@ -41,12 +41,15 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 	for i := range specs {
 		spec := &specs[i]
 		r.Add(registry.TestSpec{
-			Name:            fmt.Sprintf("unoptimized-query-oracle/disable-rules=%s", spec.disableRules),
-			Owner:           registry.OwnerSQLQueries,
-			Timeout:         time.Hour * 1,
-			RequiresLicense: true,
-			Tags:            nil,
-			Cluster:         r.MakeClusterSpec(1),
+			Name:    fmt.Sprintf("unoptimized-query-oracle/disable-rules=%s", spec.disableRules),
+			Owner:   registry.OwnerSQLQueries,
+			Timeout: time.Hour * 1,
+			// The tests aren't yet stable, so the issues shouldn't be release
+			// blockers until someone looks at them.
+			NonReleaseBlocker: true,
+			RequiresLicense:   true,
+			Tags:              nil,
+			Cluster:           r.MakeClusterSpec(1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runQueryComparison(ctx, t, c, &queryComparisonTest{
 					name: "unoptimized-query-oracle",
