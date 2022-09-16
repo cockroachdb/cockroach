@@ -209,7 +209,7 @@ func ClassifyConversion(
 
 	// See if there's existing cast logic.  If so, return general.
 	semaCtx := tree.MakeSemaContext()
-	if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */, false /* fromSQL */); err != nil {
+	if err := semaCtx.Placeholders.Init(1 /* numPlaceholders */, nil /* typeHints */); err != nil {
 		return ColumnConversionImpossible, err
 	}
 

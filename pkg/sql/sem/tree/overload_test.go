@@ -266,7 +266,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	for i, d := range testData {
 		t.Run(fmt.Sprintf("%v/%v", d.exprs, d.overloads), func(t *testing.T) {
 			semaCtx := MakeSemaContext()
-			if err := semaCtx.Placeholders.Init(2 /* numPlaceholders */, nil /* typeHints */, false /* fromSQL */); err != nil {
+			if err := semaCtx.Placeholders.Init(2 /* numPlaceholders */, nil /* typeHints */); err != nil {
 				t.Fatal(err)
 			}
 			desired := types.Any
