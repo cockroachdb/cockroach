@@ -126,6 +126,13 @@ exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d2';
 ----
 
+
+## ensure no table statistics are inserted on behalf of all previous schema_only restores
+query-sql
+SELECT * FROM system.table_statistics;
+----
+
+
 # There should be no data in the user tables.
 query-sql
 SELECT * FROM d2.t1;
@@ -154,12 +161,6 @@ INSERT INTO d2.t2 VALUES ('hi');
 # Part 2: test this checks corrupt data
 ########
 
-# A new cluster that recovers from checksum error.
-# A pebble bug causes the readAsOfIterator.Close() to panic. This should not occur.
-# TODO(msbutler): refactor test once this is addressed.
-new-server name=s3 share-io-dir=s1 allow-implicit-access testingKnobCfg=RecoverFromIterPanic
-----
-
 corrupt-backup uri='nodelocal://0/full_database_backup/'
 ----
 
@@ -168,8 +169,7 @@ exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, new_db_name='d3';
 ----
 
-# But verify-backup-table-data catches it
-# TODO(msbutler): refactor the test once this is addressed
+# But verify_backup_table_data catches the corrupt backup file
 exec-sql expect-error-regex=(pebble/table: invalid table 000000)
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/full_database_backup/' with schema_only, verify_backup_table_data, new_db_name='d4';
 ----
