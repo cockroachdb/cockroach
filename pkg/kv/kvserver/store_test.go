@@ -2299,7 +2299,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manualClock.Advance(txnwait.TxnLivenessThreshold + 1)
+	manualClock.Advance(time.Duration(txnwait.TxnLivenessThreshold.Load()) + 1)
 
 	// Scan the range and verify empty result (expired txn is aborted,
 	// cleaning up intents).
@@ -2352,7 +2352,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manual.Advance(txnwait.TxnLivenessThreshold + 1)
+	manual.Advance(time.Duration(txnwait.TxnLivenessThreshold.Load()) + 1)
 
 	// Query the range with a single scan, which should cause all intents
 	// to be resolved.

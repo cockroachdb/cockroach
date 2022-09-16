@@ -256,6 +256,11 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Set a long txn liveness threshold so that the txn cannot be aborted.
+	// Note: we want the defer to fire *after* the server has stopped to
+	// avoid data races.
+	defer txnwait.TestingOverrideTxnLivenessThreshold(time.Hour)()
+
 	ctx := context.Background()
 	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
@@ -277,9 +282,6 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 		require.Nil(t, err)
 		txn.Update(resp.Header().Txn)
 	}
-
-	// Set a long txn liveness threshold so that the txn cannot be aborted.
-	defer txnwait.TestingOverrideTxnLivenessThreshold(time.Hour)()
 
 	// runFollowerReads attempts to perform a follower read on a different key on
 	// each replica, using the provided timestamp as the request timestamp.
