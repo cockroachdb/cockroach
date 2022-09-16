@@ -37,7 +37,7 @@ func Example_sql() {
 	c.RunWithArgs([]string{`sql`, `-e`, `begin`, `-e`, `select 3 as "3"`, `-e`, `commit`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select * from t.f`})
 	c.RunWithArgs([]string{`sql`, `--execute=SELECT database_name, owner FROM [show databases]`})
-	c.RunWithArgs([]string{`sql`, `-e`, `\l`, `-e`, `\echo hello`})
+	c.RunWithArgs([]string{`sql`, `-e`, `\echo hello`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "2"`})
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1 as "1"; select 2 as "@" where false`})
 	// CREATE TABLE AS returns a SELECT tag with a row count, check this.
@@ -59,8 +59,6 @@ func Example_sql() {
 	// first batch consisting of 1 row has been returned to the client.
 	c.RunWithArgs([]string{`sql`, `-e`, `select 1/(i-2) from generate_series(1,3) g(i)`})
 	c.RunWithArgs([]string{`sql`, `-e`, `SELECT '20:01:02+03:04:05'::timetz AS regression_65066`})
-	c.RunWithArgs([]string{`sql`, `-e`, `CREATE USER my_user WITH CREATEDB; GRANT admin TO my_user;`})
-	c.RunWithArgs([]string{`sql`, `-e`, `\du my_user`})
 
 	// Output:
 	// sql -e show application_name
@@ -89,12 +87,7 @@ func Example_sql() {
 	// postgres	root
 	// system	node
 	// t	root
-	// sql -e \l -e \echo hello
-	// database_name	owner	primary_region	secondary_region	regions	survival_goal
-	// defaultdb	root	NULL	NULL	{}	NULL
-	// postgres	root	NULL	NULL	{}	NULL
-	// system	node	NULL	NULL	{}	NULL
-	// t	root	NULL	NULL	{}	NULL
+	// sql -e \echo hello
 	// hello
 	// sql -e select 1 as "1"; select 2 as "2"
 	// 1
@@ -125,12 +118,6 @@ func Example_sql() {
 	// sql -e SELECT '20:01:02+03:04:05'::timetz AS regression_65066
 	// regression_65066
 	// 20:01:02+03:04:05
-	// sql -e CREATE USER my_user WITH CREATEDB; GRANT admin TO my_user;
-	// CREATE ROLE
-	// GRANT
-	// sql -e \du my_user
-	// username	options	member_of
-	// my_user	CREATEDB	{admin}
 }
 
 func Example_sql_config() {
