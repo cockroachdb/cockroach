@@ -1697,17 +1697,6 @@ func (p *Pebble) RegisterFlushCompletedCallback(cb func()) {
 	p.mu.Unlock()
 }
 
-// ReadFile implements the Engine interface.
-func (p *Pebble) ReadFile(filename string) ([]byte, error) {
-	file, err := p.fs.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	return io.ReadAll(file)
-}
-
 // Remove implements the FS interface.
 func (p *Pebble) Remove(filename string) error {
 	return p.fs.Remove(filename)
