@@ -39,6 +39,17 @@ const (
 	OneAboveHighPri int = int(HighPri) + 1
 )
 
+var WorkPriorityDict = map[WorkPriority]string{
+	LowPri:        "min",
+	TTLLowPri:     "ttl",
+	UserLowPri:    "low",
+	BulkNormalPri: "bulk",
+	NormalPri:     "normal",
+	UserHighPri:   "high",
+	LockingPri:    "locking",
+	HighPri:       "max",
+}
+
 // Prevent the linter from emitting unused warnings.
 var _ = LowPri
 var _ = TTLLowPri
