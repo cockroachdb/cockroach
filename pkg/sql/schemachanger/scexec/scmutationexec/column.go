@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-func (m *visitor) MakeAddedColumnDeleteOnly(
-	ctx context.Context, op scop.MakeAddedColumnDeleteOnly,
+func (m *visitor) MakeAbsentColumnDeleteOnly(
+	ctx context.Context, op scop.MakeAbsentColumnDeleteOnly,
 ) error {
 	col := &descpb.ColumnDescriptor{
 		ID:                      op.Column.ColumnID,
@@ -83,8 +83,8 @@ func (m *visitor) SetAddedColumnType(ctx context.Context, op scop.SetAddedColumn
 	return tbl.AllocateIDsWithoutValidation(ctx)
 }
 
-func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
-	ctx context.Context, op scop.MakeAddedColumnDeleteAndWriteOnly,
+func (m *visitor) MakeDeleteOnlyColumnWriteOnly(
+	ctx context.Context, op scop.MakeDeleteOnlyColumnWriteOnly,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -94,12 +94,14 @@ func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 		tbl,
 		MakeColumnIDMutationSelector(op.ColumnID),
 		descpb.DescriptorMutation_DELETE_ONLY,
-		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		descpb.DescriptorMutation_WRITE_ONLY,
 		descpb.DescriptorMutation_ADD,
 	)
 }
 
-func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic) error {
+func (m *visitor) MakeWriteOnlyColumnPublic(
+	ctx context.Context, op scop.MakeWriteOnlyColumnPublic,
+) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -110,7 +112,7 @@ func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic
 		Tag:             op.StatementTag,
 		ApplicationName: op.Authorization.AppName,
 		User:            op.Authorization.UserName,
-	}, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+	}, descpb.DescriptorMutation_WRITE_ONLY)
 	if err != nil {
 		return err
 	}
@@ -134,8 +136,8 @@ func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic
 	return nil
 }
 
-func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
-	ctx context.Context, op scop.MakeDroppedColumnDeleteAndWriteOnly,
+func (m *visitor) MakePublicColumnWriteOnly(
+	ctx context.Context, op scop.MakePublicColumnWriteOnly,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -152,8 +154,8 @@ func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
 		op.ColumnID, tbl.GetName(), tbl.GetID())
 }
 
-func (m *visitor) MakeDroppedColumnDeleteOnly(
-	ctx context.Context, op scop.MakeDroppedColumnDeleteOnly,
+func (m *visitor) MakeWriteOnlyColumnDeleteOnly(
+	ctx context.Context, op scop.MakeWriteOnlyColumnDeleteOnly,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
@@ -162,7 +164,7 @@ func (m *visitor) MakeDroppedColumnDeleteOnly(
 	return mutationStateChange(
 		tbl,
 		MakeColumnIDMutationSelector(op.ColumnID),
-		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		descpb.DescriptorMutation_WRITE_ONLY,
 		descpb.DescriptorMutation_DELETE_ONLY,
 		descpb.DescriptorMutation_DROP,
 	)
@@ -193,7 +195,9 @@ func (m *visitor) RemoveDroppedColumnType(
 	return nil
 }
 
-func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent) error {
+func (m *visitor) MakeDeleteOnlyColumnAbsent(
+	ctx context.Context, op scop.MakeDeleteOnlyColumnAbsent,
+) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err

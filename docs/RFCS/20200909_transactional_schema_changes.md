@@ -57,7 +57,7 @@ interesting cases that will get more attention later.
 
 When dropping a column, the column is logically dropped
 immediately when the transaction which is performing the drop commits; the
-column goes from `PUBLIC`->`DELETE_AND_WRITE_ONLY`->`DELETE_ONLY`->`DROPPED`.
+column goes from `PUBLIC`->`WRITE_ONLY`->`DELETE_ONLY`->`DROPPED`.
 The important thing to note is that the writing transaction uses its provisional
 view of the table descriptor. The following is fine:
 
@@ -227,7 +227,7 @@ Ideally, at this point, the ongoing transaction could treat c1 as a `PUBLIC`
 column and could perform reads and writes against it. Let's say that at the
 outset `foo` is at version 1 (`foo@v1`). Recall from the [online schema change
 RFC] and the [F1 schema change paper] that the steps to adding a column are
-`DELETE_ONLY`->`DELETE_AND_WRITE_ONLY`->(maybe backfill)->`PUBLIC`.
+`DELETE_ONLY`->`WRITE_ONLY`->(maybe backfill)->`PUBLIC`.
 
 In this proposal, during the execution of the above statement we'd first perform
 a single-step schema change in a [child transaction](#child-transactions)
@@ -242,7 +242,7 @@ transactions to wait for all leases on the old version to be dropped (see
 Once the child transaction commits and has evidence that all leases on all nodes
 are up-to-date, the statement execution can continue. At this point, a new child
 transaction can write and commit the table descriptor which has the column in 
-`DELETE_AND_WRITE_ONLY` with a pending mutation to perform a backfill. Once all
+`WRITE_ONLY` with a pending mutation to perform a backfill. Once all
 nodes have adopted this latest version, a backfill of the new index can be
 performed. So long as the column does not become `PUBLIC` before the user
 transaction commits, other transactions won't observe its side effects (if there
@@ -290,7 +290,7 @@ described by the descriptor which will be committed. The backfill process
 determines which rows to rewrite based on their MVCC timestamp. Specifically
 it will only backfill rows which have an MVCC timestamp earlier than the
 ModificationTime (i.e. commit timestamp as of [#40581]) which moved the newly
-added column to `DELETE_AND_WRITE_ONLY`.
+added column to `WRITE_ONLY`.
 
 ```sql
 postgres=> COMMIT;
@@ -648,7 +648,7 @@ partition "ALTER TABLE Implementation"  {
        #LightBlue:Commit child transaction;
        #LightBlue:Wait for one version using new child transaction;
    }
-   partition "Move column to DELETE_AND_WRITE_ONLY" {
+   partition "Move column to WRITE_ONLY" {
        #LightBlue:Read descriptor using new child transaction;
        note right
           The version really should not have changed unless the
@@ -661,7 +661,7 @@ partition "ALTER TABLE Implementation"  {
           concurrent with transactional schema changes.
        end note
        #LightBlue:Write new descriptor version with
-        `DELETE_AND_WRITE_ONLY` column and index;
+        `WRITE_ONLY` column and index;
        #LightBlue:Wait for one version using new child transaction;
    }
    partition "Perform backfill" {
@@ -677,7 +677,7 @@ partition "ALTER TABLE Implementation"  {
    partition "Prepare user transaction for next statement" {
        :Push the user transaction to a timestamp above the read timestamp
         at which all nodes were on a version where the new index and column
-        are in `DELETE_AND_WRITE_ONLY`;
+        are in `WRITE_ONLY`;
        :Acquire new lease on current version of descriptor;
        :Synthesize a descriptor which has the old primary index in
         `DELETE_AND_ WRITE_ONLY` and the newly backfilled index as the

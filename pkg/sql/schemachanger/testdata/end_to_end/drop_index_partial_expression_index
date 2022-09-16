@@ -78,7 +78,7 @@ upsert descriptor #104
   +      sharded: {}
   +      version: 3
   +    mutationId: 2
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
   +  - column:
   +      computeExpr: lower(j)
   +      id: 3
@@ -91,7 +91,7 @@ upsert descriptor #104
   +      virtual: true
   +    direction: DROP
   +    mutationId: 2
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: t
      nextColumnId: 4
   ...
@@ -143,14 +143,14 @@ upsert descriptor #104
   ...
          version: 3
        mutationId: 2
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - column:
          computeExpr: lower(j)
   ...
        direction: DROP
        mutationId: 2
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 4

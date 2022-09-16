@@ -112,7 +112,7 @@ upsert descriptor #106
        direction: ADD
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: tbl
      nextColumnId: 3
   ...
@@ -170,7 +170,7 @@ upsert descriptor #106
   -        width: 64
   -    direction: ADD
   -    mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +  modificationTime: {}
   +  mutations: []
      name: tbl

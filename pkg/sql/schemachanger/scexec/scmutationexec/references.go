@@ -210,7 +210,7 @@ func (m *visitor) UpdateTableBackReferencesInTypes(
 func (m *visitor) RemoveBackReferenceInTypes(
 	ctx context.Context, op scop.RemoveBackReferenceInTypes,
 ) error {
-	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedDescID, catalog.DescriptorIDSet{})
+	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedDescriptorID, catalog.DescriptorIDSet{})
 }
 
 func updateBackReferencesInTypes(

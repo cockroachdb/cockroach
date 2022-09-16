@@ -5999,7 +5999,7 @@ func getMockTableDesc(
 	for _, addingIndex := range addingIndexes {
 		mutationID++
 		mockTableDescriptor.Mutations = append(mockTableDescriptor.Mutations, descpb.DescriptorMutation{
-			State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+			State:       descpb.DescriptorMutation_WRITE_ONLY,
 			Direction:   descpb.DescriptorMutation_ADD,
 			Descriptor_: &descpb.DescriptorMutation_Index{Index: &addingIndex},
 			MutationID:  mutationID,
@@ -6008,7 +6008,7 @@ func getMockTableDesc(
 	for _, droppingIndex := range droppingIndexes {
 		mutationID++
 		mockTableDescriptor.Mutations = append(mockTableDescriptor.Mutations, descpb.DescriptorMutation{
-			State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+			State:       descpb.DescriptorMutation_WRITE_ONLY,
 			Direction:   descpb.DescriptorMutation_DROP,
 			Descriptor_: &descpb.DescriptorMutation_Index{Index: &droppingIndex},
 			MutationID:  mutationID,

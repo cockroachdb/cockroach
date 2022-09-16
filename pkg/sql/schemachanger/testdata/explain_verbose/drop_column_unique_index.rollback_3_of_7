@@ -106,11 +106,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │       │     Name: pi
     │       │     TableID: 106
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 5
     │       │     TableID: 106
     │       │
-    │       ├── • MakeColumnPublic
+    │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 3
     │       │     EventBase:
     │       │       Authorization:
@@ -125,7 +125,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │       ├── • RefreshStats
     │       │     TableID: 106
     │       │
-    │       ├── • CreateGcJobForIndex
+    │       ├── • CreateGCJobForIndex
     │       │     IndexID: 4
     │       │     StatementForDropJob:
     │       │       Rollback: true
@@ -173,7 +173,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
         │
         └── • 4 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 5
             │     TableID: 106
             │

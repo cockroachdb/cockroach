@@ -287,7 +287,7 @@ func TestExecBackfiller(t *testing.T) {
 				case addIdx.GetID():
 					m.State = descpb.DescriptorMutation_MERGING
 				case tmpIdx.GetID():
-					m.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+					m.State = descpb.DescriptorMutation_WRITE_ONLY
 				}
 			}
 			descs.UpsertDescriptorEntry(mut)

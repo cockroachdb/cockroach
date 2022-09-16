@@ -24,11 +24,11 @@ type indexBackfillerCols struct {
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap catalog.TableColMap
 
-	// cols are all writable (PUBLIC and DELETE_AND_WRITE_ONLY) columns in
+	// cols are all writable (PUBLIC and WRITE_ONLY) columns in
 	// the descriptor.
 	cols []catalog.Column
 
-	// addedCols are the columns in DELETE_AND_WRITE_ONLY being added as part of
+	// addedCols are the columns in WRITE_ONLY being added as part of
 	// this index which are not computed. The definition of being added is that
 	// the index being backfilled is a new primary index and the columns do not
 	// exist in the currently public primary index. Note that this should never

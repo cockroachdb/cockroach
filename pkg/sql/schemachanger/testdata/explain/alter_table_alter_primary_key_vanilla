@@ -22,14 +22,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}
  │         └── 12 Mutation operations
- │              ├── MakeAddedIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":2,"TableID":104}
- │              ├── MakeAddedTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
+ │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":2,"TableID":104}
- │              ├── MakeAddedIndexBackfilling {"IsSecondaryIndex":true}
- │              ├── MakeAddedTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
+ │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":5,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":4,"Kind":1,"TableID":104}
@@ -45,8 +45,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    │    ├── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
  │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}
  │    │    └── 4 Mutation operations
- │    │         ├── MakeAddedIndexDeleteAndWriteOnly {"IndexID":3,"TableID":104}
- │    │         ├── MakeAddedIndexDeleteAndWriteOnly {"IndexID":5,"TableID":104}
+ │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":3,"TableID":104}
+ │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":5,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 2 of 7 in PostCommitPhase
@@ -95,8 +95,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
  │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}
  │         └── 2 Validation operations
- │              ├── ValidateUniqueIndex {"IndexID":2,"TableID":104}
- │              └── ValidateUniqueIndex {"IndexID":4,"TableID":104}
+ │              ├── ValidateIndex {"IndexID":2,"TableID":104}
+ │              └── ValidateIndex {"IndexID":4,"TableID":104}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 4 elements transitioning toward PUBLIC
@@ -115,14 +115,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │    │    ├── PUBLIC     → VALIDATED             PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
       │    │    └── PUBLIC     → ABSENT                IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
       │    └── 10 Mutation operations
-      │         ├── MakeDroppedPrimaryIndexDeleteAndWriteOnly {"IndexID":1,"TableID":104}
+      │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"t_pkey","TableID":104}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":3,"TableID":104}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":5,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":104}
       │         ├── SetIndexName {"IndexID":4,"Name":"t_i_key","TableID":104}
-      │         ├── MakeAddedPrimaryIndexPublic {"IndexID":2,"TableID":104}
-      │         ├── MakeAddedSecondaryIndexPublic {"IndexID":4,"TableID":104}
+      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":2,"TableID":104}
+      │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":4,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
@@ -132,18 +132,18 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │    ├── 1 element transitioning toward ABSENT
       │    │    └── VALIDATED             → DELETE_ONLY      PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
       │    └── 7 Mutation operations
-      │         ├── CreateGcJobForIndex {"IndexID":3,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
-      │         ├── CreateGcJobForIndex {"IndexID":5,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":5,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":5,"TableID":104}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":1,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
            │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
            └── 4 Mutation operations
-                ├── CreateGcJobForIndex {"IndexID":1,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

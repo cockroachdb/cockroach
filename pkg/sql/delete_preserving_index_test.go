@@ -272,9 +272,9 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (b);
 	_, err = sqlDB.Exec(`DELETE FROM t.test WHERE a = 1`)
 	require.NoError(t, err)
 
-	// Move index to DELETE_AND_WRITE_ONLY. The following inserts
+	// Move index to WRITE_ONLY. The following inserts
 	// are seen by the index and deletes should be preserved.
-	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", nil, descpb.DescriptorMutation_WRITE_ONLY)
 	require.NoError(t, err)
 
 	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (2, 2), (3, 3)`)
@@ -333,7 +333,7 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (y) STORING (z, a);
 		idx.StoreColumnIDs = []catid.ColumnID{0x1, 0x3, 0x4}
 		idx.KeySuffixColumnIDs = nil
 		return nil
-	}, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+	}, descpb.DescriptorMutation_WRITE_ONLY)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (1, 1, 1, 1); DELETE FROM t.test WHERE x = 1;`)
 	require.NoError(t, err)
@@ -631,7 +631,7 @@ func TestMergeProcessor(t *testing.T) {
 
 		// Here want to have different entries for the two indices, so we manipulate
 		// the index to DELETE_ONLY when we don't want to write to it, and
-		// DELETE_AND_WRITE_ONLY when we write to it.
+		// WRITE_ONLY when we write to it.
 		setUseDeletePreservingEncoding := func(b bool) func(*descpb.IndexDescriptor) error {
 			return func(idx *descpb.IndexDescriptor) error {
 				idx.UseDeletePreservingEncoding = b
@@ -639,7 +639,7 @@ func TestMergeProcessor(t *testing.T) {
 			}
 		}
 
-		err := mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+		err := mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_WRITE_ONLY)
 		require.NoError(t, err)
 		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, setUseDeletePreservingEncoding(true), descpb.DescriptorMutation_DELETE_ONLY)
 		require.NoError(t, err)
@@ -650,14 +650,14 @@ func TestMergeProcessor(t *testing.T) {
 
 		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_ONLY)
 		require.NoError(t, err)
-		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, nil, descpb.DescriptorMutation_WRITE_ONLY)
 		require.NoError(t, err)
 
 		if _, err := tdb.Exec(test.srcDataSQL); err != nil {
 			t.Fatal(err)
 		}
 
-		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_WRITE_ONLY)
 		require.NoError(t, err)
 		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, nil, descpb.DescriptorMutation_DELETE_ONLY)
 		require.NoError(t, err)

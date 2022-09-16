@@ -39,7 +39,7 @@ func descriptorStatus(desc catalog.Descriptor) scpb.Status {
 
 // maybeMutationStatus tries to map a table mutation to an element status
 // on a best-effort basis. This is necessary incomplete, for instance we can't
-// distinguish between DELETE_AND_WRITE_ONLY, BACKFILLED and VALIDATED for
+// distinguish between WRITE_ONLY, BACKFILLED and VALIDATED for
 // write-only indexes.
 //
 // TODO(postamar): handle constraint mutation statuses
