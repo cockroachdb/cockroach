@@ -11,6 +11,7 @@
 package fs
 
 import (
+	"bytes"
 	"io"
 	"os"
 )
@@ -76,7 +77,7 @@ func WriteFile(fs FS, filename string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(data)
+	_, err = io.Copy(f, bytes.NewReader(data))
 	if err1 := f.Close(); err == nil {
 		err = err1
 	}
