@@ -319,7 +319,6 @@ func (w *schemaChangeWorker) WrapWithErrorState(err error) error {
 	}
 	return &ErrorState{
 		cause:                      err,
-		PotentialErrors:            w.opGen.potentialExecErrors.StringSlice(),
 		PotentialCommitErrors:      w.opGen.potentialCommitErrors.StringSlice(),
 		ExpectedCommitErrors:       w.opGen.expectedCommitErrors.StringSlice(),
 		QueriesForGeneratingErrors: w.opGen.GetOpGenLog(),
