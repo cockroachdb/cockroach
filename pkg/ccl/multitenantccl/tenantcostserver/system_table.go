@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"math"
 	"math/rand"
 	"time"
@@ -22,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -219,14 +220,14 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 }
 
 // updateTenantState writes out an updated tenant state.
-func (h *sysTableHelper) updateTenantState(tenant tenantState) error {
+func (h *sysTableHelper) updateTenantState(ie sqlutil.InternalExecutor, tenant tenantState) error {
 	consumption, err := protoutil.Marshal(&tenant.Consumption)
 	if err != nil {
 		return err
 	}
 	// Note: it is important that this UPSERT specifies all columns of the
 	// table, to allow it to perform "blind" writes.
-	_, err = h.ex.ExecEx(
+	_, err = ie.ExecEx(
 		h.ctx, "tenant-usage-upsert", h.txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`UPSERT INTO system.tenant_usage(

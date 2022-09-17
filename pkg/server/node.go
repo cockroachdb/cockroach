@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"net"
 	"sort"
 	"strings"
@@ -42,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -1770,16 +1771,7 @@ func (dummyTenantUsageServer) TokenBucketRequest(
 }
 
 // ReconfigureTokenBucket is defined in the TenantUsageServer interface.
-func (dummyTenantUsageServer) ReconfigureTokenBucket(
-	ctx context.Context,
-	txn *kv.Txn,
-	tenantID roachpb.TenantID,
-	availableRU float64,
-	refillRate float64,
-	maxBurstRU float64,
-	asOf time.Time,
-	asOfConsumedRequestUnits float64,
-) error {
+func (dummyTenantUsageServer) ReconfigureTokenBucket(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, tenantID roachpb.TenantID, availableRU float64, refillRate float64, maxBurstRU float64, asOf time.Time, asOfConsumedRequestUnits float64) error {
 	return errors.Errorf("tenant resource limits require a CCL binary")
 }
 

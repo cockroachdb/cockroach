@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -52,16 +53,7 @@ type TenantUsageServer interface {
 	//    It is used to adjust availableRU with the consumption that happened in the
 	//    meantime.
 	//
-	ReconfigureTokenBucket(
-		ctx context.Context,
-		txn *kv.Txn,
-		tenantID roachpb.TenantID,
-		availableRU float64,
-		refillRate float64,
-		maxBurstRU float64,
-		asOf time.Time,
-		asOfConsumedRequestUnits float64,
-	) error
+	ReconfigureTokenBucket(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, tenantID roachpb.TenantID, availableRU float64, refillRate float64, maxBurstRU float64, asOf time.Time, asOfConsumedRequestUnits float64) error
 
 	// Metrics returns the top-level metrics.
 	Metrics() metric.Struct

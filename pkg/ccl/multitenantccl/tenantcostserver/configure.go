@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,6 +27,7 @@ import (
 func (s *instance) ReconfigureTokenBucket(
 	ctx context.Context,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	tenantID roachpb.TenantID,
 	availableRU float64,
 	refillRate float64,
@@ -47,7 +49,7 @@ func (s *instance) ReconfigureTokenBucket(
 		ctx, tenantID, availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
 		now, state.Consumption.RU,
 	)
-	if err := h.updateTenantState(state); err != nil {
+	if err := h.updateTenantState(ie, state); err != nil {
 		return err
 	}
 	return nil
