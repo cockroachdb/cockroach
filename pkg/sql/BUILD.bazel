@@ -537,6 +537,7 @@ go_test(
         "comment_on_constraint_test.go",
         "comment_on_database_test.go",
         "comment_on_index_test.go",
+        "comment_on_schema_test.go",
         "comment_on_table_test.go",
         "conn_executor_internal_test.go",
         "conn_executor_savepoints_test.go",
