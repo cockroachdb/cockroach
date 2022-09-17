@@ -104,6 +104,6 @@ func TestCommentOnDatabaseWhenDrop(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		t.Fatal("dropped comment remain comment")
+		t.Fatal("comment remaining in system.comments despite drop")
 	}
 }
