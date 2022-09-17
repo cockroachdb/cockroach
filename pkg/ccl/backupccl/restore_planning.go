@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"sort"
 	"strconv"
 	"strings"
@@ -705,8 +706,9 @@ func getDatabaseIDAndDesc(
 // as regular databases, we drop them before restoring them again in the
 // restore.
 func dropDefaultUserDBs(ctx context.Context, execCfg *sql.ExecutorConfig) error {
-	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		ie := execCfg.InternalExecutor
+	return execCfg.CollectionFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
 		_, err := ie.Exec(ctx, "drop-defaultdb", txn, "DROP DATABASE IF EXISTS defaultdb")
 		if err != nil {
 			return err
