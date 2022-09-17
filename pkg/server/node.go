@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"net"
 	"sort"
 	"strings"
@@ -1750,6 +1751,7 @@ var NewTenantUsageServer = func(
 	settings *cluster.Settings,
 	db *kv.DB,
 	executor *sql.InternalExecutor,
+	cf *descs.CollectionFactory,
 ) multitenant.TenantUsageServer {
 	return dummyTenantUsageServer{}
 }

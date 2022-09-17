@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -487,6 +488,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// InternalExecutor uses this one instance.
 	internalExecutor := &sql.InternalExecutor{}
 	jobRegistry := &jobs.Registry{} // ditto
+	collectionFactory := &descs.CollectionFactory{}
 
 	// Create an ExternalStorageBuilder. This is only usable after Start() where
 	// we initialize all the configuration params.
@@ -694,7 +696,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		updates.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
-	tenantUsage := NewTenantUsageServer(st, db, internalExecutor)
+	tenantUsage := NewTenantUsageServer(st, db, internalExecutor, collectionFactory)
 	registry.AddMetricStruct(tenantUsage.Metrics())
 
 	tenantSettingsWatcher := tenantsettingswatcher.New(
@@ -836,6 +838,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		closedSessionCache:       closedSessionCache,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
+		collectionFactory:        collectionFactory,
 		internalExecutorFactory:  nil, // will be initialized in server.newSQLServer.
 		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,

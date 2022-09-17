@@ -9,6 +9,7 @@
 package tenantcostserver
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -24,6 +25,7 @@ import (
 type instance struct {
 	db         *kv.DB
 	executor   *sql.InternalExecutor
+	cf         *descs.CollectionFactory
 	metrics    Metrics
 	timeSource timeutil.TimeSource
 	settings   *cluster.Settings
@@ -44,11 +46,13 @@ func newInstance(
 	settings *cluster.Settings,
 	db *kv.DB,
 	executor *sql.InternalExecutor,
+	cf *descs.CollectionFactory,
 	timeSource timeutil.TimeSource,
 ) *instance {
 	res := &instance{
 		db:         db,
 		executor:   executor,
+		cf:         cf,
 		timeSource: timeSource,
 		settings:   settings,
 	}
@@ -68,7 +72,8 @@ func init() {
 		settings *cluster.Settings,
 		db *kv.DB,
 		executor *sql.InternalExecutor,
+		cf *descs.CollectionFactory,
 	) multitenant.TenantUsageServer {
-		return newInstance(settings, db, executor, timeutil.DefaultTimeSource{})
+		return newInstance(settings, db, executor, cf, timeutil.DefaultTimeSource{})
 	}
 }

@@ -36,7 +36,7 @@ func (s *instance) ReconfigureTokenBucket(
 	if err := s.checkTenantID(ctx, txn, tenantID); err != nil {
 		return err
 	}
-	h := makeSysTableHelper(ctx, s.executor, txn, tenantID)
+	h := makeSysTableHelper(ctx, s.executor, s.cf, txn, tenantID)
 	state, err := h.readTenantState()
 	if err != nil {
 		return err

@@ -55,7 +55,7 @@ func (s *instance) TokenBucketRequest(
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		*result = roachpb.TokenBucketResponse{}
 
-		h := makeSysTableHelper(ctx, s.executor, txn, tenantID)
+		h := makeSysTableHelper(ctx, s.executor, s.cf, txn, tenantID)
 		tenant, instance, err := h.readTenantAndInstanceState(instanceID)
 		if err != nil {
 			return err

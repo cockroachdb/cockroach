@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"math"
 	"math/rand"
 	"time"
@@ -112,16 +113,22 @@ type instanceState struct {
 type sysTableHelper struct {
 	ctx      context.Context
 	ex       *sql.InternalExecutor
+	cf       *descs.CollectionFactory
 	txn      *kv.Txn
 	tenantID roachpb.TenantID
 }
 
 func makeSysTableHelper(
-	ctx context.Context, ex *sql.InternalExecutor, txn *kv.Txn, tenantID roachpb.TenantID,
+	ctx context.Context,
+	ex *sql.InternalExecutor,
+	cf *descs.CollectionFactory,
+	txn *kv.Txn,
+	tenantID roachpb.TenantID,
 ) sysTableHelper {
 	return sysTableHelper{
 		ctx:      ctx,
 		ex:       ex,
+		cf:       cf,
 		txn:      txn,
 		tenantID: tenantID,
 	}
@@ -567,7 +574,7 @@ func InspectTenantMetadata(
 	tenantID roachpb.TenantID,
 	timeFormat string,
 ) (string, error) {
-	h := makeSysTableHelper(ctx, ex, txn, tenantID)
+	h := makeSysTableHelper(ctx, ex, nil, txn, tenantID)
 	tenant, err := h.readTenantState()
 	if err != nil {
 		return "", err
