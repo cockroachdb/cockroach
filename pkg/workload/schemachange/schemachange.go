@@ -313,17 +313,12 @@ func (w *schemaChangeWorker) recordInHist(elapsed time.Duration, bin histBin) {
 
 func (w *schemaChangeWorker) getErrorState() string {
 	return fmt.Sprintf("Dumping state before death:\n"+
-		"Expected errors: %s"+
-		"Potential exec errors: %s"+
 		"Expected commit errors: %s"+
 		"Potential commit errors: %s"+
 		"==========================="+
 		"Executed queries for generating errors: %s"+
 		"==========================="+
 		"Previous statements %s",
-		"",
-		//	w.opGen.expectedExecErrors.String(),
-		w.opGen.potentialExecErrors.String(),
 		w.opGen.expectedCommitErrors.String(),
 		w.opGen.potentialCommitErrors.String(),
 		w.opGen.GetOpGenLog(),

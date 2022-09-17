@@ -54,7 +54,6 @@ type operationGeneratorParams struct {
 // The OperationBuilder has the sole responsibility of generating ops
 type operationGenerator struct {
 	params                *operationGeneratorParams
-	potentialExecErrors   errorCodeSet
 	expectedCommitErrors  errorCodeSet
 	potentialCommitErrors errorCodeSet
 
@@ -103,7 +102,6 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 	return &operationGenerator{
 		params:                        params,
 		expectedCommitErrors:          makeExpectedErrorSet(),
-		potentialExecErrors:           makeExpectedErrorSet(),
 		potentialCommitErrors:         makeExpectedErrorSet(),
 		candidateExpectedCommitErrors: makeExpectedErrorSet(),
 	}
@@ -112,7 +110,6 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 // Reset internal state used per operation within a transaction
 func (og *operationGenerator) resetOpState() {
 	og.candidateExpectedCommitErrors.reset()
-	og.potentialExecErrors.reset()
 	og.opGenLog = strings.Builder{}
 }
 
@@ -881,7 +878,7 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	// perfectly if an error is expected. We can confirm post transaction with a time
 	// travel query.
 	_ = rowsSatisfyConstraint
-	og.potentialExecErrors.add(pgcode.ForeignKeyViolation)
+	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
 
 	// It's possible for the table to be dropped concurrently, while we are running
@@ -2474,7 +2471,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			return nil, err
 		}
 		// We may have errors that are possible, but not guaranteed.
-		potentialErrors.add(og.potentialExecErrors)
+		potentialErrors.add(stmt.potentialExecErrors)
 		if invalidInsert {
 			generatedErrors.add(stmt.expectedExecErrors)
 			// We will be pessimistic and assume that other column related errors can
