@@ -30,6 +30,13 @@ func (u Uint128) GetBytes() []byte {
 	return buf
 }
 
+// AppendBytes appends big-endian byte representation to the
+// buffer and returns the buffer.
+func (u Uint128) AppendBytes(buf []byte) []byte {
+	buf = binary.BigEndian.AppendUint64(buf, u.Hi)
+	return binary.BigEndian.AppendUint64(buf, u.Lo)
+}
+
 // String returns a hexadecimal string representation.
 func (u Uint128) String() string {
 	return hex.EncodeToString(u.GetBytes())

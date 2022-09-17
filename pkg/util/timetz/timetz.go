@@ -11,12 +11,12 @@
 package timetz
 
 import (
-	"fmt"
 	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -150,25 +150,33 @@ func ParseTimeTZ(
 
 // String implements the Stringer interface.
 func (t *TimeTZ) String() string {
+	return string(t.AppendFormat(nil))
+}
+
+// AppendFormat appends TimeTZ to the buffer, and returns modified buffer.
+func (t *TimeTZ) AppendFormat(buf []byte) []byte {
 	tTime := t.ToTime()
-	timeComponent := tTime.Format("15:04:05.999999")
-	// 24:00:00 gets returned as 00:00:00, which is incorrect.
 	if t.TimeOfDay == timeofday.Time2400 {
-		timeComponent = "24:00:00"
+		// 24:00:00 gets returned as 00:00:00, which is incorrect.
+		buf = append(buf, "24:00:00"...)
+	} else {
+		buf = tTime.AppendFormat(buf, "15:04:05.999999")
 	}
-	timeZoneComponent := tTime.Format("Z07:00:00")
-	// If it is UTC, .Format converts it to "Z".
-	// Fully expand this component.
+
 	if t.OffsetSecs == 0 {
-		timeZoneComponent = "+00:00:00"
+		// If it is UTC, .Format converts it to "Z".
+		// Fully expand this component.
+		buf = append(buf, "+00:00:00"...)
+	} else if 0 < t.OffsetSecs && t.OffsetSecs < 60 {
+		// Go's time.Format functionality does not work for offsets which
+		// in the range -0s < offsetSecs < -60s, e.g. -22s offset prints as 00:00:-22.
+		// Manually correct for this.
+		buf = append(buf, "-00:00:"...)
+		buf = strutil.AppendInt(buf, int(t.OffsetSecs), 2)
+	} else {
+		buf = tTime.AppendFormat(buf, "Z07:00:00")
 	}
-	// Go's time.Format functionality does not work for offsets which
-	// in the range -0s < offsetSecs < -60s, e.g. -22s offset prints as 00:00:-22.
-	// Manually correct for this.
-	if 0 < t.OffsetSecs && t.OffsetSecs < 60 {
-		timeZoneComponent = fmt.Sprintf("-00:00:%02d", t.OffsetSecs)
-	}
-	return timeComponent + timeZoneComponent
+	return buf
 }
 
 // ToTime converts a DTimeTZ to a time.Time, corrected to the given location.
