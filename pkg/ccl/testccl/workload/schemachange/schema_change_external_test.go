@@ -34,7 +34,7 @@ import (
 func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
-	skip.WithIssue(t, 78478)
+	skip.UnderRace(t, "test connections can be too slow under race option.")
 
 	dir := t.TempDir()
 	ctx := context.Background()
