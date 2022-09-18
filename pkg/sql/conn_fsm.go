@@ -534,7 +534,7 @@ func cleanupAndFinishOnError(args fsm.Args) error {
 	func() {
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
-		ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
+		_ = ts.mu.txn.Rollback(ts.Ctx)
 	}()
 	finishedTxnID := ts.finishSQLTxn()
 	ts.setAdvanceInfo(
