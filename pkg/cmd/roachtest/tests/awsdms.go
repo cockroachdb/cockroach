@@ -45,7 +45,11 @@ const (
 )
 
 func awsdmsVerString(v *version.Version) string {
-	return fmt.Sprintf("-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
+	ret := fmt.Sprintf("-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
+	if v.PreRelease() != "" {
+		ret += "-" + v.PreRelease()
+	}
+	return ret
 }
 
 func awsdmsRoachtestRDSClusterName(v *version.Version) string {
