@@ -87,6 +87,9 @@ type StartOpts struct {
 	Sequential bool
 	ExtraArgs  []string
 
+	// ScheduleBackups starts a backup schedule once the cluster starts
+	ScheduleBackups bool
+
 	// systemd limits on resources.
 	NumFilesLimit int64
 
