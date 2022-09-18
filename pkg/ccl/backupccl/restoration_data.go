@@ -140,7 +140,7 @@ func (b *restorationDataBase) coveredByLaterReintroduction(
 	}
 	latestIntro, ok := b.latestEndTimesForReIntroducedTables[descpb.ID(tablePrefix)]
 	if !ok {
-		// span was never introduced
+		// span was never re-introduced
 		return false, nil
 	}
 	return backupEndTime.Less(latestIntro), nil

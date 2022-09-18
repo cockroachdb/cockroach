@@ -39,8 +39,12 @@ import (
 func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []backuppb.BackupManifest {
 	backups := make([]backuppb.BackupManifest, length)
 	ts := hlc.Timestamp{WallTime: time.Second.Nanoseconds()}
-	backupWithDroppedSpan := r.Intn(len(backups))
+
+	// spanIdxToDrop represents that span that will get dropped during this mock backup chain.
 	spanIdxToDrop := r.Intn(spans)
+
+	// backupWithDroppedSpan represents the first backup that will observe the dropped span.
+	backupWithDroppedSpan := r.Intn(len(backups))
 
 	genTableID := func(j int) uint32 {
 		return uint32(10 + j*2)
@@ -58,7 +62,9 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []backuppb.Back
 			backups[i].StartTime = backups[i-1].EndTime
 
 			if i >= backupWithDroppedSpan {
-				// Drop a span present in the first i backups, and add a new one
+				// At and after the backupWithDroppedSpan, drop the span at
+				// span[spanIdxToDrop], present in the first i backups, and add a new
+				// one.
 				newTableID := genTableID(spanIdxToDrop) + 1
 				backups[i].Spans[spanIdxToDrop] = makeTableSpan(newTableID)
 				backups[i].IntroducedSpans = append(backups[i].IntroducedSpans, backups[i].Spans[spanIdxToDrop])
@@ -121,11 +127,13 @@ func checkRestoreCovering(
 	for _, s := range spans {
 		var last roachpb.Key
 		for _, b := range backups {
-			isCovered, err := data.coveredByLaterReintroduction(s.Key, b.EndTime)
+			coveredLater, err := data.coveredByLaterReintroduction(s.Key, b.EndTime)
 			if err != nil {
 				return err
 			}
-			if isCovered {
+			if coveredLater {
+				// Skip spans that were later re-introduced. See makeSimpleImportSpans
+				// for explanation.
 				continue
 			}
 			for _, f := range b.Files {
@@ -220,7 +228,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	}
 	restoreData := restorationDataBase{
 		spans:                               spans,
-		backupCodec:                         keys.TODOSQLCodec,
+		backupCodec:                         keys.SystemSQLCodec,
 		latestEndTimesForReIntroducedTables: map[descpb.ID]hlc.Timestamp{},
 	}
 	cover, err := makeSimpleImportSpans(&restoreData, backups, nil, nil, noSpanTargetSize)
@@ -282,23 +290,19 @@ func createMockManifest(
 	endTime hlc.Timestamp,
 	path string,
 ) backuppb.BackupManifest {
-	tables, reIntroducedTables := createMockTables(info)
+	tables, _ := createMockTables(info)
 
 	spans, err := spansForAllTableIndexes(execCfg, tables,
 		nil /* revs */)
 	require.NoError(t, err)
 	require.Equal(t, info.expectedBackupSpanCount, len(spans))
 
-	reIntroducedSpans, err := spansForAllTableIndexes(execCfg, reIntroducedTables,
-		nil /* revs */)
-	require.NoError(t, err)
-
 	files := make([]backuppb.BackupManifest_File, len(spans))
 	for _, sp := range spans {
 		files = append(files, backuppb.BackupManifest_File{Span: sp, Path: path})
 	}
 
-	return backuppb.BackupManifest{Spans: spans, ReintroducedSpans: reIntroducedSpans,
+	return backuppb.BackupManifest{Spans: spans,
 		EndTime: endTime, Files: files}
 }
 
@@ -315,7 +319,7 @@ func createMockManifest(
 func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	codec := keys.TODOSQLCodec
+	codec := keys.SystemSQLCodec
 	execCfg := &sql.ExecutorConfig{
 		Codec: codec,
 	}
@@ -430,13 +434,19 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 				createMockManifest(t, execCfg, test.inc, hlc.Timestamp{WallTime: int64(2)}, incBackupPath),
 			}
 
-			// create a restore span covering
-			latestReIntrosByTable, err := backupinfo.FindLatestReIntroductionByTable(backups, codec,
-				hlc.Timestamp{})
+			// Create the IntroducedSpans field for incremental backup.
+			incTables, reIntroducedTables := createMockTables(test.inc)
+
+			newSpans := roachpb.FilterSpans(backups[1].Spans, backups[0].Spans)
+			reIntroducedSpans, err := spansForAllTableIndexes(execCfg, reIntroducedTables, nil)
+			require.NoError(t, err)
+			backups[1].IntroducedSpans = append(newSpans, reIntroducedSpans...)
+
+			// Create a restore span covering AOST after the incremental backup.
+			latestReIntrosByTable, err := backupinfo.FindLatestReIntroductionByTable(backups, codec, hlc.Timestamp{})
 			require.NoError(t, err)
 
-			tables, reIntroducedTables := createMockTables(test.inc)
-			restoreSpans := spansForAllRestoreTableIndexes(codec, tables, nil, false)
+			restoreSpans := spansForAllRestoreTableIndexes(codec, incTables, nil, false)
 			require.Equal(t, test.expectedRestoreSpanCount, len(restoreSpans))
 
 			restoreData := restorationDataBase{
@@ -471,21 +481,21 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 
 func TestRestoreEntryCover(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
+	codec := keys.SystemSQLCodec
 	r, _ := randutil.NewTestRand()
 	for _, numBackups := range []int{1, 2, 3, 5, 9, 10, 11, 12} {
 		for _, spans := range []int{1, 2, 3, 5, 9, 11, 12} {
 			for _, files := range []int{0, 1, 2, 3, 4, 10, 12, 50} {
 				backups := MockBackupChain(numBackups, spans, files, r)
 
-				latestReIntrosByTable, err := backupinfo.FindLatestReIntroductionByTable(backups, keys.TODOSQLCodec, hlc.Timestamp{})
+				latestReIntrosByTable, err := backupinfo.FindLatestReIntroductionByTable(backups, codec, hlc.Timestamp{})
 				require.NoError(t, err)
 
 				for _, target := range []int64{0, 1, 4, 100, 1000} {
 					t.Run(fmt.Sprintf("numBackups=%d, numSpans=%d, numFiles=%d, merge=%d", numBackups, spans, files, target), func(t *testing.T) {
 						restoreData := restorationDataBase{
 							spans:                               backups[numBackups-1].Spans,
-							backupCodec:                         keys.TODOSQLCodec,
+							backupCodec:                         codec,
 							latestEndTimesForReIntroducedTables: latestReIntrosByTable,
 						}
 						cover, err := makeSimpleImportSpans(&restoreData, backups, nil, nil,

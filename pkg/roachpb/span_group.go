@@ -144,3 +144,12 @@ func r2s(r interval.Range) Span {
 		EndKey: Key(r.End),
 	}
 }
+
+// FilterSpans returns the spans that represent the set difference
+// (includes - excludes).
+func FilterSpans(includes []Span, excludes []Span) []Span {
+	var cov SpanGroup
+	cov.Add(includes...)
+	cov.Sub(excludes...)
+	return cov.Slice()
+}

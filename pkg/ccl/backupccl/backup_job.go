@@ -82,15 +82,6 @@ func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCoun
 	return res
 }
 
-// filterSpans returns the spans that represent the set difference
-// (includes - excludes).
-func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Span {
-	var cov roachpb.SpanGroup
-	cov.Add(includes...)
-	cov.Sub(excludes...)
-	return cov.Slice()
-}
-
 // clusterNodeCount returns the approximate number of nodes in the cluster.
 func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 	g, err := gw.OptionalErr(47970)
@@ -152,8 +143,8 @@ func backup(
 	}
 
 	// Subtract out any completed spans.
-	spans := filterSpans(backupManifest.Spans, completedSpans)
-	introducedSpans := filterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
+	spans := roachpb.FilterSpans(backupManifest.Spans, completedSpans)
+	introducedSpans := roachpb.FilterSpans(backupManifest.IntroducedSpans, completedIntroducedSpans)
 
 	pkIDs := make(map[uint64]bool)
 	for i := range backupManifest.Descriptors {

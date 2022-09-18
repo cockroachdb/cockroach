@@ -1305,8 +1305,14 @@ func createBackupManifest(
 		}
 	}
 
-	var newSpans, reintroducedSpans roachpb.Spans
+	var introducedSpans, reintroducedSpans roachpb.Spans
 	var priorIDs map[descpb.ID]descpb.ID
+
+	// verifiedNewSpanCount, verifiedReIntroducedSpanCount ensure that
+	// the IntroducedSpans field in the backup manifest obeys the following:
+	// the first verifiedNewSpanCount spans are new spans and the remaining
+	// verifiedReIntroducedSpanCount spans are re-introducedSpans.
+	var verifiedNewSpanCount, verifiedReIntroducedSpanCount int
 
 	var revs []backuppb.BackupManifest_DescriptorRevision
 	if mvccFilter == backuppb.MVCCFilter_All {
@@ -1359,13 +1365,14 @@ func createBackupManifest(
 			}
 		}
 
-		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
-
+		introducedSpans = roachpb.FilterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
+		verifiedNewSpanCount = len(introducedSpans)
 		reintroducedSpans, err = getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
+		verifiedReIntroducedSpanCount = len(reintroducedSpans)
 		if err != nil {
 			return backuppb.BackupManifest{}, err
 		}
-		newSpans = append(newSpans, reintroducedSpans...)
+		introducedSpans = append(introducedSpans, reintroducedSpans...)
 	}
 
 	// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion
@@ -1380,6 +1387,12 @@ func createBackupManifest(
 		coverage = tree.AllDescriptors
 	}
 
+	if len(introducedSpans) != verifiedNewSpanCount+verifiedReIntroducedSpanCount {
+		return backuppb.BackupManifest{}, errors.AssertionFailedf(
+			`length of introduced spans, %v, is not equal to the number new spans, %v, plus
+the number of re-introduced spans, %v`,
+			len(introducedSpans), verifiedNewSpanCount, verifiedReIntroducedSpanCount)
+	}
 	backupManifest := backuppb.BackupManifest{
 		StartTime:           startTime,
 		EndTime:             endTime,
@@ -1389,8 +1402,7 @@ func createBackupManifest(
 		DescriptorChanges:   revs,
 		CompleteDbs:         jobDetails.ResolvedCompleteDbs,
 		Spans:               spans,
-		IntroducedSpans:     newSpans,
-		ReintroducedSpans:   reintroducedSpans,
+		IntroducedSpans:     introducedSpans,
 		FormatVersion:       backupinfo.BackupFormatDescriptorTrackingVersion,
 		BuildInfo:           build.GetInfo(),
 		ClusterVersion:      execCfg.Settings.Version.ActiveVersion(ctx).Version,

@@ -106,15 +106,24 @@ func makeSimpleImportSpans(
 
 		spanCoverStart := len(cover)
 		for layer := range backups {
-			isCovered, err := data.coveredByLaterReintroduction(span.Key, backups[layer].EndTime)
+			coveredLater, err := data.coveredByLaterReintroduction(span.Key, backups[layer].EndTime)
 			if err != nil {
 				return nil, err
 			}
-			if isCovered {
+			if coveredLater {
 				// Don't use this backup to cover this span if the span was reintroduced
-				// after the backup's endTime. In this case, this backup may
-				// have invalid data, and further, a subsequent backup will contain all of
-				// this span's data.
+				// after the backup's endTime. In this case, this backup may have
+				// invalid data, and further, a subsequent backup will contain all of
+				// this span's data. Consider the following example:
+				//
+				// T0: Begin IMPORT INTO on existing table foo, ingest some data
+				// T1: Backup foo
+				// T2: Rollback IMPORT via clearRange
+				// T3: Incremental backup of foo, with a full reintroduction of foo’s span
+				// T4: RESTORE foo: should only restore foo from the incremental backup.
+				//    If data from the full backup were also restored,
+				//    the imported-but-then-clearRanged data will leak in the restored cluster.
+				//    This logic seeks to avoid this form of data corruption.
 				continue
 			}
 			covPos := spanCoverStart

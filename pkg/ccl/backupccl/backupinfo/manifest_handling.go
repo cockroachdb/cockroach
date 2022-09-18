@@ -913,17 +913,30 @@ func LoadSQLDescsFromBackupsAtTime(
 }
 
 // FindLatestReIntroductionByTable finds the endtime of the latest incremental
-// backup that reintroduced each backed up table, as of restore time. Note: this
-// function assumes that each introduced span in the manifest covers a single table.
+// backup that reintroduced each table that was previously offline at some point
+// between backups. See ReintroducedSpans( ) for more information. Note: this
+// function assumes that:
+//
+//  1. Each introduced span in the manifest covers at most a single table
+//  2. Manifests are sorted in increasing EndTime.
+//  3. The first set of spans in b.IntroducedSpans are new spans that did not
+//     exist in the previous backup, while the remainder are reIntroducedSpans.
 func FindLatestReIntroductionByTable(
 	manifests []backuppb.BackupManifest, codec keys.SQLCodec, asOf hlc.Timestamp,
 ) (map[descpb.ID]hlc.Timestamp, error) {
 	latestReIntro := make(map[descpb.ID]hlc.Timestamp)
-	for _, b := range manifests {
+	for i, b := range manifests {
+		if i == 0 {
+			continue
+		}
 		if !asOf.IsEmpty() && asOf.Less(b.StartTime) {
 			break
 		}
-		for _, sp := range b.ReintroducedSpans {
+
+		// To get the re-introducedSpans, first find the new spans and remove them
+		// from b.IntroducedSpans.
+		newSpans := roachpb.FilterSpans(b.Spans, manifests[i-1].Spans)
+		for _, sp := range b.IntroducedSpans[len(newSpans):] {
 			_, tablePrefix, err := codec.DecodeTablePrefix(sp.Key)
 			if err != nil {
 				return nil, err

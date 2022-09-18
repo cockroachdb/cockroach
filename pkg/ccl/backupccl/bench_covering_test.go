@@ -10,7 +10,7 @@ package backupccl
 
 import (
 	"context"
-	fmt "fmt"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
@@ -48,7 +48,7 @@ func BenchmarkCoverageChecks(b *testing.B) {
 
 func BenchmarkRestoreEntryCover(b *testing.B) {
 	r, _ := randutil.NewTestRand()
-
+	codec := keys.SystemSQLCodec
 	for _, numBackups := range []int{1, 2, 24, 24 * 4} {
 		b.Run(fmt.Sprintf("numBackups=%d", numBackups), func(b *testing.B) {
 			for _, baseFiles := range []int{0, 100, 10000} {
@@ -58,17 +58,17 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 							ctx := context.Background()
 							backups := MockBackupChain(numBackups, numSpans, baseFiles, r)
 							latestIntrosByTable, err := backupinfo.FindLatestReIntroductionByTable(backups,
-								keys.TODOSQLCodec, hlc.Timestamp{})
+								codec, hlc.Timestamp{})
 							require.NoError(b, err)
+							restoreData := restorationDataBase{
+								spans:                               backups[numBackups-1].Spans,
+								backupCodec:                         codec,
+								latestEndTimesForReIntroducedTables: latestIntrosByTable,
+							}
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
 								if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
 									b.Fatal(err)
-								}
-								restoreData := restorationDataBase{
-									spans:                               backups[numBackups-1].Spans,
-									backupCodec:                         keys.TODOSQLCodec,
-									latestEndTimesForReIntroducedTables: latestIntrosByTable,
 								}
 								cov, err := makeSimpleImportSpans(&restoreData, backups, nil, nil, 0)
 								require.NoError(b, err)

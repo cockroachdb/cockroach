@@ -494,7 +494,7 @@ func MakeBackupTableEntry(
 	restoreData := restorationDataBase{
 		spans:                               []roachpb.Span{tablePrimaryIndexSpan},
 		backupCodec:                         backupCodec,
-		latestEndTimesForReIntroducedTables: make(map[descpb.ID]hlc.Timestamp, 1),
+		latestEndTimesForReIntroducedTables: make(map[descpb.ID]hlc.Timestamp, 0),
 	}
 	entry, err := makeSimpleImportSpans(
 		&restoreData,
