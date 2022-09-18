@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -150,9 +151,9 @@ import (
 // A link to the issue will be printed out if the -print-blocklist-issues flag
 // is specified.
 //
-// There is a special directive '!metamorphic' that adjusts the server to force
-// the usage of production values for some constants that might change via the
-// metamorphic testing.
+// There is a special directive '!metamorphic-batch-sizes' that adjusts the
+// server to force the usage of production values related for some constants,
+// mostly related to batch sizes, that might change via metamorphic testing.
 //
 //
 // ###########################################################
@@ -2242,6 +2243,14 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 	return subtests, nil
 }
 
+func (t *logicTest) purgeZoneConfig() {
+	for i := 0; i < t.cluster.NumServers(); i++ {
+		sysconfigProvider := t.cluster.Server(i).SystemConfigProvider()
+		sysconfig := sysconfigProvider.GetSystemConfig()
+		sysconfig.PurgeZoneConfigCache()
+	}
+}
+
 func (t *logicTest) processSubtest(
 	subtest subtestDetails, path string, config logictestbase.TestClusterConfig, rng *rand.Rand,
 ) error {
@@ -2746,12 +2755,14 @@ func (t *logicTest) processSubtest(
 				for i := 0; i < repeat; i++ {
 					if query.retry && !*rewriteResultsInTestfiles {
 						if err := testutils.SucceedsSoonError(func() error {
+							t.purgeZoneConfig()
 							return t.execQuery(query)
 						}); err != nil {
 							t.Error(err)
 						}
 					} else {
 						if query.retry && *rewriteResultsInTestfiles {
+							t.purgeZoneConfig()
 							// The presence of the retry flag indicates that we expect this
 							// query may need some time to succeed. If we are rewriting, wait
 							// 500ms before executing the query.
@@ -3868,7 +3879,8 @@ func RunLogicTest(
 	}
 
 	// Check whether the test can only be run in non-metamorphic mode.
-	_, onlyNonMetamorphic := logictestbase.ReadTestFileConfigs(t, path, logictestbase.ConfigSet{configIdx})
+	_, nonMetamorphicBatchSizes :=
+		logictestbase.ReadTestFileConfigs(t, path, logictestbase.ConfigSet{configIdx})
 	config := logictestbase.LogicTestConfigs[configIdx]
 
 	// The tests below are likely to run concurrently; `log` is shared
@@ -3920,7 +3932,12 @@ func RunLogicTest(
 	}
 	// Each test needs a copy because of Parallel
 	serverArgsCopy := serverArgs
-	serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || onlyNonMetamorphic
+	serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || nonMetamorphicBatchSizes
+	if serverArgsCopy.ForceProductionValues {
+		if err := coldata.SetBatchSizeForTests(coldata.DefaultColdataBatchSize); err != nil {
+			panic(errors.Wrapf(err, "could not set batch size for test"))
+		}
+	}
 	lt.setup(
 		config, serverArgsCopy, readClusterOptions(t, path), readKnobOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
 	)

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 var (
@@ -589,7 +588,7 @@ func (l stdlogger) Logf(format string, args ...interface{}) {
 // If the file doesn't contain a directive, the default config is returned.
 func ReadTestFileConfigs(
 	t logger, path string, defaults ConfigSet,
-) (_ ConfigSet, onlyNonMetamorphic bool) {
+) (_ ConfigSet, nonMetamorphicBatchSizes bool) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, false
@@ -613,8 +612,8 @@ func ReadTestFileConfigs(
 			if len(fields) == 2 {
 				t.Fatalf("%s: empty LogicTest directive", path)
 			}
-			cs, onlyNonMetamorphic := processConfigs(t, path, defaults, fields[2:])
-			return cs, onlyNonMetamorphic
+			cs, nonMetamorphicBatchSizes := processConfigs(t, path, defaults, fields[2:])
+			return cs, nonMetamorphicBatchSizes
 		}
 	}
 	// No directive found, return the default config.
@@ -640,10 +639,11 @@ func getBlocklistIssueNo(blocklistDirective string) (string, int) {
 
 // processConfigs, given a list of configNames, returns the list of
 // corresponding logicTestConfigIdxs as well as a boolean indicating whether
-// the test works only in non-metamorphic setting.
+// metamorphic settings related to batch sizes should be overridden with default
+// production values.
 func processConfigs(
 	t logger, path string, defaults ConfigSet, configNames []string,
-) (_ ConfigSet, onlyNonMetamorphic bool) {
+) (_ ConfigSet, nonMetamorphicBatchSizes bool) {
 	const blocklistChar = '!'
 	// blocklist is a map from a blocked config to a corresponding issue number.
 	// If 0, there is no associated issue.
@@ -671,12 +671,12 @@ func processConfigs(
 		}
 	}
 
-	if _, ok := blocklist["metamorphic"]; ok && util.IsMetamorphicBuild() {
-		onlyNonMetamorphic = true
+	if _, ok := blocklist["metamorphic-batch-sizes"]; ok {
+		nonMetamorphicBatchSizes = true
 	}
 	if len(blocklist) != 0 && allConfigNamesAreBlocklistDirectives {
 		// No configs specified, this blocklist applies to the default configs.
-		return applyBlocklistToConfigs(defaults, blocklist), onlyNonMetamorphic
+		return applyBlocklistToConfigs(defaults, blocklist), nonMetamorphicBatchSizes
 	}
 
 	var configs ConfigSet
@@ -705,7 +705,7 @@ func processConfigs(
 		}
 	}
 
-	return configs, onlyNonMetamorphic
+	return configs, nonMetamorphicBatchSizes
 }
 
 // applyBlocklistToConfigs applies the given blocklist to configs, returning the
