@@ -364,9 +364,7 @@ func TestTransactionStatus(t *testing.T) {
 				}
 			}
 			if commit {
-				if pErr := txn.CommitOrCleanup(ctx); pErr != nil {
-					t.Fatal(pErr)
-				}
+				require.NoError(t, txn.Commit(ctx))
 				if a, e := txn.TestingCloneTxn().Status, roachpb.COMMITTED; a != e {
 					t.Errorf("write: %t, commit: %t transaction expected to have status %q but had %q", write, commit, e, a)
 				}
