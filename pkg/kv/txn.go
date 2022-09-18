@@ -100,9 +100,9 @@ type Txn struct {
 // Note: for KV usage that should be subject to admission control, prefer
 // NewTxnRootKV() below.
 //
-// If the transaction is used to send any operations, CommitOrCleanup() or
-// CleanupOnError() should eventually be called to commit/rollback the
-// transaction (including stopping the heartbeat loop).
+// If the transaction is used to send any operations, Commit() or Rollback()
+// should eventually be called to commit/rollback the transaction (including
+// stopping the heartbeat loop).
 //
 // gatewayNodeID: If != 0, this is the ID of the node on whose behalf this
 //
@@ -689,27 +689,7 @@ func (txn *Txn) commit(ctx context.Context) error {
 	return pErr.GoError()
 }
 
-// CleanupOnError cleans up the transaction as a result of an error.
-func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
-	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(errors.AssertionFailedf("CleanupOnError() called on leaf txn"), ctx))
-	}
-
-	if err == nil {
-		panic(errors.WithContextTags(errors.AssertionFailedf("CleanupOnError() called with nil error"), ctx))
-	}
-	if replyErr := txn.rollback(ctx); replyErr != nil {
-		if _, ok := replyErr.GetDetail().(*roachpb.TransactionStatusError); ok || txn.IsAborted() {
-			log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
-		} else {
-			log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
-		}
-	}
-}
-
-// Commit is the same as CommitOrCleanup but will not attempt to clean
-// up on failure. This can be used when the caller is prepared to do proper
-// cleanup.
+// Commit sends an EndTxnRequest with Commit=true.
 func (txn *Txn) Commit(ctx context.Context) error {
 	if txn.typ != RootTxn {
 		return errors.WithContextTags(errors.AssertionFailedf("Commit() called on leaf txn"), ctx)
@@ -739,21 +719,6 @@ func (txn *Txn) CommitInBatch(ctx context.Context, b *Batch) error {
 	b.reqs[len(b.reqs)-1].Value = &et.union
 	b.initResult(1 /* calls */, 0, b.raw, nil)
 	return txn.Run(ctx, b)
-}
-
-// CommitOrCleanup sends an EndTxnRequest with Commit=true.
-// If that fails, an attempt to rollback is made.
-// txn should not be used to send any more commands after this call.
-func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
-	if txn.typ != RootTxn {
-		return errors.WithContextTags(errors.AssertionFailedf("CommitOrCleanup() called on leaf txn"), ctx)
-	}
-
-	err := txn.commit(ctx)
-	if err != nil {
-		txn.CleanupOnError(ctx, err)
-	}
-	return err
 }
 
 // UpdateDeadline sets the transactions deadline to the passed deadline.

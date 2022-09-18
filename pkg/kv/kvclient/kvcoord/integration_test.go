@@ -22,11 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 // This file contains contains integration tests that don't fit anywhere else.
@@ -177,9 +177,8 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 	<-readerBlocked
 	<-readerBlocked
 
-	if err := txn.CommitOrCleanup(ctx); !testutils.IsError(err, "test injected err") {
-		t.Fatalf("expected injected err, got: %v", err)
-	}
+	require.ErrorContains(t, txn.Commit(ctx), "test injected err", "expected injected error")
+	require.NoError(t, txn.Rollback(ctx))
 	// Wait for the txn wait queue to be pinged and check the status.
 	if status := <-txnUpdate; status != roachpb.ABORTED {
 		t.Fatalf("expected the wait queue to be updated with an Aborted txn, instead got: %s", status)

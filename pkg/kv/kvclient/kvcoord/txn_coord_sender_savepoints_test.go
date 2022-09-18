@@ -94,7 +94,7 @@ func TestSavepoints(t *testing.T) {
 				ptxn()
 
 			case "commit":
-				if err := txn.CommitOrCleanup(ctx); err != nil {
+				if err := txn.Commit(ctx); err != nil {
 					fmt.Fprintf(&buf, "(%T) %v\n", err, err)
 				}
 
