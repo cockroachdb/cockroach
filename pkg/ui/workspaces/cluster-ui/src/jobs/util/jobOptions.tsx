@@ -73,6 +73,9 @@ export function isRetrying(status: string): boolean {
 export function isRunning(status: string): boolean {
   return [JOB_STATUS_RUNNING, JOB_STATUS_RETRY_RUNNING].includes(status);
 }
+export function isTerminalState(status: string): boolean {
+  return [JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED].includes(status);
+}
 
 export const statusOptions = [
   { value: "", name: "All" },
