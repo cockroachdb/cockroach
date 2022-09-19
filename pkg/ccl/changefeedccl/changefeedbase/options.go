@@ -434,15 +434,15 @@ func MakeStatementOptions(opts map[string]string) StatementOptions {
 	if opts == nil {
 		return MakeDefaultOptions()
 	}
-	stmtOpts := make(map[string]string)
+	mapCopy := make(map[string]string, len(opts))
 	for key, value := range opts {
 		if _, ok := CaseInsensitiveOpts[key]; ok {
-			stmtOpts[key] = strings.ToLower(value)
+			mapCopy[key] = strings.ToLower(value)
 		} else {
-			stmtOpts[key] = value
+			mapCopy[key] = value
 		}
 	}
-	return StatementOptions{m: stmtOpts}
+	return StatementOptions{m: mapCopy}
 }
 
 // MakeDefaultOptions creates the StatementOptions you'd get from
