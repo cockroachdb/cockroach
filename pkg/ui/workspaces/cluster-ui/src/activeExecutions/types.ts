@@ -34,13 +34,13 @@ export interface ActiveExecution {
   application: string;
   query?: string; // Possibly empty for a transaction.
   timeSpentWaiting?: moment.Duration;
-  isFullScan: boolean;
 }
 
 export type ActiveStatement = ActiveExecution &
   Required<Pick<ActiveExecution, "statementID">> & {
     user: string;
     clientAddress: string;
+    isFullScan: boolean;
   };
 
 export type ActiveTransaction = ActiveExecution & {
