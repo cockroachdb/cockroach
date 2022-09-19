@@ -1,0 +1,60 @@
+new-server name=s1
+----
+
+# Create a few tenants.
+exec-sql
+SELECT crdb_internal.create_tenant(5);
+----
+
+exec-sql
+SELECT crdb_internal.create_tenant(6);
+----
+
+# Drop one of them.
+exec-sql
+SELECT crdb_internal.destroy_tenant(5);
+----
+
+query-sql
+SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+----
+5 false {"id": "5", "state": "DROP"}
+6 true {"id": "6", "state": "ACTIVE"}
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster'
+----
+
+exec-sql expect-error-regex=(tenant 5 is not active)
+BACKUP TENANT 5 INTO 'nodelocal://1/tenant5'
+----
+regex matches error
+
+exec-sql
+BACKUP TENANT 6 INTO 'nodelocal://1/tenant6'
+----
+
+new-server name=s2 share-io-dir=s1
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/cluster'
+----
+
+# A dropped tenant should be restored as an inactive tenant.
+query-sql
+SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+----
+5 false {"id": "5", "state": "DROP"}
+6 true {"id": "6", "state": "ACTIVE"}
+
+exec-sql
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant = '7';
+----
+
+query-sql
+SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+----
+5 false {"id": "5", "state": "DROP"}
+6 true {"id": "6", "state": "ACTIVE"}
+7 true {"id": "7", "state": "ACTIVE"}

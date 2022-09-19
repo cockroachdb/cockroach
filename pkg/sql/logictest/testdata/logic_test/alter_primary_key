@@ -1763,6 +1763,38 @@ SELECT column_name FROM [SHOW COLUMNS FROM t_rowid] ORDER BY column_name;
 k
 v
 
+subtest check_constraint_name
+
+statement ok
+CREATE TABLE t_name_check (a INT NOT NULL, CONSTRAINT ctcheck CHECK (a > 0))
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42710 constraint with name "ctcheck" already exists
+ALTER TABLE t_name_check ADD CONSTRAINT ctcheck PRIMARY KEY (a)
+
+statement ok
+ALTER TABLE t_name_check ADD CONSTRAINT t_name_check_pkey PRIMARY KEY (a)
+
+statement ok
+DROP TABLE t_name_check
+
+statement ok
+CREATE TABLE t_name_check (a INT NOT NULL, CONSTRAINT ctuniq UNIQUE (a))
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42710 constraint with name "ctuniq" already exists
+ALTER TABLE t_name_check ADD CONSTRAINT ctuniq PRIMARY KEY (a)
+
+statement ok
+DROP TABLE t_name_check
+
+statement ok
+CREATE TABLE t_name_check (a INT NOT NULL, INDEX idx (a))
+
+skipif config local-legacy-schema-changer
+statement error pgcode 42710 constraint with name "idx" already exists
+ALTER TABLE t_name_check ADD CONSTRAINT idx PRIMARY KEY (a)
+
 # The following subtest tests the case when the new primary key
 # intersects with the old primary key.
 subtest regression_85877
