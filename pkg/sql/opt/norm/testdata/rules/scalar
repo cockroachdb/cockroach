@@ -164,7 +164,7 @@ exprnorm expect=EliminateCast
 (Root
   (Project
     (Scan [ (Table "a") (Cols "i,s,arr") ])
-    [ 
+    [
       (ProjectionsItem (Cast (Var "i") "int")                                  (NewColumn "c1" "int"))
       (ProjectionsItem (Cast (Var "arr") "int[]")                              (NewColumn "c2" "int[]"))
       (ProjectionsItem (Cast (Cast (Const "[1, 2]" "string") "jsonb") "json")  (NewColumn "c3" "json"))
@@ -1286,16 +1286,16 @@ project
 
 # Working in concert with other norm rules
 opt
-SELECT k FROM e WHERE d - '1w'::INTERVAL > '2018-07-01'::DATE
+SELECT k FROM e WHERE i - 10 > 100
 ----
 project
  ├── columns: k:1!null
  ├── key: (1)
  └── scan e@secondary
-      ├── columns: k:1!null d:5!null
-      ├── constraint: /5/1: [/'2018-07-09' - ]
+      ├── columns: k:1!null i:2!null
+      ├── constraint: /2/1: [/111 - ]
       ├── key: (1)
-      └── fd: (1)-->(5)
+      └── fd: (1)-->(2)
 
 # --------------------------------------------------
 # InlineAnyValuesSingleCol
