@@ -78,6 +78,8 @@ export function executeSql<RowType>(
 }
 
 export const INTERNAL_SQL_API_APP = "$ internal-console";
+export const LONG_TIMEOUT = "300s";
+export const LARGE_RESULT_SIZE = 50000; // 50 kib
 
 /**
  * executeInternalSql executes the provided SQL statements with
