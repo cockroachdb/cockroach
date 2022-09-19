@@ -10,6 +10,6 @@
 
 #include "funcdata.h"
 
-TEXT ·Grow(SB),0,$16384-0
+TEXT ·Grow(SB),0,$32768-0
         NO_LOCAL_POINTERS
         RET
