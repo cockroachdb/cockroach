@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -32,6 +33,52 @@ func (c *CustomFuncs) CommuteInequality(
 ) opt.ScalarExpr {
 	op = opt.CommuteEqualityOrInequalityOp(op)
 	return c.f.DynamicConstruct(op, right, left).(opt.ScalarExpr)
+}
+
+// FoldBinaryCheckOverflow attempts to evaluate a binary expression with
+// constant inputs. The only operations supported are plus and minus. It returns
+// a constant expression as if all of the following criteria are met:
+//
+//  1. An overload function for the given operator and input types exists and
+//     has an appropriate volatility.
+//  2. The result type of the overload is equivalent to the type of left. This
+//     is required in order to check for overflow/underflow (see #4).
+//  3. The evaluation causes no error.
+//  4. The evaluation does not overflow or underflow.
+//
+// If any of these conditions are not met, it returns ok=false.
+func (c *CustomFuncs) FoldBinaryCheckOverflow(
+	op opt.Operator, left, right opt.ScalarExpr,
+) (_ opt.ScalarExpr, ok bool) {
+	o, ok := memo.FindBinaryOverload(op, left.DataType(), right.DataType())
+	if !ok || !c.CanFoldOperator(o.Volatility) {
+		return nil, false
+	}
+	if !o.ReturnType.Equivalent(left.DataType()) {
+		// We can only check for overflow or underflow when the result type
+		// matches the type of left.
+		return nil, false
+	}
+
+	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
+	result, err := eval.BinaryOp(c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	if err != nil {
+		return nil, false
+	}
+	var overflowCmp int
+	switch op {
+	case opt.PlusOp:
+		overflowCmp = -1
+	case opt.MinusOp:
+		overflowCmp = 1
+	default:
+		panic(errors.AssertionFailedf("unsupported op %s", op))
+	}
+	if cmp, err := result.CompareError(c.f.evalCtx, lDatum); err == nil && cmp != overflowCmp {
+		// The operation did not overflow or underflow.
+		return c.f.ConstructConstVal(result, o.ReturnType), true
+	}
+	return nil, false
 }
 
 // NormalizeTupleEquality remaps the elements of two tuples compared for

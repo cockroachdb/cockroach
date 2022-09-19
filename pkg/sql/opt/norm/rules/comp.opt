@@ -26,10 +26,15 @@
 #   /   \             /   \
 #  a     1           2     1
 #
-# See the NormalizeConstEqNe pattern for the definition of constant expression
-# tree. Also, the NormalizePlusMult pattern ensures that constant expression
-# trees are on the right side of the expression, so no "flipped" pattern is
-# necessary. Other patterns will fold new constant expressions further.
+# The rule can only perform this transformation if all of the following criteria
+# are met:
+#
+#  1. A minus overload with an appropriate volatility exists for the two
+#     constant values.
+#  2. The result type of the overload is equivalent to the type of left. This
+#     is required in order to check for overflow/underflow (see #4).
+#  3. The evaluation causes no error.
+#  4. The evaluation does not overflow or underflow.
 #
 # NOTE: Ne is not part of the operator choices because it wasn't handled in
 #       normalize.go either. We can add once we've proved it's OK to do so.
@@ -37,10 +42,18 @@
 (Eq | Ge | Gt | Le | Lt
     (Plus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
     $right:(ConstValue) &
-        (CanConstructBinary Minus $right $leftRight)
+        (CanConstructBinary Minus $right $leftRight) &
+        (Let
+            ($result $ok):(FoldBinaryCheckOverflow
+                Minus
+                $right
+                $leftRight
+            )
+            $ok
+        )
 )
 =>
-((OpName) $leftLeft (Minus $right $leftRight))
+((OpName) $leftLeft $result)
 
 # NormalizeCmpMinusConst builds up constant expression trees on one side of the
 # comparison, in cases like this:
@@ -50,16 +63,23 @@
 #   /   \           /   \
 #  a     1         2     1
 #
-# See the NormalizeConstEqNe pattern for the definition of constant expression
-# tree. Other patterns will fold new constant expressions further.
+# See NormalizeCmpPlusConst for more details.
 [NormalizeCmpMinusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
     (Minus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
     $right:(ConstValue) &
-        (CanConstructBinary Plus $right $leftRight)
+        (CanConstructBinary Plus $right $leftRight) &
+        (Let
+            ($result $ok):(FoldBinaryCheckOverflow
+                Plus
+                $right
+                $leftRight
+            )
+            $ok
+        )
 )
 =>
-((OpName) $leftLeft (Plus $right $leftRight))
+((OpName) $leftLeft $result)
 
 # NormalizeCmpConstMinus builds up constant expression trees on one side of the
 # comparison, in cases like this:
@@ -69,17 +89,23 @@
 #   /   \        /   \
 #  1     a      1     2
 #
-# See the NormalizeConstEqNe pattern for the definition of constant expression
-# tree. Other patterns will switch the constant to the right side and fold the
-# constant expression if possible.
+# See NormalizeCmpPlusConst for more details.
 [NormalizeCmpConstMinus, Normalize]
 (Eq | Ge | Gt | Le | Lt
     (Minus $leftLeft:(ConstValue) $leftRight:^(ConstValue))
     $right:(ConstValue) &
-        (CanConstructBinary Minus $leftLeft $right)
+        (CanConstructBinary Minus $leftLeft $right) &
+        (Let
+            ($result $ok):(FoldBinaryCheckOverflow
+                Minus
+                $leftLeft
+                $right
+            )
+            $ok
+        )
 )
 =>
-((OpName) (Minus $leftLeft $right) $leftRight)
+((OpName) $result $leftRight)
 
 # NormalizeTupleEquality breaks up expressions like:
 #   (a, b, c) = (x, y, z)
