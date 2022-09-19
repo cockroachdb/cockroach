@@ -5140,3 +5140,110 @@ i  NEVER
 x  NEVER
 y  NEVER
 z  ALWAYS
+
+subtest role_routine_grants
+
+query TTTTTTTTTT colnames
+SELECT * FROM information_schema.role_routine_grants
+WHERE reverse(split_part(reverse(specific_name), '_', 1))::INT < 50
+ORDER BY specific_name, grantee;
+----
+grantor  grantee  specific_catalog  specific_schema  specific_name  routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
+NULL     public   test              pg_catalog       array_agg_1    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_1    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_10   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_10   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_11   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_11   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_12   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_12   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_13   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_13   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_14   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_14   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_15   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_15   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_16   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_16   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_17   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_17   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_18   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_18   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_19   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_19   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_2    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_2    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_20   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_20   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_21   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_21   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_22   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_22   test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_3    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_3    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_4    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_4    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_5    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_5    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_6    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_6    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_7    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_7    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_8    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_8    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       array_agg_9    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     root     test              pg_catalog       array_agg_9    test             pg_catalog      array_agg     EXECUTE         NO
+NULL     public   test              pg_catalog       avg_23         test             pg_catalog      avg           EXECUTE         NO
+NULL     root     test              pg_catalog       avg_23         test             pg_catalog      avg           EXECUTE         NO
+NULL     public   test              pg_catalog       avg_24         test             pg_catalog      avg           EXECUTE         NO
+NULL     root     test              pg_catalog       avg_24         test             pg_catalog      avg           EXECUTE         NO
+NULL     public   test              pg_catalog       avg_25         test             pg_catalog      avg           EXECUTE         NO
+NULL     root     test              pg_catalog       avg_25         test             pg_catalog      avg           EXECUTE         NO
+NULL     public   test              pg_catalog       avg_26         test             pg_catalog      avg           EXECUTE         NO
+NULL     root     test              pg_catalog       avg_26         test             pg_catalog      avg           EXECUTE         NO
+NULL     public   test              pg_catalog       bit_and_27     test             pg_catalog      bit_and       EXECUTE         NO
+NULL     root     test              pg_catalog       bit_and_27     test             pg_catalog      bit_and       EXECUTE         NO
+NULL     public   test              pg_catalog       bit_and_28     test             pg_catalog      bit_and       EXECUTE         NO
+NULL     root     test              pg_catalog       bit_and_28     test             pg_catalog      bit_and       EXECUTE         NO
+NULL     public   test              pg_catalog       bit_or_29      test             pg_catalog      bit_or        EXECUTE         NO
+NULL     root     test              pg_catalog       bit_or_29      test             pg_catalog      bit_or        EXECUTE         NO
+NULL     public   test              pg_catalog       bit_or_30      test             pg_catalog      bit_or        EXECUTE         NO
+NULL     root     test              pg_catalog       bit_or_30      test             pg_catalog      bit_or        EXECUTE         NO
+NULL     public   test              pg_catalog       bool_and_31    test             pg_catalog      bool_and      EXECUTE         NO
+NULL     root     test              pg_catalog       bool_and_31    test             pg_catalog      bool_and      EXECUTE         NO
+NULL     public   test              pg_catalog       bool_or_32     test             pg_catalog      bool_or       EXECUTE         NO
+NULL     root     test              pg_catalog       bool_or_32     test             pg_catalog      bool_or       EXECUTE         NO
+NULL     public   test              pg_catalog       concat_agg_33  test             pg_catalog      concat_agg    EXECUTE         NO
+NULL     root     test              pg_catalog       concat_agg_33  test             pg_catalog      concat_agg    EXECUTE         NO
+NULL     public   test              pg_catalog       concat_agg_34  test             pg_catalog      concat_agg    EXECUTE         NO
+NULL     root     test              pg_catalog       concat_agg_34  test             pg_catalog      concat_agg    EXECUTE         NO
+NULL     public   test              pg_catalog       corr_35        test             pg_catalog      corr          EXECUTE         NO
+NULL     root     test              pg_catalog       corr_35        test             pg_catalog      corr          EXECUTE         NO
+NULL     public   test              pg_catalog       corr_36        test             pg_catalog      corr          EXECUTE         NO
+NULL     root     test              pg_catalog       corr_36        test             pg_catalog      corr          EXECUTE         NO
+NULL     public   test              pg_catalog       corr_37        test             pg_catalog      corr          EXECUTE         NO
+NULL     root     test              pg_catalog       corr_37        test             pg_catalog      corr          EXECUTE         NO
+NULL     public   test              pg_catalog       corr_38        test             pg_catalog      corr          EXECUTE         NO
+NULL     root     test              pg_catalog       corr_38        test             pg_catalog      corr          EXECUTE         NO
+NULL     public   test              pg_catalog       corr_39        test             pg_catalog      corr          EXECUTE         NO
+NULL     root     test              pg_catalog       corr_39        test             pg_catalog      corr          EXECUTE         NO
+NULL     public   test              pg_catalog       corr_40        test             pg_catalog      corr          EXECUTE         NO
+NULL     root     test              pg_catalog       corr_40        test             pg_catalog      corr          EXECUTE         NO
+NULL     public   test              pg_catalog       corr_41        test             pg_catalog      corr          EXECUTE         NO
+NULL     root     test              pg_catalog       corr_41        test             pg_catalog      corr          EXECUTE         NO
+NULL     public   test              pg_catalog       corr_42        test             pg_catalog      corr          EXECUTE         NO
+NULL     root     test              pg_catalog       corr_42        test             pg_catalog      corr          EXECUTE         NO
+NULL     public   test              pg_catalog       corr_43        test             pg_catalog      corr          EXECUTE         NO
+NULL     root     test              pg_catalog       corr_43        test             pg_catalog      corr          EXECUTE         NO
+NULL     public   test              pg_catalog       covar_pop_44   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     root     test              pg_catalog       covar_pop_44   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     public   test              pg_catalog       covar_pop_45   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     root     test              pg_catalog       covar_pop_45   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     public   test              pg_catalog       covar_pop_46   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     root     test              pg_catalog       covar_pop_46   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     public   test              pg_catalog       covar_pop_47   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     root     test              pg_catalog       covar_pop_47   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     public   test              pg_catalog       covar_pop_48   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     root     test              pg_catalog       covar_pop_48   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     public   test              pg_catalog       covar_pop_49   test             pg_catalog      covar_pop     EXECUTE         NO
+NULL     root     test              pg_catalog       covar_pop_49   test             pg_catalog      covar_pop     EXECUTE         NO
