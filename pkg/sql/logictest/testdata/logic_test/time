@@ -540,3 +540,43 @@ SELECT * FROM regression_46973 WHERE a != '24:00'
 
 statement ok
 DROP TABLE regression_46973
+
+subtest regression_88128
+
+statement ok
+CREATE TABLE t88128 (t TIME)
+
+statement ok
+INSERT INTO t88128 VALUES ('20:00:00')
+
+# Ensure that the optimizer does not simplify the filter by adding the constant
+# subtrahend to the right side of the comparison when the addition would
+# overflow.
+query B
+SELECT t - '05:00:00'::INTERVAL < '23:59:00'::TIME FROM t88128
+----
+true
+
+# Ensure that the optimizer does not simplify the filter by adding the constant
+# subtrahend to the right side of the comparison when the addition would
+# underflow.
+query B
+SELECT t - '-2:00:00'::INTERVAL > '01:00:00'::TIME FROM t88128
+----
+true
+
+# Ensure that the optimizer does not simplify the filter by subtracting the
+# constant addend to the right side of the comparison when the subtraction would
+# underflow.
+query B
+SELECT t + '02:00:00'::INTERVAL > '01:00:00'::TIME FROM t88128
+----
+true
+
+# Ensure that the optimizer does not simplify the filter by subtracting the
+# constant addend to the right side of the comparison when the subtraction would
+# overflow.
+query B
+SELECT t + '-18:00:00'::INTERVAL < '07:00:00'::TIME FROM t88128
+----
+true
