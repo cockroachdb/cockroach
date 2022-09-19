@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -233,8 +232,9 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	sc, err := params.p.Descriptors().GetMutableSchemaByName(
-		params.ctx, params.p.txn, db, string(n.n.NewSchemaName), tree.SchemaLookupFlags{Required: true},
+	scFlags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
+	sc, err := params.p.Descriptors().GetImmutableSchemaByName(
+		params.ctx, params.p.txn, db, string(n.n.NewSchemaName), scFlags,
 	)
 	if err != nil {
 		return err
@@ -256,10 +256,15 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		}
 	}
 
-	targetSc := sc.(*schemadesc.Mutable)
-	if targetSc.GetID() == fnDesc.GetParentSchemaID() {
+	if sc.GetID() == fnDesc.GetParentSchemaID() {
 		// No-op if moving to the same schema.
 		return nil
+	}
+	targetSc, err := params.p.Descriptors().GetMutableSchemaByID(
+		params.ctx, params.p.txn, sc.GetID(), params.p.CommonLookupFlagsRequired(),
+	)
+	if err != nil {
+		return err
 	}
 
 	// Check if there is a conflicting function exists.

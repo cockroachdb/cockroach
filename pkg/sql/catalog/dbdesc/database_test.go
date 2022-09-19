@@ -275,7 +275,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			cb.UpsertDescriptorEntry(schemadesc.NewBuilder(&schemaDesc).BuildImmutable())
 		}
 		_ = cb.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-			cb.UpsertNamespaceEntry(desc, desc.GetID())
+			cb.UpsertNamespaceEntry(desc, desc.GetID(), desc.GetModificationTime())
 			return nil
 		})
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)

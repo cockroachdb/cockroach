@@ -666,6 +666,7 @@ func TestChangefeedCursor(t *testing.T) {
 		// 'after', throw a couple sleeps around them. We round timestamps to
 		// Microsecond granularity for Postgres compatibility, so make the
 		// sleeps 10x that.
+		beforeInsert := s.Server.Clock().Now()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'before')`)
 		time.Sleep(10 * time.Microsecond)
 
@@ -676,6 +677,32 @@ func TestChangefeedCursor(t *testing.T) {
 
 		time.Sleep(10 * time.Microsecond)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'after')`)
+
+		// The below function is currently used to test negative timestamp in cursor i.e of the form
+		// "-3us".
+		// Using this function we can calculate the difference with the time that was before
+		// the insert statement, which is set as the new cursor value inside createChangefeedJobRecord
+		calculateCursor := func(currentTime *hlc.Timestamp) string {
+			//  Should convert to microseconds as that is the maximum precision we support
+			diff := (beforeInsert.WallTime - currentTime.WallTime) / 1000
+			diffStr := strconv.FormatInt(diff, 10) + "us"
+			return diffStr
+		}
+
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		knobs.OverrideCursor = calculateCursor
+
+		// The "-3 days" is a placeholder here - it will be replaced with actual difference
+		// in createChangefeedJobRecord
+		fooInterval := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, "-3 days")
+		defer closeFeed(t, fooInterval)
+		assertPayloads(t, fooInterval, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "before"}}`,
+			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+		})
+
+		// We do not need to override for the remaining cases
+		knobs.OverrideCursor = nil
 
 		fooLogical := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsLogical)
 		defer closeFeed(t, fooLogical)
