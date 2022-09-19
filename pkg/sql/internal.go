@@ -741,7 +741,12 @@ func (ie *InternalExecutor) execInternal(
 	}
 	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
 
-	typeHints := make(tree.PlaceholderTypes, len(datums))
+	// We take max(len(s.Types), stmt.NumPlaceHolders) as the length of types.
+	numParams := len(datums)
+	if parsed.NumPlaceholders > numParams {
+		numParams = parsed.NumPlaceholders
+	}
+	typeHints := make(tree.PlaceholderTypes, numParams)
 	for i, d := range datums {
 		// Arg numbers start from 1.
 		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
