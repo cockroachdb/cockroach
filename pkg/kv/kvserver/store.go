@@ -3142,6 +3142,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		overreplicatedRangeCount  int64
 		behindCount               int64
 		pausedFollowerCount       int64
+		ioOverload                float64
 		slowRaftProposalCount     int64
 
 		locks                          int64
@@ -3166,6 +3167,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.mu.RLock()
 	uninitializedCount = int64(len(s.mu.uninitReplicas))
 	s.mu.RUnlock()
+
+	// TODO(kaisun314,kvoli): move this to a per-store admission control metrics
+	// struct when available. See pkg/util/admission/granter.go.
+	s.ioThreshold.Lock()
+	ioOverload, _ = s.ioThreshold.t.Score()
+	s.ioThreshold.Unlock()
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
@@ -3264,6 +3271,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 	s.metrics.RaftPausedFollowerCount.Update(pausedFollowerCount)
+	s.metrics.IOOverload.Update(ioOverload)
 	s.metrics.SlowRaftRequests.Update(slowRaftProposalCount)
 
 	var averageLockHoldDurationNanos int64
