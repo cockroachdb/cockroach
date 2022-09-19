@@ -264,8 +264,15 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Overload {
 			r, err := ctx.Planner.QueryRowEx(
 				ctx.Ctx(), "pg_get_viewdef",
 				sessiondata.NoSessionDataOverride,
-				"SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
-					"c.relname=v.viewname WHERE oid=$1", args[0])
+				`SELECT definition
+ FROM pg_catalog.pg_views v
+ JOIN pg_catalog.pg_class c ON c.relname=v.viewname
+WHERE c.oid=$1
+UNION ALL
+SELECT definition
+ FROM pg_catalog.pg_matviews v
+ JOIN pg_catalog.pg_class c ON c.relname=v.matviewname
+WHERE c.oid=$1`, args[0])
 			if err != nil {
 				return nil, err
 			}
