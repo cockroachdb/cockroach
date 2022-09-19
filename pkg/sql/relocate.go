@@ -67,7 +67,13 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	var relocationTargets []roachpb.ReplicationTarget
 	var leaseStoreID roachpb.StoreID
 	if n.relocateLease {
-		leaseStoreID = roachpb.StoreID(tree.MustBeDInt(data[0]))
+		if !data[0].ResolvedType().Equivalent(types.Int) {
+			return false, errors.Errorf(
+				"expected int in the first EXPERIMENTAL_RELOCATE data column; got %s",
+				data[0].ResolvedType(),
+			)
+		}
+		leaseStoreID = roachpb.StoreID(*data[0].(*tree.DInt))
 		if leaseStoreID <= 0 {
 			return false, errors.Errorf("invalid target leaseholder store ID %d for EXPERIMENTAL_RELOCATE LEASE", leaseStoreID)
 		}
@@ -87,6 +93,9 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 		// Create an array of the desired replication targets.
 		relocationTargets = make([]roachpb.ReplicationTarget, len(relocation.Array))
 		for i, d := range relocation.Array {
+			if d == tree.DNull {
+				return false, errors.Errorf("NULL value in relocation array for EXPERIMENTAL_RELOCATE")
+			}
 			storeID := roachpb.StoreID(*d.(*tree.DInt))
 			nodeID, ok := n.run.storeMap[storeID]
 			if !ok {
