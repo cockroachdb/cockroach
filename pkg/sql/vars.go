@@ -70,6 +70,11 @@ type sessionVar struct {
 	// either by SHOW or in the pg_catalog table.
 	Get func(evalCtx *extendedEvalContext) string
 
+	// Exists returns true if this custom session option exists in the current
+	// context. It's needed to support the current_setting builtin for custom
+	// options. It is only defined for custom options.
+	Exists func(evalCtx *extendedEvalContext) bool
+
 	// GetFromSessionData returns a string representation of a given variable to
 	// be used by BufferParamStatus. This is only required if the variable
 	// is expected to send updates through ParamStatusUpdate in pgwire.
@@ -2086,7 +2091,65 @@ func getSessionVar(name string, missingOk bool) (bool, sessionVar, error) {
 	return true, v, nil
 }
 
+<<<<<<< HEAD
 // GetSessionVar implements the EvalSessionAccessor interface.
+||||||| parent of 888bf2b9e8 (sql: fix current_setting(..., true) for custom options)
+func getCustomOptionSessionVar(varName string) (sv sessionVar, isCustom bool) {
+	if strings.Contains(varName, ".") {
+		return sessionVar{
+			Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+				v, ok := evalCtx.SessionData().CustomOptions[varName]
+				if !ok {
+					return "", pgerror.Newf(pgcode.UndefinedObject,
+						"unrecognized configuration parameter %q", varName)
+				}
+				return v, nil
+			},
+			Set: func(ctx context.Context, m sessionDataMutator, val string) error {
+				// TODO(#72026): do some memory accounting.
+				m.SetCustomOption(varName, val)
+				return nil
+			},
+			GlobalDefault: func(sv *settings.Values) string {
+				return ""
+			},
+		}, true
+	}
+	return sessionVar{}, false
+}
+
+// GetSessionVar implements the eval.SessionAccessor interface.
+=======
+func getCustomOptionSessionVar(varName string) (sv sessionVar, isCustom bool) {
+	if strings.Contains(varName, ".") {
+		return sessionVar{
+			Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+				v, ok := evalCtx.SessionData().CustomOptions[varName]
+				if !ok {
+					return "", pgerror.Newf(pgcode.UndefinedObject,
+						"unrecognized configuration parameter %q", varName)
+				}
+				return v, nil
+			},
+			Exists: func(evalCtx *extendedEvalContext) bool {
+				_, ok := evalCtx.SessionData().CustomOptions[varName]
+				return ok
+			},
+			Set: func(ctx context.Context, m sessionDataMutator, val string) error {
+				// TODO(#72026): do some memory accounting.
+				m.SetCustomOption(varName, val)
+				return nil
+			},
+			GlobalDefault: func(sv *settings.Values) string {
+				return ""
+			},
+		}, true
+	}
+	return sessionVar{}, false
+}
+
+// GetSessionVar implements the eval.SessionAccessor interface.
+>>>>>>> 888bf2b9e8 (sql: fix current_setting(..., true) for custom options)
 func (p *planner) GetSessionVar(
 	_ context.Context, varName string, missingOk bool,
 ) (bool, string, error) {
@@ -2094,6 +2157,11 @@ func (p *planner) GetSessionVar(
 	ok, v, err := getSessionVar(name, missingOk)
 	if err != nil || !ok {
 		return ok, "", err
+	}
+	if existsFn := v.Exists; existsFn != nil {
+		if missingOk && !existsFn(&p.extendedEvalCtx) {
+			return false, "", nil
+		}
 	}
 	return true, v.Get(&p.extendedEvalCtx), nil
 }
