@@ -11,12 +11,14 @@
 package state
 
 import (
+	"context"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // LoadSplitter provides an abstraction for load based splitting. It records
@@ -66,7 +68,10 @@ func (s *SplitDecider) newDecider() *split.Decider {
 	}
 
 	decider := &split.Decider{}
-	split.Init(decider, intN, s.qpsThreshold, s.qpsRetention)
+	split.Init(decider, intN, s.qpsThreshold, s.qpsRetention, &split.LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	})
 	return decider
 }
 
@@ -81,7 +86,7 @@ func (s *SplitDecider) Record(tick time.Time, rangeID RangeID, le workload.LoadE
 	}
 
 	qps := LoadEventQPS(le)
-	shouldSplit := decider.Record(tick, int(qps), func() roachpb.Span {
+	shouldSplit := decider.Record(context.Background(), tick, int(qps), func() roachpb.Span {
 		return roachpb.Span{
 			Key: Key(le.Key).ToRKey().AsRawKey(),
 		}
@@ -102,7 +107,7 @@ func (s *SplitDecider) SplitKey(tick time.Time, rangeID RangeID) (Key, bool) {
 		return InvalidKey, false
 	}
 
-	key := decider.MaybeSplitKey(tick)
+	key := decider.MaybeSplitKey(context.Background(), tick)
 	if key == nil {
 		return InvalidKey, false
 	}

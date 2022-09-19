@@ -11,6 +11,7 @@
 package split
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +40,10 @@ func TestDecider(t *testing.T) {
 	intn := rand.New(rand.NewSource(12)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 10.0 }, func() time.Duration { return 2 * time.Second })
+	Init(&d, intn, func() float64 { return 10.0 }, func() time.Duration { return 2 * time.Second }, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	})
 
 	op := func(s string) func() roachpb.Span {
 		return func() roachpb.Span { return roachpb.Span{Key: roachpb.Key(s)} }
@@ -46,38 +51,38 @@ func TestDecider(t *testing.T) {
 
 	assertQPS := func(i int, expQPS float64) {
 		t.Helper()
-		qps := d.LastQPS(ms(i))
+		qps := d.LastQPS(context.Background(), ms(i))
 		assert.Equal(t, expQPS, qps)
 	}
 
 	assertMaxQPS := func(i int, expMaxQPS float64, expOK bool) {
 		t.Helper()
-		maxQPS, ok := d.MaxQPS(ms(i))
+		maxQPS, ok := d.MaxQPS(context.Background(), ms(i))
 		assert.Equal(t, expMaxQPS, maxQPS)
 		assert.Equal(t, expOK, ok)
 	}
 
-	assert.Equal(t, false, d.Record(ms(100), 1, nil))
+	assert.Equal(t, false, d.Record(context.Background(), ms(100), 1, nil))
 	assertQPS(100, 0)
 	assertMaxQPS(100, 0, false)
 
 	assert.Equal(t, ms(100), d.mu.lastQPSRollover)
 	assert.EqualValues(t, 1, d.mu.count)
 
-	assert.Equal(t, false, d.Record(ms(400), 3, nil))
+	assert.Equal(t, false, d.Record(context.Background(), ms(400), 3, nil))
 	assertQPS(100, 0)
 	assertQPS(700, 0)
 	assertMaxQPS(400, 0, false)
 
-	assert.Equal(t, false, d.Record(ms(300), 3, nil))
+	assert.Equal(t, false, d.Record(context.Background(), ms(300), 3, nil))
 	assertQPS(100, 0)
 	assertMaxQPS(300, 0, false)
 
-	assert.Equal(t, false, d.Record(ms(900), 1, nil))
+	assert.Equal(t, false, d.Record(context.Background(), ms(900), 1, nil))
 	assertQPS(0, 0)
 	assertMaxQPS(900, 0, false)
 
-	assert.Equal(t, false, d.Record(ms(1099), 1, nil))
+	assert.Equal(t, false, d.Record(context.Background(), ms(1099), 1, nil))
 	assertQPS(0, 0)
 	assertMaxQPS(1099, 0, false)
 
@@ -86,7 +91,7 @@ func TestDecider(t *testing.T) {
 
 	// It won't engage because the duration between the rollovers is 1.1s, and
 	// we had 10 events over that interval.
-	assert.Equal(t, false, d.Record(ms(1200), 1, nil))
+	assert.Equal(t, false, d.Record(context.Background(), ms(1200), 1, nil))
 	assertQPS(0, float64(10)/float64(1.1))
 	assert.Equal(t, ms(1200), d.mu.lastQPSRollover)
 	assertMaxQPS(1099, 0, false)
@@ -95,11 +100,11 @@ func TestDecider(t *testing.T) {
 
 	assert.Equal(t, nilFinder, d.mu.splitFinder)
 
-	assert.Equal(t, false, d.Record(ms(2199), 12, nil))
+	assert.Equal(t, false, d.Record(context.Background(), ms(2199), 12, nil))
 	assert.Equal(t, nilFinder, d.mu.splitFinder)
 
 	// 2200 is the next rollover point, and 12+1=13 qps should be computed.
-	assert.Equal(t, false, d.Record(ms(2200), 1, op("a")))
+	assert.Equal(t, false, d.Record(context.Background(), ms(2200), 1, op("a")))
 	assert.Equal(t, ms(2200), d.mu.lastQPSRollover)
 	assertQPS(0, float64(13))
 	assertMaxQPS(2200, 13, true)
@@ -111,7 +116,7 @@ func TestDecider(t *testing.T) {
 	// to split. We don't test the details of exactly when that happens because
 	// this is done in the finder tests.
 	tick := 2200
-	for o := op("a"); !d.Record(ms(tick), 11, o); tick += 1000 {
+	for o := op("a"); !d.Record(context.Background(), ms(tick), 11, o); tick += 1000 {
 		if tick/1000%2 == 0 {
 			o = op("z")
 		} else {
@@ -119,7 +124,7 @@ func TestDecider(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, roachpb.Key("z"), d.MaybeSplitKey(ms(tick)))
+	assert.Equal(t, roachpb.Key("z"), d.MaybeSplitKey(context.Background(), ms(tick)))
 
 	// We were told to split, but won't be told to split again for some time
 	// to avoid busy-looping on split attempts.
@@ -128,35 +133,35 @@ func TestDecider(t *testing.T) {
 		if i%2 != 0 {
 			o = op("a")
 		}
-		assert.False(t, d.Record(ms(tick), 11, o))
-		assert.True(t, d.LastQPS(ms(tick)) > 1.0)
+		assert.False(t, d.Record(context.Background(), ms(tick), 11, o))
+		assert.True(t, d.LastQPS(context.Background(), ms(tick)) > 1.0)
 		// Even though the split key remains.
-		assert.Equal(t, roachpb.Key("z"), d.MaybeSplitKey(ms(tick+999)))
+		assert.Equal(t, roachpb.Key("z"), d.MaybeSplitKey(context.Background(), ms(tick+999)))
 		tick += 1000
 	}
 	// But after minSplitSuggestionInterval of ticks, we get another one.
-	assert.True(t, d.Record(ms(tick), 11, op("a")))
+	assert.True(t, d.Record(context.Background(), ms(tick), 11, op("a")))
 	assertQPS(tick, float64(11))
 	assertMaxQPS(tick, 11, true)
 
 	// Split key suggestion vanishes once qps drops.
 	tick += 1000
-	assert.False(t, d.Record(ms(tick), 9, op("a")))
-	assert.Equal(t, roachpb.Key(nil), d.MaybeSplitKey(ms(tick)))
+	assert.False(t, d.Record(context.Background(), ms(tick), 9, op("a")))
+	assert.Equal(t, roachpb.Key(nil), d.MaybeSplitKey(context.Background(), ms(tick)))
 	assert.Equal(t, nilFinder, d.mu.splitFinder)
 
 	// Hammer a key with writes above threshold. There shouldn't be a split
 	// since everyone is hitting the same key and load can't be balanced.
 	for i := 0; i < 1000; i++ {
-		assert.False(t, d.Record(ms(tick), 11, op("q")))
+		assert.False(t, d.Record(context.Background(), ms(tick), 11, op("q")))
 		tick += 1000
 	}
 	assert.True(t, d.mu.splitFinder.Ready(ms(tick)))
-	assert.Equal(t, roachpb.Key(nil), d.MaybeSplitKey(ms(tick)))
+	assert.Equal(t, roachpb.Key(nil), d.MaybeSplitKey(context.Background(), ms(tick)))
 
 	// But the finder keeps sampling to adapt to changing workload...
 	for i := 0; i < 1000; i++ {
-		assert.False(t, d.Record(ms(tick), 11, op("p")))
+		assert.False(t, d.Record(context.Background(), ms(tick), 11, op("p")))
 		tick += 1000
 	}
 
@@ -168,7 +173,7 @@ func TestDecider(t *testing.T) {
 	// Since the new workload is also not partitionable, nothing changes in
 	// the decision.
 	assert.True(t, d.mu.splitFinder.Ready(ms(tick)))
-	assert.Equal(t, roachpb.Key(nil), d.MaybeSplitKey(ms(tick)))
+	assert.Equal(t, roachpb.Key(nil), d.MaybeSplitKey(context.Background(), ms(tick)))
 
 	// Get the decider engaged again so that we can test Reset().
 	for i := 0; i < 1000; i++ {
@@ -176,16 +181,16 @@ func TestDecider(t *testing.T) {
 		if i%2 != 0 {
 			o = op("a")
 		}
-		d.Record(ms(tick), 11, o)
+		d.Record(context.Background(), ms(tick), 11, o)
 		tick += 500
 	}
 
 	// The finder wants to split, until Reset is called, at which point it starts
 	// back up at zero.
 	assert.True(t, d.mu.splitFinder.Ready(ms(tick)))
-	assert.Equal(t, roachpb.Key("z"), d.MaybeSplitKey(ms(tick)))
+	assert.Equal(t, roachpb.Key("z"), d.MaybeSplitKey(context.Background(), ms(tick)))
 	d.Reset(ms(tick))
-	assert.Nil(t, d.MaybeSplitKey(ms(tick)))
+	assert.Nil(t, d.MaybeSplitKey(context.Background(), ms(tick)))
 	assert.Nil(t, d.mu.splitFinder)
 }
 
@@ -194,11 +199,14 @@ func TestDecider_MaxQPS(t *testing.T) {
 	intn := rand.New(rand.NewSource(11)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 100.0 }, func() time.Duration { return 10 * time.Second })
+	Init(&d, intn, func() float64 { return 100.0 }, func() time.Duration { return 10 * time.Second }, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	})
 
 	assertMaxQPS := func(i int, expMaxQPS float64, expOK bool) {
 		t.Helper()
-		maxQPS, ok := d.MaxQPS(ms(i))
+		maxQPS, ok := d.MaxQPS(context.Background(), ms(i))
 		assert.Equal(t, expMaxQPS, maxQPS)
 		assert.Equal(t, expOK, ok)
 	}
@@ -206,22 +214,22 @@ func TestDecider_MaxQPS(t *testing.T) {
 	assertMaxQPS(1000, 0, false)
 
 	// Record a large number of samples.
-	d.Record(ms(1500), 5, nil)
-	d.Record(ms(2000), 5, nil)
-	d.Record(ms(4500), 1, nil)
-	d.Record(ms(5000), 15, nil)
-	d.Record(ms(5500), 2, nil)
-	d.Record(ms(8000), 5, nil)
-	d.Record(ms(10000), 9, nil)
+	d.Record(context.Background(), ms(1500), 5, nil)
+	d.Record(context.Background(), ms(2000), 5, nil)
+	d.Record(context.Background(), ms(4500), 1, nil)
+	d.Record(context.Background(), ms(5000), 15, nil)
+	d.Record(context.Background(), ms(5500), 2, nil)
+	d.Record(context.Background(), ms(8000), 5, nil)
+	d.Record(context.Background(), ms(10000), 9, nil)
 
 	assertMaxQPS(10000, 0, false)
 	assertMaxQPS(11000, 17, true)
 
 	// Record more samples with a lower QPS.
-	d.Record(ms(12000), 1, nil)
-	d.Record(ms(13000), 4, nil)
-	d.Record(ms(15000), 2, nil)
-	d.Record(ms(19000), 3, nil)
+	d.Record(context.Background(), ms(12000), 1, nil)
+	d.Record(context.Background(), ms(13000), 4, nil)
+	d.Record(context.Background(), ms(15000), 2, nil)
+	d.Record(context.Background(), ms(19000), 3, nil)
 
 	assertMaxQPS(20000, 4.5, true)
 	assertMaxQPS(21000, 4, true)
@@ -237,7 +245,10 @@ func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 	intn := rand.New(rand.NewSource(11)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second })
+	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	})
 
 	baseKey := keys.SystemSQLCodec.TablePrefix(51)
 	for i := 0; i < 4; i++ {
@@ -253,10 +264,10 @@ func TestDeciderCallsEnsureSafeSplitKey(t *testing.T) {
 	var now time.Time
 	for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
 		now = now.Add(500 * time.Millisecond)
-		d.Record(now, 1, c0)
+		d.Record(context.Background(), now, 1, c0)
 		now = now.Add(500 * time.Millisecond)
-		d.Record(now, 1, c1)
-		k = d.MaybeSplitKey(now)
+		d.Record(context.Background(), now, 1, c1)
+		k = d.MaybeSplitKey(context.Background(), now)
 		if len(k) != 0 {
 			break
 		}
@@ -270,7 +281,10 @@ func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
 	intn := rand.New(rand.NewSource(11)).Intn
 
 	var d Decider
-	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second })
+	Init(&d, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	})
 
 	baseKey := keys.SystemSQLCodec.TablePrefix(51)
 	for i := 0; i < 4; i++ {
@@ -290,10 +304,10 @@ func TestDeciderIgnoresEnsureSafeSplitKeyOnError(t *testing.T) {
 	var now time.Time
 	for i := 0; i < 2*int(minSplitSuggestionInterval/time.Second); i++ {
 		now = now.Add(500 * time.Millisecond)
-		d.Record(now, 1, c0)
+		d.Record(context.Background(), now, 1, c0)
 		now = now.Add(500 * time.Millisecond)
-		d.Record(now, 1, c1)
-		k = d.MaybeSplitKey(now)
+		d.Record(context.Background(), now, 1, c1)
+		k = d.MaybeSplitKey(context.Background(), now)
 		if len(k) != 0 {
 			break
 		}
@@ -391,4 +405,71 @@ func TestMaxQPSTracker(t *testing.T) {
 	require.Equal(t, false, ok)
 	require.Equal(t, [6]float64{20, 27, 0, 0, 0, 0}, mt.windows)
 	require.Equal(t, 1, mt.curIdx)
+}
+
+func TestDeciderMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	intn := rand.New(rand.NewSource(11)).Intn
+	timeStart := 1000
+
+	var dPopular Decider
+	Init(&dPopular, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	})
+
+	// No split key, popular key
+	for i := 0; i < 20; i++ {
+		dPopular.Record(context.Background(), ms(timeStart), 1, func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+	}
+	for i := 1; i <= 2000; i++ {
+		dPopular.Record(context.Background(), ms(timeStart+i*50), 1, func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+	}
+
+	assert.Equal(t, dPopular.loadSplitterMetrics.PopularKeyCount.Count(), int64(2))
+	assert.Equal(t, dPopular.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(2))
+
+	// No split key, not popular key
+	var dNotPopular Decider
+	Init(&dNotPopular, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	})
+	for i := 0; i < 20; i++ {
+		dNotPopular.Record(context.Background(), ms(timeStart), 1, func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+	}
+	for i := 1; i <= 2000; i++ {
+		dNotPopular.Record(context.Background(), ms(timeStart+i*50), 1, func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(i))}
+		})
+	}
+
+	assert.Equal(t, dNotPopular.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
+	assert.Equal(t, dNotPopular.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(2))
+
+	// No split key, all insufficient counters
+	var dAllInsufficientCounters Decider
+	Init(&dAllInsufficientCounters, intn, func() float64 { return 1.0 }, func() time.Duration { return time.Second }, &LoadSplitterMetrics{
+		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
+		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
+	})
+	for i := 0; i < 20; i++ {
+		dAllInsufficientCounters.Record(context.Background(), ms(timeStart), 1, func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+	}
+	for i := 1; i <= 80; i++ {
+		dAllInsufficientCounters.Record(context.Background(), ms(timeStart+i*1000), 1, func() roachpb.Span {
+			return roachpb.Span{Key: keys.SystemSQLCodec.TablePrefix(uint32(0))}
+		})
+	}
+
+	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.PopularKeyCount.Count(), int64(0))
+	assert.Equal(t, dAllInsufficientCounters.loadSplitterMetrics.NoSplitKeyCount.Count(), int64(0))
 }
