@@ -398,22 +398,31 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 			tab := b.mem.Metadata().Table(scan.Table)
 			if tab.StatisticCount() > 0 {
 				// The first stat is the most recent one.
-				stat := tab.Statistic(0)
-				val.TableStatsRowCount = stat.RowCount()
-				if val.TableStatsRowCount == 0 {
-					val.TableStatsRowCount = 1
+				var first int
+				if !b.evalCtx.SessionData().OptimizerUseForecasts {
+					for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
+						first++
+					}
 				}
-				val.TableStatsCreatedAt = stat.CreatedAt()
-				val.LimitHint = scan.RequiredPhysical().LimitHint
-				val.Forecast = stat.IsForecast()
-				if val.Forecast {
-					val.ForecastAt = stat.CreatedAt()
-					// Find the first non-forecast stat.
-					for i := 0; i < tab.StatisticCount(); i++ {
-						nextStat := tab.Statistic(i)
-						if !nextStat.IsForecast() {
-							val.TableStatsCreatedAt = nextStat.CreatedAt()
-							break
+
+				if first < tab.StatisticCount() {
+					stat := tab.Statistic(first)
+					val.TableStatsRowCount = stat.RowCount()
+					if val.TableStatsRowCount == 0 {
+						val.TableStatsRowCount = 1
+					}
+					val.TableStatsCreatedAt = stat.CreatedAt()
+					val.LimitHint = scan.RequiredPhysical().LimitHint
+					val.Forecast = stat.IsForecast()
+					if val.Forecast {
+						val.ForecastAt = stat.CreatedAt()
+						// Find the first non-forecast stat.
+						for i := first + 1; i < tab.StatisticCount(); i++ {
+							nextStat := tab.Statistic(i)
+							if !nextStat.IsForecast() {
+								val.TableStatsCreatedAt = nextStat.CreatedAt()
+								break
+							}
 						}
 					}
 				}
