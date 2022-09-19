@@ -8,13 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package kvprober sends queries to KV in a loop, with configurable sleep
-// times, in order to generate data about the healthiness or unhealthiness of
-// kvclient & below.
-//
-// Prober increments metrics that SRE & other operators can use as alerting
-// signals. It also writes to logs to help narrow down the problem (e.g. which
-// range(s) are acting up).
+// The quarantine pool provides a way of repeatedly probing ranges that
+// have previously failed to probe. This provides confirmation of outages
+// over a smaller set of ranges at a high confidence.
 package kvprober
 
 import (
@@ -33,8 +29,11 @@ type quarantinePool struct {
 	size func() int64 // can change over time
 	mu   struct {
 		syncutil.Mutex
-		steps        []Step
-		size         int64
+		// steps are the queue of ranges to probe in quarantine.
+		steps []Step
+		// entryTimeMap keeps track of when ranges enter the quarantine
+		// pool. This is used to determine the WriteProbeQuarantineOldestDuration
+		// metric.
 		entryTimeMap map[roachpb.RangeID]time.Time
 	}
 }

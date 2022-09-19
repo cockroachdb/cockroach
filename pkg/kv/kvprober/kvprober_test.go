@@ -200,6 +200,7 @@ func initTestProber(ctx context.Context, m *mock) *Prober {
 	})
 	readEnabled.Override(ctx, &p.settings.SV, m.read)
 	writeEnabled.Override(ctx, &p.settings.SV, m.write)
+	quarantineWriteEnabled.Override(ctx, &p.settings.SV, m.qWrite)
 	bypassAdmissionControl.Override(ctx, &p.settings.SV, m.bypass)
 	p.readPlanner = m
 	return p
@@ -215,6 +216,7 @@ type mock struct {
 
 	read     bool
 	write    bool
+	qWrite   bool
 	readErr  error
 	writeErr error
 	txnErr   error
