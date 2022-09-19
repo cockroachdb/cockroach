@@ -296,6 +296,9 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err := startLoop(ctx, "write probe loop", p.writeProbe, p.writePlanner, writeInterval); err != nil {
 		return err
 	}
+	// The purpose of the quarantine pool is to detect outages affecting a small number
+	// of ranges but at a high confidence. The quarantine pool does this by repeatedly
+	// probing ranges that are in the pool.
 	return startLoop(ctx, "quarantine write probe loop", p.quarantineProbe, p.quarantineWritePool, quarantineWriteInterval)
 }
 
@@ -372,6 +375,11 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	p.metrics.ProbePlanAttempts.Inc(1)
 
 	step, err := pl.next(ctx)
+	// In the case where the quarantine pool is empty don't record a planning failure since
+	// it isn't an actual plan failure.
+	if err == nil && step.RangeID == 0 {
+		return
+	}
 	if err != nil {
 		log.Health.Errorf(ctx, "can't make a plan: %v", err)
 		p.metrics.ProbePlanFailures.Inc(1)
