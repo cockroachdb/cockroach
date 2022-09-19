@@ -144,7 +144,7 @@ func uploadFile(
 		}
 	}
 
-	if err := ex.CopyFrom(ctx, bytes.NewReader(send), stmt); err != nil {
+	if _, err := ex.CopyFrom(ctx, bytes.NewReader(send), stmt); err != nil {
 		return err
 	}
 

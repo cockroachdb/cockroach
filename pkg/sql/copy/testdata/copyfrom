@@ -1,108 +1,93 @@
-# LogicTest: !3node-tenant
-subtest basic
-
-statement ok
+exec-ddl
 CREATE TABLE t (a int)
+----
 
 # builtins not allowed
 copy-error
 COPY t FROM STDIN
-
 random()
 ----
-could not parse "random()" as type int: strconv.ParseInt: parsing "random()": invalid syntax
+ERROR: could not parse "random()" as type int: strconv.ParseInt: parsing "random()": invalid syntax (SQLSTATE 22P02)
 
 copy
 COPY t FROM STDIN
-
 ----
 0
 
 copy
 COPY t FROM STDIN
-
 1
 ----
 1
 
 copy
 COPY t FROM STDIN
-
 1
 2
 ----
 2
 
-query I rowsort
+query
 SELECT * FROM t
 ----
 1
 1
 2
 
-subtest types
-
-statement ok
+exec-ddl
 CREATE TABLE t2 (i INT, d DATE, dec DECIMAL, t TIMESTAMP)
+----
 
 copy
 COPY t2 FROM STDIN
-
 1	1996-03-13	12.123	2016-01-25 10:10:10.555555
 ----
 1
 
-query IT rowsort
+query
 SELECT i,dec FROM t2
 ----
-1  12.123
+1|12.123
 
 copy-error
 COPY t2 FROM STDIN
-
 a	1996-03-13	12.123	2016-01-25 10:10:10.555555
 ----
-could not parse "a" as type int: strconv.ParseInt: parsing "a": invalid syntax
+ERROR: could not parse "a" as type int: strconv.ParseInt: parsing "a": invalid syntax (SQLSTATE 22P02)
 
 copy-error
 COPY t2 FROM STDIN
-
 1	2	12.123	2016-01-25 10:10:10.555555
 ----
-parsing as type date: missing required date fields
+ERROR: parsing as type date: missing required date fields (SQLSTATE 22007)
 
 copy-error
 COPY t2 FROM STDIN
-
 1	1996-03-13	not a decimal	2016-01-25 10:10:10.555555
 ----
-could not parse "not a decimal" as type decimal: parse exponent: cimal: strconv.ParseInt: parsing "cimal": invalid syntax
+ERROR: could not parse "not a decimal" as type decimal: parse exponent: cimal: strconv.ParseInt: parsing "cimal": invalid syntax (SQLSTATE 22P02)
 
 copy-error
 COPY t2 FROM STDIN
-
 1	1996-03-13	12.123	not a timestamp
 ----
-parsing as type timestamp: could not parse "not a timestamp"
+ERROR: parsing as type timestamp: could not parse "not a timestamp" (SQLSTATE 22007)
 
 copy-error
 COPY t2 FROM STDIN
-
 1	1996-03-13	12.123
 ----
-expected 4 values, got 3
+ERROR: expected 4 values, got 3 (SQLSTATE 22P04)
 
 copy-error
 COPY t2 FROM STDIN
-
 1	1996-03-13	12.123	2016-01-25 10:10:10.555555	extra col
 ----
-expected 4 values, got 5
+ERROR: expected 4 values, got 5 (SQLSTATE 22P04)
 
 # now is allowed
 copy
 COPY t2 FROM STDIN
-
 2	1996-03-13	12.123	now
 ----
 1
@@ -110,7 +95,6 @@ COPY t2 FROM STDIN
 # now is allowed
 copy
 COPY t2 FROM STDIN
-
 3	1996-03-13	12.123	now()
 ----
 1
@@ -118,110 +102,105 @@ COPY t2 FROM STDIN
 # expressions are not allowed
 copy-error
 COPY t2 FROM STDIN
-
 2	1996-03-13	12.123	now()-1
 ----
-parsing as type timestamp: could not parse "now()-1"
+ERROR: parsing as type timestamp: could not parse "now()-1" (SQLSTATE 22007)
 
-query I
+query
 SELECT count(t) FROM t2 WHERE t > now()
 ----
 0
 
 copy
 COPY t2 FROM STDIN
-
 \N	\N	\N	\N
 ----
 1
 
 copy-error
 COPY t2 FROM STDIN WITH DESTINATION = 'foo.csv'
-
 \N	\N	\N	\N
 ----
-DESTINATION can only be specified when table is external storage table
+ERROR: DESTINATION can only be specified when table is external storage table (SQLSTATE 0A000)
 
-subtest constraints
+#subtest constraints
 
-statement ok
+exec-ddl
 CREATE TABLE t3 (i INT CHECK (i > 0))
+----
 
 copy-error
 COPY t3 FROM STDIN
-
 0
 ----
-failed to satisfy CHECK constraint (i > 0:::INT8)
+ERROR: failed to satisfy CHECK constraint (i > 0:::INT8) (SQLSTATE 23514)
 
 
 # Foreign key checks happen
-statement ok
+exec-ddl
 CREATE TABLE parent (k INT PRIMARY KEY);
 CREATE TABLE child (k INT PRIMARY KEY REFERENCES parent)
+----
 
 copy-error
 COPY child FROM STDIN
-
 1
 ----
-insert on table "child" violates foreign key constraint "child_k_fkey"
+ERROR: insert on table "child" violates foreign key constraint "child_k_fkey" (SQLSTATE 23503)
 
-statement ok
+exec-ddl
 CREATE TABLE t4 (i INT UNIQUE)
+----
 
 copy-error
 COPY t4 FROM STDIN
-
 1
 1
 ----
-duplicate key value violates unique constraint "t4_i_key"
+ERROR: duplicate key value violates unique constraint "t4_i_key" (SQLSTATE 23505)
 
-subtest defaults
+#subtest defaults
 # Default column values tests
 
-statement ok
-CREATE table tdefaults (i INT PRIMARY KEY DEFAULT unique_rowid(), d INT NOT NULL DEFAULT -1, x INT)
+exec-ddl
+CREATE table tdefaults (i INT PRIMARY KEY DEFAULT unique_rowid(), d INT NOT NULL
+DEFAULT -1, x INT)
+----
 
 copy
 COPY tdefaults(x) FROM STDIN
-
 1
 ----
 1
 
 copy
 COPY tdefaults(x,d) FROM STDIN
-
 1	2
 ----
 1
 
 copy
 COPY tdefaults FROM STDIN
-
 1	1	1
 ----
 1
 
-query II rowsort
+query
 SELECT d,x FROM tdefaults
 ----
-1   1
--1  1
-2   1
+1|1
+-1|1
+2|1
 
-subtest end
 
-subtest array_decoding
+#subtest array_decoding
 
-statement ok
+exec-ddl
 CREATE TABLE test_copy_array (id INT PRIMARY KEY, data TEXT[])
+----
 
 copy
 COPY test_copy_array(id,data) FROM STDIN
-
 1	{}
 2	{}
 3	{}
@@ -480,14 +459,12 @@ COPY test_copy_array(id,data) FROM STDIN
 ----
 255
 
-query ITT
+query
 SELECT id, data AS got, array[chr(id)] AS want FROM test_copy_array WHERE data != ARRAY[chr(id)]
 ----
 
-subtest end
-
 # Regression test for #87011
-statement ok
+exec-ddl
 CREATE TABLE tab (
   col1 STRING,
   col2 STRING,
@@ -508,10 +485,10 @@ CREATE TABLE tab_child (
   PRIMARY KEY (col1, col2, col3, col4, col5) using hash,
   FOREIGN KEY (col5, col6) REFERENCES tab (col5, col6)
 )
+----
 
 copy-error
 COPY tab_child FROM STDIN
-
 'high'	'straight'	'writer'	'develop'	'shells'	'bean'
 'basic'	'tent'	'compound'	'it'	'future'	'held'
 'bite'	'bring'	'taught'	'world'	'themselves'	'airplane'
@@ -521,4 +498,4 @@ COPY tab_child FROM STDIN
 'grabbed'	'reader'	'number'	'serve'	'fill'	'wonderful'
 'tower'	'former'	'mainly'	'point'	'class'	'idea'
 ----
-insert on table "tab_child" violates foreign key constraint "tab_child_col5_col6_fkey"
+ERROR: insert on table "tab_child" violates foreign key constraint "tab_child_col5_col6_fkey" (SQLSTATE 23503)
