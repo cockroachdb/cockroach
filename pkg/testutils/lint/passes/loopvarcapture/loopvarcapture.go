@@ -77,10 +77,12 @@ var (
 	}
 
 	// function definitions that wrap `go` calls
-	errgroupGo    = Function{Pkg: "golang.org/x/sync/errgroup", Type: "Group", Name: "Go"}
-	ctxgroupGo    = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/util/ctxgroup", Type: "Group", Name: "Go"}
-	ctxgroupGoCtx = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/util/ctxgroup", Type: "Group", Name: "GoCtx"}
-	monitorGo     = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster", Type: "Monitor", Name: "Go"}
+	errgroupGo         = Function{Pkg: "golang.org/x/sync/errgroup", Type: "Group", Name: "Go"}
+	ctxgroupGo         = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/util/ctxgroup", Type: "Group", Name: "Go"}
+	ctxgroupGoCtx      = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/util/ctxgroup", Type: "Group", Name: "GoCtx"}
+	monitorGo          = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster", Type: "Monitor", Name: "Go"}
+	stopperAsyncTask   = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/util/stop", Type: "Stopper", Name: "RunAsyncTask"}
+	stopperAsyncTaskEx = Function{Pkg: "github.com/cockroachdb/cockroach/pkg/util/stop", Type: "Stopper", Name: "RunAsyncTaskEx"}
 
 	// GoRoutineFunctions is a collection of `go` wrappers that are
 	// known to take closures as parameters and invoke them
@@ -93,6 +95,8 @@ var (
 		{Func: ctxgroupGo, WaitFuncName: "Wait"},
 		{Func: ctxgroupGoCtx, WaitFuncName: "Wait"},
 		{Func: monitorGo, WaitFuncName: "Wait"},
+		{Func: stopperAsyncTask},
+		{Func: stopperAsyncTaskEx},
 	}
 
 	// test-related function locations. We are interested in calls to
