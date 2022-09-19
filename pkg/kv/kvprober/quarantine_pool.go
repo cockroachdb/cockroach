@@ -8,13 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package kvprober sends queries to KV in a loop, with configurable sleep
-// times, in order to generate data about the healthiness or unhealthiness of
-// kvclient & below.
-//
-// Prober increments metrics that SRE & other operators can use as alerting
-// signals. It also writes to logs to help narrow down the problem (e.g. which
-// range(s) are acting up).
 package kvprober
 
 import (
@@ -26,15 +19,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
+// quarantinePool provides a way of repeatedly probing ranges that
+// have previously failed to probe. This provides confirmation of outages
+// over a smaller set of ranges at a high confidence.
 type quarantinePool struct {
 	size func() int64 // can change over time
 	mu   struct {
 		syncutil.Mutex
-		steps        []Step
-		size         int64
+		// steps are the queue of ranges to probe in quarantine.
+		steps []Step
+		// entryTimeMap keeps track of when ranges enter the quarantine
+		// pool. This is used to determine the WriteProbeQuarantineOldestDuration
+		// metric.
 		entryTimeMap map[roachpb.RangeID]time.Time
 	}
 }
@@ -115,7 +113,7 @@ func (qp *quarantinePool) next(ctx context.Context) (Step, error) {
 	defer qp.mu.Unlock()
 
 	if len(qp.mu.steps) == 0 {
-		return Step{}, errors.New("quarantine pool is empty")
+		return Step{}, nil
 	}
 
 	step := qp.mu.steps[0]

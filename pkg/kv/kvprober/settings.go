@@ -144,7 +144,10 @@ var quarantinePoolSize = settings.RegisterIntSetting(
 var quarantineWriteEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.prober.quarantine.write.enabled",
-	"whether the KV write prober is enabled for the quaranatine pool",
+	"whether the KV write prober is enabled for the quarantine pool; The "+
+		"quarantine pool holds a separate group of ranges that have previously failed "+
+		"a probe which are continually probed. This helps determine outages for ranges "+
+		" with a high level of confidence",
 	false)
 
 var quarantineWriteInterval = settings.RegisterDurationSetting(
