@@ -133,6 +133,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 		}
 	}
 	out.apply(b.Drop)
+	checkIfConstraintNameAlreadyExists(b, tbl, t)
 	sharding := makeShardedDescriptor(b, t)
 	var sourcePrimaryIndexElem *scpb.PrimaryIndex
 	if rowidToDrop == nil {
@@ -497,6 +498,25 @@ func mustRetrieveKeyIndexColumns(
 			"index %v from table %v", indexID, tableID))
 	}
 	return indexColumns
+}
+
+func checkIfConstraintNameAlreadyExists(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
+	if t.Name == "" {
+		return
+	}
+	// Check explicit constraint names.
+	publicTableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
+	scpb.ForEachConstraintName(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintName) {
+		if e.Name == string(t.Name) {
+			panic(pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", t.Name))
+		}
+	})
+	// Check index names.
+	scpb.ForEachIndexName(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, n *scpb.IndexName) {
+		if n.Name == string(t.Name) {
+			panic(pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", t.Name))
+		}
+	})
 }
 
 // makeShardedDescriptor construct a sharded descriptor for the new primary key.
