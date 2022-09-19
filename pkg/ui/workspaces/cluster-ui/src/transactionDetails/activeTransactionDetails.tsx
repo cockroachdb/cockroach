@@ -60,7 +60,6 @@ export const ActiveTxnInsightsLabels = {
   LAST_STATEMENT_EXEC_ID: "Most Recent Statement Execution ID",
   SESSION_ID: "Session ID",
   PRIORITY: "Priority",
-  FULL_SCAN: "Full Scan",
 };
 
 export const RECENT_STATEMENT_NOT_FOUND_MESSAGE =
@@ -142,10 +141,6 @@ export const ActiveTransactionDetails: React.FC<
                     <SummaryCardItem
                       label={ActiveTxnInsightsLabels.PRIORITY}
                       value={capitalize(transaction.priority)}
-                    />
-                    <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.FULL_SCAN}
-                      value={transaction.isFullScan.toString()}
                     />
                   </Col>
                 </Row>
