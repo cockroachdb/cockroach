@@ -350,6 +350,10 @@ func (p *pubsubSink) Topics() []string {
 }
 
 func (p *gcpPubsubClient) getTopicClient(name string) (*pubsub.Topic, error) {
+	//TODO (zinger): Investigate whether changing topics to a sync.Map would be
+	//faster here, I think it would.
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if topic, ok := p.topics[name]; ok {
 		return topic, nil
 	}
