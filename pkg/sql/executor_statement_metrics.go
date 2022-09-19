@@ -195,7 +195,7 @@ func (ex *connExecutor) recordStatementSummary(
 		IndexRecommendations: idxRecommendations,
 		Query:                stmt.StmtNoConstants,
 		StartTime:            phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt),
-		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerEndExecStmt),
+		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).Add(svcLatRaw),
 		FullScan:             fullScan,
 		SessionData:          planner.SessionData(),
 		ExecStats:            queryLevelStats,
