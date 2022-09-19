@@ -75,6 +75,11 @@ type sessionVar struct {
 	// either by SHOW or in the pg_catalog table.
 	Get func(evalCtx *extendedEvalContext) (string, error)
 
+	// Exists returns true if this custom session option exists in the current
+	// context. It's needed to support the current_setting builtin for custom
+	// options. It is only defined for custom options.
+	Exists func(evalCtx *extendedEvalContext) bool
+
 	// GetFromSessionData returns a string representation of a given variable to
 	// be used by BufferParamStatus. This is only required if the variable
 	// is expected to send updates through ParamStatusUpdate in pgwire.
@@ -2479,6 +2484,10 @@ func getCustomOptionSessionVar(varName string) (sv sessionVar, isCustom bool) {
 				}
 				return v, nil
 			},
+			Exists: func(evalCtx *extendedEvalContext) bool {
+				_, ok := evalCtx.SessionData().CustomOptions[varName]
+				return ok
+			},
 			Set: func(ctx context.Context, m sessionDataMutator, val string) error {
 				// TODO(#72026): do some memory accounting.
 				m.SetCustomOption(varName, val)
@@ -2500,6 +2509,11 @@ func (p *planner) GetSessionVar(
 	ok, v, err := getSessionVar(name, missingOk)
 	if err != nil || !ok {
 		return ok, "", err
+	}
+	if existsFn := v.Exists; existsFn != nil {
+		if missingOk && !existsFn(&p.extendedEvalCtx) {
+			return false, "", nil
+		}
 	}
 	val, err := v.Get(&p.extendedEvalCtx)
 	return true, val, err
