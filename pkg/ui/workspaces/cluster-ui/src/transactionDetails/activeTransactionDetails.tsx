@@ -143,10 +143,6 @@ export const ActiveTransactionDetails: React.FC<
                       label={ActiveTxnInsightsLabels.PRIORITY}
                       value={capitalize(transaction.priority)}
                     />
-                    <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.FULL_SCAN}
-                      value={transaction.isFullScan.toString()}
-                    />
                   </Col>
                 </Row>
               </SummaryCard>
