@@ -149,3 +149,63 @@ func (f *Finder) Key() roachpb.Key {
 	}
 	return f.samples[bestIdx].key
 }
+
+// NoSplitKeyCause iterates over all sampled candidate split keys and
+// determines the number of samples that don't pass each split key requirement
+// (e.g. insufficient counters, imbalance in left and right counters, too many
+// contained counters, or a combination of the last two).
+func (f *Finder) NoSplitKeyCause() (
+	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained int,
+) {
+	for _, s := range f.samples {
+		if s.left+s.right+s.contained < splitKeyMinCounter {
+			insufficientCounters++
+		} else {
+			balanceScore := math.Abs(float64(s.left-s.right)) / float64(s.left+s.right)
+			imbalanceBool := balanceScore >= splitKeyThreshold
+			containedScore := float64(s.contained) / float64(s.left+s.right+s.contained)
+			tooManyContainedBool := containedScore >= splitKeyContainedThreshold
+			if imbalanceBool && !tooManyContainedBool {
+				imbalance++
+			} else if !imbalanceBool && tooManyContainedBool {
+				tooManyContained++
+			} else if imbalanceBool && tooManyContainedBool {
+				imbalanceAndTooManyContained++
+			}
+		}
+	}
+	return
+}
+
+// MajorityKeyFrequency returns 0 if there is no key that appears in f.samples
+// more than 50% of the time, and the percentage that the majority key appears
+// in f.samples if one exists.
+func (f *Finder) MajorityKeyFrequency() float64 {
+	// Run the Boyer-Moore majority vote algorithm. majorityKey will contain the
+	// majority key of f.samples if it exists, and any key if it does not exist.
+	var majorityKey roachpb.Key
+	var counter int
+	for _, s := range f.samples {
+		if counter == 0 {
+			majorityKey = s.key
+			counter = 1
+		} else if majorityKey.Equal(s.key) {
+			counter++
+		} else {
+			counter--
+		}
+	}
+
+	// Check if majorityKey is truly the majority key.
+	var majorityKeyCount int
+	for _, s := range f.samples {
+		if majorityKey.Equal(s.key) {
+			majorityKeyCount++
+		}
+	}
+
+	if 2*majorityKeyCount > len(f.samples) {
+		return float64(majorityKeyCount) / float64(len(f.samples))
+	}
+	return 0
+}

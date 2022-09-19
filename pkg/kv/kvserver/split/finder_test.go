@@ -13,6 +13,7 @@ package split
 import (
 	"bytes"
 	"context"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -268,6 +269,127 @@ func TestSplitFinderRecorder(t *testing.T) {
 			t.Errorf(
 				"%d: expected reservoir: %v, but got reservoir: %v",
 				i, test.expectedReservoir, finder.samples)
+		}
+	}
+}
+
+func TestFinder_NoSplitKeyCause(t *testing.T) {
+	samples1 := [splitKeySampleSize]sample{}
+	for i, idx := range rand.Perm(splitKeySampleSize) {
+		if i < 5 {
+			// insufficient counters
+			samples1[idx] = sample{
+				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
+				left:      0,
+				right:     0,
+				contained: splitKeyMinCounter - 1,
+			}
+		} else if i < 7 {
+			// imbalance
+			deviationLeft := rand.Intn(5)
+			deviationRight := rand.Intn(5)
+			samples1[idx] = sample{
+				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
+				left:      25 + deviationLeft,
+				right:     15 - deviationRight,
+				contained: int(max(float64(splitKeyMinCounter-40-deviationLeft+deviationRight), float64(40+deviationLeft-deviationRight))),
+			}
+		} else if i < 13 {
+			// imbalance
+			deviationLeft := rand.Intn(5)
+			deviationRight := rand.Intn(5)
+			samples1[idx] = sample{
+				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
+				left:      50 + deviationLeft,
+				right:     30 - deviationRight,
+				contained: int(max(float64(splitKeyMinCounter-80-deviationLeft+deviationRight), 0)),
+			}
+		} else {
+			// too many contained
+			contained := int(splitKeyMinCounter*splitKeyContainedThreshold + 1)
+			left := (splitKeyMinCounter - contained) / 2
+			samples1[idx] = sample{
+				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
+				left:      left,
+				right:     splitKeyMinCounter - left - contained,
+				contained: contained,
+			}
+		}
+	}
+
+	testCases := []struct {
+		samples                              [splitKeySampleSize]sample
+		expectedInsufficientCounters         int
+		expectedImbalance                    int
+		expectedTooManyContained             int
+		expectedImbalanceAndTooManyContained int
+	}{
+		{samples1, 5, 6, 7, 2},
+	}
+	for i, test := range testCases {
+		finder := NewFinder(timeutil.Now())
+		finder.samples = test.samples
+		insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := finder.NoSplitKeyCause()
+		if insufficientCounters != test.expectedInsufficientCounters {
+			t.Errorf(
+				"%d: insufficient counters - expected: %v, but got: %v",
+				i, test.expectedInsufficientCounters, insufficientCounters)
+		}
+		if imbalance != test.expectedImbalance {
+			t.Errorf(
+				"%d: imbalance - expected: %v, but got: %v",
+				i, test.expectedImbalance, imbalance)
+		}
+		if tooManyContained != test.expectedTooManyContained {
+			t.Errorf(
+				"%d: too many contained - expected: %v, but got: %v",
+				i, test.expectedTooManyContained, tooManyContained)
+		}
+		if imbalanceAndTooManyContained != test.expectedImbalanceAndTooManyContained {
+			t.Errorf(
+				"%d: imbalance and too many contained - expected: %v, but got: %v",
+				i, test.expectedImbalanceAndTooManyContained, imbalanceAndTooManyContained)
+		}
+	}
+}
+
+func TestFinder_MajorityKeyFrequency(t *testing.T) {
+	fiftyPercentMajorityKeySample := [splitKeySampleSize]sample{}
+	for i, idx := range rand.Perm(splitKeySampleSize) {
+		var tableID uint32
+		if i >= 10 {
+			tableID = uint32(10)
+		}
+		fiftyPercentMajorityKeySample[idx] = sample{
+			key: keys.SystemSQLCodec.TablePrefix(tableID),
+		}
+	}
+	fiftyFivePercentMajorityKeySample := [splitKeySampleSize]sample{}
+	for i, idx := range rand.Perm(splitKeySampleSize) {
+		var tableID uint32
+		if i >= 11 {
+			tableID = uint32(i)
+		}
+		fiftyFivePercentMajorityKeySample[idx] = sample{
+			key: keys.SystemSQLCodec.TablePrefix(tableID),
+		}
+	}
+
+	testCases := []struct {
+		samples                      [splitKeySampleSize]sample
+		expectedMajorityKeyFrequency float64
+	}{
+		{fiftyPercentMajorityKeySample, 0},
+		{fiftyFivePercentMajorityKeySample, 0.55},
+	}
+	for i, test := range testCases {
+		finder := NewFinder(timeutil.Now())
+		finder.samples = test.samples
+		majorityKeyFrequency := finder.MajorityKeyFrequency()
+		if majorityKeyFrequency != test.expectedMajorityKeyFrequency {
+			t.Errorf(
+				"%d: expected majority key frequency: %v, but got majority key frequency: %v",
+				i, test.expectedMajorityKeyFrequency, majorityKeyFrequency)
 		}
 	}
 }

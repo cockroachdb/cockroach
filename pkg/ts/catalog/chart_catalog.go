@@ -736,6 +736,18 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{DistributionLayer, "Load", "Splitter"}},
+		Charts: []chartDescription{
+			{
+				Title: "Load Splitter",
+				Metrics: []string{
+					"kv.loadsplitter.popularkey",
+					"kv.loadsplitter.nosplitkey",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{
 			{DistributionLayer, "Split Queue"},
 			{ReplicationLayer, "Split Queue"},
