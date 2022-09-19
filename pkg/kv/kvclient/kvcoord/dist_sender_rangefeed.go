@@ -610,13 +610,8 @@ func (ds *DistSender) singleRangeFeed(
 			}
 			if err != nil {
 				if stuckWatcher.stuck() {
-					ds.metrics.RangefeedRestartStuck.Inc(1)
-					if catchupRes == nil {
-						telemetry.Count("rangefeed.stuck.after-catchup-scan")
-					} else {
-						telemetry.Count("rangefeed.stuck.during-catchup-scan")
-					}
-					return args.Timestamp, errors.Wrapf(errRestartStuckRange, "waiting for r%d %s [threshold %s]", args.RangeID, args.Replica, stuckWatcher.threshold())
+					afterCatchUpScan := catchupRes == nil
+					return args.Timestamp, ds.handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold())
 				}
 				return args.Timestamp, err
 			}
@@ -637,6 +632,13 @@ func (ds *DistSender) singleRangeFeed(
 				log.VErrEventf(ctx, 2, "RangeFeedError: %s", t.Error.GoError())
 				if catchupRes != nil {
 					ds.metrics.RangefeedErrorCatchup.Inc(1)
+				}
+				if stuckWatcher.stuck() {
+					// When the stuck watcher fired, and the rangefeed call is local,
+					// the remote might notice the cancellation first and return from
+					// Recv with an error that we need to special-case here.
+					afterCatchUpScan := catchupRes == nil
+					return args.Timestamp, ds.handleStuckEvent(&args, afterCatchUpScan, stuckWatcher.threshold())
 				}
 				return args.Timestamp, t.Error.GoError()
 			}
@@ -672,6 +674,18 @@ func legacyRangeFeedEventProducer(
 	cleanup = func() {}
 	producer, err = client.RangeFeed(ctx, req)
 	return producer, cleanup, err
+}
+
+func (ds *DistSender) handleStuckEvent(
+	args *roachpb.RangeFeedRequest, afterCatchupScan bool, threshold time.Duration,
+) error {
+	ds.metrics.RangefeedRestartStuck.Inc(1)
+	if afterCatchupScan {
+		telemetry.Count("rangefeed.stuck.after-catchup-scan")
+	} else {
+		telemetry.Count("rangefeed.stuck.during-catchup-scan")
+	}
+	return errors.Wrapf(errRestartStuckRange, "waiting for r%d %s [threshold %s]", args.RangeID, args.Replica, threshold)
 }
 
 // sentinel error returned when cancelling rangefeed when it is stuck.
