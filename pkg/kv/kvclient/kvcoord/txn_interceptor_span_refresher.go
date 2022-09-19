@@ -566,8 +566,9 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) error {
+	expLogEnabled := log.ExpensiveLogEnabled(ctx, 3)
 	return ba.RefreshSpanIterate(br, func(span roachpb.Span) {
-		if log.ExpensiveLogEnabled(ctx, 3) {
+		if expLogEnabled {
 			log.VEventf(ctx, 3, "recording span to refresh: %s", span.String())
 		}
 		sr.refreshFootprint.insert(span)
