@@ -8,14 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, delay, put, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { actions } from "./jobs.reducer";
 import { getJobs, JobsRequest } from "src/api/jobsApi";
-import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
 import { PayloadAction } from "@reduxjs/toolkit";
-import { rootActions } from "../reducers";
 
 export function* refreshJobsSaga(action: PayloadAction<JobsRequest>) {
   yield put(actions.request(action.payload));
@@ -30,29 +28,16 @@ export function* requestJobsSaga(action: PayloadAction<JobsRequest>): any {
   }
 }
 
-export function* receivedJobsSaga(delayMs: number) {
-  yield delay(delayMs);
-  yield put(actions.invalidated());
-}
-
 export function* updateFilteredJobsSaga(action: PayloadAction<JobsRequest>) {
   yield put(actions.invalidated());
   const req = new cockroach.server.serverpb.JobsRequest(action.payload);
   yield put(actions.refresh(req));
 }
 
-export function* jobsSaga(
-  cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
-) {
+export function* jobsSaga() {
   yield all([
-    throttleWithReset(
-      cacheInvalidationPeriod,
-      actions.refresh,
-      [actions.invalidated, rootActions.resetState],
-      refreshJobsSaga,
-    ),
+    takeLatest(actions.refresh, refreshJobsSaga),
     takeLatest(actions.request, requestJobsSaga),
-    takeLatest(actions.received, receivedJobsSaga, cacheInvalidationPeriod),
     takeLatest(actions.updateFilteredJobs, updateFilteredJobsSaga),
   ]);
 }
