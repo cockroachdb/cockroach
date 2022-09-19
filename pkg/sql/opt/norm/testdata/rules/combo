@@ -43,38 +43,15 @@ Initial expression
              └── (k:1 = x:8) AND ((i:2 + 1) = 10) [outer=(1,2,8), immutable, constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
 ================================================================================
 NormalizeCmpPlusConst
-  Cost: 15560.04
-================================================================================
-   project
-    ├── columns: s:4
-    ├── immutable
-    └── inner-join (cross)
-  -      ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 a.tableoid:7 x:8!null y:9 xy.crdb_internal_mvcc_timestamp:10 xy.tableoid:11
-  +      ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 a.tableoid:7 x:8!null y:9 xy.crdb_internal_mvcc_timestamp:10 xy.tableoid:11
-         ├── immutable
-         ├── key: (1,8)
-         ├── fd: (1)-->(2-7), (3,4)~~>(1,2,5-7), (8)-->(9-11)
-         ├── scan a
-         │    ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 a.tableoid:7
-         │    ├── key: (1)
-         │    └── fd: (1)-->(2-7), (3,4)~~>(1,2,5-7)
-         ├── scan xy
-         │    ├── columns: x:8!null y:9 xy.crdb_internal_mvcc_timestamp:10 xy.tableoid:11
-         │    ├── key: (8)
-         │    └── fd: (8)-->(9-11)
-         └── filters
-  -           └── (k:1 = x:8) AND ((i:2 + 1) = 10) [outer=(1,2,8), immutable, constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
-  +           └── (k:1 = x:8) AND (i:2 = (10 - 1)) [outer=(1,2,8), immutable, constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /8: (/NULL - ])]
-================================================================================
-FoldBinary
   Cost: 12293.37
 ================================================================================
    project
     ├── columns: s:4
   - ├── immutable
     └── inner-join (cross)
-         ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 a.tableoid:7 x:8!null y:9 xy.crdb_internal_mvcc_timestamp:10 xy.tableoid:11
+  -      ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 a.tableoid:7 x:8!null y:9 xy.crdb_internal_mvcc_timestamp:10 xy.tableoid:11
   -      ├── immutable
+  +      ├── columns: k:1!null i:2!null f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 a.tableoid:7 x:8!null y:9 xy.crdb_internal_mvcc_timestamp:10 xy.tableoid:11
          ├── key: (1,8)
   -      ├── fd: (1)-->(2-7), (3,4)~~>(1,2,5-7), (8)-->(9-11)
   +      ├── fd: ()-->(2), (1)-->(3-7), (3,4)~~>(1,5-7), (8)-->(9-11)
@@ -87,7 +64,7 @@ FoldBinary
          │    ├── key: (8)
          │    └── fd: (8)-->(9-11)
          └── filters
-  -           └── (k:1 = x:8) AND (i:2 = (10 - 1)) [outer=(1,2,8), immutable, constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /8: (/NULL - ])]
+  -           └── (k:1 = x:8) AND ((i:2 + 1) = 10) [outer=(1,2,8), immutable, constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
   +           └── (k:1 = x:8) AND (i:2 = 9) [outer=(1,2,8), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /8: (/NULL - ]), fd=()-->(2)]
 ================================================================================
 SimplifyJoinFilters
@@ -501,7 +478,7 @@ Final best expression
 optstepsweb
 SELECT s FROM a INNER JOIN xy ON a.k=xy.x AND i+1=10
 ----
-https://raduberinde.github.io/optsteps.html?eJzsnG9zmzYcx5_vVfzmR3CGxDhpQ9hxly1Nd-mlbpdstwdJrkcduVGDwQd4s7tbr9fXkId7dX0lOzAmYEmAjCA4dR_VSEj6IfH5fvWH_NO5-O2sY3QuTs5Ojn8HH16ev3kNFpwOBifn8OrN6QBmc3gzAGvnzpzNd2bw8-AF4K5mar2O0hm43vgFHo06RkdVVbB2Tx0cYMu-crrdLrx_-Hl0BKoGXU3RDuHo6MrpTjz3IxoGV04Xvt3_9-3-y7f7LzB07enY8Q3wjf1sCh6Pp4H13kaLy_fLy46DPPWjix2Qhp7r-3KYHv2jlHpnaD86U9sGbPRhZOyF1cBH4xlYO0Pv5v077ATIcyz73fiv4fBdgMfID6zxxHgO1k5UuYtvjAOYGfqimLlxCLN5_r1aL8yS3K1plAZmgltJu0NzAyRN0WmRjW7CNFlVr6a93h6S-uqBrIC0p-zLnz_H1zSlrzxbXNcfch6qmkYr0R9aDliphK-1Pkt2RXHcMpnjfo3gWZHO5iVCFdbf1BD1ohBzei3Jh-0AeX6SspIs3RkamGEccvT6SlLYaV3QZDBB68lw6U4D5JnR49Jl5WFAKjB0HT_wLOwEvintagZIu4M_zs5AheufYFdP_5avr5wFBUIsWDb-hI7Hk7f21D8OC1kygZEYESLEwwMkIIEEtV8iSDDeIyiAhLpxkKA2cPGfx2sl5KCMSEujjEisjDKixCXKoCmUsSp6QNlqjvVQRo80RFlhqML6m4my3BBzeo1AmfrYKCvJ0rB-EyStBypocoUG9Mux9aVr3_yCHcubL4GavpKh6EFpiqrrUZQYia2EFMH6spAibhTvt6ISUwWGt6Uq2KNWsGXgloGPgyAuJh6SLSms_nL3EFTYPSRrV2B0Y2ZelQSJF3g8sfFo_srFzsvECkdspCbFkDzgtJpq4cSTnn5r-bebC8tiIArDF0HH8dQO8MTGQxzMDbDRKFA9929f-oQ8V3U91XWQrICHP9xSEpiTafZUWlAk0a2mKemLRNOUtnD-zuHcAAuzbE4CXzYnVX9x7bTqiCHN1IM45KTGPlFfNrogfIHzAP926t8u6H3qBG7I8jM0ShYUWKlpL9zf51pR2HiME62siFJyXJEvVHMoJXRoiVK1KZSSy4nIjpezOVpQcZSUIfrqE6m4evpVUFezi2StQDe9EF16PVrog2Wt6MYZ6gPt96jZzWgk3ScI7Dq6CNcc1EKXvamDloJ77NrJtIuSsFDj_n6kxrooNS63jv_YasyzmB-2cIPUv9YpYVn1j7WXS_0ray_vFHK_fIRE0andcu4Q49eI1ygIkHhWkSy3VrfEF9THfhaVJJ7pwFZEqXaJX9PE7efYFLrrbQDJBVWy3JooVhWUS_ewHG-u8AdT0s0yRmoFSwuMQU_JVd_Ip3fQUzO39MfYmA-8iFhAuMD05dgD6mI9IA9wNsxd8RKLw2MQRac6goNUXB6DlaOEArHeErr3Kz8g6lIgvodFHQCkE-EbDGvLF3d30OhK-DuOQVW3_NErZfdLSaNIH6EC1LOoRIXZJSyR2OruU9DdExuPsWMF6G0yP4yEl7yeUd5H2QvZKi9z_YKc3a-ubHCBrClJZk1sq0pyfNgi52Yx-kjGQKNVJR1jhyJWUhRmLGVWG1ayNrDkUGmTJ_44JPfO9bdrlLz1ju22zBNT0GSj4jzsA-oWRiols4ex9xh7GCJUdN3diFbvK1RZXS9TdKkDXW1Wa9atrFNo606ZOFq_xrSm3IymYRQX7jsJO5TJRHHuMY-ck5ZFLWZLIUUGWsH1jtI5mU1s10OZD1PPkevdIC8EeoL47LUY7nti4U6MmjbClkhak4gCPrLkGnBb8H4P4KWf9uMCLxuQbcXYglq_Igd5VoBeI-8DyrCLlpIh2PPK3zXEBGN91jAOa65EOKJjRZ_3D0uAiPHY-WBAl2Z-o9LSmfRGULlZDGPhO_1swZ0EUl-GS2sYTC07vHTdCvrxnuagrgDQnlnZm-4pT6tFfCWHIvcaQxm-qky-0k9INvLlQo6lZvmQLCpYf4sBpMCbhlDKgvzMde-mEyrJM0kZlPfqRrkdVQ2zebtxfofmD6251K7BhEv9msb9RTxxXrA8FN675frWm26oN20pO8sxb2tehZhXvYx5pW2SNgG5WhyDKI3eLCZvvfYT9tobDfKUQ_0TB_E3tzk2Np0pjXet_AGUaobWajfhs35Wj_ys1no_uwbqWa9fznZfhW96KIcuyqCqwsmX_AMj658VEQ3a1nyKQpTdBgzWF27n3x_-DwAA__88EvDJ
+https://raduberinde.github.io/optsteps.html?eJzsnN1um0gbx8_fq3heH4EMSXDShrBCyipNV6lct5vsag-SqKLOuJmaD4uPXburrapegw_36nolKzAm4JnBYAaCE_eoZoYZnpnh9__PB_m7c_Vrv6N1rs7752e_gQevL9-9BQMuBoPzS3jz7mIA0xm8G4CxN9ans70p_Dx4Bbir6MpBR-oMHNd6hUejjtaRZRmM_Qsb-9gwb-xutwsfH36enoKsQFeRlBM4Pb2xuxPX-YyG_o3dhR_zf3_Mv_2Yf4OhYwaW7WngaUfZFGxZgW98NNHi8nx52baRK392sA3C0HU8TwzTo3-UUsea8n87ME3AWg9G2mFYDXzWXoCxN3TvPn7Ato9c2zA_WH8Ohx98bCHPN6yJ9hKMvahyB99pxzDV1EUxM-0EprP8e5WDMEtyt6JQHjAT3EraGM00EBRJpUU2ugvTRFm-CQ4ODpHQk49FCYRD6Uj8-jW-pkg96cXiuvqQ80RWFFqJ3tCwwUglfK-1LdkVxXGLZI75BsGzIp3OCoTKrb-pIarrQszptSQfNn3keknKSrIw1hTQwzjE6PUVhLDTuqCIoINyIMK1E_jI1aPmUkXpYUBKMHRsz3cNbPueLuwrGgj7g9_7fZDh9ifYV9O_xdsbe0GBEAuGib-gM2vy3gy8s7CQJRMYiREhQjyEkDiOIAEJJKj9EkFCpr9HsAYSctshQTxgHiSoD7_4z-NFAHkoI8Ljj7KoxFSB4W2pCg6pFTCLJ6JZkhKaIiWrogdSrubYjJT0SENSrg2V25BhkjI3xJxeI0gpPzYpC6I6rF-HE7Lm_Op6Glzvn4AM-ydk7RKM7vTMq5GQ-wpbExOPZm8cbL9OVCXiNjUppvZxytoVpXa-h6On3xvePW2IthKABOPWA5AbrggaWoHp44mJh9ifaWCikS-7zl-e8AW5juy4smMjUQIXf7qnJDB9KduVcookulXXBXWRqOvCDsbPFsaNsTDL5iTw5eOk6l9fO606Ykgz9SAOOamxR9SXjc4PX-A8wL8PvPsFvS9s3wlZ3kejxJuzUtPmvHdUGPMsF75VGCeesiJKyXFFvlDNoZTQoSVK5aZQSs7MkRmvDJV4goqjpAjRV1uk4kLEd05dzS6StZjT9JpO4aUdrg3LWhyJM9QH2ueo2c1oJN0ncOw6ugjXHNRCl93ARkvBPXPMZNpFSVioce8oUmOVlxoXWxJ7bDUus_YVPuEWqX-tU8Ki6h9rbyn1r6y9ZaeQR8UjJIpObTyVDjF-jcoaBQ4SzyqS5dbqlvg19bHbopLEMx3YiijVLvEbmrijHJtCd70NIHlNlSy3xotVa8qle9gSby73hinoZhkjtYKlBcagp-Sqb-TTO-ipmVt6MzbmA68iFhAuMH059oAqXw9YBjhb5q7KEquExyCKTnVECVKV8hisHAUUiPWW0L1f8QFRlwKVayzqACCdSLnBsLF8le4OGl0Jf1diUNUtf_RK2f1S0CjSRygH9VxXosTsEpZI7HT3KejuuYktbBs-ep_MDyPhJa9nlPdR9kJ2ystcvyBn96srG6VA1pQksya2VSU5PmyRczMffSRjoNGqko6xQ-ErKRIzliKrDStZG1hyqLTJE5-zzr1z8-0aKW-9Y7ct88QUNNmouAz7gLqFkUrJ7GEcPsYeBg8V3XQ3otX7ClVW14sUXehAV5vVmnUr6xTaplOmEk-_wbSm2IymYRSv3XfidiiTieLcYx45Jy3XPTFbCiky0Aqud6TO-XRiOi7KfON1iRz3Drkh0BPEZ6_FcD_kC3di1LQRtkTShkTk8L1SqQG3A-9zAC_9tF8p8LIB2VaMLaj1C7KRa_joLXI_oQy7aCkZgr2s_F1DTDDWZw1WWHMlwhEdy_u8f1gCRIzH9icNujTzG5WWzqQ2gsrtYhgL3-m2BWfiCz0Rro2hHxhmeOm2FfQre5qDugJAa7OiN80prdUivpJDsfQaQxG-yky-0k9INvLlQo6lZvmQLCpYnzWD4LtBCKUsyPuOMw4mVJJnkjIoP6gb5WZUNUxn7cb5GM0enuZauQUdrtVbGvcX8cR5wXBReO-O6ztvuqXetKXsLMa8nXnlYl7VIuaV_ScM6oVcLY6Bl0ZvF5N3XvsJe-2tBnnKof6B_fib2xwbm86UxrtS_ABKNUNrtJvwWT-rRn5Wab2f3QD1rNcvZ7uvwjc9lEMXRVBV4eRL_oGRzc-K8AZtaz5FIcpuAwbrC7fzz__-CwAA__-U-F62
 
 # When the URL is very long, the compressed data is added as a fragment rather
 # than a query parameter.
