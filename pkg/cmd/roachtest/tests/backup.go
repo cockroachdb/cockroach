@@ -116,7 +116,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("backup/nodeShutdown/worker/%s", backupNodeRestartSpec),
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: backupNodeRestartSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -136,7 +136,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 	})
 	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("backup/nodeShutdown/coordinator/%s", backupNodeRestartSpec),
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: backupNodeRestartSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
@@ -160,7 +160,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 func registerBackupMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "backup/mixed-version",
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// An empty string means that the cockroach binary specified by flag
@@ -251,7 +251,7 @@ func registerBackup(r registry.Registry) {
 	backup2TBSpec := r.MakeClusterSpec(10)
 	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: backup2TBSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
@@ -290,7 +290,7 @@ func registerBackup(r registry.Registry) {
 	KMSSpec := r.MakeClusterSpec(3)
 	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("backup/KMS/%s", KMSSpec.String()),
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: KMSSpec,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().Cloud == spec.GCE {
@@ -408,7 +408,7 @@ func registerBackup(r registry.Registry) {
 	// verifies them with a fingerprint.
 	r.Add(registry.TestSpec{
 		Name:    `backupTPCC`,
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: r.MakeClusterSpec(3),
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

@@ -61,7 +61,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "import/nodeShutdown/worker",
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -75,7 +75,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 	})
 	r.Add(registry.TestSpec{
 		Name:    "import/nodeShutdown/coordinator",
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -140,7 +140,7 @@ func registerImportTPCC(r registry.Registry) {
 		timeout := 5 * time.Hour
 		r.Add(registry.TestSpec{
 			Name:    testName,
-			Owner:   registry.OwnerBulkIO,
+			Owner:   registry.OwnerDisasterRecovery,
 			Cluster: r.MakeClusterSpec(numNodes),
 			Timeout: timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -152,7 +152,7 @@ func registerImportTPCC(r registry.Registry) {
 	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
 	r.Add(registry.TestSpec{
 		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: r.MakeClusterSpec(8, spec.CPU(16), spec.Geo(), spec.Zones(geoZones)),
 		Timeout: 5 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -183,7 +183,7 @@ func registerImportTPCH(r registry.Registry) {
 		item := item
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
-			Owner:   registry.OwnerBulkIO,
+			Owner:   registry.OwnerDisasterRecovery,
 			Cluster: r.MakeClusterSpec(item.nodes),
 			Timeout: item.timeout,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -314,7 +314,7 @@ func runImportMixedVersion(
 func registerImportMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "import/mixed-versions",
-		Owner: registry.OwnerBulkIO,
+		Owner: registry.OwnerDisasterRecovery,
 		// Mixed-version support was added in 21.1.
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -358,7 +358,7 @@ func registerImportDecommissioned(r registry.Registry) {
 
 	r.Add(registry.TestSpec{
 		Name:    "import/decommissioned",
-		Owner:   registry.OwnerBulkIO,
+		Owner:   registry.OwnerDisasterRecovery,
 		Cluster: r.MakeClusterSpec(4),
 		Run:     runImportDecommissioned,
 	})
