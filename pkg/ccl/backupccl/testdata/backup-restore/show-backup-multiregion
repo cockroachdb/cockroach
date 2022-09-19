@@ -1,0 +1,36 @@
+new-server name=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/database_backup/';
+----
+
+exec-sql
+SHOW BACKUP LATEST IN 'nodelocal://1/database_backup/';
+----
+
+query-sql
+SELECT regions FROM [SHOW BACKUP LATEST IN 'nodelocal://1/database_backup/'] WHERE regions IS NOT NULL;
+----
+ALTER DATABASE d PRIMARY REGION "us-east-1"; ALTER DATABASE d ADD REGION "eu-central-1"; ALTER DATABASE d ADD REGION "us-west-1";
+
+exec-sql
+CREATE DATABASE foo;
+CREATE TABLE foo.t (x INT);
+INSERT INTO foo.t VALUES (1), (2), (3);
+----
+
+exec-sql
+BACKUP DATABASE foo INTO 'nodelocal://1/database_backup/';
+----
+
+query-sql
+SELECT regions FROM [SELECT * FROM [SHOW BACKUP LATEST IN 'nodelocal://1/database_backup/'] WHERE object_name='foo' AND object_type='database'];
+----
+<nil>
