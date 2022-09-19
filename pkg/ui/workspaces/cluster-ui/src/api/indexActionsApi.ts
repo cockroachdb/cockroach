@@ -8,7 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { executeInternalSql, SqlExecutionRequest } from "./sqlApi";
+import {
+  executeInternalSql,
+  LONG_TIMEOUT,
+  SqlExecutionRequest,
+} from "./sqlApi";
 
 type IndexAction = {
   status: "SUCCESS" | "FAILED";
@@ -32,6 +36,7 @@ export function executeIndexRecAction(
     statements: statements,
     database: databaseName,
     execute: true,
+    timeout: LONG_TIMEOUT,
   };
   return executeInternalSql<IndexActionResponse>(request)
     .then(result => {
