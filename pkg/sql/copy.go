@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -45,6 +46,13 @@ const CopyBatchRowSizeDefault = 100
 
 // When this many rows are in the copy buffer, they are inserted.
 var copyBatchRowSize = util.ConstantWithMetamorphicTestRange("copy-batch-size", CopyBatchRowSizeDefault, 1, 10000)
+
+// SetCopyFromBatchSize exports overriding copy batch size for test code.
+func SetCopyFromBatchSize(i int) {
+	if buildutil.CrdbTestBuild {
+		copyBatchRowSize = i
+	}
+}
 
 type copyMachineInterface interface {
 	run(ctx context.Context) error
