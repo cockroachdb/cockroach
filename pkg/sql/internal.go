@@ -616,7 +616,7 @@ func (ie *InternalExecutor) queryInternalBuffered(
 	txn *kv.Txn,
 	sessionDataOverride sessiondata.InternalExecutorOverride,
 	stmt string,
-// Non-zero limit specifies the limit on the number of rows returned.
+	// Non-zero limit specifies the limit on the number of rows returned.
 	limit int,
 	qargs ...interface{},
 ) ([]tree.Datums, colinfo.ResultColumns, error) {
