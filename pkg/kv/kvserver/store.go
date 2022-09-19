@@ -1545,10 +1545,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					// manually to a non-draining replica.
 
 					if !needsLeaseTransfer {
-						if verbose || log.V(1) {
-							// This logging is useful to troubleshoot incomplete drains.
-							log.Info(ctx, "not moving out")
-						}
+						// Skip this replica.
 						atomic.AddInt32(&numTransfersAttempted, -1)
 						return
 					}
