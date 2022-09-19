@@ -38,6 +38,7 @@ go_test(
         "kvprober_test.go",
         "main_test.go",
         "planner_test.go",
+        "quarantine_pool_test.go",
     ],
     embed = [":kvprober"],
     deps = [
