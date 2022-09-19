@@ -1,5 +1,6 @@
 
-# Populate some values
+# Populate some values. The inline value is a special case in
+# that it will cause an error if time bounds are specified.
 
 run ok
 with t=A v=abc resolve
@@ -9,6 +10,7 @@ with t=A v=abc resolve
   put  k=b
   put  k=b/123
   put  k=c
+put k=i v=inline
 ----
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 wto=false gul=0,0
@@ -17,16 +19,26 @@ data: "a/123"/44.000000000,0 -> /BYTES/abc
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
+# Last test case sees inline value but does not error
+# since no time bound specified.
 run ok
 is_span_empty k=a end=+a
+is_span_empty k=a end=z
+is_span_empty k=a end=+a startTs=45
+is_span_empty k=i end=z
 ----
+false
+false
+true
 false
 
-run ok
-is_span_empty k=a end=z
+# Case in which inline value is encountered under time bounds.
+run error
+is_span_empty k=i startTs=0 ts=1
 ----
-false
+error: (*withstack.withStack:) unexpected inline value found: "i"
 
 run ok
 clear_range k=a end=+a
@@ -36,6 +48,7 @@ data: "a/123"/44.000000000,0 -> /BYTES/abc
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 is_span_empty k=a end=+a
@@ -54,6 +67,7 @@ clear_range k=a end=-a
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 is_span_empty k=a end=-a
@@ -67,6 +81,7 @@ clear_range k=a end==b
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 clear_range k=a end=+b
@@ -74,15 +89,33 @@ clear_range k=a end=+b
 >> at end:
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 clear_range k=a end=-b
 ----
 >> at end:
 data: "c"/44.000000000,0 -> /BYTES/abc
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 clear_range k=a end=-c
 ----
 >> at end:
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+
+run ok
+is_span_empty k=a end=z
+----
+false
+
+run ok
+clear_range k=i end=+i
+----
+>> at end:
 <no data>
+
+run ok
+is_span_empty k=a end=z
+----
+true

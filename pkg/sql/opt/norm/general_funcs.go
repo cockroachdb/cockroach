@@ -64,6 +64,12 @@ func (c *CustomFuncs) IsTimestampTZ(scalar opt.ScalarExpr) bool {
 	return scalar.DataType().Family() == types.TimestampTZFamily
 }
 
+// IsJSON returns true if the given scalar expression is of type
+// JSON.
+func (c *CustomFuncs) IsJSON(scalar opt.ScalarExpr) bool {
+	return scalar.DataType().Family() == types.JsonFamily
+}
+
 // BoolType returns the boolean SQL type.
 func (c *CustomFuncs) BoolType() *types.T {
 	return types.Bool

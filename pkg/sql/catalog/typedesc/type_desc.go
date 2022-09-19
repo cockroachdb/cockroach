@@ -813,7 +813,7 @@ func EnsureTypeIsHydrated(
 			}
 		}
 	}
-	if !t.UserDefined() || t.IsHydrated() {
+	if !t.UserDefined() {
 		return nil
 	}
 	id, err := GetUserDefinedTypeDescID(t)
@@ -889,7 +889,7 @@ func HydrateTypesInSchemaDescriptor(
 func (desc *immutable) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
-	if typ.IsHydrated() {
+	if typ.IsHydrated() && typ.TypeMeta.Version == uint32(desc.GetVersion()) {
 		return nil
 	}
 	var enumData *types.EnumMetadata
