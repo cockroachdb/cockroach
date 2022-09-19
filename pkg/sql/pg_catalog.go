@@ -2422,7 +2422,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		if err != nil {
 			return err
 		}
-		return forEachDatabaseDesc(ctx, p, nil /* dbContext */, false, /* requiresPrivileges */
+		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(dbDesc catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, dbDesc, func(scDesc catalog.SchemaDescriptor) error {
 					return scDesc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
