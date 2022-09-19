@@ -180,7 +180,7 @@ type TxBoundConn interface {
 type DriverConn interface {
 	Query(ctx context.Context, query string, args ...interface{}) (driver.Rows, error)
 	Exec(ctx context.Context, query string, args ...interface{}) error
-	CopyFrom(ctx context.Context, reader io.Reader, query string) error
+	CopyFrom(ctx context.Context, reader io.Reader, query string) (int64, error)
 }
 
 type driverConnAdapter struct {
@@ -200,7 +200,12 @@ func (d *driverConnAdapter) Exec(ctx context.Context, query string, args ...inte
 	return d.c.Exec(ctx, query, args...)
 }
 
-func (d *driverConnAdapter) CopyFrom(ctx context.Context, reader io.Reader, query string) error {
-	_, err := d.c.conn.PgConn().CopyFrom(ctx, reader, query)
-	return err
+func (d *driverConnAdapter) CopyFrom(
+	ctx context.Context, reader io.Reader, query string,
+) (int64, error) {
+	cmdTag, err := d.c.conn.PgConn().CopyFrom(ctx, reader, query)
+	if err != nil {
+		return -1, err
+	}
+	return cmdTag.RowsAffected(), nil
 }
