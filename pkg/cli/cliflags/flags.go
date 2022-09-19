@@ -290,6 +290,12 @@ with the specified period. The client will stop watching
 if an execution of the SQL statement(s) fail.`,
 	}
 
+	NoLineEditor = FlagInfo{
+		Name: "no-line-editor",
+		Description: `
+Force disable the interactive line editor. Can help during testing.`,
+	}
+
 	EchoSQL = FlagInfo{
 		Name: "echo-sql",
 		Description: `

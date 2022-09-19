@@ -3,7 +3,7 @@
 source [file join [file dirname $argv0] common.tcl]
 
 start_test "Demo core changefeed using format=csv"
-spawn $argv demo --format=csv
+spawn $argv demo --no-line-editor --format=csv
 
 # We should start in a populated database.
 eexpect "movr>"
@@ -24,7 +24,7 @@ eexpect eof
 end_test
 
 start_test "Demo with rangefeeds disabled as they are in real life"
-spawn $argv demo --format=csv --auto-enable-rangefeeds=false
+spawn $argv demo --no-line-editor --format=csv --auto-enable-rangefeeds=false
 
 # We should start in a populated database.
 eexpect "movr>"

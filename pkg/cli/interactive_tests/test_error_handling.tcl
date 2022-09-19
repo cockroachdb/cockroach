@@ -24,7 +24,7 @@ eexpect ":/# "
 send "echo \$?\r"
 eexpect "0\r\n:/# "
 
-send "$argv sql\r"
+send "$argv sql --no-line-editor\r"
 eexpect "root@"
 end_test
 
