@@ -339,6 +339,8 @@ func NeededColumnFamilyIDs(
 		return families
 	}
 
+	secondaryStoredColumnIDs := index.CollectSecondaryStoredColumnIDs()
+
 	// Iterate over the column families to find which ones contain needed columns.
 	// We also keep track of whether all of the needed families' columns are
 	// nullable, since this means we need column family 0 as a sentinel, even if
@@ -366,10 +368,21 @@ func NeededColumnFamilyIDs(
 				needed = true
 			}
 			if !columns[columnOrdinal].IsNullable() && !indexedCols.Contains(columnOrdinal) {
-				// This column is non-nullable and is not indexed, thus, it must
-				// be stored in the value part of the KV entry. As a result,
-				// this column family is non-nullable too.
-				nullable = false
+				// This column is non-nullable and is not indexed, thus, if it
+				// is stored in the value part of the KV entry (which is the
+				// case for the primary indexes as well as when the column is
+				// included in STORING clause of the secondary index), the
+				// column family is non-nullable too.
+				//
+				// Note that for unique secondary indexes more columns might be
+				// included in the value part (namely "key suffix" columns when
+				// the indexed columns have a NULL value), but we choose to
+				// ignore those here. This is needed for correctness, and as a
+				// result we might fetch the zeroth column family when it turns
+				// out to be not needed.
+				if index.Primary() || secondaryStoredColumnIDs.Contains(columnID) {
+					nullable = false
+				}
 			}
 		}
 		if needed {
