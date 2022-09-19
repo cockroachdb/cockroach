@@ -998,6 +998,9 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		// Needed to prevent rule cycles that lead to timeouts and OOMs.
 		int(opt.EliminateProject),
 		int(opt.EliminateSelect),
+		// TODO(#88141): Needed until a bug in the vectorized engine is fixed.
+		int(opt.FoldInEmpty),
+		int(opt.FoldNotInEmpty),
 	)
 
 	var disabledRules RuleSet
