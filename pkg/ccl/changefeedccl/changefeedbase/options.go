@@ -10,6 +10,7 @@ package changefeedbase
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -357,8 +358,32 @@ var ExternalConnectionValidOptions = makeStringSet(
 var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents,
 	OptSchemaChangePolicy, OptOnError, OptInitialScan)
 
+// redactionFunc is a function applied to a string option which returns its redacted value.
+type redactionFunc func(string) (string, error)
+
+var redactSimple = func(string) (string, error) {
+	return "redacted", nil
+}
+
+// RedactUserFromURI takes a URI string and removes the user from it.
+// If there is no user, the original URI is returned.
+func RedactUserFromURI(uri string) (string, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return "", err
+	}
+	if u.User != nil {
+		u.User = url.User(`redacted`)
+	}
+	return u.String(), nil
+}
+
 // RedactedOptions are options whose values should be replaced with "redacted" in job descriptions and errors.
-var RedactedOptions = makeStringSet(OptWebhookAuthHeader, SinkParamClientKey)
+var RedactedOptions = map[string]redactionFunc{
+	OptWebhookAuthHeader:       redactSimple,
+	SinkParamClientKey:         redactSimple,
+	OptConfluentSchemaRegistry: RedactUserFromURI,
+}
 
 // NoLongerExperimental aliases options prefixed with experimental that no longer need to be
 var NoLongerExperimental = map[string]string{
@@ -409,12 +434,15 @@ func MakeStatementOptions(opts map[string]string) StatementOptions {
 	if opts == nil {
 		return MakeDefaultOptions()
 	}
+	stmtOpts := make(map[string]string)
 	for key, value := range opts {
 		if _, ok := CaseInsensitiveOpts[key]; ok {
-			opts[key] = strings.ToLower(value)
+			stmtOpts[key] = strings.ToLower(value)
+		} else {
+			stmtOpts[key] = value
 		}
 	}
-	return StatementOptions{m: opts}
+	return StatementOptions{m: stmtOpts}
 }
 
 // MakeDefaultOptions creates the StatementOptions you'd get from
@@ -447,18 +475,21 @@ func (s StatementOptions) DeprecationWarnings() []string {
 	return []string{}
 }
 
-var redacted string = "redacted"
-
 // ForEachWithRedaction iterates a function over the raw key/value pairs.
 // Meant for serialization.
-func (s StatementOptions) ForEachWithRedaction(fn func(k string, v string)) {
+func (s StatementOptions) ForEachWithRedaction(fn func(k string, v string)) error {
 	for k, v := range s.m {
-		if _, redact := RedactedOptions[k]; redact {
-			fn(k, redacted)
+		if redactionFunc, redact := RedactedOptions[k]; redact {
+			redactedVal, err := redactionFunc(v)
+			if err != nil {
+				return err
+			}
+			fn(k, redactedVal)
 		} else {
 			fn(k, v)
 		}
 	}
+	return nil
 }
 
 // HasStartCursor returns true if we're starting from a

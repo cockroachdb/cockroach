@@ -7378,3 +7378,30 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink(`kafka`))
 }
+
+// Regression for #85902.
+func TestRedactedSchemaRegistry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE test_table (id INT PRIMARY KEY, i int, j int)`)
+
+		userInfoToRedact := "7JHKUXMWYD374NV:secret-key"
+		registryURI := fmt.Sprintf("https://%s@psrc-x77pq.us-central1.gcp.confluent.cloud:443", userInfoToRedact)
+
+		changefeedDesc := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE test_table WITH updated,
+					confluent_schema_registry =
+					"%s";`, registryURI)
+		registryURIWithRedaction := strings.Replace(registryURI, userInfoToRedact, "redacted", 1)
+		cf := feed(t, f, changefeedDesc)
+		defer closeFeed(t, cf)
+
+		var description string
+		sqlDB.QueryRow(t, "SELECT description from [SHOW CHANGEFEED JOBS]").Scan(&description)
+
+		assert.Contains(t, description, registryURIWithRedaction)
+	}
+
+	// kafka supports the confluent_schema_registry option.
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}

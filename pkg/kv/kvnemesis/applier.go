@@ -119,6 +119,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			savedTxn = txn
 			for i := range o.Ops {
 				op := &o.Ops[i]
+				op.Result().Reset() // in case we're a retry
 				applyClientOp(ctx, txn, op, true /* inTxn */)
 				// The KV api disallows use of a txn after an operation on it errors.
 				if r := op.Result(); r.Type == ResultType_Error {

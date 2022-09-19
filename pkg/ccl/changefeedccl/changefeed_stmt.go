@@ -792,35 +792,31 @@ func changefeedJobDescription(
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,
 	})
-
 	if err != nil {
 		return "", err
 	}
 
-	cleanedSinkURI = redactUser(cleanedSinkURI)
+	cleanedSinkURI, err = changefeedbase.RedactUserFromURI(cleanedSinkURI)
+	if err != nil {
+		return "", err
+	}
 
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
 		SinkURI: tree.NewDString(cleanedSinkURI),
 		Select:  changefeed.Select,
 	}
-	opts.ForEachWithRedaction(func(k string, v string) {
+	if err = opts.ForEachWithRedaction(func(k string, v string) {
 		opt := tree.KVOption{Key: tree.Name(k)}
 		if len(v) > 0 {
 			opt.Value = tree.NewDString(v)
 		}
 		c.Options = append(c.Options, opt)
-	})
+	}); err != nil {
+		return "", err
+	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
 	return tree.AsString(c), nil
-}
-
-func redactUser(uri string) string {
-	u, _ := url.Parse(uri)
-	if u.User != nil {
-		u.User = url.User(`redacted`)
-	}
-	return u.String()
 }
 
 func validateDetailsAndOptions(
