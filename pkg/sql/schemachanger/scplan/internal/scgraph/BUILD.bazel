@@ -5,6 +5,7 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "scgraph",
     srcs = [
+        "dep_edge_alloc.go",
         "dep_edge_tree.go",
         "edge.go",
         "graph.go",
