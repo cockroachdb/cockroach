@@ -16,9 +16,11 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -775,52 +777,99 @@ func TestStopperRunAsyncTaskCreatesRootSpans(t *testing.T) {
 }
 
 func TestFoo(t *testing.T) {
-	r, err := os.Open("weird-pmax.json")
+	fs, err := filepath.Glob("*.json")
+	require.NoError(t, err)
+	for _, path := range fs {
+		t.Run(path, func(t *testing.T) {
+			testFooForFile(t, path)
+		})
+	}
+}
+
+func testFooForFile(t *testing.T, path string) {
+	r, err := os.Open(path)
 	require.NoError(t, err)
 	defer r.Close()
 
 	dec := json.NewDecoder(r)
 	m := map[string]interface{}{}
 	require.NoError(t, dec.Decode(&m))
-	frames := m["response"].(map[string]interface{})["results"].(map[string]interface{})["A"].(map[string]interface{})["frames"].([]interface{})
-	var bs buckets
-	for _, frame := range frames {
-		fields := frame.(map[string]interface{})["schema"].(map[string]interface{})["fields"].([]interface{})
-		var leString string
-		for _, field := range fields {
-			f := field.(map[string]interface{})
-			if f["name"] != "Value" {
-				continue
+	results := m["response"].(map[string]interface{})["results"].(map[string]interface{})
+	for refID, i := range results { // key is a refID (i.e. A, B, ...)
+		t.Run(refID, func(t *testing.T) {
+			frames := i.(map[string]interface{})["frames"].([]interface{})
+			bsMap := map[string]buckets{} // join(otherlabels)->buckets
+			for _, frame := range frames {
+				fields := frame.(map[string]interface{})["schema"].(map[string]interface{})["fields"].([]interface{})
+				var leString string
+				var otherLabels []string
+				for _, field := range fields {
+					f := field.(map[string]interface{})
+					if f["name"] != "Value" {
+						continue
+					}
+					labels := f["labels"].(map[string]interface{})
+					for k, iv := range labels {
+						if k == "le" {
+							leString = iv.(string)
+							continue
+						}
+						if k != "node" {
+							continue // domain knowledge
+						}
+						otherLabels = append(otherLabels, fmt.Sprintf("%v=%v", k, iv))
+					}
+				}
+				sort.Strings(otherLabels)
+				key := strings.Join(otherLabels, ",")
+				if leString == "" {
+					t.Skip("no histogram buckets found")
+				}
+				tup := frame.(map[string]interface{})["data"].(map[string]interface{})["values"].([]interface{})
+				ts, count := int64(tup[0].([]interface{})[0].(float64)), tup[1].([]interface{})[0].(float64)
+				le, err := strconv.ParseFloat(leString, 64)
+				require.NoError(t, err)
+				require.Equal(t, fmt.Sprint(le), leString) // ensure it round trips
+				_ = ts
+				bsMap[key] = append(bsMap[key], bucket{
+					upperBound: le,
+					count:      count,
+				})
 			}
-			leString = f["labels"].(map[string]interface{})["le"].(string)
-		}
-		require.NotZero(t, leString)
-		tup := frame.(map[string]interface{})["data"].(map[string]interface{})["values"].([]interface{})
-		ts, count := int64(tup[0].([]interface{})[0].(float64)), tup[1].([]interface{})[0].(float64)
-		le, err := strconv.ParseFloat(leString, 64)
-		require.NoError(t, err)
-		require.Equal(t, fmt.Sprint(le), leString) // ensure it round trips
-		_ = ts
-		bs = append(bs, bucket{
-			upperBound: le,
-			count:      count,
+			{
+				var sumBS buckets
+				for _, bs := range bsMap {
+					sumBS = append(sumBS, bs...)
+				}
+				sort.Sort(sumBS)
+				sumBS = coalesceBuckets(sumBS)
+				bsMap["SUM"] = sumBS
+			}
+			for key, bs := range bsMap {
+				t.Run(key, func(t *testing.T) {
+					sort.Sort(bs)
+					for i := range bs {
+						if i == 0 {
+							continue
+						}
+						if bs[i].count < bs[i-1].count {
+							t.Errorf("nonmonotonic bucket count at %d -> %d: %f > %f", i-1, i, bs[i-1].count, bs[i].count)
+						}
+					}
+					for i, b := range bs {
+						s := fmt.Sprint(time.Duration(b.upperBound))
+						if math.IsInf(b.upperBound, 1) {
+							s = fmt.Sprint(b.upperBound)
+						}
+						t.Logf("idx %d: <=%s: %f", i, s, b.count)
+					}
+					for _, q := range []float64{0.5, 0.9, 0.99, 0.999, 0.9999, 1.0} {
+						ns := time.Duration(bucketQuantile(t, q, bs))
+						t.Logf("p%.3f: %s", q*100, ns)
+					}
+				})
+			}
 		})
-	}
-	sort.Sort(bs)
-	if false {
-		// This helps a lot - brings the p100 to ~201ms which is the secondmost top bucket.
-		bs[len(bs)-1].count += 1.0
-	}
-	for i, b := range bs {
-		s := fmt.Sprint(time.Duration(b.upperBound))
-		if math.IsInf(b.upperBound, 1) {
-			s = fmt.Sprint(b.upperBound)
-		}
-		t.Logf("idx %d: <=%s: %f", i, s, b.count)
-	}
-	for _, q := range []float64{0.5, 0.9, 0.99, 0.999, 0.9999, 1.0} {
-		ns := time.Duration(bucketQuantile(t, q, bs))
-		t.Logf("p%.3f: %s", q*100, ns)
 	}
 }
 
@@ -973,3 +1022,8 @@ func ensureMonotonic(buckets buckets) {
 		}
 	}
 }
+
+// 44ms and 46ms
+// A 56.94    56.94
+// B 20.52    20.52
+// C 74.5     <MISSING>
