@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -487,6 +488,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// InternalExecutor uses this one instance.
 	internalExecutor := &sql.InternalExecutor{}
 	jobRegistry := &jobs.Registry{} // ditto
+	collectionFactory := &descs.CollectionFactory{}
 
 	// Create an ExternalStorageBuilder. This is only usable after Start() where
 	// we initialize all the configuration params.
@@ -836,6 +838,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		closedSessionCache:       closedSessionCache,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
+		collectionFactory:        collectionFactory,
 		internalExecutorFactory:  nil, // will be initialized in server.newSQLServer.
 		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,
@@ -1083,6 +1086,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.nodeDialer,
 		s.cfg.TestingKnobs,
 		&fileTableInternalExecutor,
+		s.sqlServer.execCfg.CollectionFactory,
 		s.db,
 		nil, /* TenantExternalIORecorder */
 	)
