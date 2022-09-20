@@ -1,7 +1,4 @@
 
-# Populate some values. The inline value is a special case in
-# that it will cause an error if time bounds are specified.
-
 run ok
 with t=A v=abc resolve
   txn_begin ts=44
@@ -21,25 +18,6 @@ data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
 meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
-# Last test case sees inline value but does not error
-# since no time bound specified.
-run ok
-is_span_empty k=a end=+a
-is_span_empty k=a end=z
-is_span_empty k=a end=+a startTs=45
-is_span_empty k=i end=z
-----
-false
-false
-true
-false
-
-# Case in which inline value is encountered under time bounds.
-run error
-is_span_empty k=i startTs=0 ts=1
-----
-error: (*withstack.withStack:) unexpected inline value found: "i"
-
 run ok
 clear_range k=a end=+a
 ----
@@ -51,16 +29,6 @@ data: "c"/44.000000000,0 -> /BYTES/abc
 meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
-is_span_empty k=a end=+a
-----
-true
-
-run ok
-is_span_empty k=a end=-a
-----
-false
-
-run ok
 clear_range k=a end=-a
 ----
 >> at end:
@@ -68,11 +36,6 @@ data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
 meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-
-run ok
-is_span_empty k=a end=-a
-----
-true
 
 run ok
 clear_range k=a end==b
@@ -99,23 +62,7 @@ data: "c"/44.000000000,0 -> /BYTES/abc
 meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
-clear_range k=a end=-c
-----
->> at end:
-meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-
-run ok
-is_span_empty k=a end=z
-----
-false
-
-run ok
-clear_range k=i end=+i
+clear_range k=c end=z
 ----
 >> at end:
 <no data>
-
-run ok
-is_span_empty k=a end=z
-----
-true
