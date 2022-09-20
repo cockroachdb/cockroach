@@ -1889,6 +1889,13 @@ func makeCheckConsistencyGenerator(
 		mode = roachpb.ChecksumMode_CHECK_STATS
 	}
 
+	if ctx.ConsistencyChecker == nil {
+		return nil, errors.WithIssueLink(
+			errors.AssertionFailedf("no consistency checker configured"),
+			errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/88222"},
+		)
+	}
+
 	return &checkConsistencyGenerator{
 		txn:                ctx.Txn,
 		consistencyChecker: ctx.ConsistencyChecker,
