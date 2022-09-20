@@ -745,10 +745,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			descriptorChanged = true
-
 			var err error
-			err = handleTTLStorageParamChange(
+			descriptorChanged, err = handleTTLStorageParamChange(
 				params,
 				tn,
 				setter.TableDesc,
@@ -767,10 +765,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			); err != nil {
 				return err
 			}
-			descriptorChanged = true
 
 			var err error
-			err = handleTTLStorageParamChange(
+			descriptorChanged, err = handleTTLStorageParamChange(
 				params,
 				tn,
 				setter.TableDesc,
@@ -1847,7 +1844,7 @@ func dropColumnImpl(
 
 func handleTTLStorageParamChange(
 	params runParams, tn *tree.TableName, tableDesc *tabledesc.Mutable, after *catpb.RowLevelTTL,
-) error {
+) (descriptorChanged bool, err error) {
 
 	before := tableDesc.GetRowLevelTTL()
 
@@ -1865,13 +1862,13 @@ func handleTTLStorageParamChange(
 				params.p.txn,
 			)
 			if err != nil {
-				return err
+				return false, err
 			}
 			if err := s.SetSchedule(after.DeletionCronOrDefault()); err != nil {
-				return err
+				return false, err
 			}
 			if err := s.Update(params.ctx, params.ExecCfg().InternalExecutor, params.p.txn); err != nil {
-				return err
+				return false, err
 			}
 		}
 
@@ -1879,11 +1876,11 @@ func handleTTLStorageParamChange(
 		if before.HasDurationExpr() && after.HasDurationExpr() && before.DurationExpr != after.DurationExpr {
 			col, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
 			if err != nil {
-				return err
+				return false, err
 			}
 			intervalExpr, err := parser.ParseExpr(string(after.DurationExpr))
 			if err != nil {
-				return errors.Wrapf(err, "unexpected expression for TTL duration")
+				return false, errors.Wrapf(err, "unexpected expression for TTL duration")
 			}
 			newExpr := rowLevelTTLAutomaticColumnExpr(intervalExpr)
 
@@ -1895,7 +1892,7 @@ func handleTTLStorageParamChange(
 				&col.ColumnDesc().DefaultExpr,
 				"TTL DEFAULT",
 			); err != nil {
-				return err
+				return false, err
 			}
 
 			if err := updateNonComputedColExpr(
@@ -1906,19 +1903,21 @@ func handleTTLStorageParamChange(
 				&col.ColumnDesc().OnUpdateExpr,
 				"TTL UPDATE",
 			); err != nil {
-				return err
+				return false, err
 			}
 		}
 	}
 
-	hasTTLMutation := false
+	// Add TTL mutation if TTL is newly SET.
+	addTTLMutation := before == nil && after != nil
 
 	// Create new column.
 	if (before == nil || !before.HasDurationExpr()) && (after != nil && after.HasDurationExpr()) {
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
+		addTTLMutation = true
 		if _, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err == nil {
-			return pgerror.Newf(
+			return false, pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot add TTL to table with the %s column already defined",
 				colinfo.TTLDefaultExpirationColumnName,
@@ -1926,7 +1925,7 @@ func handleTTLStorageParamChange(
 		}
 		col, err := rowLevelTTLAutomaticColumnDef(after)
 		if err != nil {
-			return err
+			return false, err
 		}
 		addCol := &tree.AlterTableAddColumn{
 			ColumnDef: col,
@@ -1943,52 +1942,61 @@ func handleTTLStorageParamChange(
 			tableDesc,
 			addCol,
 		); err != nil {
-			return err
+			return false, err
 		}
+		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+		if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
+			return false, err
+		}
+	}
+
+	// Add TTL mutation so that job is scheduled in SchemaChanger.
+	if addTTLMutation {
 		tableDesc.AddModifyRowLevelTTLMutation(
 			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
 			descpb.DescriptorMutation_ADD,
 		)
-		hasTTLMutation = true
-		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-		if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
-			return err
-		}
 	}
+
+	dropTTLMutation := before != nil && after == nil
 
 	// Remove existing column.
 	if (before != nil && before.HasDurationExpr()) && (after == nil || !after.HasDurationExpr()) {
 		telemetry.Inc(sqltelemetry.RowLevelTTLDropped)
 		// Create the DROP COLUMN job and the associated mutation.
+		dropTTLMutation = true
 		droppedViews, err := dropColumnImpl(params, tn, tableDesc, after, &tree.AlterTableDropColumn{
 			Column: colinfo.TTLDefaultExpirationColumnName,
 		})
 		if err != nil {
-			return err
+			return false, err
 		}
 		// This should never happen as we do not CASCADE, but error again just in case.
 		if len(droppedViews) > 0 {
-			return pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop TTL automatic column if it is depended on by a view")
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop TTL automatic column if it is depended on by a view")
 		}
+	}
+
+	if dropTTLMutation {
 		tableDesc.AddModifyRowLevelTTLMutation(
-			&descpb.ModifyRowLevelTTL{RowLevelTTL: before},
+			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
 			descpb.DescriptorMutation_DROP,
 		)
-		hasTTLMutation = true
 	}
 
 	// Validate the type and volatility of ttl_expiration_expression.
 	if after != nil {
 		if err := schemaexpr.ValidateTTLExpirationExpression(params.ctx, tableDesc, params.p.SemaCtx(), tn, after); err != nil {
-			return err
+			return false, err
 		}
 	}
 
-	if !hasTTLMutation {
+	descriptorChanged = !addTTLMutation && !dropTTLMutation
+	if descriptorChanged {
 		tableDesc.RowLevelTTL = after
 	}
 
-	return nil
+	return descriptorChanged, nil
 }
 
 // tryRemoveFKBackReferences determines whether the provided unique constraint
