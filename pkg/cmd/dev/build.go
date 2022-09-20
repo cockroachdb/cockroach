@@ -120,6 +120,19 @@ var allBuildTargets = func() []string {
 }()
 
 func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
+	// tmpDir will contain the build event binary file if produced.
+	tmpDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+			// Retry.
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+				log.Printf("Sending BEP file to beaver hub failed - %v", err)
+			}
+		}
+	}()
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
@@ -145,6 +158,7 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	if err != nil {
 		return err
 	}
+	args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
 	args = append(args, additionalBazelArgs...)
 
 	if cross == "" {

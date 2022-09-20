@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -109,6 +110,19 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 }
 
 func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
+	// tmpDir will contain the build event binary file if produced.
+	tmpDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+			// Retry.
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+				log.Printf("Sending BEP file to beaver hub failed - %v", err)
+			}
+		}
+	}()
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
@@ -326,10 +340,11 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	}
 
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
+	args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
 	args = append(args, additionalBazelArgs...)
 
 	logCommand("bazel", args...)
-	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {
 		var cmderr *exec.ExitError
 		if errors.As(err, &cmderr) && cmderr.ProcessState.ExitCode() == 4 {
