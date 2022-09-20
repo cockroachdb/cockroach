@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func TestCommentOnTable(t *testing.T) {
+func TestCommentOnSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -31,9 +31,7 @@ func TestCommentOnTable(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
-		CREATE DATABASE d;
-		SET DATABASE = d;
-		CREATE TABLE t (i INT );
+		CREATE SCHEMA d;
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -44,18 +42,18 @@ func TestCommentOnTable(t *testing.T) {
 		expect gosql.NullString
 	}{
 		{
-			`COMMENT ON TABLE t IS 'foo'`,
-			`SELECT obj_description('t'::regclass)`,
+			`COMMENT ON SCHEMA d IS 'foo'`,
+			`SELECT obj_description(oid, 'pg_namespace') FROM pg_namespace WHERE nspname = 'd'`,
 			gosql.NullString{String: `foo`, Valid: true},
 		},
 		{
-			`TRUNCATE t`,
-			`SELECT obj_description('t'::regclass)`,
+			`ALTER SCHEMA d RENAME TO d2`,
+			`SELECT obj_description(oid, 'pg_namespace') FROM pg_namespace WHERE nspname = 'd2'`,
 			gosql.NullString{String: `foo`, Valid: true},
 		},
 		{
-			`COMMENT ON TABLE t IS NULL`,
-			`SELECT obj_description('t'::regclass)`,
+			`COMMENT ON SCHEMA d2 IS NULL`,
+			`SELECT obj_description(oid, 'pg_namespace') FROM pg_namespace WHERE nspname = 'd2'`,
 			gosql.NullString{Valid: false},
 		},
 	}
@@ -76,7 +74,7 @@ func TestCommentOnTable(t *testing.T) {
 	}
 }
 
-func TestCommentOnTableWhenDrop(t *testing.T) {
+func TestCommentOnSchemaWhenDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -85,18 +83,16 @@ func TestCommentOnTableWhenDrop(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec(`
-		CREATE DATABASE d;
-		SET DATABASE = d;
-		CREATE TABLE t (i INT );
+		CREATE SCHEMA d;
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Exec(`COMMENT ON TABLE t IS 'foo'`); err != nil {
+	if _, err := db.Exec(`COMMENT ON SCHEMA d IS 'foo'`); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Exec(`DROP TABLE t`); err != nil {
+	if _, err := db.Exec(`DROP SCHEMA d`); err != nil {
 		t.Fatal(err)
 	}
 
