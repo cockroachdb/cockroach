@@ -450,6 +450,7 @@ go_library(
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/sql/vtable",
+        "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils/serverutils",
         "//pkg/upgrade",
