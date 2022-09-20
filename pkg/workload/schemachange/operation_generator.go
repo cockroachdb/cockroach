@@ -1393,6 +1393,14 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
 	}.add(opStmt.expectedExecErrors)
 
+	// Confirm the select itself doesn't run into any column generation errors,
+	// by executing it independently first until we add validation when adding
+	// generated columns. See issue: #81698?, which will allow us to remove this
+	// logic in the future.
+	if opStmt.expectedExecErrors.empty() {
+		opStmt.potentialExecErrors.merge(getValidGenerationErrors())
+	}
+
 	opStmt.sql = fmt.Sprintf(`CREATE TABLE %s AS %s FETCH FIRST %d ROWS ONLY`,
 		destTableName, selectStatement.String(), MaxRowsToConsume)
 	return opStmt, nil
