@@ -1884,6 +1884,9 @@ func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
 	if allDecoded {
 		return s1
 	}
+	// If we failed to decoded everything above, assume the key was the result of a
+	// `PrefixEnd()`. Attempt to undo PrefixEnd & retry the process, otherwise return
+	// what we were able to decode.
 	if undoPrefixEnd, ok := UndoPrefixEnd(b); ok {
 		// When we UndoPrefixEnd, we may have lost a tail of 0xFFs. Try to add
 		// enough of them to get something decoded. This is best-effort, we have to stop
@@ -1902,6 +1905,66 @@ func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
 	return s1
 }
 
+// PrettyPrintValuesWithTypes returns a slice containing each contiguous decodable value
+// in the provided byte slice along with a slice containing the type of each value.
+// The directions each value is encoded may be provided. If valDirs is nil,
+// all values are decoded and printed with the default direction (ascending).
+func PrettyPrintValuesWithTypes(valDirs []Direction, b []byte) (vals []string, types []Type) {
+	vals1, types1, allDecoded := prettyPrintValuesWithTypesImpl(valDirs, b)
+	if allDecoded {
+		return vals1, types1
+	}
+	// If we failed to decoded everything above, assume the key was the result of a
+	// `PrefixEnd()`. Attempt to undo PrefixEnd & retry the process, otherwise return
+	// what we were able to decode.
+	if undoPrefixEnd, ok := UndoPrefixEnd(b); ok {
+		// When we UndoPrefixEnd, we may have lost a tail of 0xFFs. Try to add
+		// enough of them to get something decoded. This is best-effort, we have to stop
+		// somewhere.
+		cap := 20
+		if len(valDirs) > len(b) {
+			cap = len(valDirs) - len(b)
+		}
+		for i := 0; i < cap; i++ {
+			if vals2, types2, allDecoded := prettyPrintValuesWithTypesImpl(valDirs, undoPrefixEnd); allDecoded {
+				vals2 = append(vals2, "PrefixEnd")
+				types2 = append(types2, Bytes)
+				return vals2, types2
+			}
+			undoPrefixEnd = append(undoPrefixEnd, 0xFF)
+		}
+	}
+	return vals1, types1
+}
+
+func prettyPrintValuesWithTypesImpl(
+	valDirs []Direction, b []byte,
+) (vals []string, types []Type, allDecoded bool) {
+	allDecoded = true
+	for len(b) > 0 {
+		var valDir Direction
+		if len(valDirs) > 0 {
+			valDir = valDirs[0]
+			valDirs = valDirs[1:]
+		}
+
+		bb, s, err := prettyPrintFirstValue(valDir, b)
+		if err != nil {
+			// If we fail to decode, mark as unknown and attempt
+			// to continue - it's possible we can still decode the
+			// remainder of the key bytes.
+			allDecoded = false
+			vals = append(vals, "???")
+			types = append(types, Unknown)
+		} else {
+			vals = append(vals, s)
+			types = append(types, PeekType(b))
+		}
+		b = bb
+	}
+	return vals, types, allDecoded
+}
+
 func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bool) {
 	allDecoded := true
 	var buf strings.Builder
@@ -1918,6 +1981,9 @@ func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bo
 
 		bb, s, err := prettyPrintFirstValue(valDir, b)
 		if err != nil {
+			// If we fail to decode, mark as unknown and attempt
+			// to continue - it's possible we can still decode the
+			// remainder of the key bytes.
 			allDecoded = false
 			buf.WriteString(sep)
 			buf.WriteByte('?')
