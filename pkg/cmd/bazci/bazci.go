@@ -37,6 +37,7 @@ const (
 	testSubcmd          = "test"
 	mergeTestXMLsSubcmd = "merge-test-xmls"
 	mungeTestXMLSubcmd  = "munge-test-xml"
+	besBackendHost      = "grpcs://beaver-hub-server-cflpojq3rq-uk.a.run.app"
 )
 
 type builtArtifact struct {
@@ -70,6 +71,13 @@ func init() {
 		"path where artifacts should be staged")
 }
 
+func getRunningEnvForBes(branch string) string {
+	if strings.Contains(branch, "master") || strings.Contains(branch, "release") || strings.Contains(branch, "staging") {
+		return branch
+	}
+	return "PR"
+}
+
 func bazciImpl(cmd *cobra.Command, args []string) error {
 	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
 		return errors.Newf("First argument must be `build`, `run`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
@@ -90,6 +98,10 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	}
 	bepLoc := filepath.Join(tmpDir, "beplog")
 	args = append(args, fmt.Sprintf("--build_event_binary_file=%s", bepLoc))
+
+	besEnv := getRunningEnvForBes(strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/"))
+	args = append(args, fmt.Sprintf("--bes_backend=%s", besBackendHost))
+	args = append(args, fmt.Sprintf("--bes_keywords=config=%s", besEnv))
 	fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(args))
 	bazelCmd := exec.Command("bazel", args...)
 	bazelCmd.Stdout = os.Stdout
