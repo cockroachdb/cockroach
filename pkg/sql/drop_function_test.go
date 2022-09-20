@@ -276,6 +276,10 @@ USE defaultdb;
 			stmt:        "DROP DATABASE test_udf_db RESTRICT",
 			expectedErr: `pq: database "test_udf_db" is not empty and RESTRICT was specified`,
 		},
+		{
+			stmt:        "DROP TYPE notmyworkday",
+			expectedErr: `pq: cannot drop type "notmyworkday" because other objects ([defaultdb.test_sc.f]) still depend on it`,
+		},
 	}
 
 	for i, tc := range testCases {

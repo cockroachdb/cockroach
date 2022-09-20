@@ -23,72 +23,51 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetObjectDesc looks up an object by name and returns both its
-// descriptor and that of its parent database. If the object is not
-// found and flags.required is true, an error is returned, otherwise
-// a nil reference is returned.
+// GetObjectByName looks up an object by name and returns both its
+// descriptor and that of its parent database and schema.
 //
-// TODO(ajwerner): clarify the purpose of the transaction here. It's used in
-// some cases for some lookups but not in others. For example, if a mutable
-// descriptor is requested, it will be utilized however if an immutable
-// descriptor is requested then it will only be used for its timestamp and to
-// set the deadline.
-func (tc *Collection) GetObjectDesc(
-	ctx context.Context, txn *kv.Txn, db, schema, object string, flags tree.ObjectLookupFlags,
-) (prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
-	return tc.getObjectByName(ctx, txn, db, schema, object, flags)
-}
-
-func (tc *Collection) getObjectByName(
+// If the object is not found and flags.required is true, an error is returned,
+// otherwise a nil reference is returned.
+func (tc *Collection) GetObjectByName(
 	ctx context.Context,
 	txn *kv.Txn,
 	catalogName, schemaName, objectName string,
 	flags tree.ObjectLookupFlags,
 ) (prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
-	defer func() {
-		if err != nil || desc != nil || !flags.Required {
-			return
-		}
-		if catalogName != "" && prefix.Database == nil {
-			err = sqlerrors.NewUndefinedDatabaseError(catalogName)
-		} else if prefix.Schema == nil {
-			err = sqlerrors.NewUndefinedSchemaError(schemaName)
-		} else {
-			tn := tree.MakeTableNameWithSchema(
-				tree.Name(catalogName),
-				tree.Name(schemaName),
-				tree.Name(objectName))
-			err = sqlerrors.NewUndefinedRelationError(&tn)
-		}
-	}()
-	const alwaysLookupLeasedPublicSchema = false
-	prefix, desc, err = tc.getObjectByNameIgnoringRequiredAndType(
-		ctx, txn, catalogName, schemaName, objectName, flags,
-		alwaysLookupLeasedPublicSchema,
-	)
-	if err != nil || desc == nil {
+	prefix, err = tc.getObjectPrefixByName(ctx, txn, catalogName, schemaName, flags)
+	if err != nil || prefix.Schema == nil {
 		return prefix, nil, err
 	}
-	if desc.Adding() && desc.IsUncommittedVersion() &&
-		(flags.RequireMutable || flags.CommonLookupFlags.AvoidLeased) {
-		// Special case: We always return tables in the adding state if they were
-		// created in the same transaction and a descriptor (effectively) read in
-		// the same transaction is requested. What this basically amounts to is
-		// resolving adding descriptors only for DDLs (etc.).
-		// TODO (lucy): I'm not sure where this logic should live. We could add an
-		// IncludeAdding flag and pull the special case handling up into the
-		// callers. Figure that out after we clean up the name resolution layers
-		// and it becomes more Clear what the callers should be.
-		// TODO(ajwerner): What's weird about returning here is that we have
-		// not hydrated the descriptor. I guess the assumption is that it is
-		// already hydrated.
-		return prefix, desc, nil
+	// Read object descriptor and handle errors and absence.
+	{
+		var requestedType catalog.DescriptorType
+		switch flags.DesiredObjectKind {
+		case tree.TableObject:
+			requestedType = catalog.Table
+		case tree.TypeObject:
+			requestedType = catalog.Type
+		default:
+			return prefix, nil, errors.AssertionFailedf(
+				"unknown DesiredObjectKind value %v", flags.DesiredObjectKind)
+		}
+		desc, err = tc.getDescriptorByName(
+			ctx, txn, prefix.Database, prefix.Schema, objectName, flags.CommonLookupFlags, requestedType,
+		)
+		if err != nil {
+			return prefix, nil, err
+		}
+		if desc == nil {
+			if flags.Required {
+				tn := tree.MakeTableNameWithSchema(
+					tree.Name(catalogName),
+					tree.Name(schemaName),
+					tree.Name(objectName))
+				return prefix, nil, sqlerrors.NewUndefinedRelationError(&tn)
+			}
+			return prefix, nil, nil
+		}
 	}
-	if dropped, err := filterDescriptorState(
-		desc, flags.Required, flags.CommonLookupFlags,
-	); err != nil || dropped {
-		return prefix, nil, err
-	}
+	// At this point the descriptor is not nil.
 	switch t := desc.(type) {
 	case catalog.TableDescriptor:
 		// A given table name can resolve to either a type descriptor or a table
@@ -101,11 +80,6 @@ func (tc *Collection) getObjectByName(
 		default:
 			return prefix, nil, nil
 		}
-		tableDesc, err := tc.hydrateTypesInTableDesc(ctx, txn, t)
-		if err != nil {
-			return prefix, nil, err
-		}
-		desc = tableDesc
 		if flags.DesiredObjectKind == tree.TypeObject {
 			// Since a type descriptor was requested, we need to return the implicitly
 			// created record type for the table that we found.
@@ -116,7 +90,7 @@ func (tc *Collection) getObjectByName(
 				return prefix, nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 					"cannot modify table record type %q", objectName)
 			}
-			desc, err = typedesc.CreateImplicitRecordTypeFromTableDesc(tableDesc)
+			desc, err = typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 			if err != nil {
 				return prefix, nil, err
 			}
@@ -133,74 +107,40 @@ func (tc *Collection) getObjectByName(
 	return prefix, desc, nil
 }
 
-func (tc *Collection) getObjectByNameIgnoringRequiredAndType(
-	ctx context.Context,
-	txn *kv.Txn,
-	catalogName, schemaName, objectName string,
-	flags tree.ObjectLookupFlags,
-	alwaysLookupLeasedPublicSchema bool,
-) (prefix catalog.ResolvedObjectPrefix, _ catalog.Descriptor, err error) {
-
-	flags.Required = false
+func (tc *Collection) getObjectPrefixByName(
+	ctx context.Context, txn *kv.Txn, catalogName, schemaName string, objFlags tree.ObjectLookupFlags,
+) (prefix catalog.ResolvedObjectPrefix, err error) {
 	// If we're reading the object descriptor from the store,
 	// we should read its parents from the store too to ensure
 	// that subsequent name resolution finds the latest name
 	// in the face of a concurrent rename.
-	avoidLeasedForParent := flags.AvoidLeased || flags.RequireMutable
-	// Resolve the database.
-	parentFlags := tree.DatabaseLookupFlags{
-		Required:       flags.Required,
-		AvoidLeased:    avoidLeasedForParent,
-		IncludeDropped: flags.IncludeDropped,
-		IncludeOffline: flags.IncludeOffline,
+	flags := tree.CommonLookupFlags{
+		Required:       objFlags.Required,
+		AvoidLeased:    objFlags.AvoidLeased || objFlags.RequireMutable,
+		IncludeDropped: objFlags.IncludeDropped,
+		IncludeOffline: objFlags.IncludeOffline,
 	}
-
-	var db catalog.DatabaseDescriptor
 	if catalogName != "" {
-		db, err = tc.GetImmutableDatabaseByName(ctx, txn, catalogName, parentFlags)
-		if err != nil || db == nil {
-			return catalog.ResolvedObjectPrefix{}, nil, err
-		}
-	}
-
-	prefix.Database = db
-
-	{
-		isVirtual, virtualObject, err := tc.virtual.getObjectByName(
-			schemaName, objectName, flags, catalogName,
-		)
+		prefix.Database, err = tc.GetImmutableDatabaseByName(ctx, txn, catalogName, flags)
 		if err != nil {
-			return prefix, nil, err
+			return prefix, err
 		}
-		if isVirtual {
-			sc := tc.virtual.getSchemaByName(schemaName)
-			return catalog.ResolvedObjectPrefix{
-				Database: db,
-				Schema:   sc,
-			}, virtualObject, nil
+		if prefix.Database == nil {
+			if flags.Required {
+				return prefix, sqlerrors.NewUndefinedDatabaseError(catalogName)
+			}
+			return prefix, nil
 		}
 	}
-
-	if catalogName == "" {
-		return catalog.ResolvedObjectPrefix{}, nil, nil
+	prefix.Schema, err = tc.GetImmutableSchemaByName(ctx, txn, prefix.Database, schemaName, flags)
+	if err != nil {
+		return prefix, err
 	}
-
-	// Read the ID of the schema out of the database descriptor
-	// to avoid the need to go look up the schema.
-	sc, err := tc.getSchemaByNameMaybeLookingUpPublicSchema(
-		ctx, txn, db, schemaName, parentFlags, alwaysLookupLeasedPublicSchema,
-	)
-	if err != nil || sc == nil {
-		return prefix, nil, err
+	if prefix.Schema == nil {
+		if flags.Required {
+			return prefix, sqlerrors.NewUndefinedSchemaError(schemaName)
+		}
+		return prefix, nil
 	}
-
-	prefix.Schema = sc
-	found, obj, err := tc.getByName(
-		ctx, txn, db, sc, objectName, flags.AvoidLeased, flags.RequireMutable, flags.AvoidSynthetic,
-		false, // alwaysLookupLeasedPublicSchema
-	)
-	if !found || err != nil {
-		return prefix, nil, err
-	}
-	return prefix, obj, nil
+	return prefix, nil
 }

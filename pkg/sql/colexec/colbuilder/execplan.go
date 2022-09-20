@@ -2668,7 +2668,7 @@ func appendOneType(typs []*types.T, t *types.T) []*types.T {
 // require special null-handling logic).
 func useDefaultCmpOpForIn(tuple *tree.DTuple) bool {
 	tupleContents := tuple.ResolvedType().TupleContents()
-	if len(tupleContents) == 0 {
+	if len(tupleContents) == 0 || len(tuple.D) == 0 {
 		return true
 	}
 	for _, typ := range tupleContents {

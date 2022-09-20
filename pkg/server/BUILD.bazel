@@ -255,6 +255,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
         "//pkg/util/retry",
+        "//pkg/util/schedulerlatency",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

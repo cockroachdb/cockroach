@@ -21,7 +21,7 @@ send "PS1=':''/# '\r"
 set prompt ":/# "
 eexpect $prompt
 
-send "$argv sql --certs-dir=$certs_dir\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir\r"
 eexpect root@
 
 start_test "Test setting password"
@@ -67,7 +67,7 @@ end_test
 
 start_test "Test connect to crdb with password"
 
-send "$argv sql --certs-dir=$certs_dir --user=myuser\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir --user=myuser\r"
 eexpect "Enter password:"
 send "123\r"
 eexpect myuser@
@@ -87,7 +87,7 @@ send "\\q\r"
 eexpect $prompt
 
 start_test "Test connect to crdb with new own password"
-send "$argv sql --certs-dir=$certs_dir --user=myuser\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir --user=myuser\r"
 eexpect "Enter password:"
 send "124\r"
 eexpect myuser@
@@ -97,7 +97,7 @@ send "\\q\r"
 eexpect $prompt
 
 start_test "Log in with wrong password"
-send "$argv sql --certs-dir=$certs_dir --user=myuser\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir --user=myuser\r"
 eexpect "Enter password:"
 send "125\r"
 eexpect "password authentication failed"
@@ -106,7 +106,7 @@ end_test
 
 start_test "Log in using pgpass file"
 system "echo 'localhost:*:*:myuser:124' > $home/.pgpass"
-send "$argv sql --certs-dir=$certs_dir --user=myuser\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir --user=myuser\r"
 eexpect myuser@
 eexpect "defaultdb>"
 send "\\q\r"
@@ -118,7 +118,7 @@ start_test "Log in using custom pgpass file"
 system "echo 'localhost:*:*:myuser:125' > $home/.pgpass"
 system "echo 'localhost:*:*:myuser:124' > $home/my_pgpass"
 send "export PGPASSFILE=$home/my_pgpass\r"
-send "$argv sql --certs-dir=$certs_dir --user=myuser\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir --user=myuser\r"
 eexpect myuser@
 eexpect "defaultdb>"
 send "\\q\r"
@@ -140,7 +140,7 @@ dbname=defaultdb
 user=myuser
 passfile=$home/my_pgpass
 ' > $home/.pg_service.conf"
-send "$argv sql --url='postgres://myuser@localhost?service=myservice&sslrootcert=$certs_dir/ca.crt'\r"
+send "$argv sql --no-line-editor --url='postgres://myuser@localhost?service=myservice&sslrootcert=$certs_dir/ca.crt'\r"
 eexpect myuser@
 eexpect "defaultdb>"
 send "\\q\r"

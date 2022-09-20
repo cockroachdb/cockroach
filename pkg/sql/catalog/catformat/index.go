@@ -219,7 +219,8 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
-		if index.Type == descpb.IndexDescriptor_INVERTED && len(index.InvertedColumnKinds) > 0 {
+		if index.Type == descpb.IndexDescriptor_INVERTED &&
+			col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
 			switch index.InvertedColumnKinds[0] {
 			case catpb.InvertedIndexColumnKind_TRIGRAM:
 				f.WriteString(" gin_trgm_ops")

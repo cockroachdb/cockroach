@@ -19,7 +19,7 @@ set ::env(COCKROACH_CONNECT_TIMEOUT) "1"
 spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
-send "$argv sql\r"
+send "$argv sql --no-line-editor\r"
 eexpect "ERROR: cannot dial server"
 send "exit\r"
 eexpect eof
@@ -34,7 +34,7 @@ start_test "Check that init allows a suspended SQL client to resume"
 # so we don't "expect" anything yet. The point of this test is to
 # verify that the command will succeed after blocking instead of
 # erroring out.
-spawn $argv sql
+spawn $argv sql --no-line-editor
 send "show tables from system.pg_catalog;\r"
 
 # Now initialize the one-node cluster. This will unblock the pending

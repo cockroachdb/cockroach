@@ -9,7 +9,7 @@ send "PS1=':''/# '\r"
 eexpect ":/# "
 
 start_test "Check that changefeed flushes readable output to the terminal."
-send "$argv sql\r"
+send "$argv sql --no-line-editor\r"
 eexpect root@
 send "create table target(i int primary key);insert into target values (0);\r"
 eexpect "CREATE"

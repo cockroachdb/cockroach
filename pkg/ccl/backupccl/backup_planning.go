@@ -467,6 +467,10 @@ func checkPrivilegesForBackup(
 			if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
 				return errors.WithHint(err, notice)
 			}
+		case catalog.FunctionDescriptor:
+			if err := p.CheckPrivilege(ctx, desc, privilege.EXECUTE); err != nil {
+				return errors.WithHint(err, notice)
+			}
 		}
 	}
 
@@ -700,6 +704,7 @@ func backupPlanHook(
 			EncryptionOptions:   &encryptionParams,
 			AsOfInterval:        asOfInterval,
 			Detached:            detached,
+			ApplicationName:     p.SessionData().ApplicationName,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID

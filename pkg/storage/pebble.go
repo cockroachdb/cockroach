@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -684,6 +684,7 @@ type Pebble struct {
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
 	unencryptedFS vfs.FS
+	logCtx        context.Context
 	logger        pebble.Logger
 	eventListener *pebble.EventListener
 	mu            struct {
@@ -896,6 +897,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		fs:               cfg.Opts.FS,
 		unencryptedFS:    unencryptedFS,
 		logger:           cfg.Opts.Logger,
+		logCtx:           logCtx,
 		storeIDPebbleLog: storeIDContainer,
 		closer:           filesystemCloser,
 	}
@@ -1038,58 +1040,41 @@ func (p *Pebble) Close() {
 		return
 	}
 	p.closed = true
-	_ = p.db.Close()
+
+	handleErr := func(err error) {
+		if err == nil {
+			return
+		}
+		// Allow unclean close in production builds for now. We refrain from
+		// Fatal-ing on an unclean close because Cockroach opens and closes
+		// ephemeral engines at time, and an error in those codepaths should not
+		// fatal the process.
+		//
+		// TODO(jackson): Propagate the error to call sites without fataling:
+		// This is tricky, because the Reader interface requires Close return
+		// nothing.
+		if buildutil.CrdbTestBuild {
+			log.Fatalf(p.logCtx, "error during engine close: %s\n", err)
+		} else {
+			log.Errorf(p.logCtx, "error during engine close: %s\n", err)
+		}
+	}
+
+	handleErr(p.db.Close())
 	if p.fileRegistry != nil {
-		_ = p.fileRegistry.Close()
+		handleErr(p.fileRegistry.Close())
 	}
 	if p.encryption != nil {
-		_ = p.encryption.Closer.Close()
+		handleErr(p.encryption.Closer.Close())
 	}
 	if p.closer != nil {
-		_ = p.closer.Close()
+		handleErr(p.closer.Close())
 	}
 }
 
 // Closed implements the Engine interface.
 func (p *Pebble) Closed() bool {
 	return p.closed
-}
-
-// MVCCGet implements the Engine interface.
-func (p *Pebble) MVCCGet(key MVCCKey) ([]byte, error) {
-	return mvccGetHelper(key, p)
-}
-
-func mvccGetHelper(key MVCCKey, reader wrappableReader) ([]byte, error) {
-	if len(key.Key) == 0 {
-		return nil, emptyKeyError()
-	}
-	r := wrapReader(reader)
-	// Doing defer r.Free() does not inline.
-	v, err := r.MVCCGet(key)
-	r.Free()
-	return v, err
-}
-
-func (p *Pebble) rawMVCCGet(key []byte) ([]byte, error) {
-	ret, closer, err := p.db.Get(key)
-	if closer != nil {
-		retCopy := make([]byte, len(ret))
-		copy(retCopy, ret)
-		ret = retCopy
-		closer.Close()
-	}
-	if errors.Is(err, pebble.ErrNotFound) || len(ret) == 0 {
-		return nil, nil
-	}
-	return ret, err
-}
-
-// MVCCGetProto implements the Engine interface.
-func (p *Pebble) MVCCGetProto(
-	key MVCCKey, msg protoutil.Message,
-) (ok bool, keyBytes, valBytes int64, err error) {
-	return pebbleGetProto(p, key, msg)
 }
 
 // MVCCIterate implements the Engine interface.
@@ -1965,42 +1950,6 @@ func (p *pebbleReadOnly) Closed() bool {
 	return p.closed
 }
 
-func (p *pebbleReadOnly) MVCCGet(key MVCCKey) ([]byte, error) {
-	return mvccGetHelper(key, p)
-}
-
-func (p *pebbleReadOnly) rawMVCCGet(key []byte) ([]byte, error) {
-	if p.closed {
-		panic("using a closed pebbleReadOnly")
-	}
-	// Cannot delegate to p.parent.rawMVCCGet since we need to use p.durability.
-	onlyReadGuaranteedDurable := false
-	if p.durability == GuaranteedDurability {
-		onlyReadGuaranteedDurable = true
-	}
-	options := pebble.IterOptions{
-		LowerBound:                key,
-		UpperBound:                encoding.BytesNext(key),
-		OnlyReadGuaranteedDurable: onlyReadGuaranteedDurable,
-	}
-	iter := p.parent.db.NewIter(&options)
-	defer func() {
-		// Already handled error.
-		_ = iter.Close()
-	}()
-	valid := iter.SeekGE(key)
-	if !valid {
-		return nil, iter.Error()
-	}
-	return iter.Value(), nil
-}
-
-func (p *pebbleReadOnly) MVCCGetProto(
-	key MVCCKey, msg protoutil.Message,
-) (ok bool, keyBytes, valBytes int64, err error) {
-	return pebbleGetProto(p, key, msg)
-}
-
 func (p *pebbleReadOnly) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
@@ -2240,39 +2189,6 @@ func (p *pebbleSnapshot) Closed() bool {
 	return p.closed
 }
 
-// Get implements the Reader interface.
-func (p *pebbleSnapshot) MVCCGet(key MVCCKey) ([]byte, error) {
-	if len(key.Key) == 0 {
-		return nil, emptyKeyError()
-	}
-	r := wrapReader(p)
-	// Doing defer r.Free() does not inline.
-	v, err := r.MVCCGet(key)
-	r.Free()
-	return v, err
-}
-
-func (p *pebbleSnapshot) rawMVCCGet(key []byte) ([]byte, error) {
-	ret, closer, err := p.snapshot.Get(key)
-	if closer != nil {
-		retCopy := make([]byte, len(ret))
-		copy(retCopy, ret)
-		ret = retCopy
-		closer.Close()
-	}
-	if errors.Is(err, pebble.ErrNotFound) || len(ret) == 0 {
-		return nil, nil
-	}
-	return ret, err
-}
-
-// MVCCGetProto implements the Reader interface.
-func (p *pebbleSnapshot) MVCCGetProto(
-	key MVCCKey, msg protoutil.Message,
-) (ok bool, keyBytes, valBytes int64, err error) {
-	return pebbleGetProto(p, key, msg)
-}
-
 // MVCCIterate implements the Reader interface.
 func (p *pebbleSnapshot) MVCCIterate(
 	start, end roachpb.Key,
@@ -2324,25 +2240,6 @@ func (p *pebbleSnapshot) SupportsRangeKeys() bool {
 func (p *pebbleSnapshot) PinEngineStateForIterators() error {
 	// Snapshot already pins state, so nothing to do.
 	return nil
-}
-
-// pebbleGetProto uses Reader.MVCCGet, so it not as efficient as a function
-// that can unmarshal without copying bytes. But we don't care about
-// efficiency, since this is used to implement Reader.MVCCGetProto, which is
-// deprecated and only used in tests.
-func pebbleGetProto(
-	reader Reader, key MVCCKey, msg protoutil.Message,
-) (ok bool, keyBytes, valBytes int64, err error) {
-	val, err := reader.MVCCGet(key)
-	if err != nil || val == nil {
-		return false, 0, 0, err
-	}
-	keyBytes = int64(key.Len())
-	valBytes = int64(len(val))
-	if msg != nil {
-		err = protoutil.Unmarshal(val, msg)
-	}
-	return true, keyBytes, valBytes, err
 }
 
 // ExceedMaxSizeError is the error returned when an export request

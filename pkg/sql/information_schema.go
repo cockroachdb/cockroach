@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -344,7 +346,9 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 				// uses the format <namespace_oid>_<table_oid>_<col_idx>_not_null.
 				// We might as well do the same.
 				conNameStr := tree.NewDString(fmt.Sprintf(
-					"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), column.Ordinal()+1,
+					"%s_%s_%d_not_null",
+					h.NamespaceOid(db, scName),
+					tableOid(table.GetID()), column.Ordinal()+1,
 				))
 				chkExprStr := tree.NewDString(fmt.Sprintf(
 					"%s IS NOT NULL", column.GetName(),
@@ -1308,7 +1312,9 @@ https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 					}
 					// NOT NULL column constraints are implemented as a CHECK in postgres.
 					conNameStr := tree.NewDString(fmt.Sprintf(
-						"%s_%s_%d_not_null", h.NamespaceOid(db.GetID(), scName), tableOid(table.GetID()), col.Ordinal()+1,
+						"%s_%s_%d_not_null",
+						h.NamespaceOid(db, scName),
+						tableOid(table.GetID()), col.Ordinal()+1,
 					))
 					if err := addRow(
 						dbNameStr,                // constraint_catalog
@@ -1599,7 +1605,6 @@ var informationSchemaRoutinePrivilegesTable = virtualSchemaTable{
 }
 
 var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
-	// TODO(chengxiong): add builtin function privileges as well.
 	comment: "privileges granted on functions (incomplete; only contains privileges of user-defined functions)",
 	schema:  vtable.InformationSchemaRoleRoutineGrants,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1614,6 +1619,54 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			dbDescs = append(dbDescs, db)
 		}
 		for _, db := range dbDescs {
+			dbNameStr := tree.NewDString(db.GetName())
+			exPriv := tree.NewDString(privilege.EXECUTE.String())
+			roleNameForBuiltins := []*tree.DString{
+				tree.NewDString(username.RootUser),
+				tree.NewDString(username.PublicRole),
+			}
+			for _, name := range builtins.AllBuiltinNames() {
+				parts := strings.Split(name, ".")
+				if len(parts) > 2 || len(parts) == 0 {
+					// This shouldn't happen in theory.
+					return errors.AssertionFailedf("invalid builtin function name: %s", name)
+				}
+
+				var fnNameStr string
+				var fnName *tree.DString
+				var scNameStr *tree.DString
+				if len(parts) == 2 {
+					scNameStr = tree.NewDString(parts[0])
+					fnNameStr = parts[1]
+					fnName = tree.NewDString(fnNameStr)
+				} else {
+					scNameStr = tree.NewDString(catconstants.PgCatalogName)
+					fnNameStr = name
+					fnName = tree.NewDString(fnNameStr)
+				}
+
+				_, overloads := builtinsregistry.GetBuiltinProperties(name)
+				for _, o := range overloads {
+					fnSpecificName := tree.NewDString(fmt.Sprintf("%s_%d", fnNameStr, o.Oid))
+					for _, grantee := range roleNameForBuiltins {
+						if err := addRow(
+							tree.DNull, // grantor
+							grantee,
+							dbNameStr,      // specific_catalog
+							scNameStr,      // specific_schema
+							fnSpecificName, // specific_name
+							dbNameStr,      // routine_catalog
+							scNameStr,      // routine_schema
+							fnName,         // routine_name
+							exPriv,         // privilege_type
+							noString,       // is_grantable
+						); err != nil {
+							return err
+						}
+					}
+				}
+			}
+
 			err := db.ForEachSchema(func(id descpb.ID, name string) error {
 				sc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, id, tree.SchemaLookupFlags{Required: true})
 				if err != nil {
@@ -1625,12 +1678,10 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 						return err
 					}
 					privs := fn.GetPrivileges()
-					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(sc.GetName())
 					fnSpecificName := tree.NewDString(fmt.Sprintf("%s_%d", fn.GetName(), catid.FuncIDToOID(fn.GetID())))
 					fnName := tree.NewDString(fn.GetName())
 					// EXECUTE is the only privilege kind relevant to functions.
-					exPriv := tree.NewDString(privilege.EXECUTE.String())
 					if err := addRow(
 						tree.DNull, // grantor
 						tree.NewDString(privs.Owner().Normalized()), // grantee

@@ -30,6 +30,9 @@ import (
 // Size of a UUID in bytes.
 const Size = 16
 
+// RFC4122StrSize of a size of the RFC-4122 string representation of UUID.
+const RFC4122StrSize = 36
+
 // Bytes represents a byte slice which is intended to be interpreted as a binary
 // encoding of a UUID.
 type Bytes []byte
@@ -144,7 +147,7 @@ func (u *UUID) bytesMut() []byte {
 // String returns a canonical RFC-4122 string representation of the UUID:
 // xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
 func (u UUID) String() string {
-	buf := make([]byte, 36)
+	buf := make([]byte, RFC4122StrSize)
 	u.StringBytes(buf)
 	return string(buf)
 }
@@ -152,7 +155,7 @@ func (u UUID) String() string {
 // StringBytes writes the result of String directly into a buffer, which must
 // have a length of at least 36.
 func (u UUID) StringBytes(buf []byte) {
-	_ = buf[:36]
+	_ = buf[:RFC4122StrSize]
 	hex.Encode(buf[0:8], u[0:4])
 	buf[8] = '-'
 	hex.Encode(buf[9:13], u[4:6])

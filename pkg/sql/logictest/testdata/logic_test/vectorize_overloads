@@ -465,3 +465,25 @@ statement ok
 SELECT * FROM t70738 AS t1
 JOIN t70738 as t2 ON t1.i8 = t2.i2
 WHERE (t2.i / t1.i8) = '1 day'
+
+# Regression test for incorrect usage of the optimized IN operator (#88141).
+statement ok
+CREATE TABLE t88141 (i INTERVAL);
+INSERT INTO t88141 (i) VALUES (NULL);
+SET testing_optimizer_random_seed = 6320964980407535657;
+SET testing_optimizer_disable_rule_probability = 0.500000;
+
+query T
+SELECT i
+FROM t88141
+WHERE NOT (i IN (
+    SELECT '1 day'::INTERVAL
+    FROM t88141 t1 JOIN t88141 t2 ON true
+    WHERE false
+));
+----
+NULL
+
+statement ok
+RESET testing_optimizer_random_seed;
+RESET testing_optimizer_disable_rule_probability;

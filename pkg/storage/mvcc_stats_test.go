@@ -85,87 +85,83 @@ var emptyMVCCValueHeaderSize = func() int64 {
 func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			// Put a value.
-			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, value, nil); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			vKeySize := MVCCVersionTimestampSize          // 12
-			vValSize := int64(len(value.RawBytes))        // 10
-			if disableSimpleValueEncoding {
-				vValSize += emptyMVCCValueHeaderSize // 17
-			}
-
-			expMS := enginepb.MVCCStats{
-				LiveBytes:       mKeySize + vKeySize + vValSize, // 24[+7]
-				LiveCount:       1,
-				KeyBytes:        mKeySize + vKeySize, // 14
-				KeyCount:        1,
-				ValBytes:        vValSize, // 10[+7]
-				ValCount:        1,
-				LastUpdateNanos: 1e9,
-			}
-			assertEq(t, engine, "after put", aggMS, &expMS)
-
-			// Delete the value at ts=3. We'll commit this at ts=4 later.
-			ts3 := hlc.Timestamp{WallTime: 3 * 1e9}
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts3},
-				ReadTimestamp: ts3,
-			}
-			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			// Now commit the value, but with a timestamp gap (i.e. this is a
-			// push-commit as it would happen for a SNAPSHOT txn)
-			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
-			txn.Status = roachpb.COMMITTED
-			txn.WriteTimestamp.Forward(ts4)
-			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
-				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			// The initial write used the simple MVCCValue encoding. When resolved to
-			// a higher timestamp, the MVCCValue retained its local timestamp, meaning
-			// that it now uses the extended MVCCValue encoding.
-			vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts1)}
-			vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
-			vValSize += vValHeaderSize                                       // 23
-
-			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 4e9,
-				LiveBytes:       0,
-				LiveCount:       0,
-				KeyCount:        1,
-				ValCount:        2,
-				// The implicit meta record (deletion tombstone) counts for len("a")+1=2.
-				// Two versioned keys count for 2*vKeySize.
-				KeyBytes: mKeySize + 2*vKeySize,
-				ValBytes: vValSize,
-				// No GCBytesAge has been accrued yet, as the value just got non-live at 4s.
-				GCBytesAge: 0,
-			}
-
-			assertEq(t, engine, "after committing", aggMS, &expAggMS)
-		})
+	key := roachpb.Key("a")
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	// Put a value.
+	value := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, value, nil); err != nil {
+		t.Fatal(err)
 	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize()) // 2
+	vKeySize := MVCCVersionTimestampSize          // 12
+	vValSize := int64(len(value.RawBytes))        // 10
+	if disableSimpleValueEncoding {
+		vValSize += emptyMVCCValueHeaderSize // 17
+	}
+
+	expMS := enginepb.MVCCStats{
+		LiveBytes:       mKeySize + vKeySize + vValSize, // 24[+7]
+		LiveCount:       1,
+		KeyBytes:        mKeySize + vKeySize, // 14
+		KeyCount:        1,
+		ValBytes:        vValSize, // 10[+7]
+		ValCount:        1,
+		LastUpdateNanos: 1e9,
+	}
+	assertEq(t, engine, "after put", aggMS, &expMS)
+
+	// Delete the value at ts=3. We'll commit this at ts=4 later.
+	ts3 := hlc.Timestamp{WallTime: 3 * 1e9}
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts3},
+		ReadTimestamp: ts3,
+	}
+	if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now commit the value, but with a timestamp gap (i.e. this is a
+	// push-commit as it would happen for a SNAPSHOT txn)
+	ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
+	txn.Status = roachpb.COMMITTED
+	txn.WriteTimestamp.Forward(ts4)
+	if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// The initial write used the simple MVCCValue encoding. When resolved to
+	// a higher timestamp, the MVCCValue retained its local timestamp, meaning
+	// that it now uses the extended MVCCValue encoding.
+	vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts1)}
+	vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
+	vValSize += vValHeaderSize                                       // 23
+
+	expAggMS := enginepb.MVCCStats{
+		LastUpdateNanos: 4e9,
+		LiveBytes:       0,
+		LiveCount:       0,
+		KeyCount:        1,
+		ValCount:        2,
+		// The implicit meta record (deletion tombstone) counts for len("a")+1=2.
+		// Two versioned keys count for 2*vKeySize.
+		KeyBytes: mKeySize + 2*vKeySize,
+		ValBytes: vValSize,
+		// No GCBytesAge has been accrued yet, as the value just got non-live at 4s.
+		GCBytesAge: 0,
+	}
+
+	assertEq(t, engine, "after committing", aggMS, &expAggMS)
 }
 
 // TestMVCCStatsPutCommitMovesTimestamp is similar to
@@ -174,90 +170,86 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
-				ReadTimestamp: ts1,
-			}
-			// Write an intent at t=1s.
-			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, value, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			mValSize := int64((&enginepb.MVCCMetadata{    // 46
-				Timestamp: ts1.ToLegacyTimestamp(),
-				Deleted:   false,
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			mValSize += 2
-			vKeySize := MVCCVersionTimestampSize   // 12
-			vValSize := int64(len(value.RawBytes)) // 10
-			if disableSimpleValueEncoding {
-				vValSize += emptyMVCCValueHeaderSize // 17
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos:      1e9,
-				LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 68[+2][+7]
-				LiveCount:            1,
-				KeyBytes:             mKeySize + vKeySize, // 2+12 =14
-				KeyCount:             1,
-				ValBytes:             mValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
-				ValCount:             1,
-				IntentCount:          1,
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
-				GCBytesAge:           0,
-			}
-			assertEq(t, engine, "after put", aggMS, &expMS)
-
-			// Now commit the intent, but with a timestamp gap (i.e. this is a
-			// push-commit as it would happen for a SNAPSHOT txn)
-			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
-			txn.Status = roachpb.COMMITTED
-			txn.WriteTimestamp.Forward(ts4)
-			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
-				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			// The initial write used the simple MVCCValue encoding. When resolved to
-			// a higher timestamp, the MVCCValue retained its local timestamp, meaning
-			// that it now uses the extended MVCCValue encoding.
-			vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts1)}
-			vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
-			vValSize = int64(len(value.RawBytes)) + vValHeaderSize           // 23
-
-			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 4e9,
-				LiveBytes:       mKeySize + vKeySize + vValSize, // 2+12+23 = 37
-				LiveCount:       1,
-				KeyCount:        1,
-				ValCount:        1,
-				// The implicit meta record counts for len("a")+1=2.
-				// One versioned key counts for vKeySize.
-				KeyBytes:   mKeySize + vKeySize,
-				ValBytes:   vValSize,
-				GCBytesAge: 0, // this was once erroneously negative
-			}
-
-			assertEq(t, engine, "after committing", aggMS, &expAggMS)
-		})
+	key := roachpb.Key("a")
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+		ReadTimestamp: ts1,
 	}
+	// Write an intent at t=1s.
+	value := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize()) // 2
+	mValSize := int64((&enginepb.MVCCMetadata{    // 46
+		Timestamp: ts1.ToLegacyTimestamp(),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	mValSize += 2
+	vKeySize := MVCCVersionTimestampSize   // 12
+	vValSize := int64(len(value.RawBytes)) // 10
+	if disableSimpleValueEncoding {
+		vValSize += emptyMVCCValueHeaderSize // 17
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos:      1e9,
+		LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 68[+2][+7]
+		LiveCount:            1,
+		KeyBytes:             mKeySize + vKeySize, // 2+12 =14
+		KeyCount:             1,
+		ValBytes:             mValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
+		ValCount:             1,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+		GCBytesAge:           0,
+	}
+	assertEq(t, engine, "after put", aggMS, &expMS)
+
+	// Now commit the intent, but with a timestamp gap (i.e. this is a
+	// push-commit as it would happen for a SNAPSHOT txn)
+	ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
+	txn.Status = roachpb.COMMITTED
+	txn.WriteTimestamp.Forward(ts4)
+	if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// The initial write used the simple MVCCValue encoding. When resolved to
+	// a higher timestamp, the MVCCValue retained its local timestamp, meaning
+	// that it now uses the extended MVCCValue encoding.
+	vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts1)}
+	vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
+	vValSize = int64(len(value.RawBytes)) + vValHeaderSize           // 23
+
+	expAggMS := enginepb.MVCCStats{
+		LastUpdateNanos: 4e9,
+		LiveBytes:       mKeySize + vKeySize + vValSize, // 2+12+23 = 37
+		LiveCount:       1,
+		KeyCount:        1,
+		ValCount:        1,
+		// The implicit meta record counts for len("a")+1=2.
+		// One versioned key counts for vKeySize.
+		KeyBytes:   mKeySize + vKeySize,
+		ValBytes:   vValSize,
+		GCBytesAge: 0, // this was once erroneously negative
+	}
+
+	assertEq(t, engine, "after committing", aggMS, &expAggMS)
 }
 
 // TestMVCCStatsPutPushMovesTimestamp is similar to TestMVCCStatsPutCommitMovesTimestamp:
@@ -266,95 +258,91 @@ func TestMVCCStatsPutCommitMovesTimestamp(t *testing.T) {
 func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
-				ReadTimestamp: ts1,
-			}
-			// Write an intent.
-			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			mValSize := int64((&enginepb.MVCCMetadata{    // 46
-				Timestamp: ts1.ToLegacyTimestamp(),
-				Deleted:   false,
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			mValSize += 2
-			vKeySize := MVCCVersionTimestampSize   // 12
-			vValSize := int64(len(value.RawBytes)) // 10
-			if disableSimpleValueEncoding {
-				vValSize += emptyMVCCValueHeaderSize // 17
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos:      1e9,
-				LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 70[+2][+7]
-				LiveCount:            1,
-				KeyBytes:             mKeySize + vKeySize, // 2+12 = 14
-				KeyCount:             1,
-				ValBytes:             mValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
-				ValCount:             1,
-				IntentAge:            0,
-				IntentCount:          1,
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
-			}
-			assertEq(t, engine, "after put", aggMS, &expMS)
-
-			// Now push the value, but with a timestamp gap (i.e. this is a
-			// push as it would happen for a SNAPSHOT txn)
-			ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
-			txn.WriteTimestamp.Forward(ts4)
-			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
-				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
-			); err != nil {
-				t.Fatal(err)
-			}
-			// Account for removal of TxnDidNotUpdateMeta.
-			mValSize -= 2
-
-			// The initial write used the simple MVCCValue encoding. When resolved to
-			// a higher timestamp, the MVCCValue retained its local timestamp, meaning
-			// that it now uses the extended MVCCValue encoding.
-			vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts1)}
-			vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
-			vValSize = int64(len(value.RawBytes)) + vValHeaderSize           // 23
-
-			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 4e9,
-				LiveBytes:       mKeySize + mValSize + vKeySize + vValSize, // 2+54+12+23 = 91
-				LiveCount:       1,
-				KeyCount:        1,
-				ValCount:        1,
-				// The explicit meta record counts for len("a")+1=2.
-				// One versioned key counts for vKeySize.
-				KeyBytes: mKeySize + vKeySize,
-				// The intent is still there, so we see mValSize.
-				ValBytes:             mValSize + vValSize, // 54+23 = 69
-				IntentAge:            0,                   // this was once erroneously positive
-				IntentCount:          1,                   // still there
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vValSize, // still there
-			}
-
-			assertEq(t, engine, "after pushing", aggMS, &expAggMS)
-		})
+	key := roachpb.Key("a")
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+		ReadTimestamp: ts1,
 	}
+	// Write an intent.
+	value := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize()) // 2
+	mValSize := int64((&enginepb.MVCCMetadata{    // 46
+		Timestamp: ts1.ToLegacyTimestamp(),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	mValSize += 2
+	vKeySize := MVCCVersionTimestampSize   // 12
+	vValSize := int64(len(value.RawBytes)) // 10
+	if disableSimpleValueEncoding {
+		vValSize += emptyMVCCValueHeaderSize // 17
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos:      1e9,
+		LiveBytes:            mKeySize + mValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 70[+2][+7]
+		LiveCount:            1,
+		KeyBytes:             mKeySize + vKeySize, // 2+12 = 14
+		KeyCount:             1,
+		ValBytes:             mValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
+		ValCount:             1,
+		IntentAge:            0,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+	}
+	assertEq(t, engine, "after put", aggMS, &expMS)
+
+	// Now push the value, but with a timestamp gap (i.e. this is a
+	// push as it would happen for a SNAPSHOT txn)
+	ts4 := hlc.Timestamp{WallTime: 4 * 1e9}
+	txn.WriteTimestamp.Forward(ts4)
+	if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
+	); err != nil {
+		t.Fatal(err)
+	}
+	// Account for removal of TxnDidNotUpdateMeta.
+	mValSize -= 2
+
+	// The initial write used the simple MVCCValue encoding. When resolved to
+	// a higher timestamp, the MVCCValue retained its local timestamp, meaning
+	// that it now uses the extended MVCCValue encoding.
+	vValHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts1)}
+	vValHeaderSize := extendedPreludeSize + int64(vValHeader.Size()) // 13
+	vValSize = int64(len(value.RawBytes)) + vValHeaderSize           // 23
+
+	expAggMS := enginepb.MVCCStats{
+		LastUpdateNanos: 4e9,
+		LiveBytes:       mKeySize + mValSize + vKeySize + vValSize, // 2+54+12+23 = 91
+		LiveCount:       1,
+		KeyCount:        1,
+		ValCount:        1,
+		// The explicit meta record counts for len("a")+1=2.
+		// One versioned key counts for vKeySize.
+		KeyBytes: mKeySize + vKeySize,
+		// The intent is still there, so we see mValSize.
+		ValBytes:             mValSize + vValSize, // 54+23 = 69
+		IntentAge:            0,                   // this was once erroneously positive
+		IntentCount:          1,                   // still there
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vValSize, // still there
+	}
+
+	assertEq(t, engine, "after pushing", aggMS, &expAggMS)
 }
 
 // TestMVCCStatsDeleteMovesTimestamp is similar to TestMVCCStatsPutCommitMovesTimestamp:
@@ -363,132 +351,128 @@ func TestMVCCStatsPutPushMovesTimestamp(t *testing.T) {
 func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2 * 1e9}
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2 * 1e9}
 
-			key := roachpb.Key("a")
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
-				ReadTimestamp: ts1,
-			}
-
-			// Write an intent.
-			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize())
-			require.EqualValues(t, mKeySize, 2)
-
-			mVal1Size := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts1.ToLegacyTimestamp(),
-				Deleted:   false,
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			require.EqualValues(t, mVal1Size, 46)
-			mVal1Size += 2
-
-			// TODO(sumeer): this is the first put at ts1, so why are we using this m1ValSize
-			// instead of mVal1Size being sufficient?
-			m1ValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts2.ToLegacyTimestamp(),
-				Deleted:   false,
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			require.EqualValues(t, m1ValSize, 46)
-			m1ValSize += 2
-
-			vKeySize := MVCCVersionTimestampSize
-			require.EqualValues(t, vKeySize, 12)
-
-			vValSize := int64(len(value.RawBytes))
-			require.EqualValues(t, vValSize, 10)
-			if disableSimpleValueEncoding {
-				vValSize += emptyMVCCValueHeaderSize
-				require.EqualValues(t, vValSize, 17)
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos:      1e9,
-				LiveBytes:            mKeySize + m1ValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 70[+2][+7]
-				LiveCount:            1,
-				KeyBytes:             mKeySize + vKeySize, // 2+12 = 14
-				KeyCount:             1,
-				ValBytes:             mVal1Size + vValSize, // (46[+2])+(10[+7]) = 56[+2][+7]
-				ValCount:             1,
-				IntentAge:            0,
-				IntentCount:          1,
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
-			}
-			assertEq(t, engine, "after put", aggMS, &expMS)
-
-			// Now replace our intent with a deletion intent, but with a timestamp gap.
-			// This could happen if a transaction got restarted with a higher timestamp
-			// and ran logic different from that in the first attempt.
-			txn.WriteTimestamp.Forward(ts2)
-
-			txn.Sequence++
-
-			// Annoyingly, the new meta value is actually a little larger thanks to the
-			// sequence number. Also since there was a write previously on the same
-			// transaction, the IntentHistory will add a few bytes to the metadata.
-			encValue, err := EncodeMVCCValue(MVCCValue{Value: value})
-			require.NoError(t, err)
-			m2ValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts2.ToLegacyTimestamp(),
-				Txn:       &txn.TxnMeta,
-				IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
-					{Sequence: 0, Value: encValue},
-				},
-			}).Size())
-			expM2ValSize := 64
-			if disableSimpleValueEncoding {
-				expM2ValSize = 71
-			}
-			require.EqualValues(t, m2ValSize, expM2ValSize)
-
-			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			vVal2Size := int64(0) // tombstone
-			if disableSimpleValueEncoding {
-				vVal2Size = emptyMVCCValueHeaderSize // 7
-			}
-
-			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 2e9,
-				LiveBytes:       0,
-				LiveCount:       0,
-				KeyCount:        1,
-				ValCount:        1,
-				// The explicit meta record counts for len("a")+1=2.
-				// One versioned key counts for vKeySize.
-				KeyBytes: mKeySize + vKeySize,
-				// The intent is still there, but this time with mVal2Size, and a zero vValSize.
-				ValBytes:             m2ValSize + vVal2Size,
-				IntentAge:            0,
-				IntentCount:          1, // still there
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vVal2Size, // still there, but now without vValSize
-				GCBytesAge:           0,                    // this was once erroneously negative
-			}
-
-			assertEq(t, engine, "after deleting", aggMS, &expAggMS)
-		})
+	key := roachpb.Key("a")
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+		ReadTimestamp: ts1,
 	}
+
+	// Write an intent.
+	value := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 2)
+
+	mVal1Size := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts1.ToLegacyTimestamp(),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, mVal1Size, 46)
+	mVal1Size += 2
+
+	// TODO(sumeer): this is the first put at ts1, so why are we using this m1ValSize
+	// instead of mVal1Size being sufficient?
+	m1ValSize := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts2.ToLegacyTimestamp(),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, m1ValSize, 46)
+	m1ValSize += 2
+
+	vKeySize := MVCCVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vValSize := int64(len(value.RawBytes))
+	require.EqualValues(t, vValSize, 10)
+	if disableSimpleValueEncoding {
+		vValSize += emptyMVCCValueHeaderSize
+		require.EqualValues(t, vValSize, 17)
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos:      1e9,
+		LiveBytes:            mKeySize + m1ValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 70[+2][+7]
+		LiveCount:            1,
+		KeyBytes:             mKeySize + vKeySize, // 2+12 = 14
+		KeyCount:             1,
+		ValBytes:             mVal1Size + vValSize, // (46[+2])+(10[+7]) = 56[+2][+7]
+		ValCount:             1,
+		IntentAge:            0,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+	}
+	assertEq(t, engine, "after put", aggMS, &expMS)
+
+	// Now replace our intent with a deletion intent, but with a timestamp gap.
+	// This could happen if a transaction got restarted with a higher timestamp
+	// and ran logic different from that in the first attempt.
+	txn.WriteTimestamp.Forward(ts2)
+
+	txn.Sequence++
+
+	// Annoyingly, the new meta value is actually a little larger thanks to the
+	// sequence number. Also since there was a write previously on the same
+	// transaction, the IntentHistory will add a few bytes to the metadata.
+	encValue, err := EncodeMVCCValue(MVCCValue{Value: value})
+	require.NoError(t, err)
+	m2ValSize := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts2.ToLegacyTimestamp(),
+		Txn:       &txn.TxnMeta,
+		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+			{Sequence: 0, Value: encValue},
+		},
+	}).Size())
+	expM2ValSize := 64
+	if disableSimpleValueEncoding {
+		expM2ValSize = 71
+	}
+	require.EqualValues(t, m2ValSize, expM2ValSize)
+
+	if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	vVal2Size := int64(0) // tombstone
+	if disableSimpleValueEncoding {
+		vVal2Size = emptyMVCCValueHeaderSize // 7
+	}
+
+	expAggMS := enginepb.MVCCStats{
+		LastUpdateNanos: 2e9,
+		LiveBytes:       0,
+		LiveCount:       0,
+		KeyCount:        1,
+		ValCount:        1,
+		// The explicit meta record counts for len("a")+1=2.
+		// One versioned key counts for vKeySize.
+		KeyBytes: mKeySize + vKeySize,
+		// The intent is still there, but this time with mVal2Size, and a zero vValSize.
+		ValBytes:             m2ValSize + vVal2Size,
+		IntentAge:            0,
+		IntentCount:          1, // still there
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vVal2Size, // still there, but now without vValSize
+		GCBytesAge:           0,                    // this was once erroneously negative
+	}
+
+	assertEq(t, engine, "after deleting", aggMS, &expAggMS)
 }
 
 // TestMVCCStatsPutMovesDeletionTimestamp is similar to TestMVCCStatsPutCommitMovesTimestamp: A
@@ -497,124 +481,121 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2 * 1e9}
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := roachpb.Key("a")
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
-				ReadTimestamp: ts1,
-			}
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2 * 1e9}
 
-			// Write a deletion tombstone intent.
-			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize())
-			require.EqualValues(t, mKeySize, 2)
-
-			mVal1Size := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts1.ToLegacyTimestamp(),
-				Deleted:   false,
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			require.EqualValues(t, mVal1Size, 46)
-			mVal1Size += 2
-
-			vKeySize := MVCCVersionTimestampSize
-			require.EqualValues(t, vKeySize, 12)
-
-			vVal1Size := int64(0) // tombstone
-			if disableSimpleValueEncoding {
-				vVal1Size = emptyMVCCValueHeaderSize // 7
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos:      1e9,
-				LiveBytes:            0,
-				LiveCount:            0,
-				KeyBytes:             mKeySize + vKeySize, // 2 + 12 = 24
-				KeyCount:             1,
-				ValBytes:             mVal1Size + vVal1Size, // 46[+2] [+7]
-				ValCount:             1,
-				IntentAge:            0,
-				IntentCount:          1,
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vVal1Size, // 12 [+7]
-				GCBytesAge:           0,
-			}
-			assertEq(t, engine, "after delete", aggMS, &expMS)
-
-			// Now replace our deletion with a value intent, but with a timestamp gap.
-			// This could happen if a transaction got restarted with a higher timestamp
-			// and ran logic different from that in the first attempt.
-			txn.WriteTimestamp.Forward(ts2)
-
-			txn.Sequence++
-
-			// Annoyingly, the new meta value is actually a little larger thanks to the
-			// sequence number. Also the value is larger because the previous intent on the
-			// transaction is recorded in the IntentHistory.
-			encVal1, err := EncodeMVCCValue(MVCCValue{Value: roachpb.Value{RawBytes: []byte{}}})
-			require.NoError(t, err)
-			mVal2Size := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts2.ToLegacyTimestamp(),
-				Txn:       &txn.TxnMeta,
-				IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
-					{Sequence: 0, Value: encVal1},
-				},
-			}).Size())
-			expMVal2Size := 54
-			if disableSimpleValueEncoding {
-				expMVal2Size = 61
-			}
-			require.EqualValues(t, mVal2Size, expMVal2Size)
-
-			value := roachpb.MakeValueFromString("value")
-
-			vVal2Size := int64(len(value.RawBytes))
-			require.EqualValues(t, vVal2Size, 10)
-			if disableSimpleValueEncoding {
-				vVal2Size += emptyMVCCValueHeaderSize
-				require.EqualValues(t, vVal2Size, 17)
-			}
-
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 2e9,
-				LiveBytes:       mKeySize + mVal2Size + vKeySize + vVal2Size, // 2+46+12+(10[+7]) = 70[+7]
-				LiveCount:       1,
-				KeyCount:        1,
-				ValCount:        1,
-				// The explicit meta record counts for len("a")+1=2.
-				// One versioned key counts for vKeySize.
-				KeyBytes: mKeySize + vKeySize,
-				// The intent is still there, but this time with mVal2Size, and a zero vValSize.
-				ValBytes:             vVal2Size + mVal2Size, // (10[+7])+46 = 56[+7]
-				IntentAge:            0,
-				IntentCount:          1, // still there
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vVal2Size, // still there, now bigger
-				GCBytesAge:           0,                    // this was once erroneously negative
-			}
-
-			assertEq(t, engine, "after put", aggMS, &expAggMS)
-		})
+	key := roachpb.Key("a")
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+		ReadTimestamp: ts1,
 	}
+
+	// Write a deletion tombstone intent.
+	if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 2)
+
+	mVal1Size := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts1.ToLegacyTimestamp(),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, mVal1Size, 46)
+	mVal1Size += 2
+
+	vKeySize := MVCCVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vVal1Size := int64(0) // tombstone
+	if disableSimpleValueEncoding {
+		vVal1Size = emptyMVCCValueHeaderSize // 7
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos:      1e9,
+		LiveBytes:            0,
+		LiveCount:            0,
+		KeyBytes:             mKeySize + vKeySize, // 2 + 12 = 24
+		KeyCount:             1,
+		ValBytes:             mVal1Size + vVal1Size, // 46[+2] [+7]
+		ValCount:             1,
+		IntentAge:            0,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vVal1Size, // 12 [+7]
+		GCBytesAge:           0,
+	}
+	assertEq(t, engine, "after delete", aggMS, &expMS)
+
+	// Now replace our deletion with a value intent, but with a timestamp gap.
+	// This could happen if a transaction got restarted with a higher timestamp
+	// and ran logic different from that in the first attempt.
+	txn.WriteTimestamp.Forward(ts2)
+
+	txn.Sequence++
+
+	// Annoyingly, the new meta value is actually a little larger thanks to the
+	// sequence number. Also the value is larger because the previous intent on the
+	// transaction is recorded in the IntentHistory.
+	encVal1, err := EncodeMVCCValue(MVCCValue{Value: roachpb.Value{RawBytes: []byte{}}})
+	require.NoError(t, err)
+	mVal2Size := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts2.ToLegacyTimestamp(),
+		Txn:       &txn.TxnMeta,
+		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+			{Sequence: 0, Value: encVal1},
+		},
+	}).Size())
+	expMVal2Size := 54
+	if disableSimpleValueEncoding {
+		expMVal2Size = 61
+	}
+	require.EqualValues(t, mVal2Size, expMVal2Size)
+
+	value := roachpb.MakeValueFromString("value")
+
+	vVal2Size := int64(len(value.RawBytes))
+	require.EqualValues(t, vVal2Size, 10)
+	if disableSimpleValueEncoding {
+		vVal2Size += emptyMVCCValueHeaderSize
+		require.EqualValues(t, vVal2Size, 17)
+	}
+
+	if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	expAggMS := enginepb.MVCCStats{
+		LastUpdateNanos: 2e9,
+		LiveBytes:       mKeySize + mVal2Size + vKeySize + vVal2Size, // 2+46+12+(10[+7]) = 70[+7]
+		LiveCount:       1,
+		KeyCount:        1,
+		ValCount:        1,
+		// The explicit meta record counts for len("a")+1=2.
+		// One versioned key counts for vKeySize.
+		KeyBytes: mKeySize + vKeySize,
+		// The intent is still there, but this time with mVal2Size, and a zero vValSize.
+		ValBytes:             vVal2Size + mVal2Size, // (10[+7])+46 = 56[+7]
+		IntentAge:            0,
+		IntentCount:          1, // still there
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vVal2Size, // still there, now bigger
+		GCBytesAge:           0,                    // this was once erroneously negative
+	}
+
+	assertEq(t, engine, "after put", aggMS, &expAggMS)
 }
 
 // TestMVCCStatsDelDelCommit writes a non-transactional tombstone, and then adds an intent tombstone
@@ -625,149 +606,145 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := roachpb.Key("a")
+	key := roachpb.Key("a")
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
-			ts3 := hlc.Timestamp{WallTime: 3e9}
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2e9}
+	ts3 := hlc.Timestamp{WallTime: 3e9}
 
-			// Write a non-transactional tombstone at t=1s.
-			if _, err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize())
-			require.EqualValues(t, mKeySize, 2)
-			vKeySize := MVCCVersionTimestampSize
-			require.EqualValues(t, vKeySize, 12)
-
-			vValSize := int64(0) // tombstone
-			if disableSimpleValueEncoding {
-				vValSize = emptyMVCCValueHeaderSize // 7
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1e9,
-				KeyBytes:        mKeySize + vKeySize,
-				KeyCount:        1,
-				ValBytes:        vValSize,
-				ValCount:        1,
-			}
-
-			assertEq(t, engine, "after non-transactional delete", aggMS, &expMS)
-
-			// Write a tombstone intent at t=2s.
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
-				ReadTimestamp: ts2,
-			}
-			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			mValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts1.ToLegacyTimestamp(),
-				Deleted:   true,
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			require.EqualValues(t, mValSize, 46)
-			// Account for TxnDidNotUpdateMeta
-			mValSize += 2
-
-			expMS = enginepb.MVCCStats{
-				LastUpdateNanos:      2e9,
-				KeyBytes:             mKeySize + 2*vKeySize, // 2+2*12 = 26
-				KeyCount:             1,
-				ValBytes:             mValSize + 2*vValSize, // 46[+2] [+7]
-				ValCount:             2,
-				IntentCount:          1,
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vValSize,
-				// The original non-transactional write (at 1s) has now aged one second.
-				GCBytesAge: 1 * (vKeySize + vValSize),
-			}
-			assertEq(t, engine, "after put", aggMS, &expMS)
-
-			// Now commit or abort the intent, respectively, but with a timestamp gap
-			// (i.e. this is a push-commit as it would happen for a SNAPSHOT txn).
-			t.Run("Commit", func(t *testing.T) {
-				aggMS := *aggMS
-				engine := engine.NewBatch()
-				defer engine.Close()
-
-				txnCommit := txn.Clone()
-				txnCommit.Status = roachpb.COMMITTED
-				txnCommit.WriteTimestamp.Forward(ts3)
-				if _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
-					roachpb.MakeLockUpdate(txnCommit, roachpb.Span{Key: key}),
-				); err != nil {
-					t.Fatal(err)
-				}
-
-				// The initial write used the simple MVCCValue encoding. When resolved to
-				// a higher timestamp, the MVCCValue retained its local timestamp, meaning
-				// that it now uses the extended MVCCValue encoding.
-				vVal2Header := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts2)}
-				vVal2HeaderSize := extendedPreludeSize + int64(vVal2Header.Size()) // 13
-				vVal2Size := vVal2HeaderSize + 0                                   // tombstone, so just a header
-
-				expAggMS := enginepb.MVCCStats{
-					LastUpdateNanos: 3e9,
-					KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
-					KeyCount:        1,
-					ValBytes:        vValSize + vVal2Size,
-					ValCount:        2,
-					IntentCount:     0,
-					IntentBytes:     0,
-					// The very first write picks up another second of age. Before a bug fix,
-					// this was failing to do so.
-					GCBytesAge: 2 * (vKeySize + vValSize),
-				}
-
-				assertEq(t, engine, "after committing", &aggMS, &expAggMS)
-			})
-			t.Run("Abort", func(t *testing.T) {
-				aggMS := *aggMS
-				engine := engine.NewBatch()
-				defer engine.Close()
-
-				txnAbort := txn.Clone()
-				txnAbort.Status = roachpb.ABORTED
-				txnAbort.WriteTimestamp.Forward(ts3)
-				if _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
-					roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
-				); err != nil {
-					t.Fatal(err)
-				}
-
-				expAggMS := enginepb.MVCCStats{
-					LastUpdateNanos: 3e9,
-					KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
-					KeyCount:        1,
-					ValBytes:        vValSize,
-					ValCount:        1,
-					IntentCount:     0,
-					IntentBytes:     0,
-					// We aborted our intent, but the value we first wrote was a tombstone, and
-					// so it's expected to retain its age. Since it's now the only value, it
-					// also contributes as a meta key.
-					GCBytesAge: 2 * (mKeySize + vKeySize + vValSize),
-				}
-
-				assertEq(t, engine, "after aborting", &aggMS, &expAggMS)
-			})
-		})
+	// Write a non-transactional tombstone at t=1s.
+	if _, err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
+		t.Fatal(err)
 	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 2)
+	vKeySize := MVCCVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vValSize := int64(0) // tombstone
+	if disableSimpleValueEncoding {
+		vValSize = emptyMVCCValueHeaderSize // 7
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 1e9,
+		KeyBytes:        mKeySize + vKeySize,
+		KeyCount:        1,
+		ValBytes:        vValSize,
+		ValCount:        1,
+	}
+
+	assertEq(t, engine, "after non-transactional delete", aggMS, &expMS)
+
+	// Write a tombstone intent at t=2s.
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
+		ReadTimestamp: ts2,
+	}
+	if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mValSize := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts1.ToLegacyTimestamp(),
+		Deleted:   true,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, mValSize, 46)
+	// Account for TxnDidNotUpdateMeta
+	mValSize += 2
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos:      2e9,
+		KeyBytes:             mKeySize + 2*vKeySize, // 2+2*12 = 26
+		KeyCount:             1,
+		ValBytes:             mValSize + 2*vValSize, // 46[+2] [+7]
+		ValCount:             2,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vValSize,
+		// The original non-transactional write (at 1s) has now aged one second.
+		GCBytesAge: 1 * (vKeySize + vValSize),
+	}
+	assertEq(t, engine, "after put", aggMS, &expMS)
+
+	// Now commit or abort the intent, respectively, but with a timestamp gap
+	// (i.e. this is a push-commit as it would happen for a SNAPSHOT txn).
+	t.Run("Commit", func(t *testing.T) {
+		aggMS := *aggMS
+		engine := engine.NewBatch()
+		defer engine.Close()
+
+		txnCommit := txn.Clone()
+		txnCommit.Status = roachpb.COMMITTED
+		txnCommit.WriteTimestamp.Forward(ts3)
+		if _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
+			roachpb.MakeLockUpdate(txnCommit, roachpb.Span{Key: key}),
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		// The initial write used the simple MVCCValue encoding. When resolved to
+		// a higher timestamp, the MVCCValue retained its local timestamp, meaning
+		// that it now uses the extended MVCCValue encoding.
+		vVal2Header := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp(ts2)}
+		vVal2HeaderSize := extendedPreludeSize + int64(vVal2Header.Size()) // 13
+		vVal2Size := vVal2HeaderSize + 0                                   // tombstone, so just a header
+
+		expAggMS := enginepb.MVCCStats{
+			LastUpdateNanos: 3e9,
+			KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
+			KeyCount:        1,
+			ValBytes:        vValSize + vVal2Size,
+			ValCount:        2,
+			IntentCount:     0,
+			IntentBytes:     0,
+			// The very first write picks up another second of age. Before a bug fix,
+			// this was failing to do so.
+			GCBytesAge: 2 * (vKeySize + vValSize),
+		}
+
+		assertEq(t, engine, "after committing", &aggMS, &expAggMS)
+	})
+	t.Run("Abort", func(t *testing.T) {
+		aggMS := *aggMS
+		engine := engine.NewBatch()
+		defer engine.Close()
+
+		txnAbort := txn.Clone()
+		txnAbort.Status = roachpb.ABORTED
+		txnAbort.WriteTimestamp.Forward(ts3)
+		if _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
+			roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		expAggMS := enginepb.MVCCStats{
+			LastUpdateNanos: 3e9,
+			KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
+			KeyCount:        1,
+			ValBytes:        vValSize,
+			ValCount:        1,
+			IntentCount:     0,
+			IntentBytes:     0,
+			// We aborted our intent, but the value we first wrote was a tombstone, and
+			// so it's expected to retain its age. Since it's now the only value, it
+			// also contributes as a meta key.
+			GCBytesAge: 2 * (mKeySize + vKeySize + vValSize),
+		}
+
+		assertEq(t, engine, "after aborting", &aggMS, &expAggMS)
+	})
 }
 
 // TestMVCCStatsPutDelPut is similar to TestMVCCStatsDelDelCommit, but its first
@@ -780,189 +757,185 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := roachpb.Key("a")
+	key := roachpb.Key("a")
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
-			ts3 := hlc.Timestamp{WallTime: 3e9}
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2e9}
+	ts3 := hlc.Timestamp{WallTime: 3e9}
 
-			// Write a non-transactional value at t=1s.
-			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, value, nil); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize())
-			require.EqualValues(t, mKeySize, 2)
-
-			vKeySize := MVCCVersionTimestampSize
-			require.EqualValues(t, vKeySize, 12)
-
-			vValSize := int64(len(value.RawBytes))
-			require.EqualValues(t, vValSize, 10)
-			if disableSimpleValueEncoding {
-				vValSize += emptyMVCCValueHeaderSize // 17
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1e9,
-				KeyBytes:        mKeySize + vKeySize,
-				KeyCount:        1,
-				ValBytes:        vValSize,
-				ValCount:        1,
-				LiveBytes:       mKeySize + vKeySize + vValSize,
-				LiveCount:       1,
-			}
-
-			assertEq(t, engine, "after non-transactional put", aggMS, &expMS)
-
-			// Write a tombstone intent at t=2s.
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
-				ReadTimestamp: ts2,
-			}
-			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			mValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts1.ToLegacyTimestamp(),
-				Deleted:   true,
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			require.EqualValues(t, mValSize, 46)
-			mValSize += 2
-
-			vDelSize := int64(0) // tombstone
-			if disableSimpleValueEncoding {
-				vDelSize = emptyMVCCValueHeaderSize // 7
-			}
-
-			expMS = enginepb.MVCCStats{
-				LastUpdateNanos:      2e9,
-				KeyBytes:             mKeySize + 2*vKeySize, // 2+2*12 = 26
-				KeyCount:             1,
-				ValBytes:             mValSize + vValSize + vDelSize, // 46[+2]+10[+7] = 56[+2][+7]
-				ValCount:             2,
-				IntentCount:          1,
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vDelSize, // 12[+7]
-				// The original non-transactional write becomes non-live at 2s, so no age
-				// is accrued yet.
-				GCBytesAge: 0,
-			}
-			assertEq(t, engine, "after txn delete", aggMS, &expMS)
-
-			// Now commit or abort the intent, but with a timestamp gap (i.e. this is a push-commit as it
-			// would happen for a SNAPSHOT txn)
-
-			txn.WriteTimestamp.Forward(ts3)
-			txn.Sequence++
-
-			// Annoyingly, the new meta value is actually a little larger thanks to the
-			// sequence number.
-			m2ValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts3.ToLegacyTimestamp(),
-				Txn:       &txn.TxnMeta,
-			}).Size())
-
-			require.EqualValues(t, m2ValSize, 48)
-
-			t.Run("Abort", func(t *testing.T) {
-				aggMS := *aggMS
-				engine := engine.NewBatch()
-				defer engine.Close()
-
-				txnAbort := txn.Clone()
-				txnAbort.Status = roachpb.ABORTED // doesn't change m2ValSize, fortunately
-				if _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
-					roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
-				); err != nil {
-					t.Fatal(err)
-				}
-
-				expAggMS := enginepb.MVCCStats{
-					LastUpdateNanos: 3e9,
-					KeyBytes:        mKeySize + vKeySize,
-					KeyCount:        1,
-					ValBytes:        vValSize,
-					ValCount:        1,
-					LiveCount:       1,
-					LiveBytes:       mKeySize + vKeySize + vValSize,
-					IntentCount:     0,
-					IntentBytes:     0,
-					// The original value is visible again, so no GCBytesAge is present. Verifying this is the
-					// main point of this test (to prevent regression of a bug).
-					GCBytesAge: 0,
-				}
-				assertEq(t, engine, "after abort", &aggMS, &expAggMS)
-			})
-			t.Run("Put", func(t *testing.T) {
-				aggMS := *aggMS
-				engine := engine.NewBatch()
-				defer engine.Close()
-
-				val2 := roachpb.MakeValueFromString("longvalue")
-				vVal2Size := int64(len(val2.RawBytes))
-				require.EqualValues(t, vVal2Size, 14)
-				if disableSimpleValueEncoding {
-					vVal2Size += emptyMVCCValueHeaderSize
-					require.EqualValues(t, vVal2Size, 21)
-				}
-
-				txn.WriteTimestamp.Forward(ts3)
-				if err := MVCCPut(ctx, engine, &aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val2, txn); err != nil {
-					t.Fatal(err)
-				}
-
-				// Annoyingly, the new meta value is actually a little larger thanks to the
-				// sequence number.
-				encDel, err := EncodeMVCCValue(MVCCValue{Value: roachpb.Value{RawBytes: []byte{}}})
-				require.NoError(t, err)
-				mVal2SizeWithHistory := int64((&enginepb.MVCCMetadata{
-					Timestamp: ts3.ToLegacyTimestamp(),
-					Txn:       &txn.TxnMeta,
-					IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
-						{Sequence: 0, Value: encDel},
-					},
-				}).Size())
-				expMVal2Size := 54
-				if disableSimpleValueEncoding {
-					expMVal2Size = 61
-				}
-				require.EqualValues(t, mVal2SizeWithHistory, expMVal2Size)
-
-				expAggMS := enginepb.MVCCStats{
-					LastUpdateNanos:      3e9,
-					KeyBytes:             mKeySize + 2*vKeySize, // 2+2*12 = 26
-					KeyCount:             1,
-					ValBytes:             mVal2SizeWithHistory + vValSize + vVal2Size,
-					ValCount:             2,
-					LiveCount:            1,
-					LiveBytes:            mKeySize + mVal2SizeWithHistory + vKeySize + vVal2Size,
-					IntentCount:          1,
-					SeparatedIntentCount: 1,
-					IntentBytes:          vKeySize + vVal2Size,
-					// The original write was previously non-live at 2s because that's where the
-					// intent originally lived. But the intent has moved to 3s, and so has the
-					// moment in time at which the shadowed put became non-live; it's now 3s as
-					// well, so there's no contribution yet.
-					GCBytesAge: 0,
-				}
-				assertEq(t, engine, "after txn put", &aggMS, &expAggMS)
-			})
-		})
+	// Write a non-transactional value at t=1s.
+	value := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, value, nil); err != nil {
+		t.Fatal(err)
 	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 2)
+
+	vKeySize := MVCCVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vValSize := int64(len(value.RawBytes))
+	require.EqualValues(t, vValSize, 10)
+	if disableSimpleValueEncoding {
+		vValSize += emptyMVCCValueHeaderSize // 17
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 1e9,
+		KeyBytes:        mKeySize + vKeySize,
+		KeyCount:        1,
+		ValBytes:        vValSize,
+		ValCount:        1,
+		LiveBytes:       mKeySize + vKeySize + vValSize,
+		LiveCount:       1,
+	}
+
+	assertEq(t, engine, "after non-transactional put", aggMS, &expMS)
+
+	// Write a tombstone intent at t=2s.
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
+		ReadTimestamp: ts2,
+	}
+	if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mValSize := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts1.ToLegacyTimestamp(),
+		Deleted:   true,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, mValSize, 46)
+	mValSize += 2
+
+	vDelSize := int64(0) // tombstone
+	if disableSimpleValueEncoding {
+		vDelSize = emptyMVCCValueHeaderSize // 7
+	}
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos:      2e9,
+		KeyBytes:             mKeySize + 2*vKeySize, // 2+2*12 = 26
+		KeyCount:             1,
+		ValBytes:             mValSize + vValSize + vDelSize, // 46[+2]+10[+7] = 56[+2][+7]
+		ValCount:             2,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vDelSize, // 12[+7]
+		// The original non-transactional write becomes non-live at 2s, so no age
+		// is accrued yet.
+		GCBytesAge: 0,
+	}
+	assertEq(t, engine, "after txn delete", aggMS, &expMS)
+
+	// Now commit or abort the intent, but with a timestamp gap (i.e. this is a push-commit as it
+	// would happen for a SNAPSHOT txn)
+
+	txn.WriteTimestamp.Forward(ts3)
+	txn.Sequence++
+
+	// Annoyingly, the new meta value is actually a little larger thanks to the
+	// sequence number.
+	m2ValSize := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts3.ToLegacyTimestamp(),
+		Txn:       &txn.TxnMeta,
+	}).Size())
+
+	require.EqualValues(t, m2ValSize, 48)
+
+	t.Run("Abort", func(t *testing.T) {
+		aggMS := *aggMS
+		engine := engine.NewBatch()
+		defer engine.Close()
+
+		txnAbort := txn.Clone()
+		txnAbort.Status = roachpb.ABORTED // doesn't change m2ValSize, fortunately
+		if _, err := MVCCResolveWriteIntent(ctx, engine, &aggMS,
+			roachpb.MakeLockUpdate(txnAbort, roachpb.Span{Key: key}),
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		expAggMS := enginepb.MVCCStats{
+			LastUpdateNanos: 3e9,
+			KeyBytes:        mKeySize + vKeySize,
+			KeyCount:        1,
+			ValBytes:        vValSize,
+			ValCount:        1,
+			LiveCount:       1,
+			LiveBytes:       mKeySize + vKeySize + vValSize,
+			IntentCount:     0,
+			IntentBytes:     0,
+			// The original value is visible again, so no GCBytesAge is present. Verifying this is the
+			// main point of this test (to prevent regression of a bug).
+			GCBytesAge: 0,
+		}
+		assertEq(t, engine, "after abort", &aggMS, &expAggMS)
+	})
+	t.Run("Put", func(t *testing.T) {
+		aggMS := *aggMS
+		engine := engine.NewBatch()
+		defer engine.Close()
+
+		val2 := roachpb.MakeValueFromString("longvalue")
+		vVal2Size := int64(len(val2.RawBytes))
+		require.EqualValues(t, vVal2Size, 14)
+		if disableSimpleValueEncoding {
+			vVal2Size += emptyMVCCValueHeaderSize
+			require.EqualValues(t, vVal2Size, 21)
+		}
+
+		txn.WriteTimestamp.Forward(ts3)
+		if err := MVCCPut(ctx, engine, &aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val2, txn); err != nil {
+			t.Fatal(err)
+		}
+
+		// Annoyingly, the new meta value is actually a little larger thanks to the
+		// sequence number.
+		encDel, err := EncodeMVCCValue(MVCCValue{Value: roachpb.Value{RawBytes: []byte{}}})
+		require.NoError(t, err)
+		mVal2SizeWithHistory := int64((&enginepb.MVCCMetadata{
+			Timestamp: ts3.ToLegacyTimestamp(),
+			Txn:       &txn.TxnMeta,
+			IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+				{Sequence: 0, Value: encDel},
+			},
+		}).Size())
+		expMVal2Size := 54
+		if disableSimpleValueEncoding {
+			expMVal2Size = 61
+		}
+		require.EqualValues(t, mVal2SizeWithHistory, expMVal2Size)
+
+		expAggMS := enginepb.MVCCStats{
+			LastUpdateNanos:      3e9,
+			KeyBytes:             mKeySize + 2*vKeySize, // 2+2*12 = 26
+			KeyCount:             1,
+			ValBytes:             mVal2SizeWithHistory + vValSize + vVal2Size,
+			ValCount:             2,
+			LiveCount:            1,
+			LiveBytes:            mKeySize + mVal2SizeWithHistory + vKeySize + vVal2Size,
+			IntentCount:          1,
+			SeparatedIntentCount: 1,
+			IntentBytes:          vKeySize + vVal2Size,
+			// The original write was previously non-live at 2s because that's where the
+			// intent originally lived. But the intent has moved to 3s, and so has the
+			// moment in time at which the shadowed put became non-live; it's now 3s as
+			// well, so there's no contribution yet.
+			GCBytesAge: 0,
+		}
+		assertEq(t, engine, "after txn put", &aggMS, &expAggMS)
+	})
 }
 
 // TestMVCCStatsDelDelGC prevents regression of a bug in MVCCGarbageCollect
@@ -970,70 +943,66 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 func TestMVCCStatsDelDelGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := roachpb.Key("a")
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
+	key := roachpb.Key("a")
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2e9}
 
-			// Write tombstones at ts1 and ts2.
-			if _, err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			vKeySize := MVCCVersionTimestampSize          // 12
-			vValSize := int64(0)                          // tombstone
-			if disableSimpleValueEncoding {
-				vValSize = emptyMVCCValueHeaderSize // 7
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 2e9,
-				KeyBytes:        mKeySize + 2*vKeySize, // 26
-				ValBytes:        2 * vValSize,
-				KeyCount:        1,
-				ValCount:        2,
-				GCBytesAge:      1 * (vKeySize + vValSize), // first tombstone, aged from ts1 to ts2
-			}
-			assertEq(t, engine, "after two puts", aggMS, &expMS)
-
-			// Run a GC invocation that clears it all. There used to be a bug here when
-			// we allowed limiting the number of deleted keys. Passing zero (i.e. remove
-			// one key and then bail) would mess up the stats, since the implementation
-			// would assume that the (implicit or explicit) meta entry was going to be
-			// removed, but this is only true when all values actually go away.
-			if err := MVCCGarbageCollect(
-				ctx,
-				engine,
-				aggMS,
-				[]roachpb.GCRequest_GCKey{{
-					Key:       key,
-					Timestamp: ts2,
-				}},
-				ts2,
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			expAggMS := enginepb.MVCCStats{
-				LastUpdateNanos: 2e9,
-			}
-
-			assertEq(t, engine, "after GC", aggMS, &expAggMS)
-		})
+	// Write tombstones at ts1 and ts2.
+	if _, err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
+		t.Fatal(err)
 	}
+	if _, err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize()) // 2
+	vKeySize := MVCCVersionTimestampSize          // 12
+	vValSize := int64(0)                          // tombstone
+	if disableSimpleValueEncoding {
+		vValSize = emptyMVCCValueHeaderSize // 7
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 2e9,
+		KeyBytes:        mKeySize + 2*vKeySize, // 26
+		ValBytes:        2 * vValSize,
+		KeyCount:        1,
+		ValCount:        2,
+		GCBytesAge:      1 * (vKeySize + vValSize), // first tombstone, aged from ts1 to ts2
+	}
+	assertEq(t, engine, "after two puts", aggMS, &expMS)
+
+	// Run a GC invocation that clears it all. There used to be a bug here when
+	// we allowed limiting the number of deleted keys. Passing zero (i.e. remove
+	// one key and then bail) would mess up the stats, since the implementation
+	// would assume that the (implicit or explicit) meta entry was going to be
+	// removed, but this is only true when all values actually go away.
+	if err := MVCCGarbageCollect(
+		ctx,
+		engine,
+		aggMS,
+		[]roachpb.GCRequest_GCKey{{
+			Key:       key,
+			Timestamp: ts2,
+		}},
+		ts2,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	expAggMS := enginepb.MVCCStats{
+		LastUpdateNanos: 2e9,
+	}
+
+	assertEq(t, engine, "after GC", aggMS, &expAggMS)
 }
 
 // TestMVCCStatsPutIntentTimestampNotPutTimestamp exercises a scenario in which
@@ -1053,99 +1022,95 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := roachpb.Key("a")
-			ts201 := hlc.Timestamp{WallTime: 2e9 + 1}
-			ts099 := hlc.Timestamp{WallTime: 1e9 - 1}
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts201},
-				ReadTimestamp: ts099,
-			}
-			// Write an intent at 2s+1.
-			value := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize()) // 2
-			m1ValSize := int64((&enginepb.MVCCMetadata{   // 46
-				Timestamp: ts201.ToLegacyTimestamp(),
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			m1ValSize += 2
-			vKeySize := MVCCVersionTimestampSize   // 12
-			vValSize := int64(len(value.RawBytes)) // 10
-			if disableSimpleValueEncoding {
-				vValSize += emptyMVCCValueHeaderSize // 17
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos:      2e9 + 1,
-				LiveBytes:            mKeySize + m1ValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 68[+2][+7]
-				LiveCount:            1,
-				KeyBytes:             mKeySize + vKeySize, // 14
-				KeyCount:             1,
-				ValBytes:             m1ValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
-				ValCount:             1,
-				IntentCount:          1,
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
-			}
-			assertEq(t, engine, "after first put", aggMS, &expMS)
-
-			// Replace the intent with an identical one, but we write it at 1s-1 now. If
-			// you're confused, don't worry. There are two timestamps here: the one in
-			// the txn (which is, perhaps surprisingly, only really used when
-			// committing/aborting intents), and the timestamp passed directly to
-			// MVCCPut (which is where the intent will actually end up being written at,
-			// and which usually corresponds to txn.ReadTimestamp).
-			txn.Sequence++
-			txn.WriteTimestamp = ts099
-
-			// Annoyingly, the new meta value is actually a little larger thanks to the
-			// sequence number.
-			encValue, err := EncodeMVCCValue(MVCCValue{Value: value})
-			require.NoError(t, err)
-			m2ValSize := int64((&enginepb.MVCCMetadata{ // 46
-				Timestamp: ts201.ToLegacyTimestamp(),
-				Txn:       &txn.TxnMeta,
-				IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
-					{Sequence: 0, Value: encValue},
-				},
-			}).Size())
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			expAggMS := enginepb.MVCCStats{
-				// Even though we tried to put a new intent at an older timestamp, it
-				// will have been written at 2E9+1, so the age will be 0.
-				IntentAge: 0,
-
-				LastUpdateNanos:      2e9 + 1,
-				LiveBytes:            mKeySize + m2ValSize + vKeySize + vValSize, // 2+(46[+7])+12+(10[+7]) = 70[+14]
-				LiveCount:            1,
-				KeyBytes:             mKeySize + vKeySize, // 14
-				KeyCount:             1,
-				ValBytes:             m2ValSize + vValSize, // (46[+7])+(10[+7]) = 56[+14]
-				ValCount:             1,
-				IntentCount:          1,
-				SeparatedIntentCount: 1,
-				IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
-			}
-
-			assertEq(t, engine, "after second put", aggMS, &expAggMS)
-		})
+	key := roachpb.Key("a")
+	ts201 := hlc.Timestamp{WallTime: 2e9 + 1}
+	ts099 := hlc.Timestamp{WallTime: 1e9 - 1}
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts201},
+		ReadTimestamp: ts099,
 	}
+	// Write an intent at 2s+1.
+	value := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize()) // 2
+	m1ValSize := int64((&enginepb.MVCCMetadata{   // 46
+		Timestamp: ts201.ToLegacyTimestamp(),
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	m1ValSize += 2
+	vKeySize := MVCCVersionTimestampSize   // 12
+	vValSize := int64(len(value.RawBytes)) // 10
+	if disableSimpleValueEncoding {
+		vValSize += emptyMVCCValueHeaderSize // 17
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos:      2e9 + 1,
+		LiveBytes:            mKeySize + m1ValSize + vKeySize + vValSize, // 2+(46[+2])+12+(10[+7]) = 68[+2][+7]
+		LiveCount:            1,
+		KeyBytes:             mKeySize + vKeySize, // 14
+		KeyCount:             1,
+		ValBytes:             m1ValSize + vValSize, // (46[+2])+(10[+7]) = 54[+2][+7]
+		ValCount:             1,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+	}
+	assertEq(t, engine, "after first put", aggMS, &expMS)
+
+	// Replace the intent with an identical one, but we write it at 1s-1 now. If
+	// you're confused, don't worry. There are two timestamps here: the one in
+	// the txn (which is, perhaps surprisingly, only really used when
+	// committing/aborting intents), and the timestamp passed directly to
+	// MVCCPut (which is where the intent will actually end up being written at,
+	// and which usually corresponds to txn.ReadTimestamp).
+	txn.Sequence++
+	txn.WriteTimestamp = ts099
+
+	// Annoyingly, the new meta value is actually a little larger thanks to the
+	// sequence number.
+	encValue, err := EncodeMVCCValue(MVCCValue{Value: value})
+	require.NoError(t, err)
+	m2ValSize := int64((&enginepb.MVCCMetadata{ // 46
+		Timestamp: ts201.ToLegacyTimestamp(),
+		Txn:       &txn.TxnMeta,
+		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+			{Sequence: 0, Value: encValue},
+		},
+	}).Size())
+	if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, value, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	expAggMS := enginepb.MVCCStats{
+		// Even though we tried to put a new intent at an older timestamp, it
+		// will have been written at 2E9+1, so the age will be 0.
+		IntentAge: 0,
+
+		LastUpdateNanos:      2e9 + 1,
+		LiveBytes:            mKeySize + m2ValSize + vKeySize + vValSize, // 2+(46[+7])+12+(10[+7]) = 70[+14]
+		LiveCount:            1,
+		KeyBytes:             mKeySize + vKeySize, // 14
+		KeyCount:             1,
+		ValBytes:             m2ValSize + vValSize, // (46[+7])+(10[+7]) = 56[+14]
+		ValCount:             1,
+		IntentCount:          1,
+		SeparatedIntentCount: 1,
+		IntentBytes:          vKeySize + vValSize, // 12+(10[+7]) = 22[+7]
+	}
+
+	assertEq(t, engine, "after second put", aggMS, &expAggMS)
 }
 
 // TestMVCCStatsPutWaitDeleteGC puts a value, deletes it, and runs a GC that
@@ -1153,96 +1118,93 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			key := roachpb.Key("a")
+	assertEq(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
+	key := roachpb.Key("a")
 
-			// Write a value at ts1.
-			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, val1, nil); err != nil {
-				t.Fatal(err)
-			}
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2e9}
 
-			mKeySize := int64(mvccKey(key).EncodedSize())
-			require.EqualValues(t, mKeySize, 2)
-
-			vKeySize := MVCCVersionTimestampSize
-			require.EqualValues(t, vKeySize, 12)
-
-			vValSize := int64(len(val1.RawBytes))
-			require.EqualValues(t, vValSize, 10)
-			if disableSimpleValueEncoding {
-				vValSize += emptyMVCCValueHeaderSize
-				require.EqualValues(t, vValSize, 17)
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1e9,
-				KeyCount:        1,
-				KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
-				ValCount:        1,
-				ValBytes:        vValSize, // 10[+7]
-				LiveCount:       1,
-				LiveBytes:       mKeySize + vKeySize + vValSize, // 2+12+(10[+7]) = 24[+7]
-			}
-			assertEq(t, engine, "after first put", aggMS, &expMS)
-
-			// Delete the value at ts5.
-
-			if _, err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
-				t.Fatal(err)
-			}
-
-			vVal2Size := int64(0) // tombstone
-			if disableSimpleValueEncoding {
-				vVal2Size = emptyMVCCValueHeaderSize // 7
-			}
-
-			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 2e9,
-				KeyCount:        1,
-				KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
-				ValBytes:        vValSize + vVal2Size,  // 10[+7]
-				ValCount:        2,
-				LiveBytes:       0,
-				LiveCount:       0,
-				GCBytesAge:      0, // before a fix, this was vKeySize + vValSize
-			}
-
-			assertEq(t, engine, "after delete", aggMS, &expMS)
-
-			if err := MVCCGarbageCollect(ctx, engine, aggMS, []roachpb.GCRequest_GCKey{{
-				Key:       key,
-				Timestamp: ts1,
-			}}, ts2); err != nil {
-				t.Fatal(err)
-			}
-
-			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 2e9,
-				KeyCount:        1,
-				KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
-				ValBytes:        vVal2Size,
-				ValCount:        1,
-				LiveBytes:       0,
-				LiveCount:       0,
-				GCBytesAge:      0, // before a fix, this was vKeySize + vValSize
-			}
-
-			assertEq(t, engine, "after GC", aggMS, &expMS)
-		})
+	// Write a value at ts1.
+	val1 := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, val1, nil); err != nil {
+		t.Fatal(err)
 	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 2)
+
+	vKeySize := MVCCVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vValSize := int64(len(val1.RawBytes))
+	require.EqualValues(t, vValSize, 10)
+	if disableSimpleValueEncoding {
+		vValSize += emptyMVCCValueHeaderSize
+		require.EqualValues(t, vValSize, 17)
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 1e9,
+		KeyCount:        1,
+		KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
+		ValCount:        1,
+		ValBytes:        vValSize, // 10[+7]
+		LiveCount:       1,
+		LiveBytes:       mKeySize + vKeySize + vValSize, // 2+12+(10[+7]) = 24[+7]
+	}
+	assertEq(t, engine, "after first put", aggMS, &expMS)
+
+	// Delete the value at ts5.
+
+	if _, err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	vVal2Size := int64(0) // tombstone
+	if disableSimpleValueEncoding {
+		vVal2Size = emptyMVCCValueHeaderSize // 7
+	}
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos: 2e9,
+		KeyCount:        1,
+		KeyBytes:        mKeySize + 2*vKeySize, // 2+2*12 = 26
+		ValBytes:        vValSize + vVal2Size,  // 10[+7]
+		ValCount:        2,
+		LiveBytes:       0,
+		LiveCount:       0,
+		GCBytesAge:      0, // before a fix, this was vKeySize + vValSize
+	}
+
+	assertEq(t, engine, "after delete", aggMS, &expMS)
+
+	if err := MVCCGarbageCollect(ctx, engine, aggMS, []roachpb.GCRequest_GCKey{{
+		Key:       key,
+		Timestamp: ts1,
+	}}, ts2); err != nil {
+		t.Fatal(err)
+	}
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos: 2e9,
+		KeyCount:        1,
+		KeyBytes:        mKeySize + vKeySize, // 2+12 = 14
+		ValBytes:        vVal2Size,
+		ValCount:        1,
+		LiveBytes:       0,
+		LiveCount:       0,
+		GCBytesAge:      0, // before a fix, this was vKeySize + vValSize
+	}
+
+	assertEq(t, engine, "after GC", aggMS, &expMS)
 }
 
 // TestMVCCStatsSysTxnPutPut prevents regression of a bug that, when rewriting an intent
@@ -1250,104 +1212,101 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			assertEqLocal(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
+	assertEqLocal(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
+	key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
-				ReadTimestamp: ts1,
-			}
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2e9}
 
-			// Write an intent at ts1.
-			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val1, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize())
-			require.EqualValues(t, mKeySize, 11)
-
-			mValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts1.ToLegacyTimestamp(),
-				Deleted:   false,
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			require.EqualValues(t, mValSize, 46)
-			mValSize += 2
-
-			vKeySize := MVCCVersionTimestampSize
-			require.EqualValues(t, vKeySize, 12)
-
-			vVal1Size := int64(len(val1.RawBytes))
-			require.EqualValues(t, vVal1Size, 10)
-			if disableSimpleValueEncoding {
-				vVal1Size += emptyMVCCValueHeaderSize
-				require.EqualValues(t, vVal1Size, 17)
-			}
-
-			val2 := roachpb.MakeValueFromString("longvalue")
-			vVal2Size := int64(len(val2.RawBytes))
-			require.EqualValues(t, vVal2Size, 14)
-			if disableSimpleValueEncoding {
-				vVal2Size += emptyMVCCValueHeaderSize
-				require.EqualValues(t, vVal2Size, 21)
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1e9,
-				SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+(46[+2])+12+(10[+7]) = 79[+2][+7]
-				SysCount:        1,
-			}
-			assertEqLocal(t, engine, "after first put", aggMS, &expMS)
-
-			// Rewrite the intent to ts2 with a different value.
-			txn.WriteTimestamp.Forward(ts2)
-			txn.Sequence++
-
-			// The new meta value grows because we've bumped `txn.Sequence`.
-			// The value also grows as the older value is part of the same
-			// transaction and so contributes to the intent history.
-			encVal1, err := EncodeMVCCValue(MVCCValue{Value: val1})
-			require.NoError(t, err)
-			mVal2Size := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts2.ToLegacyTimestamp(),
-				Deleted:   false,
-				Txn:       &txn.TxnMeta,
-				IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
-					{Sequence: 0, Value: encVal1},
-				},
-			}).Size())
-			expMVal2Size := 64
-			if disableSimpleValueEncoding {
-				expMVal2Size = 71
-			}
-			require.EqualValues(t, mVal2Size, expMVal2Size)
-
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val2, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 1e9,
-				SysBytes:        mKeySize + mVal2Size + vKeySize + vVal2Size, // 11+(46[+7])+12+14 = 83[+7]
-				SysCount:        1,
-			}
-
-			assertEqLocal(t, engine, "after intent rewrite", aggMS, &expMS)
-		})
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+		ReadTimestamp: ts1,
 	}
+
+	// Write an intent at ts1.
+	val1 := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val1, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 11)
+
+	mValSize := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts1.ToLegacyTimestamp(),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, mValSize, 46)
+	mValSize += 2
+
+	vKeySize := MVCCVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vVal1Size := int64(len(val1.RawBytes))
+	require.EqualValues(t, vVal1Size, 10)
+	if disableSimpleValueEncoding {
+		vVal1Size += emptyMVCCValueHeaderSize
+		require.EqualValues(t, vVal1Size, 17)
+	}
+
+	val2 := roachpb.MakeValueFromString("longvalue")
+	vVal2Size := int64(len(val2.RawBytes))
+	require.EqualValues(t, vVal2Size, 14)
+	if disableSimpleValueEncoding {
+		vVal2Size += emptyMVCCValueHeaderSize
+		require.EqualValues(t, vVal2Size, 21)
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 1e9,
+		SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+(46[+2])+12+(10[+7]) = 79[+2][+7]
+		SysCount:        1,
+	}
+	assertEqLocal(t, engine, "after first put", aggMS, &expMS)
+
+	// Rewrite the intent to ts2 with a different value.
+	txn.WriteTimestamp.Forward(ts2)
+	txn.Sequence++
+
+	// The new meta value grows because we've bumped `txn.Sequence`.
+	// The value also grows as the older value is part of the same
+	// transaction and so contributes to the intent history.
+	encVal1, err := EncodeMVCCValue(MVCCValue{Value: val1})
+	require.NoError(t, err)
+	mVal2Size := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts2.ToLegacyTimestamp(),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+		IntentHistory: []enginepb.MVCCMetadata_SequencedIntent{
+			{Sequence: 0, Value: encVal1},
+		},
+	}).Size())
+	expMVal2Size := 64
+	if disableSimpleValueEncoding {
+		expMVal2Size = 71
+	}
+	require.EqualValues(t, mVal2Size, expMVal2Size)
+
+	if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val2, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos: 1e9,
+		SysBytes:        mKeySize + mVal2Size + vKeySize + vVal2Size, // 11+(46[+7])+12+14 = 83[+7]
+		SysCount:        1,
+	}
+
+	assertEqLocal(t, engine, "after intent rewrite", aggMS, &expMS)
 }
 
 // TestMVCCStatsTxnSysPutAbort prevents regression of a bug that, when aborting
@@ -1356,80 +1315,76 @@ func TestMVCCStatsTxnSysPutPut(t *testing.T) {
 func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEqLocal(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEqLocal(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
+	key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			txn := &roachpb.Transaction{
-				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
-				ReadTimestamp: ts1,
-			}
-
-			// Write a system intent at ts1.
-			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val1, txn); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize())
-			require.EqualValues(t, mKeySize, 11)
-
-			mValSize := int64((&enginepb.MVCCMetadata{
-				Timestamp: ts1.ToLegacyTimestamp(),
-				Deleted:   false,
-				Txn:       &txn.TxnMeta,
-			}).Size())
-			require.EqualValues(t, mValSize, 46)
-			mValSize += 2
-
-			vKeySize := MVCCVersionTimestampSize
-			require.EqualValues(t, vKeySize, 12)
-
-			vVal1Size := int64(len(val1.RawBytes))
-			require.EqualValues(t, vVal1Size, 10)
-			if disableSimpleValueEncoding {
-				vVal1Size += emptyMVCCValueHeaderSize
-				require.EqualValues(t, vVal1Size, 17)
-			}
-
-			val2 := roachpb.MakeValueFromString("longvalue")
-			vVal2Size := int64(len(val2.RawBytes))
-			require.EqualValues(t, vVal2Size, 14)
-			if disableSimpleValueEncoding {
-				vVal2Size += emptyMVCCValueHeaderSize
-				require.EqualValues(t, vVal2Size, 21)
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1e9,
-				SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+(46[+2])+12+(10[+7]) = 79[+2][+7]
-				SysCount:        1,
-			}
-			assertEqLocal(t, engine, "after first put", aggMS, &expMS)
-
-			// Now abort the intent.
-			txn.Status = roachpb.ABORTED
-			if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
-				roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 1e9,
-			}
-			assertEqLocal(t, engine, "after aborting", aggMS, &expMS)
-		})
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	txn := &roachpb.Transaction{
+		TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts1},
+		ReadTimestamp: ts1,
 	}
+
+	// Write a system intent at ts1.
+	val1 := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, val1, txn); err != nil {
+		t.Fatal(err)
+	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 11)
+
+	mValSize := int64((&enginepb.MVCCMetadata{
+		Timestamp: ts1.ToLegacyTimestamp(),
+		Deleted:   false,
+		Txn:       &txn.TxnMeta,
+	}).Size())
+	require.EqualValues(t, mValSize, 46)
+	mValSize += 2
+
+	vKeySize := MVCCVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vVal1Size := int64(len(val1.RawBytes))
+	require.EqualValues(t, vVal1Size, 10)
+	if disableSimpleValueEncoding {
+		vVal1Size += emptyMVCCValueHeaderSize
+		require.EqualValues(t, vVal1Size, 17)
+	}
+
+	val2 := roachpb.MakeValueFromString("longvalue")
+	vVal2Size := int64(len(val2.RawBytes))
+	require.EqualValues(t, vVal2Size, 14)
+	if disableSimpleValueEncoding {
+		vVal2Size += emptyMVCCValueHeaderSize
+		require.EqualValues(t, vVal2Size, 21)
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 1e9,
+		SysBytes:        mKeySize + mValSize + vKeySize + vVal1Size, // 11+(46[+2])+12+(10[+7]) = 79[+2][+7]
+		SysCount:        1,
+	}
+	assertEqLocal(t, engine, "after first put", aggMS, &expMS)
+
+	// Now abort the intent.
+	txn.Status = roachpb.ABORTED
+	if _, err := MVCCResolveWriteIntent(ctx, engine, aggMS,
+		roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key}),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos: 1e9,
+	}
+	assertEqLocal(t, engine, "after aborting", aggMS, &expMS)
 }
 
 // TestMVCCStatsSysPutPut prevents regression of a bug that, when writing a new
@@ -1437,70 +1392,66 @@ func TestMVCCStatsTxnSysPutAbort(t *testing.T) {
 func TestMVCCStatsSysPutPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for _, engineImpl := range mvccEngineImpls {
-		t.Run(engineImpl.name, func(t *testing.T) {
-			engine := engineImpl.create()
-			defer engine.Close()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
 
-			ctx := context.Background()
-			aggMS := &enginepb.MVCCStats{}
+	ctx := context.Background()
+	aggMS := &enginepb.MVCCStats{}
 
-			assertEqLocal(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
+	assertEqLocal(t, engine, "initially", aggMS, &enginepb.MVCCStats{})
 
-			key := keys.RangeDescriptorKey(roachpb.RKey("a"))
+	key := keys.RangeDescriptorKey(roachpb.RKey("a"))
 
-			ts1 := hlc.Timestamp{WallTime: 1e9}
-			ts2 := hlc.Timestamp{WallTime: 2e9}
+	ts1 := hlc.Timestamp{WallTime: 1e9}
+	ts2 := hlc.Timestamp{WallTime: 2e9}
 
-			// Write a value at ts1.
-			val1 := roachpb.MakeValueFromString("value")
-			if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, val1, nil); err != nil {
-				t.Fatal(err)
-			}
-
-			mKeySize := int64(mvccKey(key).EncodedSize())
-			require.EqualValues(t, mKeySize, 11)
-
-			vKeySize := MVCCVersionTimestampSize
-			require.EqualValues(t, vKeySize, 12)
-
-			vVal1Size := int64(len(val1.RawBytes))
-			require.EqualValues(t, vVal1Size, 10)
-			if disableSimpleValueEncoding {
-				vVal1Size += emptyMVCCValueHeaderSize
-				require.EqualValues(t, vVal1Size, 17)
-			}
-
-			val2 := roachpb.MakeValueFromString("longvalue")
-			vVal2Size := int64(len(val2.RawBytes))
-			require.EqualValues(t, vVal2Size, 14)
-			if disableSimpleValueEncoding {
-				vVal2Size += emptyMVCCValueHeaderSize
-				require.EqualValues(t, vVal2Size, 21)
-			}
-
-			expMS := enginepb.MVCCStats{
-				LastUpdateNanos: 1e9,
-				SysBytes:        mKeySize + vKeySize + vVal1Size, // 11+12+(10[+7]) = 33[+7]
-				SysCount:        1,
-			}
-			assertEqLocal(t, engine, "after first put", aggMS, &expMS)
-
-			// Put another value at ts2.
-
-			if err := MVCCPut(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, val2, nil); err != nil {
-				t.Fatal(err)
-			}
-
-			expMS = enginepb.MVCCStats{
-				LastUpdateNanos: 1e9,
-				SysBytes:        mKeySize + 2*vKeySize + vVal1Size + vVal2Size,
-				SysCount:        1,
-			}
-
-			assertEqLocal(t, engine, "after second put", aggMS, &expMS)
-		})
+	// Write a value at ts1.
+	val1 := roachpb.MakeValueFromString("value")
+	if err := MVCCPut(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, val1, nil); err != nil {
+		t.Fatal(err)
 	}
+
+	mKeySize := int64(mvccKey(key).EncodedSize())
+	require.EqualValues(t, mKeySize, 11)
+
+	vKeySize := MVCCVersionTimestampSize
+	require.EqualValues(t, vKeySize, 12)
+
+	vVal1Size := int64(len(val1.RawBytes))
+	require.EqualValues(t, vVal1Size, 10)
+	if disableSimpleValueEncoding {
+		vVal1Size += emptyMVCCValueHeaderSize
+		require.EqualValues(t, vVal1Size, 17)
+	}
+
+	val2 := roachpb.MakeValueFromString("longvalue")
+	vVal2Size := int64(len(val2.RawBytes))
+	require.EqualValues(t, vVal2Size, 14)
+	if disableSimpleValueEncoding {
+		vVal2Size += emptyMVCCValueHeaderSize
+		require.EqualValues(t, vVal2Size, 21)
+	}
+
+	expMS := enginepb.MVCCStats{
+		LastUpdateNanos: 1e9,
+		SysBytes:        mKeySize + vKeySize + vVal1Size, // 11+12+(10[+7]) = 33[+7]
+		SysCount:        1,
+	}
+	assertEqLocal(t, engine, "after first put", aggMS, &expMS)
+
+	// Put another value at ts2.
+
+	if err := MVCCPut(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, val2, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	expMS = enginepb.MVCCStats{
+		LastUpdateNanos: 1e9,
+		SysBytes:        mKeySize + 2*vKeySize + vVal1Size + vVal2Size,
+		SysCount:        1,
+	}
+
+	assertEqLocal(t, engine, "after second put", aggMS, &expMS)
 }
 
 var mvccStatsTests = []struct {

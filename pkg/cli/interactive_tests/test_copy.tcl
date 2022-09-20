@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-spawn $argv sql
+spawn $argv sql --no-line-editor
 eexpect root@
 
 send "DROP TABLE IF EXISTS t;\r"
@@ -91,6 +91,12 @@ eexpect "(6 rows)"
 eexpect root@
 
 end_test
+
+send_eof
+eexpect eof
+
+spawn $argv sql
+eexpect root@
 
 start_test "check CTRL+C during COPY exits the COPY mode as appropriate"
 

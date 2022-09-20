@@ -817,25 +817,22 @@ commandcommit.latency for a complete batch).
 		Name: "raft.process.handleready.latency",
 		Help: `Latency histogram for handling a Raft ready.
 
-This measures the end-to-end-latency of the Raft state advancement loop, and
-in particular includes:
+This measures the end-to-end-latency of the Raft state advancement loop, including:
 - snapshot application
 - SST ingestion
 - durably appending to the Raft log (i.e. includes fsync)
 - entry application (incl. replicated side effects, notably log truncation)
-as well as updates to in-memory structures.
 
-The above steps include the work measured in 'raft.process.commandcommit.latency',
-as well as 'raft.process.applycommitted.latency'. Note that matching percentiles
-of these metrics may nevertheless be *higher* than that of the handlready latency.
-This is because not every handleready cycle leads to an update to the applycommitted
-and commandcommit latencies. For example, under tpcc-100 on a single node, the
-handleready count is approximately twice the logcommit count (and logcommit count
-tracks closely with applycommitted count).
+These include work measured in 'raft.process.commandcommit.latency' and
+'raft.process.applycommitted.latency'. However, matching percentiles of these
+metrics may be *higher* than handleready, since not every handleready cycle
+leads to an update of the others. For example, under tpcc-100 on a single node,
+the handleready count is approximately twice the logcommit count (and logcommit
+count tracks closely with applycommitted count).
 
 High percentile outliers can be caused by individual large Raft commands or
-storage layer blips. An increase in lower (say the 50th) percentile is often
-driven by either CPU exhaustion or a slowdown at the storage layer.
+storage layer blips. Lower percentile (e.g. 50th) increases are often driven by
+CPU exhaustion or storage layer slowdowns.
 `,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
@@ -1020,6 +1017,18 @@ The count is emitted by the leaseholder of each range.`,
 
 The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaIOOverload = metric.Metadata{
+		Name: "admission.io.overload",
+		Help: `1-normalized float to pause replication to raft group followers if its value exceeds a given threshold.
+
+This threshold is the admission.kv.pause_replication_io_threshold cluster setting
+(pause replication feature is disabled if this setting is 0, feature is disabled by default);
+see pkg/kv/kvserver/replica_raft_overload.go for more details. Composed of LSM L0
+sub-level and file counts.`,
+		Measurement: "Threshold",
 		Unit:        metric.Unit_COUNT,
 	}
 
@@ -1770,6 +1779,7 @@ type StoreMetrics struct {
 
 	RaftPausedFollowerCount       *metric.Gauge
 	RaftPausedFollowerDroppedMsgs *metric.Counter
+	IOOverload                    *metric.GaugeFloat64
 
 	RaftCoalescedHeartbeatsPending *metric.Gauge
 
@@ -2293,6 +2303,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		RaftPausedFollowerCount:       metric.NewGauge(metaRaftFollowerPaused),
 		RaftPausedFollowerDroppedMsgs: metric.NewCounter(metaRaftPausedFollowerDroppedMsgs),
+		IOOverload:                    metric.NewGaugeFloat64(metaIOOverload),
 
 		// This Gauge measures the number of heartbeats queued up just before
 		// the queue is cleared, to avoid flapping wildly.

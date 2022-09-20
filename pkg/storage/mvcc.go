@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -4776,7 +4777,6 @@ func MVCCGarbageCollect(
 		KeyTypes:   IterKeyTypePointsAndRanges,
 	})
 	defer iter.Close()
-	supportsPrev := iter.SupportsPrev()
 
 	// Cached stack of range tombstones covering current point. Used to determine
 	// GCBytesAge of deleted value by searching first covering range tombstone
@@ -4887,8 +4887,7 @@ func MVCCGarbageCollect(
 			// (key.ts <= gc.ts).
 			var foundPrevNanos bool
 			{
-				// If reverse iteration is supported (supportsPrev), we'll step the
-				// iterator a few time before attempting to seek.
+				// We'll step the iterator a few time before attempting to seek.
 
 				// True if we found next key while iterating. That means there's no
 				// garbage for the key.
@@ -4905,7 +4904,7 @@ func MVCCGarbageCollect(
 				// importantly, this optimization mitigated the overhead of the Seek
 				// approach when almost all of the versions are garbage.
 				const nextsBeforeSeekLT = 4
-				for i := 0; !supportsPrev || i < nextsBeforeSeekLT; i++ {
+				for i := 0; i < nextsBeforeSeekLT; i++ {
 					if i > 0 {
 						iter.Next()
 					}
@@ -4941,10 +4940,6 @@ func MVCCGarbageCollect(
 			// its predecessor. Seek to the predecessor to find the right value for
 			// prevNanos and position the iterator on the gcKey.
 			if !foundPrevNanos {
-				if !supportsPrev {
-					log.Fatalf(ctx, "failed to find first garbage key without"+
-						"support for reverse iteration")
-				}
 				gcKeyMVCC := MVCCKey{Key: gcKey.Key, Timestamp: gcKey.Timestamp}
 				iter.SeekLT(gcKeyMVCC)
 				if ok, err := iter.Valid(); err != nil {
@@ -5308,8 +5303,9 @@ func CanGCEntireRange(
 }
 
 // MVCCFindSplitKey finds a key from the given span such that the left side of
-// the split is roughly targetSize bytes. The returned key will never be chosen
-// from the key ranges listed in keys.NoSplitSpans.
+// the split is roughly targetSize bytes. It only considers MVCC point keys, not
+// range keys. The returned key will never be chosen from the key ranges listed
+// in keys.NoSplitSpans.
 func MVCCFindSplitKey(
 	_ context.Context, reader Reader, key, endKey roachpb.RKey, targetSize int64,
 ) (roachpb.Key, error) {
@@ -5717,19 +5713,31 @@ func computeStatsForIterWithVisitors(
 	return ms, nil
 }
 
-// MVCCIsSpanEmpty returns true if there are no MVCC keys whatsoever in the
-// key span in the requested time interval.
+// MVCCIsSpanEmpty returns true if there are no MVCC keys whatsoever in the key
+// span in the requested time interval. If a time interval is given and any
+// inline values are encountered, an error may be returned.
 func MVCCIsSpanEmpty(
 	ctx context.Context, reader Reader, opts MVCCIsSpanEmptyOptions,
 ) (isEmpty bool, _ error) {
-	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
-		KeyTypes:     IterKeyTypePointsAndRanges,
-		StartKey:     opts.StartKey,
-		EndKey:       opts.EndKey,
-		StartTime:    opts.StartTS,
-		EndTime:      opts.EndTS,
-		IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
-	})
+	// Only use an MVCCIncrementalIterator if time bounds are given, since it will
+	// error on any inline values, and the caller may want to respect them instead.
+	var iter SimpleMVCCIterator
+	if opts.StartTS.IsEmpty() && opts.EndTS.IsEmpty() {
+		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			LowerBound: opts.StartKey,
+			UpperBound: opts.EndKey,
+		})
+	} else {
+		iter = NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
+			KeyTypes:     IterKeyTypePointsAndRanges,
+			StartKey:     opts.StartKey,
+			EndKey:       opts.EndKey,
+			StartTime:    opts.StartTS,
+			EndTime:      opts.EndTS,
+			IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
+		})
+	}
 	defer iter.Close()
 	iter.SeekGE(MVCCKey{Key: opts.StartKey})
 	valid, err := iter.Valid()
@@ -5833,6 +5841,7 @@ func MVCCExportToSST(
 		return maxSize
 	}
 
+	elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
 	iter.SeekGE(opts.StartKey)
 	for {
 		if ok, err := iter.Valid(); err != nil {
@@ -5850,6 +5859,9 @@ func MVCCExportToSST(
 			curKey = append(curKey[:0], unsafeKey.Key...)
 		}
 
+		// TODO(irfansharif): Remove this time-based resource limiter once
+		// enabling elastic CPU limiting by default. There needs to be a
+		// compelling reason to need two mechanisms.
 		if opts.ResourceLimiter != nil {
 			// Don't check resources on first iteration to ensure we can make some progress regardless
 			// of starvation. Otherwise operations could spin indefinitely.
@@ -5875,6 +5887,16 @@ func MVCCExportToSST(
 					break
 				}
 			}
+		}
+
+		// Check if we're over our allotted CPU time + on a key boundary (we
+		// prefer callers being able to use SSTs directly). Going over limit is
+		// accounted for in admission control by penalizing the subsequent
+		// request, so doing it slightly is fine.
+		if overLimit, _ := elasticCPUHandle.OverLimit(); overLimit && isNewKey {
+			resumeKey = unsafeKey.Clone()
+			resumeKey.Timestamp = hlc.Timestamp{}
+			break
 		}
 
 		// When we encounter an MVCC range tombstone stack, we buffer it in
@@ -6131,8 +6153,8 @@ type MVCCExportOptions struct {
 	// which covers the point key at c, but resuming from c@2 will contain the
 	// MVCC range tombstone [c-f)@5 which overlaps with the MVCC range tombstone
 	// in the previous response in the interval [c-c\0)@5. This overlap will not
-	// cause problems with multiplexed iteration using NewPebbleSSTIterator(),
-	// nor when ingesting the SSTs via `AddSSTable`.
+	// cause problems with multiplexed iteration using NewSSTIterator(), nor when
+	// ingesting the SSTs via `AddSSTable`.
 	StopMidKey bool
 	// ResourceLimiter limits how long iterator could run until it exhausts allocated
 	// resources. Export queries limiter in its iteration loop to break out once

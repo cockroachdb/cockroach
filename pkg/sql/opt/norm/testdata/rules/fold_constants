@@ -1214,10 +1214,11 @@ SELECT j['field'] FROM a
 ----
 project
  ├── columns: j:9
+ ├── immutable
  ├── scan a
  │    └── columns: a.j:5
  └── projections
-      └── a.j:5['field'] [as=j:9, outer=(5)]
+      └── a.j:5->'field' [as=j:9, outer=(5), immutable]
 
 # Regression test for #40404.
 norm expect=FoldIndirection

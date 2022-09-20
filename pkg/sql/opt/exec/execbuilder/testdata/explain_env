@@ -1,4 +1,4 @@
-# LogicTest: local !metamorphic
+# LogicTest: local !metamorphic-batch-sizes
 # We must turn off metamorphic variables because some are included in
 # EXPLAIN (OPT, ENV) output.
 

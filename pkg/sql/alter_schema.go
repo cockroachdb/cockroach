@@ -57,10 +57,10 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if err != nil {
 		return nil, err
 	}
-	schema, err := p.Descriptors().GetSchemaByName(ctx, p.txn, db,
+	schema, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db,
 		string(n.Schema.SchemaName), tree.SchemaLookupFlags{
-			Required:       true,
-			RequireMutable: true,
+			Required:    true,
+			AvoidLeased: true,
 		})
 	if err != nil {
 		return nil, err
@@ -73,7 +73,11 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
 	case catalog.SchemaUserDefined:
-		desc := schema.(*schemadesc.Mutable)
+		flags := p.CommonLookupFlagsRequired()
+		desc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn, schema.GetID(), flags)
+		if err != nil {
+			return nil, err
+		}
 		// The user must be a superuser or the owner of the schema to modify it.
 		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {

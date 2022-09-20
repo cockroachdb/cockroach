@@ -328,6 +328,11 @@ func createChangefeedJobRecord(
 	}
 	var initialHighWater hlc.Timestamp
 	evalTimestamp := func(s string) (hlc.Timestamp, error) {
+		if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+			if knobs != nil && knobs.OverrideCursor != nil {
+				s = knobs.OverrideCursor(&statementTime)
+			}
+		}
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(s)}
 		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
 		if err != nil {
@@ -419,6 +424,8 @@ func createChangefeedJobRecord(
 		// TODO: Set the default envelope to row here when using a sink and format
 		// that support it.
 		details.Select = cdceval.AsStringUnredacted(normalized.Clause())
+
+		opts.SetDefaultEnvelope(changefeedbase.OptEnvelopeBare)
 
 		// TODO(#85143): do not enforce schema_change_policy='stop' for changefeed expressions.
 		schemachangeOptions, err := opts.GetSchemaChangeHandlingOptions()
@@ -790,35 +797,31 @@ func changefeedJobDescription(
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,
 	})
-
 	if err != nil {
 		return "", err
 	}
 
-	cleanedSinkURI = redactUser(cleanedSinkURI)
+	cleanedSinkURI, err = changefeedbase.RedactUserFromURI(cleanedSinkURI)
+	if err != nil {
+		return "", err
+	}
 
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
 		SinkURI: tree.NewDString(cleanedSinkURI),
 		Select:  changefeed.Select,
 	}
-	opts.ForEachWithRedaction(func(k string, v string) {
+	if err = opts.ForEachWithRedaction(func(k string, v string) {
 		opt := tree.KVOption{Key: tree.Name(k)}
 		if len(v) > 0 {
 			opt.Value = tree.NewDString(v)
 		}
 		c.Options = append(c.Options, opt)
-	})
+	}); err != nil {
+		return "", err
+	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
 	return tree.AsString(c), nil
-}
-
-func redactUser(uri string) string {
-	u, _ := url.Parse(uri)
-	if u.User != nil {
-		u.User = url.User(`redacted`)
-	}
-	return u.String()
 }
 
 func validateDetailsAndOptions(

@@ -1771,12 +1771,13 @@ func TestOptimizePuts(t *testing.T) {
 
 	testCases := []struct {
 		exKey    roachpb.Key
+		exEndKey roachpb.Key // MVCC range key
 		reqs     []roachpb.Request
 		expBlind []bool
 	}{
 		// No existing keys, single put.
 		{
-			nil,
+			nil, nil,
 			[]roachpb.Request{
 				&pArgs[0],
 			},
@@ -1786,7 +1787,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// No existing keys, nine puts.
 		{
-			nil,
+			nil, nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8],
 			},
@@ -1796,7 +1797,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// No existing keys, ten puts.
 		{
-			nil,
+			nil, nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
 			},
@@ -1806,7 +1807,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Existing key at "0", ten conditional puts.
 		{
-			roachpb.Key("0"),
+			roachpb.Key("0"), nil,
 			[]roachpb.Request{
 				&cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8], &cpArgs[9],
 			},
@@ -1816,7 +1817,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Existing key at "0", ten init puts.
 		{
-			roachpb.Key("0"),
+			roachpb.Key("0"), nil,
 			[]roachpb.Request{
 				&ipArgs[0], &ipArgs[1], &ipArgs[2], &ipArgs[3], &ipArgs[4], &ipArgs[5], &ipArgs[6], &ipArgs[7], &ipArgs[8], &ipArgs[9],
 			},
@@ -1826,7 +1827,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Existing key at 11, mixed put types.
 		{
-			roachpb.Key("11"),
+			roachpb.Key("11"), nil,
 			[]roachpb.Request{
 				&pArgs[0], &cpArgs[1], &pArgs[2], &cpArgs[3], &ipArgs[4], &ipArgs[5], &pArgs[6], &cpArgs[7], &pArgs[8], &ipArgs[9],
 			},
@@ -1836,7 +1837,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Existing key at 00, ten puts, expect nothing blind.
 		{
-			roachpb.Key("00"),
+			roachpb.Key("00"), nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
 			},
@@ -1846,7 +1847,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Existing key at 00, ten puts in reverse order, expect nothing blind.
 		{
-			roachpb.Key("00"),
+			roachpb.Key("00"), nil,
 			[]roachpb.Request{
 				&pArgs[9], &pArgs[8], &pArgs[7], &pArgs[6], &pArgs[5], &pArgs[4], &pArgs[3], &pArgs[2], &pArgs[1], &pArgs[0],
 			},
@@ -1856,7 +1857,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Existing key at 05, ten puts, expect first five puts are blind.
 		{
-			roachpb.Key("05"),
+			roachpb.Key("05"), nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
 			},
@@ -1866,7 +1867,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Existing key at 09, ten puts, expect first nine puts are blind.
 		{
-			roachpb.Key("09"),
+			roachpb.Key("09"), nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
 			},
@@ -1876,7 +1877,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// No existing key, ten puts + inc + ten cputs.
 		{
-			nil,
+			nil, nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
 				incArgs, &cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8], &cpArgs[9],
@@ -1888,7 +1889,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Duplicate put at 11th key; should see ten puts.
 		{
-			nil,
+			nil, nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9], &pArgs[9],
 			},
@@ -1898,7 +1899,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Duplicate cput at 11th key; should see ten puts.
 		{
-			nil,
+			nil, nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9], &cpArgs[9],
 			},
@@ -1908,7 +1909,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Duplicate iput at 11th key; should see ten puts.
 		{
-			nil,
+			nil, nil,
 			[]roachpb.Request{
 				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9], &ipArgs[9],
 			},
@@ -1918,7 +1919,7 @@ func TestOptimizePuts(t *testing.T) {
 		},
 		// Duplicate cput at 10th key; should see ten cputs.
 		{
-			nil,
+			nil, nil,
 			[]roachpb.Request{
 				&cpArgs[0], &cpArgs[1], &cpArgs[2], &cpArgs[3], &cpArgs[4], &cpArgs[5], &cpArgs[6], &cpArgs[7], &cpArgs[8], &cpArgs[9], &cpArgs[9],
 			},
@@ -1926,14 +1927,45 @@ func TestOptimizePuts(t *testing.T) {
 				true, true, true, true, true, true, true, true, true, true, false,
 			},
 		},
+		// Existing range key at 00-20, ten puts, expect no blind.
+		{
+			roachpb.Key("00"), roachpb.Key("20"),
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
+			},
+			[]bool{
+				false, false, false, false, false, false, false, false, false, false,
+			},
+		},
+		// Existing range key at 05-08, ten puts, expect first five puts are blind.
+		{
+			roachpb.Key("05"), roachpb.Key("08"),
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, false, false, false, false, false,
+			},
+		},
+		// Existing range key at 20-21, ten puts, expect all blind.
+		{
+			roachpb.Key("20"), roachpb.Key("21"),
+			[]roachpb.Request{
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, true,
+			},
+		},
 	}
 
 	for i, c := range testCases {
-		if c.exKey != nil {
-			if err := storage.MVCCPut(context.Background(), tc.engine, nil, c.exKey,
-				hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil); err != nil {
-				t.Fatal(err)
-			}
+		if c.exEndKey != nil {
+			require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(ctx, tc.engine, nil,
+				c.exKey, c.exEndKey, hlc.MinTimestamp, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+		} else if c.exKey != nil {
+			require.NoError(t, storage.MVCCPut(ctx, tc.engine, nil, c.exKey,
+				hlc.Timestamp{}, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("foo"), nil))
 		}
 		batch := roachpb.BatchRequest{}
 		for _, r := range c.reqs {
@@ -1976,10 +2008,11 @@ func TestOptimizePuts(t *testing.T) {
 		if !reflect.DeepEqual(blind, c.expBlind) {
 			t.Errorf("%d: expected %+v; got %+v", i, c.expBlind, blind)
 		}
-		if c.exKey != nil {
-			if err := tc.engine.ClearUnversioned(c.exKey); err != nil {
-				t.Fatal(err)
-			}
+		if c.exEndKey != nil {
+			require.NoError(t, tc.engine.ClearMVCCRangeKey(storage.MVCCRangeKey{
+				StartKey: c.exKey, EndKey: c.exEndKey, Timestamp: hlc.MinTimestamp}))
+		} else if c.exKey != nil {
+			require.NoError(t, tc.engine.ClearUnversioned(c.exKey))
 		}
 	}
 }

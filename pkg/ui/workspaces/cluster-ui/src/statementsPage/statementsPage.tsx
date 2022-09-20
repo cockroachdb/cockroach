@@ -24,10 +24,10 @@ import { Search } from "src/search";
 import { Pagination } from "src/pagination";
 import { TableStatistics } from "../tableStatistics";
 import {
+  calculateActiveFilters,
+  defaultFilters,
   Filter,
   Filters,
-  defaultFilters,
-  calculateActiveFilters,
   getTimeValueInSeconds,
   handleFiltersFromQueryString,
   updateFiltersQueryParamsOnTab,
@@ -35,15 +35,15 @@ import {
 
 import {
   calculateTotalWorkload,
-  unique,
   containAny,
   syncHistory,
+  unique,
   unset,
 } from "src/util";
 import {
   AggregateStatistics,
-  populateRegionNodeForStatements,
   makeStatementsColumns,
+  populateRegionNodeForStatements,
   StatementsSortedTable,
 } from "../statementsTable";
 import {
@@ -51,18 +51,14 @@ import {
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
 import {
-  ActivateStatementDiagnosticsModal,
   ActivateDiagnosticsModalRef,
+  ActivateStatementDiagnosticsModal,
 } from "src/statementsDiagnostics";
 import { ISortedTablePagination } from "../sortedtable";
 import styles from "./statementsPage.module.scss";
 import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert } from "@cockroachlabs/ui-components";
-
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
-type IDuration = google.protobuf.IDuration;
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
@@ -72,18 +68,22 @@ import Long from "long";
 import ClearStats from "../sqlActivity/clearStats";
 import SQLActivityError from "../sqlActivity/errorComponent";
 import {
-  TimeScaleDropdown,
-  TimeScale,
-  toDateRange,
-  timeScaleToString,
-  timeScale1hMinOptions,
   getValidOption,
+  TimeScale,
+  timeScale1hMinOptions,
+  TimeScaleDropdown,
+  timeScaleToString,
+  toDateRange,
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { StatementViewType } from "./statementPageTypes";
 import moment from "moment";
+
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
+type IDuration = google.protobuf.IDuration;
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -567,7 +567,7 @@ export class StatementsPage extends React.Component<
       search,
     } = this.props;
     const data = this.filteredStatementsData();
-    const totalWorkload = calculateTotalWorkload(data);
+    const totalWorkload = calculateTotalWorkload(statements);
     const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
     // If the cluster is a tenant cluster we don't show info

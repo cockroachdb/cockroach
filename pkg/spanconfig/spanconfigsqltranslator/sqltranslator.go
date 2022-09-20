@@ -503,10 +503,10 @@ func (s *SQLTranslator) findDescendantLeafIDs(
 // findDescendantLeafIDsForDescriptor finds all leaf object IDs below the given
 // descriptor ID in the zone configuration hierarchy. Based on the descriptor
 // type, these are:
-// - Database: IDs of all tables inside the database.
-// - Table: ID of the table itself.
-// - Schema/Type: Nothing, as schemas/types do not carry zone configurations and
-// are not part of the zone configuration hierarchy.
+//   - Database: IDs of all tables inside the database.
+//   - Table: ID of the table itself.
+//   - Other: Nothing, as these do not carry zone configurations and
+//     are not part of the zone configuration hierarchy.
 func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
 ) (descpb.IDs, error) {
@@ -521,30 +521,29 @@ func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 		return nil, nil // we're excluding this descriptor; nothing to do here
 	}
 
-	switch desc.DescriptorType() {
-	case catalog.Type, catalog.Schema:
-		// There is nothing to do for {Type, Schema} descriptors as they are not
-		// part of the zone configuration hierarchy.
-		return nil, nil
-	case catalog.Table:
+	var db catalog.DatabaseDescriptor
+	switch t := desc.(type) {
+	case catalog.TableDescriptor:
 		// Tables are leaf objects in the zone configuration hierarchy, so simply
 		// return the ID.
 		return descpb.IDs{id}, nil
-	case catalog.Database:
-	// Fallthrough.
+	case catalog.DatabaseDescriptor:
+		db = t
 	default:
-		return nil, errors.AssertionFailedf("unknown descriptor type: %s", desc.DescriptorType())
+		// There is nothing to do for non-table-or-database descriptors as they are
+		// not part of the zone configuration hierarchy.
+		return nil, nil
 	}
 
 	// There's nothing for us to do if the descriptor is offline or has been
 	// dropped.
-	if desc.Offline() || desc.Dropped() {
+	if db.Offline() || db.Dropped() {
 		return nil, nil
 	}
 
 	// Expand the database descriptor to all the tables inside it and return their
 	// IDs.
-	tables, err := descsCol.GetAllTableDescriptorsInDatabase(ctx, txn, desc.GetID())
+	tables, err := descsCol.GetAllTableDescriptorsInDatabase(ctx, txn, db)
 	if err != nil {
 		return nil, err
 	}

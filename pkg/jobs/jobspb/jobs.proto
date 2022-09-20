@@ -260,6 +260,10 @@ message BackupDetails {
   // timestamp and the timestamp resolved by the AS OF SYSTEM TIME expression.
   // The interval is expressed in nanoseconds.
   int64 as_of_interval = 22;
+
+  // ApplicationName is the application name in the session where the backup was
+  // invoked.
+  string application_name = 23;
 }
 
 message BackupProgress {
@@ -319,6 +323,9 @@ message RestoreDetails {
   // Like TypeDescs, it does not include existing schema descriptors in the
   // cluster that backed up schemas are remapped to.
   repeated sqlbase.SchemaDescriptor schema_descs = 15;
+  // FunctionDescs contains function descriptors written as part of this
+  // restore.
+  repeated sqlbase.FunctionDescriptor function_descs = 27;
   reserved 13;
   repeated sqlbase.TenantInfoWithUsage tenants = 21 [(gogoproto.nullable) = false];
 
@@ -387,7 +394,7 @@ message RestoreDetails {
 
   bool VerifyData = 26;
 
-  // NEXT ID: 27.
+  // NEXT ID: 28.
 }
 
 
@@ -1123,6 +1130,18 @@ message Progress {
   int64 modified_micros = 2;
   string running_status = 4;
 
+  //                ------ COMPLIANCE NOTE ------
+  // If you're updating this `Progress` proto, consider its impact on compliance.
+  // Currently, we include this data unredacted in debug zip bundles as part of the
+  // dump of `system.jobs`. The current assumption is that none of these details
+  // protos contain PII aside from Key spans.
+  //
+  // If you need to add a new details proto that will include PII beyond just key
+  // spans, `system.jobs.progress` will need to be redacted or excluded from debug
+  // zip to maintain compliance. Exclusion can be configured in
+  // `zip_table_registry.go`.
+  //
+  // If you're unsure, reach out to the compliance team for help.
   oneof details {
     BackupProgress backup = 10;
     RestoreProgress restore = 11;
