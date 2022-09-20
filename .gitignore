@@ -57,3 +57,7 @@ pkg/security/securitytest/embedded.go
 
 # Temporary directories during gomock generate
 **/gomock_reflect_*
+
+# This file is only produced when using "dev" and should be removed by dev anyways,
+# but to stay extra safe we add it here too.
+build_event_binary_file

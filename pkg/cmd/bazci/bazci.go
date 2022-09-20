@@ -18,6 +18,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,11 +35,12 @@ import (
 )
 
 const (
-	buildSubcmd         = "build"
-	runSubcmd           = "run"
-	testSubcmd          = "test"
-	mergeTestXMLsSubcmd = "merge-test-xmls"
-	mungeTestXMLSubcmd  = "munge-test-xml"
+	buildSubcmd             = "build"
+	runSubcmd               = "run"
+	testSubcmd              = "test"
+	mergeTestXMLsSubcmd     = "merge-test-xmls"
+	mungeTestXMLSubcmd      = "munge-test-xml"
+	beaverHubServerEndpoint = ""
 )
 
 type builtArtifact struct {
@@ -85,6 +87,29 @@ func init() {
 		false,
 		"process failures artifacts (and post github issues for release failures)",
 	)
+}
+
+func getRunEnvForBeaverHub(branch string) string {
+	if strings.Contains(branch, "master") || strings.Contains(branch, "release") || strings.Contains(branch, "staging") {
+		return branch
+	}
+	return "PR"
+}
+
+func sendBepDataToBeaverHub(bepFilepath string) error {
+	file, err := os.Open(bepFilepath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	httpClient := &http.Client{}
+	req, _ := http.NewRequest("POST", beaverHubServerEndpoint, file)
+	req.Header.Add("Run-Env", getRunEnvForBeaverHub(strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/")))
+	req.Header.Add("Content-Type", "application/octet-stream")
+	if _, err := httpClient.Do(req); err != nil {
+		return err
+	}
+	return nil
 }
 
 func bazciImpl(cmd *cobra.Command, args []string) (retErr error) {
@@ -139,6 +164,9 @@ func bazciImpl(cmd *cobra.Command, args []string) (retErr error) {
 	if bazelCmdErr != nil {
 		fmt.Printf("got error %+v from bazel run\n", bazelCmdErr)
 		fmt.Println("WARNING: the beplog file may not have been created")
+	}
+	if err := sendBepDataToBeaverHub(bepLoc); err != nil {
+		fmt.Printf("Sending BEP data to beaver hub failed - %v\n", err)
 	}
 	retErr = processBuildEventProtocolLog(args[0], bepLoc)
 	return

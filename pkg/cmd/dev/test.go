@@ -325,10 +325,15 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	}
 
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
+	workspace, err := d.getWorkspace(context.Background())
+	if err != nil {
+		return err
+	}
+	args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(workspace, bepFileBasename)))
 	args = append(args, additionalBazelArgs...)
 
 	logCommand("bazel", args...)
-	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {
 		var cmderr *exec.ExitError
 		if errors.As(err, &cmderr) && cmderr.ProcessState.ExitCode() == 4 {

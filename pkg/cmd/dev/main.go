@@ -11,9 +11,16 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
+)
+
+const (
+	beaverHubServerEndpoint = ""
+	bepFileBasename         = "build_event_binary_file"
 )
 
 func main() {
@@ -26,9 +33,17 @@ func main() {
 	}
 
 	dev := makeDevCmd()
-
 	if err := dev.cli.Execute(); err != nil {
 		log.Printf("ERROR: %v", err)
 		os.Exit(1)
+	}
+
+	workspace, err := dev.getWorkspace(context.Background())
+	if err != nil {
+		log.Printf("Failed to get workspace: %v", err)
+		os.Exit(1)
+	}
+	if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(workspace, bepFileBasename)); err != nil {
+		log.Printf("Process ran successfully but sending BEP file to beaver hub failed - %v", err)
 	}
 }

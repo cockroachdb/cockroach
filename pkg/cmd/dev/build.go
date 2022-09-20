@@ -145,6 +145,11 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	if err != nil {
 		return err
 	}
+	workspace, err := d.getWorkspace(context.Background())
+	if err != nil {
+		return err
+	}
+	args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(workspace, bepFileBasename)))
 	args = append(args, additionalBazelArgs...)
 
 	if cross == "" {
