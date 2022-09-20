@@ -355,9 +355,12 @@ func (p *gcpPubsubClient) getTopicClient(name string) (*pubsub.Topic, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if topic, ok := p.topics[name]; ok {
+		p.mu.Unlock()
 		return topic, nil
 	}
+	p.mu.Unlock() // openTopic may need the lock to record an error
 	topic, err := p.openTopic(name)
+	p.mu.Lock()
 	if err != nil {
 		return nil, err
 	}
