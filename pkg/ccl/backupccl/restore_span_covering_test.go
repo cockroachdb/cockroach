@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -36,7 +37,7 @@ func MockBackupChain(length, spans, baseFiles int, r *rand.Rand) []backuppb.Back
 	for i := range backups {
 		backups[i].Spans = make(roachpb.Spans, spans)
 		for j := range backups[i].Spans {
-			backups[i].Spans[j] = makeTableSpan(uint32(100 + j + (i / 3)))
+			backups[i].Spans[j] = makeTableSpan(keys.SystemSQLCodec, uint32(100+j+(i/3)))
 		}
 		backups[i].EndTime = ts.Add(time.Minute.Nanoseconds()*int64(i), 0)
 		if i > 0 {

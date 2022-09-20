@@ -53,7 +53,9 @@ func TestFullClusterBackup(t *testing.T) {
 	settings := clustersettings.MakeTestingClusterSettings()
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings: settings,
+			// Disabled only because backupRestoreTestSetupEmpty does not enable within tenant testing
+			DisableDefaultTestTenant: true,
+			Settings:                 settings,
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					// We compare job progress before and after a restore. Disable
@@ -351,6 +353,8 @@ func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Disabled only because backupRestoreTestSetupEmpty does not enable within tenant testing
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -942,6 +946,8 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 			}},
 	}
 	params.ServerArgs.Knobs = knobs
+	// Disabled only because backupRestoreTestSetupEmpty does not enable within tenant testing
+	params.ServerArgs.DisableDefaultTestTenant = true
 
 	const numAccounts = 1000
 	ctx := context.Background()
@@ -1098,6 +1104,8 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			// Disabled only because backupRestoreTestSetupEmpty does not enable within tenant testing
+			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

@@ -71,20 +71,11 @@ func backupRestoreTestSetupWithParams(
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params.ServerArgs.ExternalIODir = dir
 	params.ServerArgs.UseDatabase = "data"
-	// Need to disable the test tenant here. Below we're creating a database
-	// which gets used in various ways in different tests. One way it's used
-	// is to fetch the database's descriptor using TestingGetTableDescriptor
-	// which currently isn't multi-tenant enabled. The end result is that we
-	// can't find the created database and the test fails. Long term we should
-	// change TestingGetTableDescriptor so that it's multi-tenant enabled.
-	// Tracked with #76378.
-	params.ServerArgs.DisableDefaultTestTenant = true
 	if len(params.ServerArgsPerNode) > 0 {
 		for i := range params.ServerArgsPerNode {
 			param := params.ServerArgsPerNode[i]
 			param.ExternalIODir = dir
 			param.UseDatabase = "data"
-			param.DisableDefaultTestTenant = true
 			params.ServerArgsPerNode[i] = param
 		}
 	}
@@ -131,7 +122,9 @@ func backupRestoreTestSetupWithParams(
 func backupRestoreTestSetup(
 	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
-	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
+	// TODO (msbutler): DisableDefaultTestTenant should be disabled by the caller of this function
+	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init,
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DisableDefaultTestTenant: true}})
 }
 
 func backupRestoreTestSetupEmpty(
@@ -141,6 +134,8 @@ func backupRestoreTestSetupEmpty(
 	init func(*testcluster.TestCluster),
 	params base.TestClusterArgs,
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
+	// TODO (msbutler): this should be disabled by callers of this function
+	params.ServerArgs.DisableDefaultTestTenant = true
 	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
 }
 
@@ -154,15 +149,10 @@ func backupRestoreTestSetupEmptyWithParams(
 	ctx := logtags.AddTag(context.Background(), "backup-restore-test-setup-empty", nil)
 
 	params.ServerArgs.ExternalIODir = dir
-	// Need to disable the default test tenant. Much of the backup/restore tests
-	// perform validation of the restore by checking in the ranges directly.
-	// This is not supported from within a tenant. Tracked with #76378.
-	params.ServerArgs.DisableDefaultTestTenant = true
 	if len(params.ServerArgsPerNode) > 0 {
 		for i := range params.ServerArgsPerNode {
 			param := params.ServerArgsPerNode[i]
 			param.ExternalIODir = dir
-			param.DisableDefaultTestTenant = true
 			params.ServerArgsPerNode[i] = param
 		}
 	}
@@ -188,7 +178,6 @@ func createEmptyCluster(
 	params.ServerArgs.ExternalIODir = dir
 	// Disabling the default test tenant due to test failures. More
 	// investigation is required. Tracked with #76378.
-	params.ServerArgs.DisableDefaultTestTenant = true
 	tc := testcluster.StartTestCluster(t, clusterSize, params)
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
