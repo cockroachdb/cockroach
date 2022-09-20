@@ -57,20 +57,29 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 	keySizes := []int{128}
 	valSizes := []int{128}
 	numKeys := []int{1, 1024}
+
 	versionConfigs := []struct {
-		total    int
-		toDelete []int
+		total              int
+		rangeTombstoneKeys []int
+		toDelete           []int
 	}{
-		{2, []int{1}},
-		{1024, []int{1, 16, 32, 512, 1015, 1023}},
+		{
+			total:              2,
+			rangeTombstoneKeys: []int{0, 1, 2},
+			toDelete:           []int{1},
+		},
+		{
+			total:              1024,
+			rangeTombstoneKeys: []int{0, 1, 100},
+			toDelete:           []int{1, 16, 32, 512, 1015, 1023},
+		},
 	}
-	numRangeTombstones := []int{0, 1}
 	updateStats := []bool{false, true}
 	engineMakers := []struct {
 		name   string
 		create engineMaker
 	}{
-		{"pebble", setupMVCCInMemPebble},
+		{"pebble", setupPebbleInMemPebbleForLatestRelease},
 	}
 
 	ctx := context.Background()
@@ -86,7 +95,7 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 										b.Run(fmt.Sprintf("numVersions=%d", versions.total), func(b *testing.B) {
 											for _, toDelete := range versions.toDelete {
 												b.Run(fmt.Sprintf("deleteVersions=%d", toDelete), func(b *testing.B) {
-													for _, rangeTombstones := range numRangeTombstones {
+													for _, rangeTombstones := range versions.rangeTombstoneKeys {
 														b.Run(fmt.Sprintf("numRangeTs=%d", rangeTombstones), func(b *testing.B) {
 															for _, stats := range updateStats {
 																b.Run(fmt.Sprintf("updateStats=%t", stats), func(b *testing.B) {
@@ -1588,31 +1597,76 @@ func runMVCCGarbageCollect(
 	// the returned slice that affects the oldest 'deleteVersions' versions. The
 	// first write for each key will be at `ts+(1,0)`, the second one
 	// at `ts+(1,1)`, etc.
-	// If numRangeKeys is set to 1 then range tombstone will be written at ts.
+	//
+	// Write 'numRangeKeys' covering random intervals of keys using set of keys
+	// from the set described above. One range key is always below all point keys.
+	// Range tombstones are spread evenly covering versions space inserted between
+	// every m point versions.
+	// Range tombstones use timestamps starting from 'ts+(0,1)` and increase wall
+	// clock between version and if there are more range tombstones than
+	// numVersions, then logical clock is used to distinguish between them.
 	//
 	// NB: a real invocation of MVCCGarbageCollect typically has most of the keys
 	// in sorted order. Here they will be ordered randomly.
+
+	pointKeyTs := func(index int) hlc.Timestamp {
+		return ts.Add(int64(index+1), 0)
+	}
+
+	rangeKeyTs := func(index, numVersions, numRangeKeys int) hlc.Timestamp {
+		wallTime := index * numVersions / numRangeKeys
+		base := wallTime * numRangeKeys / numVersions
+		logical := 1 + index - base
+		return ts.Add(int64(wallTime), int32(logical))
+	}
+
 	setup := func() (gcKeys []roachpb.GCRequest_GCKey) {
 		batch := eng.NewBatch()
-		if opts.numRangeKeys > 1 {
-			b.Fatal("Invalid bench data config. Number of range keys can be 0 or 1")
-		}
-		if opts.numRangeKeys == 1 {
-			if err := MVCCDeleteRangeUsingTombstone(ctx, batch, nil, keys.LocalMax, keys.MaxKey,
-				ts, hlc.ClockTimestamp{}, nil, nil, true, 0, nil); err != nil {
-				b.Fatal(err)
-			}
-		}
+		pointKeys := make([]roachpb.Key, opts.numKeys)
 		for i := 0; i < opts.numKeys; i++ {
-			key := randutil.RandBytes(rng, opts.keyBytes)
-			if opts.deleteVersions > 0 {
-				gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{
-					Timestamp: ts.Add(1, int32(opts.deleteVersions-1)),
-					Key:       key,
-				})
+			pointKeys[i] = randutil.RandBytes(rng, opts.keyBytes)
+			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{
+				Timestamp: pointKeyTs(opts.deleteVersions - 1),
+				Key:       pointKeys[i],
+			})
+		}
+		rtsVersion := 0
+		for version := 0; ; version++ {
+			pts := pointKeyTs(version)
+			// Insert range keys until we reach next point key or run out of range
+			// key versions.
+			for ; rtsVersion < opts.numRangeKeys; rtsVersion++ {
+				rts := rangeKeyTs(rtsVersion, opts.numVersions, opts.numRangeKeys)
+				if pts.LessEq(rts) {
+					break
+				}
+				startKey := keys.LocalMax
+				endKey := keys.MaxKey
+				if rtsVersion > 0 && opts.numKeys > 1 {
+					for {
+						startKey = pointKeys[rng.Intn(opts.numKeys)]
+						endKey = pointKeys[rng.Intn(opts.numKeys)]
+						switch startKey.Compare(endKey) {
+						case 0:
+							continue
+						case 1:
+							startKey, endKey = endKey, startKey
+						case -1:
+						}
+						break
+					}
+				}
+				if err := MVCCDeleteRangeUsingTombstone(ctx, batch, nil, startKey, endKey,
+					rts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil); err != nil {
+					b.Fatal(err)
+				}
 			}
-			for j := 0; j < opts.numVersions; j++ {
-				if err := MVCCPut(ctx, batch, nil, key, ts.Add(1, int32(j)), hlc.ClockTimestamp{}, val, nil); err != nil {
+			if version == opts.numVersions {
+				break
+			}
+			for _, key := range pointKeys {
+				if err := MVCCPut(ctx, batch, nil, key, pts, hlc.ClockTimestamp{}, val,
+					nil); err != nil {
 					b.Fatal(err)
 				}
 			}
