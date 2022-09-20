@@ -1867,7 +1867,7 @@ func doRestorePlan(
 		}
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 		collectRestoreTelemetry(ctx, jobID, restoreDetails, intoDB, newDBName, subdir, restoreStmt,
-			descsByTablePattern, restoreDBs, asOfInterval, debugPauseOn)
+			descsByTablePattern, restoreDBs, asOfInterval, debugPauseOn, p.SessionData().ApplicationName)
 		return nil
 	}
 
@@ -1901,7 +1901,7 @@ func doRestorePlan(
 		return err
 	}
 	collectRestoreTelemetry(ctx, sj.ID(), restoreDetails, intoDB, newDBName, subdir, restoreStmt,
-		descsByTablePattern, restoreDBs, asOfInterval, debugPauseOn)
+		descsByTablePattern, restoreDBs, asOfInterval, debugPauseOn, p.SessionData().ApplicationName)
 	if err := sj.Start(ctx); err != nil {
 		return err
 	}
@@ -1923,6 +1923,7 @@ func collectRestoreTelemetry(
 	restoreDBs []catalog.DatabaseDescriptor,
 	asOfInterval int64,
 	debugPauseOn string,
+	applicationName string,
 ) {
 	telemetry.Count("restore.total.started")
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
@@ -1935,7 +1936,7 @@ func collectRestoreTelemetry(
 	}
 
 	logRestoreTelemetry(ctx, jobID, details, intoDB, newDBName, subdir, asOfInterval, restoreStmt.Options,
-		descsByTablePattern, restoreDBs, debugPauseOn)
+		descsByTablePattern, restoreDBs, debugPauseOn, applicationName)
 }
 
 func filteredUserCreatedDescriptors(

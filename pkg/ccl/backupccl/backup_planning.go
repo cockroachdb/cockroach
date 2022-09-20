@@ -704,6 +704,7 @@ func backupPlanHook(
 			EncryptionOptions:   &encryptionParams,
 			AsOfInterval:        asOfInterval,
 			Detached:            detached,
+			ApplicationName:     p.SessionData().ApplicationName,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID
