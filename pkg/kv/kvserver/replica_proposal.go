@@ -263,10 +263,13 @@ func (r *Replica) leasePostApplyLocked(
 	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID || prevLease.Sequence != newLease.Sequence
 
 	if iAmTheLeaseHolder {
-		// Log lease acquisition whenever an Epoch-based lease changes hands (or verbose
-		// logging is enabled).
-		if newLease.Type() == roachpb.LeaseEpoch && leaseChangingHands || log.V(1) {
-			log.VEventf(ctx, 1, "new range lease %s following %s", newLease, prevLease)
+		// Log lease acquisitions loudly when verbose logging is enabled or when the
+		// new leaseholder is draining, in which case it should be shedding leases.
+		// Otherwise, log a trace event.
+		if log.V(1) || r.store.IsDraining() {
+			log.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
+		} else {
+			log.Eventf(ctx, "new range lease %s following %s", newLease, prevLease)
 		}
 	}
 
@@ -374,8 +377,13 @@ func (r *Replica) leasePostApplyLocked(
 			if log.V(1) {
 				log.VEventf(ctx, 1, "upgrading expiration lease %s to an epoch-based one", newLease)
 			}
+
+			if r.store.TestingKnobs().LeaseUpgradeInterceptor != nil {
+				r.store.TestingKnobs().LeaseUpgradeInterceptor(newLease)
+			}
 			st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{})
-			r.maybeExtendLeaseAsyncLocked(ctx, st)
+			// Ignore the returned handle as we won't block on it.
+			_ = r.requestLeaseLocked(ctx, st)
 		}
 	}
 
@@ -421,10 +429,6 @@ func (r *Replica) leasePostApplyLocked(
 				log.Errorf(ctx, "%v", err)
 			}
 		})
-		if leaseChangingHands && log.V(1) {
-			// This logging is useful to troubleshoot incomplete drains.
-			log.Info(ctx, "is now leaseholder")
-		}
 	}
 
 	// Inform the store of this lease.

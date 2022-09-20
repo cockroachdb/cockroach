@@ -1009,7 +1009,7 @@ func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) e
 	return c.stmtBuf.Push(
 		ctx,
 		sql.DescribeStmt{
-			Name: name,
+			Name: tree.Name(name),
 			Type: typ,
 		})
 }

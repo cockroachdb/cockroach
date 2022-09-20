@@ -361,15 +361,14 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 	if !b.flushKeyChecked && b.rc != nil {
 		b.flushKeyChecked = true
 		if k, err := keys.Addr(nextKey); err != nil {
-			log.Warningf(ctx, "failed to get RKey for flush key lookup")
+			log.Warningf(ctx, "failed to get RKey for flush key lookup: %v", err)
 		} else {
-			r := b.rc.GetCached(ctx, k, false /* inverted */)
-			if r != nil {
+			if r, err := b.rc.Lookup(ctx, k); err != nil {
+				log.Warningf(ctx, "failed to lookup range cache entry for key %v: %v", k, err)
+			} else {
 				k := r.Desc().EndKey.AsRawKey()
 				b.flushKey = k
 				log.VEventf(ctx, 3, "%s building sstable that will flush before %v", b.name, k)
-			} else {
-				log.VEventf(ctx, 2, "%s no cached range desc available to determine sst flush key", b.name)
 			}
 		}
 	}
