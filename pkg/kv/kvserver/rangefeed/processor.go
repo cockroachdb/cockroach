@@ -155,7 +155,7 @@ type event struct {
 	sst     *sstEvent
 	sync    *syncEvent
 	// Budget allocated to process the event.
-	allocation *SharedBudgetAllocation
+	alloc *SharedBudgetAllocation
 }
 
 type opsEvent []enginepb.MVCCLogicalOp
@@ -343,7 +343,7 @@ func (p *Processor) run(
 		// Transform and route events.
 		case e := <-p.eventC:
 			p.consumeEvent(ctx, e)
-			e.allocation.Release(ctx)
+			e.alloc.Release(ctx)
 			putPooledEvent(e)
 
 		// Check whether any unresolved intents need a push.
@@ -574,13 +574,13 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 	// path where we have enough budget and outgoing channel is free. If not, we
 	// try to set up timeout for acquiring budget and then reuse it for inserting
 	// value into channel.
-	var allocation *SharedBudgetAllocation
+	var alloc *SharedBudgetAllocation
 	if p.MemBudget != nil {
 		size := calculateDateEventSize(e)
 		if size > 0 {
 			var err error
 			// First we will try non-blocking fast path to allocate memory budget.
-			allocation, err = p.MemBudget.TryGet(ctx, size)
+			alloc, err = p.MemBudget.TryGet(ctx, size)
 			if err != nil {
 				// Since we don't have enough budget, we should try to wait for
 				// allocation returns before failing.
@@ -593,7 +593,7 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 					timeout = 0
 				}
 				p.Metrics.RangeFeedBudgetBlocked.Inc(1)
-				allocation, err = p.MemBudget.WaitAndGet(ctx, size)
+				alloc, err = p.MemBudget.WaitAndGet(ctx, size)
 			}
 			if err != nil {
 				p.Metrics.RangeFeedBudgetExhausted.Inc(1)
@@ -601,12 +601,12 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 				return false
 			}
 			defer func() {
-				allocation.Release(ctx)
+				alloc.Release(ctx)
 			}()
 		}
 	}
 	ev := getPooledEvent(e)
-	ev.allocation = allocation
+	ev.alloc = alloc
 	if timeout == 0 {
 		// Timeout is zero if no timeout was requested or timeout is already set on
 		// the context by budget allocation. Just try to write using context as a
@@ -615,7 +615,7 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 		case p.eventC <- ev:
 			// Reset allocation after successful posting to prevent deferred cleanup
 			// from freeing it.
-			allocation = nil
+			alloc = nil
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		case <-ctx.Done():
@@ -629,7 +629,7 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 		case p.eventC <- ev:
 			// Reset allocation after successful posting to prevent deferred cleanup
 			// from freeing it.
-			allocation = nil
+			alloc = nil
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
 		default:
@@ -642,7 +642,7 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 			case p.eventC <- ev:
 				// Reset allocation after successful posting to prevent deferred cleanup
 				// from freeing it.
-				allocation = nil
+				alloc = nil
 			case <-p.stoppedC:
 				// Already stopped. Do nothing.
 			case <-ctx.Done():
@@ -684,13 +684,13 @@ func (p *Processor) syncEventC() {
 func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case e.ops != nil:
-		p.consumeLogicalOps(ctx, e.ops, e.allocation)
+		p.consumeLogicalOps(ctx, e.ops, e.alloc)
 	case !e.ct.IsEmpty():
 		p.forwardClosedTS(ctx, e.ct.Timestamp)
 	case bool(e.initRTS):
 		p.initResolvedTS(ctx)
 	case e.sst != nil:
-		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.allocation)
+		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.alloc)
 	case e.sync != nil:
 		if e.sync.testRegCatchupSpan != nil {
 			if err := p.reg.waitForCaughtUp(*e.sync.testRegCatchupSpan); err != nil {
@@ -708,18 +708,18 @@ func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 }
 
 func (p *Processor) consumeLogicalOps(
-	ctx context.Context, ops []enginepb.MVCCLogicalOp, allocation *SharedBudgetAllocation,
+	ctx context.Context, ops []enginepb.MVCCLogicalOp, alloc *SharedBudgetAllocation,
 ) {
 	for _, op := range ops {
 		// Publish RangeFeedValue updates, if necessary.
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
 			// Publish the new value directly.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, allocation)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, alloc)
 
 		case *enginepb.MVCCDeleteRangeOp:
 			// Publish the range deletion directly.
-			p.publishDeleteRange(ctx, t.StartKey, t.EndKey, t.Timestamp, allocation)
+			p.publishDeleteRange(ctx, t.StartKey, t.EndKey, t.Timestamp, alloc)
 
 		case *enginepb.MVCCWriteIntentOp:
 			// No updates to publish.
@@ -729,7 +729,7 @@ func (p *Processor) consumeLogicalOps(
 
 		case *enginepb.MVCCCommitIntentOp:
 			// Publish the newly committed value.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, allocation)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, alloc)
 
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
@@ -754,9 +754,9 @@ func (p *Processor) consumeSSTable(
 	sst []byte,
 	sstSpan roachpb.Span,
 	sstWTS hlc.Timestamp,
-	allocation *SharedBudgetAllocation,
+	alloc *SharedBudgetAllocation,
 ) {
-	p.publishSSTable(ctx, sst, sstSpan, sstWTS, allocation)
+	p.publishSSTable(ctx, sst, sstSpan, sstWTS, alloc)
 }
 
 func (p *Processor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
@@ -776,7 +776,7 @@ func (p *Processor) publishValue(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value, prevValue []byte,
-	allocation *SharedBudgetAllocation,
+	alloc *SharedBudgetAllocation,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
 		log.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
@@ -795,14 +795,14 @@ func (p *Processor) publishValue(
 		},
 		PrevValue: prevVal,
 	})
-	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, allocation)
+	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, alloc)
 }
 
 func (p *Processor) publishDeleteRange(
 	ctx context.Context,
 	startKey, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
-	allocation *SharedBudgetAllocation,
+	alloc *SharedBudgetAllocation,
 ) {
 	span := roachpb.Span{Key: startKey, EndKey: endKey}
 	if !p.Span.ContainsKeyRange(roachpb.RKey(startKey), roachpb.RKey(endKey)) {
@@ -814,7 +814,7 @@ func (p *Processor) publishDeleteRange(
 		Span:      span,
 		Timestamp: timestamp,
 	})
-	p.reg.PublishToOverlapping(ctx, span, &event, allocation)
+	p.reg.PublishToOverlapping(ctx, span, &event, alloc)
 }
 
 func (p *Processor) publishSSTable(
@@ -822,7 +822,7 @@ func (p *Processor) publishSSTable(
 	sst []byte,
 	sstSpan roachpb.Span,
 	sstWTS hlc.Timestamp,
-	allocation *SharedBudgetAllocation,
+	alloc *SharedBudgetAllocation,
 ) {
 	if sstSpan.Equal(roachpb.Span{}) {
 		panic(errors.AssertionFailedf("received SSTable without span"))
@@ -836,7 +836,7 @@ func (p *Processor) publishSSTable(
 			Span:    sstSpan,
 			WriteTS: sstWTS,
 		},
-	}, allocation)
+	}, alloc)
 }
 
 func (p *Processor) publishCheckpoint(ctx context.Context) {
