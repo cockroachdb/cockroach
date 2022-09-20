@@ -132,6 +132,16 @@ message AlterTableOwner {
   string owner = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// AlterTableOwner is recorded when the owner of a user-defined function is changed.
+message AlterFunctionOwner {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The name of the affected user-defined function.
+  string function_name = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // The name of the new owner.
+  string owner = 5 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // AlterDefaultPrivileges is recorded when default privileges are changed.
 message AlterDefaultPrivileges {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];

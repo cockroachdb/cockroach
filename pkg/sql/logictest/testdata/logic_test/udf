@@ -1516,6 +1516,107 @@ SELECT f()
 statement ok
 SET DATABASE = test;
 
+subtest event_logging
+
+statement ok
+CREATE USER u_test_event;
+CREATE SCHEMA sc_test_event;
+DELETE FROM system.eventlog;
+
+statement ok
+CREATE FUNCTION f_test_log() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query TTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'create_function'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
+----
+create_function  203  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
+
+statement ok
+CREATE OR REPLACE FUNCTION f_test_log() RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
+
+query TTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'create_function'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
+----
+create_function  203  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
+create_function  203  "test.public.f_test_log"  "CREATE OR REPLACE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 2;$$"
+
+statement ok
+ALTER FUNCTION f_test_log RENAME TO f_test_log_new;
+
+query TTTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'rename_function'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'NewFunctionName', info_json->'Statement' FROM tmp;
+----
+rename_function  203  "test.public.f_test_log"  "test.public.f_test_log_new"  "ALTER FUNCTION \"\".\"\".f_test_log RENAME TO f_test_log_new"
+
+statement ok
+ALTER FUNCTION f_test_log_new RENAME TO f_test_log;
+
+statement ok
+ALTER FUNCTION f_test_log OWNER TO u_test_event;
+
+query TTTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'alter_function_owner'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Owner', info_json->'Statement' FROM tmp;
+----
+alter_function_owner  203  "test.public.f_test_log"  "u_test_event"  "ALTER FUNCTION \"\".\"\".f_test_log OWNER TO u_test_event"
+
+statement ok
+ALTER FUNCTION f_test_log SET SCHEMA sc_test_event;
+
+query TTTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'set_schema'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'DescriptorName', info_json->'NewDescriptorName', info_json->'Statement' FROM tmp;
+----
+set_schema  203  "test.public.f_test_log"  "test.sc_test_event.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log SET SCHEMA sc_test_event"
+
+statement ok
+ALTER FUNCTION sc_test_event.f_test_log SET SCHEMA public;
+ALTER FUNCTION f_test_log IMMUTABLE;
+DROP FUNCTION f_test_log;
+
+query TTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'alter_function_options'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
+----
+alter_function_options  203  "test.public.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log IMMUTABLE"
+
+query TTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'drop_function'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
+----
+drop_function  203  "test.public.f_test_log"  "DROP FUNCTION \"\".\"\".f_test_log"
+
 subtest execution
 
 statement ok
