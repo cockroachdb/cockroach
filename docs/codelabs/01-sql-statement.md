@@ -22,7 +22,7 @@ some guidelines on adding new syntax that you can read about on [#17569](https:/
 ## Adding a SQL Statement
 
 CockroachDB supports many different types of [SQL statements][statements].
-This Codelab describes the process of adding a novel statement type to the SQL
+This codelab describes the process of adding a novel statement type to the SQL
 parser, its implementation, and the requisite tests.  We'll see how to work with
 the `goyacc` tool to update the parser and see how the executor and the query
 planner work together to execute queries.
@@ -101,12 +101,11 @@ frobnicate_stmt:
 | FROBNICATE SESSION { return unimplemented(sqllex, "frobnicate session") }
 | FROBNICATE ALL { return unimplemented(sqllex, "frobnicate all") }
 ```
-For now we'll leave it unimplemented, but we'll come back and take care of that later.
+For now, we'll leave it unimplemented, but we'll come back and take care of that later.
 
 This lists the three forms of the expression that we'll allow, separated by the
 pipe character.  Each production also has an implementation in curly braces
 (though in this case the implementation is to error out with an unimplemented
-message).
 message).
 
 One last thing - let's implement the *help for our statement* right now.  Above the
@@ -123,7 +122,7 @@ generators will provide assistance to users.  Let's give it a try.  First, we
 need to regenerate the file `sql.go`:
 
 ```text
-~/go/src/github.com/cockroachdb/cockroach$ make generate
+~/go/src/github.com/cockroachdb/cockroach$ ./dev gen
 ```
 
 Wait until the command finishes, then open `pkg/sql/parser/sql.go`, search for `frobnicate`, and see if there is
@@ -152,7 +151,7 @@ return unimplemented(sqllex, "frobnicate all")
 Next step is to compile the project:
 
 ```text
-~/go/src/github.com/cockroachdb/cockroach$ make build
+~/go/src/github.com/cockroachdb/cockroach$ ./dev build
 ...
 github.com/cockroachdb/cockroach
 ```
@@ -288,7 +287,7 @@ There are a few other `$` symbols that you can use with yacc.  One of the more
 useful forms refers to node values of sub-productions (for instance, in these
 three statements `$1` would be the token `FROBNICATE`).
 
-``make build`` again this project (don't forget to regenerate the parser). Now
+`./dev build` this project again (don't forget to regenerate the parser). Now
 try out the statement again:
 
 ```text
@@ -309,7 +308,7 @@ of a long type switch statement in `/pkg/sql/opaque.go`.  Let's add a case to th
 
 ```go
 case *tree.Frobnicate:
-    plan, err = p.Frobnicate(ctx, n)
+    return p.Frobnicate(ctx, n)
 ```
 
 Also add the following under the `init()` function in the same file, `/pkg/sql/opaque.go`.
@@ -336,7 +335,7 @@ func (p *planner) Frobnicate(ctx context.Context, stmt *tree.Frobnicate) (planNo
 }
 ```
 
-Run `make build` again and give it another go:
+Run `./dev build` again and give it another go:
 
 ```text
 $ cockroach sql --insecure -e "frobnicate cluster"
@@ -369,7 +368,7 @@ any arbitrary string, but `distsql` needs to be one of a specific set of options
 #### Frobnicating the session
 
 First we'll work on the latter case.  For instance, the setting for
-`distsql` must be one of `"OFF"`, `"ON"`, `"AUTO", or `"ALWAYS"`.
+`distsql` must be one of `"OFF"`, `"ON"`, `"AUTO"`, or `"ALWAYS"`.
 
 In `pkg/sql/frobnicate.go`:
 
@@ -383,13 +382,15 @@ Now we need to write a method to pick a valid option.
 import (
     // ...
     "math/rand"
+
     // ...
+    "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
-func randomMode() sessiondata.DistSQLExecMode {
+func randomMode() sessiondatapb.DistSQLExecMode {
     i := rand.Int() % len(distSQLOptions)
-    mode, _ := sessiondata.DistSQLExecModeFromString(distSQLOptions[i])
-    return mode;
+    mode, _ := sessiondatapb.DistSQLExecModeFromString(distSQLOptions[i])
+    return mode
 }
 ```
 
@@ -419,10 +420,12 @@ Now we just need to iterate through the various settings that we can frobnicate.
 
 ```go
 func (p *planner) randomizeSessionSettings() {
-    mutator := p.sessionDataMutator
+    iter := p.sessionDataMutatorIterator
 
-    mutator.SetDistSQLMode(randomMode())
-    mutator.SetApplicationName(randomName())
+    iter.applyOnEachMutator(func(m sessionDataMutator) {
+        m.SetDistSQLMode(randomMode())
+        m.SetApplicationName(randomName())
+    })
 }
 ```
 
@@ -490,8 +493,8 @@ FROBNICATE ALL
 ```
 
 Back to the terminal, make sure you are at `~/go/src/github.com/cockroachdb/cockroach`,
-and run `make test PKG=./pkg/sql/parser TESTS=TestParseDatadriven TESTFLAGS="-rewrite" FILES=grant_revoke`.
-The flag `TESTFLAGS="-rewrite"` is meant to automatically rewrite the datadriven test with the output it received.
+and run `./dev test pkg/sql/parser -f TestParseDatadriven --rewrite`.
+The flag `--rewrite` is meant to automatically rewrite the datadriven test with the output it received.
 
 Wait until the test command finishes, and open `pkg/sql/parser/testdata/frobnicate`, and you would expect:
 
