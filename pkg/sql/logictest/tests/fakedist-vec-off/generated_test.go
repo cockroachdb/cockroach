@@ -660,6 +660,13 @@ func TestLogic_drop_table(
 	runLogicTest(t, "drop_table")
 }
 
+func TestLogic_drop_temp(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_temp")
+}
+
 func TestLogic_drop_type(
 	t *testing.T,
 ) {
