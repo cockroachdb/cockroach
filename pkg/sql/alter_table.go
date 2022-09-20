@@ -1850,7 +1850,7 @@ func handleTTLStorageParamChange(
 	tableDesc *tabledesc.Mutable,
 	before, after *catpb.RowLevelTTL,
 ) error {
-	// update existing config
+	// Update existing config.
 	if before != nil && after != nil {
 
 		// Update cron schedule if required.
@@ -1910,7 +1910,10 @@ func handleTTLStorageParamChange(
 		}
 	}
 
-	// create new column
+	// Add TTL mutation if TTL is newly SET.
+	addTTLMutation := before == nil && after != nil
+
+	// Create new column.
 	if (before == nil || !before.HasDurationExpr()) && (after != nil && after.HasDurationExpr()) {
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
@@ -1943,17 +1946,23 @@ func handleTTLStorageParamChange(
 		); err != nil {
 			return err
 		}
-		tableDesc.AddModifyRowLevelTTLMutation(
-			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
-			descpb.DescriptorMutation_ADD,
-		)
+		// Also add TTL mutation if ttl_expire_after is added to exising TTL settings.
+		addTTLMutation = true
 		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
 		if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
 			return err
 		}
 	}
 
-	// remove existing column
+	// Add TTL mutation so that job is scheduled in SchemaChanger.
+	if addTTLMutation {
+		tableDesc.AddModifyRowLevelTTLMutation(
+			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
+			descpb.DescriptorMutation_ADD,
+		)
+	}
+
+	// Remove existing column.
 	if (before != nil && before.HasDurationExpr()) && (after == nil || !after.HasDurationExpr()) {
 		telemetry.Inc(sqltelemetry.RowLevelTTLDropped)
 
