@@ -40,8 +40,8 @@ type Stream interface {
 // to track memory budgets. event itself could either be shared or not in case
 // we optimized unused fields in it based on registration options.
 type sharedEvent struct {
-	event      *roachpb.RangeFeedEvent
-	allocation *SharedBudgetAllocation
+	event *roachpb.RangeFeedEvent
+	alloc *SharedBudgetAllocation
 }
 
 var sharedEventSyncPool = sync.Pool{
@@ -148,17 +148,17 @@ func newRegistration(
 // If overflowed is already set, events are ignored and not written to the
 // buffer.
 func (r *registration) publish(
-	ctx context.Context, event *roachpb.RangeFeedEvent, allocation *SharedBudgetAllocation,
+	ctx context.Context, event *roachpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
 	r.validateEvent(event)
-	e := getPooledSharedEvent(sharedEvent{event: r.maybeStripEvent(event), allocation: allocation})
+	e := getPooledSharedEvent(sharedEvent{event: r.maybeStripEvent(event), alloc: alloc})
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.overflowed {
 		return
 	}
-	allocation.Use()
+	alloc.Use()
 	select {
 	case r.buf <- e:
 		r.mu.caughtUp = false
@@ -166,7 +166,7 @@ func (r *registration) publish(
 		// Buffer exceeded and we are dropping this event. Registration will need
 		// a catch-up scan.
 		r.mu.overflowed = true
-		allocation.Release(ctx)
+		alloc.Release(ctx)
 	}
 }
 
@@ -322,7 +322,7 @@ func (r *registration) outputLoop(ctx context.Context) error {
 		select {
 		case nextEvent := <-r.buf:
 			err := r.stream.Send(nextEvent.event)
-			nextEvent.allocation.Release(ctx)
+			nextEvent.alloc.Release(ctx)
 			putPooledSharedEvent(nextEvent)
 			if err != nil {
 				return err
@@ -357,7 +357,7 @@ func (r *registration) drainAllocations(ctx context.Context) {
 			if !ok {
 				return
 			}
-			e.allocation.Release(ctx)
+			e.alloc.Release(ctx)
 			putPooledSharedEvent(e)
 		default:
 			return
@@ -443,7 +443,7 @@ func (reg *registry) PublishToOverlapping(
 	ctx context.Context,
 	span roachpb.Span,
 	event *roachpb.RangeFeedEvent,
-	allocation *SharedBudgetAllocation,
+	alloc *SharedBudgetAllocation,
 ) {
 	// Determine the earliest starting timestamp that a registration
 	// can have while still needing to hear about this event.
@@ -470,7 +470,7 @@ func (reg *registry) PublishToOverlapping(
 		// Don't publish events if they are equal to or less
 		// than the registration's starting timestamp.
 		if r.catchUpTimestamp.Less(minTS) {
-			r.publish(ctx, event, allocation)
+			r.publish(ctx, event, alloc)
 		}
 		return false, nil
 	})
