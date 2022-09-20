@@ -99,11 +99,17 @@ import (
 type elasticCPUGranter struct {
 	ctx context.Context
 	mu  struct {
+		// NB: there's no lock ordering between this mutex and the one in
+		// WorkQueue; neither holds a mutex while calling the other. This is
+		// different from the other granters: the granters that are used by
+		// GrantCoordinator don't have their own mutex, and rely on the one in
+		// GrantCoordinator, which is ordered before the one in WorkQueue, since
+		// requester.granted() is called while holding GrantCoordinator.mu.
 		syncutil.Mutex
+		tb               *quotapool.TokenBucket
 		utilizationLimit float64
 	}
 	requester requester
-	tb        *quotapool.TokenBucket
 	metrics   *elasticCPUGranterMetrics
 }
 
@@ -125,9 +131,9 @@ func newElasticCPUGranterWithTokenBucket(
 ) *elasticCPUGranter {
 	e := &elasticCPUGranter{
 		ctx:     ambientCtx.AnnotateCtx(context.Background()),
-		tb:      tokenBucket,
 		metrics: metrics,
 	}
+	e.mu.tb = tokenBucket
 	e.setUtilizationLimit(elasticCPUMinUtilization.Get(&st.SV))
 	return e
 }
@@ -143,7 +149,10 @@ func (e *elasticCPUGranter) grantKind() grantKind {
 
 // tryGet implements granter.
 func (e *elasticCPUGranter) tryGet(count int64) (granted bool) {
-	granted, _ = e.tb.TryToFulfill(quotapool.Tokens(count))
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	granted, _ = e.mu.tb.TryToFulfill(quotapool.Tokens(count))
 	return granted
 }
 
@@ -154,12 +163,18 @@ func (e *elasticCPUGranter) returnGrant(count int64) {
 }
 
 func (e *elasticCPUGranter) returnGrantWithoutGrantingElsewhere(count int64) {
-	e.tb.Adjust(quotapool.Tokens(count))
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.mu.tb.Adjust(quotapool.Tokens(count))
 }
 
 // tookWithoutPermission implements granter.
 func (e *elasticCPUGranter) tookWithoutPermission(count int64) {
-	e.tb.Adjust(quotapool.Tokens(-count))
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.mu.tb.Adjust(quotapool.Tokens(-count))
 }
 
 // continueGrantChain implements granter.
@@ -185,17 +200,17 @@ var _ elasticCPULimiter = &elasticCPUGranter{}
 // setTargetUtilization is part of the elasticCPULimiter interface.
 func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 	e.mu.Lock()
-	e.mu.utilizationLimit = utilizationLimit
-	e.mu.Unlock()
-	e.metrics.UtilizationLimit.Update(utilizationLimit)
+	defer e.mu.Unlock()
 
 	// Our rate limiter rate and burst limits are the same, are computed using:
 	//
 	//   allotted CPU time per-second = target CPU utilization * # of processors
 	//
 	rate := utilizationLimit * float64(int64(runtime.GOMAXPROCS(0))*time.Second.Nanoseconds())
-	e.tb.UpdateConfig(quotapool.TokensPerSecond(rate), quotapool.Tokens(rate))
+	e.mu.utilizationLimit = utilizationLimit
+	e.mu.tb.UpdateConfig(quotapool.TokensPerSecond(rate), quotapool.Tokens(rate))
 
+	e.metrics.UtilizationLimit.Update(utilizationLimit)
 	if log.V(1) {
 		log.Infof(e.ctx, "elastic cpu granter refill rate = %0.4f cpu seconds per second (utilization across %d procs = %0.2f%%)",
 			time.Duration(rate).Seconds(), runtime.GOMAXPROCS(0), utilizationLimit*100)
