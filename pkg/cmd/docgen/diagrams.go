@@ -370,6 +370,11 @@ var specs = []stmtSpec{
 		unlink: []string{"subdirectory", "collectionURI", "kmsURI"},
 	},
 	{
+		name:    "alter_backup_schedule",
+		replace: map[string]string{"iconst64": "schedule_id", "alter_backup_schedule_cmds": "options ( ',' options )*", "options": "'SET' ( 'LABEL' schedule_label | 'INTO' collectionURI | 'WITH' option | 'RECURRING' crontab | 'FULL BACKUP' ( crontab | 'ALWAYS' ) | 'SCHEDULE OPTION' schedule_option )"},
+		unlink:  []string{"schedule_id", "options", "option", "schedule_label", "collectionURI", "crontab", "schedule_option"},
+	},
+	{
 		name:    "alter_changefeed",
 		stmt:    "alter_changefeed_stmt",
 		replace: map[string]string{"a_expr": "job_id", "alter_changefeed_cmds": "( 'ADD' target ( ( ',' target ) )* ( 'WITH' ( initial_scan | no_initial_scan ) )? | 'DROP' target ( ( ',' target ) )* | ( 'SET' | 'UNSET' ) option ( ( ',' option ) )* )+"},
@@ -719,9 +724,12 @@ var specs = []stmtSpec{
 		name:   "create_schedule_for_backup_stmt",
 		inline: []string{"string_or_placeholder_opt_list", "string_or_placeholder_list", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
 		replace: map[string]string{
-			"string_or_placeholder 'FOR'":       "label 'FOR'",
-			"'RECURRING' sconst_or_placeholder": "'RECURRING' cronexpr",
-			"backup_targets":                    "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
+			"string_or_placeholder": "collectionURI",
+			"sconst_or_placeholder": "crontab",
+			"schedule_label_spec":   "( 'IF NOT EXISTS' | )  schedule_label",
+			"backup_targets":        "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"kv_option_list":        "schedule_option"},
+		unlink: []string{"schedule_label", "collection_URI", "crontab", "schedule_option"},
 	},
 	{
 		name:    "create_schema_stmt",
