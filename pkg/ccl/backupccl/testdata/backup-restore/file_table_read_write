@@ -1,0 +1,43 @@
+subtest backup_file_table
+
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE to_backup;
+----
+
+exec-sql
+CREATE DATABASE backups;
+----
+
+exec-sql
+BACKUP DATABASE to_backup INTO 'userfile://backups.public.userfiles_$user/data';
+----
+
+query-sql
+SELECT * FROM backups.crdb_internal.invalid_objects;
+----
+
+exec-sql
+USE backups;
+----
+
+query-sql
+SELECT * FROM pg_catalog.pg_tables where schemaname='public';
+----
+public userfiles_$user_upload_files root <nil> true false false false
+public userfiles_$user_upload_payload root <nil> true false false false
+
+query-sql
+SELECT conname FROM pg_catalog.pg_constraint con
+INNER JOIN pg_catalog.pg_class rel   ON rel.oid = con.conrelid
+INNER JOIN pg_catalog.pg_namespace nsp
+ON nsp.oid = connamespace
+WHERE rel.relname='userfiles_$user_upload_payload'
+ORDER BY conname;
+----
+file_id_fk
+userfiles_$user_upload_payload_pkey
+
+subtest end

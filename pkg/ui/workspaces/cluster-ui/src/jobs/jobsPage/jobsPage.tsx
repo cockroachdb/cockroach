@@ -56,6 +56,8 @@ export type JobsPageProps = JobsPageStateProps &
   RouteComponentProps;
 
 export class JobsPage extends React.Component<JobsPageProps> {
+  refreshDataInterval: NodeJS.Timeout;
+
   constructor(props: JobsPageProps) {
     super(props);
 
@@ -94,29 +96,26 @@ export class JobsPage extends React.Component<JobsPageProps> {
     }
   }
 
-  private refresh(props = this.props): void {
+  refresh(): void {
     const jobsRequest = new cockroach.server.serverpb.JobsRequest({
-      status: props.status,
-      type: props.type,
-      limit: parseInt(props.show, 10),
+      status: this.props.status,
+      type: this.props.type,
+      limit: parseInt(this.props.show, 10),
     });
-    props.onFilterChange
-      ? props.onFilterChange(jobsRequest)
-      : props.refreshJobs(jobsRequest);
+    this.props.onFilterChange
+      ? this.props.onFilterChange(jobsRequest)
+      : this.props.refreshJobs(jobsRequest);
   }
 
   componentDidMount(): void {
+    // Refresh every 10 seconds
     this.refresh();
+    this.refreshDataInterval = setInterval(() => this.refresh(), 10 * 1000);
   }
 
-  componentDidUpdate(prevProps: JobsPageProps): void {
-    if (
-      prevProps.status !== this.props.status ||
-      prevProps.type !== this.props.type ||
-      prevProps.show !== this.props.show
-    ) {
-      this.refresh();
-    }
+  componentWillUnmount(): void {
+    if (!this.refreshDataInterval) return;
+    clearInterval(this.refreshDataInterval);
   }
 
   onStatusSelected = (item: string): void => {

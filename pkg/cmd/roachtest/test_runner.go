@@ -29,14 +29,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -50,8 +49,10 @@ import (
 	"github.com/petermattis/goid"
 )
 
-var errTestsFailed = fmt.Errorf("some tests failed")
-var errClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+var (
+	errTestsFailed               = fmt.Errorf("some tests failed")
+	errClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+)
 
 // testRunner runs tests.
 type testRunner struct {
@@ -347,7 +348,7 @@ func defaultClusterAllocator(
 		alloc *quotapool.IntAlloc,
 		artifactsDir string,
 		wStatus *workerStatus,
-	) (*clusterImpl, error) {
+	) (*clusterImpl, *vm.CreateOpts, error) {
 		wStatus.SetStatus("creating cluster")
 		defer wStatus.SetStatus("")
 
@@ -357,7 +358,7 @@ func defaultClusterAllocator(
 			logPath := filepath.Join(artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
 			clusterL, err := logger.RootLogger(logPath, lopt.tee)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			defer clusterL.Close()
 			opt := attachOpt{
@@ -368,10 +369,10 @@ func defaultClusterAllocator(
 			lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
 			c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
 			if err == nil {
-				return c, nil
+				return c, nil, nil
 			}
 			if !errors.Is(err, errClusterNotFound) {
-				return nil, err
+				return nil, nil, err
 			}
 			// Fall through to create new cluster with name override.
 			lopt.l.PrintfCtx(
@@ -401,7 +402,7 @@ type clusterAllocatorFn func(
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
-) (*clusterImpl, error)
+) (*clusterImpl, *vm.CreateOpts, error)
 
 // runWorker runs tests in a loop until work is exhausted.
 //
@@ -561,13 +562,14 @@ func (r *testRunner) runWorker(
 		}
 
 		var clusterCreateErr error
+		var vmCreateOpts *vm.CreateOpts
 
 		if !testToRun.canReuseCluster {
 			// Create a new cluster if can't reuse or reuse attempt failed.
 			// N.B. non-reusable cluster would have been destroyed above.
 			wStatus.SetTest(nil /* test */, testToRun)
 			wStatus.SetStatus("creating cluster")
-			c, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
+			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
 			if clusterCreateErr != nil {
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
@@ -609,6 +611,8 @@ func (r *testRunner) runWorker(
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
 
+		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts, l)
+
 		if clusterCreateErr != nil {
 			// N.B. cluster creation must have failed...
 			// We don't want to prematurely abort the test suite since it's likely a transient issue.
@@ -623,7 +627,11 @@ func (r *testRunner) runWorker(
 			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
 			t.spec.Name = "cluster_creation"
 			t.spec.Owner = registry.OwnerDevInf
-			r.maybePostGithubIssue(ctx, l, t, stdout, issueOutput)
+
+			if err := github.MaybePost(t, issueOutput); err != nil {
+				shout(ctx, l, stdout, "failed to post issue: %s", err)
+			}
+
 			// Restore test name and owner.
 			t.spec.Name = oldName
 			t.spec.Owner = oldOwner
@@ -652,7 +660,7 @@ func (r *testRunner) runWorker(
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
-				err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL)
+				err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL, github)
 			}
 		}
 
@@ -766,6 +774,7 @@ func (r *testRunner) runTest(
 	c *clusterImpl,
 	stdout io.Writer,
 	l *logger.Logger,
+	github *githubIssues,
 ) error {
 	if t.Spec().(*registry.TestSpec).Skip != "" {
 		return fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().(*registry.TestSpec).Skip)
@@ -819,7 +828,9 @@ func (r *testRunner) runTest(
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
 
-			r.maybePostGithubIssue(ctx, l, t, stdout, output)
+			if err := github.MaybePost(t, output); err != nil {
+				shout(ctx, l, stdout, "failed to post issue: %s", err)
+			}
 		} else {
 			shout(ctx, l, stdout, "--- PASS: %s (%s)", runID, durationStr)
 			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
@@ -1021,7 +1032,7 @@ func (r *testRunner) teardownTest(
 		c.FailOnReplicaDivergence(ctx, t)
 
 		if timedOut || t.Failed() {
-			r.collectClusterArtifacts(ctx, c, t)
+			r.collectClusterArtifacts(ctx, c, t.L())
 		}
 	})
 
@@ -1050,91 +1061,9 @@ func (r *testRunner) teardownTest(
 	return nil
 }
 
-func (r *testRunner) shouldPostGithubIssue(t test.Test) bool {
-	opts := issues.DefaultOptionsFromEnv()
-	return !r.config.disableIssue &&
-		opts.CanPost() &&
-		opts.IsReleaseBranch() &&
-		t.Spec().(*registry.TestSpec).Run != nil &&
-		// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
-		t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
-}
-
-func (r *testRunner) maybePostGithubIssue(
-	ctx context.Context, l *logger.Logger, t test.Test, stdout io.Writer, output string,
+func (r *testRunner) collectClusterArtifacts(
+	ctx context.Context, c *clusterImpl, l *logger.Logger,
 ) {
-	if !r.shouldPostGithubIssue(t) {
-		return
-	}
-
-	teams, err := team.DefaultLoadTeams()
-	if err != nil {
-		t.Fatalf("could not load teams: %v", err)
-	}
-
-	var mention []string
-	var projColID int
-	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*registry.TestSpec).Owner), team.PurposeRoachtest); ok {
-		for _, alias := range sl {
-			mention = append(mention, "@"+string(alias))
-		}
-		projColID = teams[sl[0]].TriageColumnID
-	}
-
-	branch := os.Getenv("TC_BUILD_BRANCH")
-	if branch == "" {
-		branch = "<unknown branch>"
-	}
-
-	artifacts := fmt.Sprintf("/%s", t.Name())
-
-	// Issues posted from roachtest are identifiable as such and
-	// they are also release blockers (this label may be removed
-	// by a human upon closer investigation).
-	spec := t.Spec().(*registry.TestSpec)
-	labels := []string{"O-roachtest"}
-	if !spec.NonReleaseBlocker {
-		labels = append(labels, "release-blocker")
-	}
-
-	roachtestParam := func(s string) string { return "ROACHTEST_" + s }
-	clusterParams := map[string]string{
-		roachtestParam("cloud"): spec.Cluster.Cloud,
-		roachtestParam("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
-		roachtestParam("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
-	}
-
-	req := issues.PostRequest{
-		MentionOnCreate: mention,
-		ProjectColumnID: projColID,
-		PackageName:     "roachtest",
-		TestName:        t.Name(),
-		Message:         output,
-		Artifacts:       artifacts,
-		ExtraLabels:     labels,
-		ExtraParams:     clusterParams,
-		HelpCommand: func(renderer *issues.Renderer) {
-			issues.HelpCommandAsLink(
-				"roachtest README",
-				"https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/README.md",
-			)(renderer)
-			issues.HelpCommandAsLink(
-				"How To Investigate (internal)",
-				"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
-			)(renderer)
-		},
-	}
-	if err := issues.Post(
-		context.Background(),
-		issues.UnitTestFormatter,
-		req,
-	); err != nil {
-		shout(ctx, l, stdout, "failed to post issue: %s", err)
-	}
-}
-
-// TODO(tbg): nothing in this method should have the `t`; they should have a `Logger` only.
-func (r *testRunner) collectClusterArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
 	// NB: fetch the logs even when we have a debug zip because
 	// debug zip can't ever get the logs for down nodes.
 	// We only save artifacts for failed tests in CI, so this
@@ -1143,32 +1072,32 @@ func (r *testRunner) collectClusterArtifacts(ctx context.Context, c *clusterImpl
 	// below has problems. For example, `debug zip` is known to
 	// hang sometimes at the time of writing, see:
 	// https://github.com/cockroachdb/cockroach/issues/39620
-	t.L().PrintfCtx(ctx, "collecting cluster logs")
+	l.PrintfCtx(ctx, "collecting cluster logs")
 	// Do this before collecting logs to make sure the file gets
 	// downloaded below.
 	if err := saveDiskUsageToLogsDir(ctx, c); err != nil {
-		t.L().Printf("failed to fetch disk uage summary: %s", err)
+		l.Printf("failed to fetch disk uage summary: %s", err)
 	}
-	if err := c.FetchLogs(ctx, t); err != nil {
-		t.L().Printf("failed to download logs: %s", err)
+	if err := c.FetchLogs(ctx, l); err != nil {
+		l.Printf("failed to download logs: %s", err)
 	}
-	if err := c.FetchDmesg(ctx, t); err != nil {
-		t.L().Printf("failed to fetch dmesg: %s", err)
+	if err := c.FetchDmesg(ctx, l); err != nil {
+		l.Printf("failed to fetch dmesg: %s", err)
 	}
-	if err := c.FetchJournalctl(ctx, t); err != nil {
-		t.L().Printf("failed to fetch journalctl: %s", err)
+	if err := c.FetchJournalctl(ctx, l); err != nil {
+		l.Printf("failed to fetch journalctl: %s", err)
 	}
-	if err := c.FetchCores(ctx, t); err != nil {
-		t.L().Printf("failed to fetch cores: %s", err)
+	if err := c.FetchCores(ctx, l); err != nil {
+		l.Printf("failed to fetch cores: %s", err)
 	}
 	if err := c.CopyRoachprodState(ctx); err != nil {
-		t.L().Printf("failed to copy roachprod state: %s", err)
+		l.Printf("failed to copy roachprod state: %s", err)
 	}
-	if err := c.FetchTimeseriesData(ctx, t); err != nil {
-		t.L().Printf("failed to fetch timeseries data: %s", err)
+	if err := c.FetchTimeseriesData(ctx, l); err != nil {
+		l.Printf("failed to fetch timeseries data: %s", err)
 	}
-	if err := c.FetchDebugZip(ctx, t); err != nil {
-		t.L().Printf("failed to collect zip: %s", err)
+	if err := c.FetchDebugZip(ctx, l); err != nil {
+		l.Printf("failed to collect zip: %s", err)
 	}
 }
 

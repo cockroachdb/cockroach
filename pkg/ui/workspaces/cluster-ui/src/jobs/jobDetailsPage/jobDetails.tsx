@@ -27,6 +27,7 @@ import { getMatchParamByName } from "src/util/query";
 
 import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
 import { JobStatusCell } from "src/jobs/util/jobStatusCell";
+import { isTerminalState } from "../util/jobOptions";
 
 import { commonStyles } from "src/common";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
@@ -52,11 +53,18 @@ export type JobDetailsProps = JobDetailsStateProps &
   RouteComponentProps<unknown>;
 
 export class JobDetails extends React.Component<JobDetailsProps> {
+  refreshDataInterval: NodeJS.Timeout;
+
   constructor(props: JobDetailsProps) {
     super(props);
   }
 
   private refresh(): void {
+    if (isTerminalState(this.props.job?.status)) {
+      clearInterval(this.refreshDataInterval);
+      return;
+    }
+
     this.props.refreshJob(
       new cockroach.server.serverpb.JobRequest({
         job_id: Long.fromString(getMatchParamByName(this.props.match, "id")),
@@ -66,10 +74,14 @@ export class JobDetails extends React.Component<JobDetailsProps> {
 
   componentDidMount(): void {
     this.refresh();
+    // Refresh every 10s.
+    this.refreshDataInterval = setInterval(() => this.refresh(), 10 * 1000);
   }
 
-  componentDidUpdate(): void {
-    this.refresh();
+  componentWillUnmount(): void {
+    if (this.refreshDataInterval) {
+      clearInterval(this.refreshDataInterval);
+    }
   }
 
   prevPage = (): void => this.props.history.goBack();

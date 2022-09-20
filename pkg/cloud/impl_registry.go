@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -151,6 +152,7 @@ func ExternalStorageFromURI(
 	blobClientFactory blobs.BlobClientFactory,
 	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
+	cf *descs.CollectionFactory,
 	kvDB *kv.DB,
 	limiters Limiters,
 	opts ...ExternalStorageOption,
@@ -159,7 +161,8 @@ func ExternalStorageFromURI(
 	if err != nil {
 		return nil, err
 	}
-	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB, limiters, opts...)
+	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory,
+		ie, cf, kvDB, limiters, opts...)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -204,6 +207,7 @@ func MakeExternalStorage(
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 	ie sqlutil.InternalExecutor,
+	cf *descs.CollectionFactory,
 	kvDB *kv.DB,
 	limiters Limiters,
 	opts ...ExternalStorageOption,
@@ -213,6 +217,7 @@ func MakeExternalStorage(
 		Settings:          settings,
 		BlobClientFactory: blobClientFactory,
 		InternalExecutor:  ie,
+		CollectionFactory: cf,
 		DB:                kvDB,
 		Options:           opts,
 		Limiters:          limiters,
