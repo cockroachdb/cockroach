@@ -34,7 +34,10 @@ func (ctx *FmtCtx) formatNodeOrHideConstants(n NodeFormatter) {
 			return
 		case *Placeholder:
 			// Placeholders should be printed as placeholder markers.
-			// Deliberately empty so we format as normal.
+			// Using always '$1' so we limit the amount of different
+			// fingerprints created.
+			ctx.WriteString("$1")
+			return
 		case *StrVal:
 			ctx.WriteString("'_'")
 			return
