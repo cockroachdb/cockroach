@@ -605,6 +605,9 @@ func (t *RaftTransport) SendAsync(
 		}
 		return true
 	default:
+		if logRaftSendQueueFullEvery.ShouldLog() {
+			log.Warningf(t.AnnotateCtx(context.Background()), "raft send queue to n%d is full", toNodeID)
+		}
 		releaseRaftMessageRequest(req)
 		return false
 	}
