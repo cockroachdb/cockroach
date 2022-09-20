@@ -3,11 +3,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "schemachange_test",
+    size = "large",
     srcs = [
         "main_test.go",
         "schema_change_external_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=895s"],
     data = [
         "//c-deps:libgeos",
     ],
