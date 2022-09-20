@@ -180,31 +180,14 @@ query-sql
 WITH descs AS (
   SHOW BACKUP LATEST IN 'nodelocal://0/test/'
 )
-SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
+SELECT
+  database_name, parent_schema_name, object_name, object_type, is_full_cluster
+FROM
+  descs
+WHERE
+  database_name = 'db1'
+
 ----
-<nil> <nil> system database true
-system public users table true
-system public zones table true
-system public settings table true
-system public ui table true
-system public locations table true
-system public role_members table true
-system public comments table true
-system public role_options table true
-system public scheduled_jobs table true
-system public database_role_settings table true
-system public role_id_seq table true
-system public tenant_settings table true
-system public privileges table true
-system public external_connections table true
-<nil> <nil> defaultdb database true
-defaultdb <nil> public schema true
-<nil> <nil> postgres database true
-postgres <nil> public schema true
-<nil> <nil> data database true
-data <nil> public schema true
-data public bank table true
-<nil> <nil> db1 database true
 db1 <nil> public schema true
 db1 <nil> sc1 schema true
 db1 sc1 tbl1 table true
