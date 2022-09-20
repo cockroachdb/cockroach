@@ -1505,10 +1505,23 @@ this flag is applied.`,
 	ZipRedactLogs = FlagInfo{
 		Name: "redact-logs",
 		Description: `
-Redact text that may contain confidential data or PII from retrieved
-log entries. Note that this flag only operates on log entries;
-other items retrieved by the zip command may still consider
-confidential data or PII.
+DEPRECATED: Redact text that may contain confidential data or PII from 
+retrieved log entries.
+<PRE>
+
+</PRE>
+Note that this flag is being deprecated in favor of the --redact flag.
+Setting this flag will be interpreted in the same way as setting the
+--redact flag.
+`,
+	}
+
+	ZipRedact = FlagInfo{
+		Name: "redact",
+		Description: `
+Redact anything that may contain confidential data or PII from retrieved
+debug data. An exception is made for range key data, as this data is
+necessary to support CockroachDB.
 `,
 	}
 
