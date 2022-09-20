@@ -539,6 +539,9 @@ func mergeCheckingTimestampCaches(
 			if !rhsRepl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
 				return errors.New("rhs store does not own valid lease for rhs range")
 			}
+			if rhsRepl.CurrentLeaseStatus(ctx).Lease.Type() != roachpb.LeaseEpoch {
+				return errors.Errorf("lease still an expiration based lease")
+			}
 			return nil
 		})
 	}
@@ -1004,6 +1007,9 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		}
 		if !lhsRepl1.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
 			return errors.New("s2 does not own valid lease for lhs range")
+		}
+		if lhsRepl1.CurrentLeaseStatus(ctx).Lease.Type() != roachpb.LeaseEpoch {
+			return errors.Errorf("lease still an expiration based lease")
 		}
 		return nil
 	})
