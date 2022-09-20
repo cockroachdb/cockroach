@@ -173,7 +173,8 @@ func RunNemesis(f TestFeedFactory, db *gosql.DB, isSinkless bool) (Validator, er
 	if err != nil {
 		return nil, err
 	}
-	fprintV, err := NewFingerprintValidator(db, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount, false)
+	withSQLDB := WithDBConnection(db)
+	fprintV, err := NewFingerprintValidator(withSQLDB, `foo`, scratchTableName, foo.Partitions(), ns.maxTestColumnCount)
 	if err != nil {
 		return nil, err
 	}

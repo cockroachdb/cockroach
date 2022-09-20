@@ -413,7 +413,8 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return errors.Wrap(err, "CREATE TABLE failed")
 		}
 
-		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions, 0, false)
+		withSQLDB := cdctest.WithDBConnection(db)
+		fprintV, err := cdctest.NewFingerprintValidator(withSQLDB, `bank.bank`, `fprint`, tc.partitions, 0)
 		if err != nil {
 			return errors.Wrap(err, "error creating validator")
 		}
