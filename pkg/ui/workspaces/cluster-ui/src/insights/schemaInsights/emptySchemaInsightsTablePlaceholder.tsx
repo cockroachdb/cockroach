@@ -12,9 +12,17 @@ import React from "react";
 import { EmptyTable, EmptyTableProps } from "src/empty";
 import magnifyingGlassImg from "src/assets/emptyState/magnifying-glass.svg";
 import emptyTableResultsImg from "src/assets/emptyState/empty-table-results.svg";
+import { Anchor } from "../../anchor";
+import { insights } from "../../util";
+
+const footer = (
+  <Anchor href={insights} target="_blank">
+    Learn more about insights.
+  </Anchor>
+);
 
 const emptySearchResults = {
-  title: "No schema insight match your search.",
+  title: "No schema insights match your search.",
   icon: magnifyingGlassImg,
 };
 
@@ -24,8 +32,9 @@ export const EmptySchemaInsightsTablePlaceholder: React.FC<{
   const emptyPlaceholderProps: EmptyTableProps = props.isEmptySearchResults
     ? emptySearchResults
     : {
-        title: "No schema insight since this page was last refreshed.",
+        title: "No insight events since this page was last refreshed.",
         icon: emptyTableResultsImg,
+        footer,
       };
 
   return <EmptyTable {...emptyPlaceholderProps} />;

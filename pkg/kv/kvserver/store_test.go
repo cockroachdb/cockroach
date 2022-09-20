@@ -466,9 +466,8 @@ func TestInitializeEngineErrors(t *testing.T) {
 	stopper.AddCloser(eng)
 
 	// Bootstrap should fail if engine has no cluster version yet.
-	if err := InitEngine(ctx, eng, testIdent); !testutils.IsError(err, `no cluster version`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err := InitEngine(ctx, eng, testIdent)
+	require.ErrorContains(t, err, "no cluster version")
 
 	require.NoError(t, WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
 
@@ -480,14 +479,22 @@ func TestInitializeEngineErrors(t *testing.T) {
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
-	if err := store.Start(ctx, stopper); !errors.HasType(err, (*NotBootstrappedError)(nil)) {
-		t.Errorf("unexpected error initializing un-bootstrapped store: %+v", err)
-	}
+	err = store.Start(ctx, stopper)
+	require.ErrorIs(t, err, &NotBootstrappedError{})
 
 	// Bootstrap should fail on non-empty engine.
-	if err := InitEngine(ctx, eng, testIdent); !testutils.IsError(err, `cannot be bootstrapped`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err = InitEngine(ctx, eng, testIdent)
+	require.ErrorContains(t, err, "cannot be bootstrapped")
+
+	// Bootstrap should fail on MVCC range key in engine.
+	require.NoError(t, eng.PutMVCCRangeKey(storage.MVCCRangeKey{
+		StartKey:  roachpb.Key("a"),
+		EndKey:    roachpb.Key("b"),
+		Timestamp: hlc.MinTimestamp,
+	}, storage.MVCCValue{}))
+
+	err = InitEngine(ctx, eng, testIdent)
+	require.ErrorContains(t, err, "found mvcc range key")
 }
 
 // create a Replica and add it to the store. Note that replicas
@@ -2292,7 +2299,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manualClock.Advance(txnwait.TxnLivenessThreshold + 1)
+	manualClock.Advance(time.Duration(txnwait.TxnLivenessThreshold.Load()) + 1)
 
 	// Scan the range and verify empty result (expired txn is aborted,
 	// cleaning up intents).
@@ -2345,7 +2352,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manual.Advance(txnwait.TxnLivenessThreshold + 1)
+	manual.Advance(time.Duration(txnwait.TxnLivenessThreshold.Load()) + 1)
 
 	// Query the range with a single scan, which should cause all intents
 	// to be resolved.

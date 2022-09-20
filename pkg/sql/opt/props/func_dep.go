@@ -704,9 +704,16 @@ func (f *FuncDepSet) AreColsEquiv(col1, col2 opt.ColumnID) bool {
 // equal non-NULL values, or else all must be NULL (see definition for NULL= in
 // the comment for FuncDepSet).
 func (f *FuncDepSet) ComputeEquivClosure(cols opt.ColSet) opt.ColSet {
+	return f.ComputeEquivClosureNoCopy(cols.Copy())
+}
+
+// ComputeEquivClosureNoCopy is similar to ComputeEquivClosure, but computes the
+// closure in-place (e.g. the argument ColSet will be mutated). It should only
+// be used when it is ok to mutate the argument. This avoids allocations when
+// columns overflow the small set of util.FastIntSet.
+func (f *FuncDepSet) ComputeEquivClosureNoCopy(cols opt.ColSet) opt.ColSet {
 	// Don't need to get transitive closure, because equivalence closures are
 	// already maintained for every column.
-	cols = cols.Copy()
 	for i := range f.deps {
 		fd := &f.deps[i]
 		if fd.equiv && fd.from.SubsetOf(cols) && !fd.to.SubsetOf(cols) {
@@ -1550,7 +1557,7 @@ func (f *FuncDepSet) EquivReps() opt.ColSet {
 // ComputeEquivGroup returns the group of columns that are equivalent to the
 // given column. See ComputeEquivClosure for more details.
 func (f *FuncDepSet) ComputeEquivGroup(rep opt.ColumnID) opt.ColSet {
-	return f.ComputeEquivClosure(opt.MakeColSet(rep))
+	return f.ComputeEquivClosureNoCopy(opt.MakeColSet(rep))
 }
 
 // ensureKeyClosure checks whether the closure for this FD set's key (if there
@@ -1966,9 +1973,7 @@ func (f *FuncDepSet) tryToReduceKey(notNullCols opt.ColSet) {
 func (f *FuncDepSet) makeEquivMap(from, to opt.ColSet) map[opt.ColumnID]opt.ColumnID {
 	var equivMap map[opt.ColumnID]opt.ColumnID
 	for i, ok := from.Next(0); ok; i, ok = from.Next(i + 1) {
-		var oneCol opt.ColSet
-		oneCol.Add(i)
-		closure := f.ComputeEquivClosure(oneCol)
+		closure := f.ComputeEquivClosureNoCopy(opt.MakeColSet(i))
 		closure.IntersectionWith(to)
 		if !closure.Empty() {
 			if equivMap == nil {

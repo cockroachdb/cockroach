@@ -522,7 +522,7 @@ CREATE TABLE test.schema.t(x INT);
 		}
 
 		descsCol.SkipValidationOnWrite()
-		return descsCol.WriteDesc(ctx, false, schemaDesc.(catalog.MutableDescriptor), txn)
+		return descsCol.WriteDesc(ctx, false, schemaDesc, txn)
 	}),
 	)
 
@@ -791,12 +791,12 @@ func TestDescriptorCache(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			schemaDesc.SchemaDesc().Name = "new_name"
-			schemaDesc.SchemaDesc().Version++
+			schemaDesc.Name = "new_name"
+			schemaDesc.Version++
 			delete(dbDesc.Schemas, "schema")
-			dbDesc.Schemas["new_name"] = descpb.DatabaseDescriptor_SchemaInfo{ID: schemaDesc.GetID()}
+			dbDesc.Schemas["new_name"] = descpb.DatabaseDescriptor_SchemaInfo{ID: schemaDesc.ID}
 			dbDesc.Version++
-			err = descriptors.AddUncommittedDescriptor(ctx, schemaDesc.(catalog.MutableDescriptor))
+			err = descriptors.AddUncommittedDescriptor(ctx, schemaDesc)
 			if err != nil {
 				return err
 			}
@@ -810,7 +810,7 @@ func TestDescriptorCache(t *testing.T) {
 				return err
 			}
 			require.Len(t, schemas, 2)
-			require.Equal(t, schemaDesc.GetName(), schemas[schemaDesc.GetID()])
+			require.Equal(t, schemaDesc.Name, schemas[schemaDesc.ID])
 			return nil
 		}))
 	})
@@ -935,10 +935,10 @@ func TestHydrateCatalog(t *testing.T) {
 				}
 				return nil
 			})
-			// Make a dummy table descriptor to replace the type descriptor.
-			tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{ID: typeDescID}).BuildImmutable()
+			// Make a dummy database descriptor to replace the type descriptor.
+			dbDesc := dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: typeDescID}).BuildImmutable()
 			mutCat := nstree.MutableCatalog{Catalog: cat}
-			mutCat.UpsertDescriptorEntry(tableDesc)
+			mutCat.UpsertDescriptorEntry(dbDesc)
 			return mutCat.Catalog
 		}
 		type testCase struct {
@@ -949,7 +949,7 @@ func TestHydrateCatalog(t *testing.T) {
 			{deleteDescriptor("typ"), "type \"[107]\" does not exist"},
 			{deleteDescriptor("db"), "database \"[104]\" does not exist"},
 			{deleteDescriptor("schema"), "unknown schema \"[106]\""},
-			{replaceTypeDescWithNonTypeDesc, "found relation while looking for type [107]"},
+			{replaceTypeDescWithNonTypeDesc, "referenced type ID 107: descriptor is a *dbdesc.immutable: unexpected descriptor type"},
 		} {
 			require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
@@ -960,7 +960,8 @@ func TestHydrateCatalog(t *testing.T) {
 				}
 				// Hydration should fail when the given catalog is invalid.
 				cat = tc.tamper(cat)
-				require.EqualError(t, descs.HydrateCatalog(ctx, cat), tc.expectedError)
+				mc := nstree.MutableCatalog{Catalog: cat}
+				require.EqualError(t, descs.HydrateCatalog(ctx, mc), tc.expectedError)
 				return nil
 			}))
 		}
@@ -973,7 +974,8 @@ func TestHydrateCatalog(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			require.NoError(t, descs.HydrateCatalog(ctx, cat))
+			mc := nstree.MutableCatalog{Catalog: cat}
+			require.NoError(t, descs.HydrateCatalog(ctx, mc))
 			tbl := desctestutils.TestingGetTableDescriptor(txn.DB(), keys.SystemSQLCodec, "db", "schema", "table")
 			tblDesc := cat.LookupDescriptorEntry(tbl.GetID()).(catalog.TableDescriptor)
 			expected := types.UserDefinedTypeMetadata{

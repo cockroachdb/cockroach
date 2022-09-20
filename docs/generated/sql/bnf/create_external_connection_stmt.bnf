@@ -1,2 +1,2 @@
 create_external_connection_stmt ::=
-	'CREATE' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
+	'CREATE' 'EXTERNAL' 'CONNECTION' connection_name 'AS' connection_URI

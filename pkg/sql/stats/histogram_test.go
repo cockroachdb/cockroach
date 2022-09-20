@@ -691,7 +691,11 @@ func TestAdjustCounts(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			actual := histogram{buckets: make([]cat.HistogramBucket, len(tc.h))}
 			copy(actual.buckets, tc.h)
-			actual.adjustCounts(&evalCtx, tc.rowCount, tc.distinctCount)
+			colType := types.Int
+			if len(tc.h) > 0 {
+				colType = tc.h[0].UpperBound.ResolvedType()
+			}
+			actual.adjustCounts(&evalCtx, colType, tc.rowCount, tc.distinctCount)
 			roundHistogram(&actual)
 			if !reflect.DeepEqual(actual.buckets, tc.expected) {
 				t.Fatalf("expected %v but found %v", tc.expected, actual.buckets)
@@ -741,7 +745,7 @@ func TestAdjustCounts(t *testing.T) {
 			distinctCount = max(distinctCount, len(h.buckets))
 
 			// Adjust the counts in the histogram to match the provided counts.
-			h.adjustCounts(&evalCtx, float64(rowCount), float64(distinctCount))
+			h.adjustCounts(&evalCtx, types.Int, float64(rowCount), float64(distinctCount))
 
 			// Check that the resulting histogram is valid.
 			if h.buckets[0].NumRange > 0 || h.buckets[0].DistinctRange > 0 {

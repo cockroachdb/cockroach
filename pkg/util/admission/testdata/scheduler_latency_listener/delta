@@ -1,0 +1,105 @@
+# Explore the effects of the delta term. Set up an initial elastic limit of 5%
+# and further below, a set-point of 25% to observe how we quickly we're able to
+# increase the limit. We'll simulate two workloads under different
+# delta values.
+#
+# (This is not to determine the right tuning parameters; that has to happen
+# with actual experiments, this should hopefully help understand effects of the
+# delta term.)
+init limit=5%
+----
+
+params delta=0.1%
+----
+target-p99       = 1ms
+min-util         = 5.00%
+max-util         = 75.00%
+inactive-util    = 12.00%
+adjustment-delta = 0.10%
+factor           = 2.00
+inactive-factor  = 0.25
+
+# Start a workload from scratch, increasing at 1% per tick.
+tick
+p99=1ms ticks=1 util-fraction=0.0
+p99=1ms ticks=1 util-fraction=+0.01
+----
+
+auto set-point=25% ticks=400
+----
+
+params delta=1% max-util=30%
+----
+target-p99       = 1ms
+min-util         = 5.00%
+max-util         = 30.00%
+inactive-util    = 7.50%
+adjustment-delta = 1.00%
+factor           = 2.00
+inactive-factor  = 0.25
+
+# Start a workload from scratch, increasing at 1% per tick.
+tick
+p99=1ms ticks=1 util-fraction=0.0
+p99=1ms ticks=1 util-fraction=+0.01
+----
+
+auto set-point=25% ticks=400
+----
+
+# Observe that we're able to reach the set-point faster with a higher delta
+# (right half), but it make for a more unstable controller (higher variation
+# around the set point).
+plot width=70 height=20
+----
+----
+ 1104 ┤                                                      ╭╮
+ 1070 ┤                                             ╭╮ ╭╮    ││   ╭╮ ╭╮
+ 1036 ┤             ╭╮            ╭╮                │╰╮││  ╭─╯│   ││╭╯│ ╭╮
+ 1002 ┼─────────────────────────────────────────────────────────────────────
+  967 ┤│          ╭╮││││    ╭╮││││││  ││││    ╭╮ ││ │ │││  │  ╰╮ │ ││ │ ││
+  933 ┤│          ││││││╭╮  │││││╰╯│ ╭╯│││    ││ ││ │ ╰╯│  │   │ │ ╰╯ │ ││ ╭
+  899 ┤│          │││││╰╯╰╮╭╯││╰╯  ╰╮│ │││    ││╭╯│ │   │╭╮│   │ │    ╰─╯│╭╯
+  865 ┤│        ╭╮│││││   ││ ╰╯     ││ │││    │╰╯ ╰╮│   ╰╯╰╯   │╭╯       ││
+  831 ┤│        │││││││   ╰╯        ││ │││   ╭╯    ││          ││        ││
+  797 ┤│       ╭╯││││╰╯             ╰╯ │││  ╭╯     ││          ╰╯        ││
+  763 ┤│       │ ││╰╯                  ╰╯│ ╭╯      ╰╯                    ││
+  729 ┤│       │ ││                      │ │                             ││
+  695 ┤│   ╭─╮ │ ╰╯                      │ │                             ╰╯
+  661 ┤│   │ ╰╮│                         │ │
+  627 ┤│ ╭╮│  ││                         │╭╯
+  593 ┤│ │││  ││                         ││
+  559 ┤│ │││  ╰╯                         ╰╯
+  525 ┤╰╮│││
+  490 ┤ ╰╯││
+  456 ┤   ││
+  422 ┤   ╰╯
+                           p99 scheduler latencies (μs)
+
+
+ 30.0 ┤                                   ╭───╮╭╮
+ 28.5 ┤                                   │   ╰╯│
+ 27.0 ┤                                   │     │            ╭╮     ╭─╮
+ 25.5 ┤                                   │     │            ││    ╭╯╰│
+ 24.0 ┤                                   │     ╰╮  ╭╮  ╭─╮  │╰╮╭╮╭╯  │   ╭╮
+ 22.5 ┤                          ╭╮   ╭╮  │    ╭╮│╭╮││ ╭────╮│ │╭╮│   │╮  ╭─
+ 21.0 ┤                      ╭───╯╰───╯╰─╮╯    │╰─╯││╰╮│╯  ╰╰╯ ││││   ╰─╮╭│
+ 19.5 ┤                   ╭──╯           │    ╭╯   ││╰││       ││││     │╭╯
+ 18.0 ┤            ╭──────╯              │    │    ╰╯ ╰╯       ╰╯╰╯     ││
+ 16.5 ┤          ╭─╯                     │    │       ╰╯                ╰╯
+ 15.0 ┤         ╭╯                       │   ╭╯                         ╰╯
+ 13.5 ┤        ╭╯                        │   │
+ 12.0 ┤       ╭╯                         │  ╭╯
+ 10.5 ┤     ╭─│                          │  │
+  9.0 ┤    ╭╯╭╯                          │ ╭╯
+  7.5 ┤   ╭╯╭╯                           │ │
+  6.0 ┤ ╭─╯ │                            │ │
+  4.5 ┼─╯  ╭╯                            │╭╯
+  3.0 ┤  ╭─╯                             ││
+  1.5 ┤ ╭╯                               ╰╯
+  0.0 ┼─╯
+                       elastic cpu utilization and limit (%)
+----
+----
+
+# vim:ft=sh

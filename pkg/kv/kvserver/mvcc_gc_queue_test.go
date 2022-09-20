@@ -525,8 +525,8 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 
 	rangeMs := ms
 	pointMs := ms
-	deleteWithTombstone(eng.NewBatch(), deletionTime, &rangeMs)
-	deleteWithPoints(eng.NewBatch(), deletionTime, &pointMs)
+	withBatch(eng, func(b storage.Batch) { deleteWithTombstone(b, deletionTime, &rangeMs) })
+	withBatch(eng, func(b storage.Batch) { deleteWithPoints(b, deletionTime, &pointMs) })
 
 	gcTTL := time.Minute * 30
 	for _, d := range []struct {
@@ -547,6 +547,12 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 			require.Equal(t, d.rangeDel, dr, "expect enqueue metric for range deletion")
 		})
 	}
+}
+
+func withBatch(eng storage.Engine, fn func(b storage.Batch)) {
+	b := eng.NewBatch()
+	defer b.Close()
+	fn(b)
 }
 
 // TestMVCCGCQueueProcess creates test data in the range over various time

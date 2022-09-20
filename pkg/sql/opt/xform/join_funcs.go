@@ -1237,6 +1237,9 @@ func (c *CustomFuncs) CreateLocalityOptimizedLookupJoinPrivateIncludingCols(
 	lookupExpr, remoteLookupExpr memo.FiltersExpr, private *memo.LookupJoinPrivate, cols opt.ColSet,
 ) *memo.LookupJoinPrivate {
 	newPrivate := c.CreateLocalityOptimizedLookupJoinPrivate(lookupExpr, remoteLookupExpr, private)
+	// Make a copy of the columns to avoid mutating the original
+	// LookupJoinPrivate's columns.
+	newPrivate.Cols = newPrivate.Cols.Copy()
 	newPrivate.Cols.UnionWith(cols)
 	return newPrivate
 }

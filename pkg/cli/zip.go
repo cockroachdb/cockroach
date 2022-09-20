@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -40,18 +41,6 @@ import (
 type zipRequest struct {
 	fn       func(ctx context.Context) (interface{}, error)
 	pathName string
-}
-
-// Override for the default SELECT * FROM table when dumping one of the tables
-// in `debugZipTablesPerNode` or `debugZipTablesPerCluster`
-var customQuery = map[string]string{
-	"crdb_internal.node_inflight_trace_spans": "WITH spans AS (" +
-		"SELECT * FROM crdb_internal.node_inflight_trace_spans " +
-		"WHERE duration > INTERVAL '10' ORDER BY trace_id ASC, duration DESC" +
-		") SELECT * FROM spans, LATERAL crdb_internal.payloads_for_span(span_id)",
-	"system.jobs":       "SELECT *, to_hex(payload) AS hex_payload, to_hex(progress) AS hex_progress FROM system.jobs",
-	"system.descriptor": "SELECT *, to_hex(descriptor) AS hex_descriptor FROM system.descriptor",
-	"system.settings":   "SELECT *, to_hex(value) as hex_value FROM system.settings",
 }
 
 type debugZipContext struct {
@@ -165,6 +154,13 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	defer cancel()
 
 	zr := zipCtx.newZipReporter("cluster")
+	// Interpret the deprecated `--redact-logs` the same as the new `--redact` flag.
+	if zipCtx.redactLogs {
+		zipCtx.redact = true
+		zr.info("WARNING: The --" + cliflags.ZipRedactLogs.Name +
+			" flag has been deprecated in favor of the --" + cliflags.ZipRedact.Name + " flag. " +
+			"Interpreting as --" + cliflags.ZipRedact.Name + " and continuing.")
+	}
 
 	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
 	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
@@ -360,7 +356,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			return sqlExecCtx.RunQueryAndFormatResults(ctx, conn, w, io.Discard, stderr, clisqlclient.MakeQuery(query))
 		}()
 		if sqlErr != nil {
-			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {
+			if cErr := zc.z.createError(s, name, errors.CombineErrors(sqlErr, errors.Newf("query: %s", query))); cErr != nil {
 				return cErr
 			}
 			var pgErr = (*pgconn.PgError)(nil)

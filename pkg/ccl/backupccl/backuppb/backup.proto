@@ -7,7 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 syntax = "proto3";
-package cockroach.ccl.backupccl.backuppb;
+package cockroach.ccl.backupccl;
 option go_package = "backuppb";
 
 import "build/info.proto";

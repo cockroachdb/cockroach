@@ -137,7 +137,10 @@ func (c *CustomFuncs) canMapJoinOpEquivalenceGroup(
 	found := 0
 	for i := range filters {
 		fd := &filters[i].ScalarProps().FuncDeps
-		filterEqCols := fd.ComputeEquivClosure(fd.EquivReps())
+
+		// Note that EquivReps creates a new ColSet, so it is safe to modify it
+		// in-place with ComputeEquivClosureNoCopy.
+		filterEqCols := fd.ComputeEquivClosureNoCopy(fd.EquivReps())
 		if filterEqCols.Intersects(leftCols) && filterEqCols.Intersects(rightCols) &&
 			filterEqCols.SubsetOf(eqCols) {
 			found++
@@ -206,7 +209,10 @@ func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
 	for i := range filters {
 		fd := &filters[i].ScalarProps().FuncDeps
-		filterEqCols := fd.ComputeEquivClosure(fd.EquivReps())
+
+		// Note that EquivReps creates a new ColSet, so it is safe to modify it
+		// in-place with ComputeEquivClosureNoCopy.
+		filterEqCols := fd.ComputeEquivClosureNoCopy(fd.EquivReps())
 		if !filterEqCols.Empty() && filterEqCols.SubsetOf(eqCols) {
 			continue
 		}

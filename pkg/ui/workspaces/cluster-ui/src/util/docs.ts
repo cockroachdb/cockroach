@@ -138,3 +138,4 @@ export const performanceTuningRecipes = docsURLNoVersion(
 export const transactionContention = docsURL(
   "transactions.html#transaction-contention",
 );
+export const insights = docsURL("ui-insights-page.html");

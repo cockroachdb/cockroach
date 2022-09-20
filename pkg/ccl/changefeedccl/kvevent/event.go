@@ -115,6 +115,9 @@ func (e *Event) Type() Type {
 
 // ApproximateSize returns events approximate size in bytes.
 func (e *Event) ApproximateSize() int {
+	if e.et == TypeFlush {
+		return 0
+	}
 	return e.ev.Size() + int(unsafe.Sizeof(Event{}))
 }
 

@@ -1,3 +1,14 @@
+# HEY! DON'T edit this file unless you really want to change a configuration for
+# everyone building cockroach ever.
+# This file is checked into tree and is not auto-generated.
+# If you are following directions from `dev doctor`, you probably want to put
+# your configurations in ~/.bazelrc or .bazelrc.user instead.
+# Configurations in ~/.bazelrc apply to all Bazel builds across all projects on
+# your machine. Configurations in .bazelrc.user apply only to builds in this
+# workspace. Take a closer look to see which one `dev doctor` is talking about.
+# Note that .bazelrc.user should be in your checkout (next to this file), not
+# your home directory.
+
 # Define a set up flag aliases, so people can use `--cross` instead of the
 # longer `//build/toolchains:cross_flag`.
 build --flag_alias=crdb_test=//build/toolchains:crdb_test_flag

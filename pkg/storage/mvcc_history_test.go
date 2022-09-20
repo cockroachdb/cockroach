@@ -160,10 +160,12 @@ func TestMVCCHistories(t *testing.T) {
 	const statsTS = 100e9
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
+		disableSeparateEngineBlocks := strings.Contains(path, "_disable_separate_engine_blocks")
+
 		engineOpts := []ConfigOption{CacheSize(1 << 20 /* 1 MiB */), ForTesting}
 		// If enabled by metamorphic parameter, use very small blocks to provoke TBI
 		// optimization. We'll also flush after each command.
-		if separateEngineBlocks {
+		if separateEngineBlocks && !disableSeparateEngineBlocks {
 			engineOpts = append(engineOpts, func(cfg *engineConfig) error {
 				cfg.Opts.DisableAutomaticCompactions = true
 				for i := range cfg.Opts.Levels {
@@ -548,7 +550,7 @@ func TestMVCCHistories(t *testing.T) {
 					// Run the command.
 					foundErr = cmd.fn(e)
 
-					if separateEngineBlocks && dataChange {
+					if separateEngineBlocks && !disableSeparateEngineBlocks && dataChange {
 						require.NoError(t, e.engine.Flush())
 					}
 
@@ -900,11 +902,20 @@ func cmdCheckIntent(e *evalCtx) error {
 	if e.hasArg("none") {
 		wantIntent = false
 	}
-	metaKey := mvccKey(key)
+
 	var meta enginepb.MVCCMetadata
-	ok, _, _, err := e.engine.MVCCGetProto(metaKey, &meta)
+	iter := e.engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: key})
+	ok, err := iter.Valid()
 	if err != nil {
 		return err
+	}
+	ok = ok && iter.UnsafeKey().Timestamp.IsEmpty()
+	if ok {
+		if err = iter.ValueProto(&meta); err != nil {
+			return err
+		}
 	}
 	if !ok && wantIntent {
 		return errors.Newf("meta: %v -> expected intent, found none", key)
@@ -1264,7 +1275,7 @@ func cmdIsSpanEmpty(e *evalCtx) error {
 	if err != nil {
 		return err
 	}
-	e.results.buf.Print(isEmpty)
+	e.results.buf.Printf("%t\n", isEmpty)
 	return nil
 }
 
@@ -1300,7 +1311,7 @@ func cmdExport(e *evalCtx) error {
 	}
 	e.results.buf.Printf("\n")
 
-	iter, err := NewPebbleMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
+	iter, err := NewMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})
@@ -1724,7 +1735,7 @@ func cmdSSTIterNew(e *evalCtx) error {
 	for i, sst := range e.ssts {
 		ssts[len(ssts)-i-1] = sst
 	}
-	iter, err := NewPebbleMultiMemSSTIterator(ssts, sstIterVerify, IterOptions{
+	iter, err := NewMultiMemSSTIterator(ssts, sstIterVerify, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})

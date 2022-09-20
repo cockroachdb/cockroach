@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "kv.go",
         "mocking.go",
+        "mvcc.go",
         "scan.go",
         "sst.go",
         "stats.go",

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -76,13 +77,18 @@ func (p *planner) alterDefaultPrivileges(
 
 	var schemaDescs []*schemadesc.Mutable
 	for _, sc := range n.Schemas {
-		schemaDesc, err := p.Descriptors().GetMutableSchemaByName(ctx, p.txn, dbDesc, sc.Schema(), tree.SchemaLookupFlags{Required: true})
+		immFlags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
+		immSchema, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, dbDesc, sc.Schema(), immFlags)
 		if err != nil {
 			return nil, err
 		}
-		mutableSchemaDesc, ok := schemaDesc.(*schemadesc.Mutable)
-		if !ok {
-			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "%s is not a physical schema", schemaDesc.GetName())
+		if immSchema.SchemaKind() != catalog.SchemaUserDefined {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "%s is not a physical schema", immSchema.GetName())
+		}
+		mutFlags := tree.SchemaLookupFlags{Required: true}
+		mutableSchemaDesc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn, immSchema.GetID(), mutFlags)
+		if err != nil {
+			return nil, err
 		}
 		schemaDescs = append(schemaDescs, mutableSchemaDesc)
 	}

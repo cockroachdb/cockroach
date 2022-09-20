@@ -114,13 +114,12 @@ func (m *metamorphicIterator) moveAround() {
 			func() {
 				m.it.Next()
 				stillValid, _ := m.it.Valid()
-				if stillValid && mvccIt.SupportsPrev() {
+				if stillValid {
 					resetActions = append(resetActions, action{
 						"ResetViaPrev",
 						mvccIt.Prev,
 					})
 				}
-
 			},
 		},
 		{
@@ -155,7 +154,7 @@ func (m *metamorphicIterator) moveAround() {
 		// Can only leave iterator in reverse mode if it's in reverse
 		// initially, otherwise caller wouldn't be allowed to invoke NextKey
 		// due to MVCCIterator contract.
-		if !m.isForward && mvccIt.SupportsPrev() {
+		if !m.isForward {
 			actions = append(actions, action{
 				"Prev",
 				func() {
@@ -234,9 +233,9 @@ func (m *metamorphicIterator) moveAround() {
 			},
 		})
 	}
-	// NB: can't use reverse iteration to find the point if it's not supported,
-	// or if the iterator is currently forward.
-	if !m.isForward && hasPoint && mvccIt.SupportsPrev() && !mvccIt.IsPrefix() {
+	// NB: can't use reverse iteration to find the point if the iterator is
+	// currently forward.
+	if !m.isForward && hasPoint && !mvccIt.IsPrefix() {
 		resetActions = append(resetActions, action{
 			"SeekLT(max) && RevIterate",
 			func() {
@@ -391,10 +390,6 @@ func (m *metamorphicMVCCIterator) Stats() IteratorStats {
 
 func (m *metamorphicMVCCIterator) IsPrefix() bool {
 	return m.it.(MVCCIterator).IsPrefix()
-}
-
-func (m *metamorphicMVCCIterator) SupportsPrev() bool {
-	return m.it.(MVCCIterator).SupportsPrev()
 }
 
 type metamorphicMVCCIncrementalIterator struct {

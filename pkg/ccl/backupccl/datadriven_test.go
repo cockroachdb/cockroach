@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -177,12 +176,6 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	}
 	if cfg.testingKnobCfg != "" {
 		switch cfg.testingKnobCfg {
-		case "RecoverFromIterPanic":
-			params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
-				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-					RecoverFromIterPanic: true,
-				},
-			}
 		default:
 			t.Fatalf("TestingKnobCfg %s not found", cfg.testingKnobCfg)
 		}

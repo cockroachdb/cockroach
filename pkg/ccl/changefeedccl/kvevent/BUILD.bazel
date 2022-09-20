@@ -52,6 +52,8 @@ go_test(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

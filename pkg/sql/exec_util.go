@@ -1598,9 +1598,6 @@ type BackupRestoreTestingKnobs struct {
 	// testing. This is typically the bulk mem monitor if not
 	// specified here.
 	BackupMemMonitor *mon.BytesMonitor
-
-	// RecoverFromIterClosePanic prevents the node from panicing during ReadAsOfIterator.Close
-	RecoverFromIterPanic bool
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}

@@ -3213,6 +3213,16 @@ func (m *RecoveryEvent) AppendJSONFields(printComma bool, b redact.RedactableByt
 		b = append(b, "\"IgnoreExistingBackup\":true"...)
 	}
 
+	if m.ApplicationName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ApplicationName\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ApplicationName)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 

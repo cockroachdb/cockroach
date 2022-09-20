@@ -347,7 +347,7 @@ FROM (
 /103/Table/114/1  /103/Table/114/1/100  /114/1/100  /114/2
 
 # resume the job and ensure it completes, which includes validation.
-statement ok 
+statement ok
 RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'CREATE INDEX pauseidx%');
 
 query T
@@ -398,10 +398,14 @@ CREATE TABLE opclasses (a INT PRIMARY KEY, b TEXT, c JSON)
 
 # Make sure that we don't permit creating indexes with opclasses that aren't
 # inverted.
-statement error operator class "blah_ops" does not exist
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
 CREATE INDEX ON opclasses(b blah_ops)
 
 # Make sure that we don't permit creating indexes with opclasses that aren't
 # inverted, even if the type is invertible.
-statement error operator class "blah_ops" does not exist
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
 CREATE INDEX ON opclasses(c blah_ops)
+
+# Make sure that we don't permit creating indexes with opclasses that don't exist
+statement error pgcode 42704 operator class "blah_ops" does not exist
+CREATE INVERTED INDEX ON opclasses(c blah_ops)

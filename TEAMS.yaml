@@ -53,7 +53,7 @@ cockroachdb/security:
   triage_column_id: 0 # TODO
 cockroachdb/prodsec:
   triage_column_id: 0 # TODO as well
-cockroachdb/bulk-io:
+cockroachdb/disaster-recovery:
   triage_column_id: 3097123
 cockroachdb/cdc:
   aliases:

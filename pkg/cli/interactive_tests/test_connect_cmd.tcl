@@ -15,7 +15,7 @@ proc start_secure_server {argv certs_dir extra} {
 
 start_secure_server $argv $certs_dir ""
 
-spawn $argv sql --certs-dir=$certs_dir
+spawn $argv sql --certs-dir=$certs_dir --no-line-editor
 eexpect root@
 
 start_test "Test initialization"
@@ -147,7 +147,7 @@ set ::env(HOME) "."
 system "mkdir -p ./.cockroach-certs"
 system "cp $certs_dir/* ./.cockroach-certs/"
 
-spawn $argv sql
+spawn $argv sql --no-line-editor
 eexpect root@
 eexpect "/defaultdb>"
 send "\\c\r"
@@ -163,7 +163,7 @@ eexpect eof
 
 start_test "Check that extra URL params are preserved when changing database"
 
-spawn $argv sql --certs-dir=$certs_dir --url=postgres://root@localhost:26257/defaultdb?options=--search_path%3Dcustom_path&statement_timeout=1234
+spawn $argv sql --no-line-editor --certs-dir=$certs_dir --url=postgres://root@localhost:26257/defaultdb?options=--search_path%3Dcustom_path&statement_timeout=1234
 eexpect root@
 eexpect "/defaultdb>"
 send "SHOW search_path;\r"
@@ -188,7 +188,7 @@ eexpect eof
 
 start_test "Check that the client-side connect cmd prints the current conn details with password redacted"
 
-spawn $argv sql --certs-dir=$certs_dir --url=postgres://foo:abc@localhost:26257/defaultdb
+spawn $argv sql --no-line-editor --certs-dir=$certs_dir --url=postgres://foo:abc@localhost:26257/defaultdb
 eexpect foo@
 send "\\c\r"
 eexpect "Connection string: postgresql://foo:~~~~~~@"
@@ -206,7 +206,7 @@ stop_server $argv
 set ::env(COCKROACH_INSECURE) "true"
 start_server $argv
 
-spawn $argv sql
+spawn $argv sql --no-line-editor
 eexpect root@
 eexpect "defaultdb>"
 

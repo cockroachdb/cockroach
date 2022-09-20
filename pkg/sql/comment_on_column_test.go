@@ -181,7 +181,7 @@ func TestCommentOnColumnWhenDropColumn(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		t.Fatal("comment remain")
+		t.Fatal("comment remaining in system.comments despite drop")
 	}
 }
 

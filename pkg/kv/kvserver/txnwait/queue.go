@@ -45,16 +45,22 @@ var TxnLivenessHeartbeatMultiplier = envutil.EnvOrDefaultInt(
 // mutable to allow tests to override it.
 //
 // Use TestingOverrideTxnLivenessThreshold to override the value in tests.
-var TxnLivenessThreshold = time.Duration(TxnLivenessHeartbeatMultiplier) * base.DefaultTxnHeartbeatInterval
+//
+// This is an atomic to avoid data races as some tests want to update this
+// in a running cluster.
+var TxnLivenessThreshold = func() *atomic.Int64 {
+	var a atomic.Int64
+	a.Store(int64(TxnLivenessHeartbeatMultiplier) * int64(base.DefaultTxnHeartbeatInterval))
+	return &a
+}()
 
 // TestingOverrideTxnLivenessThreshold allows tests to override the transaction
 // liveness threshold. The function returns a closure that should be called to
 // reset the value.
 func TestingOverrideTxnLivenessThreshold(t time.Duration) func() {
-	old := TxnLivenessThreshold
-	TxnLivenessThreshold = t
+	old := TxnLivenessThreshold.Swap(int64(t))
 	return func() {
-		TxnLivenessThreshold = old
+		TxnLivenessThreshold.Store(old)
 	}
 }
 
@@ -93,7 +99,7 @@ func isPushed(req *roachpb.PushTxnRequest, txn *roachpb.Transaction) bool {
 // TxnExpiration computes the timestamp after which the transaction will be
 // considered expired.
 func TxnExpiration(txn *roachpb.Transaction) hlc.Timestamp {
-	return txn.LastActive().Add(TxnLivenessThreshold.Nanoseconds(), 0)
+	return txn.LastActive().Add(TxnLivenessThreshold.Load(), 0)
 }
 
 // IsExpired is true if the given transaction is expired.

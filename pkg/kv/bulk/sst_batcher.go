@@ -658,7 +658,7 @@ func (b *SSTBatcher) addSSTable(
 		LowerBound: start,
 		UpperBound: end,
 	}
-	iter, err := storage.NewPebbleMemSSTIterator(sstBytes, true, iterOpts)
+	iter, err := storage.NewMemSSTIterator(sstBytes, true, iterOpts)
 	if err != nil {
 		return err
 	}
@@ -785,7 +785,7 @@ func (b *SSTBatcher) addSSTable(
 					}
 
 					// Needs a new iterator with new bounds.
-					statsIter, err := storage.NewPebbleMemSSTIterator(sstBytes, true, storage.IterOptions{
+					statsIter, err := storage.NewMemSSTIterator(sstBytes, true, storage.IterOptions{
 						KeyTypes:   storage.IterKeyTypePointsOnly,
 						LowerBound: right.start,
 						UpperBound: right.end,

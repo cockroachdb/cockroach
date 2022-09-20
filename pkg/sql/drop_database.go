@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -82,10 +81,10 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	d := newDropCascadeState()
 
 	for _, schema := range schemas {
-		res, err := p.Descriptors().GetSchemaByName(
+		res, err := p.Descriptors().GetImmutableSchemaByName(
 			ctx, p.txn, dbDesc, schema, tree.SchemaLookupFlags{
-				Required:       true,
-				RequireMutable: true,
+				Required:    true,
+				AvoidLeased: true,
 			},
 		)
 		if err != nil {
@@ -147,9 +146,11 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 			}
 		case catalog.SchemaUserDefined:
 			// For user defined schemas, we have to do a bit more work.
-			mutDesc, ok := schemaToDelete.(*schemadesc.Mutable)
-			if !ok {
-				return errors.AssertionFailedf("expected Mutable, found %T", schemaToDelete)
+			mutDesc, err := p.Descriptors().GetMutableSchemaByID(
+				ctx, p.txn, schemaToDelete.GetID(), p.CommonLookupFlagsRequired(),
+			)
+			if err != nil {
+				return err
 			}
 			if err := params.p.dropSchemaImpl(ctx, n.dbDesc, mutDesc); err != nil {
 				return err

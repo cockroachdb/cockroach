@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
 )
@@ -768,7 +769,7 @@ const unknownTxnStatus = " ?"
 // doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
 func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
-	if !c.hasEditor() {
+	if !c.iCtx.displayPrompt {
 		return nextState
 	}
 
@@ -782,7 +783,9 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 			c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
 		}
 
-		c.ins.SetLeftPrompt(c.continuePrompt)
+		if c.hasEditor() {
+			c.ins.SetLeftPrompt(c.continuePrompt)
+		}
 		return nextState
 	}
 
@@ -848,7 +851,9 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	c.currentPrompt = c.fullPrompt
 
 	// Configure the editor to use the new prompt.
-	c.ins.SetLeftPrompt(c.currentPrompt)
+	if c.hasEditor() {
+		c.ins.SetLeftPrompt(c.currentPrompt)
+	}
 
 	return nextState
 }
@@ -1019,6 +1024,13 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 			fmt.Fprintln(c.iCtx.stdout)
 		}
 	} else {
+		if c.iCtx.displayPrompt {
+			prompt := c.currentPrompt
+			if c.useContinuePrompt {
+				prompt = c.continuePrompt
+			}
+			fmt.Fprint(c.iCtx.stdout, prompt)
+		}
 		l, err = c.buf.ReadString('\n')
 		// bufio.ReadString() differs from readline.Readline in the handling of
 		// EOF. Readline only returns EOF when there is nothing left to read and
@@ -2097,7 +2109,10 @@ func (c *cliState) configurePreShellDefaults(
 	// An interactive readline prompter is comparatively slow at
 	// reading input, so we only use it in interactive mode and when
 	// there is also a terminal on stdout.
-	if c.cliCtx.IsInteractive && c.sqlExecCtx.TerminalOutput {
+	canUseEditor := c.cliCtx.IsInteractive && c.sqlExecCtx.TerminalOutput
+	useEditor := canUseEditor && !c.sqlCtx.DisableLineEditor
+	c.iCtx.displayPrompt = canUseEditor
+	if useEditor {
 		// The readline initialization is not placed in
 		// the doStart() method because of the defer.
 		c.ins, c.exitErr = readline.InitFiles("cockroach",
@@ -2129,17 +2144,19 @@ func (c *cliState) configurePreShellDefaults(
 		cleanupFn = func() {}
 	}
 
-	if c.hasEditor() {
-		// We only enable prompt and history management when the
-		// interactive input prompter is enabled. This saves on churn and
-		// memory when e.g. piping a large SQL script through the
-		// command-line client.
-
+	if c.iCtx.displayPrompt {
 		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
 		c.iCtx.customPromptPattern = defaultPromptPattern
 		if c.sqlConnCtx.DebugMode {
 			c.iCtx.customPromptPattern = debugPromptPattern
 		}
+	}
+
+	if c.hasEditor() {
+		// We only enable prompt and history management when the
+		// interactive input prompter is enabled. This saves on churn and
+		// memory when e.g. piping a large SQL script through the
+		// command-line client.
 
 		c.ins.SetCompleter(c)
 		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
@@ -2304,8 +2321,15 @@ func (c *cliState) maybeHandleInterrupt() func() {
 				cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
 				c.iCtx.mu.Unlock()
 				if cancelFn == nil {
-					// No query currently executing; nothing to do.
-					continue
+					// No query currently executing.
+					// Do we have a line editor? If so, do nothing.
+					if c.ins != noLineEditor {
+						continue
+					}
+					// Otherwise, ctrl+c interrupts the shell. We do this
+					// by re-throwing the signal after stopping the signal capture.
+					signal.Reset(os.Interrupt)
+					_ = sysutil.InterruptSelf()
 				}
 
 				fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")

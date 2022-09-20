@@ -127,9 +127,12 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 		stats.frequencyMu.interval = ReporterInterval.Get(&stats.settings.SV)
 	})
 	_ = stopper.RunAsyncTask(ctx, "stats-reporter", func(ctx context.Context) {
+		ctx = logtags.AddTag(ctx, "replication-reporter", nil /* value */)
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
 		var timer timeutil.Timer
 		defer timer.Stop()
-		ctx = logtags.AddTag(ctx, "replication-reporter", nil /* value */)
 
 		replStatsSaver := makeReplicationStatsReportSaver()
 		constraintsSaver := makeReplicationConstraintStatusReportSaver()
@@ -164,6 +167,8 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 			case <-timerCh:
 				timer.Read = true
 			case <-changeCh:
+			case <-ctx.Done():
+				return
 			case <-stopper.ShouldQuiesce():
 				return
 			}
@@ -586,6 +591,11 @@ func visitRanges(
 		if rd.RangeID == 0 {
 			// We're done.
 			break
+		}
+
+		// Check for context cancellation.
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		newKey, err := resolver.resolveRange(ctx, &rd, cfg)

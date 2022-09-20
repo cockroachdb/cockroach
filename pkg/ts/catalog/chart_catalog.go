@@ -3451,6 +3451,9 @@ var charts = []sectionDescription{
 					"admission.requested.sql-root-start",
 					"admission.admitted.sql-root-start",
 					"admission.errored.sql-root-start",
+					"admission.requested.elastic-cpu",
+					"admission.admitted.elastic-cpu",
+					"admission.errored.elastic-cpu",
 				},
 			},
 			{
@@ -3462,6 +3465,7 @@ var charts = []sectionDescription{
 					"admission.wait_queue_length.sql-sql-response",
 					"admission.wait_queue_length.sql-leaf-start",
 					"admission.wait_queue_length.sql-root-start",
+					"admission.wait_queue_length.elastic-cpu",
 				},
 			},
 			{
@@ -3473,6 +3477,7 @@ var charts = []sectionDescription{
 					"admission.wait_sum.sql-sql-response",
 					"admission.wait_sum.sql-leaf-start",
 					"admission.wait_sum.sql-root-start",
+					"admission.wait_sum.elastic-cpu",
 				},
 			},
 			{
@@ -3484,6 +3489,7 @@ var charts = []sectionDescription{
 					"admission.wait_durations.sql-sql-response",
 					"admission.wait_durations.sql-leaf-start",
 					"admission.wait_durations.sql-root-start",
+					"admission.wait_durations.elastic-cpu",
 				},
 			},
 			{
@@ -3498,9 +3504,35 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Elastic CPU Utilization Limit",
+				Metrics: []string{
+					"admission.elastic_cpu.utilization_limit",
+				},
+			},
+			{
+				Title: "Scheduler Latency Listener",
+				Metrics: []string{
+					"admission.scheduler_latency_listener.p99_nanos",
+				},
+			},
+			{
+				Title: "Elastic CPU Durations",
+				Metrics: []string{
+					"admission.elastic_cpu.acquired_nanos",
+					"admission.elastic_cpu.returned_nanos",
+					"admission.elastic_cpu.max_available_nanos",
+				},
+			},
+			{
 				Title: "IO Tokens Exhausted Duration Sum",
 				Metrics: []string{
 					"admission.granter.io_tokens_exhausted_duration.kv",
+				},
+			},
+			{
+				Title: "IO Overload - IOThreshold Score",
+				Metrics: []string{
+					"admission.io.overload",
 				},
 			},
 		},

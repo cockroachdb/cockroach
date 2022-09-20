@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -196,7 +195,6 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 
 func TestRandomParquetExports(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 80780, "flaky test")
 	defer log.Scope(t).Close(t)
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()

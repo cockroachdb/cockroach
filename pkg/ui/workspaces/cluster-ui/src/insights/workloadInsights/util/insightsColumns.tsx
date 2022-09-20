@@ -26,7 +26,7 @@ export const insightsColumnLabels = {
   fingerprintID: "Fingerprint ID",
   numRetries: "Retries",
   isFullScan: "Full Scan",
-  contention: "Contention",
+  contention: "Contention Time",
   rowsProcessed: "Rows Processed",
 };
 

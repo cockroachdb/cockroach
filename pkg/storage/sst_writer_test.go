@@ -175,7 +175,7 @@ func TestSSTWriterRangeKeys(t *testing.T) {
 
 	require.NoError(t, sst.Finish())
 
-	iter, err := NewPebbleMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
+	iter, err := NewMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})

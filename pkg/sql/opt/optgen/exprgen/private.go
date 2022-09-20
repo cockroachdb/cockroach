@@ -55,6 +55,14 @@ func (eg *exprGen) evalPrivate(privType reflect.Type, expr lang.Expr) interface{
 
 	result := reflect.New(privType)
 
+	getField := func(fn *lang.FuncExpr, fieldName string) (reflect.Value, interface{}) {
+		field := result.Elem().FieldByName(fieldName)
+		if !field.IsValid() {
+			panic(errorf("invalid field %s for %s", fieldName, privType))
+		}
+		return field, eg.convertPrivateFieldValue(privType, fieldName, field.Type(), eg.eval(fn.Args[0]))
+	}
+
 	for _, item := range items {
 		// Each item must be of the form (FieldName Value).
 		fn, ok := item.(*lang.FuncExpr)
@@ -62,14 +70,29 @@ func (eg *exprGen) evalPrivate(privType reflect.Type, expr lang.Expr) interface{
 			panic(errorf("private list must contain items of the form (FieldName Value)"))
 		}
 		fieldName := fn.SingleName()
-		field := result.Elem().FieldByName(fieldName)
-		if !field.IsValid() {
-			panic(errorf("invalid field %s for %s", fieldName, privType))
+		if fieldName == "stats" && privType == reflect.TypeOf(props.Relational{}) {
+			// Special case: the stats field of props.Relational is unexported, so we
+			// have to use the Statistics method. We do this later, so skip for now.
+			continue
 		}
-		val := eg.convertPrivateFieldValue(privType, fieldName, field.Type(), eg.eval(fn.Args[0]))
+		field, val := getField(fn, fieldName)
 		field.Set(reflect.ValueOf(val))
 	}
-	return result.Interface()
+
+	ret := result.Interface()
+
+	// Special case for unexported stats field of props.Relational.
+	if privType == reflect.TypeOf(props.Relational{}) {
+		for _, item := range items {
+			fn, _ := item.(*lang.FuncExpr)
+			if fieldName := fn.SingleName(); fieldName == "stats" {
+				_, val := getField(fn, fieldName)
+				*ret.(*props.Relational).Statistics() = val.(props.Statistics)
+			}
+		}
+	}
+
+	return ret
 }
 
 func (eg *exprGen) convertPrivateFieldValue(

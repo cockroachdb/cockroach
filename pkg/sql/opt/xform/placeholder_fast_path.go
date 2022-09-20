@@ -59,7 +59,7 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 	// performance significantly (see #64214). So we only use the fast path if the
 	// estimated row count is small; typically this will happen when we constrain
 	// columns that form a key and we know there will be at most one row.
-	if rootRelProps.Stats.RowCount > maxRowCountForPlaceholderFastPath {
+	if rootRelProps.Statistics().RowCount > maxRowCountForPlaceholderFastPath {
 		return nil, false, nil
 	}
 

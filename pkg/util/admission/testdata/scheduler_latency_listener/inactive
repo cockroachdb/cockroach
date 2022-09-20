@@ -1,0 +1,87 @@
+# Explore how the controller behaves when there's no utilization.
+init limit=50%
+----
+
+params
+----
+target-p99       = 1ms
+min-util         = 5.00%
+max-util         = 75.00%
+inactive-util    = 12.00%
+adjustment-delta = 0.10%
+factor           = 2.00
+inactive-factor  = 0.25
+
+# Start a workload from scratch, increasing at 1% per tick.
+tick
+p99=1ms ticks=1 util-fraction=0.0
+p99=1ms ticks=1 util-fraction=+0.01
+----
+
+auto set-point=45% ticks=400
+----
+
+# Decrease the workload at 1% per tick.
+tick
+p99=1ms ticks=1 util-fraction=-0.01
+----
+
+# Run for a lot longer.
+auto set-point=45% ticks=2400
+----
+
+# We should observe the limit gradually decrease to inactive-util == 12.0%;
+# decreasing unused CPU limit to prevent bursts of over admission.
+plot width=70 height=20
+----
+----
+ 1276 ┤  ╭╮
+ 1214 ┤  ││
+ 1153 ┤  ││
+ 1092 ┤ ╭╯│╭╮
+ 1031 ┤ │ ╰╯│
+  969 ┼─────────────────────────────────────────────────────────────────────
+  908 ┤││   │││╭╯│
+  847 ┤││   ╰╯╰╯ │
+  785 ┤││        │
+  724 ┤││        │
+  663 ┤││        │
+  602 ┤││        ╰╮
+  540 ┤╰╯         │
+  479 ┤           │
+  418 ┤           │
+  356 ┤           │
+  295 ┤           ╰╮
+  234 ┤            │                     ╭╮╭╮   ╭╮    ╭╮           ╭╮
+  173 ┤            │╭╮   ╭──╮╭╮ ╭╮       ││││   ││    ││ ╭╮╭╮  ╭─╮ ││  ╭╮
+  111 ┤            │││   │  │││ │╰╮   ╭╮ │││╰──╮││  ╭─╯╰─╯╰╯│  │ │ ││╭╮││ ╭╮
+   50 ┤            ╰╯╰───╯  ╰╯╰─╯ ╰───╯╰─╯╰╯   ╰╯╰──╯       ╰──╯ ╰─╯╰╯╰╯╰─╯╰
+                           p99 scheduler latencies (μs)
+
+
+ 56.0 ┤ ╭╮
+ 53.2 ┤╭╯│
+ 50.4 ┼╯ ╭╮       ╭─╮
+ 47.6 ┤  ││       │ ╰──╮
+ 44.8 ┤ ╭╯╰╮     ╭╯    ╰──╮
+ 42.0 ┤ │  ╰────╮╯        ╰─╮
+ 39.2 ┤ │       ╰╮          ╰──╮
+ 36.4 ┤ │        │             ╰──╮
+ 33.6 ┤ │        │                ╰──╮
+ 30.8 ┤ │        │                   ╰─╮
+ 28.0 ┤ │        │                     ╰──╮
+ 25.2 ┤ │        ╰╮                       ╰──╮
+ 22.4 ┤╭╯         │                          ╰──╮
+ 19.6 ┤│          │                             ╰──╮
+ 16.8 ┤│          │                                ╰─╮
+ 14.0 ┤│          │                                  ╰──╮
+ 11.2 ┤│          │                                     ╰───────────────────
+  8.4 ┤│          │
+  5.6 ┤│          ╰╮
+  2.8 ┤│           │
+ -0.0 ┼╯           ╰────────────────────────────────────────────────────────
+                       elastic cpu utilization and limit (%)
+----
+----
+
+# vim:ft=sh

@@ -25,19 +25,19 @@ expr
   [
     (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
     (Cardinality "5 - 1000")
-    (Stats `[
+    (stats `[
       {
         "columns": ["a"],
         "distinct_count": 100,
-        "null_count": 0, 
-        "row_count": 100, 
+        "null_count": 0,
+        "row_count": 100,
         "created_at": "2018-01-01 1:00:00.00000+00:00"
       },
       {
         "columns": ["b"],
         "distinct_count": 20,
-        "null_count": 5, 
-        "row_count": 100, 
+        "null_count": 5,
+        "row_count": 100,
         "created_at": "2018-01-01 1:00:00.00000+00:00"
       }
     ]`)
@@ -56,33 +56,33 @@ expr
   [
     (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
     (Cardinality "-")
-    (Stats `[
+    (stats `[
       {
         "columns": ["a"],
         "distinct_count": 100,
-        "null_count": 0, 
-        "row_count": 100, 
+        "null_count": 0,
+        "row_count": 100,
         "created_at": "2018-01-01 1:00:00.00000+00:00"
       },
       {
         "columns": ["a"],
         "distinct_count": 110,
-        "null_count": 0, 
-        "row_count": 110, 
+        "null_count": 0,
+        "row_count": 110,
         "created_at": "2018-01-02 1:00:00.00000+00:00"
       },
       {
         "columns": ["b"],
         "distinct_count": 20,
-        "null_count": 5, 
-        "row_count": 100, 
+        "null_count": 5,
+        "row_count": 100,
         "created_at": "2018-01-01 1:00:00.00000+00:00"
       },
       {
         "columns": ["b"],
         "distinct_count": 22,
-        "null_count": 5, 
-        "row_count": 120, 
+        "null_count": 5,
+        "row_count": 120,
         "created_at": "2018-01-03 1:00:00.00000+00:00"
       }
     ]`)

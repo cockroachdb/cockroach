@@ -9,6 +9,7 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/strutil",
         "//pkg/util/timeofday",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",

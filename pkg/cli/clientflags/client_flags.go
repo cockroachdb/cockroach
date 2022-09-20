@@ -95,6 +95,9 @@ func AddSQLFlags(
 		// then use the value "true".
 		f.Lookup(cliflags.SafeUpdates.Name).NoOptDefVal = "true"
 
+		// --no-line-editor
+		cliflagcfg.BoolFlagDepth(1, f, &sqlCfg.ShellCtx.DisableLineEditor, cliflags.NoLineEditor)
+
 		// --read-only
 		cliflagcfg.BoolFlagDepth(1, f, &sqlCfg.ReadOnly, cliflags.ReadOnly)
 

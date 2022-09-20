@@ -19,7 +19,7 @@ eexpect ":/# "
 end_test
 
 start_test "Check that the read-only flag works interactively"
-send "$argv sql --read-only | cat\r"
+send "$argv sql --no-line-editor --read-only | cat\r"
 # We can't immediately send input, because the shell will eat stdin just before it's ready.
 eexpect "brief introduction"
 sleep 0.4

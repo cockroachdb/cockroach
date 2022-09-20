@@ -1639,7 +1639,12 @@ type webhookSinkTestfeedPayload struct {
 
 // extractValueFromJSONMessage extracts the value of the first element of
 // the payload array from an webhook sink JSON message.
-func extractValueFromJSONMessage(message []byte) ([]byte, error) {
+func extractValueFromJSONMessage(message []byte) (val []byte, err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "message was '%s'", message)
+		}
+	}()
 	var parsed webhookSinkTestfeedPayload
 	if err := gojson.Unmarshal(message, &parsed); err != nil {
 		return nil, err
@@ -1649,7 +1654,6 @@ func extractValueFromJSONMessage(message []byte) ([]byte, error) {
 		return nil, fmt.Errorf("payload value in json message contains no elements")
 	}
 
-	var err error
 	var value []byte
 	if value, err = reformatJSON(keyParsed[0]); err != nil {
 		return nil, err

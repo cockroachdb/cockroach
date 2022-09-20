@@ -2015,13 +2015,13 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 		// Make sure we have estimated stats for this column.
 		colSet := opt.MakeColSet(col)
 		memo.RequestColStat(&ot.evalCtx, rel, colSet)
-		stat, ok := relProps.Stats.ColStats.Lookup(colSet)
+		stat, ok := relProps.Statistics().ColStats.Lookup(colSet)
 		if !ok {
 			return nil, fmt.Errorf("could not find statistic for column %s", colName)
 		}
 		jsonStats[i] = ot.makeStat(
 			[]string{colName},
-			uint64(int64(math.Round(relProps.Stats.RowCount))),
+			uint64(int64(math.Round(relProps.Statistics().RowCount))),
 			uint64(int64(math.Round(stat.DistinctCount))),
 			uint64(int64(math.Round(stat.NullCount))),
 		)
@@ -2196,7 +2196,7 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	if err != nil {
 		return err
 	}
-	if err := ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */, false /* fromSQL */); err != nil {
+	if err := ot.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
 		return err
 	}
 	ot.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)

@@ -473,7 +473,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	ba.Add(&req)
 	// Since we are talking directly to the replica, we need to explicitly do
 	// admission control here, as we are bypassing server.Node.
-	var admissionHandle interface{}
+	var admissionHandle AdmissionHandle
 	if r.admissionController != nil {
 		pri := admissionpb.WorkPriority(gc.AdmissionPriority.Get(&r.repl.ClusterSettings().SV))
 		ba.AdmissionHeader = roachpb.AdmissionHeader{

@@ -194,13 +194,34 @@ func WrapFunctionDescRefErr(id descpb.ID, err error) error {
 
 // NewMutableAccessToVirtualSchemaError is returned when trying to mutably
 // access a virtual schema object.
-func NewMutableAccessToVirtualSchemaError(entry VirtualSchema, object string) error {
-	switch entry.Desc().GetName() {
+func NewMutableAccessToVirtualSchemaError(schema SchemaDescriptor) error {
+	switch schema.SchemaKind() {
+	case SchemaPublic:
+		return pgerror.New(pgcode.InsufficientPrivilege,
+			"descriptorless public schema cannot be modified")
+	case SchemaTemporary:
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"%s is a temporary schema and cannot be modified", tree.ErrNameString(schema.GetName()))
+	case SchemaVirtual:
+		if schema.GetName() == "pg_catalog" {
+			return pgerror.New(pgcode.InsufficientPrivilege, "pg_catalog is a system catalog")
+		}
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"%s is a virtual schema and cannot be modified", tree.ErrNameString(schema.GetName()))
+	}
+	return errors.AssertionFailedf("schema %q (%d) of kind %d is not virtual",
+		schema.GetName(), schema.GetID(), schema.SchemaKind())
+}
+
+// NewMutableAccessToVirtualObjectError is returned when trying to mutably
+// access a virtual schema object.
+func NewMutableAccessToVirtualObjectError(schema VirtualSchema, object VirtualObject) error {
+	switch schema.Desc().GetName() {
 	case "pg_catalog":
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			"%s is a system catalog", tree.ErrNameString(object))
+			"%s is a system catalog", tree.ErrNameString(object.Desc().GetName()))
 	default:
 		return pgerror.Newf(pgcode.WrongObjectType,
-			"%s is a virtual object and cannot be modified", tree.ErrNameString(object))
+			"%s is a virtual object and cannot be modified", tree.ErrNameString(object.Desc().GetName()))
 	}
 }

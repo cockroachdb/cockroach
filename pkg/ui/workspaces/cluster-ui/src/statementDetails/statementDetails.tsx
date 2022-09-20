@@ -14,7 +14,7 @@ import "antd/lib/col/style";
 import "antd/lib/row/style";
 import "antd/lib/tabs/style";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
-import { Text, InlineAlert } from "@cockroachlabs/ui-components";
+import { InlineAlert, Text } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Location } from "history";
 import _, { isNil } from "lodash";
@@ -28,14 +28,14 @@ import { AxisUnits } from "../graphs";
 import { AlignedData, Options } from "uplot";
 
 import {
-  intersperse,
-  unique,
-  queryByName,
   appAttr,
   appNamesAttr,
+  DATE_FORMAT_24_UTC,
+  intersperse,
+  queryByName,
   RenderCount,
   TimestampToMoment,
-  DATE_FORMAT_24_UTC,
+  unique,
 } from "src/util";
 import { getValidErrorsList, Loading } from "src/loading";
 import { Button } from "src/button";
@@ -64,14 +64,15 @@ import {
   ActivateStatementDiagnosticsModal,
 } from "../statementsDiagnostics";
 import {
+  generateContentionTimeseries,
   generateExecCountTimeseries,
   generateExecRetriesTimeseries,
   generateExecuteAndPlanningTimeseries,
   generateRowsProcessedTimeseries,
-  generateContentionTimeseries,
 } from "./timeseriesUtils";
 import { Delayed } from "../delayed";
 import moment from "moment";
+
 type IDuration = google.protobuf.IDuration;
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -708,7 +709,7 @@ export class StatementDetails extends React.Component<
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
               <BarGraphTimeSeries
-                title={`Contention${noSamples}`}
+                title={`Contention Time${noSamples}`}
                 alignedData={contentionTimeseries}
                 uPlotOptions={contentionOps}
                 tooltip={unavailableTooltip}

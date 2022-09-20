@@ -11,6 +11,8 @@
 package storage
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -581,6 +583,11 @@ func (i *MVCCIncrementalIterator) advance(seeked bool) {
 
 // Valid implements SimpleMVCCIterator.
 func (i *MVCCIncrementalIterator) Valid() (bool, error) {
+	if util.RaceEnabled && i.valid {
+		if err := i.assertInvariants(); err != nil {
+			return false, err
+		}
+	}
 	return i.valid, i.err
 }
 
@@ -741,4 +748,148 @@ func (i *MVCCIncrementalIterator) TryGetIntentError() error {
 	return &roachpb.WriteIntentError{
 		Intents: i.intents,
 	}
+}
+
+// assertInvariants asserts iterator invariants. The iterator must be valid.
+func (i *MVCCIncrementalIterator) assertInvariants() error {
+	// Check general SimpleMVCCIterator API invariants.
+	if err := assertSimpleMVCCIteratorInvariants(i); err != nil {
+		return err
+	}
+
+	// The underlying iterator must be valid when the MVCCIncrementalIterator is.
+	if ok, err := i.iter.Valid(); err != nil || !ok {
+		errMsg := err.Error()
+		return errors.AssertionFailedf("i.iter is invalid with err=%s", errMsg)
+	}
+
+	iterKey := i.iter.UnsafeKey()
+
+	// endTime must be set, and be at or after startTime.
+	if i.endTime.IsEmpty() {
+		return errors.AssertionFailedf("i.endTime not set")
+	}
+	if i.endTime.Less(i.startTime) {
+		return errors.AssertionFailedf("i.endTime %s before i.startTime %s", i.endTime, i.startTime)
+	}
+
+	// If startTime is empty, the TBI should be disabled in non-metamorphic builds.
+	if !util.IsMetamorphicBuild() && i.startTime.IsEmpty() && i.timeBoundIter != nil {
+		return errors.AssertionFailedf("TBI enabled without i.startTime")
+	}
+
+	// If the TBI is enabled, its position should be <= iter unless iter is on an intent.
+	if i.timeBoundIter != nil && iterKey.Timestamp.IsSet() {
+		if ok, _ := i.timeBoundIter.Valid(); ok {
+			if tbiKey := i.timeBoundIter.UnsafeKey(); tbiKey.Compare(iterKey) > 0 {
+				return errors.AssertionFailedf("TBI at %q ahead of i.iter at %q", tbiKey, iterKey)
+			}
+		}
+	}
+
+	// i.meta should match the underlying iterator's key.
+	if hasPoint, _ := i.iter.HasPointAndRange(); hasPoint {
+		metaTS := i.meta.Timestamp.ToTimestamp()
+		if iterKey.Timestamp.IsSet() && !metaTS.EqOrdering(iterKey.Timestamp) {
+			return errors.AssertionFailedf("i.meta.Timestamp %s differs from i.iter.UnsafeKey %s",
+				metaTS, iterKey)
+		}
+		if metaTS.IsEmpty() && i.meta.Txn == nil {
+			return errors.AssertionFailedf("empty i.meta for point key %s", iterKey)
+		}
+	} else {
+		if i.meta.Timestamp.ToTimestamp().IsSet() || i.meta.Txn != nil {
+			return errors.AssertionFailedf("i.iter hasPoint=false but non-empty i.meta %+v", i.meta)
+		}
+	}
+
+	// Unlike most SimpleMVCCIterators, it's possible to return
+	// hasPoint=false,hasRange=false following a NextIgnoringTime() call.
+	hasPoint, hasRange := i.HasPointAndRange()
+	if !hasPoint && !hasRange {
+		if !i.ignoringTime {
+			return errors.AssertionFailedf(
+				"hasPoint=false,hasRange=false invalid when i.ignoringTime=false")
+		}
+		if i.RangeKeysIgnoringTime().IsEmpty() {
+			return errors.AssertionFailedf(
+				"hasPoint=false,hasRange=false and RangeKeysIgnoringTime() returned nothing")
+		}
+	}
+
+	// Point keys and range keys must be within the time bounds, unless
+	// we're ignoring time bounds.
+	assertInRange := func(ts hlc.Timestamp, format string, args ...interface{}) error {
+		if i.startTime.IsSet() && ts.LessEq(i.startTime) || i.endTime.Less(ts) {
+			return errors.AssertionFailedf("%s not in range (%s-%s]",
+				fmt.Sprintf(format, args...), i.startTime, i.endTime)
+		}
+		return nil
+	}
+	key := i.UnsafeKey()
+
+	if hasPoint && !i.ignoringTime {
+		if key.Timestamp.IsEmpty() {
+			intent := key.Clone()
+			intent.Timestamp = i.meta.Timestamp.ToTimestamp()
+			if err := assertInRange(intent.Timestamp, "intent %s", intent); err != nil {
+				return err
+			}
+		} else {
+			if err := assertInRange(key.Timestamp, "point key %s", key); err != nil {
+				return err
+			}
+		}
+	}
+	if hasRange {
+		rangeKeys := i.RangeKeys()
+		for _, v := range rangeKeys.Versions {
+			if err := assertInRange(v.Timestamp, "range key %s", rangeKeys.AsRangeKey(v)); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Check that intents are processed according to intentPolicy.
+	if hasPoint && key.Timestamp.IsEmpty() && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
+		return errors.AssertionFailedf("emitted intent %s not allowed by i.intentPolicy %v",
+			key, i.intentPolicy)
+	}
+	if len(i.intents) > 0 && i.intentPolicy != MVCCIncrementalIterIntentPolicyAggregate {
+		return errors.AssertionFailedf("i.intents set but not allowed by i.intentPolicy %v",
+			i.intentPolicy)
+	}
+	for _, intent := range i.intents {
+		intentKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.WriteTimestamp}
+		if err := assertInRange(intentKey.Timestamp, "gathered intent %s", intentKey); err != nil {
+			return err
+		}
+	}
+
+	// RangeKeys() must be a subset of RangeKeysIgnoringTime().
+	if hasRange {
+		rangeKeys := i.RangeKeys()
+		rangeKeysIgnoringTime := i.RangeKeysIgnoringTime()
+		if !rangeKeys.Bounds.Equal(rangeKeysIgnoringTime.Bounds) {
+			return errors.AssertionFailedf("RangeKeys=%s does not match RangeKeysIgnoringTime=%s",
+				rangeKeys.Bounds, rangeKeysIgnoringTime.Bounds)
+		}
+		trimmedVersions := rangeKeysIgnoringTime.Versions
+		trimmedVersions.Trim(rangeKeys.Oldest(), rangeKeys.Newest())
+		if !rangeKeys.Versions.Equal(trimmedVersions) {
+			return errors.AssertionFailedf("RangeKeys=%s not subset of RangeKeysIgnoringTime=%s",
+				rangeKeys, rangeKeysIgnoringTime)
+		}
+
+	} else {
+		// RangeKeysIgnoringTime must cover the current iterator position.
+		if rangeKeys := i.RangeKeysIgnoringTime(); !rangeKeys.IsEmpty() {
+			if !rangeKeys.Bounds.ContainsKey(key.Key) {
+				return errors.AssertionFailedf("RangeKeysIgnoringTime %s does not cover position %s",
+					rangeKeys.Bounds, key)
+			}
+		}
+	}
+
+	return nil
 }

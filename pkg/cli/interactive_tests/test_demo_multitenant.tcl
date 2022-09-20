@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 start_test "Check --multitenant flag runs as expected"
 
 # Start a demo with --multitenant set
-spawn $argv demo --empty --nodes 3 --multitenant
+spawn $argv demo --no-line-editor --empty --nodes 3 --multitenant
 
 eexpect "system tenant"
 eexpect "tenant 1"

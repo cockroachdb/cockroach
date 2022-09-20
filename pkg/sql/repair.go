@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -485,7 +486,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 	if val.Value != nil {
 		existingID = descpb.ID(val.ValueInt())
 	}
-	flags := p.CommonLookupFlags(true /* required */)
+	flags := p.CommonLookupFlagsRequired()
 	flags.IncludeDropped = true
 	flags.IncludeOffline = true
 	validateDescriptor := func() error {
@@ -786,7 +787,8 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 		Key: tableSpan.Key, EndKey: tableSpan.EndKey,
 	}
 	b := &kv.Batch{}
-	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) {
+	if p.execCfg.Settings.Version.IsActive(ctx, clusterversion.UseDelRangeInGCJob) &&
+		storage.CanUseMVCCRangeTombstones(ctx, p.execCfg.Settings) {
 		b.AddRawRequest(&roachpb.DeleteRangeRequest{
 			RequestHeader:           requestHeader,
 			UseRangeTombstone:       true,

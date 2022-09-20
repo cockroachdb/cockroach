@@ -209,9 +209,16 @@ func filtersMatchLeftRowsAtMostOnce(left, right RelExpr, filters FiltersExpr) bo
 	}
 
 	// Condition #2.
-	filtersFDs := getFiltersFDs(filters)
-	closure := filtersFDs.ComputeEquivClosure(left.Relational().OutputCols)
-	return right.Relational().FuncDeps.ColsAreLaxKey(closure)
+	equivClosure := left.Relational().OutputCols
+	if len(filters) > 0 {
+		// Only copy if necessary since the resulting allocations can become
+		// significant for complex queries with many joins.
+		equivClosure = equivClosure.Copy()
+	}
+	for i := range filters {
+		equivClosure = filters[i].ScalarProps().FuncDeps.ComputeEquivClosureNoCopy(equivClosure)
+	}
+	return right.Relational().FuncDeps.ColsAreLaxKey(equivClosure)
 }
 
 // filtersMatchAllLeftRows returns true when each row in the given join's left
@@ -624,18 +631,4 @@ func getTableIDsFromCols(md *opt.Metadata, cols opt.ColSet) (tables []opt.TableI
 		tables = append(tables, tableID)
 	}
 	return tables
-}
-
-// getFiltersFDs returns a FuncDepSet with the FDs from the FiltersItems in
-// the given FiltersExpr.
-func getFiltersFDs(filters FiltersExpr) props.FuncDepSet {
-	if len(filters) == 1 {
-		return filters[0].ScalarProps().FuncDeps
-	}
-
-	filtersFDs := props.FuncDepSet{}
-	for i := range filters {
-		filtersFDs.AddFrom(&filters[i].ScalarProps().FuncDeps)
-	}
-	return filtersFDs
 }

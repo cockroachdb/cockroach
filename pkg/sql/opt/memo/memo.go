@@ -487,7 +487,7 @@ func (m *Memo) Detach() {
 
 		switch t := parent.(type) {
 		case RelExpr:
-			t.Relational().Stats.ColStats = props.ColStatsMap{}
+			t.Relational().Statistics().ColStats = props.ColStatsMap{}
 		}
 	}
 	clearColStats(m.RootExpr())

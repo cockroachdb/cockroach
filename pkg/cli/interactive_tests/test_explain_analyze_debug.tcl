@@ -14,7 +14,7 @@ start_test "Ensure that EXPLAIN ANALYZE (DEBUG) works as expected in the sql she
 start_server $argv
 
 # Spawn a sql shell.
-spawn $argv sql
+spawn $argv sql --no-line-editor
 set client_spawn_id $spawn_id
 eexpect root@
 
@@ -82,7 +82,7 @@ start_test "Ensure that EXPLAIN ANALYZE (DEBUG) works for a tenant"
 
 start_tenant 5 $argv
 
-spawn $argv sql --port [tenant_port 5]
+spawn $argv sql --no-line-editor --port [tenant_port 5]
 
 set client_spawn_id $spawn_id
 eexpect root@

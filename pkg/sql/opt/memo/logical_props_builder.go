@@ -938,7 +938,7 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 	// Statistics
 	// ----------
 	// Inherited from the input expression.
-	rel.Stats = inputProps.Stats
+	*rel.Statistics() = *inputProps.Statistics()
 }
 
 func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *props.Relational) {
@@ -2134,7 +2134,7 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 		relational.Cardinality = props.AnyCardinality
 		relational.FuncDeps.CopyFrom(MakeTableFuncDep(md, join.Table))
 		relational.FuncDeps.ProjectCols(relational.OutputCols)
-		relational.Stats = *sb.makeTableStatistics(join.Table)
+		*relational.Statistics() = *sb.makeTableStatistics(join.Table)
 	}
 	return relational
 }
@@ -2156,7 +2156,7 @@ func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder)
 		relational.FuncDeps.ProjectCols(relational.OutputCols)
 
 		// TODO(rytaft): Change this to use inverted index stats once available.
-		relational.Stats = *sb.makeTableStatistics(join.Table)
+		*relational.Statistics() = *sb.makeTableStatistics(join.Table)
 	}
 	return relational
 }
@@ -2201,7 +2201,7 @@ func ensureInputPropsForIndex(
 		relProps.Cardinality = props.AnyCardinality
 		relProps.FuncDeps.CopyFrom(MakeTableFuncDep(md, tabID))
 		relProps.FuncDeps.ProjectCols(relProps.OutputCols)
-		relProps.Stats = *sb.makeTableStatistics(tabID)
+		*relProps.Statistics() = *sb.makeTableStatistics(tabID)
 	}
 }
 
@@ -2624,7 +2624,7 @@ func (b *logicalPropsBuilder) buildMemoCycleTestRelProps(
 	// failures.
 	rel.OutputCols = inputProps.OutputCols
 	// Make the row count non-zero to avoid assertion failures.
-	rel.Stats.RowCount = 1
+	rel.Statistics().RowCount = 1
 }
 
 // WithUses returns the WithUsesMap for the given expression.

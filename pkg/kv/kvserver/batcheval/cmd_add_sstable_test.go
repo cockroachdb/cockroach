@@ -921,6 +921,7 @@ func TestEvalAddSSTable(t *testing.T) {
 						// Write initial data.
 						intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, hlc.Timestamp{WallTime: intentTS * 1e9}, 0, 1)
 						b := engine.NewBatch()
+						defer b.Close()
 						for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
 							switch kv := tc.data[i].(type) {
 							case storage.MVCCKeyValue:
@@ -1135,6 +1136,7 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 			engine := storage.NewDefaultInMemForTesting()
 			defer engine.Close()
 			opLogger := storage.NewOpLoggerBatch(engine.NewBatch())
+			defer opLogger.Close()
 
 			// Build and add SST.
 			sst, start, end := storageutils.MakeSST(t, st, tc.sst)

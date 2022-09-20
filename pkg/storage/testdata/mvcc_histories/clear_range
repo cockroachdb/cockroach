@@ -1,6 +1,4 @@
 
-# Populate some values
-
 run ok
 with t=A v=abc resolve
   txn_begin ts=44
@@ -9,6 +7,7 @@ with t=A v=abc resolve
   put  k=b
   put  k=b/123
   put  k=c
+put k=i v=inline
 ----
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 wto=false gul=0,0
@@ -17,16 +16,7 @@ data: "a/123"/44.000000000,0 -> /BYTES/abc
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
-
-run ok
-is_span_empty k=a end=+a
-----
-false
-
-run ok
-is_span_empty k=a end=z
-----
-false
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 clear_range k=a end=+a
@@ -36,16 +26,7 @@ data: "a/123"/44.000000000,0 -> /BYTES/abc
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
-
-run ok
-is_span_empty k=a end=+a
-----
-true
-
-run ok
-is_span_empty k=a end=-a
-----
-false
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 clear_range k=a end=-a
@@ -54,11 +35,7 @@ clear_range k=a end=-a
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
-
-run ok
-is_span_empty k=a end=-a
-----
-true
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 clear_range k=a end==b
@@ -67,6 +44,7 @@ clear_range k=a end==b
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 clear_range k=a end=+b
@@ -74,15 +52,17 @@ clear_range k=a end=+b
 >> at end:
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
 clear_range k=a end=-b
 ----
 >> at end:
 data: "c"/44.000000000,0 -> /BYTES/abc
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
 
 run ok
-clear_range k=a end=-c
+clear_range k=c end=z
 ----
 >> at end:
 <no data>

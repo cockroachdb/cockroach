@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-spawn $argv sql
+spawn $argv sql --no-line-editor
 
 start_test "Check that the client starts with the welcome message."
 eexpect "# Welcome to the CockroachDB SQL shell."
@@ -71,7 +71,7 @@ start_test "Check that the client picks up a new server version, and warns about
 set env(COCKROACH_TESTING_VERSION_TAG) "v0.1.0-fakever"
 start_server $argv
 set env(COCKROACH_TESTING_VERSION_TAG) "v0.2.0-fakever"
-spawn $argv sql
+spawn $argv sql --no-line-editor
 send "select 1;\r"
 eexpect "# Client version: CockroachDB"
 eexpect "# Server version: CockroachDB"

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -432,7 +433,7 @@ func (s *TestState) ReadObjectNamesAndIDs(
 	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
 ) (names tree.TableNames, ids descpb.IDs) {
 	m := make(map[string]descpb.ID)
-	_ = s.uncommitted.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+	_ = s.uncommitted.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
 		if e.GetParentID() == db.GetID() && e.GetParentSchemaID() == schema.GetID() {
 			m[e.GetName()] = e.GetID()
 			names = append(names, tree.MakeTableNameWithSchema(

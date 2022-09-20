@@ -797,9 +797,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	if !f.HasFlags(ExprFmtHideStats) {
 		if f.HasFlags(ExprFmtHideHistograms) {
-			tp.Childf("stats: %s", relational.Stats.StringWithoutHistograms())
+			tp.Childf("stats: %s", relational.Statistics().StringWithoutHistograms())
 		} else {
-			tp.Childf("stats: %s", &relational.Stats)
+			tp.Childf("stats: %s", relational.Statistics())
 		}
 	}
 
