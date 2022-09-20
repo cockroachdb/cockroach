@@ -114,6 +114,16 @@ func (tc *TestCluster) StartedDefaultTestTenant() bool {
 	return !tc.Servers[0].Cfg.DisableDefaultTestTenant
 }
 
+// TenantOrServer returns either the ith server in the cluster or the tenant server associated with
+// the ith server if the cluster started with a default test tenant.
+func (tc *TestCluster) TenantOrServer(idx int) serverutils.TestTenantInterface {
+	s := tc.Server(idx)
+	if tc.StartedDefaultTestTenant() {
+		return s.TestTenants()[0]
+	}
+	return s
+}
+
 // stopServers stops the stoppers for each individual server in the cluster.
 // This method ensures that servers that were previously stopped explicitly are
 // not double-stopped.

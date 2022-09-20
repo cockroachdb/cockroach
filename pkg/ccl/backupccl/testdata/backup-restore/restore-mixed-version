@@ -1,4 +1,4 @@
-new-server name=s1 beforeVersion=Start22_2
+new-server name=s1 beforeVersion=Start22_2 disable-tenant
 ----
 
 exec-sql
@@ -15,7 +15,7 @@ BACKUP INTO 'nodelocal://1/full_cluster_backup/';
 # This is a server where the cluster version is behind the binary version. Such
 # a condition only occurs when the user has upgraded the node to a new major
 # version but has not yet finalized the upgrade.
-new-server name=s2 beforeVersion=Start22_2 share-io-dir=s1
+new-server name=s2 beforeVersion=Start22_2 share-io-dir=s1 disable-tenant
 ----
 
 exec-sql expect-error-regex=pq: cluster restore not supported during major version upgrade: restore started at cluster version 22.1 but binary version is.*

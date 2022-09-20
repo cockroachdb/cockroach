@@ -1,7 +1,9 @@
 # Tests that Backups without Revisions History and Restore properly handle
 # range keys
 
-new-server name=s1
+# disabled to run within tenants because the kv request cmd only works on system tenants
+
+new-server name=s1 disable-tenant
 ----
 
 exec-sql

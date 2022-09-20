@@ -329,9 +329,12 @@ SELECT * FROM d.foofoo;
 # RESTORE AOST in-progress IMPORT, these tables should get thrown out.
 #
 # TODO(msbutler): cover mixed version RESTORE TABLE
+#
+# Disabled to run within tenants because version gating infra does not play nice within tenants.
+# More investigation required.
 
 
-new-server name=s4 share-io-dir=s1 allow-implicit-access beforeVersion=Start22_2
+new-server name=s4 share-io-dir=s1 allow-implicit-access beforeVersion=Start22_2 disable-tenant
 ----
 
 exec-sql
@@ -529,7 +532,7 @@ d foofoo table 3 incremental
 
 
 # Restore the backups taken from a mixed version chain
-new-server name=s5 share-io-dir=s1 allow-implicit-access
+new-server name=s5 share-io-dir=s1 allow-implicit-access disable-tenant
 ----
 
 

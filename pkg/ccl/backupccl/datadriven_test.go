@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -133,6 +134,7 @@ type serverCfg struct {
 	localities     string
 	beforeVersion  string
 	testingKnobCfg string
+	disableTenant  bool
 }
 
 func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
@@ -140,6 +142,7 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	var cleanup func()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
+	params.ServerArgs.DisableDefaultTestTenant = cfg.disableTenant
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
@@ -271,6 +274,9 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //     for possible values.
 //
 //   - testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
+//
+//   - disable-tenant : ensures the test is never run in a multitenant environment by
+//     setting testserverargs.DisableDefaultTestTenant to true.
 //
 //   - "upgrade-server version=<version>"
 //     Upgrade the cluster version of the active server to the passed in
@@ -452,6 +458,7 @@ func TestDataDriven(t *testing.T) {
 			case "new-server":
 				var name, shareDirWith, iodir, localities, beforeVersion, testingKnobCfg string
 				var splits int
+				var disableTenant bool
 				nodes := singleNode
 				var io base.ExternalIODirConfig
 				d.ScanArgs(t, "name", &name)
@@ -478,9 +485,16 @@ func TestDataDriven(t *testing.T) {
 				}
 				if d.HasArg("beforeVersion") {
 					d.ScanArgs(t, "beforeVersion", &beforeVersion)
+					if !d.HasArg("disable-tenant") {
+						// TODO(msbutler): figure out why test tenants don't mix with version testing
+						t.Fatal("tests that use beforeVersion must use disable-tenant")
+					}
 				}
 				if d.HasArg("testingKnobCfg") {
 					d.ScanArgs(t, "testingKnobCfg", &testingKnobCfg)
+				}
+				if d.HasArg("disable-tenant") {
+					disableTenant = true
 				}
 
 				lastCreatedServer = name
@@ -493,6 +507,7 @@ func TestDataDriven(t *testing.T) {
 					localities:     localities,
 					beforeVersion:  beforeVersion,
 					testingKnobCfg: testingKnobCfg,
+					disableTenant:  disableTenant,
 				}
 				err := ds.addServer(t, cfg)
 				if err != nil {
@@ -770,11 +785,15 @@ func TestDataDriven(t *testing.T) {
 
 			case "create-dummy-system-table":
 				db := ds.servers[lastCreatedServer].DB()
-				codec := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig).Codec
+				execCfg := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig)
+				testTenants := ds.servers[lastCreatedServer].TestTenants()
+				if len(testTenants) > 0 {
+					execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
+				}
+				codec := execCfg.Codec
 				dummyTable := systemschema.SettingsTable
 				err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					id, err := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig).
-						DescIDGenerator.GenerateUniqueDescID(ctx)
+					id, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
 					if err != nil {
 						return err
 					}
@@ -842,7 +861,7 @@ func handleKVRequest(
 		err := ds.getSQLDB(t, server, user).QueryRow(`SELECT id FROM system.namespace WHERE name = $1`,
 			target).Scan(&tableID)
 		require.NoError(t, err)
-		bankSpan := makeTableSpan(tableID)
+		bankSpan := makeTableSpan(keys.SystemSQLCodec, tableID)
 		dr := roachpb.DeleteRangeRequest{
 			// Bogus span to make it a valid request.
 			RequestHeader: roachpb.RequestHeader{

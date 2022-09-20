@@ -1,6 +1,8 @@
 subtest backup-feature-flags
 
-new-server name=s1
+# disabled for tenants as they can't enable/disable backup and restore features
+
+new-server name=s1 disable-tenant
 ----
 
 exec-sql

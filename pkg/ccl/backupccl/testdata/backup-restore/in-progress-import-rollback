@@ -7,7 +7,9 @@
 # - roll it back it back non-mvcc
 # - run an inc backup and ensure we reintroduce the table spans
 
-new-server name=s1
+# disabled to run within tenant as they don't have access to the
+# storage.mvcc.range_tombstones.enabled cluster setting
+new-server name=s1 disable-tenant
 ----
 
 ###########

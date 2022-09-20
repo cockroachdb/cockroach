@@ -1,7 +1,9 @@
 # Test schema only multi region restore this test is exactly the same as the 'multiregion' datadriven
 # test, except schema_only RESTORE is used
 
-new-server name=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1
+# disabled to run within tenant because multiregion primitives are not supported within tenant
+
+new-server name=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
 ----
 
 exec-sql
@@ -26,7 +28,7 @@ BACKUP INTO 'nodelocal://1/full_cluster_backup/';
 ----
 
 # A new cluster with the same locality settings.
-new-server name=s2 share-io-dir=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1
+new-server name=s2 share-io-dir=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1,eu-central-1
 ----
 
 exec-sql
@@ -51,7 +53,7 @@ postgres root <nil> <nil> {} <nil>
 system node <nil> <nil> {} <nil>
 
 # A new cluster with different localities settings.
-new-server name=s3 share-io-dir=s1 allow-implicit-access localities=eu-central-1,eu-north-1
+new-server name=s3 share-io-dir=s1 allow-implicit-access disable-tenant localities=eu-central-1,eu-north-1
 ----
 
 exec-sql
@@ -143,7 +145,7 @@ BACKUP DATABASE eu_central_db INTO 'nodelocal://1/eu_central_database_backup/';
 ----
 
 # New cluster for a cluster backup.
-new-server name=s4 share-io-dir=s1 allow-implicit-access localities=eu-central-1,eu-north-1
+new-server name=s4 share-io-dir=s1 allow-implicit-access disable-tenant localities=eu-central-1,eu-north-1
 ----
 
 exec-sql ignore-notice

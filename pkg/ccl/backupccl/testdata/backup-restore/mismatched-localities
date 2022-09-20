@@ -1,4 +1,6 @@
-new-server name=s1 allow-implicit-access localities=us-east-1,us-west-1
+# disabled to run within tenant because multiregion primitives are not supported within tenant
+
+new-server name=s1 allow-implicit-access disable-tenant localities=us-east-1,us-west-1
 ----
 
 exec-sql
