@@ -388,7 +388,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 // ExplainFactory and annotates the node with more information if so.
 func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 	if ef, ok := b.factory.(exec.ExplainFactory); ok {
-		stats := &e.Relational().Stats
+		stats := e.Relational().Statistics()
 		val := exec.EstimatedStats{
 			TableStatsAvailable: stats.Available,
 			RowCount:            stats.RowCount,
@@ -616,8 +616,8 @@ func (b *Builder) scanParams(
 	// been removed by DetachMemo. Update that function if the column stats are
 	// needed here in the future.
 	var rowCount float64
-	if relProps.Stats.Available {
-		rowCount = relProps.Stats.RowCount
+	if relProps.Statistics().Available {
+		rowCount = relProps.Statistics().RowCount
 	}
 
 	if scan.PartitionConstrainedScan {
@@ -715,7 +715,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
-	stats := scan.Relational().Stats
+	stats := scan.Relational().Statistics()
 	if !tab.IsVirtualTable() && isUnfiltered {
 		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
@@ -1167,8 +1167,8 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		// it during the costing.
 		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
 		// choosing a side.
-		leftRowCount := leftExpr.Relational().Stats.RowCount
-		rightRowCount := rightExpr.Relational().Stats.RowCount
+		leftRowCount := leftExpr.Relational().Statistics().RowCount
+		rightRowCount := rightExpr.Relational().Statistics().RowCount
 		if leftRowCount < rightRowCount {
 			if joinType == descpb.LeftSemiJoin {
 				joinType = descpb.RightSemiJoin
@@ -1252,8 +1252,8 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 		// it during the costing.
 		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
 		// choosing a side.
-		leftRowCount := leftExpr.Relational().Stats.RowCount
-		rightRowCount := rightExpr.Relational().Stats.RowCount
+		leftRowCount := leftExpr.Relational().Statistics().RowCount
+		rightRowCount := rightExpr.Relational().Statistics().RowCount
 		if leftRowCount < rightRowCount {
 			if joinType == descpb.LeftSemiJoin {
 				joinType = descpb.RightSemiJoin
@@ -2578,7 +2578,7 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 		// to behave like a spoolNode) and using the EXISTS mode.
 		Mode:     exec.SubqueryAllRows,
 		Root:     buffer,
-		RowCount: int64(with.Relational().Stats.RowCountIfAvailable()),
+		RowCount: int64(with.Relational().Statistics().RowCountIfAvailable()),
 	})
 
 	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
@@ -2632,7 +2632,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		if err != nil {
 			return nil, err
 		}
-		rootRowCount := int64(rec.Recursive.Relational().Stats.RowCountIfAvailable())
+		rootRowCount := int64(rec.Recursive.Relational().Statistics().RowCountIfAvailable())
 		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks, rootRowCount)
 	}
 

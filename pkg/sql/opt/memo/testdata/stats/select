@@ -1306,7 +1306,7 @@ expr colstat=1 colstat=2
     [
       (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
       (Cardinality "-")
-      (Stats `[
+      (stats `[
         {
           "columns": ["a"],
           "distinct_count": 100,
