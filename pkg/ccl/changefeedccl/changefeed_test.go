@@ -1030,6 +1030,26 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+func TestChangefeedProjectionDelete(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (id int primary key, a string)`)
+		sqlDB.Exec(t, `INSERT INTO foo values (0, 'a')`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT * FROM foo`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"a": "a", "id": 0}`,
+		})
+		sqlDB.Exec(t, `DELETE FROM foo WHERE id = 0`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{}`,
+		})
+	}
+	cdcTest(t, testFn)
+}
+
 // If we drop columns which are not targeted by the changefeed, it should not backfill.
 func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
