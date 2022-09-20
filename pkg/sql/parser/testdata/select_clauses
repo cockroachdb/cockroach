@@ -195,7 +195,7 @@ SELECT $1, $2 FROM t
 ----
 SELECT $1, $2 FROM t
 SELECT ($1), ($2) FROM t -- fully parenthesized
-SELECT $1, $2 FROM t -- literals removed
+SELECT $1, $1 FROM t -- literals removed
 SELECT $1, $2 FROM _ -- identifiers removed
 
 parse
@@ -2801,7 +2801,7 @@ SELECT a FROM t FETCH FIRST $1 ROWS ONLY OFFSET $2 ROWS
 ----
 SELECT a FROM t LIMIT $1 OFFSET $2 -- normalized!
 SELECT (a) FROM t LIMIT ($1) OFFSET ($2) -- fully parenthesized
-SELECT a FROM t LIMIT $1 OFFSET $2 -- literals removed
+SELECT a FROM t LIMIT $1 OFFSET $1 -- literals removed
 SELECT _ FROM _ LIMIT $1 OFFSET $2 -- identifiers removed
 
 parse
