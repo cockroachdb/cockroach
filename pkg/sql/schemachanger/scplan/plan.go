@@ -95,6 +95,7 @@ func makePlan(p *Plan) (err error) {
 			}
 			err = rAsErr
 		}
+		err = errors.WithAssertionFailure(err)
 	}()
 	{
 		start := timeutil.Now()
