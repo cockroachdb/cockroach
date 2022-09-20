@@ -69,6 +69,7 @@ go_library(
         "zip_cmd.go",
         "zip_helpers.go",
         "zip_per_node.go",
+        "zip_table_registry.go",
         ":gen-keytype-stringer",  # keep
     ],
     # keep
@@ -335,6 +336,7 @@ go_test(
         "userfiletable_test.go",
         "workload_test.go",
         "zip_helpers_test.go",
+        "zip_table_registry_test.go",
         "zip_tenant_test.go",
         "zip_test.go",
     ],
