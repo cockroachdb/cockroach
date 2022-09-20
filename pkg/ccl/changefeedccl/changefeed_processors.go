@@ -285,7 +285,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.flowCtx, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, feed, ca.spec.Select, ca.knobs, ca.isSinkless())
+		ca.sink, feed, ca.spec.Select, ca.knobs, ca.metrics, ca.isSinkless())
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.

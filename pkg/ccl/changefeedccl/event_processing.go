@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -71,6 +72,7 @@ func newEventConsumer(
 	details ChangefeedConfig,
 	expr execinfrapb.Expression,
 	knobs TestingKnobs,
+	metrics *Metrics,
 	isSinkless bool,
 ) (eventConsumer, EventSink, error) {
 	cfg := flowCtx.Cfg
@@ -112,6 +114,7 @@ func newEventConsumer(
 	c := &parallelEventConsumer{
 		g:            ctxgroup.WithContext(ctx),
 		hash:         makeHash(),
+		metrics:      metrics,
 		termCh:       make(chan struct{}),
 		flushCh:      make(chan struct{}, 1),
 		doneCh:       make(chan struct{}),
@@ -349,6 +352,8 @@ type parallelEventConsumer struct {
 
 	hash hash.Hash32
 
+	metrics *Metrics
+
 	// doneCh is used to shut down all workers when
 	// parallelEventConsumer.Close() is called.
 	doneCh chan struct{}
@@ -391,6 +396,12 @@ type parallelEventConsumer struct {
 var _ eventConsumer = (*parallelEventConsumer)(nil)
 
 func (c *parallelEventConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
+	startTime := timeutil.Now().UnixNano()
+	defer func() {
+		time := timeutil.Now().UnixNano()
+		c.metrics.ParallelConsumerConsumeNanos.Inc(time - startTime)
+	}()
+
 	bucket := c.getBucketForEvent(ev)
 
 	select {
@@ -471,11 +482,13 @@ func (c *parallelEventConsumer) incInFlight() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.mu.inFlight++
+	c.metrics.ParallelConsumerInFlightEvents.Inc(1)
 }
 
 func (c *parallelEventConsumer) decInFlight() {
 	c.mu.Lock()
 	c.mu.inFlight--
+	c.metrics.ParallelConsumerInFlightEvents.Dec(1)
 	send := c.mu.waiting && c.mu.inFlight == 0
 	c.mu.Unlock()
 
@@ -501,6 +514,12 @@ func (c *parallelEventConsumer) setWorkerError(err error) error {
 // or until there is an error.
 func (c *parallelEventConsumer) Flush(ctx context.Context) error {
 	log.Info(ctx, "flushing parallel event consumer")
+
+	startTime := timeutil.Now().UnixNano()
+	defer func() {
+		time := timeutil.Now().UnixNano()
+		c.metrics.ParallelConsumerFlushNanos.Inc(time - startTime)
+	}()
 
 	needFlush := func() bool {
 		c.mu.Lock()
