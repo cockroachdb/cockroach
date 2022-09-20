@@ -2922,6 +2922,12 @@ select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, 
 ----
 system
 
+query B
+select length(crdb_internal.pb_def('cockroach.sql.sqlbase.Descriptor')) > 0
+----
+true
+
+
 query error pq: crdb_internal.pb_to_json\(\): invalid protocol message: unknown proto message type cockroach.sql.sqlbase.descriptor
 select crdb_internal.pb_to_json('cockroach.sql.sqlbase.descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
 

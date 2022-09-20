@@ -20,6 +20,7 @@ type Message interface {
 	MarshalToSizedBuffer(data []byte) (int, error)
 	Unmarshal(data []byte) error
 	Size() int
+	Descriptor() ([]byte, []int)
 }
 
 // Interceptor will be called with every proto before it is marshaled.

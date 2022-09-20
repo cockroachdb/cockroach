@@ -117,6 +117,8 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_gogo_protobuf//protoc-gen-gogo/descriptor",
         "@com_github_golang_geo//s1",
         "@com_github_knz_strtime//:strtime",
         "@com_github_lib_pq//oid",

@@ -445,6 +445,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.pb_to_json(pbname: string, data: bytes) -> jsonb`:                                                                    1270,
 	`crdb_internal.pb_to_json(pbname: string, data: bytes, emit_defaults: bool) -> jsonb`:                                               1271,
 	`crdb_internal.pb_to_json(pbname: string, data: bytes, emit_defaults: bool, emit_redacted: bool) -> jsonb`:                          1272,
+	`crdb_internal.pb_def(pbname: string) -> string`:                                                                                    2036,
 	`crdb_internal.pretty_key(raw_key: bytes, skip_fields: int) -> string`:                                                              1323,
 	`crdb_internal.pretty_span(raw_key_start: bytes, raw_key_end: bytes, skip_fields: int) -> string`:                                   1324,
 	`crdb_internal.probe_ranges(timeout: interval, probe_type: unknown_enum) -> tuple{int AS range_id, string AS error, int AS end_to_end_latency_ms, string AS verbose_trace}`: 356,

@@ -94,6 +94,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
 	"github.com/knz/strtime"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -4028,6 +4030,28 @@ value if you rely on the HLC for accuracy.`,
 				return tree.NewDBytes(tree.DBytes(data)), nil
 			},
 			Info:       "Convert JSONB data to protocol message bytes",
+			Volatility: volatility.Immutable,
+		}),
+
+	"crdb_internal.pb_def": makeBuiltin(
+		jsonProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"pbname", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (res tree.Datum, err error) {
+				messageName := string(tree.MustBeDString(args[0]))
+
+				msg, err := protoreflect.NewMessage(messageName)
+				if err != nil {
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid proto name")
+				}
+
+				_, md := descriptor.ForMessage(msg)
+				return tree.NewDString(proto.MarshalTextString(md)), nil
+			},
+			Info:       "Print protocol message definition as it exists in this binary",
 			Volatility: volatility.Immutable,
 		}),
 
