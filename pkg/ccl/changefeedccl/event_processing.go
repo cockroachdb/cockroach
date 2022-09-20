@@ -10,8 +10,8 @@ package changefeedccl
 
 import (
 	"context"
-	"math/big"
-	"math/rand"
+	"hash"
+	"hash/crc32"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -111,6 +111,7 @@ func newEventConsumer(
 
 	c := &parallelEventConsumer{
 		g:            ctxgroup.WithContext(ctx),
+		hash:         makeHash(),
 		termCh:       make(chan struct{}),
 		flushCh:      make(chan struct{}, 1),
 		doneCh:       make(chan struct{}),
@@ -133,6 +134,10 @@ func newEventConsumer(
 		return nil, nil, err
 	}
 	return c, ss, nil
+}
+
+func makeHash() hash.Hash32 {
+	return crc32.New(crc32.MakeTable(crc32.IEEE))
 }
 
 func newKVEventToRowConsumer(
@@ -342,6 +347,8 @@ func (c *kvEventToRowConsumer) Flush(ctx context.Context) error {
 type parallelEventConsumer struct {
 	g ctxgroup.Group
 
+	hash hash.Hash32
+
 	// doneCh is used to shut down all workers when
 	// parallelEventConsumer.Close() is called.
 	doneCh chan struct{}
@@ -405,17 +412,10 @@ func (c *parallelEventConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Eve
 // This is used to ensure events of the same key get sent to the same worker.
 // Events of the same key are sent to the same worker so per-key ordering is
 // maintained.
-func (c *parallelEventConsumer) getBucketForEvent(ev kvevent.Event) int {
-	var bucket int
-	if ev.Type() == kvevent.TypeKV {
-		key := new(big.Int)
-		bigIntBucket := new(big.Int)
-		key.SetBytes(ev.KV().Key)
-		workers := big.NewInt(c.numWorkers)
-		bucket = int(bigIntBucket.Mod(key, workers).Int64())
-		return bucket
-	}
-	return rand.Intn(int(c.numWorkers))
+func (c *parallelEventConsumer) getBucketForEvent(ev kvevent.Event) int64 {
+	c.hash.Reset()
+	c.hash.Write(ev.KV().Key)
+	return int64(c.hash.Sum32()) % c.numWorkers
 }
 
 func (c *parallelEventConsumer) startWorkers() error {
