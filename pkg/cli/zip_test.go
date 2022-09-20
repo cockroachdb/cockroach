@@ -105,8 +105,8 @@ ORDER BY name ASC`)
 	sort.Strings(tables)
 
 	var exp []string
-	exp = append(exp, debugZipTablesPerNode...)
-	for _, t := range debugZipTablesPerCluster {
+	exp = append(exp, zipInternalTablesPerNode.GetTables()...)
+	for _, t := range zipInternalTablesPerCluster.GetTables() {
 		t = strings.TrimPrefix(t, `"".`)
 		exp = append(exp, t)
 	}
