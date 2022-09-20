@@ -1097,7 +1097,16 @@ func (ie *InternalExecutor) checkIfStmtIsAllowed(stmt tree.Statement, txn *kv.Tx
 
 // checkIfTxnIsConsistent returns true if the given txn is not nil and is not
 // the same txn that is used to construct the internal executor.
+// TODO(janexing): this will be deprecated soon as we will only use
+// ie.extraTxnState.txn, and the txn argument in query functions will be
+// deprecated.
 func (ie *InternalExecutor) checkIfTxnIsConsistent(txn *kv.Txn) error {
+	if txn == nil && ie.extraTxnState != nil {
+		return errors.New("the current internal executor was contructed with" +
+			"a txn. To use an internal executor without a txn, call " +
+			"sqlutil.InternalExecutorFactory.RunWithoutTxn()")
+	}
+
 	if txn != nil && ie.extraTxnState != nil && ie.extraTxnState.txn != txn {
 		return errors.New("txn is inconsistent with the one when " +
 			"constructing the internal executor")
