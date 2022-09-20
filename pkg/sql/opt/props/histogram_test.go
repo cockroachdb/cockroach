@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 func TestCanFilter(t *testing.T) {
@@ -1113,7 +1114,7 @@ func BenchmarkHistogram(b *testing.B) {
 			arr.Array[0] = makeDatum(t.ArrayContents(), i)
 			return arr
 		}
-		panic("unsupported type")
+		panic(errors.AssertionFailedf("unsupported type"))
 	}
 
 	makeBuckets := func(t *types.T, bucketCount int) []cat.HistogramBucket {
