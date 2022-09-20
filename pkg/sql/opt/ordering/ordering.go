@@ -340,7 +340,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 				result = append(result, provided[i])
 			}
 		} else {
-			equivCols := fds.ComputeEquivClosure(opt.MakeColSet(col))
+			equivCols := fds.ComputeEquivClosureNoCopy(opt.MakeColSet(col))
 			remappedCol, ok := equivCols.Intersection(outCols).Next(0)
 			if !ok {
 				panic(errors.AssertionFailedf("no output column equivalent to %d", redact.Safe(col)))
