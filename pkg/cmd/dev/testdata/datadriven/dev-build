@@ -1,7 +1,7 @@
 exec
-dev build cockroach-short
+dev build cockroach-short --data-driven-test
 ----
-bazel build //pkg/cmd/cockroach-short:cockroach-short
+bazel build //pkg/cmd/cockroach-short:cockroach-short --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
@@ -11,9 +11,9 @@ rm crdb-checkout/cockroach
 cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
 
 exec
-dev build cockroach-short --cpus=12
+dev build cockroach-short --cpus=12 --data-driven-test
 ----
-bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short:cockroach-short
+bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short:cockroach-short --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
@@ -23,9 +23,9 @@ rm crdb-checkout/cockroach
 cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
 
 exec
-dev build --debug short
+dev build --debug short --data-driven-test
 ----
-bazel build //pkg/cmd/cockroach-short:cockroach-short
+bazel build //pkg/cmd/cockroach-short:cockroach-short --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
@@ -35,9 +35,9 @@ rm crdb-checkout/cockroach
 cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
 
 exec
-dev build short -- -s
+dev build short --data-driven-test -- -s
 ----
-bazel build //pkg/cmd/cockroach-short:cockroach-short -s
+bazel build //pkg/cmd/cockroach-short:cockroach-short -s --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
@@ -47,9 +47,9 @@ rm crdb-checkout/cockroach
 cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkout/cockroach
 
 exec
-dev build -- --verbose_failures --sandbox_debug
+dev build --data-driven-test -- --verbose_failures --sandbox_debug
 ----
-bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug
+bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
@@ -57,9 +57,9 @@ rm crdb-checkout/cockroach
 cp sandbox/pkg/cmd/cockroach/cockroach_/cockroach crdb-checkout/cockroach
 
 exec
-dev build stress
+dev build stress --data-driven-test
 ----
-bazel build @com_github_cockroachdb_stress//:stress --//build/toolchains:nogo_disable_flag
+bazel build @com_github_cockroachdb_stress//:stress --//build/toolchains:nogo_disable_flag --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
@@ -67,9 +67,9 @@ rm crdb-checkout/bin/stress
 cp sandbox/external/com_github_cockroachdb_stress/stress_/stress crdb-checkout/bin/stress
 
 exec
-dev build tests
+dev build tests --data-driven-test
 ----
-bazel build //pkg:all_tests --config=test
+bazel build //pkg:all_tests --config=test --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no

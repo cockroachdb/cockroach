@@ -65,6 +65,7 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	buildCmd.Flags().String(crossFlag, "", "cross-compiles using the builder image (options: linux, linuxarm, macos, macosarm, windows)")
 	buildCmd.Flags().Lookup(crossFlag).NoOptDefVal = "linux"
 	addCommonBuildFlags(buildCmd)
+	addCommonBuildAndTestFlags(buildCmd)
 	return buildCmd
 }
 
@@ -120,6 +121,20 @@ var allBuildTargets = func() []string {
 }()
 
 func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
+	// tmpDir will contain the build event binary file if produced.
+	tmpDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+			// Retry.
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+				log.Printf("Sending BEP file to beaver hub failed - %v", err)
+			}
+		}
+		_ = os.RemoveAll(tmpDir)
+	}()
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
@@ -146,6 +161,11 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 	args = append(args, additionalBazelArgs...)
+	if dataDrivenTestIgnoreTemporaryPaths {
+		args = append(args, "--build_event_binary_file=/tmp/path")
+	} else {
+		args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
+	}
 
 	if cross == "" {
 		logCommand("bazel", args...)

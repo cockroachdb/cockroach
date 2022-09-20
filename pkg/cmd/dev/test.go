@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	// Attach flags for the test sub-command.
 	addCommonBuildFlags(testCmd)
 	addCommonTestFlags(testCmd)
+	addCommonBuildAndTestFlags(testCmd)
 
 	// Go's test runner runs tests in sub-processes; the stderr/stdout data from
 	// the test process is first swallowed by go test and then only
@@ -109,6 +111,20 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 }
 
 func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
+	// tmpDir will contain the build event binary file if produced.
+	tmpDir, err := os.MkdirTemp("", "")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+			// Retry.
+			if err := sendBepDataToBeaverHubIfNeeded(filepath.Join(tmpDir, bepFileBasename)); err != nil {
+				log.Printf("Sending BEP file to beaver hub failed - %v", err)
+			}
+		}
+		_ = os.RemoveAll(tmpDir)
+	}()
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
@@ -328,8 +344,14 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 
+	if dataDrivenTestIgnoreTemporaryPaths {
+		args = append(args, "--build_event_binary_file=/tmp/path")
+	} else {
+		args = append(args, fmt.Sprintf("--build_event_binary_file=%s", filepath.Join(tmpDir, bepFileBasename)))
+	}
+
 	logCommand("bazel", args...)
-	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {
 		var cmderr *exec.ExitError
 		if errors.As(err, &cmderr) && cmderr.ProcessState.ExitCode() == 4 {
