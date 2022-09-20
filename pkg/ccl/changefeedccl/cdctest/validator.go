@@ -15,11 +15,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -64,8 +62,6 @@ var NoOpValidator = &noOpValidator{}
 var _ Validator = &orderValidator{}
 var _ Validator = &noOpValidator{}
 var _ StreamValidator = &orderValidator{}
-
-var retryDuration = 2 * time.Minute
 
 type noOpValidator struct{}
 
@@ -326,7 +322,7 @@ type validatorRow struct {
 // fingerprintValidator verifies that recreating a table from its changefeed
 // will fingerprint the same at all "interesting" points in time.
 type fingerprintValidator struct {
-	sqlDB                  *gosql.DB
+	withSQLDB              func(func(*gosql.DB) error) error
 	origTable, fprintTable string
 	primaryKeyCols         []string
 	partitionResolved      map[string]hlc.Timestamp
@@ -347,12 +343,16 @@ type fingerprintValidator struct {
 	fprintTestColumns int
 	buffer            []validatorRow
 
-	// shouldRetry indicates whether row updates should be retried (for
-	// a fixed duration). Typically used when the transient errors are
-	// expected (e.g., if performing an upgrade)
-	shouldRetry bool
-
 	failures []string
+}
+
+// WithDBConnection is a helper used to create a function to be passed
+// to NewFingerprintValidator. Use this function when access to the
+// database connection by the validator is unrestrained (the default case)
+func WithDBConnection(db *gosql.DB) func(func(*gosql.DB) error) error {
+	return func(f func(*gosql.DB) error) error {
+		return f(db)
+	}
 }
 
 // NewFingerprintValidator returns a new FingerprintValidator that uses `fprintTable` as
@@ -362,27 +362,32 @@ type fingerprintValidator struct {
 // will modify `fprint`'s schema to add `maxTestColumnCount` columns to avoid having to
 // accommodate schema changes on the fly.
 func NewFingerprintValidator(
-	sqlDB *gosql.DB,
+	withSQLDB func(func(*gosql.DB) error) error,
 	origTable, fprintTable string,
 	partitions []string,
 	maxTestColumnCount int,
-	shouldRetry bool,
 ) (Validator, error) {
 	// Fetch the primary keys though information_schema schema inspections so we
 	// can use them to construct the SQL for DELETEs and also so we can verify
 	// that the key in a message matches what's expected for the value.
-	primaryKeyCols, err := fetchPrimaryKeyCols(sqlDB, fprintTable)
-	if err != nil {
+	var primaryKeyCols []string
+	var err error
+	if err := withSQLDB(func(db *gosql.DB) error {
+		primaryKeyCols, err = fetchPrimaryKeyCols(db, fprintTable)
+		return err
+	}); err != nil {
 		return nil, err
 	}
 
 	// Record the non-test%d columns in `fprint`.
 	var fprintOrigColumns int
-	if err := sqlDB.QueryRow(`
+	if err := withSQLDB(func(db *gosql.DB) error {
+		return db.QueryRow(`
 		SELECT count(column_name)
 		FROM information_schema.columns
 		WHERE table_name=$1
-	`, fprintTable).Scan(&fprintOrigColumns); err != nil {
+	`, fprintTable).Scan(&fprintOrigColumns)
+	}); err != nil {
 		return nil, err
 	}
 
@@ -396,19 +401,21 @@ func NewFingerprintValidator(
 			}
 			fmt.Fprintf(&addColumnStmt, `ADD COLUMN test%d STRING`, i)
 		}
-		if _, err := sqlDB.Exec(addColumnStmt.String()); err != nil {
+		if err := withSQLDB(func(db *gosql.DB) error {
+			_, err := db.Exec(addColumnStmt.String())
+			return err
+		}); err != nil {
 			return nil, err
 		}
 	}
 
 	v := &fingerprintValidator{
-		sqlDB:             sqlDB,
+		withSQLDB:         withSQLDB,
 		origTable:         origTable,
 		fprintTable:       fprintTable,
 		primaryKeyCols:    primaryKeyCols,
 		fprintOrigColumns: fprintOrigColumns,
 		fprintTestColumns: maxTestColumnCount,
-		shouldRetry:       shouldRetry,
 	}
 	v.partitionResolved = make(map[string]hlc.Timestamp)
 	for _, partition := range partitions {
@@ -512,8 +519,8 @@ func (v *fingerprintValidator) applyRowUpdate(row validatorRow) (_err error) {
 		}
 	}
 
-	return v.maybeRetry(func() error {
-		_, err := v.sqlDB.Exec(stmtBuf.String(), args...)
+	return v.withSQLDB(func(db *gosql.DB) error {
+		_, err := db.Exec(stmtBuf.String(), args...)
 		return err
 	})
 }
@@ -594,16 +601,16 @@ func (v *fingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 
 func (v *fingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 	var orig string
-	if err := v.maybeRetry(func() error {
-		return v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
+	if err := v.withSQLDB(func(db *gosql.DB) error {
+		return db.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
 		SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ` + v.origTable + `
 	] AS OF SYSTEM TIME '` + ts.AsOfSystemTime() + `'`).Scan(&orig)
 	}); err != nil {
 		return err
 	}
 	var check string
-	if err := v.maybeRetry(func() error {
-		return v.sqlDB.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
+	if err := v.withSQLDB(func(db *gosql.DB) error {
+		return db.QueryRow(`SELECT IFNULL(fingerprint, 'EMPTY') FROM [
 		SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ` + v.fprintTable + `
 	]`).Scan(&check)
 	}); err != nil {
@@ -619,17 +626,6 @@ func (v *fingerprintValidator) fingerprint(ts hlc.Timestamp) error {
 // Failures implements the Validator interface.
 func (v *fingerprintValidator) Failures() []string {
 	return v.failures
-}
-
-// maybeRetry will retry the function passed if the fingerprint was
-// created with `shouldRetry` set to `true`. Every access to `sqlDB`
-// should be made my closures passed to this function
-func (v *fingerprintValidator) maybeRetry(f func() error) error {
-	if v.shouldRetry {
-		return retry.ForDuration(retryDuration, f)
-	}
-
-	return f()
 }
 
 // Validators abstracts over running multiple `Validator`s at once on the same
