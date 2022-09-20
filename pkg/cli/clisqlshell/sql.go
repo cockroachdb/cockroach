@@ -280,12 +280,10 @@ func (c *cliState) addHistory(line string) {
 		return
 	}
 
-	// ins.AddHistory will push command into memory and try to
-	// persist to disk (if ins's history file is set). err can
-	// be not nil only if it got a IO error while trying to persist.
+	// ins.AddHistory will push command into memory. err can
+	// be not nil only if it got a memory error.
 	if err := c.ins.AddHistory(line); err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "warning: cannot save command-line history: %v\n", err)
-		c.ins.SetAutoSaveHistory("", false)
+		fmt.Fprintf(c.iCtx.stderr, "warning: cannot add entry to history: %v\n", err)
 	}
 }
 
@@ -2182,7 +2180,22 @@ func (c *cliState) configurePreShellDefaults(
 					fmt.Fprintf(c.iCtx.stderr, "warning: cannot load the command-line history (file corrupted?): %v\n", err)
 					fmt.Fprintf(c.iCtx.stderr, "note: the history file will be cleared upon first entry\n")
 				}
-				c.ins.SetAutoSaveHistory(histFile, true)
+				// SetAutoSaveHistory() does two things:
+				// - it preserves the name of the history file, for use
+				//   by the final SaveHistory() call.
+				// - it decides whether to save the history to file upon
+				//   every new command.
+				// We disable the latter, since a history file can grow somewhat
+				// large and we don't want the excess I/O latency to be interleaved
+				// in-between every command.
+				c.ins.SetAutoSaveHistory(histFile, false)
+				prevCleanup := cleanupFn
+				cleanupFn = func() {
+					if err := c.ins.SaveHistory(); err != nil {
+						fmt.Fprintf(c.iCtx.stderr, "warning: cannot save command-line history: %v\n", err)
+					}
+					prevCleanup()
+				}
 			}
 		}
 	}

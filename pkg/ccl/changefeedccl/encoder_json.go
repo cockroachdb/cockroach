@@ -158,7 +158,11 @@ func (e *jsonEncoder) EncodeValue(
 			meta = jsonEntries
 		} else {
 			meta = make(map[string]interface{}, 1)
-			jsonEntries = after
+			if after != nil {
+				jsonEntries = after
+			} else {
+				jsonEntries = map[string]interface{}{}
+			}
 			jsonEntries[jsonMetaSentinel] = meta
 		}
 		if e.beforeField {
