@@ -15,11 +15,13 @@ import (
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"reflect"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -104,12 +106,21 @@ func (w *random) Tables() []workload.Table {
 
 type col struct {
 	name          string
-	dataType      *types.T
+	typeOid       oid.Oid
 	dataPrecision int
 	dataScale     int
 	cdefault      gosql.NullString
 	isNullable    bool
 	isComputed    bool
+}
+
+func typeForOid(typeOid oid.Oid) *types.T {
+	datumType := *types.OidToType[typeOid]
+	if typeOid == oid.T_bit {
+		datumType.InternalType.Width = 1
+	}
+
+	return &datumType
 }
 
 // Ops implements the Opser interface.
@@ -161,8 +172,7 @@ WHERE attrelid=$1`, relid)
 		if err := rows.Scan(&c.name, &typOid, &c.cdefault, &c.isNullable, &c.isComputed); err != nil {
 			return workload.QueryLoad{}, err
 		}
-		datumType := types.OidToType[oid.Oid(typOid)]
-		c.dataType = datumType
+		c.typeOid = oid.Oid(typOid)
 		if c.cdefault.String == "unique_rowid()" { // skip
 			continue
 		}
@@ -320,7 +330,7 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 	case *tree.DString:
 		return string(*d), nil
 	case *tree.DBytes:
-		return string(*d), nil
+		return fmt.Sprintf(`x'%s'`, hex.EncodeToString([]byte(*d))), nil
 	case *tree.DDate, *tree.DTime:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	case *tree.DTimestamp:
@@ -338,7 +348,9 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 	case *tree.DFloat:
 		return float64(*d), nil
 	case *tree.DDecimal:
-		return d.Float64()
+		// use string representation here since randgen might generate
+		// decimals that don't fit into a float64
+		return d.String(), nil
 	case *tree.DArray:
 		arr := make([]interface{}, len(d.Array))
 		for i := range d.Array {
@@ -358,12 +370,19 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 		return d.IPAddr.String(), nil
 	case *tree.DJSON:
 		return d.JSON.String(), nil
+	case *tree.DTimeTZ:
+		return d.TimeTZ.String(), nil
+	case *tree.DBox2D:
+		return d.CartesianBoundingBox.Repr(), nil
+	case *tree.DGeography:
+		return geo.SpatialObjectToEWKT(d.Geography.SpatialObject(), 2)
+	case *tree.DGeometry:
+		return geo.SpatialObjectToEWKT(d.Geometry.SpatialObject(), 2)
 	}
 	return nil, errors.Errorf("unhandled datum type: %s", reflect.TypeOf(d))
 }
 
-type nullVal struct {
-}
+type nullVal struct{}
 
 func (nullVal) Value() (driver.Value, error) {
 	return nil, nil
@@ -378,7 +397,7 @@ func (o *randOp) run(ctx context.Context) (err error) {
 			if c.isNullable && o.config.nullPct > 0 {
 				nullPct = 100 / o.config.nullPct
 			}
-			d := randgen.RandDatumWithNullChance(o.rng, c.dataType, nullPct, /* nullChance */
+			d := randgen.RandDatumWithNullChance(o.rng, typeForOid(c.typeOid), nullPct, /* nullChance */
 				false /* favorCommonData */, false /* targetColumnIsUnique */)
 			params[k], err = DatumToGoSQL(d)
 			if err != nil {
@@ -389,6 +408,8 @@ func (o *randOp) run(ctx context.Context) (err error) {
 	}
 	start := timeutil.Now()
 	_, err = o.writeStmt.ExecContext(ctx, params...)
-	o.hists.Get(`write`).Record(timeutil.Since(start))
+	if o.hists != nil {
+		o.hists.Get(`write`).Record(timeutil.Since(start))
+	}
 	return err
 }

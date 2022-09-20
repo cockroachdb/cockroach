@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "rand",
@@ -7,6 +7,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/rand",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/geo",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
@@ -18,6 +19,26 @@ go_library(
         "@com_github_lib_pq//:pq",
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+go_test(
+    name = "rand_test",
+    srcs = ["rand_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":rand"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/randgen",
+        "//pkg/sql/sem/eval",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
