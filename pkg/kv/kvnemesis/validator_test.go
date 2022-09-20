@@ -85,6 +85,10 @@ func withScanResult(op Operation, kvs ...KeyValue) Operation {
 	return op
 }
 
+func withDeleteRangeResultTS(op Operation, ts int, keys ...[]byte) Operation {
+	return withDeleteRangeResult(withTimestamp(op, ts), keys...)
+}
+
 func withDeleteRangeResult(op Operation, keys ...[]byte) Operation {
 	delRange := op.GetValue().(*DeleteRangeOperation)
 	delRange.Result = Result{
@@ -1678,7 +1682,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one deleterange before write",
 			steps: []Step{
-				step(withDeleteRangeResult(delRange(`a`, `c`))),
+				step(withDeleteRangeResultTS(delRange(`a`, `c`), 0)),
 				step(withResult(put(`a`, `v1`), nil)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
@@ -1687,12 +1691,12 @@ func TestValidate(t *testing.T) {
 		{
 			name: "one deleterange before write returning wrong value",
 			steps: []Step{
-				step(withDeleteRangeResult(delRange(`a`, `c`), roachpb.Key(`a`))),
+				step(withDeleteRangeResultTS(delRange(`a`, `c`), 0, roachpb.Key(`a`))),
 				step(withResult(put(`a`, `v1`), nil)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`)),
 			expected: []string{
-				`committed deleteRange missing write: ` +
+				`committed deleterange missing write: ` +
 					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), gap:[<min>, <max>)}->["a"] ` +
 					`[dr.d]"a":missing-><nil>`,
 			},

@@ -553,11 +553,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 					break
 				}
 				maybeSynTxn = t.SynTxn
-				s := t.SynTxn.String()
+				s := t.SynTxn.ID.String()
 				txnID = &s
-			}
-			for _, op := range t.Ops {
-				v.processOp(txnID, op)
 			}
 			if maybeSynTxn != nil {
 				v.checkAtomic(`batch`, t.Result, maybeSynTxn, t.Ops...)
