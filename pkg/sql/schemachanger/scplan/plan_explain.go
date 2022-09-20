@@ -63,7 +63,7 @@ func (p Plan) DecorateErrorWithPlanDetails(err error) error {
 		}
 	}
 
-	return errors.WithAssertionFailure(err)
+	return err
 }
 
 // DependenciesURL returns a URL to render the dependency graph in the Plan.

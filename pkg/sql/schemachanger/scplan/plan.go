@@ -89,6 +89,7 @@ func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
 			}
 			err = p.DecorateErrorWithPlanDetails(rAsErr)
 		}
+		err = errors.WithAssertionFailure(err)
 	}()
 
 	{
