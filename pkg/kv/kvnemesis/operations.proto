@@ -21,7 +21,7 @@ import "util/hlc/timestamp.proto";
 message BatchOperation {
   repeated Operation ops = 1 [(gogoproto.nullable) = false];
   Result result = 2 [(gogoproto.nullable) = false];
-  roachpb.Transaction txn = 3;
+  roachpb.Transaction syn_txn = 3;
 }
 
 enum ClosureTxnType {

@@ -40,6 +40,10 @@ func withTimestamp(op Operation, ts int) Operation {
 	switch o := op.GetValue().(type) {
 	case *ClosureTxnOperation:
 		o.Txn = &txn
+	case *BatchOperation:
+		o.SynTxn = &txn
+	case *DeleteRangeOperation:
+		o.SynTxn = &txn
 	default:
 		panic("incorrect op type")
 	}
@@ -48,7 +52,16 @@ func withTimestamp(op Operation, ts int) Operation {
 }
 
 func withResult(op Operation, err error) Operation {
-	(*op.Result()) = resultError(context.Background(), err)
+	*op.Result() = resultError(context.Background(), err)
+	return op
+}
+
+func withResultTS(op Operation, ts int) Operation {
+	if op.Result().Err != nil {
+		panic("error already set; use withTimestamp instead")
+	}
+	op = withTimestamp(op, ts)
+	*op.Result() = resultError(context.Background(), nil)
 	return op
 }
 
@@ -240,25 +253,25 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:     "one batch put with successful write",
-			steps:    []Step{step(withResult(batch(withResult(put(`a`, `v1`), nil)), nil))},
+			steps:    []Step{step(withResultTS(batch(withResult(put(`a`, `v1`), nil)), 1))},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: nil,
 		},
 		{
 			name:     "one batch delete with successful write",
-			steps:    []Step{step(withResult(batch(withResult(del(`a`), nil)), nil))},
+			steps:    []Step{step(withResultTS(batch(withResult(del(`a`), nil)), 1))},
 			kvs:      kvs(tombstone(`a`, 1)),
 			expected: nil,
 		},
 		{
 			name:     "one batch put with missing write",
-			steps:    []Step{step(withResult(batch(withResult(put(`a`, `v1`), nil)), nil))},
+			steps:    []Step{step(withResultTS(batch(withResult(put(`a`, `v1`), nil)), 1))},
 			kvs:      nil,
 			expected: []string{`committed batch missing write: [w]"a":missing->v1`},
 		},
 		{
 			name:     "one batch delete with missing write",
-			steps:    []Step{step(withResult(batch(withResult(del(`a`), nil)), nil))},
+			steps:    []Step{step(withResultTS(batch(withResult(del(`a`), nil)), 1))},
 			kvs:      nil,
 			expected: []string{`committed batch missing write: [d]"a":missing-><nil>`},
 		},
@@ -398,9 +411,9 @@ func TestValidate(t *testing.T) {
 			name: "one transactionally rolled back batch put with write (correctly) missing",
 			steps: []Step{
 				step(withResult(closureTxn(ClosureTxnType_Rollback,
-					withResult(batch(
+					withResultTS(batch(
 						withResult(put(`a`, `v1`), nil),
-					), nil),
+					), 1),
 				), errors.New(`rollback`))),
 			},
 			kvs:      nil,
@@ -410,9 +423,9 @@ func TestValidate(t *testing.T) {
 			name: "one transactionally rolled back batch delete with write (correctly) missing",
 			steps: []Step{
 				step(withResult(closureTxn(ClosureTxnType_Rollback,
-					withResult(batch(
+					withResultTS(batch(
 						withResult(del(`a`), nil),
-					), nil),
+					), 1),
 				), errors.New(`rollback`))),
 			},
 			kvs:      nil,
@@ -688,11 +701,11 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withReadResult(get(`a`), `v1`),
 					withReadResult(get(`b`), `v2`),
 					withReadResult(get(`c`), ``),
-				), nil)),
+				), 2)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: nil,
@@ -704,11 +717,11 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`b`, `v2`), nil)),
 				step(withResult(del(`a`), nil)),
 				step(withResult(del(`b`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withReadResult(get(`a`), `v1`),
 					withReadResult(get(`b`), `v2`),
 					withReadResult(get(`c`), ``),
-				), nil)),
+				), 5)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
 			expected: nil,
@@ -720,11 +733,11 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`b`, `v2`), nil)),
 				step(withResult(del(`a`), nil)),
 				step(withResult(del(`b`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withReadResult(get(`a`), ``),
 					withReadResult(get(`b`), ``),
 					withReadResult(get(`c`), ``),
-				), nil)),
+				), 5)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
 			expected: nil,
@@ -734,11 +747,11 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withReadResult(get(`a`), ``),
 					withReadResult(get(`b`), `v1`),
 					withReadResult(get(`c`), `v2`),
-				), nil)),
+				), 3)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: []string{
@@ -753,11 +766,11 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`b`, `v2`), nil)),
 				step(withResult(del(`a`), nil)),
 				step(withResult(del(`b`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withReadResult(get(`a`), ``),
 					withReadResult(get(`b`), `v1`),
 					withReadResult(get(`c`), `v2`),
-				), nil)),
+				), 5)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
 			expected: []string{
@@ -770,11 +783,11 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withReadResult(get(`a`), ``),
 					withReadResult(get(`b`), `v2`),
 					withReadResult(get(`c`), ``),
-				), nil)),
+				), 3)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: []string{
@@ -789,11 +802,11 @@ func TestValidate(t *testing.T) {
 				step(withResult(put(`b`, `v2`), nil)),
 				step(withResult(del(`a`), nil)),
 				step(withResult(del(`b`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withReadResult(get(`a`), ``),
 					withReadResult(get(`b`), `v2`),
 					withReadResult(get(`c`), ``),
-				), nil)),
+				), 5)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`), tombstone(`a`, 3), tombstone(`b`, 4)),
 			expected: nil,
@@ -1417,11 +1430,11 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withScanResult(scan(`a`, `c`), scanKV(`a`, `v1`), scanKV(`b`, `v2`)),
 					withScanResult(scan(`b`, `d`), scanKV(`b`, `v2`)),
 					withScanResult(scan(`c`, `e`)),
-				), nil)),
+				), 2)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: nil,
@@ -1431,11 +1444,11 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withScanResult(scan(`a`, `c`)),
 					withScanResult(scan(`b`, `d`), scanKV(`b`, `v1`)),
 					withScanResult(scan(`c`, `e`), scanKV(`c`, `v2`)),
-				), nil)),
+				), 2)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: []string{
@@ -1450,11 +1463,11 @@ func TestValidate(t *testing.T) {
 			steps: []Step{
 				step(withResult(put(`a`, `v1`), nil)),
 				step(withResult(put(`b`, `v2`), nil)),
-				step(withResult(batch(
+				step(withResultTS(batch(
 					withScanResult(scan(`a`, `c`), scanKV(`b`, `v1`)),
 					withScanResult(scan(`b`, `d`), scanKV(`b`, `v1`)),
 					withScanResult(scan(`c`, `e`)),
-				), nil)),
+				), 2)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: []string{

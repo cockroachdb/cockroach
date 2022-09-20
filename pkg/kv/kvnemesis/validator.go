@@ -390,8 +390,13 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		// [^1]: see applyClientOp.
 		var maybeSynTxn *roachpb.Transaction
 		if txnID == nil {
-			maybeSynTxn = t.Txn
-			s := t.Txn.ID.String()
+			if t.SynTxn == nil {
+				err := errors.AssertionFailedf(`expected transaction in %s`, op)
+				v.failures = append(v.failures, err)
+				break
+			}
+			maybeSynTxn = t.SynTxn
+			s := t.SynTxn.ID.String()
 			txnID = &s
 		}
 		// For the purposes of validation, DelRange operations decompose into
@@ -540,15 +545,22 @@ func (v *validator) processOp(txnID *string, op Operation) {
 	case *BatchOperation:
 		if !resultIsRetryable(t.Result) {
 			v.failIfError(op, t.Result)
+			var maybeSynTxn *roachpb.Transaction
 			if txnID == nil {
-				s := t.Txn.String()
+				if t.SynTxn == nil {
+					err := errors.AssertionFailedf(`expected transaction in %s`, op)
+					v.failures = append(v.failures, err)
+					break
+				}
+				maybeSynTxn = t.SynTxn
+				s := t.SynTxn.String()
 				txnID = &s
 			}
 			for _, op := range t.Ops {
 				v.processOp(txnID, op)
 			}
-			if t.Txn != nil {
-				v.checkAtomic(`batch`, t.Result, t.Txn, t.Ops...)
+			if maybeSynTxn != nil {
+				v.checkAtomic(`batch`, t.Result, maybeSynTxn, t.Ops...)
 			}
 		}
 	case *ClosureTxnOperation:

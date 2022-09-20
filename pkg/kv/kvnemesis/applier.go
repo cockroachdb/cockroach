@@ -295,11 +295,14 @@ func applyBatchOp(
 		}
 	}
 	runErr := runFn(ctx, b)
-	if runErr == nil && !inTxn {
-		o.Txn = syntheticTxnAtTime(b.RawResponse().Timestamp)
-	}
 
 	o.Result = resultError(ctx, runErr)
+	if runErr == nil && !inTxn {
+		o.SynTxn = syntheticTxnAtTime(b.RawResponse().Timestamp)
+	} else {
+		_ = runErr
+	}
+
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
 		case *GetOperation:
