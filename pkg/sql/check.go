@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -634,8 +635,23 @@ func validateUniqueConstraint(
 
 	sessionDataOverride := sessiondata.NoSessionDataOverride
 	sessionDataOverride.User = user
-	values, err := ie.QueryRowEx(ctx, "validate unique constraint", txn, sessionDataOverride, query)
-	if err != nil {
+	// We are likely to have performed a lot of work before getting here (e.g.
+	// importing the data), so we want to make an effort in order to run the
+	// validation query without error in order to not fail the whole operation.
+	// Thus, we allow up to 5 retries for an allowlist of errors.
+	var values tree.Datums
+	for retryCount := 0; retryCount < 5; retryCount++ {
+		values, err = ie.QueryRowEx(ctx, "validate unique constraint", txn, sessionDataOverride, query)
+		if err == nil {
+			break
+		}
+		if pgerror.IsSQLRetryableError(err) || flowinfra.IsFlowRetryableError(err) {
+			// An example error that we want to retry is "no inbound stream"
+			// connection error which can occur if the node that is used for the
+			// distributed query goes down.
+			log.Infof(ctx, "retrying the validation query because of %v", err)
+			continue
+		}
 		return err
 	}
 	if values.Len() > 0 {
