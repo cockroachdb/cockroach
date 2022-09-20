@@ -21,8 +21,6 @@ SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_int
 ----
 1  RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
 
-
-
 # Without explicit keys, scans all ranges (we don't test this too precisely to
 # avoid flaking the test when the range count changes, just want to know that
 # we're touching multiple ranges).
@@ -58,6 +56,11 @@ query B
 SELECT count(*) > 10 FROM crdb_internal.check_consistency(false, '', '')
 ----
 true
+
+# Fill a table with consistency check results. This used to panic.
+# See: https://github.com/cockroachdb/cockroach/issues/88222
+statement error pgcode XX000 no consistency checker configured
+CREATE TABLE conscheckresult AS (SELECT * FROM crdb_internal.check_consistency(false, '', ''));
 
 # Test crdb_internal commands which execute as root, but
 # only checks for permissions afterwards.
@@ -155,7 +158,7 @@ SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_tes
 query T
 SELECT ($t_id)::regclass
 ----
-108
+109
 
 # reset state to default
 user root
