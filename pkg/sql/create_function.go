@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type createFunctionNode struct {
@@ -81,10 +82,20 @@ func (n *createFunctionNode) startExec(params runParams) error {
 				return err
 			}
 
-			if isNew {
-				return n.createNewFunction(udfMutableDesc, mutScDesc, params)
+			fnName := tree.MakeQualifiedFunctionName(n.dbDesc.GetName(), n.scDesc.GetName(), n.cf.FuncName.String())
+			event := eventpb.CreateFunction{
+				FunctionName: fnName.FQString(),
+				IsReplace:    !isNew,
 			}
-			return n.replaceFunction(udfMutableDesc, params)
+			if isNew {
+				err = n.createNewFunction(udfMutableDesc, mutScDesc, params)
+			} else {
+				err = n.replaceFunction(udfMutableDesc, params)
+			}
+			if err != nil {
+				return err
+			}
+			return params.p.logEvent(params.ctx, udfMutableDesc.GetID(), &event)
 		}()
 	})
 
