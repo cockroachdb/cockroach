@@ -1,0 +1,28 @@
+# Tests MVCCIsSpanEmpty with inline value. Disables separate engine blocks,
+# because the TBI may non-deterministically omit the inline value.
+run ok
+put k=i v=inline
+----
+>> at end:
+meta: "i"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+
+# Detects inline values without timestamp bounds.
+run ok
+is_span_empty k=a end=z
+is_span_empty k=a end=i
+is_span_empty k=+i end=z
+----
+false
+true
+true
+
+# Errors on inline values with timestamped bounds.
+run error
+is_span_empty k=i end=i+ startTs=1
+----
+error: (*withstack.withStack:) unexpected inline value found: "i"
+
+run error
+is_span_empty k=i end=i+ ts=1
+----
+error: (*withstack.withStack:) unexpected inline value found: "i"
