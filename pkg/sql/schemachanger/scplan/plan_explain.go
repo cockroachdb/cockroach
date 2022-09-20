@@ -41,7 +41,7 @@ func (p Plan) DecorateErrorWithPlanDetails(err error) (retErr error) {
 	if p.Graph != nil {
 		err = addDetail(err, "dependencies graphviz URL", "dependencies graphviz: ", p.DependenciesURL)
 	}
-	return errors.WithAssertionFailure(err)
+	return err
 }
 
 func addDetail(
