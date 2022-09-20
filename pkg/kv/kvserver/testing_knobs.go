@@ -434,6 +434,10 @@ type StoreTestingKnobs struct {
 	// - rangefeed.TestingKnobs.IgnoreOnDeleteRangeError
 	// - kvserverbase.BatchEvalTestingKnobs.DisableInitPutFailOnTombstones
 	GlobalMVCCRangeTombstone bool
+
+	// LeaseUpgradeInterceptor intercepts leases that get upgraded to
+	// epoch-based ones.
+	LeaseUpgradeInterceptor func(*roachpb.Lease)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
