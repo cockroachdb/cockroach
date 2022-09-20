@@ -78,7 +78,7 @@ func AlterColumnType(
 			)
 		}
 	}
-	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, col); err != nil {
+	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, tableDesc.GetRowLevelTTL(), col); err != nil {
 		return err
 	}
 
