@@ -1,0 +1,74 @@
+# An empty span is, well, empty.
+run ok
+is_span_empty k=a end=z
+is_span_empty k=a end=z startTs=1
+----
+true
+true
+
+# Populate with some values and an MVCC range tombstone. Inline values are
+# tested in separate file.
+run ok
+put k=a ts=2 v=a2
+put k=a ts=4 v=a4
+del k=b ts=4
+with t=A
+  txn_begin ts=10
+  put  k=c v=c10
+del_range_ts k=d end=f ts=2
+----
+del: "b": found key false
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=10.000000000,0 wto=false gul=0,0
+rangekey: {d-f}/[2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /BYTES/a4
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=10.000000000,0 min=0,0 seq=0} ts=10.000000000,0 del=false klen=12 vlen=8 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/10.000000000,0 -> /BYTES/c10
+
+# Span is not empty.
+run ok
+is_span_empty k=a end=z
+----
+false
+
+# Empty key span.
+run ok
+is_span_empty k=+a end=b
+----
+true
+
+# Empty time span (startTs is exclusive).
+run ok
+is_span_empty k=a end=z startTs=2 ts=3
+----
+true
+
+# Intent is detected, with and without timestamp bounds.
+run ok
+is_span_empty k=c end=+c
+is_span_empty k=c end=+c startTs=9 ts=10
+----
+false
+false
+
+# Tombstone is detected, with and without timestamp bounds.
+run ok
+is_span_empty k=b end=+b
+is_span_empty k=b end=+b startTs=3 ts=4
+----
+false
+false
+
+# Range tombstone is detected, with and without timestamp bounds.
+run ok
+is_span_empty k=d end=d+
+is_span_empty k=e end=e+
+is_span_empty k=e end=e+ startTs=1 end=2
+is_span_empty k=e end=e+ startTs=2 end=3
+----
+false
+false
+false
+true

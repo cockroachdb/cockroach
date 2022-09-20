@@ -160,10 +160,12 @@ func TestMVCCHistories(t *testing.T) {
 	const statsTS = 100e9
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
+		disableSeparateEngineBlocks := strings.Contains(path, "_disable_separate_engine_blocks")
+
 		engineOpts := []ConfigOption{CacheSize(1 << 20 /* 1 MiB */), ForTesting}
 		// If enabled by metamorphic parameter, use very small blocks to provoke TBI
 		// optimization. We'll also flush after each command.
-		if separateEngineBlocks {
+		if separateEngineBlocks && !disableSeparateEngineBlocks {
 			engineOpts = append(engineOpts, func(cfg *engineConfig) error {
 				cfg.Opts.DisableAutomaticCompactions = true
 				for i := range cfg.Opts.Levels {
@@ -548,7 +550,7 @@ func TestMVCCHistories(t *testing.T) {
 					// Run the command.
 					foundErr = cmd.fn(e)
 
-					if separateEngineBlocks && dataChange {
+					if separateEngineBlocks && !disableSeparateEngineBlocks && dataChange {
 						require.NoError(t, e.engine.Flush())
 					}
 
