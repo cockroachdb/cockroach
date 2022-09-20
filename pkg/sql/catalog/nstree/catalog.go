@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,13 +42,21 @@ func (c Catalog) ForEachDescriptorEntry(fn func(desc catalog.Descriptor) error) 
 	})
 }
 
+// NamespaceEntry is a catalog.NameEntry augmented with an MVCC timestamp.
+type NamespaceEntry interface {
+	catalog.NameEntry
+	GetMVCCTimestamp() hlc.Timestamp
+}
+
 // ForEachNamespaceEntry iterates over all namespace table entries in an ordered
 // fashion.
-func (c Catalog) ForEachNamespaceEntry(fn func(e catalog.NameEntry) error) error {
+func (c Catalog) ForEachNamespaceEntry(fn func(e NamespaceEntry) error) error {
 	if !c.IsInitialized() {
 		return nil
 	}
-	return c.underlying.byName.ascend(fn)
+	return c.underlying.byName.ascend(func(entry catalog.NameEntry) error {
+		return fn(entry.(NamespaceEntry))
+	})
 }
 
 // LookupDescriptorEntry looks up a descriptor by ID.
@@ -63,11 +72,15 @@ func (c Catalog) LookupDescriptorEntry(id descpb.ID) catalog.Descriptor {
 }
 
 // LookupNamespaceEntry looks up a descriptor ID by name.
-func (c Catalog) LookupNamespaceEntry(key catalog.NameKey) catalog.NameEntry {
+func (c Catalog) LookupNamespaceEntry(key catalog.NameKey) NamespaceEntry {
 	if !c.IsInitialized() || key == nil {
 		return nil
 	}
-	return c.underlying.byName.getByName(key.GetParentID(), key.GetParentSchemaID(), key.GetName())
+	e := c.underlying.byName.getByName(key.GetParentID(), key.GetParentSchemaID(), key.GetName())
+	if e == nil {
+		return nil
+	}
+	return e.(NamespaceEntry)
 }
 
 // OrderedDescriptors returns the descriptors in an ordered fashion.
@@ -89,7 +102,7 @@ func (c Catalog) OrderedDescriptorIDs() []descpb.ID {
 		return nil
 	}
 	ret := make([]descpb.ID, 0, c.underlying.byName.t.Len())
-	_ = c.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+	_ = c.ForEachNamespaceEntry(func(e NamespaceEntry) error {
 		ret = append(ret, e.GetID())
 		return nil
 	})
@@ -236,7 +249,9 @@ func (mc *MutableCatalog) DeleteDescriptorEntry(id descpb.ID) {
 }
 
 // UpsertNamespaceEntry adds a name -> id mapping to the MutableCatalog.
-func (mc *MutableCatalog) UpsertNamespaceEntry(key catalog.NameKey, id descpb.ID) {
+func (mc *MutableCatalog) UpsertNamespaceEntry(
+	key catalog.NameKey, id descpb.ID, mvccTimestamp hlc.Timestamp,
+) {
 	if key == nil || id == descpb.InvalidID {
 		return
 	}
@@ -247,7 +262,8 @@ func (mc *MutableCatalog) UpsertNamespaceEntry(key catalog.NameKey, id descpb.ID
 			ParentSchemaID: key.GetParentSchemaID(),
 			Name:           key.GetName(),
 		},
-		ID: id,
+		ID:        id,
+		Timestamp: mvccTimestamp,
 	}
 	if replaced := mc.underlying.byName.upsert(nsEntry); replaced != nil {
 		mc.byteSize -= replaced.(*namespaceEntry).ByteSize()
@@ -274,9 +290,10 @@ func (mc *MutableCatalog) Clear() {
 type namespaceEntry struct {
 	descpb.NameInfo
 	descpb.ID
+	hlc.Timestamp
 }
 
-var _ catalog.NameEntry = namespaceEntry{}
+var _ NamespaceEntry = namespaceEntry{}
 
 // GetID implements the catalog.NameEntry interface.
 func (e namespaceEntry) GetID() descpb.ID {
@@ -286,4 +303,8 @@ func (e namespaceEntry) GetID() descpb.ID {
 // ByteSize returns the number of bytes a namespaceEntry object takes.
 func (e namespaceEntry) ByteSize() int64 {
 	return int64(e.NameInfo.Size()) + int64(unsafe.Sizeof(e.ID))
+}
+
+func (e namespaceEntry) GetMVCCTimestamp() hlc.Timestamp {
+	return e.Timestamp
 }

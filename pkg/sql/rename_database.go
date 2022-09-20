@@ -119,7 +119,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	// Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
 	// See #34416.
-	lookupFlags := p.CommonLookupFlags(true /*required*/)
+	lookupFlags := p.CommonLookupFlagsRequired()
 	// DDL statements bypass the cache.
 	lookupFlags.AvoidLeased = true
 	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc)

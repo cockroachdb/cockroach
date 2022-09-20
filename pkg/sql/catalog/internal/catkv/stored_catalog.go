@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -32,7 +32,7 @@ import (
 // A StoredCatalog can also be initialized in a bare-bones fashion with just
 // a catalogReader and used for direct catalog access, see MakeDirect.
 type StoredCatalog struct {
-	catalogReader
+	CatalogReader
 
 	// cache mirrors the descriptors in storage.
 	// This map does not store descriptors by name.
@@ -64,19 +64,8 @@ type StoredCatalog struct {
 }
 
 // MakeStoredCatalog returns a new instance of StoredCatalog.
-func MakeStoredCatalog(
-	codec keys.SQLCodec,
-	version clusterversion.ClusterVersion,
-	systemDatabaseCache *SystemDatabaseCache,
-	monitor *mon.BytesMonitor,
-) StoredCatalog {
-	sd := StoredCatalog{
-		catalogReader: catalogReader{
-			Codec:               codec,
-			Version:             version,
-			systemDatabaseCache: systemDatabaseCache,
-		},
-	}
+func MakeStoredCatalog(cr CatalogReader, monitor *mon.BytesMonitor) StoredCatalog {
+	sd := StoredCatalog{CatalogReader: cr}
 	if monitor != nil {
 		memAcc := monitor.MakeBoundAccount()
 		sd.memAcc = &memAcc
@@ -93,7 +82,7 @@ func (sc *StoredCatalog) Reset(ctx context.Context) {
 	}
 	old := *sc
 	*sc = StoredCatalog{
-		catalogReader: old.catalogReader,
+		CatalogReader: old.CatalogReader,
 		cache:         old.cache,
 		nameIndex:     old.nameIndex,
 		memAcc:        old.memAcc,
@@ -163,7 +152,7 @@ func (sc *StoredCatalog) EnsureAllDescriptors(ctx context.Context, txn *kv.Txn) 
 	if sc.hasAllDescriptors {
 		return nil
 	}
-	c, err := sc.scanAll(ctx, txn)
+	c, err := sc.ScanAll(ctx, txn)
 	if err != nil {
 		return err
 	}
@@ -182,12 +171,12 @@ func (sc *StoredCatalog) EnsureAllDatabaseDescriptors(ctx context.Context, txn *
 	if sc.hasAllDescriptors || sc.hasAllDatabaseDescriptors {
 		return nil
 	}
-	c, err := sc.scanNamespaceForDatabases(ctx, txn)
+	c, err := sc.ScanNamespaceForDatabases(ctx, txn)
 	if err != nil {
 		return err
 	}
 	var readIDs catalog.DescriptorIDSet
-	_ = c.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
 		if id := e.GetID(); sc.GetCachedByID(id) == nil {
 			readIDs.Add(id)
 		}
@@ -209,14 +198,19 @@ func (sc *StoredCatalog) ensureAllSchemaIDsAndNamesForDatabase(
 	if _, ok := sc.allSchemasForDatabase[db.GetID()]; ok {
 		return nil
 	}
-	schemasNamespaceEntries, err := resolver.GetForDatabase(ctx, txn, sc.Codec, db)
+	c, err := sc.ScanNamespaceForDatabaseSchemas(ctx, txn, db)
 	if err != nil {
 		return err
 	}
-	m := make(map[descpb.ID]string, len(schemasNamespaceEntries))
-	for id, entry := range schemasNamespaceEntries {
-		m[id] = entry.Name
+	m := make(map[descpb.ID]string)
+	// This is needed at least for the temp system db during restores.
+	if !db.HasPublicSchemaWithDescriptor() {
+		m[keys.PublicSchemaIDForBackup] = catconstants.PublicSchemaName
 	}
+	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		m[e.GetID()] = e.GetName()
+		return nil
+	})
 	sc.allSchemasForDatabase[db.GetID()] = m
 	return nil
 }
@@ -264,7 +258,7 @@ func (sc *StoredCatalog) LookupDescriptorID(
 		return id, nil
 	}
 	// Fall back to querying the namespace table.
-	c, err := sc.getNamespaceEntries(ctx, txn, []descpb.NameInfo{key})
+	c, err := sc.GetNamespaceEntries(ctx, txn, []descpb.NameInfo{key})
 	if err != nil {
 		return descpb.InvalidID, err
 	}
@@ -272,39 +266,6 @@ func (sc *StoredCatalog) LookupDescriptorID(
 		return ne.GetID(), nil
 	}
 	return descpb.InvalidID, nil
-}
-
-// GetByName reads a descriptor from the storage layer by name.
-//
-// This is a three-step process:
-//  1. resolve the descriptor's ID using the name information,
-//  2. actually read the descriptor from storage,
-//  3. check that the name in the descriptor is the one we expect; meaning that
-//     there is no RENAME underway for instance.
-func (sc *StoredCatalog) GetByName(
-	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
-) (catalog.Descriptor, error) {
-	id, err := sc.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
-	if err != nil || id == descpb.InvalidID {
-		return nil, err
-	}
-	desc := sc.GetCachedByID(id)
-	if desc == nil {
-		err = sc.EnsureFromStorageByIDs(ctx, txn, catalog.MakeDescriptorIDSet(id), catalog.Any)
-		if err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				// Having done the namespace lookupObjectID, the descriptor must exist.
-				return nil, errors.WithAssertionFailure(err)
-			}
-			return nil, err
-		}
-		desc = sc.GetCachedByID(id)
-	}
-	if desc.GetName() != name {
-		// TODO(postamar): make StoredCatalog aware of name ops
-		return nil, nil
-	}
-	return desc, nil
 }
 
 // EnsureFromStorageByIDs actually reads a batch of descriptors from storage
@@ -319,7 +280,7 @@ func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	if ids.Empty() {
 		return nil
 	}
-	c, err := sc.getDescriptorEntries(ctx, txn, ids.Ordered(), true /* isRequired */, descriptorType)
+	c, err := sc.GetDescriptorEntries(ctx, txn, ids.Ordered(), true /* isRequired */, descriptorType)
 	if err != nil {
 		return err
 	}
@@ -419,7 +380,7 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptors(
 		}
 	}
 	if len(fallbackReqs) > 0 {
-		read, err := c.sc.getDescriptorEntries(ctx, c.txn, fallbackReqs, false /* isRequired */, catalog.Any)
+		read, err := c.sc.GetDescriptorEntries(ctx, c.txn, fallbackReqs, false /* isRequired */, catalog.Any)
 		if err != nil {
 			return nil, err
 		}
@@ -451,7 +412,7 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptorIDs(
 	ctx context.Context, reqs []descpb.NameInfo,
 ) ([]descpb.ID, error) {
 	// TODO(postamar): cache namespace entries in StoredCatalog
-	read, err := c.sc.getNamespaceEntries(ctx, c.txn, reqs)
+	read, err := c.sc.GetNamespaceEntries(ctx, c.txn, reqs)
 	if err != nil {
 		return nil, err
 	}

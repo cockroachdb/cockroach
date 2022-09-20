@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -379,7 +380,8 @@ func validateColumnForHasPrivilegeSpecifier(
 
 // ObjectLookupFlags is part of the resolver.SchemaResolver interface.
 func (p *planner) ObjectLookupFlags(required, requireMutable bool) tree.ObjectLookupFlags {
-	flags := p.CommonLookupFlags(required)
+	flags := p.CommonLookupFlagsRequired()
+	flags.Required = required
 	flags.RequireMutable = requireMutable
 	return tree.ObjectLookupFlags{CommonLookupFlags: flags}
 }
@@ -399,9 +401,8 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 ) ([]DescriptorWithObjectType, error) {
 	const required = true
 	flags := tree.CommonLookupFlags{
-		Required:       required,
-		AvoidLeased:    p.skipDescriptorCache,
-		RequireMutable: true,
+		Required:    required,
+		AvoidLeased: p.skipDescriptorCache,
 	}
 	if targets.Databases != nil {
 		if len(targets.Databases) == 0 {
@@ -549,8 +550,8 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 				if err != nil {
 					return nil, err
 				}
-				sc, err := p.Descriptors().GetMutableSchemaByName(
-					ctx, p.txn, db, scName.Schema(), tree.SchemaLookupFlags{Required: true},
+				sc, err := p.Descriptors().GetImmutableSchemaByName(
+					ctx, p.txn, db, scName.Schema(), tree.SchemaLookupFlags{Required: true, AvoidLeased: true},
 				)
 				if err != nil {
 					return nil, err
@@ -597,19 +598,24 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		}
 
 		for _, sc := range targetSchemas {
-			resSchema, err := p.Descriptors().GetSchemaByName(
-				ctx, p.txn, sc.dbDesc, sc.schema, flags)
+			resSchema, err := p.Descriptors().GetImmutableSchemaByName(
+				ctx, p.txn, sc.dbDesc, sc.schema, flags,
+			)
 			if err != nil {
 				return nil, err
 			}
 			switch resSchema.SchemaKind() {
 			case catalog.SchemaUserDefined:
-				descs = append(
-					descs,
-					DescriptorWithObjectType{
-						descriptor: resSchema,
-						objectType: privilege.Schema,
-					})
+				mutSchema, err := p.Descriptors().GetMutableSchemaByID(
+					ctx, p.txn, resSchema.GetID(), flags,
+				)
+				if err != nil {
+					return nil, err
+				}
+				descs = append(descs, DescriptorWithObjectType{
+					descriptor: mutSchema,
+					objectType: privilege.Schema,
+				})
 			default:
 				return nil, pgerror.Newf(pgcode.InvalidSchemaName,
 					"cannot change privileges on schema %q", resSchema.GetName())
@@ -981,16 +987,17 @@ type tableLookupFn = *internalLookupCtx
 // internalLookupCtx. It also hydrates any table descriptors with enum
 // information. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptorProtos(
-	ctx context.Context, rawDescs []descpb.Descriptor, prefix catalog.DatabaseDescriptor,
+	ctx context.Context, rawDescs []descpb.Descriptor,
 ) (*internalLookupCtx, error) {
-	descriptors := make([]catalog.Descriptor, len(rawDescs))
+	var c nstree.MutableCatalog
 	for i := range rawDescs {
-		descriptors[i] = descbuilder.NewBuilder(&rawDescs[i]).BuildImmutable()
+		desc := descbuilder.NewBuilder(&rawDescs[i]).BuildImmutable()
+		c.UpsertDescriptorEntry(desc)
 	}
-	lCtx := newInternalLookupCtx(descriptors, prefix)
-	if err := descs.HydrateGivenDescriptors(ctx, descriptors); err != nil {
+	if err := descs.HydrateCatalog(ctx, c); err != nil {
 		return nil, err
 	}
+	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), nil /* prefix */)
 	return lCtx, nil
 }
 
@@ -1310,10 +1317,11 @@ func (p *planner) ResolveExistingObjectEx(
 	requiredType tree.RequiredTableKind,
 ) (res catalog.TableDescriptor, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags:    p.CommonLookupFlags(required),
+		CommonLookupFlags:    p.CommonLookupFlagsRequired(),
 		DesiredObjectKind:    tree.TableObject,
 		DesiredTableDescKind: requiredType,
 	}
+	lookupFlags.Required = required
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
 	if err != nil || desc == nil {
 		return nil, err

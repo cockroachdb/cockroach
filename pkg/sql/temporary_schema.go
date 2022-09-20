@@ -96,17 +96,12 @@ var (
 	}
 )
 
-// TemporarySchemaNameForRestorePrefix is the prefix name of the schema we
-// synthesize during a full cluster restore. All temporary objects being
-// restored are remapped to belong to this schema allowing the reconciliation
-// job to gracefully clean up these objects when it runs.
-const TemporarySchemaNameForRestorePrefix string = "pg_temp_0_"
-
 func (p *planner) getOrCreateTemporarySchema(
 	ctx context.Context, db catalog.DatabaseDescriptor,
 ) (catalog.SchemaDescriptor, error) {
 	tempSchemaName := p.TemporarySchemaName()
-	sc, err := p.Descriptors().GetMutableSchemaByName(ctx, p.txn, db, tempSchemaName, p.CommonLookupFlags(false))
+	flags := tree.CommonLookupFlags{AvoidLeased: true}
+	sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db, tempSchemaName, flags)
 	if sc != nil || err != nil {
 		return sc, err
 	}
@@ -124,7 +119,7 @@ func (p *planner) getOrCreateTemporarySchema(
 		m.SetTemporarySchemaName(sKey.GetName())
 		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
 	})
-	return p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), id, p.CommonLookupFlags(true))
+	return p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), id, p.CommonLookupFlagsRequired())
 }
 
 // CreateSchemaNamespaceEntry creates an entry for the schema in the

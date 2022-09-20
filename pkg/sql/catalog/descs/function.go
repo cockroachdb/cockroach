@@ -55,15 +55,9 @@ func (tc *Collection) getFunctionByID(
 		}
 		return nil, err
 	}
-
 	fn, ok := descs[0].(catalog.FunctionDescriptor)
 	if !ok {
 		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", fnID)
 	}
-
-	hydrated, err := tc.hydrateTypesInDescWithOptions(ctx, txn, fn, flags.IncludeOffline, flags.AvoidLeased)
-	if err != nil {
-		return nil, err
-	}
-	return hydrated.(catalog.FunctionDescriptor), nil
+	return fn, nil
 }

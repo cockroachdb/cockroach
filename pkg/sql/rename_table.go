@@ -122,10 +122,10 @@ func (n *renameTableNode) startExec(params runParams) error {
 			return err
 		}
 
-		targetSchemaDesc, err = p.Descriptors().GetMutableSchemaByName(
+		targetSchemaDesc, err = p.Descriptors().GetImmutableSchemaByName(
 			ctx, p.txn, targetDbDesc, oldTn.Schema(), tree.SchemaLookupFlags{
-				Required:       true,
-				RequireMutable: true,
+				Required:    true,
+				AvoidLeased: true,
 			})
 		if err != nil {
 			return err

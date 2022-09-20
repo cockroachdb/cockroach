@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,7 +38,7 @@ func (tc *virtualDescriptors) getSchemaByName(schemaName string) catalog.SchemaD
 }
 
 func (tc *virtualDescriptors) getObjectByName(
-	schema string, object string, flags tree.ObjectLookupFlags, db string,
+	schema string, object string, flags tree.ObjectLookupFlags,
 ) (isVirtual bool, _ catalog.Descriptor, _ error) {
 	if tc.vs == nil {
 		return false, nil, nil
@@ -48,21 +47,17 @@ func (tc *virtualDescriptors) getObjectByName(
 	if !ok {
 		return false, nil, nil
 	}
-	desc, err := scEntry.GetObjectByName(object, flags)
+	obj, err := scEntry.GetObjectByName(object, flags)
 	if err != nil {
 		return true, nil, err
 	}
-	if desc == nil {
-		if flags.Required {
-			obj := tree.NewQualifiedObjectName(db, schema, object, flags.DesiredObjectKind)
-			return true, nil, sqlerrors.NewUndefinedObjectError(obj, flags.DesiredObjectKind)
-		}
+	if obj == nil {
 		return true, nil, nil
 	}
 	if flags.RequireMutable {
-		return true, nil, catalog.NewMutableAccessToVirtualSchemaError(scEntry, object)
+		return true, nil, catalog.NewMutableAccessToVirtualObjectError(scEntry, obj)
 	}
-	return true, desc.Desc(), nil
+	return true, obj.Desc(), nil
 }
 
 func (tc virtualDescriptors) getByID(
@@ -80,7 +75,7 @@ func (tc virtualDescriptors) getByID(
 					id, vd.Desc().GetParentSchemaID(),
 				)
 			}
-			return nil, catalog.NewMutableAccessToVirtualSchemaError(vs, vd.Desc().GetName())
+			return nil, catalog.NewMutableAccessToVirtualObjectError(vs, vd)
 		}
 		return vd.Desc(), nil
 	}
@@ -98,7 +93,7 @@ func (tc virtualDescriptors) getSchemaByID(
 	case !found:
 		return nil, nil
 	case mutable:
-		return nil, catalog.NewMutableAccessToVirtualSchemaError(vs, vs.Desc().GetName())
+		return nil, catalog.NewMutableAccessToVirtualSchemaError(vs.Desc())
 	default:
 		return vs.Desc(), nil
 	}

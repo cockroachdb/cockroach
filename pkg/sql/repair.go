@@ -486,7 +486,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 	if val.Value != nil {
 		existingID = descpb.ID(val.ValueInt())
 	}
-	flags := p.CommonLookupFlags(true /* required */)
+	flags := p.CommonLookupFlagsRequired()
 	flags.IncludeDropped = true
 	flags.IncludeOffline = true
 	validateDescriptor := func() error {
