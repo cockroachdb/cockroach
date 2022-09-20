@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -459,15 +460,12 @@ func SanitizeVarFreeExpr(
 // ValidateTTLExpressionDoesNotDependOnColumn verifies that the
 // ttl_expiration_expression, if any, does not reference the given column.
 func ValidateTTLExpressionDoesNotDependOnColumn(
-	tableDesc catalog.TableDescriptor, col catalog.Column,
+	tableDesc catalog.TableDescriptor, rowLevelTTL *catpb.RowLevelTTL, col catalog.Column,
 ) error {
-	if !tableDesc.HasRowLevelTTL() {
+	if rowLevelTTL == nil || !rowLevelTTL.HasExpirationExpr() {
 		return nil
 	}
-	expirationExpr := tableDesc.GetRowLevelTTL().ExpirationExpr
-	if expirationExpr == "" {
-		return nil
-	}
+	expirationExpr := rowLevelTTL.ExpirationExpr
 	expr, err := parser.ParseExpr(string(expirationExpr))
 	if err != nil {
 		// At this point, we should be able to parse the expiration expression.
@@ -497,12 +495,9 @@ func ValidateTTLExpirationExpression(
 	tableDesc catalog.TableDescriptor,
 	semaCtx *tree.SemaContext,
 	tableName *tree.TableName,
+	ttl *catpb.RowLevelTTL,
 ) error {
-	if !tableDesc.HasRowLevelTTL() {
-		return nil
-	}
 
-	ttl := tableDesc.GetRowLevelTTL()
 	if !ttl.HasExpirationExpr() {
 		return nil
 	}
