@@ -362,12 +362,12 @@ func getMinVal(
 		i := int64(*bound)
 		switch t.Width() {
 		case 16:
-			if i == math.MinInt16 {
+			if i <= math.MinInt16 { // use inequality to be conservative
 				return nil, false
 			}
 			return tree.NewDInt(tree.DInt(math.MinInt16)), true
 		case 32:
-			if i == math.MinInt32 {
+			if i <= math.MinInt32 { // use inequality to be conservative
 				return nil, false
 			}
 			return tree.NewDInt(tree.DInt(math.MinInt32)), true
@@ -397,12 +397,12 @@ func getMaxVal(
 		i := int64(*bound)
 		switch t.Width() {
 		case 16:
-			if i == math.MaxInt16 {
+			if i >= math.MaxInt16 { // use inequality to be conservative
 				return nil, false
 			}
 			return tree.NewDInt(tree.DInt(math.MaxInt16)), true
 		case 32:
-			if i == math.MaxInt32 {
+			if i >= math.MaxInt32 { // use inequality to be conservative
 				return nil, false
 			}
 			return tree.NewDInt(tree.DInt(math.MaxInt32)), true
