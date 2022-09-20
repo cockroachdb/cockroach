@@ -831,6 +831,10 @@ func (ie *InternalExecutor) execInternal(
 	stmt string,
 	qargs ...interface{},
 ) (r *rowsIterator, retErr error) {
+	if err := ie.checkIfTxnIsConsistent(txn); err != nil {
+		return nil, err
+	}
+
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
@@ -896,6 +900,9 @@ func (ie *InternalExecutor) execInternal(
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)
+	if err := ie.checkIfStmtIsAllowed(parsed.AST, txn); err != nil {
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1073,6 +1080,29 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	}
 	defer ex.close(ctx, externalTxnClose)
 	return ex.commitSQLTransactionInternal(ctx)
+}
+
+// checkIfStmtIsAllowed returns an error if the internal executor is not bound
+// with the outer-txn-related info but is used to run DDL statements within an
+// outer txn.
+// TODO (janexing): this will be deprecate soon since it's not a good idea
+// to have `extraTxnState` to store the info from a outer txn.
+func (ie *InternalExecutor) checkIfStmtIsAllowed(stmt tree.Statement, txn *kv.Txn) error {
+	if tree.CanModifySchema(stmt) && txn != nil && ie.extraTxnState == nil {
+		return errors.New("DDL statement is disallowed if internal " +
+			"executor is not bound with txn metadata")
+	}
+	return nil
+}
+
+// checkIfTxnIsConsistent returns true if the given txn is not nil and is not
+// the same txn that is used to construct the internal executor.
+func (ie *InternalExecutor) checkIfTxnIsConsistent(txn *kv.Txn) error {
+	if txn != nil && ie.extraTxnState != nil && ie.extraTxnState.txn != txn {
+		return errors.New("txn is inconsistent with the one when " +
+			"constructing the internal executor")
+	}
+	return nil
 }
 
 // internalClientComm is an implementation of ClientComm used by the

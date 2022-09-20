@@ -2158,8 +2158,18 @@ func (c *cliState) configurePreShellDefaults(
 		// memory when e.g. piping a large SQL script through the
 		// command-line client.
 
+		// maxHistEntries is the maximum number of entries to
+		// preserve. Note that libedit de-duplicates entries under the
+		// hood. We expect that folk entering SQL in a shell will often
+		// reuse the same queries over time, so we don't expect this limit
+		// to ever be reached in practice, or to be an annoyance to
+		// anyone. We do prefer a limit however (as opposed to no limit at
+		// all), to prevent abnormal situation where a history runs into
+		// megabytes and starts slowing down the shell.
+		const maxHistEntries = 1000
+
 		c.ins.SetCompleter(c)
-		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
+		if err := c.ins.UseHistory(maxHistEntries, true /*dedup*/); err != nil {
 			fmt.Fprintf(c.iCtx.stderr, "warning: cannot enable history: %v\n ", err)
 		} else {
 			homeDir, err := envutil.HomeDir()

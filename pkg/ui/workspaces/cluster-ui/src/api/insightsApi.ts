@@ -13,6 +13,8 @@ import {
   SqlExecutionRequest,
   SqlExecutionResponse,
   INTERNAL_SQL_API_APP,
+  LONG_TIMEOUT,
+  LARGE_RESULT_SIZE,
 } from "./sqlApi";
 import {
   InsightExecEnum,
@@ -187,7 +189,8 @@ export function getTransactionInsightEventState(): Promise<TransactionInsightEve
       },
     ],
     execute: true,
-    max_result_size: 50000, // 50 kib
+    max_result_size: LARGE_RESULT_SIZE,
+    timeout: LONG_TIMEOUT,
   };
   return executeInternalSql<TransactionContentionResponseColumns>(
     txnContentionRequest,
@@ -204,7 +207,8 @@ export function getTransactionInsightEventState(): Promise<TransactionInsightEve
         },
       ],
       execute: true,
-      max_result_size: 50000, // 50 kib
+      max_result_size: LARGE_RESULT_SIZE,
+      timeout: LONG_TIMEOUT,
     };
     return executeInternalSql<TxnStmtFingerprintsResponseColumns>(
       txnFingerprintRequest,
@@ -224,7 +228,8 @@ export function getTransactionInsightEventState(): Promise<TransactionInsightEve
           },
         ],
         execute: true,
-        max_result_size: 50000, // 50 kib
+        max_result_size: LARGE_RESULT_SIZE,
+        timeout: LONG_TIMEOUT,
       };
       return executeInternalSql<FingerprintStmtsResponseColumns>(
         fingerprintStmtsRequest,
@@ -381,7 +386,8 @@ export function getTransactionInsightEventDetailsState(
       },
     ],
     execute: true,
-    max_result_size: 50000, // 50 kib
+    max_result_size: LARGE_RESULT_SIZE,
+    timeout: LONG_TIMEOUT,
   };
   return executeInternalSql<TxnContentionDetailsResponseColumns>(
     txnContentionDetailsRequest,
@@ -398,7 +404,8 @@ export function getTransactionInsightEventDetailsState(
         },
       ],
       execute: true,
-      max_result_size: 50000, // 50 kib
+      max_result_size: LARGE_RESULT_SIZE,
+      timeout: LONG_TIMEOUT,
     };
     return executeInternalSql<TxnStmtFingerprintsResponseColumns>(
       waitingTxnFingerprintRequest,
@@ -412,7 +419,8 @@ export function getTransactionInsightEventDetailsState(
           },
         ],
         execute: true,
-        max_result_size: 50000, // 50 kib
+        max_result_size: LARGE_RESULT_SIZE,
+        timeout: LONG_TIMEOUT,
       };
       return executeInternalSql<FingerprintStmtsResponseColumns>(
         waitingFingerprintStmtsRequest,
@@ -427,7 +435,8 @@ export function getTransactionInsightEventDetailsState(
             },
           ],
           execute: true,
-          max_result_size: 50000, // 50 kib
+          max_result_size: LARGE_RESULT_SIZE,
+          timeout: LONG_TIMEOUT,
         };
         return executeInternalSql<TxnStmtFingerprintsResponseColumns>(
           blockingTxnFingerprintRequest,
@@ -442,7 +451,8 @@ export function getTransactionInsightEventDetailsState(
               },
             ],
             execute: true,
-            max_result_size: 50000, // 50 kib
+            max_result_size: LARGE_RESULT_SIZE,
+            timeout: LONG_TIMEOUT,
           };
           return executeInternalSql<FingerprintStmtsResponseColumns>(
             blockingFingerprintStmtsRequest,
@@ -624,7 +634,8 @@ export function getStatementInsightsApi(): Promise<StatementInsights> {
       },
     ],
     execute: true,
-    max_result_size: 50000, // 50 kib
+    max_result_size: LARGE_RESULT_SIZE,
+    timeout: LONG_TIMEOUT,
   };
   return executeInternalSql<ExecutionInsightsResponseRow>(request).then(
     result => {

@@ -77,7 +77,9 @@ const mapStateToProps = (
   const key = jobsKey(status, type, parseInt(show, 10));
   const jobsState = selectJobsState(state, key);
   const jobs = jobsState ? jobsState.data : null;
-  const jobsLoading = jobsState ? jobsState.inFlight : false;
+  const jobsLoading = jobsState
+    ? jobsState.inFlight && !jobsState.valid
+    : false;
   const jobsError = jobsState ? jobsState.lastError : null;
   return {
     sort,

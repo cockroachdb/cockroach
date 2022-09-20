@@ -12,6 +12,7 @@ import {
   SqlExecutionRequest,
   SqlTxnResult,
   executeInternalSql,
+  LONG_TIMEOUT,
 } from "./sqlApi";
 import {
   InsightRecommendation,
@@ -181,6 +182,7 @@ export function getSchemaInsights(): Promise<InsightRecommendation[]> {
       sql: insightQuery.query,
     })),
     execute: true,
+    timeout: LONG_TIMEOUT,
   };
   return executeInternalSql<SchemaInsightResponse>(request).then(result => {
     const results: InsightRecommendation[] = [];

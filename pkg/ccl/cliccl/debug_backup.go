@@ -291,7 +291,12 @@ func externalStorageFromURIFactory(
 	defaultSettings := &cluster.Settings{}
 	defaultSettings.SV.Init(ctx, nil /* opaque */)
 	return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
-		defaultSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/, nil, opts...)
+		defaultSettings, newBlobFactory, user,
+		nil, /* ie */
+		nil, /* cf */
+		nil, /* kvDB */
+		nil, /* limiters */
+		opts...)
 }
 
 func getManifestFromURI(ctx context.Context, path string) (backuppb.BackupManifest, error) {
@@ -588,7 +593,13 @@ func makeIters(
 		var err error
 		clusterSettings := cluster.MakeClusterSettings()
 		dirStorage[i], err = cloud.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
-			clusterSettings, newBlobFactory, nil /*internal executor*/, nil /*kvDB*/, nil)
+			clusterSettings,
+			newBlobFactory,
+			nil, /* ie */
+			nil, /* cf */
+			nil, /* kvDB */
+			nil, /* limiters */
+		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "making external storage")
 		}

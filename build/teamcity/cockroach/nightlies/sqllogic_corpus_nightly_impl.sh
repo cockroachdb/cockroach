@@ -143,7 +143,7 @@ done
 
 # Any generated corpus should be validated on the current version first, which
 # indicates we can replay it on the same version.
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test --config=ci \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
     //pkg/sql/schemachanger/corpus:corpus_test \
     --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed \
     --test_filter='^TestValidateCorpuses$' \
