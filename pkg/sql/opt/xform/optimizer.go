@@ -1042,9 +1042,6 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		// Needed to make sure that dummy columns are pruned so that the
 		// database name is retrieved correctly.
 		int(opt.PruneScanCols),
-		// TODO(#88141): Needed until a bug in the vectorized engine is fixed.
-		int(opt.FoldInEmpty),
-		int(opt.FoldNotInEmpty),
 	)
 
 	var disabledRules RuleSet
