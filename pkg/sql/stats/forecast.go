@@ -276,7 +276,7 @@ func forecastColumnStatistics(
 		// Now adjust for consistency. We don't use any session data for operations
 		// on upper bounds, so a nil *eval.Context works as our tree.CompareContext.
 		var compareCtx *eval.Context
-		hist.adjustCounts(compareCtx, nonNullRowCount, nonNullDistinctCount)
+		hist.adjustCounts(compareCtx, observed[0].HistogramData.ColumnType, nonNullRowCount, nonNullDistinctCount)
 
 		// Finally, convert back to HistogramData.
 		histData, err := hist.toHistogramData(observed[0].HistogramData.ColumnType)

@@ -431,7 +431,6 @@ func upgradeNodes(
 
 		binary := uploadVersion(ctx, t, c, c.Node(node), newVersion)
 		settings := install.MakeClusterSettings(install.BinaryOption(binary))
-		settings.Env = append(settings.Env, "COCKROACH_UPGRADE_TO_DEV_VERSION=true")
 		c.Start(ctx, t.L(), startOpts, settings, c.Node(node))
 
 		// We have seen cases where a transient error could occur when this

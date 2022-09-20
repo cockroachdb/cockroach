@@ -1,0 +1,39 @@
+# LogicTest: !fakedist-disk
+
+# Note that we disable the "forced disk spilling" config because the histograms
+# are dropped if the stats collection reaches the memory budget limit.
+
+# Regression test for using values outside of the range supported by the column
+# type for the histogram buckets (#76887).
+statement ok
+CREATE TABLE t (c INT2);
+
+# Insert many values so that the boundary values are likely to not be sampled.
+# Splitting the INSERT statement into two such that negative values are inserted
+# later for some reason makes it more likely that "outer" histogram buckets will
+# be needed.
+statement ok
+INSERT INTO t SELECT generate_series(1, 10000);
+INSERT INTO t SELECT generate_series(-10000, 0);
+
+statement ok
+ANALYZE t;
+
+# Get the histogram ID for column 'c'.
+let $histogram_id
+WITH h(columns, id) AS
+  (SELECT column_names, histogram_id from [SHOW STATISTICS FOR TABLE t])
+SELECT id FROM h WHERE columns = ARRAY['c'];
+
+# Run a query that verifies that minimum and maximum values of the histogram
+# buckets are exactly the boundaries of the INT2 supported range (unless -10000
+# and 10000 values were sampled).
+query B
+SELECT CASE
+  WHEN (SELECT count(*) FROM [SHOW HISTOGRAM $histogram_id]) = 2
+    THEN true -- if the sampling picked the boundary values, we're happy
+  ELSE
+    (SELECT min(upper_bound::INT) = -32768 AND max(upper_bound::INT) = 32767 FROM [SHOW HISTOGRAM $histogram_id])
+  END
+----
+true
