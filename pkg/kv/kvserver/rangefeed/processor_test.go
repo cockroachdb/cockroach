@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1052,7 +1053,7 @@ func (p *Processor) syncEventAndRegistrations() {
 // overlapping the given span to fully process their own internal buffers.
 func (p *Processor) syncEventAndRegistrationSpan(span roachpb.Span) {
 	syncC := make(chan struct{})
-	ev := getPooledEvent(event{syncC: syncC, testRegCatchupSpan: span})
+	ev := getPooledEvent(event{sync: &syncEvent{c: syncC, testRegCatchupSpan: &span}})
 	select {
 	case p.eventC <- ev:
 		select {
@@ -1465,4 +1466,12 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 		err := <-r1ErrC
 		require.NoError(b, err.GoError())
 	}
+}
+
+// TestSizeOfEvent tests the size of the event struct. It is fine if this struct
+// changes in size, as long as this is done consciously.
+func TestSizeOfEvent(t *testing.T) {
+	var e event
+	size := int(unsafe.Sizeof(e))
+	require.Equal(t, 72, size)
 }
