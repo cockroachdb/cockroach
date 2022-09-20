@@ -93,7 +93,16 @@ func (w *schemaChangeWatchDog) watchLoop(ctx context.Context) {
 			close(responseChannel)
 			return
 		case <-ctx.Done():
-			panic("dumping stacks, we failed to terminate threads on time.")
+			// Give the connections a small amount of time to clean up, if they fail
+			// to do so, we will dump stacks.
+			select {
+			case responseChannel := <-w.cmdChannel:
+				close(responseChannel)
+				return
+			case <-time.After(time.Second * 4):
+				panic("dumping stacks, we failed to terminate threads on time.")
+
+			}
 		case <-time.After(time.Second):
 			// If the connection is making progress, the watch dog timer can be reset
 			// again.
