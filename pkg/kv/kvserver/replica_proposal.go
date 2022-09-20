@@ -374,8 +374,13 @@ func (r *Replica) leasePostApplyLocked(
 			if log.V(1) {
 				log.VEventf(ctx, 1, "upgrading expiration lease %s to an epoch-based one", newLease)
 			}
+
+			if r.store.TestingKnobs().LeaseUpgradeInterceptor != nil {
+				r.store.TestingKnobs().LeaseUpgradeInterceptor(newLease)
+			}
 			st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{})
-			r.maybeExtendLeaseAsyncLocked(ctx, st)
+			// Ignore the returned handle as we won't block on it.
+			_ = r.requestLeaseLocked(ctx, st)
 		}
 	}
 
