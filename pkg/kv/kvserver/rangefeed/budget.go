@@ -117,7 +117,7 @@ type FeedBudget struct {
 		closed bool
 	}
 	// Maximum amount of memory to use by feed. We use separate limit here to
-	// avoid creating BytesMontior with a limit per feed.
+	// avoid creating BytesMonitor with a limit per feed.
 	limit int64
 	// Channel to notify that memory was returned to the budget.
 	replenishC chan interface{}
