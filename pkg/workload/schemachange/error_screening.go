@@ -560,14 +560,20 @@ SELECT count(*) > 0
 	return nil
 }
 
+func getValidGenerationErrors() errorCodeSet {
+	return errorCodeSet{
+		pgcode.NumericValueOutOfRange:    true,
+		pgcode.FloatingPointException:    true,
+		pgcode.InvalidTextRepresentation: true,
+	}
+}
+
 // isValidGenerationError these codes can be observed when evaluating values
 // for generated expressions. These are errors are not ignored, but added into
 // the expected set of errors.
 func isValidGenerationError(code string) bool {
 	pgCode := pgcode.MakeCode(code)
-	return pgCode == pgcode.NumericValueOutOfRange ||
-		pgCode == pgcode.FloatingPointException ||
-		pgCode == pgcode.InvalidTextRepresentation
+	return getValidGenerationErrors().contains(pgCode)
 }
 
 // validateGeneratedExpressionsForInsert goes through generated expressions and
