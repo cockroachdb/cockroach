@@ -17,25 +17,25 @@ ARTIFACTS_DIR=/artifacts
 GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 exit_status=0
 
-for config in local multiregion-9node-3region-3azs 5node multiregion-9node-3region-3azs-no-los multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-vec-off multiregion-15node-5region-3azs 3node-tenant 3node-tenant-multiregion; do
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
-    //pkg/ccl/logictestccl/tests/$config/... \
-    --test_arg=-show-sql \
-    --test_env=COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY=0.8 \
-    --test_env=GO_TEST_WRAP_TESTV=1 \
-    --test_env=GO_TEST_WRAP=1 \
-    --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE.$config \
-    --test_timeout=14400 \
-    --test_env=GOOGLE_APPLICATION_CREDENTIALS="$GOOGLE_APPLICATION_CREDENTIALS" \
-    || exit_status=$?
-
-process_test_json \
-  $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
-  $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
-  $ARTIFACTS_DIR \
-  $GO_TEST_JSON_OUTPUT_FILE \
-  $exit_status
-done
+#for config in local multiregion-9node-3region-3azs 5node multiregion-9node-3region-3azs-no-los multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-vec-off multiregion-15node-5region-3azs 3node-tenant 3node-tenant-multiregion; do
+#$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
+#    //pkg/ccl/logictestccl/tests/$config/... \
+#    --test_arg=-show-sql \
+#    --test_env=COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY=0.8 \
+#    --test_env=GO_TEST_WRAP_TESTV=1 \
+#    --test_env=GO_TEST_WRAP=1 \
+#    --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE.$config \
+#    --test_timeout=14400 \
+#    --test_env=GOOGLE_APPLICATION_CREDENTIALS="$GOOGLE_APPLICATION_CREDENTIALS" \
+#    || exit_status=$?
+#
+#process_test_json \
+#  $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
+#  $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
+#  $ARTIFACTS_DIR \
+#  $GO_TEST_JSON_OUTPUT_FILE \
+#  $exit_status
+#done
 
 
 for config in local; do
