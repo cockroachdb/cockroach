@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -141,6 +143,7 @@ func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 	producerCtx, stopProducer := context.WithCancel(context.Background())
 	wg := ctxgroup.WithContext(producerCtx)
 	defer func() {
+		stopProducer()
 		_ = wg.Wait() // Ignore error -- this group returns context cancellation.
 	}()
 
@@ -156,18 +159,28 @@ func TestBlockingBufferNotifiesConsumerWhenOutOfMemory(t *testing.T) {
 	})
 
 	// Consume events until we get a flush event.
-	var outstanding kvevent.Alloc
-	for i := 0; ; i++ {
-		e, err := buf.Get(context.Background())
-		require.NoError(t, err)
-		if e.Type() == kvevent.TypeFlush {
-			break
-		}
-
-		// detach alloc associated with an event and merge (but not release) it into outstanding.
-		a := e.DetachAlloc()
-		outstanding.Merge(&a)
+	consumerTimeout := 10 * time.Second
+	if util.RaceEnabled {
+		consumerTimeout *= 10
 	}
 
-	stopProducer()
+	require.NoError(t, contextutil.RunWithTimeout(
+		context.Background(), "consume", consumerTimeout,
+		func(ctx context.Context) error {
+			var outstanding kvevent.Alloc
+			for i := 0; ; i++ {
+				e, err := buf.Get(ctx)
+				if err != nil {
+					return err
+				}
+				if e.Type() == kvevent.TypeFlush {
+					return nil
+				}
+
+				// detach alloc associated with an event and merge (but not release) it into outstanding.
+				a := e.DetachAlloc()
+				outstanding.Merge(&a)
+			}
+		},
+	))
 }
