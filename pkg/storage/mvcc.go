@@ -5309,8 +5309,9 @@ func CanGCEntireRange(
 }
 
 // MVCCFindSplitKey finds a key from the given span such that the left side of
-// the split is roughly targetSize bytes. The returned key will never be chosen
-// from the key ranges listed in keys.NoSplitSpans.
+// the split is roughly targetSize bytes. It only considers MVCC point keys, not
+// range keys. The returned key will never be chosen from the key ranges listed
+// in keys.NoSplitSpans.
 func MVCCFindSplitKey(
 	_ context.Context, reader Reader, key, endKey roachpb.RKey, targetSize int64,
 ) (roachpb.Key, error) {
@@ -5718,19 +5719,31 @@ func computeStatsForIterWithVisitors(
 	return ms, nil
 }
 
-// MVCCIsSpanEmpty returns true if there are no MVCC keys whatsoever in the
-// key span in the requested time interval.
+// MVCCIsSpanEmpty returns true if there are no MVCC keys whatsoever in the key
+// span in the requested time interval. If a time interval is given and any
+// inline values are encountered, an error may be returned.
 func MVCCIsSpanEmpty(
 	ctx context.Context, reader Reader, opts MVCCIsSpanEmptyOptions,
 ) (isEmpty bool, _ error) {
-	iter := NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
-		KeyTypes:     IterKeyTypePointsAndRanges,
-		StartKey:     opts.StartKey,
-		EndKey:       opts.EndKey,
-		StartTime:    opts.StartTS,
-		EndTime:      opts.EndTS,
-		IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
-	})
+	// Only use an MVCCIncrementalIterator if time bounds are given, since it will
+	// error on any inline values, and the caller may want to respect them instead.
+	var iter SimpleMVCCIterator
+	if opts.StartTS.IsEmpty() && opts.EndTS.IsEmpty() {
+		iter = reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			LowerBound: opts.StartKey,
+			UpperBound: opts.EndKey,
+		})
+	} else {
+		iter = NewMVCCIncrementalIterator(reader, MVCCIncrementalIterOptions{
+			KeyTypes:     IterKeyTypePointsAndRanges,
+			StartKey:     opts.StartKey,
+			EndKey:       opts.EndKey,
+			StartTime:    opts.StartTS,
+			EndTime:      opts.EndTS,
+			IntentPolicy: MVCCIncrementalIterIntentPolicyEmit,
+		})
+	}
 	defer iter.Close()
 	iter.SeekGE(MVCCKey{Key: opts.StartKey})
 	valid, err := iter.Valid()
