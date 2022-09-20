@@ -1804,7 +1804,7 @@ func (p *fakePubsubSink) Flush(ctx context.Context) error {
 	return p.Sink.Flush(ctx)
 }
 
-func (p *fakePubsubClient) connectivityError() error {
+func (p *fakePubsubClient) connectivityErrorLocked() error {
 	return nil
 }
 
