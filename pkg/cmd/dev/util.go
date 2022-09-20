@@ -12,8 +12,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -190,4 +192,28 @@ func logCommand(cmd string, args ...string) {
 	fullArgs = append(fullArgs, cmd)
 	fullArgs = append(fullArgs, args...)
 	log.Printf("$ %s", shellescape.QuoteCommand(fullArgs))
+}
+
+func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
+	// Check if a BEP file exists.
+	if _, err := os.Stat(bepFilepath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	file, err := os.Open(bepFilepath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	httpClient := &http.Client{}
+	req, _ := http.NewRequest("POST", beaverHubServerEndpoint, file)
+	req.Header.Add("Run-Env", "dev")
+	req.Header.Add("Content-Type", "application/octet-stream")
+	if _, err := httpClient.Do(req); err != nil {
+		return err
+	}
+	_ = os.Remove(bepFilepath)
+	return nil
 }
