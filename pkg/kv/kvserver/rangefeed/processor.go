@@ -148,20 +148,37 @@ func putPooledEvent(ev *event) {
 // to be informed of. It is used so that all events can be sent over the same
 // channel, which is necessary to prevent reordering.
 type event struct {
-	ops     []enginepb.MVCCLogicalOp
-	ct      hlc.Timestamp
-	sst     []byte
-	sstSpan roachpb.Span
-	sstWTS  hlc.Timestamp
-	initRTS bool
-	syncC   chan struct{}
-	// This setting is used in conjunction with syncC in tests in order to ensure
-	// that all registrations have fully finished outputting their buffers. This
-	// has to be done by the processor in order to avoid race conditions with the
-	// registry. Should be used only in tests.
-	testRegCatchupSpan roachpb.Span
-	// Budget allocated to process the event
+	// Event variants. Only one set.
+	ops     opsEvent
+	ct      ctEvent
+	initRTS initRTSEvent
+	sst     *sstEvent
+	sync    *syncEvent
+	// Budget allocated to process the event.
 	allocation *SharedBudgetAllocation
+}
+
+type opsEvent []enginepb.MVCCLogicalOp
+
+type ctEvent struct {
+	hlc.Timestamp
+}
+
+type initRTSEvent bool
+
+type sstEvent struct {
+	data []byte
+	span roachpb.Span
+	ts   hlc.Timestamp
+}
+
+type syncEvent struct {
+	c chan struct{}
+	// This setting is used in conjunction with c in tests in order to ensure that
+	// all registrations have fully finished outputting their buffers. This has to
+	// be done by the processor in order to avoid race conditions with the
+	// registry. Should be used only in tests.
+	testRegCatchupSpan *roachpb.Span
 }
 
 // spanErr is an error across a key span that will disconnect overlapping
@@ -530,7 +547,7 @@ func (p *Processor) ConsumeSSTable(
 	if p == nil {
 		return true
 	}
-	return p.sendEvent(ctx, event{sst: sst, sstSpan: sstSpan, sstWTS: writeTS}, p.EventChanTimeout)
+	return p.sendEvent(ctx, event{sst: &sstEvent{sst, sstSpan, writeTS}}, p.EventChanTimeout)
 }
 
 // ForwardClosedTS indicates that the closed timestamp that serves as the basis
@@ -546,7 +563,7 @@ func (p *Processor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp)
 	if closedTS.IsEmpty() {
 		return true
 	}
-	return p.sendEvent(ctx, event{ct: closedTS}, p.EventChanTimeout)
+	return p.sendEvent(ctx, event{ct: ctEvent{closedTS}}, p.EventChanTimeout)
 }
 
 // sendEvent informs the Processor of a new event. If a timeout is specified,
@@ -650,7 +667,7 @@ func (p *Processor) setResolvedTSInitialized(ctx context.Context) {
 // It does so by flushing the event pipeline.
 func (p *Processor) syncEventC() {
 	syncC := make(chan struct{})
-	ev := getPooledEvent(event{syncC: syncC})
+	ev := getPooledEvent(event{sync: &syncEvent{c: syncC}})
 	select {
 	case p.eventC <- ev:
 		select {
@@ -666,17 +683,17 @@ func (p *Processor) syncEventC() {
 
 func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	switch {
-	case len(e.ops) > 0:
+	case e.ops != nil:
 		p.consumeLogicalOps(ctx, e.ops, e.allocation)
-	case len(e.sst) > 0:
-		p.consumeSSTable(ctx, e.sst, e.sstSpan, e.sstWTS, e.allocation)
 	case !e.ct.IsEmpty():
-		p.forwardClosedTS(ctx, e.ct)
-	case e.initRTS:
+		p.forwardClosedTS(ctx, e.ct.Timestamp)
+	case bool(e.initRTS):
 		p.initResolvedTS(ctx)
-	case e.syncC != nil:
-		if e.testRegCatchupSpan.Valid() {
-			if err := p.reg.waitForCaughtUp(e.testRegCatchupSpan); err != nil {
+	case e.sst != nil:
+		p.consumeSSTable(ctx, e.sst.data, e.sst.span, e.sst.ts, e.allocation)
+	case e.sync != nil:
+		if e.sync.testRegCatchupSpan != nil {
+			if err := p.reg.waitForCaughtUp(*e.sync.testRegCatchupSpan); err != nil {
 				log.Errorf(
 					ctx,
 					"error waiting for registries to catch up during test, results might be impacted: %s",
@@ -684,7 +701,7 @@ func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 				)
 			}
 		}
-		close(e.syncC)
+		close(e.sync.c)
 	default:
 		panic(fmt.Sprintf("missing event variant: %+v", e))
 	}
@@ -852,6 +869,8 @@ func calculateDateEventSize(e event) int64 {
 	for _, op := range e.ops {
 		size += int64(op.Size())
 	}
-	size += int64(len(e.sst))
+	if e.sst != nil {
+		size += int64(len(e.sst.data))
+	}
 	return size
 }
