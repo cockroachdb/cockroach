@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type alterFunctionOptionsNode struct {
@@ -86,7 +87,26 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 		return err
 	}
 
-	return params.p.writeFuncSchemaChange(params.ctx, fnDesc)
+	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+		return err
+	}
+
+	fctx := tree.NewFmtCtx(tree.FmtSimple)
+	for i := range n.n.Options {
+		if i > 0 {
+			fctx.WriteString(", ")
+		}
+		fctx.FormatNode(n.n.Options[i])
+	}
+	fnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	if err != nil {
+		return err
+	}
+	event := eventpb.AlterFunctionOptions{
+		FunctionName: fnName.FQString(),
+		Options:      fctx.CloseAndGetString(),
+	}
+	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionOptionsNode) Next(params runParams) (bool, error) { return false, nil }
@@ -113,6 +133,10 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	// referenced by other objects. This is needed when want to allow function
 	// references.
 	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	if err != nil {
+		return err
+	}
+	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
 	if err != nil {
 		return err
 	}
@@ -145,7 +169,19 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 
-	return params.p.writeSchemaDescChange(params.ctx, scDesc, "alter function name")
+	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "alter function name"); err != nil {
+		return err
+	}
+
+	newFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	if err != nil {
+		return err
+	}
+	event := eventpb.RenameFunction{
+		FunctionName:    oldFnName.FQString(),
+		NewFunctionName: newFnName.FQString(),
+	}
+	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionRenameNode) Next(params runParams) (bool, error) { return false, nil }
@@ -193,7 +229,19 @@ func (n *alterFunctionSetOwnerNode) startExec(params runParams) error {
 	}
 
 	fnDesc.GetPrivileges().SetOwner(newOwner)
-	return params.p.writeFuncSchemaChange(params.ctx, fnDesc)
+	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+		return err
+	}
+
+	fnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	if err != nil {
+		return err
+	}
+	event := eventpb.AlterFunctionOwner{
+		FunctionName: fnName.FQString(),
+		Owner:        newOwner.Normalized(),
+	}
+	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionSetOwnerNode) Next(params runParams) (bool, error) { return false, nil }
@@ -220,6 +268,10 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	// referenced by other objects. This is needed when want to allow function
 	// references.
 	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	if err != nil {
+		return err
+	}
+	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
 	if err != nil {
 		return err
 	}
@@ -298,7 +350,20 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 	fnDesc.SetParentSchemaID(targetSc.GetID())
-	return params.p.writeFuncSchemaChange(params.ctx, fnDesc)
+	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+		return err
+	}
+
+	newFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	if err != nil {
+		return err
+	}
+	event := eventpb.SetSchema{
+		DescriptorName:    oldFnName.FQString(),
+		NewDescriptorName: newFnName.FQString(),
+		DescriptorType:    string(fnDesc.DescriptorType()),
+	}
+	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionSetSchemaNode) Next(params runParams) (bool, error) { return false, nil }
