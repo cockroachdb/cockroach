@@ -1333,9 +1333,7 @@ func NewTableDesc(
 	); err != nil {
 		return nil, err
 	}
-	if updatedRowLevelTTL := setter.UpdatedRowLevelTTL; updatedRowLevelTTL != nil {
-		setter.TableDesc.RowLevelTTL = updatedRowLevelTTL
-	}
+	setter.TableDesc.RowLevelTTL = setter.UpdatedRowLevelTTL
 
 	indexEncodingVersion := descpb.StrictIndexColumnIDGuaranteesVersion
 	isRegionalByRow := n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow
@@ -1491,6 +1489,7 @@ func NewTableDesc(
 						hasRowLevelTTLColumn = true
 						break
 					}
+
 				}
 			}
 			if !hasRowLevelTTLColumn {
