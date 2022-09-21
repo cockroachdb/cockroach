@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -330,20 +331,26 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				}
 
 				// Verify that we're always doing the space savings when we can.
+				var buf redact.StringBuilder
+				var buf2 redact.StringBuilder
 				if span.Key.PrefixEnd().Equal(span.EndKey) {
+					encoding.PrettyPrintValue(&buf, directions, span.Key, "/")
+					encoding.PrettyPrintValue(&buf2, directions, span.EndKey, "/")
 					t.Errorf("endKey should be omitted when equal to key.PrefixEnd [%s, %s)",
-						encoding.PrettyPrintValue(directions, span.Key, "/"),
-						encoding.PrettyPrintValue(directions, span.EndKey, "/"))
+						buf.String(),
+						buf2.String())
 				}
 				if len(span.EndKey) == 0 {
 					span.EndKey = span.Key.PrefixEnd()
 				}
 
 				// TODO(dan): Check that spans are sorted.
+				encoding.PrettyPrintValue(&buf, directions, span.Key, "/")
+				encoding.PrettyPrintValue(&buf2, directions, span.EndKey, "/")
 
 				actual = append(actual, fmt.Sprintf("%s %s-%s", subzoneShort,
-					encoding.PrettyPrintValue(directions, span.Key, "/"),
-					encoding.PrettyPrintValue(directions, span.EndKey, "/")))
+					buf.String(),
+					buf2.String()))
 			}
 
 			if len(actual) != len(test.parsed.generatedSpans) {
