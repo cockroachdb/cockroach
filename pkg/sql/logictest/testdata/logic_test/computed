@@ -1078,3 +1078,20 @@ SELECT j, c, j->'b' = '1' AS expected_c FROM t75907
 ----
 j         c     expected_c
 {"a": 1}  NULL  NULL
+
+subtest regression_88128
+
+statement ok
+CREATE TABLE t88128 (t TIME);
+INSERT INTO t88128 VALUES ('10:00:00');
+ALTER TABLE t88128 ADD COLUMN b1 BOOL as (t - '5 hrs'::INTERVAL < '23:00:00'::TIME) STORED;
+ALTER TABLE t88128 ADD COLUMN b2 BOOL as (t + '5 hrs'::INTERVAL > '01:00:00'::TIME) STORED
+
+query BBBB colnames
+SELECT
+  b1, t - '5 hrs'::INTERVAL < '23:00:00'::TIME AS expected_b1,
+  b2, t + '5 hrs'::INTERVAL > '01:00:00'::TIME AS expected_b2
+FROM t88128
+----
+b1    expected_b1  b2    expected_b2
+true  true         true  true
