@@ -56,6 +56,7 @@ func TestTelemetryLogRegions(t *testing.T) {
 	// Enable the telemetry logging and increase the sampling frequency so that
 	// all statements are captured.
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = true;`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 1000000`)
 
 	testData := []struct {
