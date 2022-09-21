@@ -80,9 +80,9 @@ import ActiveStatementDetails from "./views/statements/activeStatementDetailsCon
 import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 import "styl/app.styl";
 import { Tracez } from "src/views/tracez/tracez";
-import InsightsOverviewPage from "src/views/insights/insightsOverview";
-import TransactionInsightDetailsPageConnected from "src/views/insights/transactionInsightDetailsPageConnected";
-import StatementInsightDetailsPageConnected from "src/views/insights/statementInsightDetailsPageConnected";
+import InsightsOverviewPage from "./views/insights/insightsOverview";
+import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
+import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
 import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -312,11 +312,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   />
                   <Route
                     path={"/insights/transaction/:id"}
-                    component={TransactionInsightDetailsPageConnected}
+                    component={TransactionInsightDetailsPage}
                   />
                   <Route
                     path={"/insights/statement/:id"}
-                    component={StatementInsightDetailsPageConnected}
+                    component={StatementInsightDetailsPage}
                   />
 
                   {/* debug pages */}

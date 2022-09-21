@@ -10,75 +10,89 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { AppState } from "src/store";
+import { actions as localStorageActions } from "src/store/localStorage";
 import {
-  refreshTransactionInsights,
-  refreshStatementInsights,
-} from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
-import {
-  WorkloadInsightEventFilters,
-  SortSetting,
-  StatementInsightsViewDispatchProps,
-  StatementInsightsViewStateProps,
   TransactionInsightsViewDispatchProps,
   TransactionInsightsViewStateProps,
-  WorkloadInsightsRootControl,
-  WorkloadInsightsViewProps,
-} from "@cockroachlabs/cluster-ui";
+} from "./transactionInsights";
 import {
-  filtersLocalSetting,
+  StatementInsightsViewDispatchProps,
+  StatementInsightsViewStateProps,
+} from "./statementInsights";
+import { WorkloadInsightEventFilters } from "../types";
+import {
+  WorkloadInsightsViewProps,
+  WorkloadInsightsRootControl,
+} from "./workloadInsightRootControl";
+import { SortSetting } from "src/sortedtable";
+import {
+  actions as statementInsights,
+  selectColumns,
   selectStatementInsights,
-  sortSettingLocalSetting,
+  selectStatementInsightsError,
+} from "src/store/insights/statementInsights";
+import {
+  actions as transactionInsights,
   selectTransactionInsights,
-} from "src/views/insights/insightsSelectors";
+  selectTransactionInsightsError,
+  selectFilters,
+  selectSortSetting,
+} from "src/store/insights/transactionInsights";
 import { bindActionCreators } from "redux";
-import { LocalSetting } from "src/redux/localsettings";
-
-export const insightStatementColumnsLocalSetting = new LocalSetting<
-  AdminUIState,
-  string | null
->(
-  "columns/StatementsInsightsPage",
-  (state: AdminUIState) => state.localSettings,
-  null,
-);
 
 const transactionMapStateToProps = (
-  state: AdminUIState,
+  state: AppState,
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
   transactions: selectTransactionInsights(state),
-  transactionsError: state.cachedData?.transactionInsights.lastError,
-  filters: filtersLocalSetting.selector(state),
-  sortSetting: sortSettingLocalSetting.selector(state),
+  transactionsError: selectTransactionInsightsError(state),
+  filters: selectFilters(state),
+  sortSetting: selectSortSetting(state),
 });
 
 const statementMapStateToProps = (
-  state: AdminUIState,
+  state: AppState,
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
   statements: selectStatementInsights(state),
-  statementsError: state.cachedData?.statementInsights.lastError,
-  filters: filtersLocalSetting.selector(state),
-  sortSetting: sortSettingLocalSetting.selector(state),
-  selectedColumnNames:
-    insightStatementColumnsLocalSetting.selectorToArray(state),
+  statementsError: selectStatementInsightsError(state),
+  filters: selectFilters(state),
+  sortSetting: selectSortSetting(state),
+  selectedColumnNames: selectColumns(state),
 });
 
 const TransactionDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
-    filtersLocalSetting.set(filters),
-  onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
-  refreshTransactionInsights: refreshTransactionInsights,
+    localStorageActions.update({
+      key: "filters/InsightsPage",
+      value: filters,
+    }),
+  onSortChange: (ss: SortSetting) =>
+    localStorageActions.update({
+      key: "sortSetting/InsightsPage",
+      value: ss,
+    }),
+  refreshTransactionInsights: transactionInsights.refresh,
 };
 
 const StatementDispatchProps: StatementInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
-    filtersLocalSetting.set(filters),
-  onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
-  refreshStatementInsights: refreshStatementInsights,
+    localStorageActions.update({
+      key: "filters/InsightsPage",
+      value: filters,
+    }),
+  onSortChange: (ss: SortSetting) =>
+    localStorageActions.update({
+      key: "sortSetting/InsightsPage",
+      value: ss,
+    }),
   onColumnsChange: (value: string[]) =>
-    insightStatementColumnsLocalSetting.set(value.join(",")),
+    localStorageActions.update({
+      key: "showColumns/StatementInsightsPage",
+      value: value.join(","),
+    }),
+  refreshStatementInsights: statementInsights.refresh,
 };
 
 type StateProps = {
@@ -91,14 +105,14 @@ type DispatchProps = {
   statementInsightsViewDispatchProps: StatementInsightsViewDispatchProps;
 };
 
-const WorkloadInsightsPageConnected = withRouter(
+export const WorkloadInsightsPageConnected = withRouter(
   connect<
     StateProps,
     DispatchProps,
     RouteComponentProps,
     WorkloadInsightsViewProps
   >(
-    (state: AdminUIState, props: RouteComponentProps) => ({
+    (state: AppState, props: RouteComponentProps) => ({
       transactionInsightsViewStateProps: transactionMapStateToProps(
         state,
         props,
@@ -127,5 +141,3 @@ const WorkloadInsightsPageConnected = withRouter(
     }),
   )(WorkloadInsightsRootControl),
 );
-
-export default WorkloadInsightsPageConnected;

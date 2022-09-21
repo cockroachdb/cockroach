@@ -39,15 +39,22 @@ import {
   ClusterLocksReqState,
   reducer as clusterLocks,
 } from "./clusterLocks/clusterLocks.reducer";
-import { InsightsState, reducer as insights } from "./insights";
 import {
-  InsightDetailsState,
-  reducer as insightDetails,
-} from "./insightDetails";
+  TransactionInsightsState,
+  reducer as transactionInsights,
+} from "./insights/transactionInsights";
+import {
+  StatementInsightsState,
+  reducer as statementInsights,
+} from "./insights/statementInsights";
 import {
   SchemaInsightsState,
   reducer as schemaInsights,
 } from "./schemaInsights";
+import {
+  TransactionInsightDetailsState,
+  reducer as transactionInsightDetails,
+} from "./insightDetails/transactionInsightDetails";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -63,8 +70,9 @@ export type AdminUiState = {
   jobs: JobsState;
   job: JobState;
   clusterLocks: ClusterLocksReqState;
-  insights: InsightsState;
-  insightDetails: InsightDetailsState;
+  transactionInsights: TransactionInsightsState;
+  transactionInsightDetails: TransactionInsightDetailsState;
+  statementInsights: StatementInsightsState;
   schemaInsights: SchemaInsightsState;
 };
 
@@ -78,8 +86,9 @@ export const reducers = combineReducers<AdminUiState>({
   nodes,
   liveness,
   sessions,
-  insights,
-  insightDetails,
+  transactionInsights,
+  transactionInsightDetails,
+  statementInsights,
   terminateQuery,
   uiConfig,
   sqlStats,
