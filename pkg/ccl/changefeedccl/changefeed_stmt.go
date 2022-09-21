@@ -348,6 +348,26 @@ func createChangefeedJobRecord(
 		statementTime = initialHighWater
 	}
 
+	// Change the statement time to highwater time if available to make sure
+	// that we do not get an error when getting table descriptors (might happen
+	// in case where cursor time is far behind in the past)
+	var progressHighWater *hlc.Timestamp
+	job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.Txn())
+	if err != nil {
+		// If the job is not found it means that we are processing create
+		// changefeed command. Any other type of error is fatal.
+		if _, ok := err.(*jobs.JobNotFoundError); !ok {
+			return nil, err
+		}
+	} else {
+		progress := job.Progress()
+		progressHighWater = (&progress).GetHighWater()
+	}
+
+	if progressHighWater != nil && !progressHighWater.IsEmpty() {
+		statementTime = *progressHighWater
+	}
+
 	endTime := hlc.Timestamp{}
 
 	if opts.HasEndTime() {
