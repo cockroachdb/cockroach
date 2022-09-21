@@ -114,9 +114,23 @@ func alterChangefeedPlanHook(
 		}
 		newChangefeedStmt.SinkURI = tree.NewDString(newSinkURI)
 
+		// We validate that all the tables are resolvable at the
+		// resolveTime below in validateNewTargets. resolveTime is also
+		// the time from which changefeed will resume. Therefore we
+		// will override with this time in createChangefeedJobRecord
+		// when we get table descriptors.
+		var resolveTime hlc.Timestamp
+		highWater := newProgress.GetHighWater()
+		if highWater != nil && !highWater.IsEmpty() {
+			resolveTime = *highWater
+		} else {
+			resolveTime = newStatementTime
+		}
+
 		annotatedStmt := &annotatedChangefeedStatement{
-			CreateChangefeed: newChangefeedStmt,
-			originalSpecs:    originalSpecs,
+			CreateChangefeed:    newChangefeedStmt,
+			originalSpecs:       originalSpecs,
+			alterChangefeedAsOf: resolveTime,
 		}
 
 		jobRecord, err := createChangefeedJobRecord(

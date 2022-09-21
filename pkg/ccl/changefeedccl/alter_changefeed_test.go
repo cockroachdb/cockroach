@@ -1325,3 +1325,74 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 		cdcTest(t, testFn(initialScanOpt), feedTestForceSink("kafka"))
 	}
 }
+
+// This test checks that the time used to get table descriptors in alter
+// changefeed is the time from which changefeed will resume (check
+// validateNewTargets for more info on how this time is calculated).
+func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		var tsLogical string
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsLogical)
+		cursor := parseTimeToHLC(t, tsLogical)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsLogical)
+		defer closeFeed(t, testFeed)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'before')`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [1]->{"after": {"a": 1, "b": "before"}}`,
+		})
+
+		castedFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		loadProgress := func() jobspb.Progress {
+			job, err := registry.LoadJob(context.Background(), castedFeed.JobID())
+			require.NoError(t, err)
+			return job.Progress()
+		}
+
+		testutils.SucceedsSoon(t, func() error {
+			progress := loadProgress()
+			if hw := progress.GetHighWater(); hw != nil && cursor.LessEq(*hw) {
+				return nil
+			}
+			return errors.New("waiting for checkpoint advance")
+		})
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, castedFeed.JobID())
+		waitForJobStatus(sqlDB, t, castedFeed.JobID(), `paused`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'after')`)
+
+		// Simulate that a significant time has passed since the create
+		// change feed command was given - if the highwater mark is not
+		// used in the following alter changefeed command, then we will
+		// get an error when we try to get a table descriptors using
+		// cursor time.
+		calculateCursor := func(currentTime *hlc.Timestamp) string {
+			return "-3h"
+		}
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		knobs.OverrideCursor = calculateCursor
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET format='json'`, castedFeed.JobID()))
+
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, castedFeed.JobID()))
+		waitForJobStatus(sqlDB, t, castedFeed.JobID(), `running`)
+
+		assertPayloads(t, testFeed, []string{
+			`foo: [2]->{"after": {"a": 2, "b": "after"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
