@@ -127,7 +127,9 @@ export const ActiveTransactionDetails: React.FC<
                     />
                     <SummaryCardItem
                       label={ActiveTxnInsightsLabels.ELAPSED_TIME}
-                      value={Duration(transaction.elapsedTimeMillis * 1e6)}
+                      value={Duration(
+                        transaction.elapsedTime.asMilliseconds() * 1e6,
+                      )}
                     />
                     <SummaryCardItem
                       label={ActiveTxnInsightsLabels.STATUS}
