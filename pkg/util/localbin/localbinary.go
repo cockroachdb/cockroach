@@ -20,12 +20,12 @@ import (
 // NB: The binary must be specified as a target to build in the BUILD.bazel.
 func GetBazelBinaryPath() (string, error) {
 	if bazel.BuiltWithBazel() {
-		binaryPath, found := bazel.FindBinary("pkg/cmd/cockroach", "cockroach")
+		binaryPath, found := bazel.FindBinary("pkg/cmd/cockroach/cockroach_", "cockroach")
 		if !found {
 			return "", errors.New("BuiltWithBazel: cockroach binary not found")
 		}
 		return binaryPath, nil
-	} else {
-		return "", errors.New("GetBazelBinaryPath is only supported under BuiltWithBazel")
 	}
+
+	return "", errors.New("GetBazelBinaryPath is only supported under BuiltWithBazel")
 }

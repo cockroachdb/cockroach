@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 )
 
 // ssl generates a function to upgrade a net.Conn based on the "sslmode" and
@@ -48,6 +49,16 @@ func ssl(o values) (func(net.Conn) (net.Conn, error), error) {
 		return nil, nil
 	default:
 		return nil, fmterrorf(`unsupported sslmode %q; only "require" (default), "verify-full", "verify-ca", and "disable" supported`, mode)
+	}
+
+	// Set Server Name Indication (SNI), if enabled by connection parameters.
+	// By default SNI is on, any value which is not starting with "1" disables
+	// SNI -- that is the same check vanilla libpq uses.
+	if sslsni := o["sslsni"]; sslsni == "" || strings.HasPrefix(sslsni, "1") {
+		// RFC 6066 asks to not set SNI if the host is a literal IP address (IPv4
+		// or IPv6). This check is coded already crypto.tls.hostnameInSNI, so
+		// just always set ServerName here and let crypto/tls do the filtering.
+		tlsConf.ServerName = o["host"]
 	}
 
 	err := sslClientCertificates(&tlsConf, o)

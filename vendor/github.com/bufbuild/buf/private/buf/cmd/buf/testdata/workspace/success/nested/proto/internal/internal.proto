@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-package internal;
-
-import "external.proto";
-
-message Internal {
-    external.External external = 1;
-}

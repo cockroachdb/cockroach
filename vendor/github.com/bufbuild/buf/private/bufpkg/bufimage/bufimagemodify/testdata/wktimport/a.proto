@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-package acme.weather.v1alpha1;
-
-import "google/protobuf/timestamp.proto";
-
-message Container {
-    google.protobuf.Timestamp timestamp = 1;
-}

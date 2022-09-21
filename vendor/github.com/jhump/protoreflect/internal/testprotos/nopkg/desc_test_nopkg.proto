@@ -1,5 +1,0 @@
-syntax = "proto2";
-
-option go_package = "github.com/jhump/protoreflect/internal/testprotos/nopkg;nopkg";
-
-import public "nopkg/desc_test_nopkg_new.proto";

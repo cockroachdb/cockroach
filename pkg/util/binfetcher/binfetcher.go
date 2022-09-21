@@ -168,6 +168,7 @@ func Download(ctx context.Context, opts Options) (string, error) {
 	}
 
 	log.Infof(ctx, "downloading %s to %s", opts.URL.String(), destFileName)
+	fmt.Println("binURL:", opts.URL.String())
 	resp, err := httpClient.Get(ctx, opts.URL.String())
 	if err != nil {
 		return "", err

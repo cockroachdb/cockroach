@@ -1,6 +1,0 @@
-syntax = "proto3";
-
-package twirp.internal.twirptest.importmapping.y;
-option go_package = "example.com/will/be/ignored/y";
-
-message MsgY {}

@@ -1,3 +1,0 @@
-package google.protobuf.bla.v1;
-
-option objc_class_prefix = "foo";

@@ -1,7 +1,0 @@
-syntax = "proto3";
-
-package buf;
-
-message Foo3 {
-  int64 one_two = 1;
-}

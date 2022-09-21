@@ -1,0 +1,27 @@
+# LogicTest: cockroach-go-testserver-21.1-21.2
+
+query I
+SELECT 1
+----
+1
+
+query T
+SELECT crdb_internal.node_executable_version()
+----
+21.1
+
+upgrade 0
+
+#upgrade 1
+
+#upgrade 2
+
+query I
+SELECT 1
+----
+1
+
+query B
+SELECT crdb_internal.node_executable_version() SIMILAR TO '21.2-%%'
+----
+false

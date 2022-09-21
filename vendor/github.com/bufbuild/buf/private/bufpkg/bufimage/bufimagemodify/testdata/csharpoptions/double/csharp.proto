@@ -1,3 +1,0 @@
-package acme.weather.v1;
-
-option csharp_namespace = "foo";

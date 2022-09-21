@@ -1,5 +1,0 @@
-// comment
-
-syntax = "proto3";
-
-package a;

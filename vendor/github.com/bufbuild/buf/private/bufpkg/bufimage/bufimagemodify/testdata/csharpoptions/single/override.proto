@@ -1,4 +1,0 @@
-package acme.v1;
-
-option csharp_namespace = "foo";
-

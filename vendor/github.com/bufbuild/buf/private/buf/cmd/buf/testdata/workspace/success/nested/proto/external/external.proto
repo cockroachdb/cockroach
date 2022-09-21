@@ -1,7 +1,0 @@
-syntax = "proto3";
-
-package external;
-
-message External {
-    string name = 1;
-}

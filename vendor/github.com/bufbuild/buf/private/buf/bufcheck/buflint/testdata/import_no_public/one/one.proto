@@ -1,6 +1,0 @@
-syntax = "proto3";
-
-package one;
-
-import "sub/sub1.proto";
-import public "sub/sub2.proto";

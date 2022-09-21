@@ -1,5 +1,0 @@
-syntax = "proto3";
-
-package buf;
-
-message Buf {}

@@ -15,6 +15,7 @@
 package testserver
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -34,6 +35,25 @@ func (ts *testServerImpl) isTenant() bool {
 	// An uninitialized ts.curTenantID indicates that this TestServer is a
 	// tenant.
 	return ts.curTenantID < firstTenantID
+}
+
+// cockroachSupportsTenantScopeCert is a hack to figure out if the version of
+// cockroach on the test server supports tenant scoped certificates. This is less
+// brittle than a static version comparison as these tenant scoped certificates are
+// subject to backports to older CRDB verions.
+func (ts *testServerImpl) cockroachSupportsTenantScopeCert() (bool, error) {
+	certCmdArgs := []string{
+		"cert",
+		"create-client",
+		"--help",
+	}
+	checkTenantScopeCertCmd := exec.Command(ts.serverArgs.cockroachBinary, certCmdArgs...)
+	var output bytes.Buffer
+	checkTenantScopeCertCmd.Stdout = &output
+	if err := checkTenantScopeCertCmd.Run(); err != nil {
+		return false, err
+	}
+	return strings.Contains(output.String(), "--tenant-scope"), nil
 }
 
 // NewTenantServer creates and returns a new SQL tenant pointed at the receiver,
@@ -87,7 +107,11 @@ func (ts *testServerImpl) NewTenantServer(proxy bool) (TestServer, error) {
 		if err := createCertCmd.Run(); err != nil {
 			return nil, fmt.Errorf("%s command %s failed: %w", tenantserverMessagePrefix, createCertCmd, err)
 		}
-		if ts.version.AtLeast(version.MustParse("v22.2.0-alpha")) {
+		tenantScopeCertsAvailable, err := ts.cockroachSupportsTenantScopeCert()
+		if err != nil {
+			return nil, fmt.Errorf("failed to determine if tenant scoped certificates are available: %w", err)
+		}
+		if tenantScopeCertsAvailable {
 			// Overwrite root client certificate scoped to the system and current tenant.
 			// Tenant scoping is needed for client certificates used to access tenant servers.
 			tenantScopedClientCertArgs := []string{

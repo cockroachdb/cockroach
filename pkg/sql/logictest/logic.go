@@ -39,6 +39,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -73,7 +74,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/localbin"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1147,6 +1147,7 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	}
 
 	db := t.openDB(pgURL)
+	//fmt.Println(pgURL)
 
 	// The default value for extra_float_digits assumed by tests is
 	// 1. However, lib/pq by default configures this to 2 during
@@ -1158,7 +1159,7 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	// The default setting for index_recommendations_enabled is true. We do not
 	// want to display index recommendations in logic tests, so we disable them
 	// here. This is only applicable if the bootstrap version is >= 22.1.
-	if !t.cfg.bootstrapVersion.Less(roachpb.Version{Major: 21, Minor: 2, Internal: 2}) {
+	if !t.cfg.BootstrapVersion.Less(roachpb.Version{Major: 21, Minor: 2, Internal: 2}) {
 		if _, err := db.Exec("SET index_recommendations_enabled = false"); err != nil {
 			t.Fatal(err)
 		}
@@ -1190,20 +1191,102 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 }
 
 func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBinaryPath string) {
+	// Copy binary over to temp directory for this cluster.
+	//newTmp, err := bazel.NewTmpDir("cockroach-testserver-tmp")
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, func() {
+	//	err := os.RemoveAll(newTmp)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//})
+	//
+	//fileNames := []string{"cockroach-bootstrap", "cockroach-upgrade"}
+	//bootstrapPaths := make([]string, 2)
+	//for i, file := range []string{bootstrapBinaryPath, upgradeBinaryPath} {
+	//	fin, err := os.Open(file)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//
+	//	path := newTmp + "/" + fileNames[i]
+	//	bootstrapPaths[i] = path
+	//
+	//	fout, err := os.Create(path)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//
+	//	err = os.Chmod(path, 0755)
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//
+	//	_, err = io.Copy(fout, fin)
+	//
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//
+	//	err = fout.Close()
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//
+	//	err = fin.Close()
+	//	if err != nil {
+	//		t.Fatal(err)
+	//	}
+	//
+	//	//bytesRead, err := ioutil.ReadFile(file)
+	//	//
+	//	//if err != nil {
+	//	//	t.Fatal(err)
+	//	//}
+	//	//
+	//	//path := newTmp + "/" + fileNames[i]
+	//	//bootstrapPaths[i] = path
+	//	//err = ioutil.WriteFile(path, bytesRead, 0644)
+	//	//if err != nil {
+	//	//	t.Fatal(err)
+	//	//}
+	//}
+
+	// This is always hardcoded to 3 ports.
+	const numPorts = 3
+	ports := make([]int, 3)
+	for i := 0; i < numPorts; i++ {
+		port, err := getFreePort()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ports[i] = port
+	}
+	//fmt.Println("newTmp:", newTmp)
+	//fmt.Println("tempDir:", t.t().TempDir())
+	//fmt.Println("bootstrap:", bootstrapBinaryPath)
+	//fmt.Println("upgrade:", upgradeBinaryPath)
+
 	opts := []testserver.TestServerOpt{
 		testserver.ThreeNodeOpt(),
 		testserver.StoreOnDiskOpt(),
 		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
+		testserver.AddListenAddrPortOpt(ports[0]),
+		testserver.AddListenAddrPortOpt(ports[1]),
+		testserver.AddListenAddrPortOpt(ports[2]),
 	}
 
 	if upgradeBinaryPath != "" {
-		opts = append(opts, testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath))
+		opts = append(opts, testserver.UpgradeCockroachBinaryPathOpt(bootstrapBinaryPath))
 	}
 
 	ts, err := testserver.NewTestServer(opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
+	fmt.Println("base dir", ts.BaseDir())
 
 	t.testserverCluster = ts
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(username.RootUser, 0 /* nodeIdxOverride */))
@@ -1720,29 +1803,40 @@ func (t *logicTest) setup(
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
-	if cfg.useCockroachGoTestserver {
-		binaryPath, err := localbin.GetBazelBinaryPath()
-		if err != nil {
-			t.Fatal(err)
+	if cfg.UseCockroachGoTestserver {
+		if !bazel.BuiltWithBazel() {
+			t.t().Skip("not using bazel")
 		}
-		var bootstrapBinaryPath, upgradeBinaryPath string
-		if cfg.cockroachBinaryVersion != "" {
+		binaryPath, found := bazel.FindBinary("pkg/cmd/cockroach", "cockroach")
+		if !found {
+			t.Fatal(errors.New("cockroach binary not found"))
+		}
+		var err error
+		bootstrapBinaryPath := binaryPath
+		var upgradeBinaryPath string
+
+		if cfg.CockroachBinaryVersion != "" {
 			bootstrapBinaryPath, err = binfetcher.Download(context.Background(), binfetcher.Options{
 				Binary:  "cockroach",
 				Dir:     tempExternalIODir,
-				Version: cfg.cockroachBinaryVersion,
+				Version: cfg.CockroachBinaryVersion,
 				GOOS:    runtime.GOOS,
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
 			upgradeBinaryPath = binaryPath
-		} else {
-			// If the cockroachBinaryVersion is not specified, we
-			// bootstrap on the local version. If this is the case
-			// we do not support upgrades.
-			bootstrapBinaryPath = binaryPath
-
+		}
+		if cfg.UpgradeCockroachBinaryVersion != "" {
+			upgradeBinaryPath, err = binfetcher.Download(context.Background(), binfetcher.Options{
+				Binary:  "cockroach",
+				Dir:     tempExternalIODir,
+				Version: cfg.UpgradeCockroachBinaryVersion,
+				GOOS:    runtime.GOOS,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 		t.newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath)
 	} else {
@@ -1757,19 +1851,8 @@ CREATE DATABASE test; USE test;
 		t.Fatal(err)
 	}
 
-	if !t.cfg.BootstrapVersion.Equal(roachpb.Version{}) && t.cfg.BootstrapVersion.Less(roachpb.Version{Major: 22, Minor: 2}) {
-		// Hacky way to create user with an ID if we're on a
-		// bootstrapped binary less than 22.2. The version gate
-		// causes the regular CREATE USER to fail since it will not
-		// insert an ID.
-		if _, err := t.db.Exec(`INSERT INTO system.users VALUES ($1, '', false, $2);`,
-			username.TestUser, 100); err != nil {
-			t.Fatal(err)
-		}
-	} else {
-		if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", username.TestUser)); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := t.db.Exec(fmt.Sprintf("CREATE USER %s;", username.TestUser)); err != nil {
+		t.Fatal(err)
 	}
 
 	t.labelMap = make(map[string]string)
@@ -2972,13 +3055,35 @@ func (t *logicTest) processSubtest(
 			if err != nil {
 				t.Fatal(err)
 			}
+			fmt.Println("Upgrade")
 			if err := t.testserverCluster.UpgradeNode(nodeNum); err != nil {
 				t.Fatal(err)
 			}
+			fmt.Println("WaitForInitFinishForNode")
+
+			//successfulPing := false
+			//for i := 0; i < 50; i++ {
+			//	url := t.testserverCluster.PGURLForNode(nodeNum)
+			//	db, err := gosql.Open("postgres", url.String())
+			//	if err != nil {
+			//		return err
+			//	}
+			//	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, func() { _ = db.Close() })
+			//	if err = db.Ping(); err == nil {
+			//		successfulPing = true
+			//		break
+			//	}
+			//	time.Sleep(time.Millisecond * 1000)
+			//}
+			//
+			//if !successfulPing {
+			//	return errors.New("node did not finish init")
+			//}
+
 			if err := t.testserverCluster.WaitForInitFinishForNode(nodeNum); err != nil {
 				t.Fatal(err)
 			}
-
+			fmt.Println("Done")
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.Line+subtest.lineLineIndexIntoFile, cmd,
@@ -3765,7 +3870,7 @@ func (t *logicTest) validateAfterTestCompletion() error {
 		// upgrade the descriptors.
 		// TODO(richardcai): Should we wait until all migrations are
 		// done? The migrations can take up to in the order of minutes.
-		if !t.cfg.useCockroachGoTestserver {
+		if !t.cfg.UseCockroachGoTestserver {
 			rows, err := t.db.Query(
 				`
 SELECT encode(descriptor, 'hex') AS descriptor

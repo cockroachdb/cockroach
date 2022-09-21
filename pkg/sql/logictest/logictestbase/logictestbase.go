@@ -95,6 +95,8 @@ type TestClusterConfig struct {
 	// cockroach-go/testserver is bootstrapped on for the logictest.
 	// If one is not specified, it uses the local cockroach binary.
 	CockroachBinaryVersion string
+
+	UpgradeCockroachBinaryVersion string
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -475,8 +477,22 @@ var LogicTestConfigs = []TestClusterConfig{
 	{
 		Name:                     "cockroach-go-testserver",
 		UseCockroachGoTestserver: true,
-		CockroachBinaryVersion:   "v21.2.12",
-		BootstrapVersion:         roachpb.Version{Major: 21, Minor: 2},
+		CockroachBinaryVersion:   "v22.1.6",
+		BootstrapVersion:         roachpb.Version{Major: 22, Minor: 1},
+	},
+	{
+		Name:                          "cockroach-go-testserver-21.1-21.2",
+		UseCockroachGoTestserver:      true,
+		CockroachBinaryVersion:        "v21.1.19",
+		UpgradeCockroachBinaryVersion: "v21.2.15",
+		BootstrapVersion:              roachpb.Version{Major: 21, Minor: 2},
+	},
+	{
+		Name:                     "cockroach-go-testserver-22.1-22.2",
+		UseCockroachGoTestserver: true,
+		CockroachBinaryVersion:   "v22.1.6",
+		//UpgradeCockroachBinaryVersion: "v22.2.0-alpha.1",
+		BootstrapVersion: roachpb.Version{Major: 22, Minor: 1},
 	},
 }
 

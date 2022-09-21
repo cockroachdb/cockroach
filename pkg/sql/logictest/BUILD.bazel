@@ -22,11 +22,18 @@ filegroup(
 go_library(
     name = "logictest",
     testonly = 1,
-    srcs = ["logic.go"],
+    srcs = [
+        "logic.go",
+        "ports_helper.go",
+    ],
+    data = [
+        "//pkg/cmd/cockroach",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/logictest",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/cloud/externalconn/providers",
         "//pkg/clusterversion",
         "//pkg/kv/kvclient/rangefeed",
@@ -61,7 +68,6 @@ go_library(
         "//pkg/util",
         "//pkg/util/binfetcher",
         "//pkg/util/envutil",
-        "//pkg/util/localbin",
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",

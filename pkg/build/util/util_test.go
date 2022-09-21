@@ -19,6 +19,8 @@ import (
 )
 
 func TestOutputOfBinaryRule(t *testing.T) {
+	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach", false),
+		"pkg/cmd/cockroach/cockroach_/cockroach")
 	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach-short", false),
 		"pkg/cmd/cockroach-short/cockroach-short_/cockroach-short")
 	require.Equal(t, OutputOfBinaryRule("//pkg/cmd/cockroach-short", true),

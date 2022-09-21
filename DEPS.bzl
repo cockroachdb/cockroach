@@ -1339,8 +1339,8 @@ def go_deps():
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/cockroach-go/v2",
         # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
-        sum = "h1:wUJwq9OgsvICHwFgVc5n9ooF+AAyDhKgi+be5uEEYm8=",
-        version = "v2.2.14",
+        sum = "h1:t9dmZuC9J2W8IDQDSIGXmP+fBuEJSsrGXxWQz4cYqBY=",
+        version = "v2.2.16",
     )
     go_repository(
         name = "com_github_cockroachdb_crlfmt",
@@ -5197,11 +5197,9 @@ def go_deps():
         name = "com_github_lib_pq",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lib/pq",
-        sha256 = "7247dc4284bb572dd8bb3932ab1bf8a3de953882ade18c31a240838af8c73ee9",
-        strip_prefix = "github.com/lib/pq@v1.10.6",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lib/pq/com_github_lib_pq-v1.10.6.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:p7ZhMD+KsSRozJr34udlUrhboJwWAgCg34+/ZZNvZZw=",
+        version = "v1.10.7",
     )
     go_repository(
         name = "com_github_lightstep_lightstep_tracer_common_golang_gogo",
@@ -9348,11 +9346,9 @@ def go_deps():
         name = "org_golang_x_sys",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/sys",
-        sha256 = "f4480597a942160a2aaeb761d41ee67f610287785c263f1df253a3e157c98594",
-        strip_prefix = "golang.org/x/sys@v0.0.0-20220722155257-8c9f86f7a55f",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/sys/org_golang_x_sys-v0.0.0-20220722155257-8c9f86f7a55f.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:XeJjHH1KiLpKGb6lvMiksZ9l0fVUh+AmGcm0nOMEBOY=",
+        version = "v0.0.0-20220908164124-27713097b956",
     )
     go_repository(
         name = "org_golang_x_term",

@@ -1,7 +1,0 @@
-syntax="proto2";
-
-package a;
-
-message Test{
-  extensions 10to max;
-}

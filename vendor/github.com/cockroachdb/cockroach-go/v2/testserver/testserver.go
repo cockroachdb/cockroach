@@ -215,7 +215,8 @@ type testServerArgs struct {
 	rootPW                 string  // if nonempty, set as pw for root
 	storeOnDisk            bool    // to save database in disk
 	storeMemSize           float64 // the proportion of available memory allocated to test server
-	httpPort               int
+	httpPorts              []int
+	listenAddrPorts        []int
 	testConfig             TestConfig
 	nonStableDB            bool
 	cockroachBinary        string // path to cockroach executable file
@@ -287,9 +288,29 @@ func NonStableDbOpt() TestServerOpt {
 
 // ExposeConsoleOpt is a TestServer option that can be passed to NewTestServer to
 // expose the console of the server on the given port.
+// Warning: This is kept around for backwards compatibility, use AddHttpPortOpt
+// instead.
 func ExposeConsoleOpt(port int) TestServerOpt {
 	return func(args *testServerArgs) {
-		args.httpPort = port
+		args.httpPorts = []int{port}
+	}
+}
+
+// AddHttpPortOpt is a TestServer option that can be passed to NewTestServer to
+// specify the http ports for the Cockroach nodes.
+func AddHttpPortOpt(port int) TestServerOpt {
+	return func(args *testServerArgs) {
+		args.httpPorts = append(args.httpPorts, port)
+	}
+}
+
+// AddListenAddrPortOpt is a TestServer option that can be passed to NewTestServer to
+// specify the ports for the Cockroach nodes.
+// In the case of restarting nodes, it is up to the user of TestServer to make
+// sure the port used here cannot be re-used.
+func AddListenAddrPortOpt(port int) TestServerOpt {
+	return func(args *testServerArgs) {
+		args.listenAddrPorts = append(args.listenAddrPorts, port)
 	}
 }
 
@@ -335,6 +356,19 @@ func NewTestServer(opts ...TestServerOpt) (TestServer, error) {
 		serverArgs.cockroachBinary = *customBinaryFlag
 	} else if customBinaryEnv := os.Getenv("COCKROACH_BINARY"); customBinaryEnv != "" {
 		serverArgs.cockroachBinary = customBinaryEnv
+	}
+
+	// For backwards compatibility, in the 3 node case where no args are
+	// specified, default to ports 26257, 26258, 26259.
+	if serverArgs.numNodes == 3 && len(serverArgs.listenAddrPorts) == 0 {
+		serverArgs.listenAddrPorts = []int{26257, 26258, 26259}
+	} else if serverArgs.numNodes != 1 && len(serverArgs.listenAddrPorts) != serverArgs.numNodes {
+		panic(fmt.Sprintf("need to specify a port for each node using AddListenAddrPortOpt, got %d nodes, need %d ports",
+			serverArgs.numNodes, len(serverArgs.listenAddrPorts)))
+	}
+
+	if len(serverArgs.listenAddrPorts) == 0 || len(serverArgs.listenAddrPorts) == 1 {
+		serverArgs.listenAddrPorts = []int{0}
 	}
 
 	var err error
@@ -445,19 +479,30 @@ func NewTestServer(opts ...TestServerOpt) (TestServer, error) {
 
 	nodes := make([]nodeInfo, serverArgs.numNodes)
 	var initArgs []string
+	joinAddrs := make([]string, 3)
+	hostPort := serverArgs.listenAddrPorts[0]
+	for i, port := range serverArgs.listenAddrPorts {
+		joinAddrs[i] = fmt.Sprintf("localhost:%d", port)
+	}
+
+	if len(serverArgs.httpPorts) == 0 {
+		serverArgs.httpPorts = make([]int, serverArgs.numNodes)
+	}
+
 	for i := 0; i < serverArgs.numNodes; i++ {
 		nodes[i].state = stateNew
 		nodes[i].listeningURLFile = filepath.Join(baseDir, fmt.Sprintf("listen-url%d", i))
 		if serverArgs.numNodes > 1 {
+			joinArg := fmt.Sprintf("--join=%s", strings.Join(joinAddrs, ","))
 			nodes[i].startCmdArgs = []string{
 				serverArgs.cockroachBinary,
 				startCmd,
 				secureOpt,
 				storeArg + strconv.Itoa(i),
-				fmt.Sprintf("--listen-addr=localhost:%d", 26257+i),
-				fmt.Sprintf("--http-addr=localhost:%d", 8080+i),
+				fmt.Sprintf("--listen-addr=localhost:%d", serverArgs.listenAddrPorts[i]),
+				fmt.Sprintf("--http-addr=localhost:%d", serverArgs.httpPorts[i]),
 				"--listening-url-file=" + nodes[i].listeningURLFile,
-				fmt.Sprintf("--join=localhost:%d,localhost:%d,localhost:%d", 26257, 26258, 26259),
+				joinArg,
 			}
 		} else {
 			nodes[0].startCmdArgs = []string{
@@ -467,7 +512,7 @@ func NewTestServer(opts ...TestServerOpt) (TestServer, error) {
 				secureOpt,
 				"--host=localhost",
 				"--port=0",
-				"--http-port=" + strconv.Itoa(serverArgs.httpPort),
+				"--http-port=" + strconv.Itoa(serverArgs.httpPorts[0]),
 				storeArg,
 				"--listening-url-file=" + nodes[i].listeningURLFile,
 			}
@@ -480,7 +525,7 @@ func NewTestServer(opts ...TestServerOpt) (TestServer, error) {
 		serverArgs.cockroachBinary,
 		"init",
 		secureOpt,
-		"--host=localhost:26259",
+		fmt.Sprintf("--host=localhost:%d", hostPort),
 	}
 
 	states := make([]int, serverArgs.numNodes)
@@ -556,20 +601,20 @@ func (ts *testServerImpl) setPGURLForNode(nodeNum int, u *url.URL) {
 
 func (ts *testServerImpl) WaitForInitFinishForNode(nodeNum int) error {
 	db, err := sql.Open("postgres", ts.PGURLForNode(nodeNum).String())
-	defer func() {
-		_ = db.Close()
-	}()
 	if err != nil {
 		return err
 	}
-	for i := 0; i < 50; i++ {
-		if _, err = db.Query("SHOW DATABASES"); err == nil {
-			return err
+	defer func() {
+		_ = db.Close()
+	}()
+	for i := 0; i < 100; i++ {
+		if err = db.Ping(); err == nil {
+			return nil
 		}
 		log.Printf("%s: WaitForInitFinishForNode %d: Trying again after error: %v", testserverMessagePrefix, nodeNum, err)
 		time.Sleep(time.Millisecond * 100)
 	}
-	return nil
+	return fmt.Errorf("init did not finish for node %d", nodeNum)
 }
 
 // WaitForInit retries until a connection is successfully established.
