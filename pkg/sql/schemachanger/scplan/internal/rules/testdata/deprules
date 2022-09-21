@@ -1401,12 +1401,12 @@ deprules
   to: column-node
   query:
     - $column-type[Type] = '*scpb.ColumnType'
+    - descriptorIsNotBeingDropped($column-type)
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-type, $column, $table-id, $col-id)
     - toAbsent($column-type-target, $column-target)
     - $column-type-node[CurrentStatus] = ABSENT
     - $column-node[CurrentStatus] = ABSENT
-    - relationIsNotBeingDropped(*scpb.ColumnType)($column-type)
     - joinTargetNode($column-type, $column-type-target, $column-type-node)
     - joinTargetNode($column, $column-target, $column-node)
 - name: constraint dependent absent right before constraint
@@ -1964,9 +1964,9 @@ deprules
   to: index-node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
+    - descriptorIsNotBeingDropped($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
-    - relationIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
     - transient($partial-predicate-target, $index-target)
     - $partial-predicate-node[CurrentStatus] = TRANSIENT_ABSENT
     - $index-node[CurrentStatus] = TRANSIENT_ABSENT
@@ -1978,9 +1978,9 @@ deprules
   to: index-node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
+    - descriptorIsNotBeingDropped($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
-    - relationIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
     - toAbsent($partial-predicate-target, $index-target)
     - $partial-predicate-node[CurrentStatus] = ABSENT
     - $index-node[CurrentStatus] = ABSENT
@@ -1992,9 +1992,9 @@ deprules
   to: index-node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
+    - descriptorIsNotBeingDropped($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
-    - relationIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
     - $partial-predicate-target[TargetStatus] = TRANSIENT_ABSENT
     - $partial-predicate-node[CurrentStatus] = TRANSIENT_ABSENT
     - $index-target[TargetStatus] = ABSENT
@@ -2007,9 +2007,9 @@ deprules
   to: index-node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
+    - descriptorIsNotBeingDropped($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
-    - relationIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
     - $partial-predicate-target[TargetStatus] = ABSENT
     - $partial-predicate-node[CurrentStatus] = ABSENT
     - $index-target[TargetStatus] = TRANSIENT_ABSENT
