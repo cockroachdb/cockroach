@@ -85,7 +85,6 @@ function makeActiveTxn(
     statementID: defaultActiveStatement.statementID,
     retries: 3,
     lastAutoRetryReason: null,
-    isFullScan: defaultActiveStatement.isFullScan,
     priority: "Normal",
     statementCount: 5,
     status: "Executing",
@@ -184,67 +183,186 @@ describe("test activeStatementUtils", () => {
   });
 
   describe("getActiveExecutionsFromSessions", () => {
-    const activeQueries = [1, 2, 3, 4].map(num =>
-      makeActiveQuery({ id: num.toString() }),
-    );
+    it("should convert sessions response to active statements result", () => {
+      const sessionsResponse: SessionsResponse = {
+        sessions: [
+          {
+            id: new Uint8Array(),
+            username: "bar",
+            application_name: "application",
+            client_address: "clientAddress",
+            active_queries: [makeActiveQuery({ id: "1" })],
+          },
+          {
+            id: new Uint8Array(),
+            username: "foo",
+            application_name: "application2",
+            client_address: "clientAddress2",
+            active_queries: [makeActiveQuery({ id: "2" })],
+          },
+          {
+            id: new Uint8Array(),
+            username: "closed",
+            status: SessionStatusType.CLOSED,
+            // Closed sessions should not appear in active stmts.
+            application_name: "application2",
+            client_address: "clientAddress2",
+            active_queries: [makeActiveQuery({ id: "3" })],
+          },
+        ],
+        errors: [],
+        internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
+        toJSON: () => ({}),
+      };
 
-    const sessionsResponse: SessionsResponse = {
-      sessions: [
+      const statements = getActiveExecutionsFromSessions(
+        sessionsResponse,
+        LAST_UPDATED,
+      ).statements;
+
+      expect(statements.length).toBe(2);
+
+      statements.forEach(stmt => {
+        if (stmt.user === "bar") {
+          expect(stmt.application).toBe("application");
+          expect(stmt.clientAddress).toBe("clientAddress");
+        } else if (stmt.user === "foo") {
+          expect(stmt.application).toBe("application2");
+          expect(stmt.clientAddress).toBe("clientAddress2");
+        } else {
+          fail(`stmt user should be foo or bar, got ${stmt.user}`);
+        }
+        // expect(stmt.transactionID).toBe(defaultActiveStatement.transactionID);
+        expect(stmt.status).toBe("Executing");
+        expect(stmt.elapsedTimeMillis).toBe(
+          LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
+        );
+        expect(stmt.start.unix()).toBe(
+          TimestampToMoment(defaultActiveQuery.start).unix(),
+        );
+        expect(stmt.query).toBe(defaultActiveStatement.query);
+      });
+    });
+
+    it("should convert sessions response to active transactions result", () => {
+      const txns = [
         {
           id: new Uint8Array(),
-          username: "bar",
-          application_name: "application",
-          client_address: "clientAddress",
-          active_queries: activeQueries,
+          start: new Timestamp({
+            seconds: Long.fromNumber(MOCK_START_TIME.unix()),
+          }),
+          num_auto_retries: 3,
+          num_statements_executed: 4,
         },
         {
           id: new Uint8Array(),
-          username: "foo",
-          application_name: "application2",
-          client_address: "clientAddress2",
-          active_queries: activeQueries,
+          start: new Timestamp({
+            seconds: Long.fromNumber(MOCK_START_TIME.unix()),
+          }),
+          num_auto_retries: 4,
+          num_statements_executed: 3,
         },
-        {
-          id: new Uint8Array(),
-          username: "foo",
-          status: SessionStatusType.CLOSED,
-          application_name: "application2",
-          client_address: "clientAddress2",
-          active_queries: activeQueries,
-        },
-      ],
-      errors: [],
-      internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
-      toJSON: () => ({}),
-    };
+      ];
 
-    const statements = getActiveExecutionsFromSessions(
-      sessionsResponse,
-      LAST_UPDATED,
-    ).statements;
+      const sessionsResponse: SessionsResponse = {
+        sessions: [
+          {
+            id: new Uint8Array(),
+            username: "bar",
+            application_name: "application",
+            client_address: "clientAddress",
+            active_queries: [makeActiveQuery()],
+            active_txn: txns[0],
+          },
+          {
+            id: new Uint8Array(),
+            username: "foo",
+            application_name: "application2",
+            client_address: "clientAddress2",
+            active_queries: [makeActiveQuery()],
+            active_txn: txns[1],
+          },
+          {
+            id: new Uint8Array(),
+            username: "foo",
+            status: SessionStatusType.CLOSED,
+            application_name: "closed_application",
+            client_address: "clientAddress2",
+            active_queries: [makeActiveQuery()],
+            active_txn: txns[1],
+          },
+        ],
+        errors: [],
+        internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
+        toJSON: () => ({}),
+      };
 
-    expect(statements.length).toBe(activeQueries.length * 2);
+      const activeTransactions = getActiveExecutionsFromSessions(
+        sessionsResponse,
+        LAST_UPDATED,
+      ).transactions;
 
-    statements.forEach(stmt => {
-      if (stmt.user === "bar") {
-        expect(stmt.application).toBe("application");
-        expect(stmt.clientAddress).toBe("clientAddress");
-      } else if (stmt.user === "foo") {
-        expect(stmt.application).toBe("application2");
-        expect(stmt.clientAddress).toBe("clientAddress2");
-      } else {
-        fail(`stmt user should be foo or bar, got ${stmt.user}`);
-      }
-      // expect(stmt.transactionID).toBe(defaultActiveStatement.transactionID);
-      expect(stmt.status).toBe("Executing");
-      expect(stmt.elapsedTimeMillis).toBe(
-        LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
+      // Should filter out the txn from closed  session.
+      expect(activeTransactions.length).toBe(2);
+
+      activeTransactions.forEach((txn: ActiveTransaction, i) => {
+        expect(txn.application).toBe(
+          sessionsResponse.sessions[i].application_name,
+        );
+        expect(txn.elapsedTimeMillis).toBe(
+          LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
+        );
+        expect(txn.status).toBe("Executing");
+        expect(txn.query).toBeTruthy();
+        expect(txn.start.unix()).toBe(
+          TimestampToMoment(defaultActiveQuery.start).unix(),
+        );
+      });
+    });
+
+    it("should populate txn latest query when there is no active stmt for txns with at least 1 stmt", () => {
+      const lastActiveQueryText = "SELECT 1";
+      const sessionsResponse: SessionsResponse = {
+        sessions: [
+          {
+            id: new Uint8Array(),
+            last_active_query: lastActiveQueryText,
+            active_queries: [],
+            active_txn: {
+              id: new Uint8Array(),
+              start: new Timestamp({
+                seconds: Long.fromNumber(MOCK_START_TIME.unix()),
+              }),
+              num_auto_retries: 0,
+              num_statements_executed: 1,
+            },
+          },
+          {
+            id: new Uint8Array(),
+            last_active_query: lastActiveQueryText,
+            active_queries: [],
+            active_txn: {
+              id: new Uint8Array(),
+              start: new Timestamp({
+                seconds: Long.fromNumber(MOCK_START_TIME.unix()),
+              }),
+              num_auto_retries: 0,
+              num_statements_executed: 0,
+            },
+          },
+        ],
+        errors: [],
+        internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
+        toJSON: () => ({}),
+      };
+
+      const activeExecs = getActiveExecutionsFromSessions(
+        sessionsResponse,
+        LAST_UPDATED,
       );
-      expect(stmt.start.unix()).toBe(
-        TimestampToMoment(defaultActiveQuery.start).unix(),
-      );
-      // expect(stmt.sessionID).toBe(defaultActiveStatement.sessionID);
-      expect(stmt.query).toBe(defaultActiveStatement.query);
+
+      expect(activeExecs.transactions[0].query).toBe(lastActiveQueryText);
+      expect(activeExecs.transactions[1].query).toBeFalsy();
     });
   });
 
@@ -260,84 +378,6 @@ describe("test activeStatementUtils", () => {
       INTERNAL_APP_NAME_PREFIX,
     );
     expect(apps).toEqual(["app1", "app2", "app3", "app4"]);
-  });
-
-  describe("getActiveExecutionsFromSessions transactions result", () => {
-    const txns = [
-      {
-        id: new Uint8Array(),
-        start: new Timestamp({
-          seconds: Long.fromNumber(MOCK_START_TIME.unix()),
-        }),
-        num_auto_retries: 3,
-        num_statements_executed: 4,
-      },
-      {
-        id: new Uint8Array(),
-        start: new Timestamp({
-          seconds: Long.fromNumber(MOCK_START_TIME.unix()),
-        }),
-        num_auto_retries: 4,
-        num_statements_executed: 3,
-      },
-    ];
-
-    const sessionsResponse: SessionsResponse = {
-      sessions: [
-        {
-          id: new Uint8Array(),
-          username: "bar",
-          application_name: "application",
-          client_address: "clientAddress",
-          active_queries: [makeActiveQuery()],
-          active_txn: txns[0],
-        },
-        {
-          id: new Uint8Array(),
-          username: "foo",
-          application_name: "application2",
-          client_address: "clientAddress2",
-          active_queries: [makeActiveQuery()],
-          active_txn: txns[1],
-        },
-        {
-          id: new Uint8Array(),
-          username: "foo",
-          status: SessionStatusType.CLOSED,
-          application_name: "closed_application",
-          client_address: "clientAddress2",
-          active_queries: [makeActiveQuery()],
-          active_txn: txns[1],
-        },
-      ],
-      errors: [],
-      internal_app_name_prefix: INTERNAL_APP_NAME_PREFIX,
-      toJSON: () => ({}),
-    };
-
-    const activeTransactions = getActiveExecutionsFromSessions(
-      sessionsResponse,
-      LAST_UPDATED,
-    ).transactions;
-
-    // Should filter out the txn from closed  session.
-    expect(activeTransactions.length).toBe(2);
-
-    expect(activeTransactions.length).toBe(txns.length);
-
-    activeTransactions.forEach((txn: ActiveTransaction, i) => {
-      expect(txn.application).toBe(
-        sessionsResponse.sessions[i].application_name,
-      );
-      expect(txn.elapsedTimeMillis).toBe(
-        LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
-      );
-      expect(txn.status).toBe("Executing");
-      expect(txn.query).toBeTruthy();
-      expect(txn.start.unix()).toBe(
-        TimestampToMoment(defaultActiveQuery.start).unix(),
-      );
-    });
   });
 
   describe("filterActiveTransactions", () => {
