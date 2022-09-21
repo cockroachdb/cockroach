@@ -172,7 +172,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
 
   const clearFilters = () =>
     onSubmitFilters({
-      app: defaultFilters.app,
+      app: "",
     });
 
   const transactionInsights = getInsightsFromState(transactions);

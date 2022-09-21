@@ -28,7 +28,7 @@ export const filtersLocalSetting = new LocalSetting<
   AdminUIState,
   WorkloadInsightEventFilters
 >("filters/InsightsPage", (state: AdminUIState) => state.localSettings, {
-  app: defaultFilters.app,
+  app: "",
 });
 
 export const sortSettingLocalSetting = new LocalSetting<

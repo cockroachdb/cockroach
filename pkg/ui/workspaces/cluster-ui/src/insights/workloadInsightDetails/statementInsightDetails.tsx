@@ -55,11 +55,13 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
   constructor(props: StatementInsightDetailsProps) {
     super(props);
   }
+
   prevPage = (): void => this.props.history.goBack();
 
   renderContent = (): React.ReactElement => {
-    const insightDetailsArr = [this.props.insightEventDetails];
-    populateStatementInsightsFromProblemAndCauses(insightDetailsArr);
+    const insightDetailsArr = populateStatementInsightsFromProblemAndCauses([
+      this.props.insightEventDetails,
+    ]);
     const insightDetails = insightDetailsArr[0];
     const isCockroachCloud = useContext(CockroachCloudContext);
     const insightsColumns = makeInsightsColumns(isCockroachCloud);
@@ -71,7 +73,6 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
         fingerprintID: insightDetails.statementFingerprintID,
         retries: insightDetails.retries,
       };
-
       insightDetails.insights.forEach(insight => {
         switch (insight.name) {
           case InsightNameEnum.highContention:

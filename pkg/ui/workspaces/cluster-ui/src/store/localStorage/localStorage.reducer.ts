@@ -10,8 +10,9 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
-import { defaultFilters, Filters } from "../../queryFilter";
+import { defaultFilters, Filters } from "src/queryFilter/";
 import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
+import { WorkloadInsightEventFilters } from "src/insights";
 
 type SortSetting = {
   ascending: boolean;
@@ -25,6 +26,7 @@ export type LocalStorageState = {
   "showColumns/StatementsPage": string;
   "showColumns/TransactionPage": string;
   "showColumns/SessionsPage": string;
+  "showColumns/StatementInsightsPage": string;
   "timeScale/SQLActivity": TimeScale;
   "sortSetting/ActiveStatementsPage": SortSetting;
   "sortSetting/ActiveTransactionsPage": SortSetting;
@@ -39,7 +41,7 @@ export type LocalStorageState = {
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
   "filters/SessionsPage": Filters;
-  "filters/InsightsPage": Filters;
+  "filters/InsightsPage": WorkloadInsightEventFilters;
   "filters/SchemaInsightsPage": Filters;
   "search/StatementsPage": string;
   "search/TransactionsPage": string;
@@ -74,16 +76,16 @@ const defaultSortSettingSchemaInsights: SortSetting = {
 };
 
 const defaultFiltersActiveExecutions = {
-  app: defaultFilters.app,
+  app: "",
 };
 
 const defaultFiltersInsights = {
-  app: defaultFilters.app,
+  app: "",
 };
 
 const defaultFiltersSchemaInsights = {
-  database: defaultFilters.database,
-  schemaInsightType: defaultFilters.schemaInsightType,
+  database: "",
+  schemaInsightType: "",
 };
 
 const defaultSessionsSortSetting: SortSetting = {
@@ -119,6 +121,9 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
   "showColumns/SessionsPage":
     JSON.parse(localStorage.getItem("showColumns/SessionsPage")) || null,
+  "showColumns/StatementInsightsPage":
+    JSON.parse(localStorage.getItem("showColumns/StatementInsightsPage")) ||
+    null,
   "showSetting/JobsPage":
     JSON.parse(localStorage.getItem("showSetting/JobsPage")) ||
     defaultJobShowSetting,
