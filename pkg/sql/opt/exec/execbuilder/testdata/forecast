@@ -889,6 +889,17 @@ statement ok
 SET optimizer_use_forecasts = off
 
 query T
+EXPLAIN SELECT * FROM g WHERE a > 8
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  table: g@g_pkey
+  spans: [/9 - ]
+
+query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM g WHERE a > 8
 ----
 scan g
@@ -899,6 +910,17 @@ scan g
  ├── cost: 14.02
  ├── key: (1)
  └── distribution: test
+
+query T
+EXPLAIN SELECT * FROM s WHERE b < 3
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (100% of the table; stats collected <hidden> ago)
+  table: s@s_pkey
+  spans: [ - /2]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM s WHERE b < 3
@@ -914,6 +936,17 @@ scan s
  └── distribution: test
 
 query T
+EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  table: c@c_pkey
+  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
+
+query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h > '1988-08-07'
 ----
 scan c
@@ -926,6 +959,17 @@ scan c
  └── distribution: test
 
 query T
+EXPLAIN SELECT * FROM x WHERE a > 16
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  table: x@x_pkey
+  spans: [/17 - ]
+
+query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM x WHERE a > 16
 ----
 scan x
@@ -936,6 +980,17 @@ scan x
  ├── cost: 14.02
  ├── key: (1)
  └── distribution: test
+
+query T
+EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (100% of the table; stats collected <hidden> ago)
+  table: d@d_pkey
+  spans: [/'1999-12-16' - ]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM d WHERE d >= '1999-12-16'
@@ -954,6 +1009,17 @@ statement ok
 RESET optimizer_use_forecasts
 
 query T
+EXPLAIN SELECT * FROM g WHERE a > 8
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (22% of the table; stats collected <hidden> ago; using stats forecast)
+  table: g@g_pkey
+  spans: [/9 - ]
+
+query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM g WHERE a > 8
 ----
 scan g
@@ -967,6 +1033,17 @@ scan g
  └── distribution: test
 
 query T
+EXPLAIN SELECT * FROM s WHERE b < 3
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 1 (100% of the table; stats collected <hidden> ago; using stats forecast)
+  table: s@s_pkey
+  spans: [ - /2]
+
+query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM s WHERE b < 3
 ----
 scan s
@@ -977,6 +1054,17 @@ scan s
  ├── cost: 15.03
  ├── key: (1)
  └── distribution: test
+
+query T
+EXPLAIN SELECT * FROM c WHERE h > '1988-08-07'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 23 (96% of the table; stats collected <hidden> ago; using stats forecast)
+  table: c@c_pkey
+  spans: [/'1988-08-07 00:00:00.000001+00:00' - ]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM c WHERE h > '1988-08-07'
@@ -992,6 +1080,17 @@ scan c
  └── distribution: test
 
 query T
+EXPLAIN SELECT * FROM x WHERE a > 16
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 2 (50% of the table; stats collected <hidden> ago; using stats forecast)
+  table: x@x_pkey
+  spans: [/17 - ]
+
+query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM x WHERE a > 16
 ----
 scan x
@@ -1003,6 +1102,17 @@ scan x
  ├── cost: 16.04
  ├── key: (1)
  └── distribution: test
+
+query T
+EXPLAIN SELECT * FROM d WHERE d >= '1999-12-16'
+----
+distribution: local
+vectorized: true
+·
+• scan
+  estimated row count: 3 (100% of the table; stats collected <hidden> ago)
+  table: d@d_pkey
+  spans: [/'1999-12-16' - ]
 
 query T
 EXPLAIN (OPT, VERBOSE) SELECT * FROM d WHERE d >= '1999-12-16'
@@ -1155,3 +1265,334 @@ vectorized: true
   estimated row count: 3 (100% of the table; stats collected <hidden> ago)
   table: d@d_pkey
   spans: [/'1999-12-16' - ]
+
+# Check that EXPLAIN output respects optimizer_use_forecasts (#88177).
+
+statement ok
+CREATE TABLE t (
+  a INT,
+  b INT,
+  INDEX (a) STORING (b),
+  INDEX (b) STORING (a)
+) WITH (sql_stats_automatic_collection_enabled = false)
+
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2022-09-19 19:00:00.000000",
+          "distinct_count": 1,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 100,
+                  "num_range": 0,
+                  "upper_bound": "1"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2022-09-19 20:00:00.000000",
+          "distinct_count": 1,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 100,
+                  "num_range": 0,
+                  "upper_bound": "2"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2022-09-19 21:00:00.000000",
+          "distinct_count": 1,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 100,
+                  "num_range": 0,
+                  "upper_bound": "3"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2022-09-19 19:00:00.000000",
+          "distinct_count": 1,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 100,
+                  "num_range": 0,
+                  "upper_bound": "10"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2022-09-19 20:00:00.000000",
+          "distinct_count": 1,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 100,
+                  "num_range": 0,
+                  "upper_bound": "11"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "b"
+          ],
+          "created_at": "2022-09-19 21:00:00.000000",
+          "distinct_count": 1,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 100,
+                  "num_range": 0,
+                  "upper_bound": "12"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a",
+              "b"
+          ],
+          "created_at": "2022-09-19 19:00:00.000000",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a",
+              "b"
+          ],
+          "created_at": "2022-09-19 20:00:00.000000",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a",
+              "b"
+          ],
+          "created_at": "2022-09-19 21:00:00.000000",
+          "distinct_count": 1,
+          "histo_col_type": "",
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 100
+      }
+]'
+
+query T
+SELECT jsonb_pretty(stat)
+FROM (
+  SELECT jsonb_array_elements(statistics) AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t WITH FORECAST]
+)
+WHERE stat->>'name' = '__forecast__'
+----
+{
+    "avg_size": 1,
+    "columns": [
+        "a"
+    ],
+    "created_at": "2022-09-19 22:00:00",
+    "distinct_count": 1,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 100,
+            "num_range": 0,
+            "upper_bound": "4"
+        }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__forecast__",
+    "null_count": 0,
+    "row_count": 100
+}
+{
+    "avg_size": 1,
+    "columns": [
+        "a",
+        "b"
+    ],
+    "created_at": "2022-09-19 22:00:00",
+    "distinct_count": 1,
+    "histo_col_type": "",
+    "name": "__forecast__",
+    "null_count": 0,
+    "row_count": 100
+}
+{
+    "avg_size": 1,
+    "columns": [
+        "b"
+    ],
+    "created_at": "2022-09-19 22:00:00",
+    "distinct_count": 1,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 100,
+            "num_range": 0,
+            "upper_bound": "13"
+        }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__forecast__",
+    "null_count": 0,
+    "row_count": 100
+}
+
+statement ok
+SET enable_zigzag_join = off
+
+query T
+EXPLAIN SELECT * FROM t WHERE a = 3 AND b = 13
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ estimated row count: 0
+│ filter: b = 13
+│
+└── • scan
+      estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago; using stats forecast)
+      table: t@t_a_idx
+      spans: [/3 - /3]
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM t WHERE a = 3 AND b = 13
+----
+select
+ ├── columns: a:1 b:2
+ ├── stats: [rows=2e-08, distinct(1)=2e-08, null(1)=0, distinct(2)=2e-08, null(2)=0]
+ │   histogram(1)=
+ │   histogram(2)=  0 2e-08
+ │                <--- 13 -
+ ├── cost: 14.05
+ ├── fd: ()-->(1,2)
+ ├── distribution: test
+ ├── scan t@t_a_idx
+ │    ├── columns: a:1 b:2
+ │    ├── constraint: /1/3: [/3 - /3]
+ │    ├── stats: [rows=2e-08, distinct(1)=2e-08, null(1)=0]
+ │    │   histogram(1)=
+ │    ├── cost: 14.02
+ │    ├── fd: ()-->(1)
+ │    └── distribution: test
+ └── filters
+      └── b:2 = 13 [outer=(2), constraints=(/2: [/13 - /13]; tight), fd=()-->(2)]
+
+statement ok
+SET optimizer_use_forecasts = off
+
+query T
+EXPLAIN SELECT * FROM t WHERE a = 3 AND b = 13
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ estimated row count: 0
+│ filter: a = 3
+│
+└── • scan
+      estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+      table: t@t_b_idx
+      spans: [/13 - /13]
+
+query T
+EXPLAIN (OPT, VERBOSE) SELECT * FROM t WHERE a = 3 AND b = 13
+----
+select
+ ├── columns: a:1 b:2
+ ├── stats: [rows=2e-08, distinct(1)=2e-08, null(1)=0, distinct(2)=2e-08, null(2)=0]
+ │   histogram(1)=  0 2e-08
+ │                <---- 3 -
+ │   histogram(2)=
+ ├── cost: 14.05
+ ├── fd: ()-->(1,2)
+ ├── distribution: test
+ ├── scan t@t_b_idx
+ │    ├── columns: a:1 b:2
+ │    ├── constraint: /2/3: [/13 - /13]
+ │    ├── stats: [rows=2e-08, distinct(2)=2e-08, null(2)=0]
+ │    │   histogram(2)=
+ │    ├── cost: 14.02
+ │    ├── fd: ()-->(2)
+ │    └── distribution: test
+ └── filters
+      └── a:1 = 3 [outer=(1), constraints=(/1: [/3 - /3]; tight), fd=()-->(1)]
+
+statement ok
+RESET enable_zigzag_join
+
+statement ok
+RESET optimizer_use_forecasts
