@@ -670,6 +670,8 @@ func backupShowerDefault(
 
 			var rows []tree.Datums
 			for layer, manifest := range info.manifests {
+				ctx, sp := tracing.ChildSpan(ctx, "backupccl.backupShowerDefault.fn.layer")
+
 				// Map database ID to descriptor name.
 				dbIDToName := make(map[descpb.ID]string)
 				schemaIDToName := make(map[descpb.ID]string)
@@ -692,11 +694,12 @@ func backupShowerDefault(
 						}
 					}
 				}
+
 				var fileSizes []int64
 				if len(info.fileSizes) > 0 {
 					fileSizes = info.fileSizes[layer]
 				}
-				tableSizes, err := getTableSizes(manifest.Files, fileSizes)
+				tableSizes, err := getTableSizes(ctx, manifest.Files, fileSizes)
 				if err != nil {
 					return nil, err
 				}
@@ -772,18 +775,23 @@ func backupShowerDefault(
 						rowCountDatum = tree.NewDInt(tree.DInt(tableSize.rowCount.Rows))
 						fileSizeDatum = tree.NewDInt(tree.DInt(tableSize.fileSize))
 
-						displayOptions := sql.ShowCreateDisplayOptions{
-							FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
-							IgnoreComments: true,
+						// Only resolve the table schemas if running `SHOW BACKUP SCHEMAS`.
+						// In all other cases we discard these results and so it is wasteful
+						// to construct the SQL representation of the table's schema.
+						if showSchemas {
+							displayOptions := sql.ShowCreateDisplayOptions{
+								FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
+								IgnoreComments: true,
+							}
+							createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
+								tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable(), displayOptions)
+							if err != nil {
+								// We expect that we might get an error here due to X-DB
+								// references, which were possible on 20.2 betas and rcs.
+								log.Errorf(ctx, "error while generating create statement: %+v", err)
+							}
+							createStmtDatum = nullIfEmpty(createStmt)
 						}
-						createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-							tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable(), displayOptions)
-						if err != nil {
-							// We expect that we might get an error here due to X-DB
-							// references, which were possible on 20.2 betas and rcs.
-							log.Errorf(ctx, "error while generating create statement: %+v", err)
-						}
-						createStmtDatum = nullIfEmpty(createStmt)
 					default:
 						descriptorType = "unknown"
 					}
@@ -805,7 +813,7 @@ func backupShowerDefault(
 						row = append(row, createStmtDatum)
 					}
 					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
-						row = append(row, tree.NewDString(showPrivileges(descriptor)))
+						row = append(row, tree.NewDString(showPrivileges(ctx, descriptor)))
 						owner := desc.GetPrivileges().Owner().SQLIdentifier()
 						row = append(row, tree.NewDString(owner))
 					}
@@ -867,6 +875,7 @@ func backupShowerDefault(
 					}
 					rows = append(rows, row)
 				}
+				sp.Finish()
 			}
 			return rows, nil
 		},
@@ -881,7 +890,11 @@ type descriptorSize struct {
 // getLogicalSSTSize gets the total logical bytes stored in each SST. Note that a
 // BackupManifest_File identifies a span in an SST and there can be multiple
 // spans stored in an SST.
-func getLogicalSSTSize(files []backuppb.BackupManifest_File) map[string]int64 {
+func getLogicalSSTSize(ctx context.Context, files []backuppb.BackupManifest_File) map[string]int64 {
+	ctx, span := tracing.ChildSpan(ctx, "backupccl.getLogicalSSTSize")
+	defer span.Finish()
+	_ = ctx
+
 	sstDataSize := make(map[string]int64)
 	for _, file := range files {
 		sstDataSize[file.Path] += file.EntryCounts.DataSize
@@ -898,8 +911,11 @@ func approximateSpanPhysicalSize(
 
 // getTableSizes gathers row and size count for each table in the manifest
 func getTableSizes(
-	files []backuppb.BackupManifest_File, fileSizes []int64,
+	ctx context.Context, files []backuppb.BackupManifest_File, fileSizes []int64,
 ) (map[descpb.ID]descriptorSize, error) {
+	ctx, span := tracing.ChildSpan(ctx, "backupccl.getTableSizes")
+	defer span.Finish()
+
 	tableSizes := make(map[descpb.ID]descriptorSize)
 	if len(files) == 0 {
 		return tableSizes, nil
@@ -910,7 +926,7 @@ func getTableSizes(
 	}
 	showCodec := keys.MakeSQLCodec(tenantID)
 
-	logicalSSTSize := getLogicalSSTSize(files)
+	logicalSSTSize := getLogicalSSTSize(ctx, files)
 
 	for i, file := range files {
 		// TODO(dan): This assumes each file in the backup only
@@ -985,7 +1001,11 @@ func showRegions(typeDesc catalog.TypeDescriptor, dbname string) (string, error)
 	return regionsStringBuilder.String(), nil
 }
 
-func showPrivileges(descriptor *descpb.Descriptor) string {
+func showPrivileges(ctx context.Context, descriptor *descpb.Descriptor) string {
+	ctx, span := tracing.ChildSpan(ctx, "backupccl.showPrivileges")
+	defer span.Finish()
+	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
+
 	var privStringBuilder strings.Builder
 
 	b := descbuilder.NewBuilder(descriptor)
@@ -1173,7 +1193,7 @@ func backupShowerFileSetup(inCol tree.StringOrPlaceholderOptList) backupShower {
 					backupType = "incremental"
 				}
 
-				logicalSSTSize := getLogicalSSTSize(manifest.Files)
+				logicalSSTSize := getLogicalSSTSize(ctx, manifest.Files)
 				for j, file := range manifest.Files {
 					filePath := file.Path
 					if inCol != nil {
