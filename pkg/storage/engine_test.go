@@ -1227,7 +1227,6 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 	if err := db.Remove("/non/existent/file"); !oserror.IsNotExist(err) {
 		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 	}
-
 	// Verify RemoveAll returns nil if path does not exist.
 	if err := db.RemoveAll("/non/existent/file"); err != nil {
 		t.Fatalf("expected nil, but got %v (%T)", err, err)
@@ -1250,7 +1249,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 		}
 	}
 
-	if b, err := db.ReadFile(fname); err != nil {
+	if b, err := fs.ReadFile(db, fname); err != nil {
 		t.Errorf("unable to read file with filename %s, got err %v", fname, err)
 	} else if string(b) != data {
 		t.Errorf("expected content in %s is '%s', got '%s'", fname, data, string(b))
@@ -1261,7 +1260,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 	}
 
 	// Verify ReadFile returns os.ErrNotExist if reading an already deleted file.
-	if _, err := db.ReadFile(fname); !oserror.IsNotExist(err) {
+	if _, err := fs.ReadFile(db, fname); !oserror.IsNotExist(err) {
 		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
 	}
 

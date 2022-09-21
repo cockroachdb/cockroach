@@ -2031,6 +2031,7 @@ func TestLint(t *testing.T) {
 		var buf strings.Builder
 		if err := gcassert.GCAssert(&buf,
 			"../../col/coldata",
+			"../../sql/colcontainer",
 			"../../sql/colconv",
 			"../../sql/colexec",
 			"../../sql/colexec/colexecagg",

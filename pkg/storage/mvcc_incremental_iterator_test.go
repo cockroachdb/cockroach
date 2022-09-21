@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1347,7 +1348,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 		if err := sst.Finish(); err != nil {
 			t.Fatal(err)
 		}
-		if err := db2.WriteFile(`ingest`, memFile.Data()); err != nil {
+		if err := fs.WriteFile(db2, `ingest`, memFile.Data()); err != nil {
 			t.Fatal(err)
 		}
 		if err := db2.IngestExternalFiles(ctx, []string{`ingest`}); err != nil {
