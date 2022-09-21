@@ -229,31 +229,95 @@ func MakeTrace(root tracingpb.RecordedSpan) Trace {
 	}
 }
 
-// addChild attempts to add a child's trace to t. If the child's trace is too
-// large and would cause t's trace to get over the maxRecordedSpansPerTrace
-// limit, false is returned and the call is a no-op.
-//
-// TODO(andrei): don't wholly reject the child if there's some space left in t.
-func (t *Trace) addChild(child Trace) bool {
-	if t.NumSpans+child.NumSpans > maxRecordedSpansPerTrace {
-		t.DroppedDirectChildren = true
-		t.Root.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_dropped_children", "")
-		return false
+func (t *Trace) String() string {
+	return tracingpb.Recording(t.Flatten()).String()
+}
+
+// trim reduces the size of the trace to maxSpans. If t.NumSpans <= maxSpans,
+// this is a no-op. Otherwise, spans will be dropped from the trace until the
+// size is exactly maxSpans.
+func (t *Trace) trim(maxSpans int) {
+	if t.NumSpans <= maxSpans {
+		return
+	}
+	t.trimRecursive(t.NumSpans - maxSpans)
+}
+
+func (t *Trace) trimRecursive(toDrop int) {
+	if toDrop <= 0 {
+		toDrop := toDrop // copy escaping to the heap
+		panic(fmt.Sprintf("invalid toDrop < 0: %d", toDrop))
+	}
+	if t.NumSpans <= toDrop {
+		panic(fmt.Sprintf("NumSpans expected to be > toDrop; NumSpans: %d, toDrop: %d", t.NumSpans, toDrop))
 	}
 
-	if child.DroppedDirectChildren || child.DroppedIndirectChildren {
+	// Look at the spans ordered by size descendingly, so that we drop the fewest children
+	// possible.
+	childrenIdx := make([]int, len(t.Children))
+	for i := range t.Children {
+		childrenIdx[i] = i
+	}
+	sort.Slice(childrenIdx, func(i, j int) bool {
+		return t.Children[childrenIdx[i]].NumSpans >= t.Children[childrenIdx[j]].NumSpans
+	})
+	// We'll eliminate some children completely (the largest ones), and we'll
+	// recurse into the next one.
+	// Figure out how many spans we're going to drop completely (we might not have
+	// to drop any).
+	spansToDrop := 0
+	total := 0
+	recurseIdx := -1
+	for _, idx := range childrenIdx {
+		if total+t.Children[idx].NumSpans <= toDrop {
+			spansToDrop++
+			total += t.Children[idx].NumSpans
+		} else {
+			break
+		}
+	}
+	// If we need to drop some more spans, but we don't have to completely drop
+	// the next fattest child, recurse into the next child.
+	toDropFromNextChild := toDrop - total
+	if toDropFromNextChild > 0 {
+		recurseIdx = childrenIdx[spansToDrop]
+		if t.Children[recurseIdx].NumSpans < toDropFromNextChild {
+			panic("expected next child to have enough spans")
+		}
+		t.Children[recurseIdx].trimRecursive(toDropFromNextChild)
+		t.NumSpans -= toDropFromNextChild
 		t.DroppedIndirectChildren = true
 		t.Root.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_dropped_indirect_children", "")
 	}
-	t.NumSpans += child.NumSpans
-	t.Children = append(t.Children, child)
-	return true
+
+	if spansToDrop > 0 {
+		t.DroppedDirectChildren = true
+		t.Root.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_dropped_children", "")
+		childrenToDropIdx := childrenIdx[:spansToDrop]
+
+		// Remove all the spans that we decided to completely remove. Sort the indexes
+		// in reverse order so that we can remove them one by one without affecting
+		// the other indexes.
+		sort.Sort(sort.Reverse(sort.IntSlice(childrenToDropIdx)))
+		for _, idx := range childrenToDropIdx {
+			// Copy the structured events from the child we're about to drop to the
+			// parent.
+			buf := t.Children[idx].appendStructuredEventsRecursively(nil /* buffer */)
+			t.Root.StructuredRecords = append(t.Root.StructuredRecords, buf...)
+
+			t.Children[idx] = t.Children[len(t.Children)-1]
+			t.Children = t.Children[:len(t.Children)-1]
+		}
+		t.NumSpans -= total
+	}
 }
 
-func (t *Trace) addChildren(children []Trace) {
-	for i := range children {
-		t.addChild(children[i])
-	}
+// addChild attempts to add a child's trace to t. After adding the child, the
+// trace is trimmed to maxRecordedSpansPerTrace.
+func (t *Trace) addChild(child Trace) {
+	t.NumSpans += child.NumSpans
+	t.Children = append(t.Children, child)
+	t.trim(maxRecordedSpansPerTrace)
 }
 
 // Empty returns true if the receiver is not initialized.
@@ -524,7 +588,9 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 		s.mu.Lock()
 
 		result = s.mu.recording.finishedChildren.Clone()
+		oldEvents := result.Root.StructuredRecords
 		result.Root = s.getRecordingNoChildrenLocked(tracingpb.RecordingVerbose, finishing)
+		result.Root.StructuredRecords = append(result.Root.StructuredRecords, oldEvents...)
 
 		// Copy over the OperationMetadata collected from s' finished children.
 		childrenMetadata = make(map[string]tracingpb.OperationMetadata)
@@ -635,14 +701,7 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRec Trace) {
 		// processors run in spans that FollowFrom an RPC Span that we don't
 		// collect.
 		childRec.Root.ParentSpanID = s.spanID
-
-		if s.mu.recording.finishedChildren.addChild(childRec) {
-			break
-		}
-
-		// We don't have space for this recording. Let's collect just the structured
-		// records by falling through.
-		fallthrough
+		s.mu.recording.finishedChildren.addChild(childRec)
 	case tracingpb.RecordingStructured:
 		buf := childRec.appendStructuredEventsRecursively(nil /* buffer */)
 		for i := range buf {
