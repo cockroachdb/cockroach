@@ -354,6 +354,10 @@ type RaftConfig struct {
 	// without acknowledgement. With an average entry size of 1 KB that
 	// translates to ~4096 commands that might be executed in the handling of a
 	// single raft.Ready operation.
+	//
+	// This setting is used both by sending and receiving end of Raft messages. To
+	// minimize dropped messages on the receiver, its size should at least match
+	// the sender's (being it the default size, or taken from the env variables).
 	RaftMaxInflightMsgs int
 
 	// Splitting a range which has a replica needing a snapshot results in two
