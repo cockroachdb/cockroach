@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -1879,8 +1880,9 @@ func PeekLength(b []byte) (int, error) {
 // separator.
 // The directions each value is encoded may be provided. If valDirs is nil,
 // all values are decoded and printed with the default direction (ascending).
-func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
-	s1, allDecoded := prettyPrintValueImpl(valDirs, b, sep)
+func PrettyPrintValue(valDirs []Direction, b []byte, sep string) redact.RedactableString {
+	safeSep := redact.SafeString(sep)
+	s1, allDecoded := prettyPrintValueImpl(valDirs, b, safeSep)
 	if allDecoded {
 		return s1
 	}
@@ -1895,9 +1897,13 @@ func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
 		if len(valDirs) > len(b) {
 			cap = len(valDirs) - len(b)
 		}
+		buf := redact.StringBuilder{}
 		for i := 0; i < cap; i++ {
-			if s2, allDecoded := prettyPrintValueImpl(valDirs, undoPrefixEnd, sep); allDecoded {
-				return s2 + sep + "PrefixEnd"
+			if s2, allDecoded := prettyPrintValueImpl(valDirs, undoPrefixEnd, safeSep); allDecoded {
+				buf.Reset()
+				buf.Print(s2)
+				buf.Print(sep + "PrefixEnd")
+				return buf.RedactableString()
 			}
 			undoPrefixEnd = append(undoPrefixEnd, 0xFF)
 		}
@@ -1965,9 +1971,11 @@ func prettyPrintValuesWithTypesImpl(
 	return vals, types, allDecoded
 }
 
-func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bool) {
+func prettyPrintValueImpl(
+	valDirs []Direction, b []byte, sep redact.SafeString,
+) (redact.RedactableString, bool) {
 	allDecoded := true
-	var buf strings.Builder
+	buf := redact.StringBuilder{}
 	for len(b) > 0 {
 		// If there are more values than encoding directions specified,
 		// valDir will contain the 0 value of Direction.
@@ -1985,17 +1993,18 @@ func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bo
 			// to continue - it's possible we can still decode the
 			// remainder of the key bytes.
 			allDecoded = false
-			buf.WriteString(sep)
-			buf.WriteByte('?')
-			buf.WriteByte('?')
-			buf.WriteByte('?')
+			// Mark the separator as safe.
+			buf.Print(sep)
+			buf.SafeRune('?')
+			buf.SafeRune('?')
+			buf.SafeRune('?')
 		} else {
-			buf.WriteString(sep)
-			buf.WriteString(s)
+			buf.Print(sep)
+			buf.Print(redact.Safe(s))
 		}
 		b = bb
 	}
-	return buf.String(), allDecoded
+	return buf.RedactableString(), allDecoded
 }
 
 // prettyPrintFirstValue returns a string representation of the first decodable

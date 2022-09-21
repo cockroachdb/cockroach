@@ -1275,7 +1275,7 @@ func TestEncodeDecodeJSONInvertedIndex(t *testing.T) {
 		}
 
 		for j, path := range enc {
-			str := encoding.PrettyPrintValue(nil, path, "/")
+			str := encoding.PrettyPrintValue(nil, path, "/").StripMarkers()
 			if str != c.expEnc[j] {
 				t.Errorf("unexpected encoding mismatch for %v. expected [%s], got [%s]",
 					c.value, c.expEnc[j], str)
