@@ -23,7 +23,7 @@ import { Tooltip } from "@cockroachlabs/ui-components";
 import { limitText } from "../../util";
 
 export function makeActiveTransactionsColumns(
-  isCockroachCloud: boolean,
+  isTenant: boolean,
 ): ColumnDescriptor<ActiveTransaction>[] {
   const execType: ExecutionType = "transaction";
   return [
@@ -50,9 +50,7 @@ export function makeActiveTransactionsColumns(
     activeTransactionColumnsFromCommon.status,
     activeTransactionColumnsFromCommon.startTime,
     activeTransactionColumnsFromCommon.elapsedTime,
-    !isCockroachCloud
-      ? activeTransactionColumnsFromCommon.timeSpentWaiting
-      : null,
+    !isTenant ? activeTransactionColumnsFromCommon.timeSpentWaiting : null,
     {
       name: "statementCount",
       title: executionsTableTitles.statementCount(execType),

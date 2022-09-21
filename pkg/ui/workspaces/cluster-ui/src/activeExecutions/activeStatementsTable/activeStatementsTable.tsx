@@ -23,7 +23,7 @@ import { Tooltip } from "@cockroachlabs/ui-components";
 import { limitText } from "../../util";
 
 export function makeActiveStatementsColumns(
-  isCockroachCloud: boolean,
+  isTenant: boolean,
 ): ColumnDescriptor<ActiveStatement>[] {
   return [
     activeStatementColumnsFromCommon.executionID,
@@ -42,9 +42,7 @@ export function makeActiveStatementsColumns(
     activeStatementColumnsFromCommon.status,
     activeStatementColumnsFromCommon.startTime,
     activeStatementColumnsFromCommon.elapsedTime,
-    !isCockroachCloud
-      ? activeStatementColumnsFromCommon.timeSpentWaiting
-      : null,
+    !isTenant ? activeStatementColumnsFromCommon.timeSpentWaiting : null,
     activeStatementColumnsFromCommon.applicationName,
   ].filter(col => col != null);
 }
