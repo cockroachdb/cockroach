@@ -57,7 +57,6 @@ func TestRedactRecordingForTenant(t *testing.T) {
 
 	rec := mkRec()
 	redactRecording(rec)
-	require.Zero(t, rec[0].Tags)
 	require.Zero(t, rec[0].TagGroups)
 	require.Len(t, rec[0].Logs, 1)
 	msg := rec[0].Logs[0].Msg().StripMarkers()
@@ -79,7 +78,6 @@ func TestNewSpanFields(t *testing.T) {
 		SpanID            tracingpb.SpanID
 		ParentSpanID      tracingpb.SpanID
 		Operation         string
-		Tags              map[string]string
 		TagGroups         []tracingpb.TagGroup
 		StartTime         time.Time
 		Duration          time.Duration
