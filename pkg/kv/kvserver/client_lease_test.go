@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1364,7 +1365,6 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 		if !li.Current().OwnedBy(n2.GetFirstStoreID()) {
 			return errors.New("lease still owned by n1")
 		}
-		require.Equal(t, roachpb.LeaseExpiration, li.Current().Type())
 		return nil
 	})
 
@@ -1375,4 +1375,75 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 	mu.Lock()
 	defer mu.Unlock()
 	require.Equal(t, roachpb.LeaseExpiration, mu.lease.Type())
+}
+
+// TestLeaseUpgradeVersionGate tests the version gating for the lease-upgrade
+// process.
+//
+// TODO(irfansharif): Delete this in 23.1 (or whenever we get rid of the
+// clusterversion.EnableLeaseUpgrade).
+func TestLeaseUpgradeVersionGate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.ByKey(clusterversion.EnableLeaseUpgrade-1),
+		false, /* initializeVersion */
+	)
+	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.EnableLeaseUpgrade - 1),
+				},
+			},
+		},
+	})
+	tc := tci.(*testcluster.TestCluster)
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	n1, n1Target := tc.Server(0), tc.Target(0)
+	n2, n2Target := tc.Server(1), tc.Target(1)
+
+	// Add a replica; we're going to move the lease to and from it below.
+	desc := tc.AddVotersOrFatal(t, scratchKey, n2Target)
+
+	// Transfer the lease from n1 to n2. It should be transferred as an
+	// epoch-based one since we've not upgraded past
+	// clusterversion.EnableLeaseUpgrade yet.
+	tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
+	testutils.SucceedsSoon(t, func() error {
+		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+		require.NoError(t, err)
+		if !li.Current().OwnedBy(n2.GetFirstStoreID()) {
+			return errors.New("lease still owned by n1")
+		}
+		require.Equal(t, roachpb.LeaseEpoch, li.Current().Type())
+		return nil
+	})
+
+	// Enable the version gate.
+	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+		clusterversion.ByKey(clusterversion.EnableLeaseUpgrade).String())
+	require.NoError(t, err)
+
+	// Transfer the lease back from n2 to n1. It should be transferred as an
+	// expiration-based lease that's later upgraded to an epoch based one now
+	// that we're past the version gate.
+	tc.TransferRangeLeaseOrFatal(t, desc, n1Target)
+	testutils.SucceedsSoon(t, func() error {
+		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
+		require.NoError(t, err)
+		if !li.Current().OwnedBy(n1.GetFirstStoreID()) {
+			return errors.New("lease still owned by n2")
+		}
+		return nil
+	})
+	tc.WaitForLeaseUpgrade(ctx, t, desc)
 }

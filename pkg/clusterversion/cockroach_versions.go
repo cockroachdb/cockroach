@@ -288,6 +288,16 @@ const (
 	// version is enabled, the receiver will look at the priority of snapshots
 	// using the fields added in 22.2.
 	PrioritizeSnapshots
+	// EnableLeaseUpgrade version gates a change in the lease transfer protocol
+	// whereby we only ever transfer expiration-based leases (and have
+	// recipients later upgrade them to the more efficient epoch based ones).
+	// This was done to limit the effects of ill-advised lease transfers since
+	// the incoming leaseholder would need to recognize itself as such within a
+	// few seconds. This needs version gating so that in mixed-version clusters,
+	// as part of lease transfers, we don't start sending out expiration based
+	// leases to nodes that (i) don't expect them for certain keyspans, and (ii)
+	// don't know to upgrade them to efficient epoch-based ones.
+	EnableLeaseUpgrade
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -466,6 +476,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     PrioritizeSnapshots,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 70},
+	},
+	{
+		Key:     EnableLeaseUpgrade,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 72},
 	},
 
 	// *************************************************
