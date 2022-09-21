@@ -1985,11 +1985,13 @@ func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bo
 			// to continue - it's possible we can still decode the
 			// remainder of the key bytes.
 			allDecoded = false
+			// Mark the separator as safe
 			buf.WriteString(sep)
 			buf.WriteByte('?')
 			buf.WriteByte('?')
 			buf.WriteByte('?')
 		} else {
+			// Mark the separator as safe
 			buf.WriteString(sep)
 			buf.WriteString(s)
 		}

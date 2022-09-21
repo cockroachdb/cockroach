@@ -47,9 +47,10 @@ type DictEntry struct {
 	Name   string
 	prefix roachpb.Key
 	// print the key's pretty value, key has been removed prefix data
+	// TODO: update return type to be a redactable string so we can at least mark the `/` chars as "safe"
 	ppFunc func(valDirs []encoding.Direction, key roachpb.Key) string
 	// safe format the key's pretty value into a RedactableString
-	sfFunc func(valDirs []encoding.Direction, key roachpb.Key) redact.RedactableString
+	sfFunc func(valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys QuoteOpt) redact.RedactableString
 	// PSFunc parses the relevant prefix of the input into a roachpb.Key,
 	// returning the remainder and the key corresponding to the consumed prefix of
 	// 'input'. Allowed to panic on errors.
@@ -664,7 +665,8 @@ func prettyPrintInternal(
 //
 // See SafeFormat for a redaction-safe implementation.
 func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
-	return prettyPrintInternal(valDirs, key, QuoteRaw, false /*skipOverrides*/)
+	//return prettyPrintInternal(valDirs, key, QuoteRaw, false /*skipOverrides*/)
+	return safeFormatInternal(valDirs, key, QuoteRaw).StripMarkers()
 }
 
 // formatTableKey formats the given key in the system tenant table keyspace & redacts any
@@ -679,7 +681,9 @@ func PrettyPrint(valDirs []encoding.Direction, key roachpb.Key) string {
 //   - `/42/122/‹"index key"›`
 //   - `/42/122/‹"index key"›/‹"some value"›`
 //   - `/42/122/‹"index key"›/‹"some value"›/‹"some other value"›`
-func formatTableKey(valDirs []encoding.Direction, key roachpb.Key) redact.RedactableString {
+func formatTableKey(
+	valDirs []encoding.Direction, key roachpb.Key, _ QuoteOpt,
+) redact.RedactableString {
 	buf := redact.StringBuilder{}
 	vals, types := encoding.PrettyPrintValuesWithTypes(valDirs, key)
 	prefixLength := 1
@@ -714,7 +718,9 @@ func formatTableKey(valDirs []encoding.Direction, key roachpb.Key) redact.Redact
 // For example:
 //   - `/5/Table/42/‹"index key"›`
 //   - `/5/Table/42/122/‹"index key"›`
-func formatTenantKey(valDirs []encoding.Direction, key roachpb.Key) redact.RedactableString {
+func formatTenantKey(
+	valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys QuoteOpt,
+) redact.RedactableString {
 	buf := redact.StringBuilder{}
 	key, tID, err := DecodeTenantPrefix(key)
 	if err != nil {
@@ -724,64 +730,95 @@ func formatTenantKey(valDirs []encoding.Direction, key roachpb.Key) redact.Redac
 
 	buf.Printf("/%s", tID)
 	if len(key) != 0 {
-		buf.Print(safeFormatInternal(valDirs, key))
+		buf.Print(safeFormatInternal(valDirs, key, quoteRawKeys))
 	}
 	return buf.RedactableString()
 }
 
 // SafeFormat is the generalized redaction function used to redact pretty-printed keys.
 func SafeFormat(w redact.SafeWriter, valDirs []encoding.Direction, key roachpb.Key) {
-	w.Print(safeFormatInternal(valDirs, key))
+	w.Print(safeFormatInternal(valDirs, key, QuoteRaw))
 }
 
-func safeFormatInternal(valDirs []encoding.Direction, key roachpb.Key) redact.RedactableString {
+func safeFormatInternal(
+	valDirs []encoding.Direction, key roachpb.Key, quoteRawKeys QuoteOpt,
+) redact.RedactableString {
 	for _, k := range ConstKeyOverrides {
 		if key.Equal(k.Value) {
 			return redact.Sprint(redact.Safe(k.Name))
 		}
 	}
 
-	helper := func(key roachpb.Key, isRemainder bool) redact.RedactableString {
+	// ""
+	helper := func(key roachpb.Key) redact.RedactableString {
 		var b redact.StringBuilder
 		for _, k := range KeyDict {
 			if key.Compare(k.start) >= 0 && (k.end == nil || key.Compare(k.end) <= 0) {
+				b.Print(redact.Safe(k.Name))
 				if k.end != nil && k.end.Compare(key) == 0 {
-					b.Print(redact.Safe(k.Name))
 					b.Print(redact.Safe("/Max"))
 					return b.RedactableString()
 				}
 
+				safeFormatted := false
 				for _, e := range k.Entries {
 					if bytes.HasPrefix(key, e.prefix) && e.sfFunc != nil {
-						b.Print(redact.Safe(k.Name))
 						key = key[len(e.prefix):]
 						b.Print(redact.Safe(e.Name))
-						b.Print(e.sfFunc(valDirs, key))
-						return b.RedactableString()
+						b.Print(e.sfFunc(valDirs, key, quoteRawKeys))
+						safeFormatted = true
 					}
 				}
+
+				if !safeFormatted {
+					hasPrefix := false
+					for _, e := range k.Entries {
+						if bytes.HasPrefix(key, e.prefix) {
+							hasPrefix = true
+							key = key[len(e.prefix):]
+							b.Print(redact.Safe(e.Name))
+							b.Print(e.ppFunc(valDirs, key))
+							break
+							// Might need to do some more prefix stuff to do here
+						}
+					}
+					if !hasPrefix {
+						key = key[len(k.start):]
+						if quoteRawKeys {
+							b.Print("/")
+							b.Print(`"`)
+						}
+						// Caution: using b.Print here might not print the bytes the way we want :|
+						// might have to use b.Write([]byte), but this requires error handling so
+						// ideally we don't have to use it since we don't have error handling anywhere
+						// else
+						b.Print([]byte(key))
+						if quoteRawKeys {
+							b.Print(`"`)
+						}
+					}
+
+				}
+				return b.RedactableString()
 			}
 		}
-		// If we reach this point, the key is not recognized based on KeyDict, or no `sfFunc`
-		// is defined for the keyspace. Therefore, we fall back to the standard pretty print
-		// functionality and avoid marking safe from a redaction perspective.
-		// NB: This will lead to the entirety of the pretty-printed key to be redactable, e.g:
-		//		Unredacted: `‹/SomeKeyspace/42›`
-		//		Redacted:   `‹x›`
-		return redact.Sprint(prettyPrintInternal(valDirs, key, QuoteRaw, isRemainder /*skipOverrides*/))
+		// If we reach this point, the key is not recognized based on KeyDict.
+		// Print the raw bytes instead.
+		b.Print(key)
+		return b.RedactableString()
 	}
 
 	for _, k := range keyOfKeyDict {
 		if bytes.HasPrefix(key, k.prefix) {
 			key = key[len(k.prefix):]
-			str := helper(key, true /* isRemainder */)
+			str := helper(key)
 			if len(str) > 0 && strings.Index(str.StripMarkers(), "/") != 0 {
 				return redact.Sprintf("%v/%v", redact.Sprint(k.name), str)
 			}
 			return redact.Sprintf("%v%v", redact.Sprint(k.name), str)
 		}
 	}
-	return helper(key, false /* isRemainder */)
+	return helper(key)
 }
 
 func init() {
