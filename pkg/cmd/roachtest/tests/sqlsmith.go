@@ -228,6 +228,11 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 					_, err := conn.Exec(stmt)
 					if err == nil {
 						logStmt(stmt)
+						explainStmt := "EXPLAIN " + stmt
+						_, err = conn.Exec(explainStmt)
+						if err == nil {
+							logStmt(explainStmt)
+						}
 					}
 					done <- err
 				}(ctx)
