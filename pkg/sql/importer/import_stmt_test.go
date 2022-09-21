@@ -2000,8 +2000,7 @@ func TestFailedImportGC(t *testing.T) {
 		ExternalIODir:            baseDir,
 		Knobs: base.TestingKnobs{
 			GCJob: &sql.GCJobTestingKnobs{
-				RunBeforeResume:      func(_ jobspb.JobID) error { <-blockGC; return nil },
-				SkipWaitingForMVCCGC: true,
+				RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil },
 			},
 		},
 	}})
@@ -2027,6 +2026,9 @@ func TestFailedImportGC(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	// The test assumes we'll use the MVCC range tombstone in the GC job. We need
+	// to set this cluster setting to make that true.
+	sqlDB.Exec(t, `SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true`)
 
 	forceFailure = true
 	defer func() { forceFailure = false }()
