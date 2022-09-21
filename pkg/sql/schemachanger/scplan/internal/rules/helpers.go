@@ -344,14 +344,6 @@ func isTypeDescriptor(element scpb.Element) bool {
 	}
 }
 
-func getExpressionOrPanic(element scpb.Element) *scpb.Expression {
-	ret, err := getExpression(element)
-	if err != nil {
-		panic(err)
-	}
-	return ret
-}
-
 func isColumnDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ColumnType:

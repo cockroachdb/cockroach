@@ -81,8 +81,6 @@ func init() {
 	// Note that DEFAULT and ON UPDATE expressions are column-dependent elements
 	// which also hold references to other descriptors. The rule prior to this one
 	// ensures that they transition to ABSENT before scpb.ColumnType does.
-	//
-	// TODO(postamar): express this rule in a saner way
 	registerDepRule(
 		"column type removed right before column when not dropping relation",
 		scgraph.SameStagePrecedence,
@@ -90,14 +88,10 @@ func init() {
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.ColumnType)(nil)),
+				from.descriptorIsNotBeingDropped(),
 				to.Type((*scpb.Column)(nil)),
 				joinOnColumnID(from, to, "table-id", "col-id"),
 				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
-				rel.Filter("relationIsNotBeingDropped", from.el)(
-					func(ct *scpb.ColumnType) bool {
-						return !ct.IsRelationBeingDropped
-					},
-				),
 			}
 		},
 	)

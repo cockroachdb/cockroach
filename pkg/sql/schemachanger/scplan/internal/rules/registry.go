@@ -230,6 +230,12 @@ func (v nodeVars) referencedSequenceIDsContains(containedIDVar rel.Var) rel.Clau
 	return v.el.AttrContainsVar(screl.ReferencedSequenceIDs, containedIDVar)
 }
 
+// descriptorIsNotBeingDropped is a type-safe shorthand to invoke the
+// rule of the same name on the element.
+func (v nodeVars) descriptorIsNotBeingDropped() rel.Clause {
+	return descriptorIsNotBeingDropped(v.el)
+}
+
 func mkNodeVars(elStr string) nodeVars {
 	el := rel.Var(elStr)
 	return nodeVars{
