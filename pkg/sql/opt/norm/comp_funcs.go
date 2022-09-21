@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -86,7 +85,7 @@ func (c *CustomFuncs) FoldBinaryCheckOverflow(
 	}
 
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
-	result, err := eval.BinaryOp(c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
 	if err != nil {
 		return nil, false
 	}
