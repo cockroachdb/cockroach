@@ -578,3 +578,29 @@ WHERE
         )
           AS tab_397813 (col_664948, col_664949) ON (tab_397806.col_664940) = (tab_397813.col_664948)
   );
+
+subtest regression_87733
+
+statement ok
+CREATE TABLE t87733a (a INT);
+CREATE TABLE t87733b (b INT);
+INSERT INTO t87733a VALUES (1)
+
+# Regression test for #87733. Do not panic when planning the RHS of an
+# apply-join that refers to a With expression transitively through another With
+# expression.
+query T
+WITH
+  t1 AS (SELECT a FROM t87733a),
+  t2 AS MATERIALIZED (SELECT a, b FROM t1 JOIN t87733b ON true)
+SELECT NULL
+FROM t1
+LEFT JOIN LATERAL (
+  WITH t3 AS (SELECT * FROM t2 WHERE t2.a = t1.a)
+  SELECT array_agg(CASE WHEN v = '' THEN b END)
+  FROM (
+    SELECT '' AS v, b FROM t3 ORDER BY b DESC
+  )
+) ON true;
+----
+NULL
