@@ -41,17 +41,19 @@ go_test(
     name = "metric_test",
     size = "small",
     srcs = [
+        "metric_ext_test.go",
         "metric_test.go",
         "prometheus_exporter_test.go",
         "prometheus_rule_exporter_test.go",
         "registry_test.go",
         "rule_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":metric"],
     deps = [
+        "//pkg/testutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/log",
-        "@com_github_kr_pretty//:pretty",
-        "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//require",
     ],
 )

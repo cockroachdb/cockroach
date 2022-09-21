@@ -1,0 +1,20 @@
+echo
+----
+{
+  "sample_count": 5,
+  "sample_sum": 31,
+  "bucket": [
+    {
+      "cumulative_count": 1,
+      "upper_bound": 1
+    },
+    {
+      "cumulative_count": 3,
+      "upper_bound": 5
+    },
+    {
+      "cumulative_count": 5,
+      "upper_bound": 10
+    }
+  ]
+}
