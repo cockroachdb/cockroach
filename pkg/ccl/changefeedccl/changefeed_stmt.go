@@ -356,7 +356,7 @@ func createChangefeedJobRecord(
 	if err != nil {
 		// If the job is not found it means that we are processing create
 		// changefeed command. Any other type of error is fatal.
-		if _, ok := err.(*jobs.JobNotFoundError); !ok {
+		if !errors.HasType(err, (*jobs.JobNotFoundError)(nil)) {
 			return nil, err
 		}
 	} else {
