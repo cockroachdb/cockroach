@@ -332,8 +332,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				// Verify that we're always doing the space savings when we can.
 				if span.Key.PrefixEnd().Equal(span.EndKey) {
 					t.Errorf("endKey should be omitted when equal to key.PrefixEnd [%s, %s)",
-						encoding.PrettyPrintValue(directions, span.Key, "/"),
-						encoding.PrettyPrintValue(directions, span.EndKey, "/"))
+						encoding.PrettyPrintValue(directions, span.Key, "/").StripMarkers(),
+						encoding.PrettyPrintValue(directions, span.EndKey, "/").StripMarkers())
 				}
 				if len(span.EndKey) == 0 {
 					span.EndKey = span.Key.PrefixEnd()
@@ -342,8 +342,8 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 				// TODO(dan): Check that spans are sorted.
 
 				actual = append(actual, fmt.Sprintf("%s %s-%s", subzoneShort,
-					encoding.PrettyPrintValue(directions, span.Key, "/"),
-					encoding.PrettyPrintValue(directions, span.EndKey, "/")))
+					encoding.PrettyPrintValue(directions, span.Key, "/").StripMarkers(),
+					encoding.PrettyPrintValue(directions, span.EndKey, "/").StripMarkers()))
 			}
 
 			if len(actual) != len(test.parsed.generatedSpans) {
