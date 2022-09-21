@@ -300,7 +300,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			// immediate) in the ctx cancellation subtest.
 			testutils.SucceedsSoon(t, func() error {
 				return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
-					rec := sp.GetFullRecording(tracingpb.RecordingVerbose)[0]
+					rec := sp.GetFullRecording(tracingpb.RecordingVerbose).Root
 					return errors.Newf("leaked span: %s %s", rec.Operation, rec.TagGroups)
 				})
 			})
