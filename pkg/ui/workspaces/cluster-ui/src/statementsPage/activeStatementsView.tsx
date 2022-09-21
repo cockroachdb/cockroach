@@ -54,6 +54,7 @@ export type ActiveStatementsViewStateProps = {
   sessionsError: Error | null;
   filters: ActiveStatementFilters;
   internalAppNamePrefix: string;
+  isTenant?: boolean;
 };
 
 export type ActiveStatementsViewProps = ActiveStatementsViewStateProps &
