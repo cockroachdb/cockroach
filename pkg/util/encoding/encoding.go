@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -1879,10 +1880,11 @@ func PeekLength(b []byte) (int, error) {
 // separator.
 // The directions each value is encoded may be provided. If valDirs is nil,
 // all values are decoded and printed with the default direction (ascending).
-func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
-	s1, allDecoded := prettyPrintValueImpl(valDirs, b, sep)
+func PrettyPrintValue(buf *redact.StringBuilder, valDirs []Direction, b []byte, sep string) {
+	safeSep := redact.SafeString(sep)
+	allDecoded := prettyPrintValueImpl(buf, valDirs, b, safeSep)
 	if allDecoded {
-		return s1
+		return
 	}
 	// If we failed to decoded everything above, assume the key was the result of a
 	// `PrefixEnd()`. Attempt to undo PrefixEnd & retry the process, otherwise return
@@ -1896,13 +1898,14 @@ func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
 			cap = len(valDirs) - len(b)
 		}
 		for i := 0; i < cap; i++ {
-			if s2, allDecoded := prettyPrintValueImpl(valDirs, undoPrefixEnd, sep); allDecoded {
-				return s2 + sep + "PrefixEnd"
+			if allDecoded := prettyPrintValueImpl(buf, valDirs, undoPrefixEnd, safeSep); allDecoded {
+				buf.Reset()
+				buf.Print(sep + "PrefixEnd")
+				return
 			}
 			undoPrefixEnd = append(undoPrefixEnd, 0xFF)
 		}
 	}
-	return s1
 }
 
 // PrettyPrintValuesWithTypes returns a slice containing each contiguous decodable value
@@ -1965,9 +1968,10 @@ func prettyPrintValuesWithTypesImpl(
 	return vals, types, allDecoded
 }
 
-func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bool) {
+func prettyPrintValueImpl(
+	buf *redact.StringBuilder, valDirs []Direction, b []byte, sep redact.SafeString,
+) bool {
 	allDecoded := true
-	var buf strings.Builder
 	for len(b) > 0 {
 		// If there are more values than encoding directions specified,
 		// valDir will contain the 0 value of Direction.
@@ -1985,17 +1989,16 @@ func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bo
 			// to continue - it's possible we can still decode the
 			// remainder of the key bytes.
 			allDecoded = false
-			buf.WriteString(sep)
-			buf.WriteByte('?')
-			buf.WriteByte('?')
-			buf.WriteByte('?')
+			// Mark the separator as safe.
+			buf.Print(sep)
+			buf.SafeString("???")
 		} else {
-			buf.WriteString(sep)
-			buf.WriteString(s)
+			buf.Print(sep)
+			buf.Print(redact.Safe(s))
 		}
 		b = bb
 	}
-	return buf.String(), allDecoded
+	return allDecoded
 }
 
 // prettyPrintFirstValue returns a string representation of the first decodable
