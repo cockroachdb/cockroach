@@ -525,6 +525,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 	// that suggested this.
 	retryOpts.RandomizationFactor = 0.5
 	var lastErr error
+	splitRetryLogLimiter := log.Every(10 * time.Second)
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
 		// The replica may have been destroyed since the start of the retry loop.
 		// We need to explicitly check this condition. Having a valid lease, as we
@@ -551,6 +552,9 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		if !IsRetriableReplicationChangeError(lastErr) &&
 			!errors.HasType(lastErr, (*roachpb.AmbiguousResultError)(nil)) {
 			break
+		}
+		if splitRetryLogLimiter.ShouldLog() {
+			log.Warningf(ctx, "retrying split after err: %v", lastErr)
 		}
 	}
 	return roachpb.NewError(lastErr)
