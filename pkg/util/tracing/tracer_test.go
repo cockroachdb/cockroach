@@ -60,7 +60,7 @@ func TestTracingOffRecording(t *testing.T) {
 	noop2 := tr.StartSpan("noop2", WithParent(noop1), WithDetachedRecording())
 	require.True(t, noop2.IsNoop())
 
-	// Noop span returns empty recording.
+	// Noop span returns Empty recording.
 	require.Nil(t, noop1.GetRecording(tracingpb.RecordingVerbose))
 }
 
@@ -482,7 +482,8 @@ func getSpanOpsWithFinished(t *testing.T, tr *Tracer) map[string]bool {
 	spanOpsWithFinished := make(map[string]bool)
 
 	require.NoError(t, tr.VisitSpans(func(sp RegistrySpan) error {
-		for _, rec := range sp.GetFullRecording(tracingpb.RecordingVerbose) {
+		rec := sp.GetFullRecording(tracingpb.RecordingVerbose)
+		for _, rec := range rec.Flatten() {
 			spanOpsWithFinished[rec.Operation] = rec.Finished
 		}
 		return nil
@@ -499,7 +500,8 @@ func getSortedSpanOps(t *testing.T, tr *Tracer) []string {
 	var spanOps []string
 
 	require.NoError(t, tr.VisitSpans(func(sp RegistrySpan) error {
-		for _, rec := range sp.GetFullRecording(tracingpb.RecordingVerbose) {
+		rec := sp.GetFullRecording(tracingpb.RecordingVerbose)
+		for _, rec := range rec.Flatten() {
 			spanOps = append(spanOps, rec.Operation)
 		}
 		return nil

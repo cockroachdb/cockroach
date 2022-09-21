@@ -82,6 +82,29 @@ func (s *RecordedSpan) FindTagGroup(name string) *TagGroup {
 	return nil
 }
 
+// EnsureTagGroup returns a reference to the tag group with the given name,
+// creating it if it doesn't exist.
+func (s *RecordedSpan) EnsureTagGroup(name string) *TagGroup {
+	if tg := s.FindTagGroup(name); tg != nil {
+		return tg
+	}
+	s.TagGroups = append(s.TagGroups, TagGroup{Name: name})
+	return &s.TagGroups[len(s.TagGroups)-1]
+}
+
+// AddTag adds a tag to the group. If a tag with the given key already exists,
+// its value is updated.
+func (tg *TagGroup) AddTag(k, v string) {
+	for i := range tg.Tags {
+		tag := &tg.Tags[i]
+		if tag.Key == k {
+			tag.Value = v
+			return
+		}
+	}
+	tg.Tags = append(tg.Tags, Tag{Key: k, Value: v})
+}
+
 // Msg extracts the message of the LogRecord, which is either in an "event" or
 // "error" field.
 func (l LogRecord) Msg() redact.RedactableString {
