@@ -854,15 +854,17 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// make sure that we don't bother filling in extra data if we
 				// don't need to.
 				emitBatch = true
-				// Update the limit hint to track the expected remaining rows to
-				// be fetched.
-				//
-				// Note that limitHint might become negative at which point we
-				// will start ignoring it.
-				cf.machine.limitHint -= cf.machine.rowIdx
 			}
 
 			if emitBatch {
+				if cf.machine.limitHint > 0 {
+					// Update the limit hint to track the expected remaining
+					// rows to be fetched.
+					//
+					// Note that limitHint might become negative at which point
+					// we will start ignoring it.
+					cf.machine.limitHint -= cf.machine.rowIdx
+				}
 				cf.pushState(stateResetBatch)
 				cf.finalizeBatch()
 				return cf.machine.batch, nil
