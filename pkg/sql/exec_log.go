@@ -402,6 +402,10 @@ func (p *planner) maybeLogStatementInternal(
 			}
 
 			stats = telemetryMetrics.getQueryLevelStats(stats)
+			indexRecs := make([]string, 0, len(p.curPlan.instrumentation.indexRecs))
+			for _, rec := range p.curPlan.instrumentation.indexRecs {
+				indexRecs = append(indexRecs, rec.SQL)
+			}
 
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			sampledQuery := eventpb.SampledQuery{
@@ -446,6 +450,7 @@ func (p *planner) maybeLogStatementInternal(
 				KVBytesRead:              stats.KVBytesRead,
 				KVRowsRead:               stats.KVRowsRead,
 				NetworkMessages:          stats.NetworkMessages,
+				IndexRecommendations:     indexRecs,
 			}
 			p.logOperationalEventsOnlyExternally(ctx, &sampledQuery)
 		} else {
