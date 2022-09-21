@@ -190,7 +190,7 @@ func deleteIndexZoneConfigsAfterGC(
 	parentID descpb.ID,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
-
+	checkImmediatelyOnWait := false
 	for _, index := range progress.Indexes {
 		if index.Status == jobspb.SchemaChangeGCProgress_CLEARED {
 			continue
@@ -199,12 +199,13 @@ func deleteIndexZoneConfigsAfterGC(
 		if err := waitForEmptyPrefix(
 			ctx, execCfg.DB, execCfg.SV(),
 			execCfg.GCJobTestingKnobs.SkipWaitingForMVCCGC,
+			checkImmediatelyOnWait,
 			execCfg.Codec.IndexPrefix(uint32(parentID), uint32(index.IndexID)),
 		); err != nil {
 			return errors.Wrapf(err, "waiting for gc of index %d from table %d",
 				index.IndexID, parentID)
 		}
-
+		checkImmediatelyOnWait = true
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		removeIndexZoneConfigs := func(
