@@ -280,9 +280,6 @@ type MVCCIterator interface {
 	// IsPrefix returns true if the MVCCIterator is a prefix iterator, i.e.
 	// created with IterOptions.Prefix enabled.
 	IsPrefix() bool
-	// SupportsPrev returns true if MVCCIterator implementation supports reverse
-	// iteration with Prev() or SeekLT().
-	SupportsPrev() bool
 }
 
 // EngineIterator is an iterator over key-value pairs where the key is

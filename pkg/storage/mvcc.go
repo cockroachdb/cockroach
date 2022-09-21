@@ -4777,7 +4777,6 @@ func MVCCGarbageCollect(
 		KeyTypes:   IterKeyTypePointsAndRanges,
 	})
 	defer iter.Close()
-	supportsPrev := iter.SupportsPrev()
 
 	// Cached stack of range tombstones covering current point. Used to determine
 	// GCBytesAge of deleted value by searching first covering range tombstone
@@ -4888,8 +4887,7 @@ func MVCCGarbageCollect(
 			// (key.ts <= gc.ts).
 			var foundPrevNanos bool
 			{
-				// If reverse iteration is supported (supportsPrev), we'll step the
-				// iterator a few time before attempting to seek.
+				// We'll step the iterator a few time before attempting to seek.
 
 				// True if we found next key while iterating. That means there's no
 				// garbage for the key.
@@ -4906,7 +4904,7 @@ func MVCCGarbageCollect(
 				// importantly, this optimization mitigated the overhead of the Seek
 				// approach when almost all of the versions are garbage.
 				const nextsBeforeSeekLT = 4
-				for i := 0; !supportsPrev || i < nextsBeforeSeekLT; i++ {
+				for i := 0; i < nextsBeforeSeekLT; i++ {
 					if i > 0 {
 						iter.Next()
 					}
@@ -4942,10 +4940,6 @@ func MVCCGarbageCollect(
 			// its predecessor. Seek to the predecessor to find the right value for
 			// prevNanos and position the iterator on the gcKey.
 			if !foundPrevNanos {
-				if !supportsPrev {
-					log.Fatalf(ctx, "failed to find first garbage key without"+
-						"support for reverse iteration")
-				}
 				gcKeyMVCC := MVCCKey{Key: gcKey.Key, Timestamp: gcKey.Timestamp}
 				iter.SeekLT(gcKeyMVCC)
 				if ok, err := iter.Valid(); err != nil {

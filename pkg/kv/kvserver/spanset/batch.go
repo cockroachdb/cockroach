@@ -220,11 +220,6 @@ func (i *MVCCIterator) IsPrefix() bool {
 	return i.i.IsPrefix()
 }
 
-// SupportsPrev is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SupportsPrev() bool {
-	return i.i.SupportsPrev()
-}
-
 // EngineIterator wraps a storage.EngineIterator and ensures that it can
 // only be used to access spans in a SpanSet.
 type EngineIterator struct {
