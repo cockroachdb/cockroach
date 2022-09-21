@@ -178,12 +178,23 @@ func (r *Replica) checkConsistencyImpl(
 		}
 		res.Detail += buf.String()
 	} else {
+		// The Persisted stats are covered by the SHA computation, so if all the
+		// hashes match, we can take an arbitrary one that succeeded.
 		res.Detail += fmt.Sprintf("stats: %+v\n", results[0].Response.Persisted)
 	}
 	for _, result := range missing {
 		res.Detail += fmt.Sprintf("%s: error: %v\n", result.Replica, result.Err)
 	}
 
+	// NB: delta is examined only when minoritySHA == "", i.e. all the checksums
+	// match. It helps to further check that the recomputed MVCC stats match the
+	// stored stats.
+	//
+	// Both Persisted and Delta stats were computed deterministically from the
+	// data fed into the checksum, so if all checksums match, we can take the
+	// stats from an arbitrary replica that succeeded.
+	//
+	// TODO(pavelkalinnikov): Compare deltas to assert this assumption anyway.
 	delta := enginepb.MVCCStats(results[0].Response.Delta)
 	var haveDelta bool
 	{
@@ -355,8 +366,8 @@ func (r *Replica) collectChecksumFromReplica(
 
 // runConsistencyCheck carries out a round of ComputeChecksum/CollectChecksum
 // for the members of this range, returning the results (which it does not act
-// upon). The first result will belong to the local replica, and in particular
-// there is a first result when no error is returned.
+// upon). Requires that the computation succeeds on at least one replica, and
+// puts an arbitrary successful result first in the returned slice.
 func (r *Replica) runConsistencyCheck(
 	ctx context.Context, req roachpb.ComputeChecksumRequest,
 ) ([]ConsistencyCheckResult, error) {
@@ -368,13 +379,7 @@ func (r *Replica) runConsistencyCheck(
 	}
 	ccRes := res.(*roachpb.ComputeChecksumResponse)
 
-	replSet := r.Desc().Replicas()
-	localReplica, found := replSet.GetReplicaDescriptorByID(r.replicaID)
-	if !found {
-		return nil, errors.New("could not get local replica descriptor")
-	}
-	replicas := replSet.Descriptors()
-
+	replicas := r.Desc().Replicas().Descriptors()
 	resultCh := make(chan ConsistencyCheckResult, len(replicas))
 	results := make([]ConsistencyCheckResult, 0, len(replicas))
 
@@ -410,22 +415,19 @@ func (r *Replica) runConsistencyCheck(
 	// Collect the results from all replicas, while the tasks are running.
 	for result := range resultCh {
 		results = append(results, result)
-		if result.Replica.IsSame(localReplica) {
-			// If we can't compute the local checksum, give up. This will cancel all
-			// the outstanding requests, and wait for the tasks above to terminate.
-			if err := result.Err; err != nil {
-				return nil, errors.Wrap(err, "computing own checksum")
-			}
-			// Put the local replica first in the list.
-			results[0], results[len(results)-1] = results[len(results)-1], results[0]
-		}
 		// If it was the last request, don't wait on the channel anymore.
 		if len(results) == len(replicas) {
 			break
 		}
 	}
-
-	return results, nil
+	// Find any successful result, and put it first.
+	for i, res := range results {
+		if res.Err == nil {
+			results[0], results[i] = res, results[0]
+			return results, nil
+		}
+	}
+	return nil, errors.New("could not collect checksum from any replica")
 }
 
 func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
