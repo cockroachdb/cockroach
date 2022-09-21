@@ -202,7 +202,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
 
   const clearFilters = () =>
     onSubmitFilters({
-      app: defaultFilters.app,
+      app: "",
     });
 
   const apps = getAppsFromStatementInsights(
@@ -217,7 +217,8 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     search,
   );
 
-  populateStatementInsightsFromProblemAndCauses(filteredStatements);
+  const statementInsights =
+    populateStatementInsightsFromProblemAndCauses(filteredStatements);
   const tableColumns = defaultColumns
     .filter(c => !c.alwaysShow)
     .map(
@@ -266,21 +267,21 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
                 <TableStatistics
                   pagination={pagination}
                   search={search}
-                  totalCount={filteredStatements?.length}
+                  totalCount={statementInsights?.length}
                   arrayItemName="statement insights"
                   activeFilters={countActiveFilters}
                   onClearFilters={clearFilters}
                 />
               </div>
               <StatementInsightsTable
-                data={filteredStatements}
+                data={statementInsights}
                 sortSetting={sortSetting}
                 visibleColumns={visibleColumns}
                 onChangeSortSetting={onChangeSortSetting}
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && filteredStatements?.length === 0
+                      search?.length > 0 && statementInsights?.length === 0
                     }
                   />
                 }
@@ -290,7 +291,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
             <Pagination
               pageSize={pagination.pageSize}
               current={pagination.current}
-              total={filteredStatements?.length}
+              total={statementInsights?.length}
               onChange={onChangePage}
             />
           </div>

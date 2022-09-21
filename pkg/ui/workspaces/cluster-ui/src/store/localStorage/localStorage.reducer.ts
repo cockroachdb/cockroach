@@ -10,8 +10,9 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../utils";
-import { defaultFilters, Filters } from "../../queryFilter";
+import { defaultFilters, Filters } from "src/queryFilter/";
 import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
+import { WorkloadInsightEventFilters } from "src/insights";
 
 type SortSetting = {
   ascending: boolean;
@@ -41,7 +42,7 @@ export type LocalStorageState = {
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
   "filters/SessionsPage": Filters;
-  "filters/InsightsPage": Filters;
+  "filters/InsightsPage": WorkloadInsightEventFilters;
   "filters/SchemaInsightsPage": Filters;
   "search/StatementsPage": string;
   "search/TransactionsPage": string;
@@ -76,16 +77,16 @@ const defaultSortSettingSchemaInsights: SortSetting = {
 };
 
 const defaultFiltersActiveExecutions = {
-  app: defaultFilters.app,
+  app: "",
 };
 
 const defaultFiltersInsights = {
-  app: defaultFilters.app,
+  app: "",
 };
 
 const defaultFiltersSchemaInsights = {
-  database: defaultFilters.database,
-  schemaInsightType: defaultFilters.schemaInsightType,
+  database: "",
+  schemaInsightType: "",
 };
 
 const defaultSessionsSortSetting: SortSetting = {

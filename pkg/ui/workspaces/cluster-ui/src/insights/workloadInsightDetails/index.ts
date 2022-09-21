@@ -9,4 +9,6 @@
 // licenses/APL.txt.
 
 export * from "./transactionInsightDetails";
+export * from "./transactionInsightDetailsConnected";
 export * from "./statementInsightDetails";
+export * from "./statementInsightDetailsConnected";

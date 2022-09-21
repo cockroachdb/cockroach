@@ -18,8 +18,8 @@ import "antd/lib/tabs/style";
 import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
 import { tabAttr, viewAttr } from "src/util/constants";
-import WorkloadInsightsPageConnected from "src/views/insights/workloadInsightsPageConnected";
-import SchemaInsightsPageConnected from "src/views/insights/schemaInsightsPageConnected";
+import WorkloadInsightsPage from "./workloadInsightsPage";
+import SchemaInsightsPage from "./schemaInsightsPage";
 
 const { TabPane } = Tabs;
 
@@ -63,10 +63,10 @@ const InsightsOverviewPage = (props: RouteComponentProps) => {
         destroyInactiveTabPane
       >
         <TabPane tab="Workload Insights" key="Workload Insights">
-          <WorkloadInsightsPageConnected />
+          <WorkloadInsightsPage />
         </TabPane>
         <TabPane tab="Schema Insights" key="Schema Insights">
-          <SchemaInsightsPageConnected />
+          <SchemaInsightsPage />
         </TabPane>
       </Tabs>
     </div>
