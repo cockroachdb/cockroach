@@ -1386,6 +1386,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Size Based Flushes",
+				Metrics: []string{
+					"changefeed.size_based_flushes",
+				},
+			},
+			{
 				Title: "Max Behind Nanos",
 				Metrics: []string{
 					"changefeed.max_behind_nanos",
