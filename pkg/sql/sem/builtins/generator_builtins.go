@@ -394,8 +394,9 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
-			Category: builtinconstants.CategorySystemInfo,
+			Class:            tree.GeneratorClass,
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // see #88222
 		},
 		makeGeneratorOverload(
 			tree.ArgTypes{
