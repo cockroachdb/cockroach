@@ -12,12 +12,13 @@ package metric_test
 
 import (
 	"encoding/json"
+	"testing"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestHistogramPrometheus(t *testing.T) {
