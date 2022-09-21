@@ -250,184 +250,39 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		// pre-condition, we know there is at least one variable in the expression
 		// tree or we would not have entered this code path.
 		exprCopied := false
-		for {
-			if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
-				return DNull
-			}
-
-			if v.isConst(expr.Left) {
-				switch expr.Right.(type) {
-				case *BinaryExpr, VariableExpr:
-					break
-				default:
-					return expr
-				}
-
-				invertedOp, err := invertComparisonOp(expr.Operator)
-				if err != nil {
-					v.err = err
-					return expr
-				}
-
-				// The left side is const and the right side is a binary expression or a
-				// variable. Flip the comparison op so that the right side is const and
-				// the left side is a binary expression or variable.
-				// Create a new ComparisonExpr so the function cache isn't reused.
-				if !exprCopied {
-					exprCopy := *expr
-					expr = &exprCopy
-					exprCopied = true
-				}
-
-				expr = NewTypedComparisonExpr(invertedOp, expr.TypedRight(), expr.TypedLeft())
-			} else if !v.isConst(expr.Right) {
-				return expr
-			}
-
-			left, ok := expr.Left.(*BinaryExpr)
-			if !ok {
-				return expr
-			}
-			// The right is const and the left side is a binary expression. Rotate the
-			// comparison combining portions that are const.
-
-			switch {
-			case v.isConst(left.Right) &&
-				(left.Operator.Symbol == treebin.Plus || left.Operator.Symbol == treebin.Minus || left.Operator.Symbol == treebin.Div):
-
-				//        cmp          cmp
-				//       /   \        /   \
-				//    [+-/]   2  ->  a   [-+*]
-				//   /     \            /     \
-				//  a       1          2       1
-				var op treebin.BinaryOperator
-				switch left.Operator.Symbol {
-				case treebin.Plus:
-					op = treebin.MakeBinaryOperator(treebin.Minus)
-				case treebin.Minus:
-					op = treebin.MakeBinaryOperator(treebin.Plus)
-				case treebin.Div:
-					op = treebin.MakeBinaryOperator(treebin.Mult)
-					if expr.Operator.Symbol != treecmp.EQ {
-						// In this case, we must remember to *flip* the inequality if the
-						// divisor is negative, since we are in effect multiplying both sides
-						// of the inequality by a negative number.
-						divisor, err := left.TypedRight().Eval(v.ctx)
-						if err != nil {
-							v.err = err
-							return expr
-						}
-						if divisor.Compare(v.ctx, DZero) < 0 {
-							if !exprCopied {
-								exprCopy := *expr
-								expr = &exprCopy
-								exprCopied = true
-							}
-
-							invertedOp, err := invertComparisonOp(expr.Operator)
-							if err != nil {
-								v.err = err
-								return expr
-							}
-							expr = NewTypedComparisonExpr(invertedOp, expr.TypedLeft(), expr.TypedRight())
-						}
-					}
-				}
-
-				newBinExpr := newBinExprIfValidOverload(op,
-					expr.TypedRight(), left.TypedRight())
-				if newBinExpr == nil {
-					// Substitution is not possible type-wise. Nothing else to do.
-					break
-				}
-
-				newRightExpr, err := newBinExpr.Eval(v.ctx)
-				if err != nil {
-					// In the case of an error during Eval, give up on normalizing this
-					// expression. There are some expected errors here if, for example,
-					// normalization produces a result that overflows an int64.
-					break
-				}
-
-				if !exprCopied {
-					exprCopy := *expr
-					expr = &exprCopy
-					exprCopied = true
-				}
-
-				expr.Left = left.Left
-				expr.Right = newRightExpr
-				expr.memoizeFn()
-				if !isVar(v.ctx, expr.Left, true /*allowConstPlaceholders*/) {
-					// Continue as long as the left side of the comparison is not a
-					// variable.
-					continue
-				}
-
-			case v.isConst(left.Left) && (left.Operator.Symbol == treebin.Plus || left.Operator.Symbol == treebin.Minus):
-				//       cmp              cmp
-				//      /   \            /   \
-				//    [+-]   2  ->     [+-]   a
-				//   /    \           /    \
-				//  1      a         1      2
-
-				op := expr.Operator
-				var newBinExpr *BinaryExpr
-
-				switch left.Operator.Symbol {
-				case treebin.Plus:
-					//
-					// (A + X) cmp B => X cmp (B - C)
-					//
-					newBinExpr = newBinExprIfValidOverload(
-						treebin.MakeBinaryOperator(treebin.Minus),
-						expr.TypedRight(),
-						left.TypedLeft(),
-					)
-				case treebin.Minus:
-					//
-					// (A - X) cmp B => X cmp' (A - B)
-					//
-					newBinExpr = newBinExprIfValidOverload(
-						treebin.MakeBinaryOperator(treebin.Minus),
-						left.TypedLeft(),
-						expr.TypedRight(),
-					)
-					op, v.err = invertComparisonOp(op)
-					if v.err != nil {
-						return expr
-					}
-				}
-
-				if newBinExpr == nil {
-					break
-				}
-
-				newRightExpr, err := newBinExpr.Eval(v.ctx)
-				if err != nil {
-					break
-				}
-
-				if !exprCopied {
-					exprCopy := *expr
-					expr = &exprCopy
-					exprCopied = true
-				}
-
-				expr.Operator = op
-				expr.Left = left.Right
-				expr.Right = newRightExpr
-				expr.memoizeFn()
-				if !isVar(v.ctx, expr.Left, true /*allowConstPlaceholders*/) {
-					// Continue as long as the left side of the comparison is not a
-					// variable.
-					continue
-				}
-			}
-
-			// We've run out of work to do.
-			break
+		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
+			return DNull
 		}
+
+		if v.isConst(expr.Left) {
+			switch expr.Right.(type) {
+			case *BinaryExpr, VariableExpr:
+				break
+			default:
+				return expr
+			}
+
+			invertedOp, err := invertComparisonOp(expr.Operator)
+			if err != nil {
+				v.err = err
+				return expr
+			}
+
+			// The left side is const and the right side is a binary expression or a
+			// variable. Flip the comparison op so that the right side is const and
+			// the left side is a binary expression or variable.
+			// Create a new ComparisonExpr so the function cache isn't reused.
+			if !exprCopied {
+				exprCopy := *expr
+				expr = &exprCopy
+				exprCopied = true
+			}
+
+			expr = NewTypedComparisonExpr(invertedOp, expr.TypedRight(), expr.TypedLeft())
+		} else if !v.isConst(expr.Right) {
+			return expr
+		}
+
 	case treecmp.In, treecmp.NotIn:
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
 		// be normalized.
