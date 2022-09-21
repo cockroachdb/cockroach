@@ -248,7 +248,7 @@ sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statemen
 sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics
 sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID
 sql.metrics.statement_details.max_mem_reported_idx_recommendations	integer	5000	the maximum number of reported index recommendation info stored in memory
-sql.metrics.statement_details.plan_collection.enabled	boolean	true	periodically save a logical plan for each fingerprint
+sql.metrics.statement_details.plan_collection.enabled	boolean	false	periodically save a logical plan for each fingerprint
 sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected
 sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.
 sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics

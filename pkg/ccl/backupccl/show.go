@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"sort"
 	"strings"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -629,6 +631,7 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.Resul
 		{Name: "size_bytes", Typ: types.Int},
 		{Name: "rows", Typ: types.Int},
 		{Name: "is_full_cluster", Typ: types.Bool},
+		{Name: "regions", Typ: types.String},
 	}
 	if showSchemas {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "create_statement", Typ: types.String})
@@ -670,14 +673,20 @@ func backupShowerDefault(
 				// Map database ID to descriptor name.
 				dbIDToName := make(map[descpb.ID]string)
 				schemaIDToName := make(map[descpb.ID]string)
+				typeIDToTypeDescriptor := make(map[descpb.ID]catalog.TypeDescriptor)
 				schemaIDToName[keys.PublicSchemaIDForBackup] = catconstants.PublicSchemaName
 				for i := range manifest.Descriptors {
-					_, db, _, schema, _ := descpb.FromDescriptor(&manifest.Descriptors[i])
-					if db != nil {
+					_, db, typ, schema, _ := descpb.FromDescriptor(&manifest.Descriptors[i])
+					switch {
+					case db != nil:
 						if _, ok := dbIDToName[db.ID]; !ok {
 							dbIDToName[db.ID] = db.Name
 						}
-					} else if schema != nil {
+					case typ != nil:
+						if _, ok := schemaIDToName[typ.ID]; !ok {
+							typeIDToTypeDescriptor[typ.ID] = typedesc.NewBuilder(typ).BuildImmutableType()
+						}
+					case schema != nil:
 						if _, ok := schemaIDToName[schema.ID]; !ok {
 							schemaIDToName[schema.ID] = schema.Name
 						}
@@ -721,6 +730,7 @@ func backupShowerDefault(
 					dataSizeDatum := tree.DNull
 					rowCountDatum := tree.DNull
 					fileSizeDatum := tree.DNull
+					regionsDatum := tree.DNull
 
 					desc := descbuilder.NewBuilder(descriptor).BuildExistingMutable()
 
@@ -728,6 +738,13 @@ func backupShowerDefault(
 					switch desc := desc.(type) {
 					case catalog.DatabaseDescriptor:
 						descriptorType = "database"
+						if desc.IsMultiRegion() {
+							regions, err := showRegions(typeIDToTypeDescriptor[desc.GetRegionConfig().RegionEnumID], desc.GetName())
+							if err != nil {
+								return nil, errors.Wrapf(err, "cannot generate regions column")
+							}
+							regionsDatum = nullIfEmpty(regions)
+						}
 					case catalog.SchemaDescriptor:
 						descriptorType = "schema"
 						dbName = dbIDToName[desc.GetParentID()]
@@ -782,6 +799,7 @@ func backupShowerDefault(
 						dataSizeDatum,
 						rowCountDatum,
 						tree.MakeDBool(manifest.DescriptorCoverage == tree.AllDescriptors),
+						regionsDatum,
 					}
 					if showSchemas {
 						row = append(row, createStmtDatum)
@@ -822,6 +840,7 @@ func backupShowerDefault(
 						tree.DNull, // DataSize
 						tree.DNull, // RowCount
 						tree.DNull, // Descriptor Coverage
+						tree.DNull, // Regions
 					}
 					if showSchemas {
 						row = append(row, tree.DNull)
@@ -930,6 +949,40 @@ func nullIfZero(i descpb.ID) tree.Datum {
 		return tree.DNull
 	}
 	return tree.NewDInt(tree.DInt(i))
+}
+
+// showRegions constructs a string containing the ALTER DATABASE
+// commands that create the multi region specifications for a backed up database.
+func showRegions(typeDesc catalog.TypeDescriptor, dbname string) (string, error) {
+	var regionsStringBuilder strings.Builder
+	if typeDesc == nil {
+		return "", fmt.Errorf("type descriptor for %s is nil", dbname)
+	}
+
+	primaryRegionName, err := typeDesc.PrimaryRegionName()
+	if err != nil {
+		return "", err
+	}
+	regionsStringBuilder.WriteString("ALTER DATABASE ")
+	regionsStringBuilder.WriteString(dbname)
+	regionsStringBuilder.WriteString(" SET PRIMARY REGION ")
+	regionsStringBuilder.WriteString("\"" + primaryRegionName.String() + "\"")
+	regionsStringBuilder.WriteString(";")
+
+	regionNames, err := typeDesc.RegionNames()
+	if err != nil {
+		return "", err
+	}
+	for _, regionName := range regionNames {
+		if regionName != primaryRegionName {
+			regionsStringBuilder.WriteString(" ALTER DATABASE ")
+			regionsStringBuilder.WriteString(dbname)
+			regionsStringBuilder.WriteString(" ADD REGION ")
+			regionsStringBuilder.WriteString("\"" + regionName.String() + "\"")
+			regionsStringBuilder.WriteString(";")
+		}
+	}
+	return regionsStringBuilder.String(), nil
 }
 
 func showPrivileges(descriptor *descpb.Descriptor) string {

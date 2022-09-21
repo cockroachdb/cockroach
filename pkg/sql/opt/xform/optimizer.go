@@ -1042,6 +1042,8 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		// Needed to make sure that dummy columns are pruned so that the
 		// database name is retrieved correctly.
 		int(opt.PruneScanCols),
+		// Needed to ensure that the input of a RangeExpr is always an AndExpr.
+		int(opt.SimplifyRange),
 	)
 
 	var disabledRules RuleSet
