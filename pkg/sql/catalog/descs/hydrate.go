@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // hydrateDescriptors installs user defined type metadata in all types.T present
@@ -151,6 +152,9 @@ func makeImmutableTypeLookupFunc(
 // HydrateCatalog installs type metadata in the type.T objects present for all
 // objects referencing them in the catalog.
 func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
+	ctx, sp := tracing.ChildSpan(ctx, "descs.HydrateCatalog")
+	defer sp.Finish()
+
 	fakeLookupFunc := func(_ context.Context, id descpb.ID) (catalog.Descriptor, error) {
 		return nil, catalog.WrapDescRefErr(id, catalog.ErrDescriptorNotFound)
 	}
