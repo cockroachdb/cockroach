@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -47,6 +48,7 @@ type TestingKnobs struct {
 	ShouldReplan func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool
 	// RaiseRetryableError is a knob used to possibly return an error.
 	RaiseRetryableError func() error
+	OverrideCursor      func(currentTime *hlc.Timestamp) string
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
