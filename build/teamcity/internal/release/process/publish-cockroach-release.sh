@@ -118,6 +118,7 @@ tc_end_block "Make and push docker images"
 
 
 tc_start_block "Push release tag to GitHub"
+configure_git_ssh_key
 git_wrapped push "ssh://git@github.com/${git_repo_for_tag}.git" "$build_name"
 tc_end_block "Push release tag to GitHub"
 
