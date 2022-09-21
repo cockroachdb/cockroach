@@ -13,8 +13,11 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -388,22 +391,149 @@ func TestRecordingMaxSpans(t *testing.T) {
 	for i := 0; i < numChildren; i++ {
 		child := tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
 		exp := i + 2
-		over := false
 		if exp > maxRecordedSpansPerTrace {
 			exp = maxRecordedSpansPerTrace
-			over = true
 		}
-		if over {
-			// Structured events from children that are not included in the recording
-			// are still collected (subject to the structured recording bytes limit).
-			child.RecordStructured(&types.Int32Value{Value: int32(i)})
-		}
+		child.RecordStructured(&types.Int32Value{Value: int32(i)})
 		child.Finish()
 		require.Len(t, sp.GetRecording(tracingpb.RecordingVerbose), exp)
 	}
 	rec := sp.GetRecording(tracingpb.RecordingVerbose)
-	root := rec[0]
-	require.Len(t, root.StructuredRecords, extraChildren)
+	// Check that the structured events from children that were dropped from the
+	// recording were still included.
+	numStructuredEvents := 0
+	for _, s := range rec {
+		numStructuredEvents += len(s.StructuredRecords)
+	}
+	require.Equal(t, numChildren, numStructuredEvents)
+	// Same when requesting a Structured recording.
+	require.Len(t, sp.GetRecording(tracingpb.RecordingStructured)[0].StructuredRecords, numChildren)
+}
+
+type testTrace struct {
+	op       string
+	children []testTrace
+}
+
+func (t testTrace) toTrace() Trace {
+	id := tracingpb.SpanID(rand.Uint64())
+	r := MakeTrace(tracingpb.RecordedSpan{
+		SpanID:    id,
+		Operation: t.op,
+	})
+	for _, c := range t.children {
+		child := c.toTrace()
+		child.Root.ParentSpanID = id
+		r.NumSpans += child.NumSpans
+		r.Children = append(r.Children, child)
+	}
+	return r
+}
+
+func makeLeafSpans(n int) []testTrace {
+	s := make([]testTrace, n)
+	for i := range s {
+		s[i] = testTrace{op: strconv.Itoa(i)}
+	}
+	return s
+}
+
+func (t testTrace) equalToTrace(tr Trace) bool {
+	if t.op != "" && t.op != tr.Root.Operation {
+		return false
+	}
+	if len(t.children) != len(tr.Children) {
+		return false
+	}
+
+	sort.Slice(tr.Children, func(i, j int) bool {
+		return strings.Compare(tr.Children[i].Root.Operation, tr.Children[j].Root.Operation) == -1
+	})
+	sort.Slice(t.children, func(i, j int) bool {
+		return strings.Compare(t.children[i].op, t.children[j].op) == -1
+	})
+	for i, c := range t.children {
+		if !c.equalToTrace(tr.Children[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func TestTrim(t *testing.T) {
+	type testCase struct {
+		t         testTrace
+		trimSpans int
+		exp       testTrace
+	}
+	for _, tc := range []testCase{
+		{
+			t: testTrace{
+				op:       "p",
+				children: makeLeafSpans(3),
+			},
+			trimSpans: 3,
+			exp: testTrace{
+				op:       "p",
+				children: nil,
+			},
+		},
+		{
+			t: testTrace{
+				op:       "p",
+				children: makeLeafSpans(3),
+			},
+			trimSpans: 1,
+			exp: testTrace{
+				op:       "p",
+				children: make([]testTrace, 2),
+			},
+		},
+		{
+			// A more general test. We'll trim 23 spans. All of them will be under
+			// "fat cat", namely the children marked with "11 spans in this trace",
+			// and one span from the next child.
+			t: testTrace{
+				op: "root",
+				children: []testTrace{
+					{op: "c1", children: makeLeafSpans(10)},
+					{
+						op: "fat cat",
+						children: []testTrace{
+							{children: makeLeafSpans(10)}, // 11 spans in this trace
+							{children: makeLeafSpans(10)}, // 11 spans in this trace
+							{children: makeLeafSpans(5)},
+							{children: makeLeafSpans(1)},
+						},
+					},
+					{op: "c2", children: makeLeafSpans(1)},
+					{op: "c3", children: makeLeafSpans(5)},
+				},
+			},
+			trimSpans: 23,
+			exp: testTrace{
+				op: "root",
+				children: []testTrace{
+					{op: "c1", children: makeLeafSpans(10)},
+					{
+						op: "fat cat",
+						children: []testTrace{
+							{children: makeLeafSpans(4)},
+							{children: makeLeafSpans(1)},
+						},
+					},
+					{op: "c2", children: makeLeafSpans(1)},
+					{op: "c3", children: makeLeafSpans(5)},
+				},
+			},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			trace := tc.t.toTrace()
+			trace.trim(trace.NumSpans - tc.trimSpans)
+			require.True(t, tc.exp.equalToTrace(trace), "resulting trace: %s", &trace)
+		})
+	}
 }
 
 func TestOpenSpansCountTowardsMaxSpans(t *testing.T) {
@@ -463,9 +593,9 @@ func TestRecordingMaxSpansTags(t *testing.T) {
 	rec = sp.GetConfiguredRecording()
 	root = rec[0]
 	_, ok = root.FindTagGroup(tracingpb.AnonymousTagGroupName).FindTag("_dropped_children")
-	require.True(t, ok)
-	_, ok = root.FindTagGroup(tracingpb.AnonymousTagGroupName).FindTag("_dropped_indirect_children")
 	require.False(t, ok)
+	_, ok = root.FindTagGroup(tracingpb.AnonymousTagGroupName).FindTag("_dropped_indirect_children")
+	require.True(t, ok)
 
 	sp.Finish()
 	rec = sr.GetConfiguredRecording()
@@ -474,47 +604,6 @@ func TestRecordingMaxSpansTags(t *testing.T) {
 	require.False(t, ok)
 	_, ok = root.FindTagGroup(tracingpb.AnonymousTagGroupName).FindTag("_dropped_indirect_children")
 	require.True(t, ok)
-}
-
-// TestRecordingDowngradesToStructuredIfTooBig finishes a span that has reached
-// the maximum number of recorded spans and asserts that its structured
-// recordings are correctly added to the parent.
-func TestRecordingDowngradesToStructuredIfTooBig(t *testing.T) {
-	now := timeutil.Now()
-	clock := timeutil.NewManualTime(now)
-	tr := NewTracerWithOpt(context.Background(), WithTestingKnobs(TracerTestingKnobs{Clock: clock}))
-
-	s1 := tr.StartSpan("p", WithRecording(tracingpb.RecordingVerbose))
-	s2 := tr.StartSpan("c", WithParent(s1))
-	extraChildren := 10
-	numChildren := maxRecordedSpansPerTrace - 1 + extraChildren // subtract one for the root
-	payload := &types.Int32Value{Value: int32(1)}
-	for i := 0; i < numChildren; i++ {
-		child := tr.StartSpan(fmt.Sprintf("cc%d", i), WithParent(s2))
-		child.RecordStructured(payload)
-		child.Finish()
-	}
-
-	// We expect recordings from sp and up to the maximum number of spans and
-	// structured records from all spans over the max.
-	rec := s2.FinishAndGetConfiguredRecording()
-	require.Len(t, rec, maxRecordedSpansPerTrace)
-	require.Len(t, rec[0].StructuredRecords, extraChildren)
-
-	pl, err := types.MarshalAny(payload)
-	require.NoError(t, err)
-	structuredRecordSize := (&tracingpb.StructuredRecord{Time: now, Payload: pl}).MemorySize()
-	maxNumStructuredRecordings := maxStructuredBytesPerSpan / structuredRecordSize
-	if maxNumStructuredRecordings > numChildren {
-		maxNumStructuredRecordings = numChildren
-	}
-
-	// Since s2's child count exceeded the maximum, we don't expect to see any of
-	// its span recordings in s1. But, we should only see as many of s2's
-	// structured recordings as possible.
-	rec2 := s1.FinishAndGetConfiguredRecording()
-	require.Len(t, rec2, 1)
-	require.Len(t, rec2[0].StructuredRecords, maxNumStructuredRecordings)
 }
 
 // Test that a RecordingStructured parent does not panic when asked to ingest a
