@@ -1004,6 +1004,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 
 		// Copy the right expression into a new memo, replacing each bound column
 		// with the corresponding value from the left row.
+		addedWithBindings := false
 		var replaceFn norm.ReplaceFunc
 		replaceFn = func(e opt.Expr) opt.Expr {
 			switch t := e.(type) {
@@ -1013,15 +1014,26 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				}
 
 			case *memo.WithScanExpr:
-				// Allow referring to "outer" With expressions. The bound expressions
-				// are not part of this Memo but they are used only for their relational
-				// properties, which should be valid.
-				for i := range withExprs {
-					if withExprs[i].id == t.With {
-						memoExpr := b.mem.Metadata().WithBinding(t.With)
-						f.Metadata().AddWithBinding(t.With, memoExpr)
-						break
+				// Allow referring to "outer" With expressions. The bound
+				// expressions are not part of this Memo, but they are used only
+				// for their relational properties, which should be valid.
+				//
+				// We must add all With expressions to the metadata even if they
+				// aren't referred to directly because they might be referred to
+				// transitively through other With expressions. For example, if
+				// the RHS refers to With expression &1, and &1 refers to With
+				// expression &2, we must include &2 in the metadata so that
+				// its relational properties are available. See #87733.
+				//
+				// We lazily add these With expressions to the metadata here
+				// because the call to Factory.CopyAndReplace below clears With
+				// expressions in the metadata.
+				if !addedWithBindings {
+					for i, n := opt.WithID(1), b.mem.MaxWithID(); i <= n; i++ {
+						memoExpr := b.mem.Metadata().WithBinding(i)
+						f.Metadata().AddWithBinding(i, memoExpr)
 					}
+					addedWithBindings = true
 				}
 				// Fall through.
 			}
