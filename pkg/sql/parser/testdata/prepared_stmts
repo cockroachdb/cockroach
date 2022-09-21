@@ -27,7 +27,7 @@ PREPARE a (STRING, STRING) AS SELECT $1, $2
 ----
 PREPARE a (STRING, STRING) AS SELECT $1, $2
 PREPARE a (STRING, STRING) AS SELECT ($1), ($2) -- fully parenthesized
-PREPARE a (STRING, STRING) AS SELECT $1, $2 -- literals removed
+PREPARE a (STRING, STRING) AS SELECT $1, $1 -- literals removed
 PREPARE _ (STRING, STRING) AS SELECT $1, $2 -- identifiers removed
 
 parse
@@ -251,7 +251,7 @@ PREPARE a (STRING, STRING, STRING) AS IMPORT INTO a CSV DATA ($2) WITH temp = $3
 ----
 PREPARE a (STRING, STRING, STRING) AS IMPORT INTO a CSV DATA ($2) WITH temp = $3
 PREPARE a (STRING, STRING, STRING) AS IMPORT INTO a CSV DATA (($2)) WITH temp = ($3) -- fully parenthesized
-PREPARE a (STRING, STRING, STRING) AS IMPORT INTO a CSV DATA ($2) WITH temp = $3 -- literals removed
+PREPARE a (STRING, STRING, STRING) AS IMPORT INTO a CSV DATA ($1) WITH temp = $1 -- literals removed
 PREPARE _ (STRING, STRING, STRING) AS IMPORT INTO _ CSV DATA ($2) WITH _ = $3 -- identifiers removed
 
 parse
