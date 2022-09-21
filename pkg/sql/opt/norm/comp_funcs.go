@@ -13,7 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -82,20 +82,13 @@ func (c *CustomFuncs) FoldBinaryCheckOverflow(
 	}
 
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
-	result, err := eval.BinaryOp(c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
 	if err != nil {
 		return nil, false
 	}
 
-	cmpResLeft, err := result.CompareError(c.f.evalCtx, lDatum)
-	if err != nil {
-		return nil, false
-	}
-
-	cmpRightZero, err := rDatum.CompareError(c.f.evalCtx, zeroDatumForRightType)
-	if err != nil {
-		return nil, false
-	}
+	cmpResLeft := result.Compare(c.f.evalCtx, lDatum)
+	cmpRightZero := rDatum.Compare(c.f.evalCtx, zeroDatumForRightType)
 
 	// If the operator is + and right is <0, check for underflow.
 	if op == opt.PlusOp && cmpRightZero < 0 && cmpResLeft > 0 {
