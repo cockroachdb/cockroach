@@ -519,11 +519,15 @@ func writeBinaryInterval(b *writeBuffer, v duration.Duration) {
 	b.putInt32(int32(v.Months))
 }
 
-func writeBinaryJSON(b *writeBuffer, v json.JSON) {
+func writeBinaryJSON(b *writeBuffer, v json.JSON, t *types.T) {
 	s := v.String()
-	b.putInt32(int32(len(s) + 1))
-	// Postgres version number, as of writing, `1` is the only valid value.
-	b.writeByte(1)
+	if t.Oid() == oid.T_jsonb {
+		b.putInt32(int32(len(s) + 1))
+		// Postgres version number, as of writing, `1` is the only valid value.
+		b.writeByte(1)
+	} else {
+		b.putInt32(int32(len(s)))
+	}
 	b.writeString(s)
 }
 
@@ -740,7 +744,7 @@ func writeBinaryDatumNotNull(
 		b.putInt32AtIndex(initialLen /* index to write at */, int32(lengthToWrite))
 
 	case *tree.DJSON:
-		writeBinaryJSON(b, v.JSON)
+		writeBinaryJSON(b, v.JSON, t)
 
 	case *tree.DOid:
 		b.putInt32(4)
@@ -802,7 +806,7 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 		writeBinaryInterval(b, vecs.IntervalCols[colIdx].Get(rowIdx))
 
 	case types.JsonFamily:
-		writeBinaryJSON(b, vecs.JSONCols[colIdx].Get(rowIdx))
+		writeBinaryJSON(b, vecs.JSONCols[colIdx].Get(rowIdx), typ)
 
 	default:
 		// All other types are represented via the datum-backed vector.
