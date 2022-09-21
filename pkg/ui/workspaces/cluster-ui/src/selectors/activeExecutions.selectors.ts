@@ -27,16 +27,12 @@ import {
 
 const selectSessions = (state: AppState) => state.adminUI.sessions?.data;
 
-const selectSessionsLastUpdated = (state: AppState) =>
-  state.adminUI.sessions?.lastUpdated;
-
 const selectClusterLocks = (state: AppState) =>
   state.adminUI.clusterLocks?.data;
 
 export const selectActiveExecutions = createSelector(
   selectSessions,
   selectClusterLocks,
-  selectSessionsLastUpdated,
   selectActiveExecutionsCombiner,
 );
 

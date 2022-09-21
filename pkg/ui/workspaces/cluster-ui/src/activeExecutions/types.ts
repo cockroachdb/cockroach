@@ -30,7 +30,7 @@ export interface ActiveExecution {
   sessionID: string;
   status: ExecutionStatus;
   start: Moment;
-  elapsedTimeMillis: number;
+  elapsedTime: moment.Duration;
   application: string;
   query?: string; // Possibly empty for a transaction.
   timeSpentWaiting?: moment.Duration;

@@ -23,16 +23,12 @@ import { SessionsResponseMessage } from "src/util/api";
 
 const selectSessions = (state: AdminUIState) => state.cachedData.sessions?.data;
 
-const selectSessionsLastUpdated = (state: AdminUIState) =>
-  state.cachedData.sessions?.setAt;
-
 const selectClusterLocks = (state: AdminUIState) =>
   state.cachedData.clusterLocks?.data;
 
 export const selectActiveExecutions = createSelector(
   selectSessions,
   selectClusterLocks,
-  selectSessionsLastUpdated,
   selectActiveExecutionsCombiner,
 );
 
