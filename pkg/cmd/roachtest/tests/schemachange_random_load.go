@@ -46,9 +46,6 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 			spec.Zones(geoZonesStr),
 		),
 		NativeLibs: registry.LibGEOS,
-		// This is set while development is still happening on the workload and we
-		// fix (or bypass) minor schema change bugs that are discovered.
-		NonReleaseBlocker: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
