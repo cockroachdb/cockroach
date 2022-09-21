@@ -760,12 +760,12 @@ func TestFingerprintCreation(t *testing.T) {
 	}()
 
 	testConn := sqlutils.MakeSQLRunner(sqlConn)
-	testConn.Exec(t, "SET application_name = 'app1'")
 	testConn.Exec(t, "CREATE TABLE t (v INT)")
 
 	var count int64
 
 	t.Run("test hide constants", func(t *testing.T) {
+		testConn.Exec(t, "SET application_name = 'app1'")
 		testCases := []struct {
 			stmt        string
 			fingerprint string
@@ -1043,6 +1043,57 @@ func TestFingerprintCreation(t *testing.T) {
 			testConn.Exec(t, tc.stmt)
 			rows := testConn.QueryRow(t, "SELECT statistics -> 'statistics' ->> 'cnt' FROM "+
 				"CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = 'app1' "+
+				"AND metadata ->> 'query'=$1", tc.fingerprint)
+			rows.Scan(&count)
+
+			require.Equal(t, tc.count, count)
+		}
+	})
+
+	t.Run("test hide placeholders", func(t *testing.T) {
+		testConn.Exec(t, "SET application_name = 'app2'")
+		argsOne := []interface{}{1}
+		argsTwo := []interface{}{1, 2}
+		testCases := []struct {
+			stmt        string
+			fingerprint string
+			count       int64
+			literals    []interface{}
+		}{
+			{
+				stmt:        "SELECT * FROM t WHERE v IN ($1)",
+				fingerprint: "SELECT * FROM t WHERE v IN ($1,)",
+				count:       1,
+				literals:    argsOne,
+			},
+			{
+				stmt:        "SELECT * FROM t WHERE v IN (1)",
+				fingerprint: "SELECT * FROM t WHERE v IN (_,)",
+				count:       1,
+			},
+			{
+				stmt:        "SELECT * FROM t WHERE v IN ($1, $2)",
+				fingerprint: "SELECT * FROM t WHERE v IN ($1, $1)",
+				count:       1,
+				literals:    argsTwo,
+			},
+			{
+				stmt:        "SELECT * FROM t WHERE v IN ($2, $1)",
+				fingerprint: "SELECT * FROM t WHERE v IN ($1, $1)",
+				count:       2,
+				literals:    argsTwo,
+			},
+			{
+				stmt:        "SELECT * FROM t WHERE v IN (1,2)",
+				fingerprint: "SELECT * FROM t WHERE v IN (_, _)",
+				count:       1,
+			},
+		}
+
+		for _, tc := range testCases {
+			testConn.Exec(t, tc.stmt, tc.literals...)
+			rows := testConn.QueryRow(t, "SELECT statistics -> 'statistics' ->> 'cnt' FROM "+
+				"CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = 'app2' "+
 				"AND metadata ->> 'query'=$1", tc.fingerprint)
 			rows.Scan(&count)
 
