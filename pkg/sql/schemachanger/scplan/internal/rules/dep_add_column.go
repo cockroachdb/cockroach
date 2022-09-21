@@ -108,3 +108,44 @@ func init() {
 			}
 		})
 }
+
+// When we add new columns that lead to creation of new secondary indexes,
+// we want the primary index (with new columns) to be in VALIDATED before
+// transitioning those secondary indexes to be existent.
+func init() {
+	registerDepRule(
+		"primary index with new columns should exist before secondary indexes",
+		scgraph.Precedence,
+		"primary-index", "secondary-index",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.SecondaryIndex)(nil)),
+				joinOnDescID(from, to, "table-id"),
+				joinOn(
+					from, screl.IndexID,
+					to, screl.SourceIndexID,
+					"primary-index-id",
+				),
+				statusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_BACKFILL_ONLY),
+			}
+		})
+
+	registerDepRule(
+		"primary index with new columns should exist before temp indexes",
+		scgraph.Precedence,
+		"primary-index", "temp-index",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.Type((*scpb.TemporaryIndex)(nil)),
+				joinOnDescID(from, to, "table-id"),
+				joinOn(
+					from, screl.IndexID,
+					to, screl.SourceIndexID,
+					"primary-index-id",
+				),
+				statusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_DELETE_ONLY),
+			}
+		})
+}

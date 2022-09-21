@@ -1774,18 +1774,6 @@ PostCommitPhase stage 8 of 15 with 14 MutationType ops
       IndexID: 2
       Name: baz_pkey
       TableID: 109
-    *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT
-          ‹1›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      IndexID: 2
-      TableID: 109
     *scop.MakeAbsentIndexBackfilling
       Index:
         ConstraintID: 4
@@ -1803,6 +1791,18 @@ PostCommitPhase stage 8 of 15 with 14 MutationType ops
         SourceIndexID: 2
         TableID: 109
       IsSecondaryIndex: true
+    *scop.MakeValidatedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT
+          ‹1›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      IndexID: 2
+      TableID: 109
     *scop.AddColumnToIndex
       ColumnID: 2
       IndexID: 4
@@ -2209,18 +2209,18 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   to:   [Column:{DescID: 109, ColumnID: 2}, PUBLIC]
   kind: Precedence
   rule: swapped primary index public before column
-- from: [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
-  kind: Precedence
-  rule: primary index with new columns should exist before secondary indexes
-- from: [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
-  to:   [TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 4, SourceIndexID: 2}, DELETE_ONLY]
-  kind: Precedence
-  rule: primary index with new columns should exist before temp indexes
 - from: [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: PreviousTransactionPrecedence
   rule: PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC
+- from: [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
+  kind: Precedence
+  rule: primary index with new columns should exist before secondary indexes
+- from: [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
+  to:   [TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 4, SourceIndexID: 2}, DELETE_ONLY]
+  kind: Precedence
+  rule: primary index with new columns should exist before temp indexes
 - from: [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
   kind: PreviousTransactionPrecedence

@@ -372,7 +372,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
 │   │   │   │   │ ABSENT → DELETE_ONLY
 │   │   │   │   │
-│   │   │   │   ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │   │     rule: "primary index with new columns should exist before temp indexes"
 │   │   │   │   │
 │   │   │   │   └── • PreviousTransactionPrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
@@ -414,19 +414,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │       │     Name: t_pkey
 │   │       │     TableID: 104
 │   │       │
-│   │       ├── • MakeValidatedPrimaryIndexPublic
-│   │       │     EventBase:
-│   │       │       Authorization:
-│   │       │         UserName: root
-│   │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
-│   │       │         (‹a›)
-│   │       │       StatementTag: ALTER TABLE
-│   │       │       TargetMetadata:
-│   │       │         SourceElementID: 1
-│   │       │         SubWorkID: 1
-│   │       │     IndexID: 2
-│   │       │     TableID: 104
-│   │       │
 │   │       ├── • MakeAbsentTempIndexDeleteOnly
 │   │       │     Index:
 │   │       │       ConstraintID: 5
@@ -438,6 +425,19 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │       ├── • AddColumnToIndex
 │   │       │     ColumnID: 1
 │   │       │     IndexID: 5
+│   │       │     TableID: 104
+│   │       │
+│   │       ├── • MakeValidatedPrimaryIndexPublic
+│   │       │     EventBase:
+│   │       │       Authorization:
+│   │       │         UserName: root
+│   │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
+│   │       │         (‹a›)
+│   │       │       StatementTag: ALTER TABLE
+│   │       │       TargetMetadata:
+│   │       │         SourceElementID: 1
+│   │       │         SubWorkID: 1
+│   │       │     IndexID: 2
 │   │       │     TableID: 104
 │   │       │
 │   │       ├── • SetJobStateOnDescriptor

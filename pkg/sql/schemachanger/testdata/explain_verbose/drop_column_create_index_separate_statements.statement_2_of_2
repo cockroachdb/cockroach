@@ -235,7 +235,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
 │   │   │   │   │ ABSENT → BACKFILL_ONLY
 │   │   │   │   │
-│   │   │   │   ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │   │   ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │   │   │     rule: "primary index with new columns should exist before secondary indexes"
 │   │   │   │   │
 │   │   │   │   └── • PreviousTransactionPrecedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
@@ -258,7 +258,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
 │   │   │       │ ABSENT → DELETE_ONLY
 │   │   │       │
-│   │   │       ├── • Precedence dependency from PUBLIC PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+│   │   │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │       │     rule: "primary index with new columns should exist before temp indexes"
 │   │   │       │
 │   │   │       └── • PreviousTransactionPrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
@@ -294,18 +294,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │       │     Name: t_pkey
 │   │       │     TableID: 104
 │   │       │
-│   │       ├── • MakeValidatedPrimaryIndexPublic
-│   │       │     EventBase:
-│   │       │       Authorization:
-│   │       │         UserName: root
-│   │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-│   │       │       StatementTag: ALTER TABLE
-│   │       │       TargetMetadata:
-│   │       │         SourceElementID: 1
-│   │       │         SubWorkID: 1
-│   │       │     IndexID: 3
-│   │       │     TableID: 104
-│   │       │
 │   │       ├── • MakeAbsentIndexBackfilling
 │   │       │     Index:
 │   │       │       ConstraintID: 4
@@ -334,6 +322,18 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │       │     ColumnID: 1
 │   │       │     IndexID: 6
 │   │       │     Kind: 1
+│   │       │     TableID: 104
+│   │       │
+│   │       ├── • MakeValidatedPrimaryIndexPublic
+│   │       │     EventBase:
+│   │       │       Authorization:
+│   │       │         UserName: root
+│   │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
+│   │       │       StatementTag: ALTER TABLE
+│   │       │       TargetMetadata:
+│   │       │         SourceElementID: 1
+│   │       │         SubWorkID: 1
+│   │       │     IndexID: 3
 │   │       │     TableID: 104
 │   │       │
 │   │       ├── • AddColumnToIndex
