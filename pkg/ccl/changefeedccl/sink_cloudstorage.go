@@ -483,6 +483,7 @@ func (s *cloudStorageSink) EmitRow(
 	}
 
 	if int64(file.buf.Len()) > s.targetMaxFileSize {
+		s.metrics.recordSizeBasedFlush()
 		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
 			return err
 		}
