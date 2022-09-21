@@ -98,9 +98,11 @@ const (
 	// store's Raft log entry cache.
 	defaultRaftEntryCacheSize = 1 << 24 // 16M
 
-	// replicaRequestQueueSize specifies the maximum number of requests to queue
-	// for a replica.
-	replicaRequestQueueSize = 100
+	// replicaQueueExtraSize is the number of requests that a replica's incoming
+	// message queue can keep over RaftConfig.RaftMaxInflightMsgs. When the leader
+	// maxes out RaftMaxInflightMsgs, we want the receiving replica to still have
+	// some buffer for other messages, primarily heartbeats.
+	replicaQueueExtraSize = 10
 
 	defaultGossipWhenCapacityDeltaExceedsFraction = 0.01
 
