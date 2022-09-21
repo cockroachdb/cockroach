@@ -279,6 +279,7 @@ func deleteTableDescriptorsAfterGC(
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
+	checkImmediatelyOnWait := false
 	for _, droppedTable := range progress.Tables {
 		if droppedTable.Status == jobspb.SchemaChangeGCProgress_CLEARED {
 			// Table is not ready to be dropped, or has already been dropped.
@@ -311,11 +312,14 @@ func deleteTableDescriptorsAfterGC(
 		if err := waitForEmptyPrefix(
 			ctx, execCfg.DB, &execCfg.Settings.SV,
 			execCfg.GCJobTestingKnobs.SkipWaitingForMVCCGC,
+			checkImmediatelyOnWait,
 			execCfg.Codec.TablePrefix(uint32(table.GetID())),
 		); err != nil {
 			return errors.Wrapf(err, "waiting for empty table %d", table.GetID())
 		}
-
+		// Assume that once one of our tables have completed GC, the next table may
+		// also have completed GC.
+		checkImmediatelyOnWait = true
 		delta, err := spanconfig.Delta(ctx, execCfg.SpanConfigSplitter, table, nil /* uncommitted */)
 		if err != nil {
 			return err
