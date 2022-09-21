@@ -42,8 +42,8 @@ state offset=47
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
-/Tenant/10{-"\x00"}                        database system (tenant)
-/Tenant/11{-"\x00"}                        ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/10{-\x00}                          database system (tenant)
+/Tenant/11{-\x00}                          ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
 
 # Start the reconciliation loop for the tenant=10. It should have the vanilla
 # RANGE DEFAULT. Check against the underlying KV state, the SQL view of the
@@ -99,7 +99,7 @@ state offset=47
 /Tenant/10/Table/5{0-1}                    database system (tenant)
 /Tenant/10/Table/5{1-2}                    database system (tenant)
 /Tenant/10/Table/5{2-3}                    database system (tenant)
-/Tenant/11{-"\x00"}                        ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
+/Tenant/11{-\x00}                          ttl_seconds=14400 ignore_strict_gc=true rangefeed_enabled=true
 
 query-sql tenant=10
 SHOW ZONE CONFIGURATION FOR RANGE DEFAULT

@@ -155,7 +155,9 @@ func (rk RKey) String() string {
 
 // StringWithDirs - see Key.StringWithDirs.
 func (rk RKey) StringWithDirs(valDirs []encoding.Direction) string {
-	return Key(rk).StringWithDirs(valDirs)
+	var buf redact.StringBuilder
+	Key(rk).StringWithDirs(&buf, valDirs)
+	return buf.String()
 }
 
 // Key is a custom type for a byte string in proto
@@ -237,14 +239,12 @@ func (k Key) String() string {
 //	encoding direction.
 //
 //	returned, plus a "..." suffix.
-func (k Key) StringWithDirs(valDirs []encoding.Direction) string {
-	var s string
+func (k Key) StringWithDirs(buf *redact.StringBuilder, valDirs []encoding.Direction) {
 	if PrettyPrintKey != nil {
-		s = PrettyPrintKey(valDirs, k)
+		buf.Print(PrettyPrintKey(valDirs, k))
 	} else {
-		s = fmt.Sprintf("%q", []byte(k))
+		buf.Printf("%q", []byte(k))
 	}
-	return s
 }
 
 // Format implements the fmt.Formatter interface.
