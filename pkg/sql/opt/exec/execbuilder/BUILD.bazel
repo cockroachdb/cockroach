@@ -41,6 +41,10 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
+<<<<<<< HEAD
+=======
+        "//pkg/util/timeutil",
+>>>>>>> 5c0a632100 (opt: prevent apply-join panics from crashing nodes)
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
     ],
