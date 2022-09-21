@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1012,6 +1013,65 @@ func (m *Metrics) CompactedBytes() (read, written uint64) {
 		written += lm.BytesCompacted
 	}
 	return read, written
+}
+
+// AsStoreStatsEvent converts a Metrics struct into an eventpb.StoreStats event,
+// suitable for logging to the telemetry channel.
+func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
+	e := eventpb.StoreStats{
+		CacheSize:                  m.BlockCache.Size,
+		CacheCount:                 m.BlockCache.Count,
+		CacheHits:                  m.BlockCache.Hits,
+		CacheMisses:                m.BlockCache.Misses,
+		CompactionCountDefault:     m.Compact.DefaultCount,
+		CompactionCountDeleteOnly:  m.Compact.DeleteOnlyCount,
+		CompactionCountElisionOnly: m.Compact.ElisionOnlyCount,
+		CompactionCountMove:        m.Compact.MoveCount,
+		CompactionCountRead:        m.Compact.ReadCount,
+		CompactionCountRewrite:     m.Compact.RewriteCount,
+		CompactionNumInProgress:    m.Compact.NumInProgress,
+		CompactionMarkedFiles:      int64(m.Compact.MarkedFiles),
+		FlushCount:                 m.Flush.Count,
+		MemtableSize:               m.MemTable.Size,
+		MemtableCount:              m.MemTable.Count,
+		MemtableZombieCount:        m.MemTable.ZombieCount,
+		MemtableZombieSize:         m.MemTable.ZombieSize,
+		WalLiveCount:               m.WAL.Files,
+		WalLiveSize:                m.WAL.Size,
+		WalObsoleteCount:           m.WAL.ObsoleteFiles,
+		WalObsoleteSize:            m.WAL.ObsoletePhysicalSize,
+		WalPhysicalSize:            m.WAL.PhysicalSize,
+		WalBytesIn:                 m.WAL.BytesIn,
+		WalBytesWritten:            m.WAL.BytesWritten,
+		TableObsoleteCount:         m.Table.ObsoleteCount,
+		TableObsoleteSize:          m.Table.ObsoleteSize,
+		TableZombieCount:           m.Table.ZombieCount,
+		TableZombieSize:            m.Table.ZombieSize,
+		RangeKeySetsCount:          m.Keys.RangeKeySetsCount,
+	}
+	for i, l := range m.Levels {
+		if l.NumFiles == 0 {
+			continue
+		}
+		e.Levels = append(e.Levels, eventpb.LevelStats{
+			Level:           uint32(i),
+			NumFiles:        l.NumFiles,
+			SizeBytes:       l.Size,
+			Score:           float32(l.Score),
+			BytesIn:         l.BytesIn,
+			BytesIngested:   l.BytesIngested,
+			BytesMoved:      l.BytesMoved,
+			BytesRead:       l.BytesRead,
+			BytesCompacted:  l.BytesCompacted,
+			BytesFlushed:    l.BytesFlushed,
+			TablesCompacted: l.TablesCompacted,
+			TablesFlushed:   l.TablesFlushed,
+			TablesIngested:  l.TablesIngested,
+			TablesMoved:     l.TablesMoved,
+			NumSublevels:    l.Sublevels,
+		})
+	}
+	return e
 }
 
 // EnvStats is a set of RocksDB env stats, including encryption status.

@@ -25,22 +25,22 @@ export const SessionStatusType =
   protos.cockroach.server.serverpb.Session.Status;
 
 export interface ActiveExecution {
-  statementID?: string; // This may not be present for a transaction.
+  statementID?: string; // Empty for transactions not currently executing a statement.
   transactionID: string;
   sessionID: string;
   status: ExecutionStatus;
   start: Moment;
   elapsedTimeMillis: number;
   application: string;
-  query?: string; // Possibly empty for a transaction.
+  query?: string; // For transactions, this is the latest query executed.
   timeSpentWaiting?: moment.Duration;
-  isFullScan: boolean;
 }
 
 export type ActiveStatement = ActiveExecution &
   Required<Pick<ActiveExecution, "statementID">> & {
     user: string;
     clientAddress: string;
+    isFullScan: boolean;
   };
 
 export type ActiveTransaction = ActiveExecution & {

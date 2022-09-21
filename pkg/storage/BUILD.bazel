@@ -71,6 +71,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/iterutil",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",

@@ -1403,7 +1403,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
-	if err := schedulerlatency.StartSampler(ctx, s.st, s.stopper); err != nil {
+	if err := schedulerlatency.StartSampler(
+		ctx, s.st, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
+	); err != nil {
 		return err
 	}
 
@@ -1469,7 +1471,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	})
 
 	// We can now add the node registry.
-	s.recorder.AddNode(
+	s.recorder.AddNode( // XXX: Has to occur before
 		s.registry,
 		s.node.Descriptor,
 		s.node.startedAt,

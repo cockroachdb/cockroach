@@ -58,6 +58,13 @@ func TestEventJSON(t *testing.T) {
 		// `includeempty` annotation, so nothing is emitted, despite the presence of
 		// zero values.
 		{&SchemaSnapshotMetadata{SnapshotID: "", NumRecords: 0}, ""},
+
+		// Primitive fields with an `includeempty` annotation will emit their zero
+		// value.
+		{
+			&StoreStats{Levels: []LevelStats{{Level: 0, NumFiles: 1}, {Level: 6, NumFiles: 2}}},
+			`"Levels":[{"Level":0,"NumFiles":1},{"Level":6,"NumFiles":2}]`,
+		},
 	}
 
 	for _, tc := range testCases {

@@ -1183,6 +1183,29 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(og.params.rng, "table", tableIdx, databaseHasMultiRegion, og.newUniqueSeqNum)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
+	trigramIsNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.TrigramInvertedIndexes))
+	if err != nil {
+		return nil, err
+	}
+	hasTrigramIdxUnsupported := func() bool {
+		if !trigramIsNotSupported {
+			return false
+		}
+		// Check if any of the indexes have trigrams involved.
+		for _, def := range stmt.Defs {
+			if idx, ok := def.(*tree.IndexTableDef); ok && idx.Inverted {
+				lastColumn := idx.Columns[len(idx.Columns)-1]
+				switch lastColumn.OpClass {
+				case "gin_trgm_ops", "gist_trgm_ops":
+					return true
+				}
+			}
+		}
+		return false
+	}()
 
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
@@ -1197,6 +1220,11 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		{code: pgcode.DuplicateRelation, condition: tableExists && !stmt.IfNotExists},
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
 	}.add(opStmt.expectedExecErrors)
+	// Compatibility errors aren't guaranteed since the cluster version update is not
+	// fully transaction aware.
+	codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: hasTrigramIdxUnsupported},
+	}.add(opStmt.potentialExecErrors)
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
 }
@@ -2344,6 +2372,18 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return nil, err
+	}
+	// If we aren't on 22.2 then disable the insert plugin, since 21.X
+	// can have schema instrospection queries fail due to an optimizer bug.
+	skipInserts, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(clusterversion.Start22_2))
+	if err != nil {
+		return nil, err
+	}
+	// If inserts are to be skipped, we will intentionally, target the insert towards
+	// a non-existent table, so that they become no-ops.
+	if skipInserts {
+		tableExists = false
+		tableName.SchemaName = "InvalidObjectName"
 	}
 	if !tableExists {
 		return makeOpStmtForSingleError(OpStmtDML,
