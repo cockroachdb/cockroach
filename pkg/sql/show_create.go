@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 type shouldOmitFKClausesFromCreate int
@@ -72,6 +73,9 @@ func ShowCreateTable(
 	lCtx simpleSchemaResolver,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "sql.ShowCreateTable")
+	defer sp.Finish()
+
 	a := &tree.DatumAlloc{}
 
 	f := p.ExtendedEvalContext().FmtCtx(tree.FmtSimple)
@@ -221,6 +225,9 @@ func (p *planner) ShowCreate(
 	desc catalog.TableDescriptor,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "sql.ShowCreate")
+	defer sp.Finish()
+
 	var stmt string
 	var err error
 	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.GetName()))

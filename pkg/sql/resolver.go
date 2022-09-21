@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -989,6 +990,9 @@ type tableLookupFn = *internalLookupCtx
 func newInternalLookupCtxFromDescriptorProtos(
 	ctx context.Context, rawDescs []descpb.Descriptor,
 ) (*internalLookupCtx, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "sql.newInternalLookupCtxFromDescriptorProtos")
+	defer sp.Finish()
+
 	var c nstree.MutableCatalog
 	for i := range rawDescs {
 		desc := descbuilder.NewBuilder(&rawDescs[i]).BuildImmutable()
