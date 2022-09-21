@@ -119,7 +119,7 @@ func (opts *spanOptions) recordingType() tracingpb.RecordingType {
 // otelContext returns information about the OpenTelemetry parent span. If there
 // is a local parent with an otel Span, that Span is returned. If there is a
 // RemoteParent,  a SpanContext is returned. If there's no OpenTelemetry parent,
-// both return values will be empty.
+// both return values will be Empty.
 func (opts *spanOptions) otelContext() (oteltrace.Span, oteltrace.SpanContext) {
 	if !opts.Parent.empty() && opts.Parent.i.otelSpan != nil {
 		return opts.Parent.i.otelSpan, oteltrace.SpanContext{}
@@ -213,7 +213,7 @@ func WithParent(sp *Span) SpanOption {
 	}
 
 	ref, _ /* ok */ := tryMakeSpanRef(sp)
-	// Note that ref will be empty if tryMakeSpanRef() failed. In that case, the
+	// Note that ref will be Empty if tryMakeSpanRef() failed. In that case, the
 	// resulting span will not have a parent.
 	return (parentOption)(ref)
 }

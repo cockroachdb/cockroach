@@ -172,7 +172,8 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 			fmt.Fprintf(&buf, "unexpectedly found %d active spans:\n", len(sps))
 			var ids []uint64
 			for _, sp := range sps {
-				rec := sp.GetFullRecording(tracingpb.RecordingVerbose)
+				trace := sp.GetFullRecording(tracingpb.RecordingVerbose)
+				rec := trace.Flatten()
 				for _, rs := range rec {
 					// NB: it would be a sight easier to just include these in the output of
 					// the string formatted recording, but making a change there presumably requires

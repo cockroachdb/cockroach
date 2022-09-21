@@ -316,9 +316,13 @@ func (sp *Span) FinishAndGetConfiguredRecording() tracingpb.Recording {
 //
 // A few internal tags are added to denote span properties:
 //
-//	"_unfinished"	The span was never Finish()ed
-//	"_verbose"	The span is a verbose one
-//	"_dropped"	The span dropped recordings due to sizing constraints
+//	"_unfinished":	The span was never Finish()ed.
+//	"_verbose":	The span is a verbose one.
+//	"_dropped_logs":	The span dropped events due to size limits.
+//	"_dropped_children": Some (direct) child spans were dropped because of the
+//											 trace size limit.
+//	"_dropped_indirect_children": Some indirect child spans were dropped
+//																because of the trace size limit.
 //
 // If recType is RecordingStructured, the return value will be nil if the span
 // doesn't have any structured events.
@@ -361,7 +365,7 @@ func (sp *Span) ImportRemoteRecording(remoteRecording tracingpb.Recording) {
 
 // Meta returns the information which needs to be propagated across process
 // boundaries in order to derive child spans from this Span. This may return an
-// empty SpanMeta (which is a valid input to WithRemoteParentFromSpanMeta) if
+// Empty SpanMeta (which is a valid input to WithRemoteParentFromSpanMeta) if
 // the Span has been optimized out.
 func (sp *Span) Meta() SpanMeta {
 	if sp.detectUseAfterFinish() {
@@ -630,7 +634,7 @@ func (sp *Span) reset(
 		if len(c.mu.tags) != 0 {
 			panic(fmt.Sprintf("unexpected tags in span being reset: %v", c.mu.tags))
 		}
-		if len(c.mu.recording.finishedChildren) != 0 {
+		if !c.mu.recording.finishedChildren.Empty() {
 			panic(fmt.Sprintf("unexpected finished children in span being reset: %v", c.mu.recording.finishedChildren))
 		}
 		if c.mu.recording.structured.Len() != 0 {
@@ -649,6 +653,7 @@ func (sp *Span) reset(
 				logs:             makeSizeLimitedBuffer(maxLogBytesPerSpan, nil /* scratch */),
 				structured:       makeSizeLimitedBuffer(maxStructuredBytesPerSpan, h.structuredEventsAlloc[:]),
 				childrenMetadata: h.childrenMetadataAlloc,
+				finishedChildren: MakeTrace(tracingpb.RecordedSpan{}),
 			},
 			tags: h.tagsAlloc[:0],
 		}
@@ -741,7 +746,7 @@ func tryMakeSpanRef(sp *Span) (spanRef, bool) {
 		if cnt == 0 {
 			// sp was Finish()ed, and it might be in the pool awaiting reallocation.
 			// It'd be unsafe to hold a reference to sp because of deadlock hazards,
-			// so we'll return an empty option (i.e. the resulting child will be a
+			// so we'll return an Empty option (i.e. the resulting child will be a
 			// root).
 			return spanRef{}, false
 		}
