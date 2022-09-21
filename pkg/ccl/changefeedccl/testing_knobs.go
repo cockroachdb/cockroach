@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -41,6 +42,7 @@ type TestingKnobs struct {
 	// not accounted but it is useful to treat it as accounted in
 	// tests.
 	NullSinkIsExternalIOAccounted bool
+	OverrideCursor                func(currentTime *hlc.Timestamp) string
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

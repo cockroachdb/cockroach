@@ -75,7 +75,8 @@ func init() {
 
 type annotatedChangefeedStatement struct {
 	*tree.CreateChangefeed
-	originalSpecs map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification
+	originalSpecs       map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification
+	alterChangefeedAsOf hlc.Timestamp
 }
 
 func getChangefeedStatement(stmt tree.Statement) *annotatedChangefeedStatement {
@@ -324,6 +325,10 @@ func createChangefeedJobRecord(
 		}
 		initialHighWater = asOf.Timestamp
 		statementTime = initialHighWater
+	}
+
+	if !changefeedStmt.alterChangefeedAsOf.IsEmpty() {
+		statementTime = changefeedStmt.alterChangefeedAsOf
 	}
 
 	endTime := hlc.Timestamp{}
