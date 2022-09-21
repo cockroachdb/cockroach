@@ -2009,72 +2009,58 @@ func countIndexRowsAndMaybeCheckUniqueness(
 // Finally, the new index is brought into the DELETE_AND_WRITE_ONLY
 // state for validation.
 //
-//	┌─────────────────┐         ┌─────────────────┐             ┌─────────────────┐
-//	│                 │         │                 │             │                 │
-//	│   PrimaryIndex  │         │     NewIndex    │             │    TempIndex    │
-//
-// t0        │     (PUBLIC)    │         │  (BACKFILLING)  │             │  (DELETE_ONLY)  │
-//
-//	│                 │         │                 │             │                 │
-//	└─────────────────┘         └─────────────────┘             └────────┬────────┘
-//	                                                                     │
-//	                                                            ┌────────▼────────┐
-//	                                                            │                 │
-//	                                                            │    TempIndex    │
-//
-// t1                                                                    │(DELETE_AND_WRITE)   │
-//
-//	                                                            │                 │   │
-//	                                                            └────────┬────────┘   │
-//	                                                                     │            │
-//	┌─────────────────┐         ┌─────────────────┐             ┌────────▼────────┐   │ TempIndex receiving writes
-//	│                 │         │                 │             │                 │   │
-//	│  PrimaryIndex   ├────────►│     NewIndex    │             │    TempIndex    │   │
-//
-// t2        │   (PUBLIC)      │ Backfill│  (BACKFILLING)  │             │(DELETE_AND_WRITE│   │
-//
-//	│                 │         │                 │             │                 │   │
-//	└─────────────────┘         └────────┬────────┘             └─────────────────┘   │
-//	                                     │                                            │
-//	                            ┌────────▼────────┐                                   │
-//	                            │                 │                                   │
-//	                            │     NewIndex    │                                   │
-//
-// t3                                    │  (DELETE_ONLY)  │                                   │
-//
-//	│                 │                                   │
-//	└────────┬────────┘                                   │
-//	         │                                            │
-//	┌────────▼────────┐                                   │
-//	│                 │                                   │
-//	│     NewIndex    │                                   │   │
-//	│    (MERGING)    │                                   │   │
-//
-// t4                                    │                 │                                   │   │ NewIndex receiving writes
-//
-//	└─────────────────┘                                   │   │
-//	                                                      │   │
-//	┌─────────────────┐             ┌─────────────────┐   │   │
-//	│                 │             │                 │   │   │
-//	│     NewIndex    │◄────────────┤    TempIndex    │   │   │
-//
-// t5                                    │    (MERGING)    │  BatchMerge │(DELETE_AND_WRITE│   │   │
-//
-//	│                 │             │                 │   │   │
-//	└────────┬────────┘             └───────┬─────────┘   │   │
-//	         │                              │             │   │
-//	┌────────▼────────┐             ┌───────▼─────────┐   │   │
-//	│                 │             │                 │   │   │
-//	│     NewIndex    │             │    TempIndex    │       │
-//
-// t6                                    │(DELETE_AND_WRITE)             │  (DELETE_ONLY)  │       │
-//
-//	   │                 │             │                 │       │
-//	   └───────┬─────────┘             └───────┬─────────┘       │
-//	           │                               │
-//	           │                               │
-//	           ▼                               ▼
-//	[validate and make public]             [ dropped ]
+//	    ┌─────────────────┐         ┌─────────────────┐             ┌─────────────────┐
+//	    │                 │         │                 │             │                 │
+//	    │   PrimaryIndex  │         │     NewIndex    │             │    TempIndex    │
+//	t0  │     (PUBLIC)    │         │  (BACKFILLING)  │             │  (DELETE_ONLY)  │
+//	    │                 │         │                 │             │                 │
+//	    └─────────────────┘         └─────────────────┘             └────────┬────────┘
+//	                                                                         │
+//	                                                                ┌────────▼────────┐
+//	                                                                │                 │
+//	                                                                │    TempIndex    │
+//	t1                                                              │(DELETE_AND_WRITE)   │
+//	                                                                │                 │   │
+//	                                                                └────────┬────────┘   │
+//	                                                                         │            │
+//	    ┌─────────────────┐         ┌─────────────────┐             ┌────────▼────────┐   │ TempIndex receiving writes
+//	    │                 │         │                 │             │                 │   │
+//	    │  PrimaryIndex   ├────────►│     NewIndex    │             │    TempIndex    │   │
+//	t2  │   (PUBLIC)      │ Backfill│  (BACKFILLING)  │             │(DELETE_AND_WRITE│   │
+//	    │                 │         │                 │             │                 │   │
+//	    └─────────────────┘         └────────┬────────┘             └─────────────────┘   │
+//	                                         │                                            │
+//	                                ┌────────▼────────┐                                   │
+//	                                │                 │                                   │
+//	                                │     NewIndex    │                                   │
+//	t3                              │  (DELETE_ONLY)  │                                   │
+//	                                │                 │                                   │
+//	                                └────────┬────────┘                                   │
+//	                                         │                                            │
+//	                                ┌────────▼────────┐                                   │
+//	                                │                 │                                   │
+//	                                │     NewIndex    │                                   │   │
+//	                                │    (MERGING)    │                                   │   │
+//	t4                              │                 │                                   │   │ NewIndex receiving writes
+//	                                └─────────────────┘                                   │   │
+//	                                                                                      │   │
+//	                                ┌─────────────────┐             ┌─────────────────┐   │   │
+//	                                │                 │             │                 │   │   │
+//	                                │     NewIndex    │◄────────────┤    TempIndex    │   │   │
+//	t5                              │    (MERGING)    │  BatchMerge │(DELETE_AND_WRITE│   │   │
+//	                                │                 │             │                 │   │   │
+//	                                └────────┬────────┘             └───────┬─────────┘   │   │
+//	                                         │                              │             │   │
+//	                                ┌────────▼────────┐             ┌───────▼─────────┐   │   │
+//	                                │                 │             │                 │   │   │
+//	                                │     NewIndex    │             │    TempIndex    │       │
+//	t6                              │(DELETE_AND_WRITE)             │  (DELETE_ONLY)  │       │
+//	                                │                 │             │                 │       │
+//	                                └───────┬─────────┘             └───────┬─────────┘       │
+//	                                        │                               │
+//	                                        │                               │
+//	                                        ▼                               ▼
+//	                            [validate and make public]             [ dropped ]
 //
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely.
