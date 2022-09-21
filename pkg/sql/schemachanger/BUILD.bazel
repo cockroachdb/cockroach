@@ -30,7 +30,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/schemachanger/corpus",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/scrun",

@@ -333,6 +333,7 @@ ALL_TESTS = [
     "//pkg/sql/scanner:scanner_test",
     "//pkg/sql/scheduledlogging:scheduledlogging_test",
     "//pkg/sql/schemachange:schemachange_test",
+    "//pkg/sql/schemachanger/corpus:corpus_test",
     "//pkg/sql/schemachanger/rel:rel_test",
     "//pkg/sql/schemachanger/scbuild:scbuild_test",
     "//pkg/sql/schemachanger/scdecomp:scdecomp_test",
