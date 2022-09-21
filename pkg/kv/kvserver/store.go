@@ -98,10 +98,6 @@ const (
 	// store's Raft log entry cache.
 	defaultRaftEntryCacheSize = 1 << 24 // 16M
 
-	// replicaRequestQueueSize specifies the maximum number of requests to queue
-	// for a replica.
-	replicaRequestQueueSize = 100
-
 	defaultGossipWhenCapacityDeltaExceedsFraction = 0.01
 
 	// systemDataGossipInterval is the interval at which range lease
