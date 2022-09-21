@@ -59,7 +59,7 @@ true
 
 # Fill a table with consistency check results. This used to panic.
 # See: https://github.com/cockroachdb/cockroach/issues/88222
-statement error pgcode XX000 no consistency checker configured
+statement ok
 CREATE TABLE conscheckresult AS (SELECT * FROM crdb_internal.check_consistency(false, '', ''));
 
 # Test crdb_internal commands which execute as root, but
