@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useContext, useMemo } from "react";
+import React, { useMemo } from "react";
 import classNames from "classnames/bind";
 import {
   ActiveStatement,
@@ -31,7 +31,6 @@ import {
 } from "./activeStatementsTable";
 import { StatementViewType } from "src/statementsPage/statementPageTypes";
 import { calculateActiveFilters } from "src/queryFilter/filter";
-import { CockroachCloudContext } from "src/contexts";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -43,6 +42,7 @@ type ActiveStatementsSectionProps = {
   statements: ActiveStatement[];
   selectedColumns?: string[];
   sortSetting: SortSetting;
+  isTenant?: boolean;
   onChangeSortSetting: (sortSetting: SortSetting) => void;
   onClearFilters: () => void;
   onColumnsSelect: (columns: string[]) => void;
@@ -52,6 +52,7 @@ export const ActiveStatementsSection: React.FC<
   ActiveStatementsSectionProps
 > = ({
   filters,
+  isTenant,
   pagination,
   search,
   statements,
@@ -61,12 +62,11 @@ export const ActiveStatementsSection: React.FC<
   onChangeSortSetting,
   onColumnsSelect,
 }) => {
-  const isCockroachCloud = useContext(CockroachCloudContext);
-
   const columns = useMemo(
-    () => makeActiveStatementsColumns(isCockroachCloud),
-    [isCockroachCloud],
+    () => makeActiveStatementsColumns(isTenant),
+    [isTenant],
   );
+
   const shownColumns = columns.filter(col =>
     isSelectedColumn(selectedColumns, col),
   );
