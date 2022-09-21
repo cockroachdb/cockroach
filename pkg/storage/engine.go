@@ -906,13 +906,6 @@ type Engine interface {
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
 	CompactRange(start, end roachpb.Key) error
-	// InMem returns true if the receiver is an in-memory engine and false
-	// otherwise.
-	//
-	// TODO(peter): This is a bit of a wart in the interface. It is used by
-	// addSSTablePreApply to select alternate code paths, but really there should
-	// be a unified code path there.
-	InMem() bool
 	// RegisterFlushCompletedCallback registers a callback that will be run for
 	// every successful flush. Only one callback can be registered at a time, so
 	// registering again replaces the previous callback. The callback must
@@ -922,10 +915,6 @@ type Engine interface {
 	RegisterFlushCompletedCallback(cb func())
 	// Filesystem functionality.
 	fs.FS
-	// ReadFile reads the content from the file with the given filename int this RocksDB's env.
-	ReadFile(filename string) ([]byte, error)
-	// WriteFile writes data to a file in this RocksDB's env.
-	WriteFile(filename string, data []byte) error
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.
