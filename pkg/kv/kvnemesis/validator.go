@@ -319,14 +319,14 @@ func makeValidator(kvs *Engine) (*validator, error) {
 // getDeleteForKey looks up a stored tombstone for a given key (if it
 // exists) from tombstonesForKey, returning the tombstone (i.e. MVCCKey) along
 // with a `true` boolean value if found, or the empty key and `false` if not.
-func (v *validator) getDeleteForKey(key string, txn *roachpb.Transaction) (storage.MVCCKey, bool) {
-	if txn == nil {
+func (v *validator) getDeleteForKey(key string, optOpTS hlc.Timestamp) (storage.MVCCKey, bool) {
+	if optOpTS.IsEmpty() {
 		panic(errors.AssertionFailedf(`transaction required to look up delete for key: %v`, key))
 	}
 
-	if used, ok := v.tombstonesForKey[key][txn.TxnMeta.WriteTimestamp]; !used && ok {
-		v.tombstonesForKey[key][txn.TxnMeta.WriteTimestamp] = true
-		return storage.MVCCKey{Key: []byte(key), Timestamp: txn.TxnMeta.WriteTimestamp}, true
+	if used, ok := v.tombstonesForKey[key][optOpTS]; !used && ok {
+		v.tombstonesForKey[key][optOpTS] = true
+		return storage.MVCCKey{Key: []byte(key), Timestamp: optOpTS}, true
 	}
 
 	return storage.MVCCKey{}, false
@@ -337,7 +337,7 @@ func (v *validator) processOp(inTxn bool, op Operation) {
 	case *GetOperation:
 		v.failIfError(op, t.Result)
 		if !inTxn {
-			v.checkAtomic(`get`, t.Result, nil, op)
+			v.checkAtomic(`get`, t.Result, hlc.Timestamp{}, op)
 		} else {
 			read := &observedRead{
 				Key:   t.Key,
@@ -347,7 +347,7 @@ func (v *validator) processOp(inTxn bool, op Operation) {
 		}
 	case *PutOperation:
 		if !inTxn {
-			v.checkAtomic(`put`, t.Result, nil, op)
+			v.checkAtomic(`put`, t.Result, hlc.Timestamp{}, op)
 		} else {
 			// Accumulate all the writes for this transaction.
 			kv, ok := v.kvByValue[string(t.Value)]
@@ -364,7 +364,7 @@ func (v *validator) processOp(inTxn bool, op Operation) {
 		}
 	case *DeleteOperation:
 		if !inTxn {
-			v.checkAtomic(`delete`, t.Result, nil, op)
+			v.checkAtomic(`delete`, t.Result, hlc.Timestamp{}, op)
 		} else {
 			// NB: While Put operations can be identified as having materialized
 			// (or not) in the storage engine because the Generator guarantees each
@@ -386,7 +386,7 @@ func (v *validator) processOp(inTxn bool, op Operation) {
 		}
 	case *DeleteRangeOperation:
 		if !inTxn {
-			v.checkAtomic(`deleteRange`, t.Result, nil, op)
+			v.checkAtomic(`deleteRange`, t.Result, hlc.Timestamp{}, op)
 		} else {
 			// For the purposes of validation, DelRange operations decompose into
 			// a specialized scan for keys with non-nil values, followed by
@@ -424,7 +424,7 @@ func (v *validator) processOp(inTxn bool, op Operation) {
 			if t.Reverse {
 				atomicScanType = `reverse scan`
 			}
-			v.checkAtomic(atomicScanType, t.Result, nil, op)
+			v.checkAtomic(atomicScanType, t.Result, hlc.Timestamp{}, op)
 		} else {
 			scan := &observedScan{
 				Span: roachpb.Span{
@@ -530,7 +530,7 @@ func (v *validator) processOp(inTxn bool, op Operation) {
 		if !resultIsRetryable(t.Result) {
 			v.failIfError(op, t.Result)
 			if !inTxn {
-				v.checkAtomic(`batch`, t.Result, nil, t.Ops...)
+				v.checkAtomic(`batch`, t.Result, hlc.Timestamp{}, t.Ops...)
 			} else {
 				for _, op := range t.Ops {
 					v.processOp(inTxn, op)
@@ -542,14 +542,22 @@ func (v *validator) processOp(inTxn bool, op Operation) {
 		if t.CommitInBatch != nil {
 			ops = append(ops, t.CommitInBatch.Ops...)
 		}
-		v.checkAtomic(`txn`, t.Result, t.Txn, ops...)
+		var optOpsTimestamp hlc.Timestamp
+		if t.Result.Err == nil {
+			if t.Txn == nil {
+				v.failures = append(v.failures, errors.AssertionFailedf("missing transaction"))
+				break
+			}
+			optOpsTimestamp = t.Txn.WriteTimestamp
+		}
+		v.checkAtomic(`txn`, t.Result, optOpsTimestamp, ops...)
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
 }
 
 func (v *validator) checkAtomic(
-	atomicType string, result Result, optTxn *roachpb.Transaction, ops ...Operation,
+	atomicType string, result Result, optOpsTimestamp hlc.Timestamp, ops ...Operation,
 ) {
 	for _, op := range ops {
 		// NB: we're not really necessarily in a txn, but passing true here means that
@@ -561,7 +569,7 @@ func (v *validator) checkAtomic(
 	v.curOps = nil
 
 	if result.Type != ResultType_Error {
-		v.checkCommittedTxn(`committed `+atomicType, txnObservations, optTxn)
+		v.checkCommittedTxn(`committed `+atomicType, txnObservations, optOpsTimestamp)
 	} else if resultIsAmbiguous(result) {
 		v.checkAmbiguousTxn(`ambiguous `+atomicType, txnObservations)
 	} else {
@@ -570,7 +578,7 @@ func (v *validator) checkAtomic(
 }
 
 func (v *validator) checkCommittedTxn(
-	atomicType string, txnObservations []observedOp, optTxn *roachpb.Transaction,
+	atomicType string, txnObservations []observedOp, optOpsTimestamp hlc.Timestamp,
 ) {
 	// The following works by verifying that there is at least one time at which
 	// it was valid to see all the reads and writes that we saw in this
@@ -659,13 +667,13 @@ func (v *validator) checkCommittedTxn(
 				if o.isDelete() {
 					key := string(o.Key)
 					v.committedDeletesForKey[key]++
-					if optTxn == nil {
+					if optOpsTimestamp.IsEmpty() {
 						// In the case that the delete is not in a transaction (or in an
 						// ambiguous transaction), we do not match it to a specific
 						// tombstone as we cannot be certain which tombstone resulted from
 						// this operation; hence, we leave the timestamp empty.
 						o.Materialized = v.committedDeletesForKey[key] <= len(v.tombstonesForKey[key])
-					} else if storedDelete, ok := v.getDeleteForKey(key, optTxn); ok {
+					} else if storedDelete, ok := v.getDeleteForKey(key, optOpsTimestamp); ok {
 						o.Materialized = true
 						o.Timestamp = storedDelete.Timestamp
 					}
@@ -785,8 +793,8 @@ func (v *validator) checkCommittedTxn(
 		}
 		switch o := observation.(type) {
 		case *observedWrite:
-			if optTxn != nil && o.Materialized && optTxn.TxnMeta.WriteTimestamp != o.Timestamp {
-				failure = fmt.Sprintf(`committed txn mismatched write timestamp %s`, optTxn.TxnMeta.WriteTimestamp)
+			if optOpsTimestamp.IsSet() && o.Materialized && optOpsTimestamp != o.Timestamp {
+				failure = fmt.Sprintf(`mismatched write timestamp %s`, optOpsTimestamp)
 			}
 		}
 	}
@@ -840,9 +848,9 @@ func (v *validator) checkAmbiguousTxn(atomicType string, txnObservations []obser
 		// TODO(dan): Is it possible to receive an ambiguous read-only txn? Assume
 		// committed for now because the committed case has assertions about reads
 		// but the uncommitted case doesn't and this seems to work.
-		v.checkCommittedTxn(atomicType, txnObservations, nil)
+		v.checkCommittedTxn(atomicType, txnObservations, hlc.Timestamp{})
 	} else if somethingCommitted {
-		v.checkCommittedTxn(atomicType, txnObservations, nil)
+		v.checkCommittedTxn(atomicType, txnObservations, hlc.Timestamp{})
 	} else {
 		v.checkUncommittedTxn(atomicType, txnObservations)
 	}
