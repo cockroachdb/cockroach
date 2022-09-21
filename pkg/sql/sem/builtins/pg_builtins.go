@@ -72,6 +72,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.TimeTZ.Oid():      {},
 	types.Decimal.Oid():     {},
 	types.Interval.Oid():    {},
+	types.Json.Oid():        {},
 	types.Jsonb.Oid():       {},
 	types.Uuid.Oid():        {},
 	types.VarBit.Oid():      {},
