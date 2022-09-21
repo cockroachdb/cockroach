@@ -869,11 +869,6 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	}
 
 	addTag := func(k, v string) {
-		if rs.Tags == nil {
-			rs.Tags = make(map[string]string)
-		}
-		rs.Tags[k] = v
-
 		tagGroup := rs.FindTagGroup(tracingpb.AnonymousTagGroupName)
 		if tagGroup == nil {
 			tagGroup = addTagGroup(tracingpb.AnonymousTagGroupName)
@@ -930,12 +925,6 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 				}
 			} else {
 				rs.TagGroups = append(rs.TagGroups, *tg)
-				if rs.Tags == nil {
-					rs.Tags = make(map[string]string)
-				}
-				for _, tag := range tg.Tags {
-					rs.Tags[tag.Key] = tag.Value
-				}
 			}
 		}
 

@@ -32,7 +32,6 @@ func redactRecordingForTenant(tenID roachpb.TenantID, rec tracingpb.Recording) e
 	}
 	for i := range rec {
 		sp := &rec[i]
-		sp.Tags = nil // TODO(benbardin): Remove for 23.1.
 		sp.TagGroups = nil
 		for j := range sp.Logs {
 			record := &sp.Logs[j]

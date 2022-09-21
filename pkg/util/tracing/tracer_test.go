@@ -89,7 +89,7 @@ func TestTracerRecording(t *testing.T) {
 	rec := s1.GetRecording(tracingpb.RecordingStructured)
 	require.Len(t, rec, 1)
 	require.Nil(t, rec[0].Logs)
-	require.Nil(t, rec[0].Tags)
+	require.Nil(t, rec[0].TagGroups)
 	require.Empty(t, rec[0].ChildrenMetadata)
 	require.Empty(t, rec[0].StructuredRecords)
 
