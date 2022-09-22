@@ -1161,6 +1161,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	// is not called.
 	ex.mu.IdleInSessionTimeout.Stop()
 	ex.mu.IdleInTransactionSessionTimeout.Stop()
+	ex.mu.TransactionTimeout.Stop()
 
 	if closeType != panicClose {
 		ex.state.mon.Stop(ctx)
@@ -1485,6 +1486,10 @@ type connExecutor struct {
 		// cancels the session if the idle time in a transaction exceeds the
 		// idle_in_transaction_session_timeout.
 		IdleInTransactionSessionTimeout timeout
+
+		// TransactionTimeout is returned by the AfterFunc call that cancels the
+		// transaction if the run time exceeds the transaction_timeout.
+		TransactionTimeout timeout
 	}
 
 	// curStmtAST is the statement that's currently being prepared or executed, if
@@ -1850,6 +1855,7 @@ func (ex *connExecutor) run(
 			return err
 		}
 	}
+
 }
 
 // errDrainingComplete is returned by execCmd when the connExecutor previously got
@@ -1920,6 +1926,7 @@ func (ex *connExecutor) execCmd() error {
 			ev, payload, err = ex.execStmt(
 				ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes, canAutoCommit,
 			)
+
 			return err
 		}()
 		// Note: we write to ex.statsCollector.PhaseTimes, instead of ex.phaseTimes,
@@ -3590,4 +3597,10 @@ func init() {
 	logcrash.RegisterTagFn("gist", func(ctx context.Context) string {
 		return planGistFromCtx(ctx)
 	})
+}
+
+type Results struct {
+	ev      fsm.Event
+	payload fsm.EventPayload
+	err     error
 }

@@ -2199,6 +2199,13 @@ func TestTenantLogicCCL_tenant_unsupported(
 	runCCLLogicTest(t, "tenant_unsupported")
 }
 
+func TestTenantLogicCCL_txn_timeout(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "txn_timeout")
+}
+
 func TestTenantLogicCCL_zone_config_secondary_tenants(
 	t *testing.T,
 ) {

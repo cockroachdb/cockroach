@@ -75,6 +75,10 @@ const (
 	// committed or rolled back.
 	SessionEndExecTransaction
 
+	// SessionStartTransactionBegin is the SessionPhase when a transaction
+	// `BEGIN` starts. Resets when the transaction is committed
+	SessionStartTransactionBegin
+
 	// SessionStartTransactionCommit is the SessionPhase when a transaction
 	// `COMMIT` starts.
 	SessionStartTransactionCommit

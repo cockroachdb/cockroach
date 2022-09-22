@@ -3121,6 +3121,10 @@ func (m *sessionDataMutator) SetIdleInTransactionSessionTimeout(timeout time.Dur
 	m.data.IdleInTransactionSessionTimeout = timeout
 }
 
+func (m *sessionDataMutator) SetTransactionTimeout(timeout time.Duration) {
+	m.data.TransactionTimeout = timeout
+}
+
 func (m *sessionDataMutator) SetAllowPrepareAsOptPlan(val bool) {
 	m.data.AllowPrepareAsOptPlan = val
 }
@@ -3340,6 +3344,10 @@ func (m *sessionDataMutator) SetCopyFromAtomicEnabled(val bool) {
 
 func (m *sessionDataMutator) SetEnforceHomeRegion(val bool) {
 	m.data.EnforceHomeRegion = val
+}
+
+func (m *sessionDataMutator) transactionTimeout(timeout time.Duration) {
+	m.data.TransactionTimeout = timeout
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
