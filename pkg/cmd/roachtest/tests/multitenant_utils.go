@@ -250,7 +250,7 @@ func startTenantServer(
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- c.RunE(tenantCtx, node,
-			append([]string{binary, "mt", "start-sql"}, args...)...,
+			append([]string{"COCKROACH_UPGRADE_TO_DEV_VERSION=true", binary, "mt", "start-sql"}, args...)...,
 		)
 		close(errCh)
 	}()
