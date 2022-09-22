@@ -207,13 +207,13 @@ func reBucketExpAndTrim(buckets []float64, base, min, max float64) []float64 {
 		}
 	}
 	// b[j] > min and is the lower-bound of the j-th bucket. The min must be
-	// contained in the (j-1)-th bucket or earlier. We want to merge 0th bucket
+	// contained in the (j-1)-th bucket. We want to merge 0th bucket
 	// until the (j-2)-th one.
 	if j <= 2 {
 		// Nothing to do (we either have one or no buckets to merge together).
 	} else {
 		// We want trim the bucket list to start at (j-2)-th bucket, so just
-		// have bucket before the one containing the min.
+		// have one bucket before the one containing the min.
 		b = b[j-2:]
 		// b[0] now refers the lower bound of what was previously the (j-2)-th
 		// bucket. We make it start at -Inf.
