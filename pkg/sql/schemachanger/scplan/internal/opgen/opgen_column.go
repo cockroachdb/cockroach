@@ -39,6 +39,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
+				revertible(false),
 				emit(func(this *scpb.Column, md *targetsWithElementMap) *scop.MakeWriteOnlyColumnPublic {
 					return &scop.MakeWriteOnlyColumnPublic{
 						EventBase: newLogEventBase(this, md),

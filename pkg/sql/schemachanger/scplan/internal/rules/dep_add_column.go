@@ -109,10 +109,11 @@ func init() {
 		})
 }
 
-// When we add new columns that lead to creation of new secondary indexes,
-// we want the primary index (with new columns) to be in VALIDATED before
-// transitioning those secondary indexes to be existent.
+// These rules ensure secondary indexes added as a result of adding columns
+// progress into public in accordance with the new primary index.
 func init() {
+	// The new primary index should reach VALIDATED, a ready state to be used as
+	// source to backfill the new secondary index, before the secondary index becomes existent.
 	registerDepRule(
 		"primary index with new columns should exist before secondary indexes",
 		scgraph.Precedence,
@@ -131,6 +132,8 @@ func init() {
 			}
 		})
 
+	// The new primary index should reach VALIDATED, a ready state to be used as
+	// source to backfill the new secondary index, before the temp index becomes existent.
 	registerDepRule(
 		"primary index with new columns should exist before temp indexes",
 		scgraph.Precedence,
