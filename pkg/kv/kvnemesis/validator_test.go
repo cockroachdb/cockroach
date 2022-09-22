@@ -48,15 +48,22 @@ func withTimestamp(op Operation, ts int) Operation {
 }
 
 func withResult(op Operation, err error) Operation {
-	(*op.Result()) = resultError(context.Background(), err)
+	*op.Result() = resultInit(context.Background(), err)
+	// A number of operations are expected to report an execution
+	// timestamp. Sometime down the road we want to use that timestamp
+	// for validation throughout, but currently we only use it for
+	// transactions, and only in a limited fashion.
+	//
+	// Until we rely on it, we set a bogus timestamp here that will be obvious
+	// when and if it should start causing errors.
+	op.Result().OptionalTimestamp = hlc.Timestamp{Logical: 987}
 	return op
 }
 
 func withReadResult(op Operation, value string) Operation {
+	op = withResult(op, nil)
 	get := op.GetValue().(*GetOperation)
-	get.Result = Result{
-		Type: ResultType_Value,
-	}
+	get.Result.Type = ResultType_Value
 	if value != `` {
 		get.Result.Value = roachpb.MakeValueFromString(value).RawBytes
 	}
@@ -64,20 +71,18 @@ func withReadResult(op Operation, value string) Operation {
 }
 
 func withScanResult(op Operation, kvs ...KeyValue) Operation {
+	op = withResult(op, nil)
 	scan := op.GetValue().(*ScanOperation)
-	scan.Result = Result{
-		Type:   ResultType_Values,
-		Values: kvs,
-	}
+	scan.Result.Type = ResultType_Values
+	scan.Result.Values = kvs
 	return op
 }
 
 func withDeleteRangeResult(op Operation, keys ...[]byte) Operation {
+	op = withResult(op, nil)
 	delRange := op.GetValue().(*DeleteRangeOperation)
-	delRange.Result = Result{
-		Type: ResultType_Keys,
-		Keys: keys,
-	}
+	delRange.Result.Type = ResultType_Keys
+	delRange.Result.Keys = keys
 	return op
 }
 
