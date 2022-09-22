@@ -189,29 +189,10 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 
 		shouldInit := !c.useStartSingleNode()
 		if shouldInit {
-			l.Printf("%s: initializing cluster", c.Name)
-			initOut, err := c.initializeCluster(ctx, node)
-			if err != nil {
+			if err := c.Init(ctx, l); err != nil {
 				res.Err = err
 				return res, errors.Wrap(err, "failed to initialize cluster")
 			}
-
-			if initOut != "" {
-				l.Printf(initOut)
-			}
-		}
-
-		// We're sure to set cluster settings after having initialized the
-		// cluster.
-
-		l.Printf("%s: setting cluster settings", c.Name)
-		clusterSettingsOut, err := c.setClusterSettings(ctx, l, node)
-		if err != nil {
-			res.Err = err
-			return res, errors.Wrap(err, "unable to set cluster settings")
-		}
-		if clusterSettingsOut != "" {
-			l.Printf(clusterSettingsOut)
 		}
 		return res, nil
 	})
