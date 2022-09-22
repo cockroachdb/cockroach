@@ -2564,6 +2564,89 @@ are automatically converted server-side.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+## Storage telemetry events
+
+
+
+Events in this category are logged to the `TELEMETRY` channel.
+
+
+### `level_stats`
+
+An event of type `level_stats` contains per-level statistics for an LSM.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Level` | level is the level ID in a LSM (e.g. level(L0) == 0, etc.) | no |
+| `NumFiles` | num_files is the number of files in the level (gauge). | no |
+| `SizeBytes` | size_bytes is the size of the level, in bytes (gauge). | no |
+| `Score` | score is the compaction score of the level (gauge). | no |
+| `BytesIn` | bytes_in is the number of bytes written to this level (counter). | no |
+| `BytesIngested` | bytes_ingested is the number of bytes ingested into this level (counter). | no |
+| `BytesMoved` | bytes_moved is the number of bytes moved into this level via a move-compaction (counter). | no |
+| `BytesRead` | bytes_read is the number of bytes read from this level, during compactions (counter). | no |
+| `BytesCompacted` | bytes_compacted is the number of bytes written to this level during compactions (counter). | no |
+| `BytesFlushed` | bytes flushed is the number of bytes flushed to this level. This value is always zero for levels other than L0 (counter). | no |
+| `TablesCompacted` | tables_compacted is the count of tables compacted into this level (counter). | no |
+| `TablesFlushed` | tables_flushed is the count of tables flushed into this level (counter). | no |
+| `TablesIngested` | tables_ingested is the count of tables ingested into this level (counter). | no |
+| `TablesMoved` | tables_moved is the count of tables moved into this level via move-compactions (counter). | no |
+| `NumSublevels` | num_sublevel is the count of sublevels for the level. This value is always zero for levels other than L0 (gauge). | no |
+
+
+
+### `store_stats`
+
+An event of type `store_stats` contains per store stats.
+
+Note that because stats are scoped to the lifetime of the process, counters
+(and certain gauges) will be reset across node restarts.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `NodeId` | node_id is the ID of the node. | no |
+| `StoreId` | store_id is the ID of the store. | no |
+| `Levels` | levels is a nested message containing per-level statistics. | yes |
+| `CacheSize` | cache_size is the size of the cache for the store, in bytes (gauge). | no |
+| `CacheCount` | cache_count is the number of items in the cache (gauge). | no |
+| `CacheHits` | cache_hits is the number of cache hits (counter). | no |
+| `CacheMisses` | cache_misses is the number of cache misses (counter). | no |
+| `CompactionCountDefault` | compaction_count_default is the count of default compactions (counter). | no |
+| `CompactionCountDeleteOnly` | compaction_count_delete_only is the count of delete-only compactions (counter). | no |
+| `CompactionCountElisionOnly` | compaction_count_elision_only is the count of elision-only compactions (counter). | no |
+| `CompactionCountMove` | compaction_count_move is the count of move-compactions (counter). | no |
+| `CompactionCountRead` | compaction_count_read is the count of read-compactions (counter). | no |
+| `CompactionCountRewrite` | compaction_count_rewrite is the count of rewrite-compactions (counter). | no |
+| `CompactionNumInProgress` | compactions_num_in_progress is the number of compactions in progress (gauge). | no |
+| `CompactionMarkedFiles` | compaction_marked_files is the count of files marked for compaction (gauge). | no |
+| `FlushCount` | flush_count is the number of flushes (counter). | no |
+| `MemtableSize` | memtable_size is the total size allocated to all memtables and (large) batches, in bytes (gauge). | no |
+| `MemtableCount` | memtable_count is the count of memtables (gauge). | no |
+| `MemtableZombieCount` | memtable_zombie_count is the count of memtables no longer referenced by the current DB state, but still in use by an iterator (gauge). | no |
+| `MemtableZombieSize` | memtable_zombie_size is the size, in bytes, of all zombie memtables (gauge). | no |
+| `WalLiveCount` | wal_live_count is the count of live WAL files (gauge). | no |
+| `WalLiveSize` | wal_live_size is the size, in bytes, of live data in WAL files. With WAL recycling, this value is less than the actual on-disk size of the WAL files (gauge). | no |
+| `WalObsoleteCount` | wal_obsolete_count is the count of obsolete WAL files (gauge). | no |
+| `WalObsoleteSize` | wal_obsolete_size is the size of obsolete WAL files, in bytes (gauge). | no |
+| `WalPhysicalSize` | wal_physical_size is the size, in bytes, of the WAL files on disk (gauge). | no |
+| `WalBytesIn` | wal_bytes_in is the number of logical bytes written to the WAL (counter). | no |
+| `WalBytesWritten` | wal_bytes_written is the number of bytes written to the WAL (counter). | no |
+| `TableObsoleteCount` | table_obsolete_count is the number of tables which are no longer referenced by the current DB state or any open iterators (gauge). | no |
+| `TableObsoleteSize` | table_obsolete_size is the size, in bytes, of obsolete tables (gauge). | no |
+| `TableZombieCount` | table_zombie_count is the number of tables no longer referenced by the current DB state, but are still in use by an open iterator (gauge). | no |
+| `TableZombieSize` | table_zombie_size is the size, in bytes, of zombie tables (gauge). | no |
+| `RangeKeySetsCount` | range_key_sets_count is the approximate count of internal range key sets in the store. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Telemetry events
 
 

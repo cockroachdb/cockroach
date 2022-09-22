@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -126,6 +127,13 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
+
+// By default, telemetry events are emitted once per hour, per store:
+// (10s tick interval) * 6 * 60 = 3600s = 1h.
+var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
+	"COCKROACH_LOG_STORE_TELEMETRY_TICKS_INTERVAL",
+	6*60,
+)
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
@@ -3340,6 +3348,18 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		// NB: The initial blank line ensures that compaction stats display
 		// will not contain the log prefix.
 		log.Infof(ctx, "\n%s", m.Metrics)
+	}
+	// Periodically emit a store stats structured event to the TELEMETRY channel,
+	// if reporting is enabled. These events are intended to be emitted at low
+	// frequency. Trigger on every (N-1)-th tick to avoid spamming the telemetry
+	// channel if crash-looping.
+	if logcrash.DiagnosticsReportingEnabled.Get(&s.ClusterSettings().SV) &&
+		tick%logStoreTelemetryTicks == logStoreTelemetryTicks-1 {
+		// The stats event is populated from a subset of the Metrics.
+		e := m.AsStoreStatsEvent()
+		e.NodeId = int32(s.NodeID())
+		e.StoreId = int32(s.StoreID())
+		log.StructuredEvent(ctx, &e)
 	}
 	return nil
 }
