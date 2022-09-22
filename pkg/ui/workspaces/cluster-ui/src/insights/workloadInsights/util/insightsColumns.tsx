@@ -27,7 +27,11 @@ export const insightsColumnLabels = {
   numRetries: "Retries",
   isFullScan: "Full Scan",
   contention: "Contention Time",
+  contentionStartTime: "Contention Start Time (UTC)",
   rowsProcessed: "Rows Processed",
+  schemaName: "Schema Name",
+  databaseName: "Database Name",
+  tableName: "Table Name",
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -99,6 +103,12 @@ export const insightsTableTitles: InsightsTableTitleType = {
       "startTime",
     );
   },
+  contentionStartTime: (execType: InsightExecEnum) => {
+    return makeToolTip(
+      <p>The timestamp at which the contention started for the {execType}.</p>,
+      "contentionStartTime",
+    );
+  },
   elapsedTime: (execType: InsightExecEnum) => {
     return makeToolTip(
       <p>The time elapsed since the {execType} started execution.</p>,
@@ -109,6 +119,24 @@ export const insightsTableTitles: InsightsTableTitleType = {
     return makeToolTip(
       <p>The user that started the {execType}.</p>,
       "username",
+    );
+  },
+  schemaName: (execType: InsightExecEnum) => {
+    return makeToolTip(
+      <p>The schema name of the {execType} that had contention.</p>,
+      "schemaName",
+    );
+  },
+  databaseName: (execType: InsightExecEnum) => {
+    return makeToolTip(
+      <p>The database name of the {execType} that had contention.</p>,
+      "databaseName",
+    );
+  },
+  tableName: (execType: InsightExecEnum) => {
+    return makeToolTip(
+      <p>The table name of the {execType} that had contention.</p>,
+      "tableName",
     );
   },
   applicationName: (execType: InsightExecEnum) => {
