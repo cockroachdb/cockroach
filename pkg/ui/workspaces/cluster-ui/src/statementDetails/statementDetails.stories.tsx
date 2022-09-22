@@ -102,7 +102,5 @@ storiesOf("StatementDetails", module)
   )
   .add("No data for this time frame; no cached statement", () => {
     const props = getStatementDetailsPropsFixture(false);
-    props.latestQuery = "";
-    props.latestFormattedQuery = "";
     return <StatementDetails {...props} />;
   });
