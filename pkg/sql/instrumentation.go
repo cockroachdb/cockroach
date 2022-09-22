@@ -220,11 +220,13 @@ func (ih *instrumentationHelper) Setup(
 	ih.savePlanForStats =
 		statsCollector.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, p.SessionData().Database)
 
-	if ih.ShouldBuildExplainPlan() {
-		// Populate traceMetadata early in case we short-circuit the execution
-		// before reaching the bottom of this method.
-		ih.traceMetadata = make(execNodeTraceMetadata)
-	}
+	defer func() {
+		if ih.ShouldBuildExplainPlan() {
+			// Populate traceMetadata at the end once we have all properties of
+			// the helper setup.
+			ih.traceMetadata = make(execNodeTraceMetadata)
+		}
+	}()
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
 		if sp.IsVerbose() {
@@ -270,9 +272,6 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	ih.collectExecStats = true
-	if ih.traceMetadata == nil {
-		ih.traceMetadata = make(execNodeTraceMetadata)
-	}
 	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(tracing.RecordingVerbose))
 	ih.shouldFinishSpan = true
@@ -424,7 +423,8 @@ func (ih *instrumentationHelper) ShouldUseJobForCreateStats() bool {
 // ShouldBuildExplainPlan returns true if we should build an explain plan and
 // call RecordExplainPlan.
 func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
-	return ih.collectBundle || ih.savePlanForStats || ih.outputMode == explainAnalyzePlanOutput ||
+	return ih.collectBundle || ih.collectExecStats || ih.savePlanForStats ||
+		ih.outputMode == explainAnalyzePlanOutput ||
 		ih.outputMode == explainAnalyzeDistSQLOutput
 }
 
