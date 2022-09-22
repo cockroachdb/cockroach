@@ -38,15 +38,8 @@ export type TransactionInsightEvent = {
   execType: InsightExecEnum;
 };
 
-export type TransactionInsightEventDetails = {
-  executionID: string;
-  queries: string[];
-  insights: Insight[];
-  startTime: Moment;
-  elapsedTime: number;
-  contentionThreshold: number;
-  application: string;
-  fingerprintID: string;
+export type BlockedContentionDetails = {
+  collectionTimeStamp: Moment;
   blockingExecutionID: string;
   blockingFingerprintID: string;
   blockingQueries: string[];
@@ -55,6 +48,19 @@ export type TransactionInsightEventDetails = {
   databaseName: string;
   tableName: string;
   indexName: string;
+  contentionTimeMs: number;
+};
+
+export type TransactionInsightEventDetails = {
+  executionID: string;
+  queries: string[];
+  insights: Insight[];
+  startTime: Moment;
+  totalContentionTime: number;
+  contentionThreshold: number;
+  application: string;
+  fingerprintID: string;
+  blockingContentionDetails: BlockedContentionDetails[];
   execType: InsightExecEnum;
 };
 
@@ -97,7 +103,11 @@ export type EventExecution = {
   fingerprintID: string;
   queries: string[];
   startTime: Moment;
-  elapsedTime: number;
+  contentionTimeMs: number;
+  schemaName: string;
+  databaseName: string;
+  tableName: string;
+  indexName: string;
   execType: InsightExecEnum;
 };
 

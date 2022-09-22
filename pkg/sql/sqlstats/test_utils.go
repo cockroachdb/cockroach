@@ -33,6 +33,11 @@ type TestingKnobs struct {
 	// AOSTClause overrides the AS OF SYSTEM TIME clause in queries used in
 	// persistedsqlstats.
 	AOSTClause string
+
+	// JobMonitorUpdateCheckInterval if non-zero indicates the frequency at
+	// which the job monitor needs to check whether the schedule needs to be
+	// updated.
+	JobMonitorUpdateCheckInterval time.Duration
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.

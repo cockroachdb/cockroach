@@ -10,13 +10,14 @@
 
 import {
   executeInternalSql,
+  INTERNAL_SQL_API_APP,
+  LARGE_RESULT_SIZE,
+  LONG_TIMEOUT,
   SqlExecutionRequest,
   SqlExecutionResponse,
-  INTERNAL_SQL_API_APP,
-  LONG_TIMEOUT,
-  LARGE_RESULT_SIZE,
 } from "./sqlApi";
 import {
+  BlockedContentionDetails,
   InsightExecEnum,
   InsightNameEnum,
   StatementInsightEvent,
@@ -57,22 +58,25 @@ const txnContentionQuery = `SELECT *
                             FROM (SELECT waiting_txn_id,
                                          encode(
                                            waiting_txn_fingerprint_id, 'hex'
-                                           ) AS waiting_txn_fingerprint_id,
+                                           )                       AS waiting_txn_fingerprint_id,
                                          collection_ts,
-                                         contention_duration,
-                                         row_number() over (
-                                           PARTITION BY waiting_txn_fingerprint_id
-                                           ORDER BY
-                                             collection_ts DESC
-                                           ) AS rank,
-                                         threshold
+                                         total_contention_duration AS contention_duration,
+                                         row_number()                 over (
+                 PARTITION BY waiting_txn_fingerprint_id
+                 ORDER BY
+                     collection_ts DESC
+                 ) AS rank, threshold
                                   FROM (SELECT "sql.insights.latency_threshold" :: INTERVAL AS threshold
                                         FROM
                                           [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
-                                       (SELECT DISTINCT ON (waiting_txn_id) *
-                                        FROM crdb_internal.transaction_contention_events tce),
+                                       (SELECT waiting_txn_id,
+                                               waiting_txn_fingerprint_id,
+                                               max(collection_ts)       AS collection_ts,
+                                               sum(contention_duration) AS total_contention_duration
+                                        FROM crdb_internal.transaction_contention_events tce
+                                        GROUP BY waiting_txn_id, waiting_txn_fingerprint_id),
                                        (SELECT txn_id FROM crdb_internal.cluster_execution_insights)
-                                  WHERE contention_duration > threshold
+                                  WHERE total_contention_duration > threshold
                                      OR waiting_txn_id = txn_id)
                             WHERE rank = 1`;
 
@@ -352,24 +356,47 @@ type TxnContentionDetailsResponseColumns = {
 function transactionContentionDetailsResultsToEventState(
   response: SqlExecutionResponse<TxnContentionDetailsResponseColumns>,
 ): TransactionContentionEventDetailsResponse {
-  if (!response.execution.txn_results[0].rows) {
+  const resultsRows = response.execution.txn_results[0].rows;
+  if (!resultsRows) {
     // No data.
     return;
   }
-  const row = response.execution.txn_results[0].rows[0];
+
+  const blockingContentionDetails = new Array<BlockedContentionDetails>(
+    resultsRows.length,
+  );
+
+  let totalContentionTime = 0;
+  resultsRows.forEach((value, idx) => {
+    const contentionTimeInMs = moment
+      .duration(value.contention_duration)
+      .asMilliseconds();
+    totalContentionTime += contentionTimeInMs;
+    blockingContentionDetails[idx] = {
+      blockingExecutionID: value.blocking_txn_id,
+      blockingFingerprintID: value.blocking_txn_fingerprint_id,
+      blockingQueries: null,
+      collectionTimeStamp: moment(value.collection_ts),
+      contentionTimeMs: contentionTimeInMs,
+      contendedKey: value.key,
+      schemaName: value.schema_name,
+      databaseName: value.database_name,
+      tableName: value.table_name,
+      indexName:
+        value.index_name && value.index_name !== ""
+          ? value.index_name
+          : "primary index",
+    };
+  });
+
+  const row = resultsRows[0];
   return {
     executionID: row.waiting_txn_id,
     fingerprintID: row.waiting_txn_fingerprint_id,
     startTime: moment(row.collection_ts),
-    elapsedTime: moment.duration(row.contention_duration).asMilliseconds(),
+    totalContentionTime: totalContentionTime,
+    blockingContentionDetails: blockingContentionDetails,
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
-    blockingExecutionID: row.blocking_txn_id,
-    blockingFingerprintID: row.blocking_txn_fingerprint_id,
-    schemaName: row.schema_name,
-    databaseName: row.database_name,
-    tableName: row.table_name,
-    indexName: row.index_name,
-    contendedKey: row.key,
     insightName: InsightNameEnum.highContention,
     execType: InsightExecEnum.TRANSACTION,
   };
@@ -425,9 +452,13 @@ export function getTransactionInsightEventDetailsState(
       return executeInternalSql<FingerprintStmtsResponseColumns>(
         waitingFingerprintStmtsRequest,
       ).then(waitingTxnStmtQueries => {
-        const blockingTxnFingerprintId =
-          contentionResults.execution.txn_results[0].rows[0]
-            .blocking_txn_fingerprint_id;
+        let blockingTxnFingerprintId: string[] = [];
+        contentionResults.execution.txn_results.forEach(txnResult => {
+          blockingTxnFingerprintId = blockingTxnFingerprintId.concat(
+            txnResult.rows.map(x => x.blocking_txn_fingerprint_id),
+          );
+        });
+
         const blockingTxnFingerprintRequest: SqlExecutionRequest = {
           statements: [
             {
@@ -441,9 +472,17 @@ export function getTransactionInsightEventDetailsState(
         return executeInternalSql<TxnStmtFingerprintsResponseColumns>(
           blockingTxnFingerprintRequest,
         ).then(blockingTxnStmtFingerprintIDs => {
-          const blockingStmtFingerprintIDs =
-            blockingTxnStmtFingerprintIDs.execution.txn_results[0].rows[0]
-              .query_ids;
+          let blockingStmtFingerprintIDs: string[] = [];
+          blockingTxnStmtFingerprintIDs.execution.txn_results[0].rows.map(
+            row => {
+              if (row.query_ids && row.query_ids.length > 0) {
+                blockingStmtFingerprintIDs = blockingStmtFingerprintIDs.concat(
+                  row.query_ids,
+                );
+              }
+            },
+          );
+
           const blockingFingerprintStmtsRequest: SqlExecutionRequest = {
             statements: [
               {
@@ -492,18 +531,31 @@ export function combineTransactionInsightEventDetailsState(
     waitingFingerprintStmtState &&
     blockingFingerprintStmtState
   ) {
+    txnContentionDetailsState.blockingContentionDetails.forEach(blockedRow => {
+      const currBlockedFingerprintStmts = blockingTxnFingerprintState.filter(
+        x => x.fingerprintID === blockedRow.blockingFingerprintID,
+      );
+      if (
+        !currBlockedFingerprintStmts ||
+        currBlockedFingerprintStmts.length != 1
+      ) {
+        return;
+      }
+
+      blockedRow.blockingQueries = currBlockedFingerprintStmts[0].queryIDs.map(
+        id =>
+          blockingFingerprintStmtState.find(
+            stmt => stmt.stmtFingerprintID === id,
+          )?.query,
+      );
+    });
+
     res = {
       ...txnContentionDetailsState,
       application: waitingTxnFingerprintState[0].application,
       queries: waitingTxnFingerprintState[0].queryIDs.map(
         id =>
           waitingFingerprintStmtState.find(
-            stmt => stmt.stmtFingerprintID === id,
-          )?.query,
-      ),
-      blockingQueries: blockingTxnFingerprintState[0].queryIDs.map(
-        id =>
-          blockingFingerprintStmtState.find(
             stmt => stmt.stmtFingerprintID === id,
           )?.query,
       ),
