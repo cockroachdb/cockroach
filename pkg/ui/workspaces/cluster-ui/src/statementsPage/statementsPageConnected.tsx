@@ -17,6 +17,7 @@ import { actions as statementDiagnosticsActions } from "src/store/statementDiagn
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { actions as nodesActions } from "../store/nodes";
 import {
   StatementsPageDispatchProps,
   StatementsPageStateProps,
@@ -119,6 +120,7 @@ export const ConnectedStatementsPage = withRouter(
         },
         refreshStatementDiagnosticsRequests: () =>
           dispatch(statementDiagnosticsActions.refresh()),
+        refreshNodes: () => dispatch(nodesActions.refresh()),
         refreshUserSQLRoles: () =>
           dispatch(uiConfigActions.refreshUserSQLRoles()),
         resetSQLStats: (req: StatementsRequest) =>

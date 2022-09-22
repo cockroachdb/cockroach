@@ -14,6 +14,7 @@ import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
 import {
+  refreshNodes,
   refreshStatementDiagnosticsRequests,
   refreshStatements,
   refreshUserSQLRoles,
@@ -287,6 +288,7 @@ const fingerprintsPageActions = {
   refreshStatements,
   onTimeScaleChange: setGlobalTimeScaleAction,
   refreshStatementDiagnosticsRequests,
+  refreshNodes,
   refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
   dismissAlertMessage: () => {
