@@ -865,6 +865,27 @@ func TestSpan_KeyCount(t *testing.T) {
 			span:     ParseSpan(&evalCtx, "(/US_WEST - /US_WEST/fix]"),
 			expected: "FAIL",
 		},
+		{ // 23
+			// Fails since the key count overflows.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "[/0 - /9223372036854775807]"),
+			expected: "FAIL",
+		},
+		{ // 24
+			// Succeeds since the key count is int64 max.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "[/1 - /9223372036854775807]"),
+			expected: "9223372036854775807",
+		},
+		{ // 25
+			// Fails since the key count overflows.
+			keyCtx:   kcAscAsc,
+			length:   1,
+			span:     ParseSpan(&evalCtx, "[/-9223372036854775808 - /9223372036854775807]"),
+			expected: "FAIL",
+		},
 	}
 
 	for i, tc := range testCases {
