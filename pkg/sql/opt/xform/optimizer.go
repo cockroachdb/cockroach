@@ -1015,6 +1015,8 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		int(opt.FoldNullBinaryLeft),
 		int(opt.FoldNullComparisonRight),
 		int(opt.FoldNullComparisonLeft),
+		// FoldDivOne is needed for consistent formatting, so tests won't fail.
+		int(opt.FoldDivOne),
 		// Without PruneAggCols, it's common to receive
 		// "optimizer factory constructor call stack exceeded max depth of 10000"
 		int(opt.PruneAggCols),
