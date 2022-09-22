@@ -184,3 +184,10 @@ func TestCCLLogic_tenant_usage(
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "tenant_usage")
 }
+
+func TestCCLLogic_txn_timeout(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "txn_timeout")
+}
