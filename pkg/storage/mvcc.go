@@ -6269,8 +6269,9 @@ func ReplacePointTombstonesWithRangeTombstones(
 
 		key := iter.UnsafeKey()
 
-		// Skip intents and inline values.
-		if key.Timestamp.IsEmpty() {
+		// Skip intents and inline values, and system table keys which
+		// might be watched by rangefeeds.
+		if key.Timestamp.IsEmpty() || isWatchedSystemTable(key.Key) {
 			iter.NextKey()
 			continue
 		}
@@ -6361,4 +6362,30 @@ func ReplacePointTombstonesWithRangeTombstones(
 	}
 
 	return nil
+}
+
+// In order to test the correctness of range deletion tombstones, we added a
+// testing knob to replace point deletions with range deletion tombstones in
+// some tests. Unfortuantely, doing so affects the correctness of rangefeeds.
+// The tests in question do not use rangefeeds, but some system functionality
+// does use rangefeeds internally. The primary impact is that catch-up scans
+// will miss deletes. That makes these issues rare and hard to detect. In order
+// to deflake these tests, we avoid rewriting deletes on relevant system
+// tables.
+func isWatchedSystemTable(key roachpb.Key) bool {
+	rem, _, err := keys.DecodeTenantPrefix(key)
+	if err != nil { // allow unprefixed keys to pass through
+		return false
+	}
+	_, tableID, _, err := keys.DecodeTableIDIndexID(rem)
+	if err != nil { // allow keys which do not correspond to sql tables
+		return false
+	}
+	switch tableID {
+	case keys.SettingsTableID, keys.SpanConfigurationsTableID,
+		keys.SQLInstancesTableID, keys.DescriptorTableID, keys.ZonesTableID:
+		return true
+	default:
+		return false
+	}
 }
