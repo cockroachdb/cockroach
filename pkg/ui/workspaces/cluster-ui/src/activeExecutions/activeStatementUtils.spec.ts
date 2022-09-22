@@ -32,7 +32,6 @@ import {
 type ActiveQuery = protos.cockroach.server.serverpb.ActiveQuery;
 const Timestamp = protos.google.protobuf.Timestamp;
 
-const LAST_UPDATED = moment(new Date("2022-01-04T08:01:00"));
 const MOCK_START_TIME = moment(new Date("2022-01-04T08:00:00"));
 
 const defaultActiveQuery = {
@@ -53,7 +52,7 @@ const defaultActiveStatement: ActiveStatement = {
   query: defaultActiveQuery.sql,
   status: "Executing",
   start: MOCK_START_TIME,
-  elapsedTimeMillis: 60,
+  elapsedTime: moment.duration(60),
   application: "test",
   user: "user",
   clientAddress: "clientAddress",
@@ -79,7 +78,7 @@ function makeActiveTxn(
     transactionID: "txn",
     sessionID: "sessionID",
     start: MOCK_START_TIME,
-    elapsedTimeMillis: 10,
+    elapsedTime: moment.duration(60),
     application: "application",
     query: defaultActiveStatement.query,
     statementID: defaultActiveStatement.statementID,
@@ -215,10 +214,8 @@ describe("test activeStatementUtils", () => {
         toJSON: () => ({}),
       };
 
-      const statements = getActiveExecutionsFromSessions(
-        sessionsResponse,
-        LAST_UPDATED,
-      ).statements;
+      const statements =
+        getActiveExecutionsFromSessions(sessionsResponse).statements;
 
       expect(statements.length).toBe(2);
 
@@ -234,9 +231,6 @@ describe("test activeStatementUtils", () => {
         }
         // expect(stmt.transactionID).toBe(defaultActiveStatement.transactionID);
         expect(stmt.status).toBe("Executing");
-        expect(stmt.elapsedTimeMillis).toBe(
-          LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
-        );
         expect(stmt.start.unix()).toBe(
           TimestampToMoment(defaultActiveQuery.start).unix(),
         );
@@ -297,10 +291,8 @@ describe("test activeStatementUtils", () => {
         toJSON: () => ({}),
       };
 
-      const activeTransactions = getActiveExecutionsFromSessions(
-        sessionsResponse,
-        LAST_UPDATED,
-      ).transactions;
+      const activeTransactions =
+        getActiveExecutionsFromSessions(sessionsResponse).transactions;
 
       // Should filter out the txn from closed  session.
       expect(activeTransactions.length).toBe(2);
@@ -308,9 +300,6 @@ describe("test activeStatementUtils", () => {
       activeTransactions.forEach((txn: ActiveTransaction, i) => {
         expect(txn.application).toBe(
           sessionsResponse.sessions[i].application_name,
-        );
-        expect(txn.elapsedTimeMillis).toBe(
-          LAST_UPDATED.diff(MOCK_START_TIME, "ms"),
         );
         expect(txn.status).toBe("Executing");
         expect(txn.query).toBeTruthy();
@@ -356,10 +345,7 @@ describe("test activeStatementUtils", () => {
         toJSON: () => ({}),
       };
 
-      const activeExecs = getActiveExecutionsFromSessions(
-        sessionsResponse,
-        LAST_UPDATED,
-      );
+      const activeExecs = getActiveExecutionsFromSessions(sessionsResponse);
 
       expect(activeExecs.transactions[0].query).toBe(lastActiveQueryText);
       expect(activeExecs.transactions[1].query).toBeFalsy();

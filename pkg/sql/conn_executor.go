@@ -3131,11 +3131,14 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		autoRetryReasonStr = ex.state.mu.autoRetryReason.Error()
 	}
 
+	timeNow := timeutil.Now()
+
 	if txn != nil {
 		id := txn.ID()
 		activeTxnInfo = &serverpb.TxnInfo{
 			ID:                    id,
 			Start:                 ex.state.mu.txnStart,
+			ElapsedTime:           timeNow.Sub(ex.state.mu.txnStart),
 			NumStatementsExecuted: int32(ex.state.mu.stmtCount),
 			NumRetries:            int32(txn.Epoch()),
 			NumAutoRetries:        ex.state.mu.autoRetryCounter,
@@ -3178,10 +3181,12 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		sqlNoConstants := truncateSQL(formatStatementHideConstants(ast))
 		sql := truncateSQL(ast.String())
 		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
+		queryStart := query.start.UTC()
 		activeQueries = append(activeQueries, serverpb.ActiveQuery{
 			TxnID:          query.txnID,
 			ID:             id.String(),
-			Start:          query.start.UTC(),
+			Start:          queryStart,
+			ElapsedTime:    timeNow.Sub(queryStart),
 			Sql:            sql,
 			SqlNoConstants: sqlNoConstants,
 			SqlSummary:     formatStatementSummary(ast),
