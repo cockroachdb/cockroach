@@ -1403,7 +1403,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
-	if err := schedulerlatency.StartSampler(ctx, s.st, s.stopper); err != nil {
+	if err := schedulerlatency.StartSampler(
+		ctx, s.st, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
+	); err != nil {
 		return err
 	}
 

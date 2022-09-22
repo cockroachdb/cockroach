@@ -3516,6 +3516,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Scheduler Latency",
+				Metrics: []string{
+					"go.scheduler_latency",
+				},
+			},
+			{
 				Title: "Elastic CPU Durations",
 				Metrics: []string{
 					"admission.elastic_cpu.acquired_nanos",
