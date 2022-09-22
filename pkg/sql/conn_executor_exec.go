@@ -298,9 +298,13 @@ func (ex *connExecutor) execStmtInOpenState(
 	}(&ex.state)
 
 	var timeoutTicker *time.Timer
+	var txnTimeoutTicker *time.Timer
 	queryTimedOut := false
+	txnTimedOut := false
+
 	// doneAfterFunc will be allocated only when timeoutTicker is non-nil.
 	var doneAfterFunc chan struct{}
+	var txnDoneAfterFunc chan struct{}
 
 	// Early-associate placeholder info with the eval context,
 	// so that we can fill in placeholder values in our call to addActiveQuery, below.
@@ -321,6 +325,13 @@ func (ex *connExecutor) execStmtInOpenState(
 				// Wait for the timer callback to complete to avoid a data race on
 				// queryTimedOut.
 				<-doneAfterFunc
+			}
+		}
+		if txnTimeoutTicker != nil {
+			if !txnTimeoutTicker.Stop() {
+				// Wait for the timer callback to complete to avoid a data race on
+				// queryTimedOut.
+				<-txnDoneAfterFunc
 			}
 		}
 
@@ -365,6 +376,13 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 			res.SetError(sqlerrors.QueryTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
+		}
+		if txnTimedOut {
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(ast)),
+			}
+			res.SetError(sqlerrors.QueryTimeoutError)
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 		}
 	}(ctx, res)
 
@@ -475,6 +493,24 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 		// TODO(radu): consider removing this if/when #46164 is addressed.
 		p.extendedEvalCtx.Context.Context = ctx
+	}
+
+	if ex.sessionData().TransactionTimeout > 0 {
+		timerDuration :=
+			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
+
+		// If the timer already expired, then we should still proceed with executing
+		// the statement in order to get a TransactionAbortedError.
+		if timerDuration > 0 {
+			txnDoneAfterFunc = make(chan struct{}, 1)
+			txnTimeoutTicker = time.AfterFunc(
+				timerDuration,
+				func() {
+					cancelQuery()
+					txnTimedOut = true
+					txnDoneAfterFunc <- struct{}{}
+				})
+		}
 	}
 
 	// We exempt `SET` statements from the statement timeout, particularly so as

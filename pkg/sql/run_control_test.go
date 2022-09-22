@@ -545,6 +545,84 @@ func TestIdleInTransactionSessionTimeout(t *testing.T) {
 	}
 }
 
+func TestTransactionTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	defer tc.ServerConn(0).Close()
+
+	var TransactionStatus string
+
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET transaction_timeout = '1s'`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `select pg_sleep(1);`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `select pg_sleep(1);`)
+	require.Regexp(t, "pq: query execution canceled due to statement timeout", err)
+
+	err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+	require.NoError(t, err)
+	if TransactionStatus != "Aborted" {
+		conn, err = tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		t.Fatal(errors.Errorf("expected transaction status %s, got %s", "Aborted", TransactionStatus))
+	}
+
+	_, err = conn.ExecContext(ctx, `SELECT 1;`)
+	require.Regexp(t, "current transaction is aborted", err)
+
+	_, err = conn.ExecContext(ctx, `ROLLBACK`)
+	require.NoError(t, err)
+
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	_, err = conn.ExecContext(ctx, `SET transaction_timeout = '10s'`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `select pg_sleep(1);`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SELECT 1;`)
+	require.NoError(t, err)
+
+	err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+	require.NoError(t, err)
+	if TransactionStatus != "Open" {
+		conn, err = tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		t.Fatal(errors.Errorf("expected transaction status %s, got %s", "Open", TransactionStatus))
+	}
+
+	_, err = conn.ExecContext(ctx, `COMMIT`)
+	require.NoError(t, err)
+}
+
 func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

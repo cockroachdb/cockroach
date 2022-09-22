@@ -291,6 +291,9 @@ message LocalOnlySessionData {
   // OptimizerUseForecasts indicates whether we should use statistics forecasts
   // for cardinality estimation in the optimizer.
   bool optimizer_use_forecasts = 79;
+  // TransactionSessionTimeout is the duration a transaction is permitted to
+  // run before the transaction is canceled. If set to 0, there is no timeout.
+  int64 transaction_timeout = 80 [(gogoproto.casttype) = "time.Duration"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -101,9 +101,17 @@ func TestCCLLogic_schema_change_in_txn(
 	runCCLLogicTest(t, "schema_change_in_txn")
 }
 
+<<<<<<< HEAD
 func TestCCLLogic_show_create(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "show_create")
+=======
+func TestCCLLogic_txn_timeout(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "txn_timeout")
+>>>>>>> 55e5f60445 (sql: Add server-side transaction timeout)
 }
