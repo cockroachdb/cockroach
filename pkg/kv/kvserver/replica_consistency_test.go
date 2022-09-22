@@ -124,8 +124,10 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 
 	// Context is canceled during the initial waiting.
 	id = uuid.FastMakeV4()
+	ctx, cancel = context.WithCancel(context.Background())
+	cancel()
 	rc, err = tc.repl.getChecksum(ctx, id)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, rc.Checksum)
 	requireChecksumTaskNotStarted(id)
 }
