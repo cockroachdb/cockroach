@@ -31,7 +31,6 @@ go_library(
         "pebble_mvcc_scanner.go",
         "point_synthesizing_iter.go",
         "read_as_of_iterator.go",
-        "replicas_storage.go",
         "resource_limiter.go",
         "row_counter.go",
         "slice.go",
@@ -94,7 +93,6 @@ go_library(
         "@com_github_elastic_gosigar//:gosigar",
         "@com_github_gogo_protobuf//proto",
         "@com_github_prometheus_client_model//go",
-        "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
 

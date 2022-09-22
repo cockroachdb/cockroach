@@ -108,12 +108,12 @@ var (
 
 	// 2. Unreplicated Range-ID keys
 	//
-	// localRangeIDUnreplicatedInfix is the post-Range ID specifier for all
+	// LocalRangeIDUnreplicatedInfix is the post-Range ID specifier for all
 	// per-range data that is not fully Raft replicated. By appending this
 	// after the Range ID, these keys will be sorted directly after the local
 	// replicated keys for the same Range ID, so they can be manipulated either
 	// together or individually in a single scan.
-	localRangeIDUnreplicatedInfix = []byte("u")
+	LocalRangeIDUnreplicatedInfix = []byte("u")
 	// LocalRangeTombstoneSuffix is the suffix for the range tombstone.
 	//
 	// NB: This suffix was originally named LocalRaftTombstoneSuffix, which is

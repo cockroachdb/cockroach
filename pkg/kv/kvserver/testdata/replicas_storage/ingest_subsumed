@@ -1,0 +1,129 @@
+new
+----
+
+create-uninit range-id=1 replica-id=2
+----
+== r1/2 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+ingest-snapshot range-id=1 replica-id=2 raft-index=11 raft-term=5 span=a,c keys=a,b ts=12
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-c} desc-ts: 12 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12
+
+create-uninit range-id=2 replica-id=3
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-c} desc-ts: 12 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12
+== r2/3 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+ingest-snapshot range-id=2 replica-id=3 raft-index=12 raft-term=6 span=c,e keys=c,d ts=12
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-c} desc-ts: 12 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12
+== r2/3 inited ==
+  hs: term:0 vote:0 commit:12  trunc-state: index:12 term:6 
+  span: {c-e} desc-ts: 12 appliedState: index: 12, term: 6
+  global: "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+
+
+# RangeID 1 [a,c), RangeID 2 [c,e). Try to destroy 1 by ingesting a snapshot
+# for 2 with span [b,e). Fails because did not list rangeID 1 as subsumed in
+# the parameter.
+ingest-snapshot range-id=2 replica-id=3 raft-index=13 raft-term=6 span=b,e keys=b,c,d ts=13
+----
+additional range with rangeID 1 is being subsumed
+
+# Subsumption succeeds.
+ingest-snapshot range-id=2 replica-id=3 raft-index=13 raft-term=6 span=b,e keys=b,c,d ts=13 subsumed-range-ids=1
+----
+== r2/3 inited ==
+  hs: term:0 vote:0 commit:13  trunc-state: index:13 term:6 
+  span: {b-e} desc-ts: 13 appliedState: index: 13, term: 6
+  global: "b"/0.000000013,0=b.13 "c"/0.000000013,0=c.13 "d"/0.000000013,0=d.13
+
+# Cannot recreate rangeID 1 because we know it has been merged in history and
+# there is a RangeTombstone preventing it from ever being recreated.
+create-uninit range-id=1 replica-id=20000
+----
+raft group deleted
+
+# Create ranges on either side of rangeID 2 that it will subsume.
+create-uninit range-id=3 replica-id=4
+----
+== r2/3 inited ==
+  hs: term:0 vote:0 commit:13  trunc-state: index:13 term:6 
+  span: {b-e} desc-ts: 13 appliedState: index: 13, term: 6
+  global: "b"/0.000000013,0=b.13 "c"/0.000000013,0=c.13 "d"/0.000000013,0=d.13
+== r3/4 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+ingest-snapshot range-id=3 replica-id=4 raft-index=12 raft-term=6 span=a,b keys=a,ab ts=12
+----
+== r3/4 inited ==
+  hs: term:0 vote:0 commit:12  trunc-state: index:12 term:6 
+  span: {a-b} desc-ts: 12 appliedState: index: 12, term: 6
+  global: "a"/0.000000012,0=a.12 "ab"/0.000000012,0=ab.12
+== r2/3 inited ==
+  hs: term:0 vote:0 commit:13  trunc-state: index:13 term:6 
+  span: {b-e} desc-ts: 13 appliedState: index: 13, term: 6
+  global: "b"/0.000000013,0=b.13 "c"/0.000000013,0=c.13 "d"/0.000000013,0=d.13
+
+create-uninit range-id=4 replica-id=5
+----
+== r3/4 inited ==
+  hs: term:0 vote:0 commit:12  trunc-state: index:12 term:6 
+  span: {a-b} desc-ts: 12 appliedState: index: 12, term: 6
+  global: "a"/0.000000012,0=a.12 "ab"/0.000000012,0=ab.12
+== r2/3 inited ==
+  hs: term:0 vote:0 commit:13  trunc-state: index:13 term:6 
+  span: {b-e} desc-ts: 13 appliedState: index: 13, term: 6
+  global: "b"/0.000000013,0=b.13 "c"/0.000000013,0=c.13 "d"/0.000000013,0=d.13
+== r4/5 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+ingest-snapshot range-id=4 replica-id=5 raft-index=12 raft-term=6 span=e,g keys=e,f ts=12
+----
+== r3/4 inited ==
+  hs: term:0 vote:0 commit:12  trunc-state: index:12 term:6 
+  span: {a-b} desc-ts: 12 appliedState: index: 12, term: 6
+  global: "a"/0.000000012,0=a.12 "ab"/0.000000012,0=ab.12
+== r2/3 inited ==
+  hs: term:0 vote:0 commit:13  trunc-state: index:13 term:6 
+  span: {b-e} desc-ts: 13 appliedState: index: 13, term: 6
+  global: "b"/0.000000013,0=b.13 "c"/0.000000013,0=c.13 "d"/0.000000013,0=d.13
+== r4/5 inited ==
+  hs: term:0 vote:0 commit:12  trunc-state: index:12 term:6 
+  span: {e-g} desc-ts: 12 appliedState: index: 12, term: 6
+  global: "e"/0.000000012,0=e.12 "f"/0.000000012,0=f.12
+
+# RangeID 3 [a,b), RangeID 2 [b,e), RangeID 4 [e,g). Try to subsume 3 and 4 by
+# expanding span of 2 to [ab,f).
+ingest-snapshot range-id=2 replica-id=3 raft-index=14 raft-term=6 span=ab,f keys=ab,c,e ts=14
+----
+additional range with rangeID 3 is being subsumed
+
+# Did not list all the rangeIDs being subsumed.
+ingest-snapshot range-id=2 replica-id=3 raft-index=14 raft-term=6 span=ab,f keys=ab,c,e ts=14 subsumed-range-ids=3
+----
+additional range with rangeID 4 is being subsumed
+
+# Did not list all the rangeIDs being subsumed.
+ingest-snapshot range-id=2 replica-id=3 raft-index=14 raft-term=6 span=ab,f keys=ab,c,e ts=14 subsumed-range-ids=4
+----
+additional range with rangeID 3 is being subsumed
+
+# Subsumption succeeds.
+ingest-snapshot range-id=2 replica-id=3 raft-index=14 raft-term=6 span=ab,f keys=ab,c,e ts=14 subsumed-range-ids=3,4
+----
+== r2/3 inited ==
+  hs: term:0 vote:0 commit:14  trunc-state: index:14 term:6 
+  span: {ab-f} desc-ts: 14 appliedState: index: 14, term: 6
+  global: "ab"/0.000000014,0=ab.14 "c"/0.000000014,0=c.14 "e"/0.000000014,0=e.14

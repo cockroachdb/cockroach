@@ -1,0 +1,202 @@
+new
+----
+
+create-uninit range-id=1 replica-id=2
+----
+== r1/2 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+ingest-snapshot range-id=1 replica-id=2 raft-index=11 raft-term=5 span=a,e keys=a,b,c,d ts=12
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-e} desc-ts: 12 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12 "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+
+# Create rangeID 2 which will be the RHS of a split.
+create-uninit range-id=2 replica-id=3
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-e} desc-ts: 12 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12 "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+== r2/3 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Update the HardState for rangeID 2 since an uninitialized replica can vote.
+mutation range-id=2 replica-id=3 apply=false raft-term=6 raft-vote=7
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-e} desc-ts: 12 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12 "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+== r2/3 uninited ==
+  hs: term:6 vote:7 commit:0  trunc-state: index:0 term:0 
+
+# Split rangeID 1 where the RHS has existing raft state.
+split-replica range-id=1 replica-id=2 rhs-range-id=2 rhs-replica-id=3 rhs-span=c,e ts=13
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-c} desc-ts: 13 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-e} desc-ts: 13 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+
+# Create rangeID 3 that will be removed, creating a RangeTombstone preventing
+# replicaID's < 5.
+create-uninit range-id=3 replica-id=4
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-c} desc-ts: 13 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-e} desc-ts: 13 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+== r3/4 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+discard-replica range-id=3 replica-id=4 next-replica-id=5
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-c} desc-ts: 13 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-e} desc-ts: 13 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+
+# Split rangeID 1 where the RHS is rangeID 3 and replicaID 4, which has
+# already been removed. The global state at key b is also deleted.
+split-replica range-id=1 replica-id=2 rhs-range-id=3 rhs-replica-id=4 rhs-span=b,c ts=14
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-b} desc-ts: 14 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-e} desc-ts: 13 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+
+
+# Create, remove and create again rangeID 4.
+create-uninit range-id=4 replica-id=5
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-b} desc-ts: 14 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-e} desc-ts: 13 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+== r4/5 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+discard-replica range-id=4 replica-id=5 next-replica-id=6
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-b} desc-ts: 14 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-e} desc-ts: 13 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+
+create-uninit range-id=4 replica-id=6
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-b} desc-ts: 14 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-e} desc-ts: 13 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+== r4/6 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 6 trunc-state: index:0 term:0 
+
+mutation range-id=4 replica-id=6 apply=false raft-term=6 raft-vote=7
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-b} desc-ts: 14 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-e} desc-ts: 13 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12 "d"/0.000000012,0=d.12
+== r4/6 uninited ==
+  hs: term:6 vote:7 commit:0  next-replica-id: 6 trunc-state: index:0 term:0 
+
+# Split rangeID 2 where the RHS is rangeID 4 and replicaID 5, which has
+# already been removed, though replicaID 6 is present.
+split-replica range-id=2 replica-id=3 rhs-range-id=4 rhs-replica-id=5 rhs-span=d,e ts=15
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-b} desc-ts: 14 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-d} desc-ts: 15 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12
+== r4/6 uninited ==
+  hs: term:6 vote:7 commit:0  next-replica-id: 6 trunc-state: index:0 term:0 
+
+# Test split via snapshot ingestion by first initializing a new range.
+create-uninit range-id=5 replica-id=6
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-b} desc-ts: 14 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-d} desc-ts: 15 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12
+== r4/6 uninited ==
+  hs: term:6 vote:7 commit:0  next-replica-id: 6 trunc-state: index:0 term:0 
+== r5/6 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+ingest-snapshot range-id=5 replica-id=6 raft-index=11 raft-term=5 span=e,h keys=e,f,g ts=12
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-b} desc-ts: 14 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-d} desc-ts: 15 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12
+== r5/6 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {e-h} desc-ts: 12 appliedState: index: 11, term: 5
+  global: "e"/0.000000012,0=e.12 "f"/0.000000012,0=f.12 "g"/0.000000012,0=g.12
+== r4/6 uninited ==
+  hs: term:6 vote:7 commit:0  next-replica-id: 6 trunc-state: index:0 term:0 
+
+ingest-snapshot range-id=5 replica-id=6 raft-index=12 raft-term=6 span=f,g keys=f ts=14
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-b} desc-ts: 14 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+== r2/3 inited ==
+  hs: term:6 vote:7 commit:10  trunc-state: index:10 term:5 
+  span: {c-d} desc-ts: 15 appliedState: index: 10, term: 5
+  global: "c"/0.000000012,0=c.12
+== r5/6 inited ==
+  hs: term:0 vote:0 commit:12  trunc-state: index:12 term:6 
+  span: {f-g} desc-ts: 14 appliedState: index: 12, term: 6
+  global: "f"/0.000000014,0=f.14
+== r4/6 uninited ==
+  hs: term:6 vote:7 commit:0  next-replica-id: 6 trunc-state: index:0 term:0 
