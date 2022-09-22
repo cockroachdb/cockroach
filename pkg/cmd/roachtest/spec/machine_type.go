@@ -13,42 +13,63 @@ package spec
 import "fmt"
 
 // AWSMachineType selects a machine type given the desired number of CPUs.
-func AWSMachineType(cpus int) string {
+func AWSMachineType(cpus int, highmem bool) string {
+	// TODO(erikgrinaker): These have significantly less RAM than
+	// their GCE counterparts. Consider harmonizing them.
+	family := "c5d" // 2 GB RAM per CPU
+	if highmem {
+		family = "m5d" // 4 GB RAM per CPU
+	}
+
+	var size string
 	switch {
 	case cpus <= 2:
-		return "c5d.large"
+		size = "large"
 	case cpus <= 4:
-		return "c5d.xlarge"
+		size = "xlarge"
 	case cpus <= 8:
-		return "c5d.2xlarge"
+		size = "2xlarge"
 	case cpus <= 16:
-		return "c5d.4xlarge"
+		size = "4xlarge"
 	case cpus <= 36:
-		return "c5d.9xlarge"
+		size = "9xlarge"
 	case cpus <= 72:
-		return "c5d.18xlarge"
+		size = "18xlarge"
 	case cpus <= 96:
-		// There is no c5d.24xlarge.
-		return "m5d.24xlarge"
+		size = "24xlarge"
 	default:
 		panic(fmt.Sprintf("no aws machine type with %d cpus", cpus))
 	}
+
+	// There is no c5d.24xlarge.
+	if family == "c5d" && size == "24xlarge" {
+		family = "m5d"
+	}
+
+	return fmt.Sprintf("%s.%s", family, size)
 }
 
 // GCEMachineType selects a machine type given the desired number of CPUs.
-func GCEMachineType(cpus int) string {
+func GCEMachineType(cpus int, highmem bool) string {
 	// TODO(peter): This is awkward: at or below 16 cpus, use n1-standard so that
 	// the machines have a decent amount of RAM. We could use custom machine
 	// configurations, but the rules for the amount of RAM per CPU need to be
 	// determined (you can't request any arbitrary amount of RAM).
-	if cpus <= 16 {
-		return fmt.Sprintf("n1-standard-%d", cpus)
+	series := "n1"
+	kind := "standard" // 3.75 GB RAM per CPU
+	if highmem {
+		kind = "highmem" // 6.5 GB RAM per CPU
+	} else if cpus > 16 {
+		kind = "highcpu" // 0.9 GB RAM per CPU
 	}
-	return fmt.Sprintf("n1-highcpu-%d", cpus)
+	return fmt.Sprintf("%s-%s-%d", series, kind, cpus)
 }
 
 // AzureMachineType selects a machine type given the desired number of CPUs.
-func AzureMachineType(cpus int) string {
+func AzureMachineType(cpus int, highmem bool) string {
+	if highmem {
+		panic("highmem not implemented for Azure")
+	}
 	switch {
 	case cpus <= 2:
 		return "Standard_D2_v3"
