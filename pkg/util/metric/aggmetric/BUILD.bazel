@@ -27,10 +27,13 @@ go_test(
     size = "small",
     srcs = ["agg_metric_test.go"],
     args = ["-test.timeout=55s"],
+    data = glob(["testdata/**"]),
     deps = [
         ":aggmetric",
         "//pkg/base",
         "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "@com_github_prometheus_client_model//go",

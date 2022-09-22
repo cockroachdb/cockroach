@@ -42,6 +42,7 @@ go_test(
     size = "small",
     srcs = [
         "histogram_buckets_test.go",
+        "metric_ext_test.go",
         "metric_test.go",
         "prometheus_exporter_test.go",
         "prometheus_rule_exporter_test.go",
@@ -49,8 +50,11 @@ go_test(
         "rule_test.go",
     ],
     args = ["-test.timeout=55s"],
+    data = glob(["testdata/**"]),
     embed = [":metric"],
     deps = [
+        "//pkg/testutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/log",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_kr_pretty//:pretty",
