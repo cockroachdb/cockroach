@@ -248,15 +248,7 @@ message ConditionalPutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // The value to put.
   Value value = 2 [(gogoproto.nullable) = false];
-  // deprecated_exp_val represents the expected existing value for the key. If
-  // the existing value is different, the request will return a
-  // ConditionFailedError. A missing (Go nil) deprecated_exp_value.raw_bytes
-  // means that the key is expected to not exist.
-  //
-  // This is deprecated in 20.2 in favor of exp_bytes, which clarifies that the
-  // checksum and timestamp of the expected value are irrelevant. Remove in
-  // 21.1.
-  Value deprecated_exp_value = 3;
+  reserved 3;
   // exp_bytes represents the expected existing value for the key. If empty, the
   // key is expected to not exist. If not empty, these bytes are expected to
   // contain the tag and data of the existing value (without the existing
