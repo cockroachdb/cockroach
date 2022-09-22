@@ -94,6 +94,23 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 			Info:       "Returns previous value of a row as JSONB",
 			Volatility: volatility.Stable,
 		}),
+	"cdc_partition_key": makeCDCBuiltIn(
+		"cdc_partition_key",
+		tree.Overload{
+			Types:      tree.VariadicType{VarType: types.Any},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				var datums []tree.Datum
+				rowEvalContext := rowEvalContextFromEvalContext(evalCtx)
+				for _, arg := range args {
+					datums = append(datums, arg)
+				}
+				rowEvalContext.updatedRow.GetEventDescriptor().AssignPartitionDatums(datums)
+				return tree.DBoolTrue, nil
+			},
+			Info:       "Returns true and allows for partitioning off of inputted columns",
+			Volatility: volatility.Stable,
+		}),
 }
 
 // TODO(yevgeniy): Implement additional functions (some ideas, not all should be implemented):

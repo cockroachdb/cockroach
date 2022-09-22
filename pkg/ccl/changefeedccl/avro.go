@@ -701,7 +701,7 @@ func columnToAvroSchema(col cdcevent.ResultColumn) (*avroSchemaField, error) {
 // Only columns returned by Iterator as used to popoulate schema fields.
 // sqlName can be any string but should uniquely identify a schema.
 func newSchemaForRow(
-	it cdcevent.Iterator, sqlName string, namespace string,
+	it cdcevent.Iterator, sqlName string, namespace string, partitioning bool,
 ) (*avroDataRecord, error) {
 	schema := &avroDataRecord{
 		avroRecord: avroRecord{
@@ -713,7 +713,7 @@ func newSchemaForRow(
 		colIdxByFieldIdx: make(map[int]int),
 	}
 
-	if err := it.Col(func(col cdcevent.ResultColumn) error {
+	setColSchema := func(col cdcevent.ResultColumn) error {
 		field, err := columnToAvroSchema(col)
 		if err != nil {
 			return err
@@ -725,7 +725,15 @@ func newSchemaForRow(
 		schema.fieldIdxByName[field.Name] = len(schema.Fields)
 		schema.Fields = append(schema.Fields, field)
 		return nil
-	}); err != nil {
+	}
+
+	var err error
+	if partitioning {
+		err = it.PartitionCol(setColSchema)
+	} else {
+		err = it.Col(setColSchema)
+	}
+	if err != nil {
 		return nil, err
 	}
 
@@ -744,7 +752,14 @@ func newSchemaForRow(
 func primaryIndexToAvroSchema(
 	row cdcevent.Row, sqlName string, namespace string,
 ) (*avroDataRecord, error) {
-	return newSchemaForRow(row.ForEachKeyColumn(), SQLNameToAvroName(sqlName), namespace)
+	return newSchemaForRow(row.ForEachKeyColumn(), SQLNameToAvroName(sqlName), namespace, false)
+}
+
+// partitionColsToAvroSchema constructs schema for partition columns.
+func partitionColsToAvroSchema(
+	row cdcevent.Row, sqlName string, namespace string,
+) (*avroDataRecord, error) {
+	return newSchemaForRow(row.ForEachPartitionColumn(), SQLNameToAvroName(sqlName), namespace, true)
 }
 
 const (
@@ -771,7 +786,7 @@ func tableToAvroSchema(
 	if nameSuffix != avroSchemaNoSuffix {
 		sqlName = sqlName + `_` + nameSuffix
 	}
-	return newSchemaForRow(row.ForEachColumn(), sqlName, namespace)
+	return newSchemaForRow(row.ForEachColumn(), sqlName, namespace, false)
 }
 
 // BinaryFromRow encodes the given row data into avro's defined binary format.

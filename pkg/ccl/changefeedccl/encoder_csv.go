@@ -40,7 +40,7 @@ func newCSVEncoder(opts changefeedbase.EncodingOptions) *csvEncoder {
 }
 
 // EncodeKey implements the Encoder interface.
-func (e *csvEncoder) EncodeKey(_ context.Context, row cdcevent.Row) ([]byte, error) {
+func (e *csvEncoder) EncodeKey(_ context.Context, row cdcevent.Row, _ bool) ([]byte, error) {
 	return nil, nil
 }
 

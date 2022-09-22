@@ -79,8 +79,20 @@ func makeJSONEncoder(
 }
 
 // EncodeKey implements the Encoder interface.
-func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) ([]byte, error) {
-	jsonEntries, err := e.encodeKeyRaw(row)
+func (e *jsonEncoder) EncodeKey(
+	_ context.Context, row cdcevent.Row, partitioning bool,
+) ([]byte, error) {
+	var jsonEntries []interface{}
+	var err error
+	var encodeIter cdcevent.Iterator
+
+	if partitioning {
+		encodeIter = row.ForEachPartitionDatum()
+	} else {
+		encodeIter = row.ForEachKeyColumn()
+	}
+
+	jsonEntries, err = e.encodeKeyIter(encodeIter, partitioning)
 	if err != nil {
 		return nil, err
 	}
@@ -91,6 +103,32 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) ([]byte, er
 	e.buf.Reset()
 	j.Format(&e.buf)
 	return e.buf.Bytes(), nil
+}
+
+// Encodes the datums of either the key columns or partition columns.
+func (e *jsonEncoder) encodeKeyIter(
+	it cdcevent.Iterator, partitioning bool,
+) ([]interface{}, error) {
+	var jsonEntries []interface{}
+	encode := func(d tree.Datum, col cdcevent.ResultColumn) error {
+		j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+		if err != nil {
+			return err
+		}
+		jsonEntries = append(jsonEntries, j)
+		return nil
+	}
+
+	var err error
+	if partitioning {
+		err = it.PartitionDatum(encode)
+	} else {
+		err = it.Datum(encode)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return jsonEntries, nil
 }
 
 func (e *jsonEncoder) encodeKeyRaw(row cdcevent.Row) ([]interface{}, error) {

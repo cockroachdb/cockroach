@@ -401,7 +401,7 @@ func BenchmarkEmitRow(b *testing.B) {
 
 type testEncoder struct{}
 
-func (testEncoder) EncodeKey(context.Context, cdcevent.Row) ([]byte, error) {
+func (testEncoder) EncodeKey(context.Context, cdcevent.Row, bool) ([]byte, error) {
 	panic(`unimplemented`)
 }
 func (testEncoder) EncodeValue(

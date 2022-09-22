@@ -11,6 +11,7 @@ package cdcevent
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -78,6 +79,10 @@ type Iterator interface {
 	Datum(fn DatumFn) error
 	// Col invokes fn for each column.
 	Col(fn ColumnFn) error
+	// PartitionDatum invokes fn for each partition datum.
+	PartitionDatum(fn DatumFn) error
+	// PartitionCol invokes fn for each partition column.
+	PartitionCol(fn ColumnFn) error
 }
 
 // ForEachKeyColumn returns Iterator for each key column
@@ -93,6 +98,25 @@ func (r Row) ForEachColumn() Iterator {
 // ForEachUDTColumn returns Datum iterator for each column containing user defined types.
 func (r Row) ForEachUDTColumn() Iterator {
 	return iter{r: r, cols: r.udtCols}
+}
+
+//ForEachPartitionDatum returns Datum iterator for each partition datum.
+func (r Row) ForEachPartitionDatum() Iterator {
+	return iter{r: r, datums: r.partitionDatums}
+}
+
+//ForEachPartitionColumn returns Iterator for each partition column.
+func (r Row) ForEachPartitionColumn() Iterator {
+	var cols []int
+	for i := 0; i < len(r.partitionCols); i++ {
+		cols = append(cols, i)
+	}
+	return iter{r: r, cols: cols}
+}
+
+// GetEventDescriptor returns the EventDescriptor for the row.
+func (r Row) GetEventDescriptor() *EventDescriptor {
+	return r.EventDescriptor
 }
 
 // DatumAt returns Datum at specified position.
@@ -155,6 +179,26 @@ func (r Row) forEachColumn(fn ColumnFn, colIndexes []int) error {
 	return nil
 }
 
+// forEachPartitionDatum is a helper which invokes fn for each partition datum.
+func (r Row) forEachPartitionDatum(fn DatumFn, partitionDatums []tree.Datum) error {
+	for i, datum := range partitionDatums {
+		if err := fn(datum, r.partitionCols[i]); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
+}
+
+// forEachPartitionCol is a helper which invokes fn for each column in the partitionCols list.
+func (r Row) forEachPartitionColumn(fn ColumnFn, colIndexes []int) error {
+	for _, colIdx := range colIndexes {
+		if err := fn(r.partitionCols[colIdx]); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
+}
+
 // ResultColumn associates ResultColumn with an ordinal position where
 // such column expected to be found.
 type ResultColumn struct {
@@ -162,6 +206,9 @@ type ResultColumn struct {
 	ord       int
 	sqlString string
 }
+
+// ResultColumns is used to describe a list of ResultColumn structs.
+type ResultColumns []ResultColumn
 
 // SQLStringNotHumanReadable returns the SQL statement describing the column.
 func (c ResultColumn) SQLStringNotHumanReadable() string {
@@ -188,6 +235,9 @@ type EventDescriptor struct {
 	keyCols   []int // Primary key columns.
 	valueCols []int // All column family columns.
 	udtCols   []int // Columns containing UDTs.
+
+	partitionDatums []tree.Datum   // Datums to partition by
+	partitionCols   []ResultColumn // Columns to partition by
 }
 
 // NewEventDescriptor returns EventDescriptor for specified table and family descriptors.
@@ -313,6 +363,31 @@ func (d *EventDescriptor) HasUserDefinedTypes() bool {
 // higher level methods/structs (e.g. Metadata) instead.
 func (d *EventDescriptor) TableDescriptor() catalog.TableDescriptor {
 	return d.td
+}
+
+// PartitionDatums returns the underlying partitioning datums.
+func (d *EventDescriptor) PartitionDatums() []tree.Datum {
+	return d.partitionDatums
+}
+
+// AssignPartitionDatums assigns the inputted datums to the partitioning datums
+// field of the EventDescriptor
+func (d *EventDescriptor) AssignPartitionDatums(datums []tree.Datum) {
+	d.partitionDatums = datums
+	cols := make(ResultColumns, len(datums))
+	for i := range cols {
+		name := "partitionCol" + strconv.Itoa(i)
+		typ := datums[i].ResolvedType()
+		cols[i] = ResultColumn{
+			ResultColumn: colinfo.ResultColumn{
+				Name:   name,
+				Typ:    typ,
+				Hidden: true,
+			},
+			ord: i,
+		}
+	}
+	d.partitionCols = cols
 }
 
 type eventDescriptorFactory func(
@@ -486,8 +561,9 @@ func (m Metadata) String() string {
 }
 
 type iter struct {
-	r    Row
-	cols []int
+	r      Row
+	cols   []int
+	datums []tree.Datum
 }
 
 var _ Iterator = iter{}
@@ -500,6 +576,16 @@ func (it iter) Datum(fn DatumFn) error {
 // Col implements Iterator interface.
 func (it iter) Col(fn ColumnFn) error {
 	return it.r.forEachColumn(fn, it.cols)
+}
+
+// PartitionDatum implements Iterator interface
+func (it iter) PartitionDatum(fn DatumFn) error {
+	return it.r.forEachPartitionDatum(fn, it.datums)
+}
+
+// PartitionCol implements Iterator interface.
+func (it iter) PartitionCol(fn ColumnFn) error {
+	return it.r.forEachPartitionColumn(fn, it.cols)
 }
 
 // TestingMakeEventRow initializes Row with provided arguments.

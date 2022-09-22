@@ -237,7 +237,7 @@ func TestEncoders(t *testing.T) {
 			prevRow := cdcevent.TestingMakeEventRow(tableDesc, 0, nil, false)
 			evCtx := eventContext{updated: ts}
 
-			keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
+			keyInsert, err := e.EncodeKey(context.Background(), rowInsert, false)
 			require.NoError(t, err)
 			keyInsert = append([]byte(nil), keyInsert...)
 			valueInsert, err := e.EncodeValue(context.Background(), evCtx, rowInsert, prevRow)
@@ -247,7 +247,7 @@ func TestEncoders(t *testing.T) {
 			rowDelete := cdcevent.TestingMakeEventRow(tableDesc, 0, row, true)
 			prevRow = cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
 
-			keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
+			keyDelete, err := e.EncodeKey(context.Background(), rowDelete, false)
 			require.NoError(t, err)
 			keyDelete = append([]byte(nil), keyDelete...)
 			valueDelete, err := e.EncodeValue(context.Background(), evCtx, rowDelete, prevRow)
@@ -376,7 +376,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
 		var prevRow cdcevent.Row
 		evCtx := eventContext{updated: ts}
-		keyInsert, err := e.EncodeKey(context.Background(), rowInsert)
+		keyInsert, err := e.EncodeKey(context.Background(), rowInsert, false)
 		require.NoError(t, err)
 		keyInsert = append([]byte(nil), keyInsert...)
 		valueInsert, err := e.EncodeValue(context.Background(), evCtx, rowInsert, prevRow)
@@ -386,7 +386,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		rowDelete := cdcevent.TestingMakeEventRow(tableDesc, 0, row, true)
 		prevRow = cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
 
-		keyDelete, err := e.EncodeKey(context.Background(), rowDelete)
+		keyDelete, err := e.EncodeKey(context.Background(), rowDelete, false)
 		require.NoError(t, err)
 		keyDelete = append([]byte(nil), keyDelete...)
 		valueDelete, err := e.EncodeValue(context.Background(), evCtx, rowDelete, prevRow)
@@ -404,7 +404,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 
 		enc, err := getEncoder(opts, targets)
 		require.NoError(t, err)
-		_, err = enc.EncodeKey(context.Background(), rowInsert)
+		_, err = enc.EncodeKey(context.Background(), rowInsert, false)
 		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: "+
 			`contacting confluent schema registry: Post "%s/subjects/foo-key/versions": x509: certificate signed by unknown authority`,
 			opts.SchemaRegistryURI))
@@ -419,7 +419,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 
 		enc, err = getEncoder(opts, targets)
 		require.NoError(t, err)
-		_, err = enc.EncodeKey(context.Background(), rowInsert)
+		_, err = enc.EncodeKey(context.Background(), rowInsert, false)
 		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: "+
 			`contacting confluent schema registry: Post "%s/subjects/foo-key/versions": x509: certificate signed by unknown authority`,
 			opts.SchemaRegistryURI))

@@ -210,8 +210,12 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		evCtx.topic = topic
 	}
 
+	partitioning := false
+	if len(updatedRow.GetEventDescriptor().PartitionDatums()) > 0 {
+		partitioning = true
+	}
 	var keyCopy, valueCopy []byte
-	encodedKey, err := c.encoder.EncodeKey(ctx, updatedRow)
+	encodedKey, err := c.encoder.EncodeKey(ctx, updatedRow, partitioning)
 	if err != nil {
 		return err
 	}
