@@ -15,17 +15,13 @@ import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
-import moment from "moment";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { getMatchParamByName } from "src/util/query";
-import {
-  WaitTimeInsightsLabels,
-  WaitTimeInsightsPanel,
-} from "src/detailsPanels/waitTimeInsightsPanel";
+import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
 import {
   TransactionInsightEventDetailsRequest,
   TransactionInsightEventDetailsResponse,
@@ -107,7 +103,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
             rec = {
               type: "HighContention",
               details: {
-                duration: insightDetails.elapsedTime,
+                duration: insightDetails.totalContentionTime,
                 description: insight.description,
               },
             };
@@ -119,16 +115,22 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
     }
 
     const tableData = insightsTableData();
-    const blockingExecutions: EventExecution[] = [
-      {
-        executionID: insightDetails.blockingExecutionID,
-        fingerprintID: insightDetails.blockingFingerprintID,
-        queries: insightDetails.blockingQueries,
-        startTime: insightDetails.startTime,
-        elapsedTime: insightDetails.elapsedTime,
-        execType: insightDetails.execType,
-      },
-    ];
+    const blockingExecutions: EventExecution[] =
+      insightDetails.blockingContentionDetails.map(x => {
+        return {
+          executionID: x.blockingExecutionID,
+          fingerprintID: x.blockingFingerprintID,
+          queries: x.blockingQueries,
+          startTime: x.collectionTimeStamp,
+          contentionTimeMs: x.contentionTimeMs,
+          execType: insightDetails.execType,
+          schemaName: x.schemaName,
+          databaseName: x.databaseName,
+          tableName: x.tableName,
+          indexName: x.indexName,
+        };
+      });
+
     return (
       <>
         <section className={tableCx("section")}>
@@ -164,17 +166,6 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
           </Row>
         </section>
         <section className={tableCx("section")}>
-          <WaitTimeInsightsPanel
-            execType={insightDetails.execType}
-            executionID={insightDetails.executionID}
-            schemaName={insightDetails.schemaName}
-            tableName={insightDetails.tableName}
-            indexName={insightDetails.indexName}
-            databaseName={insightDetails.databaseName}
-            waitTime={moment.duration(insightDetails.elapsedTime)}
-            waitingExecutions={[]}
-            blockingExecutions={[]}
-          />
           <Row gutter={24}>
             <Col className="gutter-row">
               <Heading type="h5">
