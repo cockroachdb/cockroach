@@ -181,7 +181,7 @@ at or near "end": syntax error
 DETAIL: source SQL:
 CREATE OR REPLACE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1 END
                                                                                    ^
-HINT: try \h CREATE
+HINT: try \h CREATE FUNCTION
 
 error
 CREATE OR REPLACE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; CREATE OR REPLACE FUNCTION g() RETURNS INT BEGIN ATOMIC SELECT 2; END;
@@ -190,7 +190,7 @@ at or near "EOF": syntax error
 DETAIL: source SQL:
 CREATE OR REPLACE FUNCTION f(a INT) RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; CREATE OR REPLACE FUNCTION g() RETURNS INT BEGIN ATOMIC SELECT 2; END;
                                                                                                                                                           ^
-HINT: try \h CREATE
+HINT: try \h CREATE FUNCTION
 
 error
 CREATE OR REPLACE FUNCTION f(OUT a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE SQL

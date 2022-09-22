@@ -499,6 +499,10 @@ func TestContextualHelp(t *testing.T) {
 		{`EXPORT INTO CSV 'a' FROM SELECT a ??`, `SELECT`},
 		{`CREATE SCHEDULE FOR BACKUP ??`, `CREATE SCHEDULE FOR BACKUP`},
 		{`ALTER BACKUP SCHEDULE ??`, `ALTER BACKUP SCHEDULE`},
+
+		{`CREATE FUNCTION ??`, `CREATE FUNCTION`},
+		{`ALTER FUNCTION ??`, `ALTER FUNCTION`},
+		{`DROP FUNCTION ??`, `DROP FUNCTION`},
 	}
 
 	// The following checks that the test definition above exercises all

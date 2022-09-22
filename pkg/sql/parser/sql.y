@@ -1718,7 +1718,7 @@ alter_ddl_stmt:
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
-| alter_func_stmt
+| alter_func_stmt               // EXTEND WITH HELP: ALTER FUNCTION
 | alter_backup_schedule  // EXTEND WITH HELP: ALTER BACKUP SCHEDULE
 
 // %Help: ALTER TABLE - change the definition of a table
@@ -1887,12 +1887,31 @@ alter_database_stmt:
 | alter_database_drop_secondary_region
 | alter_database_set_zone_config_extension_stmt
 
+// %Help: ALTER FUNCTION - change the definition of a function
+// %Category: DDL
+// %Text:
+// ALTER FUNCTION name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    action [ ... ] [ RESTRICT ]
+// ALTER FUNCTION name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    RENAME TO new_name
+// ALTER FUNCTION name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    OWNER TO { new_owner | CURRENT_USER | SESSION_USER }
+// ALTER FUNCTION name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    SET SCHEMA new_schema
+//
+// where action is one of:
+//
+//    CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT
+//    IMMUTABLE | STABLE | VOLATILE
+//    [ NOT ] LEAKPROOF
+// %SeeAlso: WEBDOCS/alter-function.html
 alter_func_stmt:
   alter_func_options_stmt
 | alter_func_rename_stmt
 | alter_func_owner_stmt
 | alter_func_set_schema_stmt
 | alter_func_dep_extension_stmt
+| ALTER FUNCTION error // SHOW HELP: ALTER FUNCTION
 
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
@@ -4149,6 +4168,19 @@ create_extension_stmt:
   }
 | CREATE EXTENSION error // SHOW HELP: CREATE EXTENSION
 
+// %Help: CREATE FUNCTION - define a new function
+// %Category: DDL
+// %Text:
+// CREATE [ OR REPLACE ] FUNCTION
+//    name ( [ [ argmode ] [ argname ] argtype [, ...] ] )
+//    [ RETURNS rettype ]
+//  { LANGUAGE lang_name
+//    | { IMMUTABLE | STABLE | VOLATILE }
+//    | [ NOT ] LEAKPROOF
+//    | { CALLED ON NULL INPUT | RETURNS NULL ON NULL INPUT | STRICT }
+//    | AS 'definition'
+//  } ...
+// %SeeAlso: WEBDOCS/create-function.html
 create_func_stmt:
   CREATE opt_or_replace FUNCTION func_create_name '(' opt_func_arg_with_default_list ')' RETURNS opt_return_set func_return_type
   opt_create_func_opt_list opt_routine_body
@@ -4167,6 +4199,7 @@ create_func_stmt:
       RoutineBody: $12.routineBody(),
     }
   }
+| CREATE opt_or_replace FUNCTION error // SHOW HELP: CREATE FUNCTION
 
 opt_or_replace:
   OR REPLACE { $$.val = true }
@@ -4400,6 +4433,12 @@ opt_routine_body:
     $$.val = (*tree.RoutineBody)(nil)
   }
 
+// %Help: DROP FUNCTION - remove a function
+// %Category: DDL
+// %Text:
+// DROP FUNCTION [ IF EXISTS ] name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ] [, ...]
+//    [ CASCADE | RESTRICT ]
+// %SeeAlso: WEBDOCS/drop-function.html
 drop_func_stmt:
   DROP FUNCTION function_with_argtypes_list opt_drop_behavior
   {
@@ -4408,7 +4447,7 @@ drop_func_stmt:
       DropBehavior: $4.dropBehavior(),
     }
   }
-  | DROP FUNCTION IF EXISTS function_with_argtypes_list opt_drop_behavior
+| DROP FUNCTION IF EXISTS function_with_argtypes_list opt_drop_behavior
   {
     $$.val = &tree.DropFunction{
       IfExists: true,
@@ -4416,6 +4455,7 @@ drop_func_stmt:
       DropBehavior: $6.dropBehavior(),
     }
   }
+| DROP FUNCTION error // SHOW HELP: DROP FUNCTION
 
 function_with_argtypes_list:
   function_with_argtypes
@@ -4570,7 +4610,6 @@ drop_unsupported:
 | DROP EXTENSION name error { return unimplementedWithIssueDetail(sqllex, 74777, "drop extension") }
 | DROP FOREIGN TABLE error { return unimplemented(sqllex, "drop foreign table") }
 | DROP FOREIGN DATA error { return unimplemented(sqllex, "drop fdw") }
-| DROP FUNCTION error { return unimplementedWithIssueDetail(sqllex, 17511, "drop function") }
 | DROP opt_procedural LANGUAGE name error { return unimplementedWithIssueDetail(sqllex, 17511, "drop language " + $4) }
 | DROP OPERATOR error { return unimplemented(sqllex, "drop operator") }
 | DROP PUBLICATION error { return unimplemented(sqllex, "drop publication") }
@@ -4591,7 +4630,7 @@ create_ddl_stmt:
 | create_type_stmt     // EXTEND WITH HELP: CREATE TYPE
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
-| create_func_stmt
+| create_func_stmt     // EXTEND WITH HELP: CREATE FUNCTION
 
 // %Help: CREATE STATISTICS - create a new table statistic
 // %Category: Misc
@@ -4850,7 +4889,7 @@ drop_ddl_stmt:
 | drop_sequence_stmt // EXTEND WITH HELP: DROP SEQUENCE
 | drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
-| drop_func_stmt
+| drop_func_stmt     // EXTEND WITH HELP: DROP FUNCTION
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -5422,12 +5461,13 @@ deallocate_stmt:
 //   GRANT <roles...> TO <grantees...> [WITH ADMIN OPTION]
 //
 // Privileges:
-//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE
+//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, EXECUTE
 //
 // Targets:
 //   DATABASE <databasename> [, ...]
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //   TYPE <typename> [, <typename>]...
+//   FUNCTION <functionname> [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ] [, ...]
 //   SCHEMA [<databasename> .]<schemaname> [, [<databasename> .]<schemaname>]...
 //   ALL TABLES IN SCHEMA schema_name [, ...]
 //
@@ -5522,12 +5562,13 @@ grant_stmt:
 //   REVOKE [ADMIN OPTION FOR] <roles...> FROM <grantees...>
 //
 // Privileges:
-//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE
+//   CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, EXECUTE
 //
 // Targets:
 //   DATABASE <databasename> [, <databasename>]...
 //   [TABLE] [<databasename> .] { <tablename> | * } [, ...]
 //   TYPE <typename> [, <typename>]...
+//   FUNCTION <functionname> [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ] [, ...]
 //   SCHEMA [<databasename> .]<schemaname> [, [<databasename> .]<schemaname]...
 //   ALL TABLES IN SCHEMA schema_name [, ...]
 //
