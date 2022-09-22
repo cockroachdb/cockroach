@@ -97,6 +97,10 @@ func GenByteStringBetween(prev []byte, next []byte, spacing ByteSpacing) []byte 
 	return result
 }
 
+// One returns the representation of []byte representation of the first enum
+// value created in a new Enum.
+var One = []byte{byte(midToken)}
+
 // Utility functions for GenByteStringBetween.
 
 func get(arr []byte, idx int, def int) int {

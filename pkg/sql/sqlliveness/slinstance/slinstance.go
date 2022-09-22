@@ -20,7 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -195,7 +197,11 @@ func (l *Instance) clearSessionLocked(ctx context.Context) (createNewSession boo
 // createSession tries until it can create a new session and returns an error
 // only if the heart beat loop should exit.
 func (l *Instance) createSession(ctx context.Context) (*session, error) {
-	id := sqlliveness.SessionID(uuid.MakeV4().GetBytes())
+	id, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+	if err != nil {
+		return nil, err
+	}
+
 	start := l.clock.Now()
 	exp := start.Add(l.ttl().Nanoseconds(), 0)
 	s := &session{
@@ -210,7 +216,6 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 		Multiplier:     1.5,
 	}
 	everySecond := log.Every(time.Second)
-	var err error
 	for i, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
 		i++
 		if err = l.storage.Insert(ctx, s.id, s.Expiration()); err != nil {
