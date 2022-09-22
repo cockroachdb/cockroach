@@ -125,6 +125,14 @@ func MakeFrontier(spans ...roachpb.Span) (*Frontier, error) {
 // Each span timestamp initialized at specified start time.
 func MakeFrontierAt(startAt hlc.Timestamp, spans ...roachpb.Span) (*Frontier, error) {
 	f := &Frontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
+	if err := f.AddSpansAt(startAt, spans...); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// AddSpansAt adds the provided spans to the frontier at the provided timestamp.
+func (f *Frontier) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error {
 	for _, s := range spans {
 		span := makeSpan(s.AsRange())
 		e := &frontierEntry{
@@ -135,12 +143,12 @@ func MakeFrontierAt(startAt hlc.Timestamp, spans ...roachpb.Span) (*Frontier, er
 		}
 		f.idAlloc++
 		if err := f.tree.Insert(e, true /* fast */); err != nil {
-			return nil, err
+			return err
 		}
 		heap.Push(&f.minHeap, e)
 	}
 	f.tree.AdjustRanges()
-	return f, nil
+	return nil
 }
 
 // Frontier returns the minimum timestamp being tracked.
