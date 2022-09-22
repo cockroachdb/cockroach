@@ -1103,7 +1103,7 @@ func TestChangefeedProjectionDelete(t *testing.T) {
 			`foo: [0]->{}`,
 		})
 	}
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
 
 // If we drop columns which are not targeted by the changefeed, it should not backfill.
@@ -2529,9 +2529,7 @@ func TestChangefeedBareJSON(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
 		foo := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy=stop AS SELECT * FROM foo`)
 		defer closeFeed(t, foo)
-		assertPayloads(t, foo, []string{
-			`foo: [0]->{"a": 0, "b": "dog"}`,
-		})
+		assertPayloads(t, foo, []string{`foo: [0]->{"a": 0, "b": "dog"}`})
 	}
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 	cdcTest(t, testFn, feedTestForceSink("enterprise"))

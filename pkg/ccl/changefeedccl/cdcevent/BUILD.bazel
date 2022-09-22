@@ -8,6 +8,7 @@ go_library(
         "event.go",
         "projection.go",
         "rowfetcher_cache.go",
+        "version_cache.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent",
     visibility = ["//visibility:public"],
