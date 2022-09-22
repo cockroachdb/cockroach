@@ -65,6 +65,14 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
+var schemaChangeJobMaxRetryBackoff = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"schemachanger.job.max_retry_backoff",
+	"the exponential back off when retrying jobs for schema changes",
+	20*time.Second,
+	settings.PositiveDuration,
+)
+
 const (
 	// RunningStatusWaitingGC is for jobs that are currently in progress and
 	// are waiting for the GC interval to expire
@@ -2643,7 +2651,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		}
 		opts := retry.Options{
 			InitialBackoff: 20 * time.Millisecond,
-			MaxBackoff:     20 * time.Second,
+			MaxBackoff:     schemaChangeJobMaxRetryBackoff.Get(p.ExecCfg().SV()),
 			Multiplier:     1.5,
 		}
 
