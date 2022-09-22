@@ -161,6 +161,9 @@ message SampledQuery {
   // The number of network messages sent by nodes for this query.
   int64 network_messages = 44 [(gogoproto.jsontag) = ',omitempty'];
 
+  // Generated index recommendations for this query.
+  repeated string index_recommendations = 45 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
   reserved 12;
 }
 
