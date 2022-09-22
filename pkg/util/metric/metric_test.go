@@ -14,14 +14,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"math"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
-	"github.com/kr/pretty"
-	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 func testMarshal(t *testing.T, m json.Marshaler, exp string) {
@@ -105,42 +102,6 @@ func TestCounter(t *testing.T) {
 func setNow(d time.Duration) {
 	now = func() time.Time {
 		return time.Time{}.Add(d)
-	}
-}
-
-func TestHistogramPrometheus(t *testing.T) {
-	u := func(v int) *uint64 {
-		n := uint64(v)
-		return &n
-	}
-
-	f := func(v int) *float64 {
-		n := float64(v)
-		return &n
-	}
-
-	h := NewHistogram(Metadata{}, time.Hour, 10, 1)
-	h.RecordValue(1)
-	h.RecordValue(5)
-	h.RecordValue(5)
-	h.RecordValue(10)
-	h.RecordValue(15000) // counts as 10
-	act := *h.ToPrometheusMetric().Histogram
-
-	expSum := float64(1*1 + 2*5 + 2*10)
-
-	exp := prometheusgo.Histogram{
-		SampleCount: u(5),
-		SampleSum:   &expSum,
-		Bucket: []*prometheusgo.Bucket{
-			{CumulativeCount: u(1), UpperBound: f(1)},
-			{CumulativeCount: u(3), UpperBound: f(5)},
-			{CumulativeCount: u(5), UpperBound: f(10)},
-		},
-	}
-
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
 	}
 }
 
