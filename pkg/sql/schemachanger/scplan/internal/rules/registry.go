@@ -27,7 +27,7 @@ import (
 
 // ApplyDepRules adds dependency edges to the graph according to the
 // registered dependency rules.
-func ApplyDepRules(g *scgraph.Graph) error {
+func ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 	for _, dr := range registry.depRules {
 		start := timeutil.Now()
 		var added int
@@ -41,9 +41,15 @@ func ApplyDepRules(g *scgraph.Graph) error {
 		}); err != nil {
 			return errors.Wrapf(err, "applying dep rule %s", dr.name)
 		}
-		if log.V(2) {
+		// Applying the dep rules can be slow in some cases. Check for
+		// cancellation when applying the rules to ensure we don't spin for
+		// too long while the user is waiting for the task to exit cleanly.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(
-				context.TODO(), "applying dep rule %s %d took %v",
+				ctx, "applying dep rule %s %d took %v",
 				dr.name, added, timeutil.Since(start),
 			)
 		}
@@ -53,7 +59,7 @@ func ApplyDepRules(g *scgraph.Graph) error {
 
 // ApplyOpRules marks op edges as no-op in a shallow copy of the graph according
 // to the registered rules.
-func ApplyOpRules(g *scgraph.Graph) (*scgraph.Graph, error) {
+func ApplyOpRules(ctx context.Context, g *scgraph.Graph) (*scgraph.Graph, error) {
 	db := g.Database()
 	m := make(map[*screl.Node][]scgraph.RuleName)
 	for _, rule := range registry.opRules {
@@ -68,9 +74,9 @@ func ApplyOpRules(g *scgraph.Graph) (*scgraph.Graph, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "applying op rule %s", rule.name)
 		}
-		if log.V(2) {
+		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(
-				context.TODO(), "applying op rule %s %d took %v",
+				ctx, "applying op rule %s %d took %v",
 				rule.name, added, timeutil.Since(start),
 			)
 		}

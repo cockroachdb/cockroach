@@ -67,15 +67,17 @@ func (n *explainDDLNode) startExec(params runParams) error {
 			return explainNotPossibleError
 		}
 	}
-	return n.setExplainValues(scNode.plannedState)
+	return n.setExplainValues(params.ctx, scNode.plannedState)
 }
 
-func (n *explainDDLNode) setExplainValues(scState scpb.CurrentState) (err error) {
+func (n *explainDDLNode) setExplainValues(
+	ctx context.Context, scState scpb.CurrentState,
+) (err error) {
 	defer func() {
 		err = errors.WithAssertionFailure(err)
 	}()
 	var p scplan.Plan
-	p, err = scplan.MakePlan(scState, scplan.Params{
+	p, err = scplan.MakePlan(ctx, scState, scplan.Params{
 		ExecutionPhase:             scop.StatementPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
 	})

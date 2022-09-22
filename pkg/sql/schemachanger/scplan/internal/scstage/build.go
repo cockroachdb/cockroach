@@ -11,6 +11,7 @@
 package scstage
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -31,7 +32,11 @@ import (
 // Note that the scJobIDSupplier function is idempotent, and must return the
 // same value for all calls.
 func BuildStages(
-	init scpb.CurrentState, phase scop.Phase, g *scgraph.Graph, scJobIDSupplier func() jobspb.JobID,
+	ctx context.Context,
+	init scpb.CurrentState,
+	phase scop.Phase,
+	g *scgraph.Graph,
+	scJobIDSupplier func() jobspb.JobID,
 ) []Stage {
 	c := buildContext{
 		rollback:               init.InRollback,
