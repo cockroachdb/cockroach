@@ -451,7 +451,7 @@ func (ih *instrumentationHelper) ShouldCollectExecStats() bool {
 
 // ShouldSaveMemo returns true if we should save the memo and catalog in planTop.
 func (ih *instrumentationHelper) ShouldSaveMemo() bool {
-	return ih.ShouldBuildExplainPlan()
+	return ih.collectBundle
 }
 
 // RecordExplainPlan records the explain.Plan for this query.
