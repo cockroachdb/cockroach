@@ -7339,6 +7339,16 @@ show_create_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeDatabase, Name: $4.unresolvedObjectName()}
 	}
+| SHOW CREATE INDEXES FROM table_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeIndexes, Name: $5.unresolvedObjectName()}
+  }
+| SHOW CREATE SECONDARY INDEXES FROM table_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreate{Mode: tree.ShowCreateModeSecondaryIndexes, Name: $6.unresolvedObjectName()}
+  }
 | SHOW CREATE FUNCTION db_object_name
   {
     /* SKIP DOC */
