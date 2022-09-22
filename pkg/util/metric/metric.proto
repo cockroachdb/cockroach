@@ -49,6 +49,9 @@ enum Unit {
   // TIMESTAMP_SEC expresses that the metric's measurement is a time since the
   // Unix epoch in seconds.
   TIMESTAMP_SEC = 8;
+  // UNITLESS expresses that the metric's measurement does not have units (e.g.
+  // a score).
+  UNITLESS = 9;
 }
 
 // Metadata holds metadata about a metric. It must be embedded in
