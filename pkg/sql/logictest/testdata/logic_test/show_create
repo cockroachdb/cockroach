@@ -140,3 +140,30 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 COMMENT ON COLUMN public.t.c IS 'first comment'
+
+statement ok
+CREATE TABLE t1 (
+  k INT PRIMARY KEY,
+  a INT UNIQUE,
+  b STRING,
+  INDEX (a, b)
+)
+
+query TT
+SHOW CREATE INDEXES FROM t1
+----
+t1_pkey     CREATE UNIQUE INDEX t1_pkey ON public.t1 (k ASC)
+t1_a_key    CREATE UNIQUE INDEX t1_a_key ON public.t1 (a ASC)
+t1_a_b_idx  CREATE INDEX t1_a_b_idx ON public.t1 (a ASC, b ASC)
+
+query TT
+SHOW CREATE SECONDARY INDEXES FROM t1
+----
+t1_a_key    CREATE UNIQUE INDEX t1_a_key ON public.t1 (a ASC)
+t1_a_b_idx  CREATE INDEX t1_a_b_idx ON public.t1 (a ASC, b ASC)
+
+statement error relation "nonexistent" does not exist
+SHOW CREATE INDEXES FROM nonexistent
+
+statement error relation "nonexistent" does not exist
+SHOW CREATE SECONDARY INDEXES FROM nonexistent

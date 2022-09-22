@@ -1,0 +1,56 @@
+statement ok
+CREATE TABLE residents (
+	id INT,
+	name STRING,
+	country STRING,
+	PRIMARY KEY (country, id)
+)
+
+query TT
+SHOW CREATE INDEXES FROM residents
+----
+residents_pkey  CREATE UNIQUE INDEX residents_pkey ON public.residents (country ASC, id ASC)
+
+query TT
+SHOW CREATE SECONDARY INDEXES FROM residents
+----
+
+statement ok
+ALTER TABLE residents PARTITION BY LIST (country) (
+	PARTITION north_america VALUES IN ('CA', 'US', 'MX'),
+	PARTITION DEFAULT VALUES IN (default)
+)
+
+query TT
+SHOW CREATE INDEXES FROM residents
+----
+residents_pkey  CREATE UNIQUE INDEX residents_pkey ON public.residents (country ASC, id ASC) PARTITION BY LIST (country) (
+                PARTITION north_america VALUES IN (('CA'), ('US'), ('MX')),
+                PARTITION "default" VALUES IN ((DEFAULT))
+)
+
+statement ok
+CREATE UNIQUE INDEX ON residents (id) PARTITION BY RANGE (id) (
+	PARTITION negative VALUES FROM (MINVALUE) TO (0),
+	PARTITION nonnegative VALUES FROM (0) TO (MAXVALUE)
+)
+
+query TT
+SHOW CREATE INDEXES FROM residents
+----
+residents_pkey    CREATE UNIQUE INDEX residents_pkey ON public.residents (country ASC, id ASC) PARTITION BY LIST (country) (
+                  PARTITION north_america VALUES IN (('CA'), ('US'), ('MX')),
+                  PARTITION "default" VALUES IN ((DEFAULT))
+)
+residents_id_key  CREATE UNIQUE INDEX residents_id_key ON public.residents (id ASC) PARTITION BY RANGE (id) (
+                  PARTITION negative VALUES FROM (MINVALUE) TO (0),
+                  PARTITION nonnegative VALUES FROM (0) TO (MAXVALUE)
+)
+
+query TT
+SHOW CREATE SECONDARY INDEXES FROM residents
+----
+residents_id_key  CREATE UNIQUE INDEX residents_id_key ON public.residents (id ASC) PARTITION BY RANGE (id) (
+                  PARTITION negative VALUES FROM (MINVALUE) TO (0),
+                  PARTITION nonnegative VALUES FROM (0) TO (MAXVALUE)
+)
