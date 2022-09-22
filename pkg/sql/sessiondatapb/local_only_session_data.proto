@@ -295,6 +295,9 @@ message LocalOnlySessionData {
   // be allowed to consider lookup joins with inequality conditions, in
   // addition to the other restrictions on when they are planned.
   bool variable_inequality_lookup_join_enabled = 80;
+  // TransactionSessionTimeout is the duration a transaction is permitted to
+  // run before the transaction is canceled. If set to 0, there is no timeout.
+  int64 transaction_timeout = 81 [(gogoproto.casttype) = "time.Duration"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
