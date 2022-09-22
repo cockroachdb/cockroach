@@ -1,4 +1,5 @@
 # LogicTest: local
+# BackupRestoreProbability: 0.0
 
 statement ok
 CREATE TABLE t (
