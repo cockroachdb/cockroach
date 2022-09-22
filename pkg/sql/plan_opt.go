@@ -607,61 +607,36 @@ func (opc *optPlanningCtx) runExecBuilder(
 	allowAutoCommit bool,
 ) error {
 	var result *planComponents
-	var isDDL bool
-	var containsFullTableScan bool
-	var containsFullIndexScan bool
-	var containsLargeFullTableScan bool
-	var containsLargeFullIndexScan bool
-	var containsMutation bool
 	var gf *explain.PlanGistFactory
 	if !opc.p.SessionData().DisablePlanGists {
 		gf = explain.NewPlanGistFactory(f)
 		f = gf
 	}
+	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld = execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
 		}
 		result = plan.(*planComponents)
-		isDDL = bld.IsDDL
-		containsFullTableScan = bld.ContainsFullTableScan
-		containsFullIndexScan = bld.ContainsFullIndexScan
-		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
-		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
-		containsMutation = bld.ContainsMutation
-		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
-		planTop.instrumentation.totalScanRows = bld.TotalScanRows
-		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
-		planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
-		planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f)
-		bld := execbuilder.New(
-			explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit,
-		)
+		bld = execbuilder.New(explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
 		plan, err := bld.Build()
 		if err != nil {
 			return err
 		}
 		explainPlan := plan.(*explain.Plan)
 		result = explainPlan.WrappedPlan.(*planComponents)
-		isDDL = bld.IsDDL
-		containsFullTableScan = bld.ContainsFullTableScan
-		containsFullIndexScan = bld.ContainsFullIndexScan
-		containsLargeFullTableScan = bld.ContainsLargeFullTableScan
-		containsLargeFullIndexScan = bld.ContainsLargeFullIndexScan
-		containsMutation = bld.ContainsMutation
-		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
-		planTop.instrumentation.totalScanRows = bld.TotalScanRows
-		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
-		planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
-		planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
-
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
+	planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
+	planTop.instrumentation.totalScanRows = bld.TotalScanRows
+	planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
+	planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
+	planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
 	if gf != nil {
 		planTop.instrumentation.planGist = gf.PlanGist()
 	}
@@ -682,22 +657,22 @@ func (opc *optPlanningCtx) runExecBuilder(
 	planTop.planComponents = *result
 	planTop.stmt = stmt
 	planTop.flags = opc.flags
-	if isDDL {
+	if bld.IsDDL {
 		planTop.flags.Set(planFlagIsDDL)
 	}
-	if containsFullTableScan {
+	if bld.ContainsFullTableScan {
 		planTop.flags.Set(planFlagContainsFullTableScan)
 	}
-	if containsFullIndexScan {
+	if bld.ContainsFullIndexScan {
 		planTop.flags.Set(planFlagContainsFullIndexScan)
 	}
-	if containsLargeFullTableScan {
+	if bld.ContainsLargeFullTableScan {
 		planTop.flags.Set(planFlagContainsLargeFullTableScan)
 	}
-	if containsLargeFullIndexScan {
+	if bld.ContainsLargeFullIndexScan {
 		planTop.flags.Set(planFlagContainsLargeFullIndexScan)
 	}
-	if containsMutation {
+	if bld.ContainsMutation {
 		planTop.flags.Set(planFlagContainsMutation)
 	}
 	if planTop.instrumentation.ShouldSaveMemo() {
