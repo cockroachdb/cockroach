@@ -61,6 +61,7 @@ go_test(
     embed = [":opt"],
     deps = [
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/memo",
         "//pkg/sql/opt/norm",
@@ -70,6 +71,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

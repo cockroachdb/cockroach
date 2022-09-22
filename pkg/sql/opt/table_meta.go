@@ -449,7 +449,7 @@ func (tm *TableMeta) VirtualComputedColumns() ColSet {
 // multiregion. The result is cached in TableMeta.
 func (tm *TableMeta) GetRegionsInDatabase(
 	planner eval.Planner,
-) (regionNames catpb.RegionNames, ok bool) {
+) (regionNames catpb.RegionNames, hasRegionNames bool) {
 	multiregionConfig, ok := tm.TableAnnotation(regionConfigAnnID).(*multiregion.RegionConfig)
 	if ok {
 		if multiregionConfig == nil {
@@ -458,14 +458,22 @@ func (tm *TableMeta) GetRegionsInDatabase(
 		return multiregionConfig.Regions(), true
 	}
 	dbID := tm.Table.GetDatabaseID()
+	defer func() {
+		if !hasRegionNames {
+			tm.SetTableAnnotation(
+				regionConfigAnnID,
+				// Use a nil pointer to a RegionConfig, which is distinct from the
+				// untyped nil and will be detected in the type assertion above.
+				(*multiregion.RegionConfig)(nil),
+			)
+		}
+	}()
+
 	if dbID == 0 {
-		tm.SetTableAnnotation(regionConfigAnnID, nil)
 		return nil /* regionNames */, false
 	}
-
 	regionConfig, ok := planner.GetMultiregionConfig(dbID)
 	if !ok {
-		tm.SetTableAnnotation(regionConfigAnnID, nil)
 		return nil /* regionNames */, false
 	}
 	multiregionConfig, _ = regionConfig.(*multiregion.RegionConfig)
@@ -494,7 +502,9 @@ func (tm *TableMeta) GetDatabaseSurvivalGoal(
 	dbID := tm.Table.GetDatabaseID()
 	regionConfig, ok := planner.GetMultiregionConfig(dbID)
 	if !ok {
-		tm.SetTableAnnotation(regionConfigAnnID, nil)
+		// Use a nil pointer to a RegionConfig, which is distinct from the
+		// untyped nil and will be detected in the type assertion above.
+		tm.SetTableAnnotation(regionConfigAnnID, (*multiregion.RegionConfig)(nil))
 		return descpb.SurvivalGoal_ZONE_FAILURE /* survivalGoal */, false
 	}
 	multiregionConfig, _ = regionConfig.(*multiregion.RegionConfig)
