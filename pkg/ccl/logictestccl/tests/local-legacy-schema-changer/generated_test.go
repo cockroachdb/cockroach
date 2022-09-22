@@ -73,30 +73,23 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
-func TestCCLLogic_new_schema_changer(
-	t *testing.T,
-) {
+func TestCCLLogic_new_schema_changer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "new_schema_changer")
 }
 
-func TestCCLLogic_partitioning_enum(
-	t *testing.T,
-) {
+func TestCCLLogic_partitioning_enum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "partitioning_enum")
 }
 
-func TestCCLLogic_schema_change_in_txn(
-	t *testing.T,
-) {
+func TestCCLLogic_schema_change_in_txn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "schema_change_in_txn")
 }
 
-func TestCCLLogic_show_create(
-	t *testing.T,
-) {
+func TestCCLLogic_show_create(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "show_create")
+
 }
