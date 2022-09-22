@@ -347,6 +347,11 @@ const (
 // Whenever it is `false`, processOp invokes the validator's checkAtomic method
 // for the operation.
 func (v *validator) processOp(buffering bool, op Operation) {
+	// We don't need an execution timestamp when buffering (the caller will need
+	// an execution timestamp for the combined operation, though). Additionally,
+	// some operations supported by kvnemesis aren't MVCC-aware (splits, etc) and
+	// thus also don't need an execution timestamp.
+	execTimestampStrictlyOptional := buffering
 	switch t := op.GetValue().(type) {
 	case *GetOperation:
 		v.failIfError(op, t.Result)
@@ -457,8 +462,10 @@ func (v *validator) processOp(buffering bool, op Operation) {
 			v.curOps = append(v.curOps, scan)
 		}
 	case *SplitOperation:
+		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result)
 	case *MergeOperation:
+		execTimestampStrictlyOptional = true
 		if resultIsErrorStr(t.Result, `cannot merge final range`) {
 			// Because of some non-determinism, it is not worth it (or maybe not
 			// possible) to prevent these usage errors. Additionally, I (dan) think
@@ -500,6 +507,7 @@ func (v *validator) processOp(buffering bool, op Operation) {
 			v.failIfError(op, t.Result)
 		}
 	case *ChangeReplicasOperation:
+		execTimestampStrictlyOptional = true
 		var ignore bool
 		if err := errorFromResult(t.Result); err != nil {
 			ignore = kvserver.IsRetriableReplicationChangeError(err) ||
@@ -510,6 +518,7 @@ func (v *validator) processOp(buffering bool, op Operation) {
 			v.failIfError(op, t.Result)
 		}
 	case *TransferLeaseOperation:
+		execTimestampStrictlyOptional = true
 		var ignore bool
 		if err := errorFromResult(t.Result); err != nil {
 			ignore = kvserver.IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
@@ -539,6 +548,7 @@ func (v *validator) processOp(buffering bool, op Operation) {
 			v.failIfError(op, t.Result)
 		}
 	case *ChangeZoneOperation:
+		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result)
 	case *BatchOperation:
 		if !resultIsRetryable(t.Result) {
@@ -567,6 +577,10 @@ func (v *validator) processOp(buffering bool, op Operation) {
 		v.checkAtomic(`txn`, t.Result, optOpsTimestamp, ops...)
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
+	}
+
+	if !execTimestampStrictlyOptional && !buffering && op.Result().Type != ResultType_Error && op.Result().OptionalTimestamp.IsEmpty() {
+		v.failures = append(v.failures, errors.Errorf("execution timestamp missing for %s", op))
 	}
 }
 
