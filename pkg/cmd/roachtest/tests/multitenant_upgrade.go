@@ -72,6 +72,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	kvNodes := c.Node(1)
 
 	settings := install.MakeClusterSettings(install.BinaryOption(predecessorBinary), install.SecureOption(true))
+	settings.Env = append(settings.Env, "COCKROACH_UPGRADE_TO_DEV_VERSION=true")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, kvNodes)
 	tenantStartOpt := createTenantOtherTenantIDs([]int{11, 12, 13, 14})
 
