@@ -3004,6 +3004,31 @@ var charts = []sectionDescription{
 				Metrics:   []string{"storage.write-stall-nanos"},
 				AxisLabel: "Duration (nanos)",
 			},
+			{
+				Title: "Bytes Used Per Level",
+				Metrics: []string{
+					"storage.l0-level-size",
+					"storage.l1-level-size",
+					"storage.l2-level-size",
+					"storage.l3-level-size",
+					"storage.l4-level-size",
+					"storage.l5-level-size",
+					"storage.l6-level-size",
+				},
+				AxisLabel: "Bytes",
+			},
+			{
+				Title: "Compaction Score Per Level",
+				Metrics: []string{
+					"storage.l0-level-score",
+					"storage.l1-level-score",
+					"storage.l2-level-score",
+					"storage.l3-level-score",
+					"storage.l4-level-score",
+					"storage.l5-level-score",
+					"storage.l6-level-score",
+				},
+			},
 		},
 	},
 	{
