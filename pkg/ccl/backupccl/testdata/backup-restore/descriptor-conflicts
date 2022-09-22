@@ -4,7 +4,8 @@
 # restoring cluster should be copied to a descriptor ID higher than any
 # descriptor in the backup.
 #
-# disabled for tenants because the create-dummy-system-table cmd cannot be run within a tenant
+# disabled to run within a tenant because they cannot set zone configs
+# https://github.com/cockroachdb/cockroach/issues/49854?version=v22.2
 
 new-server name=s1 disable-tenant
 ----

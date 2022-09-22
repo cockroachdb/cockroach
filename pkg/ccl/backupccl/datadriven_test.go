@@ -762,11 +762,15 @@ func TestDataDriven(t *testing.T) {
 
 			case "create-dummy-system-table":
 				db := ds.servers[lastCreatedServer].DB()
-				codec := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig).Codec
+				execCfg := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig)
+				testTenants := ds.servers[lastCreatedServer].TestTenants()
+				if len(testTenants) > 0 {
+					execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
+				}
+				codec := execCfg.Codec
 				dummyTable := systemschema.SettingsTable
 				err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					id, err := ds.servers[lastCreatedServer].ExecutorConfig().(sql.ExecutorConfig).
-						DescIDGenerator.GenerateUniqueDescID(ctx)
+					id, err := execCfg.DescIDGenerator.GenerateUniqueDescID(ctx)
 					if err != nil {
 						return err
 					}

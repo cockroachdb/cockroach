@@ -19,6 +19,7 @@ exec-sql
 BACKUP INTO 'external://conn-foo/cluster';
 ----
 
+# filter out the tenant_settings row to ensure the test can run within and outside a tenant
 query-sql
 SELECT
   object_name, object_type, backup_type

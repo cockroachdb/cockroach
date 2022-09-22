@@ -176,8 +176,6 @@ func createEmptyCluster(
 	dir, dirCleanupFn := testutils.TempDir(t)
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
-	// Disabling the default test tenant due to test failures. More
-	// investigation is required. Tracked with #76378.
 	tc := testcluster.StartTestCluster(t, clusterSize, params)
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])

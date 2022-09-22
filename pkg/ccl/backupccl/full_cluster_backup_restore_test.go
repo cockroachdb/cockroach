@@ -53,7 +53,10 @@ func TestFullClusterBackup(t *testing.T) {
 	settings := clustersettings.MakeTestingClusterSettings()
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Disabled only because backupRestoreTestSetupEmpty does not enable within tenant testing
+			// Disabled only because backupRestoreTestSetupEmpty, another DR test
+			// helper function, that is not yet enabled to set up tenants within
+			// clusters by default. Tracking issue
+			// https://github.com/cockroachdb/cockroach/issues/76378
 			DisableDefaultTestTenant: true,
 			Settings:                 settings,
 			Knobs: base.TestingKnobs{
@@ -353,7 +356,10 @@ func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Disabled only because backupRestoreTestSetupEmpty does not enable within tenant testing
+			// Disabled only because backupRestoreTestSetupEmpty, another DR test
+			// helper function, is not yet enabled to set up tenants within
+			// clusters by default. Tracking issue
+			// https://github.com/cockroachdb/cockroach/issues/76378
 			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -946,7 +952,10 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 			}},
 	}
 	params.ServerArgs.Knobs = knobs
-	// Disabled only because backupRestoreTestSetupEmpty does not enable within tenant testing
+	// Disabled only because backupRestoreTestSetupEmpty, another DR test
+	// helper function, is not yet enabled to set up tenants within
+	// clusters by default. Tracking issue
+	// https://github.com/cockroachdb/cockroach/issues/76378
 	params.ServerArgs.DisableDefaultTestTenant = true
 
 	const numAccounts = 1000
@@ -1104,7 +1113,10 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Disabled only because backupRestoreTestSetupEmpty does not enable within tenant testing
+			// Disabled only because backupRestoreTestSetupEmpty, another DR test
+			// helper function, that is not yet enabled to set up tenants within
+			// clusters by default. Tracking issue
+			// https://github.com/cockroachdb/cockroach/issues/76378
 			DisableDefaultTestTenant: true,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),

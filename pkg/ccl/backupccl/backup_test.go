@@ -216,7 +216,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	args := base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
-				DisableDefaultTestTenant: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "west"},
 					// NB: This has the same value as an az in the east region
@@ -226,7 +225,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			1: {
-				DisableDefaultTestTenant: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
 					// NB: This has the same value as an az in the west region
@@ -236,7 +234,6 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			2: {
-				DisableDefaultTestTenant: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
 					{Key: "az", Value: "az2"},
@@ -1506,15 +1503,22 @@ func TestBackupRestoreResume(t *testing.T) {
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 
-		// Cannot run this test within tenant because of the TestingGetPublicTableDescriptor func
+		// Cannot run this test within tenant because it panics
+		// https://github.com/cockroachdb/cockroach/issues/88527
 		DisableDefaultTestTenant: true,
 	}}
 
 	const numAccounts = 1000
 	tc, outerDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
-
-	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), keys.SystemSQLCodec, "data", "bank")
+	codec := keys.SystemSQLCodec
+	testTenants := tc.Servers[0].TestTenants()
+	clusterID := tc.Servers[0].RPCContext().LogicalClusterID.Get()
+	if len(testTenants) > 0 {
+		codec = keys.MakeSQLCodec(testTenants[0].RPCContext().TenantID)
+		clusterID = testTenants[0].RPCContext().LogicalClusterID.Get()
+	}
+	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), codec, "data", "bank")
 
 	t.Run("backup", func(t *testing.T) {
 		for _, item := range []struct {
@@ -1527,14 +1531,14 @@ func TestBackupRestoreResume(t *testing.T) {
 			item := item
 			t.Run(item.testName, func(t *testing.T) {
 				sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
-				backupStartKey := backupTableDesc.PrimaryIndexSpan(keys.SystemSQLCodec).Key
+				backupStartKey := backupTableDesc.PrimaryIndexSpan(codec).Key
 				backupEndKey, err := randgen.TestingMakePrimaryIndexKey(backupTableDesc, numAccounts/2)
 				if err != nil {
 					t.Fatal(err)
 				}
 				backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
 				mockManifest, err := protoutil.Marshal(&backuppb.BackupManifest{
-					ClusterID: tc.Servers[0].RPCContext().LogicalClusterID.Get(),
+					ClusterID: clusterID,
 					Files: []backuppb.BackupManifest_File{
 						{Path: "garbage-checkpoint", Span: backupCompletedSpan},
 					},
@@ -2650,7 +2654,7 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 				_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0, InitManualReplication, base.TestClusterArgs{
 					ServerArgs: base.TestServerArgs{
 
-						// Disabled under tenant bc AddInStatement-schema-only subtest panicked.
+						// Disabled under tenant because AddInStatement-schema-only subtest panicked #88381.
 						DisableDefaultTestTenant: false,
 						Knobs: base.TestingKnobs{
 							SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
@@ -6270,7 +6274,9 @@ func TestPaginatedBackupTenant(t *testing.T) {
 
 	const numAccounts = 1
 	serverArgs := base.TestServerArgs{
-		Knobs:                    base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		// Disabled to probabilistically spin up a tenant in each server because the
+		// test explicitly sets up tenants to test on.
 		DisableDefaultTestTenant: true}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	var numExportRequests int
@@ -6745,7 +6751,10 @@ func TestBackupRestoreTenant(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		Knobs:                    base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+
+		// Disabled to probabilistically spin up a tenant in each server because the
+		// test explicitly sets up tenants to test on.
 		DisableDefaultTestTenant: true},
 	}
 
@@ -8629,11 +8638,7 @@ func TestRestorePauseOnError(t *testing.T) {
 	baseDir := "testdata"
 	args := base.TestServerArgs{
 		ExternalIODir: baseDir,
-
-		// Disabled to run within tenant because sometimes the job is in succeeeded
-		// state instead of paused.
-		DisableDefaultTestTenant: true,
-		Knobs:                    base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
 		InitManualReplication, params)
@@ -8641,7 +8646,13 @@ func TestRestorePauseOnError(t *testing.T) {
 
 	var forceFailure bool
 	for i := range tc.Servers {
-		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+		jobRegistry := tc.Servers[i].JobRegistry()
+		if tc.StartedDefaultTestTenant() {
+			jobRegistry = tc.Servers[i].TestTenants()[0].JobRegistry()
+		}
+
+		jobRegistry.(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.
+			Resumer{
 			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {
@@ -9048,7 +9059,6 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	tc, sqlDB, iodir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DisableDefaultTestTenant: false,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig: &spanconfig.TestingKnobs{
@@ -9062,7 +9072,6 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	_, restoreDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, iodir, InitManualReplication,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DisableDefaultTestTenant: false,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 				},
@@ -9942,6 +9951,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 		ExternalIODir: baseDir,
 
 		// Disabled to run within tenant because test can panic
+		// https://github.com/cockroachdb/cockroach/issues/88380
 		DisableDefaultTestTenant: true,
 		Knobs:                    base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
