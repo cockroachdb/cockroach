@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/require"
@@ -250,7 +251,7 @@ func startTenantServer(
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- c.RunE(tenantCtx, node,
-			append([]string{binary, "mt", "start-sql"}, args...)...,
+			append(append(append([]string{}, config.DefaultEnvVars()...), binary, "mt", "start-sql"), args...)...,
 		)
 		close(errCh)
 	}()
