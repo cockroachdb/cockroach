@@ -141,23 +141,7 @@ func (p _OP_NAME) Next() coldata.Batch {
 		// of a projection is Null.
 		// */}}
 		_outNulls := projVec.Nulls()
-
-		// {{/*
-		// If nullableArgs is true, the function’s definition can handle null
-		// arguments. We would still want to perform the projection, and there is no
-		// need to call projVec.SetNulls(). The behaviour will just be the same as
-		// _HAS_NULLS is false. Since currently only ConcatDatumDatum needs this
-		// nullableArgs == true behaviour, logic for nullableArgs is only added to
-		// the if statement for function with Datum, Datum. If we later introduce
-		// another projection operation that has nullableArgs == true, we should
-		// update this code accordingly.
-		// */}}
-		// {{if and (eq .Left.VecMethod "Datum") (eq .Right.VecMethod "Datum")}}
-		hasNullsAndNotNullable := (vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls()) && !p.nullableArgs
-		// {{else}}
-		hasNullsAndNotNullable := (vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls())
-		// {{end}}
-		if hasNullsAndNotNullable {
+		if vec1.Nulls().MaybeHasNulls() || vec2.Nulls().MaybeHasNulls() {
 			_SET_PROJECTION(true)
 		} else {
 			_SET_PROJECTION(false)
@@ -174,6 +158,7 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 	// {{define "setProjection" -}}
 	// {{$hasNulls := $.HasNulls}}
 	// {{with $.Overload}}
+	// {{$isDatum := (and (eq .Left.VecMethod "Datum") (eq .Right.VecMethod "Datum"))}}
 	// {{if _HAS_NULLS}}
 	col1Nulls := vec1.Nulls()
 	col2Nulls := vec2.Nulls()
@@ -199,7 +184,13 @@ func _SET_PROJECTION(_HAS_NULLS bool) {
 	// projVec.Nulls() so there is no need to call projVec.SetNulls().
 	// */}}
 	// {{if _HAS_NULLS}}
-	projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+	// {{if $isDatum}}
+	if !p.nullableArgs {
+		// {{end}}
+		projVec.SetNulls(_outNulls.Or(*col1Nulls).Or(*col2Nulls))
+		// {{if $isDatum}}
+	}
+	// {{end}}
 	// {{end}}
 	// {{end}}
 	// {{end}}
@@ -214,8 +205,9 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool, _HAS_SEL bool) { // */}}
 	// {{$hasNulls := $.HasNulls}}
 	// {{$hasSel := $.HasSel}}
 	// {{with $.Overload}}
+	// {{$isDatum := (and (eq .Left.VecMethod "Datum") (eq .Right.VecMethod "Datum"))}}
 	// {{if _HAS_NULLS}}
-	if !col1Nulls.NullAt(i) && !col2Nulls.NullAt(i) {
+	if p.nullableArgs || (!col1Nulls.NullAt(i) && !col2Nulls.NullAt(i)) {
 		// We only want to perform the projection operation if both values are not
 		// null.
 		// {{end}}
@@ -223,10 +215,28 @@ func _SET_SINGLE_TUPLE_PROJECTION(_HAS_NULLS bool, _HAS_SEL bool) { // */}}
 		//gcassert:bce
 		// {{end}}
 		arg1 := col1.Get(i)
+		// {{if (and _HAS_NULLS $isDatum)}}
+		if col1Nulls.NullAt(i) {
+			// {{/*
+			// If we entered this branch for a null value, nullableArgs must be
+			// true. This means the projection should be calculated on null arguments.
+			// When a value is null, the underlying data in the slice is invalid and
+			// can be anything, so we need to overwrite it here. nullableArgs is
+			// currently only true for ConcatDatumDatum, so only the datum case needs
+			// to be handled.
+			// */}}
+			arg1 = tree.DNull
+		}
+		// {{end}}
 		// {{if and (.Right.Sliceable) (not _HAS_SEL)}}
 		//gcassert:bce
 		// {{end}}
 		arg2 := col2.Get(i)
+		// {{if (and _HAS_NULLS $isDatum)}}
+		if col2Nulls.NullAt(i) {
+			arg2 = tree.DNull
+		}
+		// {{end}}
 		_ASSIGN(projCol[i], arg1, arg2, projCol, col1, col2)
 		// {{if _HAS_NULLS}}
 	}

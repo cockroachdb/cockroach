@@ -43,14 +43,12 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = bytes.HasPrefix(arg, p.constArg)
@@ -60,7 +58,7 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = bytes.HasPrefix(arg, p.constArg)
@@ -114,14 +112,12 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = bytes.HasSuffix(arg, p.constArg)
@@ -131,7 +127,7 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = bytes.HasSuffix(arg, p.constArg)
@@ -185,14 +181,12 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = bytes.Contains(arg, p.constArg)
@@ -202,7 +196,7 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = bytes.Contains(arg, p.constArg)
@@ -256,14 +250,12 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Match(arg)
@@ -273,7 +265,7 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Match(arg)
@@ -327,14 +319,12 @@ func (p projNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = !bytes.HasPrefix(arg, p.constArg)
@@ -344,7 +334,7 @@ func (p projNotPrefixBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = !bytes.HasPrefix(arg, p.constArg)
@@ -398,14 +388,12 @@ func (p projNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = !bytes.HasSuffix(arg, p.constArg)
@@ -415,7 +403,7 @@ func (p projNotSuffixBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = !bytes.HasSuffix(arg, p.constArg)
@@ -469,14 +457,12 @@ func (p projNotContainsBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = !bytes.Contains(arg, p.constArg)
@@ -486,7 +472,7 @@ func (p projNotContainsBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = !bytes.Contains(arg, p.constArg)
@@ -540,14 +526,12 @@ func (p projNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 		}
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotNullable := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotNullable {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = !p.constArg.Match(arg)
@@ -557,7 +541,7 @@ func (p projNotRegexpBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.nullableArgs || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = !p.constArg.Match(arg)
