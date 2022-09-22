@@ -2272,3 +2272,25 @@ SELECT ('foo'::STRING || col::STRING[])::STRING[] FROM (VALUES (ARRAY['bar':::ST
 ----
 {foo,bar}
 {foo,baz}
+
+# Regression test for #87919 - datum concatenation should be performed for
+# null arguments.
+statement ok
+CREATE TABLE t1_87919 (
+  a  INT
+);
+CREATE TABLE t2_87919 (
+  b INT,
+  c TIME[]
+);
+INSERT INTO t1_87919 (a) VALUES (NULL);
+INSERT INTO t2_87919 (c) VALUES (ARRAY['03:23:06.042923']);
+
+query T rowsort
+SELECT ('09:20:35.19023'::TIME || c)::TIME[] AS col_25551
+FROM t1_87919
+FULL JOIN t2_87919 ON a = b
+ORDER BY a;
+----
+{09:20:35.19023}
+{09:20:35.19023,03:23:06.042923}
