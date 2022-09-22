@@ -195,6 +195,15 @@ func InMemory() Location {
 	}
 }
 
+// MakeLocation constructs a Location that instructs the storage engine to
+// store data in fs.
+func MakeLocation(fs vfs.FS) Location {
+	return Location{
+		dir: "",
+		fs:  fs,
+	}
+}
+
 type engineConfig struct {
 	PebbleConfig
 	// cacheSize is stored separately so that we can avoid constructing the

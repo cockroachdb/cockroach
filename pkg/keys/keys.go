@@ -299,7 +299,7 @@ func RangeVersionKey(rangeID roachpb.RangeID) roachpb.Key {
 // MakeRangeIDUnreplicatedPrefix creates a range-local key prefix from
 // rangeID for all unreplicated data.
 func MakeRangeIDUnreplicatedPrefix(rangeID roachpb.RangeID) roachpb.Key {
-	return makePrefixWithRangeID(LocalRangeIDPrefix, rangeID, localRangeIDUnreplicatedInfix)
+	return makePrefixWithRangeID(LocalRangeIDPrefix, rangeID, LocalRangeIDUnreplicatedInfix)
 }
 
 // makeRangeIDUnreplicatedKey creates a range-local unreplicated key based
@@ -994,7 +994,7 @@ func (b RangeIDPrefixBuf) replicatedPrefix() roachpb.Key {
 }
 
 func (b RangeIDPrefixBuf) unreplicatedPrefix() roachpb.Key {
-	return append(roachpb.Key(b), localRangeIDUnreplicatedInfix...)
+	return append(roachpb.Key(b), LocalRangeIDUnreplicatedInfix...)
 }
 
 // AbortSpanKey returns a range-local key by Range ID for an AbortSpan

@@ -1,0 +1,198 @@
+new
+----
+
+# Create and discard an uninitialized replica.
+create-uninit range-id=1 replica-id=2
+----
+== r1/2 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+discard-replica range-id=1 replica-id=2 next-replica-id=4
+----
+
+# Try to recreate the discarded replica, which will fail due to the
+# RangeTombstone.
+create-uninit range-id=1 replica-id=3
+----
+raft group deleted
+
+# Create it again with a higher replicaID.
+create-uninit range-id=1 replica-id=4
+----
+== r1/4 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 4 trunc-state: index:0 term:0 
+
+# Create another range.
+create-uninit range-id=13 replica-id=15
+----
+== r1/4 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 4 trunc-state: index:0 term:0 
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Ingest snapshot for rangeID 1.
+ingest-snapshot range-id=1 replica-id=4 raft-index=11 raft-term=5 span=a,c keys=a,b ts=12
+----
+== r1/4 inited ==
+  hs: term:0 vote:0 commit:11  next-replica-id: 4 trunc-state: index:11 term:5 
+  span: {a-c} desc-ts: 12 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000012,0=b.12
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Create a mutation with a raft log entry and apply it to the state machine.
+# It appears in the raft log, state machine, and the HardState (hs) commit
+# index moves forward.
+mutation range-id=1 replica-id=4 raft-index=12 raft-term=5 keys=a,b ts=14
+----
+== r1/4 inited ==
+  hs: term:0 vote:0 commit:12  next-replica-id: 4 trunc-state: index:11 term:5 
+  raft-log: 12
+  span: {a-c} desc-ts: 12 appliedState: index: 12, term: 5
+  global: "a"/0.000000014,0=a.14 "a"/0.000000012,0=a.12 "b"/0.000000014,0=b.14 "b"/0.000000012,0=b.12
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Create a mutation with a raft log entry for the uninitialized replica.
+mutation range-id=13 replica-id=15 raft-index=12 raft-term=5 keys=a,b ts=14
+----
+cannot add raft log entries to a !InitializedStateMachine replica 
+
+# Create a mutation for rangeID 1 but don't apply it. Appears in the raft log.
+mutation range-id=1 replica-id=4 raft-index=13 raft-term=5 keys=a ts=15 apply=false
+----
+== r1/4 inited ==
+  hs: term:0 vote:0 commit:12  next-replica-id: 4 trunc-state: index:11 term:5 
+  raft-log: 12, 13
+  span: {a-c} desc-ts: 12 appliedState: index: 12, term: 5
+  global: "a"/0.000000014,0=a.14 "a"/0.000000012,0=a.12 "b"/0.000000014,0=b.14 "b"/0.000000012,0=b.12
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Create another mutation with a raft log entry that is not applied.
+mutation range-id=1 replica-id=4 raft-index=14 raft-term=5 keys=a ts=16 apply=false
+----
+== r1/4 inited ==
+  hs: term:0 vote:0 commit:12  next-replica-id: 4 trunc-state: index:11 term:5 
+  raft-log: 12, 13, 14
+  span: {a-c} desc-ts: 12 appliedState: index: 12, term: 5
+  global: "a"/0.000000014,0=a.14 "a"/0.000000012,0=a.12 "b"/0.000000014,0=b.14 "b"/0.000000012,0=b.12
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Increase the raft term and wipe out the old entries at index 13, 14 by
+# adding an entry at index 13, and also apply it.
+# TODO(sumeer): add test case that also wipes out sideloaded storage.
+mutation range-id=1 replica-id=4 raft-index=13 raft-term=6 keys=a ts=18
+----
+== r1/4 inited ==
+  hs: term:0 vote:0 commit:13  next-replica-id: 4 trunc-state: index:11 term:5 
+  raft-log: 12, 13
+  span: {a-c} desc-ts: 12 appliedState: index: 13, term: 6
+  global: "a"/0.000000018,0=a.18 "a"/0.000000014,0=a.14 "a"/0.000000012,0=a.12 "b"/0.000000014,0=b.14 "b"/0.000000012,0=b.12
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Split rangeID 1. The latest descriptor(s) for LHS and RHS have the expected
+# timestamps and the RHS has the expected state.
+split-replica range-id=1 replica-id=4 rhs-range-id=21 rhs-replica-id=24 rhs-span=b,c ts=20
+----
+== r1/4 inited ==
+  hs: term:0 vote:0 commit:13  next-replica-id: 4 trunc-state: index:11 term:5 
+  raft-log: 12, 13
+  span: {a-b} desc-ts: 20 appliedState: index: 13, term: 6
+  global: "a"/0.000000018,0=a.18 "a"/0.000000014,0=a.14 "a"/0.000000012,0=a.12
+== r21/24 inited ==
+  hs: term:0 vote:0 commit:10  trunc-state: index:10 term:5 
+  span: {b-c} desc-ts: 20 appliedState: index: 10, term: 5
+  global: "b"/0.000000014,0=b.14 "b"/0.000000012,0=b.12
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Merge back into rangeID 1.
+merge-replicas lhs-range-id=1 lhs-replica-id=4 rhs-range-id=21 rhs-replica-id=24 ts=22
+----
+== r1/4 inited ==
+  hs: term:0 vote:0 commit:13  next-replica-id: 4 trunc-state: index:11 term:5 
+  raft-log: 12, 13
+  span: {a-c} desc-ts: 22 appliedState: index: 13, term: 6
+  global: "a"/0.000000018,0=a.18 "a"/0.000000014,0=a.14 "a"/0.000000012,0=a.12 "b"/0.000000014,0=b.14 "b"/0.000000012,0=b.12
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Try to recreate the RHS rangeID with a high replicaID. Fails due to RangeTombstone.
+create-uninit range-id=21 replica-id=3000
+----
+raft group deleted
+
+# Split rangeID 1 again, at a different key.
+split-replica range-id=1 replica-id=4 rhs-range-id=22 rhs-replica-id=25 rhs-span=aa,c ts=23
+----
+== r1/4 inited ==
+  hs: term:0 vote:0 commit:13  next-replica-id: 4 trunc-state: index:11 term:5 
+  raft-log: 12, 13
+  span: a{-a} desc-ts: 23 appliedState: index: 13, term: 6
+  global: "a"/0.000000018,0=a.18 "a"/0.000000014,0=a.14 "a"/0.000000012,0=a.12
+== r22/25 inited ==
+  hs: term:0 vote:0 commit:10  trunc-state: index:10 term:5 
+  span: {aa-c} desc-ts: 23 appliedState: index: 10, term: 5
+  global: "b"/0.000000014,0=b.14 "b"/0.000000012,0=b.12
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Discard rangeID 1.
+discard-replica range-id=1 replica-id=4 next-replica-id=5
+----
+== r22/25 inited ==
+  hs: term:0 vote:0 commit:10  trunc-state: index:10 term:5 
+  span: {aa-c} desc-ts: 23 appliedState: index: 10, term: 5
+  global: "b"/0.000000014,0=b.14 "b"/0.000000012,0=b.12
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Add it back at a higher replicaID than the RangeTombstone.
+create-uninit range-id=1 replica-id=5
+----
+== r22/25 inited ==
+  hs: term:0 vote:0 commit:10  trunc-state: index:10 term:5 
+  span: {aa-c} desc-ts: 23 appliedState: index: 10, term: 5
+  global: "b"/0.000000014,0=b.14 "b"/0.000000012,0=b.12
+== r1/5 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 5 trunc-state: index:0 term:0 
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Remove rangeID 22 and add it back, so we can look at the RangeTombstone.
+discard-replica range-id=22 replica-id=25 next-replica-id=26
+----
+== r1/5 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 5 trunc-state: index:0 term:0 
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+create-uninit range-id=22 replica-id=26
+----
+== r1/5 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 5 trunc-state: index:0 term:0 
+== r13/15 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+== r22/26 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 26 trunc-state: index:0 term:0 
+
+# Do the same for the uninitialized rangeID 13, to check the RangeTombstone
+# behavior when discarding an uninitialized replica.
+discard-replica range-id=13 replica-id=15 next-replica-id=16
+----
+== r1/5 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 5 trunc-state: index:0 term:0 
+== r22/26 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 26 trunc-state: index:0 term:0 
+
+create-uninit range-id=13 replica-id=16
+----
+== r1/5 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 5 trunc-state: index:0 term:0 
+== r13/16 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 16 trunc-state: index:0 term:0 
+== r22/26 uninited ==
+  hs: term:0 vote:0 commit:0  next-replica-id: 26 trunc-state: index:0 term:0 

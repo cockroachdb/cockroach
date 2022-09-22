@@ -143,15 +143,24 @@ func (s *SSTSnapshotStorageScratch) NewFile(
 // the provided SST when it is finished using it. If the provided SST is empty,
 // then no file will be created and nothing will be written.
 func (s *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, data []byte) error {
+	_, err := s.WriteSSTAndReturnPath(ctx, data)
+	return err
+}
+
+// WriteSSTAndReturnPath is similar to WriteSST, but returns the path of the
+// written file.
+func (s *SSTSnapshotStorageScratch) WriteSSTAndReturnPath(
+	ctx context.Context, data []byte,
+) (path string, err error) {
 	if s.closed {
-		return errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
+		return "", errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
 	}
 	if len(data) == 0 {
-		return nil
+		return "", nil
 	}
 	f, err := s.NewFile(ctx, 512<<10 /* 512 KB */)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() {
 		// Closing an SSTSnapshotStorageFile multiple times is idempotent. Nothing
@@ -159,12 +168,15 @@ func (s *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, data []byte) e
 		_ = f.Close()
 	}()
 	if _, err := f.Write(data); err != nil {
-		return err
+		return "", err
 	}
 	if err := f.Sync(); err != nil {
-		return err
+		return "", err
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return s.ssts[len(s.ssts)-1], nil
 }
 
 // SSTs returns the names of the files created.
