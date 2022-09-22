@@ -37,11 +37,11 @@ func AWSMachineType(cpus int) string {
 
 // GCEMachineType selects a machine type given the desired number of CPUs.
 func GCEMachineType(cpus int) string {
-	// TODO(peter): This is awkward: below 16 cpus, use n1-standard so that the
-	// machines have a decent amount of RAM. We could use customer machine
+	// TODO(peter): This is awkward: at or below 16 cpus, use n1-standard so that
+	// the machines have a decent amount of RAM. We could use custom machine
 	// configurations, but the rules for the amount of RAM per CPU need to be
 	// determined (you can't request any arbitrary amount of RAM).
-	if cpus < 16 {
+	if cpus <= 16 {
 		return fmt.Sprintf("n1-standard-%d", cpus)
 	}
 	return fmt.Sprintf("n1-highcpu-%d", cpus)
