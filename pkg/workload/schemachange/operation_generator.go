@@ -931,13 +931,22 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
+	// Only generate invisible indexes when they are supported.
+	invisibleIndexesIsNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.Start22_2))
+	if err != nil {
+		return nil, err
+	}
+
 	def := &tree.CreateIndex{
 		Name:        tree.Name(indexName),
 		Table:       *tableName,
-		Unique:      og.randIntn(4) == 0,  // 25% UNIQUE
-		Inverted:    og.randIntn(10) == 0, // 10% INVERTED
-		IfNotExists: og.randIntn(2) == 0,  // 50% IF NOT EXISTS
-		NotVisible:  og.randIntn(20) == 0, // 5% NOT VISIBLE
+		Unique:      og.randIntn(4) == 0,                                     // 25% UNIQUE
+		Inverted:    og.randIntn(10) == 0,                                    // 10% INVERTED
+		IfNotExists: og.randIntn(2) == 0,                                     // 50% IF NOT EXISTS
+		NotVisible:  og.randIntn(20) == 0 && !invisibleIndexesIsNotSupported, // 5% NOT VISIBLE
 	}
 
 	regionColumn := ""
@@ -1204,6 +1213,26 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return false
 	}()
 
+	invisibleIndexesIsNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.Start22_2))
+	if err != nil {
+		return nil, err
+	}
+	hasInvisibleIndexesUnsupported := func() bool {
+		if !invisibleIndexesIsNotSupported {
+			return false
+		}
+		// Check if any of the indexes have trigrams involved.
+		for _, def := range stmt.Defs {
+			if idx, ok := def.(*tree.IndexTableDef); ok && idx.NotVisible {
+				return true
+			}
+		}
+		return false
+	}()
+
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return nil, err
@@ -1221,6 +1250,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	// fully transaction aware.
 	codesWithConditions{
 		{code: pgcode.FeatureNotSupported, condition: hasTrigramIdxUnsupported},
+		{code: pgcode.Syntax, condition: hasInvisibleIndexesUnsupported},
 	}.add(opStmt.potentialExecErrors)
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
