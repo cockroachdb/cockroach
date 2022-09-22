@@ -550,6 +550,20 @@ var metaRdbBytesIngested = storageLevelMetricMetadata(
 	metric.Unit_BYTES,
 )
 
+var metaRdbLevelSize = storageLevelMetricMetadata(
+	"level-size",
+	"Size of the SSTables in level %d",
+	"Bytes",
+	metric.Unit_BYTES,
+)
+
+var metaRdbLevelScores = storageLevelMetricMetadata(
+	"level-score",
+	"Compaction score of level %d",
+	"Score",
+	metric.Unit_COUNT,
+)
+
 var (
 	metaRdbWriteStalls = metric.Metadata{
 		Name:        "storage.write-stalls",
@@ -1699,7 +1713,9 @@ type StoreMetrics struct {
 	RdbL0BytesFlushed           *metric.Gauge
 	RdbL0Sublevels              *metric.Gauge
 	RdbL0NumFiles               *metric.Gauge
-	RdbBytesIngested            [7]*metric.Gauge // idx = level
+	RdbBytesIngested            [7]*metric.Gauge        // idx = level
+	RdbLevelSize                [7]*metric.Gauge        // idx = level
+	RdbLevelScore               [7]*metric.GaugeFloat64 // idx = level
 	RdbWriteStalls              *metric.Gauge
 	RdbWriteStallNanos          *metric.Gauge
 
@@ -2127,6 +2143,8 @@ func newTenantsStorageMetrics() *TenantsStorageMetrics {
 func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	storeRegistry := metric.NewRegistry()
 	rdbBytesIngested := storageLevelGaugeSlice(metaRdbBytesIngested)
+	rdbLevelSize := storageLevelGaugeSlice(metaRdbLevelSize)
+	rdbLevelScore := storageLevelGaugeFloat64Slice(metaRdbLevelScores)
 
 	sm := &StoreMetrics{
 		registry:              storeRegistry,
@@ -2209,6 +2227,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbL0Sublevels:              metric.NewGauge(metaRdbL0Sublevels),
 		RdbL0NumFiles:               metric.NewGauge(metaRdbL0NumFiles),
 		RdbBytesIngested:            rdbBytesIngested,
+		RdbLevelSize:                rdbLevelSize,
+		RdbLevelScore:               rdbLevelScore,
 		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
 		RdbWriteStallNanos:          metric.NewGauge(metaRdbWriteStallNanos),
 
@@ -2512,6 +2532,8 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].BytesFlushed))
 	for level, stats := range m.Levels {
 		sm.RdbBytesIngested[level].Update(int64(stats.BytesIngested))
+		sm.RdbLevelSize[level].Update(stats.Size)
+		sm.RdbLevelScore[level].Update(stats.Score)
 	}
 }
 
@@ -2563,6 +2585,14 @@ func storageLevelGaugeSlice(sl [7]metric.Metadata) [7]*metric.Gauge {
 	var gs [7]*metric.Gauge
 	for i := range sl {
 		gs[i] = metric.NewGauge(sl[i])
+	}
+	return gs
+}
+
+func storageLevelGaugeFloat64Slice(sl [7]metric.Metadata) [7]*metric.GaugeFloat64 {
+	var gs [7]*metric.GaugeFloat64
+	for i := range sl {
+		gs[i] = metric.NewGaugeFloat64(sl[i])
 	}
 	return gs
 }
