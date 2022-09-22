@@ -99,4 +99,10 @@ func TestCCLLogic_show_create(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "show_create")
+
+func TestCCLLogic_txn_timeout(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "txn_timeout")
 }

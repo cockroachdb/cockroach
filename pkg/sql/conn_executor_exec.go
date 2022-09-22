@@ -177,6 +177,42 @@ func (ex *connExecutor) execStmt(
 		}
 	}
 
+	if ex.sessionData().TransactionTimeout > 0 {
+		timerNotSet := ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionStartTransactionBegin).IsZero()
+		timerDuration :=
+			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionStartTransactionBegin))
+
+		// There's no need to proceed with execution if the timer has already expired. Unless the command
+		// is a rollback
+		if timerDuration < 0 && !timerNotSet {
+			if parserStmt.SQL == "ROLLBACK" {
+				ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionBegin, time.Time{})
+			} else {
+				ev, payload = ex.makeErrEvent(sqlerrors.TxnTimeoutError, ast)
+			}
+		}
+		startTransactionTimeout := func() {
+			switch ast.(type) {
+			case *tree.CommitTransaction, *tree.RollbackTransaction:
+				//Reset txn BEGIN time to zero in order to reset
+				ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionBegin, time.Time{})
+			case *tree.BeginTransaction:
+				ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionBegin, timeutil.Now())
+
+			}
+		}
+		switch ex.machine.CurState().(type) {
+		case stateCommitWait, stateNoTxn:
+			startTransactionTimeout()
+		case stateOpen:
+			// Only start timeout if the statement is executed in an
+			// explicit transaction.
+			if !ex.implicitTxn() {
+				startTransactionTimeout()
+			}
+		}
+	}
+
 	return ev, payload, err
 }
 

@@ -545,6 +545,111 @@ func TestIdleInTransactionSessionTimeout(t *testing.T) {
 	}
 }
 
+func TestTransactionTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	clusterSettingConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	clusterSettingConn.Exec(t, `SET transaction_timeout = '123s'`)
+	defer tc.ServerConn(0).Close()
+
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		var TransactionTimeoutSetting string
+		err = conn.QueryRowContext(ctx, `SHOW transaction_timeout`).Scan(&TransactionTimeoutSetting)
+		require.NoError(t, err)
+		if TransactionTimeoutSetting == "123000" {
+			return nil
+		}
+		conn, err = tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		return errors.Errorf("expected transaction__timeout %s, got %s", "123000", TransactionTimeoutSetting)
+	})
+
+	_, err = conn.ExecContext(ctx, `SET transaction_timeout = '1ms'`)
+	require.NoError(t, err)
+
+	time.Sleep(3 * time.Second)
+	// transaction_timeout should only timeout if a transaction
+	// is active
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = conn.ExecContext(ctx, `CREATE SEQUENCE IF NOT EXISTS frt_liquibase_test_sequence;`)
+	require.Error(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		var TransactionStatus string
+		err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
+		if TransactionStatus == "Aborted" {
+			return nil
+		}
+		conn, err = tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		return errors.Errorf("expected transaction status %s, got %s", "Aborted", TransactionStatus)
+	})
+
+	_, err = conn.ExecContext(ctx, `CREATE USER max`)
+	require.Error(t, err)
+
+	_, err = conn.ExecContext(ctx, `ROLLBACK`)
+	require.NoError(t, err)
+
+	// The connection should still be alive.
+	err = conn.PingContext(ctx)
+	if err != nil {
+		t.Fatalf("expected the connection to be alive but the connection"+
+			"is dead, %v", err)
+	}
+
+	_, err = conn.ExecContext(ctx, `SET transaction_timeout = '10s'`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `CREATE SEQUENCE IF NOT EXISTS frt_liquibase_test_sequence;`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `CREATE USER max`)
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		var TransactionStatus string
+		err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+		require.NoError(t, err)
+		if TransactionStatus == "Open" {
+			return nil
+		}
+		conn, err = tc.ServerConn(0).Conn(ctx)
+		require.NoError(t, err)
+		return errors.Errorf("expected transaction status %s, got %s", "Aborted", TransactionStatus)
+	})
+
+	_, err = conn.ExecContext(ctx, `COMMIT`)
+	require.NoError(t, err)
+
+}
+
 func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
