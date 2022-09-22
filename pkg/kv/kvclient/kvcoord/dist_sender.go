@@ -461,6 +461,8 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
 	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
+	// TODO(arul): The rpcRetryOptions passed in here from server/tenant don't
+	// set a max retries limit. Should they?
 	if cfg.RPCRetryOptions != nil {
 		ds.rpcRetryOptions = *cfg.RPCRetryOptions
 	}
@@ -1392,11 +1394,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
 		if canParallelize && !lastRange && !ds.disableParallelBatches &&
-			ds.sendPartialBatchAsync(ctx, curRangeBatch, rs, isReverse, withCommit, batchIdx, ri.Token(), responseCh, positions) {
+			ds.sendPartialBatchAsync(ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), responseCh, positions) {
 			// Sent the batch asynchronously.
 		} else {
 			resp := ds.sendPartialBatch(
-				ctx, curRangeBatch, rs, isReverse, withCommit, batchIdx, ri.Token(), positions,
+				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), positions,
 			)
 			responseCh <- resp
 			if resp.pErr != nil {
