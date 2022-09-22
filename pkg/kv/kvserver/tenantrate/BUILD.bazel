@@ -41,7 +41,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/metrictestutils",
-        "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "//pkg/util/timeutil",
