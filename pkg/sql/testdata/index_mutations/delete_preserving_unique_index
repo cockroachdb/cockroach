@@ -11,7 +11,7 @@ CREATE TABLE ti (
 );
 ----
 
-mutate-index ti index_to_mutate DELETE_AND_WRITE_ONLY use_delete_preserving_encoding=true
+mutate-index ti index_to_mutate WRITE_ONLY use_delete_preserving_encoding=true
 ----
 
 statement

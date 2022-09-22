@@ -45,7 +45,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       └── • 1 Mutation operation
 │           │
 │           └── • MarkDescriptorAsSyntheticallyDropped
-│                 DescID: 108
+│                 DescriptorID: 108
 │
 ├── • PreCommitPhase
 │   │
@@ -234,13 +234,13 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       └── • 7 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
-│           │     DescID: 108
+│           │     DescriptorID: 108
 │           │
 │           ├── • RemoveAllTableComments
 │           │     TableID: 108
 │           │
 │           ├── • RemoveBackReferenceInTypes
-│           │     BackReferencedDescID: 108
+│           │     BackReferencedDescriptorID: 108
 │           │     TypeIDs:
 │           │     - 105
 │           │
@@ -357,12 +357,12 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGcJobForTable
+            ├── • CreateGCJobForTable
             │     StatementForDropJob:
             │       Statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
             │     TableID: 108
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 1
             │     EventBase:
             │       Authorization:
@@ -375,7 +375,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │         SubWorkID: 1
             │     TableID: 108
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 4294967295
             │     EventBase:
             │       Authorization:
@@ -388,7 +388,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │         SubWorkID: 1
             │     TableID: 108
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 4294967294
             │     EventBase:
             │       Authorization:

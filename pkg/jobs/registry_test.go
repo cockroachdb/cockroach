@@ -164,7 +164,7 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 		}
 		if mutOptions.hasMutation {
 			writeColumnMutation(t, kvDB, tableDesc, "i", descpb.DescriptorMutation{State: descpb.
-				DescriptorMutation_DELETE_AND_WRITE_ONLY, Direction: descpb.DescriptorMutation_DROP})
+				DescriptorMutation_WRITE_ONLY, Direction: descpb.DescriptorMutation_DROP})
 		}
 		payload, err := protoutil.Marshal(&jobspb.Payload{
 			Description: name,

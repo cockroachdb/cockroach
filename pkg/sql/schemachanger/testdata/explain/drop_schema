@@ -11,7 +11,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │         ├── 1 element transitioning toward ABSENT
  │         │    └── PUBLIC → TXN_DROPPED Schema:{DescID: 106}
  │         └── 1 Mutation operation
- │              └── MarkDescriptorAsSyntheticallyDropped {"DescID":106}
+ │              └── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":106}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         ├── 6 elements transitioning toward ABSENT
@@ -22,7 +22,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │         │    ├── TXN_DROPPED → DROPPED Schema:{DescID: 106}
  │         │    └── PUBLIC      → ABSENT  SchemaParent:{DescID: 106, ReferencedDescID: 104}
  │         └── 6 Mutation operations
- │              ├── MarkDescriptorAsDropped {"DescID":106}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"sc"}}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}

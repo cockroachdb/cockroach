@@ -54,7 +54,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │
 │       └── • 7 Mutation operations
 │           │
-│           ├── • MakeDroppedColumnDeleteAndWriteOnly
+│           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 2
 │           │     TableID: 104
 │           │
@@ -79,7 +79,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │           │     Name: crdb_internal_column_2_name_placeholder
 │           │     TableID: 104
 │           │
-│           ├── • MakeAddedIndexBackfilling
+│           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
 │           │       ConstraintID: 2
 │           │       IndexID: 2
@@ -93,7 +93,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │           │     IndexID: 2
 │           │     TableID: 104
 │           │
-│           ├── • MakeAddedTempIndexDeleteOnly
+│           ├── • MakeAbsentTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 3
 │           │       IndexID: 3
@@ -145,7 +145,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 3
 │   │       │     TableID: 104
 │   │       │
@@ -277,7 +277,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │
 │       └── • 1 Validation operation
 │           │
-│           └── • ValidateUniqueIndex
+│           └── • ValidateIndex
 │                 IndexID: 2
 │                 TableID: 104
 │
@@ -366,11 +366,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │
     │   └── • 8 Mutation operations
     │       │
-    │       ├── • MakeDroppedColumnDeleteOnly
+    │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 2
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    │       ├── • MakePublicPrimaryIndexWriteOnly
     │       │     IndexID: 1
     │       │     TableID: 104
     │       │
@@ -384,11 +384,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │       │     Name: t_pkey
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeAddedPrimaryIndexPublic
+    │       ├── • MakeValidatedPrimaryIndexPublic
     │       │     EventBase:
     │       │       Authorization:
     │       │         UserName: root
@@ -431,7 +431,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │   │
     │   └── • 5 Mutation operations
     │       │
-    │       ├── • CreateGcJobForIndex
+    │       ├── • CreateGCJobForIndex
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
@@ -439,7 +439,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 1
     │       │     TableID: 104
     │       │
@@ -497,7 +497,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
         │
         └── • 5 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
             │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j
@@ -515,7 +515,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
             │     IndexID: 1
             │     TableID: 104
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
             │     EventBase:
             │       Authorization:

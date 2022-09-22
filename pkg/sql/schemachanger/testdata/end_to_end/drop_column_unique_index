@@ -55,7 +55,7 @@ upsert descriptor #106
   +        oid: 1700
   +    direction: DROP
   +    mutationId: 3
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 5
@@ -181,7 +181,7 @@ upsert descriptor #106
          version: 4
        mutationId: 3
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: test
      nextColumnId: 5
   ...
@@ -264,7 +264,7 @@ upsert descriptor #106
          version: 4
        mutationId: 3
   -    state: MERGING
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
@@ -298,7 +298,7 @@ upsert descriptor #106
   ...
        direction: DROP
        mutationId: 3
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
   +  - direction: DROP
@@ -326,7 +326,7 @@ upsert descriptor #106
   +      useDeletePreservingEncoding: true
          version: 4
        mutationId: 3
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
   +  - direction: DROP
@@ -441,7 +441,7 @@ upsert descriptor #106
   ...
          version: 4
        mutationId: 3
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: test
      nextColumnId: 5

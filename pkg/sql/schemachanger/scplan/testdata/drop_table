@@ -49,11 +49,11 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
     [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 109
+      DescriptorID: 109
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 110
+      DescriptorID: 110
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 111
+      DescriptorID: 111
 PreCommitPhase stage 1 of 1 with 32 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -134,7 +134,7 @@ PreCommitPhase stage 1 of 1 with 32 MutationType ops
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 109
+      DescriptorID: 109
     *scop.RemoveAllTableComments
       TableID: 109
     *scop.RemoveColumnDefaultExpression
@@ -165,11 +165,11 @@ PreCommitPhase stage 1 of 1 with 32 MutationType ops
       - 107
       - 108
     *scop.MarkDescriptorAsDropped
-      DescID: 110
+      DescriptorID: 110
     *scop.RemoveAllTableComments
       TableID: 110
     *scop.MarkDescriptorAsDropped
-      DescID: 111
+      DescriptorID: 111
     *scop.RemoveViewBackReferencesInRelations
       BackReferencedViewID: 111
       RelationIDs:
@@ -290,11 +290,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
+    *scop.CreateGCJobForTable
       StatementForDropJob:
         Statement: DROP TABLE defaultdb.public.shipments CASCADE
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -305,7 +305,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -316,7 +316,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
         Authorization:
@@ -327,7 +327,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4
       EventBase:
         Authorization:
@@ -338,7 +338,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 5
       EventBase:
         Authorization:
@@ -349,7 +349,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -360,7 +360,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -384,7 +384,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
+    *scop.CreateGCJobForTable
       StatementForDropJob:
         Statement: DROP TABLE defaultdb.public.shipments CASCADE
       TableID: 110
@@ -410,7 +410,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 111
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -421,7 +421,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
       TableID: 111
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -432,7 +432,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
       TableID: 111
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -443,7 +443,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
       TableID: 111
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -1223,7 +1223,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 114
+      DescriptorID: 114
 PreCommitPhase stage 1 of 1 with 16 MutationType ops
   transitions:
     [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -1264,7 +1264,7 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
     [[ConstraintName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 114
+      DescriptorID: 114
     *scop.RemoveAllTableComments
       TableID: 114
     *scop.RemoveColumnDefaultExpression
@@ -1355,11 +1355,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
+    *scop.CreateGCJobForTable
       StatementForDropJob:
         Statement: DROP TABLE defaultdb.public.greeter
       TableID: 114
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -1370,7 +1370,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 114
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -1381,7 +1381,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 114
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
         Authorization:
@@ -1392,7 +1392,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 114
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -1403,7 +1403,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 114
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:

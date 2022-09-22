@@ -2164,7 +2164,7 @@ func (c *cliState) configurePreShellDefaults(
 		// anyone. We do prefer a limit however (as opposed to no limit at
 		// all), to prevent abnormal situation where a history runs into
 		// megabytes and starts slowing down the shell.
-		const maxHistEntries = 1000
+		const maxHistEntries = 10000
 
 		c.ins.SetCompleter(c)
 		if err := c.ins.UseHistory(maxHistEntries, true /*dedup*/); err != nil {

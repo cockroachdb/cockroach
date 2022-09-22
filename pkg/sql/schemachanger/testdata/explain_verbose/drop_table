@@ -57,7 +57,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       └── • 1 Mutation operation
 │           │
 │           └── • MarkDescriptorAsSyntheticallyDropped
-│                 DescID: 107
+│                 DescriptorID: 107
 │
 ├── • PreCommitPhase
 │   │
@@ -338,7 +338,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       └── • 6 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
-│           │     DescID: 107
+│           │     DescriptorID: 107
 │           │
 │           ├── • RemoveAllTableComments
 │           │     TableID: 107
@@ -492,12 +492,12 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGcJobForTable
+            ├── • CreateGCJobForTable
             │     StatementForDropJob:
             │       Statement: DROP TABLE db.sc.t
             │     TableID: 107
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 1
             │     EventBase:
             │       Authorization:
@@ -509,7 +509,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
             │         SubWorkID: 1
             │     TableID: 107
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
             │     EventBase:
             │       Authorization:
@@ -521,7 +521,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
             │         SubWorkID: 1
             │     TableID: 107
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 3
             │     EventBase:
             │       Authorization:
@@ -533,7 +533,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
             │         SubWorkID: 1
             │     TableID: 107
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 4294967295
             │     EventBase:
             │       Authorization:
@@ -545,7 +545,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
             │         SubWorkID: 1
             │     TableID: 107
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 4294967294
             │     EventBase:
             │       Authorization:

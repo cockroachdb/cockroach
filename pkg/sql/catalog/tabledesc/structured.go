@@ -1559,7 +1559,7 @@ func (desc *wrapper) GetIndexMutationCapabilities(id descpb.IndexID) (bool, bool
 		if mutationIndex := mutation.GetIndex(); mutationIndex != nil {
 			if mutationIndex.ID == id {
 				return true,
-					mutation.State == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+					mutation.State == descpb.DescriptorMutation_WRITE_ONLY
 			}
 		}
 	}
@@ -2100,7 +2100,7 @@ func (desc *Mutable) AddIndexMutation(
 			return state == descpb.DescriptorMutation_BACKFILLING ||
 				state == descpb.DescriptorMutation_DELETE_ONLY
 		case descpb.DescriptorMutation_DROP:
-			return state == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+			return state == descpb.DescriptorMutation_WRITE_ONLY
 		default:
 			return false
 		}
@@ -2169,7 +2169,7 @@ func (desc *Mutable) addIndexMutationMaybeWithTempIndex(m descpb.DescriptorMutat
 			m.State = descpb.DescriptorMutation_DELETE_ONLY
 		}
 	case descpb.DescriptorMutation_DROP:
-		m.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+		m.State = descpb.DescriptorMutation_WRITE_ONLY
 	}
 	desc.addMutationWithNextID(m)
 	// If we are adding an index, we add another mutation for the

@@ -28,7 +28,7 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Database) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
-						DescID: this.DatabaseID,
+						DescriptorID: this.DatabaseID,
 					}
 				}),
 			),
@@ -38,7 +38,7 @@ func init() {
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.MarkDescriptorAsSyntheticallyDropped {
 					return &scop.MarkDescriptorAsSyntheticallyDropped{
-						DescID: this.DatabaseID,
+						DescriptorID: this.DatabaseID,
 					}
 				}),
 			),
@@ -46,7 +46,7 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.Database) *scop.MarkDescriptorAsDropped {
 					return &scop.MarkDescriptorAsDropped{
-						DescID: this.DatabaseID,
+						DescriptorID: this.DatabaseID,
 					}
 				}),
 			),
@@ -54,8 +54,8 @@ func init() {
 				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.CreateGcJobForDatabase {
-					return &scop.CreateGcJobForDatabase{
+				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.CreateGCJobForDatabase {
+					return &scop.CreateGCJobForDatabase{
 						DatabaseID:          this.DatabaseID,
 						StatementForDropJob: statementForDropJob(this, md),
 					}

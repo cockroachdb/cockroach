@@ -358,7 +358,7 @@ type TableDescriptor interface {
 	TableSpan(codec keys.SQLCodec) roachpb.Span
 	// GetIndexMutationCapabilities returns:
 	// 1. Whether the index is a mutation
-	// 2. if so, is it in state DELETE_AND_WRITE_ONLY
+	// 2. if so, is it in state WRITE_ONLY
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
 
 	// AllIndexes returns a slice with all indexes, public and non-public,
@@ -465,7 +465,7 @@ type TableDescriptor interface {
 	// table's public columns, in the canonical order.
 	PublicColumns() []Column
 	// WritableColumns returns a slice of Column interfaces containing the
-	// table's public columns and DELETE_AND_WRITE_ONLY mutations, in the canonical
+	// table's public columns and WRITE_ONLY mutations, in the canonical
 	// order.
 	WritableColumns() []Column
 	// DeletableColumns returns a slice of Column interfaces containing the

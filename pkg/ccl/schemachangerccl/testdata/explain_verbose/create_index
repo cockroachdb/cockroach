@@ -79,7 +79,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │       │
 │       └── • 10 Mutation operations
 │           │
-│           ├── • MakeAddedIndexBackfilling
+│           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
 │           │       IndexID: 2
 │           │       SourceIndexID: 1
@@ -104,7 +104,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │           │         NumColumns: 1
 │           │       TableID: 104
 │           │
-│           ├── • MakeAddedTempIndexDeleteOnly
+│           ├── • MakeAbsentTempIndexDeleteOnly
 │           │     Index:
 │           │       IndexID: 3
 │           │       SourceIndexID: 1
@@ -200,7 +200,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 3
 │   │       │     TableID: 104
 │   │       │
@@ -338,7 +338,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │       │
 │       └── • 1 Validation operation
 │           │
-│           └── • ValidateUniqueIndex
+│           └── • ValidateIndex
 │                 IndexID: 2
 │                 TableID: 104
 │
@@ -391,11 +391,11 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
     │       │     Name: id1
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
-    │       ├── • MakeAddedSecondaryIndexPublic
+    │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
@@ -419,7 +419,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
         │
         └── • 4 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     TableID: 104
             │

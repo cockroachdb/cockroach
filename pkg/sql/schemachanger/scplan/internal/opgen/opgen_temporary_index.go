@@ -21,16 +21,16 @@ func init() {
 		toTransientAbsent(
 			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
-				emit(func(this *scpb.TemporaryIndex) *scop.MakeAddedTempIndexDeleteOnly {
-					return &scop.MakeAddedTempIndexDeleteOnly{
+				emit(func(this *scpb.TemporaryIndex) *scop.MakeAbsentTempIndexDeleteOnly {
+					return &scop.MakeAbsentTempIndexDeleteOnly{
 						Index:            *protoutil.Clone(&this.Index).(*scpb.Index),
 						IsSecondaryIndex: this.IsUsingSecondaryEncoding,
 					}
 				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.TemporaryIndex) *scop.MakeAddedIndexDeleteAndWriteOnly {
-					return &scop.MakeAddedIndexDeleteAndWriteOnly{
+				emit(func(this *scpb.TemporaryIndex) *scop.MakeDeleteOnlyIndexWriteOnly {
+					return &scop.MakeDeleteOnlyIndexWriteOnly{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
@@ -41,16 +41,16 @@ func init() {
 			scpb.Status_WRITE_ONLY,
 			to(scpb.Status_DELETE_ONLY,
 				revertible(false),
-				emit(func(this *scpb.TemporaryIndex) *scop.MakeDroppedIndexDeleteOnly {
-					return &scop.MakeDroppedIndexDeleteOnly{
+				emit(func(this *scpb.TemporaryIndex) *scop.MakeWriteOnlyIndexDeleteOnly {
+					return &scop.MakeWriteOnlyIndexDeleteOnly{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.TemporaryIndex) *scop.CreateGcJobForIndex {
-					return &scop.CreateGcJobForIndex{
+				emit(func(this *scpb.TemporaryIndex) *scop.CreateGCJobForIndex {
+					return &scop.CreateGCJobForIndex{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
 					}

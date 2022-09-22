@@ -44,7 +44,13 @@
 
 # FoldDivOne folds $left / 1 for numeric types.
 [FoldDivOne, Normalize]
-(Div | FloorDiv $left:* $right:(Const 1))
+(Div $left:* $right:(Const 1))
+=>
+(Cast $left (BinaryType (OpName) $left $right))
+
+# FoldFloorDivOne folds $left // 1 for integer types.
+[FoldFloorDivOne, Normalize]
+(FloorDiv $left:* $right:(Const 1) & (IsInt $left))
 =>
 (Cast $left (BinaryType (OpName) $left $right))
 

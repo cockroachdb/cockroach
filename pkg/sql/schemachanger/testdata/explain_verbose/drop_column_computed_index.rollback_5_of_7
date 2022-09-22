@@ -114,11 +114,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │       │     Name: t_expr_idx
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
-    │       ├── • MakeColumnPublic
+    │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 2
     │       │     EventBase:
     │       │       Authorization:
@@ -133,7 +133,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
-    │       ├── • MakeColumnPublic
+    │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 3
     │       │     EventBase:
     │       │       Authorization:
@@ -148,11 +148,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
-    │       ├── • MakeAddedSecondaryIndexPublic
+    │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
@@ -191,7 +191,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
         │
         └── • 6 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     StatementForDropJob:
             │       Rollback: true
@@ -210,7 +210,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
             │     IndexID: 3
             │     TableID: 104
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 4
             │     TableID: 104
             │

@@ -2006,7 +2006,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 // to MERGING and then writes and deletes missed during
 // the backfill are merged from the temporary index.
 //
-// Finally, the new index is brought into the DELETE_AND_WRITE_ONLY
+// Finally, the new index is brought into the WRITE_ONLY
 // state for validation.
 //
 //	    ┌─────────────────┐         ┌─────────────────┐             ┌─────────────────┐
@@ -2019,14 +2019,14 @@ func countIndexRowsAndMaybeCheckUniqueness(
 //	                                                                ┌────────▼────────┐
 //	                                                                │                 │
 //	                                                                │    TempIndex    │
-//	t1                                                              │(DELETE_AND_WRITE)   │
+//	t1                                                              │   (WRITE_ONLY)  │
 //	                                                                │                 │   │
 //	                                                                └────────┬────────┘   │
 //	                                                                         │            │
 //	    ┌─────────────────┐         ┌─────────────────┐             ┌────────▼────────┐   │ TempIndex receiving writes
 //	    │                 │         │                 │             │                 │   │
 //	    │  PrimaryIndex   ├────────►│     NewIndex    │             │    TempIndex    │   │
-//	t2  │   (PUBLIC)      │ Backfill│  (BACKFILLING)  │             │(DELETE_AND_WRITE│   │
+//	t2  │   (PUBLIC)      │ Backfill│  (BACKFILLING)  │             │   (WRITE_ONLY)  │   │
 //	    │                 │         │                 │             │                 │   │
 //	    └─────────────────┘         └────────┬────────┘             └─────────────────┘   │
 //	                                         │                                            │
@@ -2047,14 +2047,14 @@ func countIndexRowsAndMaybeCheckUniqueness(
 //	                                ┌─────────────────┐             ┌─────────────────┐   │   │
 //	                                │                 │             │                 │   │   │
 //	                                │     NewIndex    │◄────────────┤    TempIndex    │   │   │
-//	t5                              │    (MERGING)    │  BatchMerge │(DELETE_AND_WRITE│   │   │
+//	t5                              │    (MERGING)    │  BatchMerge │   (WRITE_ONLY)  │   │   │
 //	                                │                 │             │                 │   │   │
 //	                                └────────┬────────┘             └───────┬─────────┘   │   │
 //	                                         │                              │             │   │
 //	                                ┌────────▼────────┐             ┌───────▼─────────┐   │   │
 //	                                │                 │             │                 │   │   │
 //	                                │     NewIndex    │             │    TempIndex    │       │
-//	t6                              │(DELETE_AND_WRITE)             │  (DELETE_ONLY)  │       │
+//	t6                              │   (WRITE_ONLY)  │             │  (DELETE_ONLY)  │       │
 //	                                │                 │             │                 │       │
 //	                                └───────┬─────────┘             └───────┬─────────┘       │
 //	                                        │                               │
@@ -2167,9 +2167,9 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 	return nil
 }
 
-// runStateMachineAfterTempIndexMerge steps any DELETE_AND_WRITE_ONLY
+// runStateMachineAfterTempIndexMerge steps any WRITE_ONLY
 // temporary indexes to DELETE_ONLY and changes their direction to
-// DROP and steps any MERGING indexes to DELETE_AND_WRITE_ONLY
+// DROP and steps any MERGING indexes to WRITE_ONLY
 func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context) error {
 	var runStatus jobs.RunningStatus
 	return sc.txn(ctx, func(
@@ -2199,7 +2199,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 				tbl.Mutations[m.MutationOrdinal()].Direction = descpb.DescriptorMutation_DROP
 				runStatus = RunningStatusDeleteOnly
 			} else if m.Merging() {
-				tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+				tbl.Mutations[m.MutationOrdinal()].State = descpb.DescriptorMutation_WRITE_ONLY
 			}
 		}
 		if runStatus == "" || tbl.Dropped() {
@@ -2396,7 +2396,7 @@ func runSchemaChangesInTxn(
 		if c.DeleteOnly() {
 			tableDesc.Mutations[i].State = descpb.DescriptorMutation_DELETE_ONLY
 		} else if c.WriteAndDeleteOnly() {
-			tableDesc.Mutations[i].State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+			tableDesc.Mutations[i].State = descpb.DescriptorMutation_WRITE_ONLY
 		}
 	}
 

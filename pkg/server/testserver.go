@@ -501,6 +501,11 @@ func (ts *TestServer) TenantStatusServer() interface{} {
 	return ts.status
 }
 
+// TestTenants provides information to tenant(s) that _may_ have been created
+func (ts *TestServer) TestTenants() []serverutils.TestTenantInterface {
+	return ts.testTenants
+}
+
 // maybeStartDefaultTestTenant might start a test tenant. This can then be used
 // for multi-tenant testing, where the default SQL connection will be made to
 // this tenant instead of to the system tenant. Note that we will

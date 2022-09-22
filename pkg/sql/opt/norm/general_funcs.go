@@ -70,6 +70,12 @@ func (c *CustomFuncs) IsJSON(scalar opt.ScalarExpr) bool {
 	return scalar.DataType().Family() == types.JsonFamily
 }
 
+// IsInt returns true if the given scalar expression is of one of the
+// integer types.
+func (c *CustomFuncs) IsInt(scalar opt.ScalarExpr) bool {
+	return scalar.DataType().Family() == types.IntFamily
+}
+
 // BoolType returns the boolean SQL type.
 func (c *CustomFuncs) BoolType() *types.T {
 	return types.Bool
