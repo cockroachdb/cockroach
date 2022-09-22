@@ -28,6 +28,8 @@ func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, erro
 		return d.delegateShowCreateTable(n)
 	case tree.ShowCreateModeDatabase:
 		return d.delegateShowCreateDatabase(n)
+	case tree.ShowCreateModeIndexes, tree.ShowCreateModeSecondaryIndexes:
+		return d.delegateShowCreateIndexes(n)
 	default:
 		return nil, errors.Newf("unknown show create mode: %d", n.Mode)
 	}
@@ -98,6 +100,27 @@ ORDER BY
     1, 2;`
 
 	return d.showTableDetails(n.Name, showCreateQuery)
+}
+
+func (d *delegator) delegateShowCreateIndexes(n *tree.ShowCreate) (tree.Statement, error) {
+	sqltelemetry.IncrementShowCounter(sqltelemetry.Indexes)
+
+	showCreateIndexesQuery := `
+SELECT
+	create_statement
+FROM %[4]s.crdb_internal.table_indexes
+WHERE descriptor_id = %[3]s::regclass::int`
+
+	switch n.Mode {
+	case tree.ShowCreateModeIndexes:
+	case tree.ShowCreateModeSecondaryIndexes:
+		showCreateIndexesQuery += `
+	AND index_type != 'primary'`
+	default:
+		return nil, errors.Newf("unknown show create indexes mode: %d", n.Mode)
+	}
+
+	return d.showTableDetails(n.Name, showCreateIndexesQuery)
 }
 
 // delegateShowIndexes implements SHOW INDEX FROM, SHOW INDEXES FROM, SHOW KEYS

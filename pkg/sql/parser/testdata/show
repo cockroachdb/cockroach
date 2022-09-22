@@ -1778,3 +1778,19 @@ SHOW CREATE FUNCTION db.sch.foo
 SHOW CREATE FUNCTION db.sch.foo -- fully parenthesized
 SHOW CREATE FUNCTION db.sch.foo -- literals removed
 SHOW CREATE FUNCTION _._._ -- identifiers removed
+
+parse
+SHOW CREATE INDEXES FROM t
+----
+SHOW CREATE INDEXES FROM t
+SHOW CREATE INDEXES FROM t -- fully parenthesized
+SHOW CREATE INDEXES FROM t -- literals removed
+SHOW CREATE INDEXES FROM _ -- identifiers removed
+
+parse
+SHOW CREATE SECONDARY INDEXES FROM t
+----
+SHOW CREATE SECONDARY INDEXES FROM t
+SHOW CREATE SECONDARY INDEXES FROM t -- fully parenthesized
+SHOW CREATE SECONDARY INDEXES FROM t -- literals removed
+SHOW CREATE SECONDARY INDEXES FROM _ -- identifiers removed
