@@ -81,12 +81,12 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       - 105
       - 106
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 2 with 1 MutationType op pending
+      RunningStatus: PostCommitPhase stage 1 of 1 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN j defaultdb.footyp
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
         statementtag: ALTER TABLE
-PostCommitPhase stage 1 of 2 with 5 MutationType ops
+PostCommitPhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
   ops:
@@ -100,8 +100,9 @@ PostCommitPhase stage 1 of 2 with 5 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 106
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
-PostCommitPhase stage 2 of 2 with 6 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
   ops:
@@ -1193,7 +1194,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
       - 104
       - 107
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 2 with 2 MutationType ops pending
+      RunningStatus: PostCommitPhase stage 1 of 1 with 2 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN a INT8
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
@@ -1201,7 +1202,7 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
       - statement: ALTER TABLE defaultdb.bar ADD COLUMN b INT8
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
         statementtag: ALTER TABLE
-PostCommitPhase stage 1 of 2 with 5 MutationType ops
+PostCommitPhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
     [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
@@ -1217,8 +1218,9 @@ PostCommitPhase stage 1 of 2 with 5 MutationType ops
     *scop.SetJobStateOnDescriptor
       DescriptorID: 107
     *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
       JobID: 1
-PostCommitPhase stage 2 of 2 with 7 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
     [[Column:{DescID: 107, ColumnID: 3}, PUBLIC], WRITE_ONLY] -> PUBLIC
@@ -1768,11 +1770,10 @@ PostCommitPhase stage 7 of 15 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 2
       TableID: 109
-PostCommitPhase stage 8 of 15 with 14 MutationType ops
+PostCommitPhase stage 8 of 15 with 12 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[IndexName:{DescID: 109, Name: baz_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
     [[PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 109, Name: baz_pkey, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
@@ -1839,20 +1840,6 @@ PostCommitPhase stage 8 of 15 with 14 MutationType ops
       ColumnID: 1
       IndexID: 5
       Kind: 1
-      TableID: 109
-    *scop.MakeWriteOnlyColumnPublic
-      ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT
-          ‹1›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TableID: 109
-    *scop.RefreshStats
       TableID: 109
     *scop.SetJobStateOnDescriptor
       DescriptorID: 109
@@ -1925,10 +1912,11 @@ PostCommitPhase stage 15 of 15 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 4
       TableID: 109
-PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[Column:{DescID: 109, ColumnID: 2}, PUBLIC], WRITE_ONLY] -> PUBLIC
     [[TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
@@ -1936,6 +1924,20 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
     [[IndexName:{DescID: 109, Name: baz_g_key, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 4, SourceIndexID: 2}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
   ops:
+    *scop.MakeWriteOnlyColumnPublic
+      ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT
+          ‹1›
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TableID: 109
+    *scop.RefreshStats
+      TableID: 109
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 3
       TableID: 109
