@@ -29,12 +29,11 @@ export const selectExecutionID = (
 export const selectActiveExecutionsCombiner = (
   sessions: SessionsResponse | null,
   clusterLocks: ClusterLocksResponse | null,
-  lastUpdated: moment.Moment,
 ): ActiveExecutions => {
   if (!sessions) return { statements: [], transactions: [] };
 
   const waitTimeByTxnID = getWaitTimeByTxnIDFromLocks(clusterLocks);
-  const execs = getActiveExecutionsFromSessions(sessions, lastUpdated);
+  const execs = getActiveExecutionsFromSessions(sessions);
 
   return {
     statements: execs.statements.map(s => ({

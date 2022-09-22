@@ -187,14 +187,15 @@ function makeActiveExecutionColumns(
     elapsedTime: {
       name: "elapsedTime",
       title: executionsTableTitles.elapsedTime(execType),
-      cell: (item: ActiveExecution) => Duration(item.elapsedTimeMillis * 1e6),
-      sort: (item: ActiveExecution) => item.elapsedTimeMillis,
+      cell: (item: ActiveExecution) =>
+        Duration(item.elapsedTime.asMilliseconds() * 1e6),
+      sort: (item: ActiveExecution) => item.elapsedTime.asMilliseconds(),
     },
     timeSpentWaiting: {
       name: "timeSpentWaiting",
       title: executionsTableTitles.timeSpentWaiting(execType),
       cell: (item: ActiveExecution) =>
-        Duration(item.timeSpentWaiting?.asMilliseconds() ?? 0 * 1e6),
+        Duration((item.timeSpentWaiting?.asMilliseconds() ?? 0) * 1e6),
       sort: (item: ActiveExecution) =>
         item.timeSpentWaiting?.asMilliseconds() || 0,
     },

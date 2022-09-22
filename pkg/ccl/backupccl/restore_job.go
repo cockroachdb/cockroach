@@ -267,6 +267,11 @@ func restore(
 		return emptyRowCount, errors.Wrap(err, "resolving locality locations")
 	}
 
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(backupManifests, endTime)
+	if err != nil {
+		return emptyRowCount, err
+	}
+
 	if err := checkCoverage(restoreCtx, dataToRestore.getSpans(), backupManifests); err != nil {
 		return emptyRowCount, err
 	}
@@ -275,8 +280,8 @@ func restore(
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
-	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityMap,
-		highWaterMark, targetRestoreSpanSize.Get(execCtx.ExecCfg().SV()))
+	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests,
+		backupLocalityMap, introducedSpanFrontier, highWaterMark, targetRestoreSpanSize.Get(execCtx.ExecCfg().SV()))
 
 	if len(importSpans) == 0 {
 		// There are no files to restore.
@@ -741,11 +746,7 @@ func createImportingDescriptors(
 		// -  An offline table undergoing an IMPORT INTO has all importing data
 		//    elided in the restore processor and is restored online to its pre import
 		//    state.
-		//
-		// TODO (msbutler) remove the schema_change condition once the online schema changer
-		// doesn't rely on OFFLINE state (#86626, #86691)
-		if desc.Offline() && desc.GetDeclarativeSchemaChangerState() == nil {
-
+		if desc.Offline() {
 			if schema, ok := desc.(catalog.SchemaDescriptor); ok {
 				offlineSchemas[schema.GetID()] = struct{}{}
 			}
@@ -1475,9 +1476,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
-
-	preData, preValidateData, mainData, err := createImportingDescriptors(ctx, p, backupCodec,
-		sqlDescs, r)
+	preData, preValidateData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r)
 	if err != nil {
 		return err
 	}

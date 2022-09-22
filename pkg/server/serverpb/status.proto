@@ -862,6 +862,10 @@ message TxnInfo {
 
   // Error message describing the cause for the txn's last automatic retry.
   string last_auto_retry_reason = 15;
+
+  // Time elapsed since this transaction started execution.
+  google.protobuf.Duration elapsed_time = 16
+  [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -905,6 +909,9 @@ message ActiveQuery {
   // field is only valid if the query is in the EXECUTING phase.
   bool is_full_scan = 10;
 
+  // Time elapsed since this query started execution.
+  google.protobuf.Duration elapsed_time = 11
+  [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
 }
 
 // Request object for ListSessions and ListLocalSessions.
