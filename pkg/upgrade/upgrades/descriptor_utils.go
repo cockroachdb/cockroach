@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -69,7 +70,11 @@ func CreateSystemTableInTxn(
 	b.CPut(tKey, desc.GetID(), nil)
 	b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
 	if desc.IsSequence() {
-		b.InitPut(codec.SequenceKey(uint32(desc.GetID())), desc.GetSequenceOpts().Start, false /* failOnTombstones */)
+		// TODO DURING REVIEW: @ajwerner, why was this an InitPut instead of a
+		// CPut(expect=nil)? This was added in 2548cb7.
+		var v roachpb.Value
+		v.SetInt(desc.GetSequenceOpts().Start)
+		b.CPutAllowingIfNotExists(codec.SequenceKey(uint32(desc.GetID())), &v, v.TagAndDataBytes())
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		return descpb.InvalidID, false, err

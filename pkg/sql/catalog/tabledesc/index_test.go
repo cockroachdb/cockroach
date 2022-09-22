@@ -381,20 +381,25 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Retrieve KV trace and check for redundant values.
-	rows, err := conn.Query(`SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'InitPut%'`)
+	rows, err := conn.Query(`SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'CPut%'`)
 	require.NoError(t, err)
 	defer rows.Close()
-	require.True(t, rows.Next())
-	var msg string
-	err = rows.Scan(&msg)
-	require.NoError(t, err)
-	expected := fmt.Sprintf(`InitPut /Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, mut.GetID())
-	require.Equal(t, expected, msg)
+	var msgs []string
+	for rows.Next() {
+		var msg string
+		require.NoError(t, rows.Scan(&msg))
+		msgs = append(msgs, msg)
+	}
+	expectedMsgs := []string{
+		fmt.Sprintf(`CPut /Table/%d/1/0/0 -> /TUPLE/2:2:Int/0`, mut.GetID()),
+		fmt.Sprintf(`CPut /Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, mut.GetID()),
+	}
+	require.Equal(t, expectedMsgs, msgs)
 
 	// Test that with the strict guarantees, this table descriptor would have been
 	// considered invalid.
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
-	expected = fmt.Sprintf(`relation "t" (%d): index "sec" has duplicates in KeySuffixColumnIDs: [2 2 2 2]`, mut.GetID())
+	expected := fmt.Sprintf(`relation "t" (%d): index "sec" has duplicates in KeySuffixColumnIDs: [2 2 2 2]`, mut.GetID())
 	require.EqualError(t, validate.Self(clusterversion.TestingClusterVersion, mut), expected)
 }
 

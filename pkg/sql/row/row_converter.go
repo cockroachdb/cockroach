@@ -35,9 +35,25 @@ import (
 // KVInserter implements the putter interface.
 type KVInserter func(roachpb.KeyValue)
 
+// Put method of the putter interface.
+func (i KVInserter) Put(key, value interface{}) {
+	i(roachpb.KeyValue{
+		Key:   *key.(*roachpb.Key),
+		Value: *value.(*roachpb.Value),
+	})
+}
+
 // CPut is not implmented.
 func (i KVInserter) CPut(key, value interface{}, expValue []byte) {
 	panic("unimplemented")
+}
+
+// CPutAllowingIfNotExists method of the putter interface.
+func (i KVInserter) CPutAllowingIfNotExists(key, value interface{}, expValue []byte) {
+	i(roachpb.KeyValue{
+		Key:   *key.(*roachpb.Key),
+		Value: *value.(*roachpb.Value),
+	})
 }
 
 // Del is not implemented.
@@ -54,22 +70,6 @@ func (i KVInserter) Del(key ...interface{}) {
 	// exist and the imported column family 0 will conflict (and the IMPORT INTO
 	// will fail) or the row does not exist (and thus the column families are all
 	// empty).
-}
-
-// Put method of the putter interface.
-func (i KVInserter) Put(key, value interface{}) {
-	i(roachpb.KeyValue{
-		Key:   *key.(*roachpb.Key),
-		Value: *value.(*roachpb.Value),
-	})
-}
-
-// InitPut method of the putter interface.
-func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
-	i(roachpb.KeyValue{
-		Key:   *key.(*roachpb.Key),
-		Value: *value.(*roachpb.Value),
-	})
 }
 
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default

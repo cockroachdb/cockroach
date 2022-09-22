@@ -2065,16 +2065,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			clientRetry: true,
 		},
 		{
-			name: "forwarded timestamp with get and initput",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Get(ctx, "a") // read key to set ts cache
-				return err
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "a", "put", false /* failOnTombstones */) // put to advance txn ts
-			},
-		},
-		{
 			name: "forwarded timestamp with get and cput",
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				_, err := db.Get(ctx, "a") // read key to set ts cache
@@ -2528,111 +2518,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			priorReads:    true,
 			txnCoordRetry: true,
-		},
-		{
-			name: "write too old with initput",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
-			},
-		},
-		{
-			name: "write too old with initput after prior read",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
-			},
-			priorReads:    true,
-			txnCoordRetry: true, // fails on first attempt at cput with write too old
-			// Succeeds on second attempt.
-		},
-		{
-			name: "write too old with initput matching older and newer values",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
-			},
-		},
-		{
-			name: "write too old with initput matching older and newer values after prior read",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
-			},
-			priorReads: true,
-			// Expect a transaction coord retry, which should succeed.
-			txnCoordRetry: true,
-		},
-		{
-			name: "write too old with initput matching older value",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put1")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put2")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put1", false)
-			},
-			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
-			expFailure:    "unexpected value", // the failure we get is a condition failed error
-		},
-		{
-			name: "write too old with initput matching newer value",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put1")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put2")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put2", false)
-			},
-			// No txn coord retry as we get condition failed error.
-			expFailure: "unexpected value", // the failure we get is a condition failed error
-		},
-		{
-			name: "write too old with initput failing on tombstone before",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Del(ctx, "iput")
-				return err
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put2")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put2", true)
-			},
-			expFailure: "unexpected value", // condition failed error when failing on tombstones
-		},
-		{
-			name: "write too old with initput failing on tombstone after",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Del(ctx, "iput")
-				return err
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", true)
-			},
-			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
-			expFailure:    "unexpected value", // condition failed error when failing on tombstones
 		},
 		{
 			name: "write too old with locking read",

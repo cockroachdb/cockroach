@@ -701,7 +701,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 colbatchscan  Scan /Table/120/1/2/0
 count         CPut /Table/120/1/2/0 -> /TUPLE/2:2:Int/3
-count         InitPut /Table/120/2/3/0 -> /BYTES/0x8a
+count         CPut /Table/120/2/3/0 -> /BYTES/0x8a
 count         fast path completed
 sql query     rows affected: 1
 
@@ -714,7 +714,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 colbatchscan  Scan /Table/120/1/1/0
 count         CPut /Table/120/1/1/0 -> /TUPLE/2:2:Int/2
-count         InitPut /Table/120/2/2/0 -> /BYTES/0x89
+count         CPut /Table/120/2/2/0 -> /BYTES/0x89
 count         fast path completed
 sql query     rows affected: 1
 

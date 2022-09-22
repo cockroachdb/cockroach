@@ -180,6 +180,56 @@ func TestDB_CPut(t *testing.T) {
 	checkResult(t, []byte("4"), result.ValueBytes())
 }
 
+func TestDB_CPutAllowingIfNotExists(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	if err := db.Put(ctx, "aa", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CPutAllowingIfNotExists(ctx, "aa", "2", kvclientutils.StrToCPutExistingValue("1")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := db.Get(ctx, "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("2"), result.ValueBytes())
+
+	if err = db.CPutAllowingIfNotExists(ctx, "aa", "3", kvclientutils.StrToCPutExistingValue("1")); err == nil {
+		t.Fatal("expected error from conditional put")
+	}
+	result, err = db.Get(ctx, "aa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("2"), result.ValueBytes())
+
+	// NOTE: this demonstrates the difference between CPut and
+	// CPutAllowingIfNotExists. A normal CPut fails when the entry
+	// does not already exist. CPutAllowingIfNotExists does not.
+	if err = db.CPutAllowingIfNotExists(ctx, "bb", "4", kvclientutils.StrToCPutExistingValue("1")); err != nil {
+		t.Fatal(err)
+	}
+	result, err = db.Get(ctx, "bb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("4"), result.ValueBytes())
+
+	if err = db.CPutAllowingIfNotExists(ctx, "bb", "4", kvclientutils.StrToCPutExistingValue("4")); err != nil {
+		t.Fatal(err)
+	}
+	result, err = db.Get(ctx, "bb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkResult(t, []byte("4"), result.ValueBytes())
+}
+
 func TestDB_CPutInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -236,38 +286,6 @@ func TestDB_CPutInline(t *testing.T) {
 	if result.Value != nil {
 		t.Fatalf("expected deleted value, got %x", result.ValueBytes())
 	}
-}
-
-func TestDB_InitPut(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	s, db := setup(t)
-	defer s.Stopper().Stop(context.Background())
-	ctx := context.Background()
-
-	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.InitPut(ctx, "aa", "2", false); err == nil {
-		t.Fatal("expected error from init put")
-	}
-	if _, err := db.Del(ctx, "aa"); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.InitPut(ctx, "aa", "2", true); err == nil {
-		t.Fatal("expected error from init put")
-	}
-	if err := db.InitPut(ctx, "aa", "1", false); err != nil {
-		t.Fatal(err)
-	}
-	result, err := db.Get(ctx, "aa")
-	if err != nil {
-		t.Fatal(err)
-	}
-	checkResult(t, []byte("1"), result.ValueBytes())
 }
 
 func TestDB_Inc(t *testing.T) {

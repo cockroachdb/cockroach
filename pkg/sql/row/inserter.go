@@ -102,20 +102,20 @@ func insertDelFn(ctx context.Context, b putter, key *roachpb.Key, traceKV bool) 
 	b.Del(key)
 }
 
-// insertPutFn is used by insertRow when conflicts should be ignored.
+// insertInvertedPutFn is used by insertRow when conflicts should be ignored.
 func insertInvertedPutFn(
 	ctx context.Context, b putter, key *roachpb.Key, value *roachpb.Value, traceKV bool,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "InitPut %s -> %s", *key, value.PrettyPrint())
+		log.VEventfDepth(ctx, 1, 2, "CPut %s -> %s", *key, value.PrettyPrint())
 	}
-	b.InitPut(key, value, false)
+	b.CPutAllowingIfNotExists(key, value, value.TagAndDataBytes())
 }
 
 type putter interface {
-	CPut(key, value interface{}, expValue []byte)
 	Put(key, value interface{})
-	InitPut(key, value interface{}, failOnTombstones bool)
+	CPut(key, value interface{}, expValue []byte)
+	CPutAllowingIfNotExists(key, value interface{}, expValue []byte)
 	Del(key ...interface{})
 }
 

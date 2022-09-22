@@ -393,7 +393,7 @@ func (w index) UseDeletePreservingEncoding() bool {
 }
 
 // ForcePut returns true if writes to the index should only use Put (rather than
-// CPut or InitPut). This is used by:
+// CPut). This is used by:
 //
 //   - indexes currently being built by the MVCC-compliant index backfiller, and
 //   - the temporary indexes that support that process, and
