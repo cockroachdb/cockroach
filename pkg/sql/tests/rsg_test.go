@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -778,6 +779,8 @@ func testRandomSyntax(
 	s, rawDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
+	err := db.exec(t, ctx, "SET CLUSTER SETTING schemachanger.job.max_retry_backoff='1s'")
+	require.NoError(t, err)
 
 	yBytes, err := os.ReadFile(testutils.TestDataPath(t, "rsg", "sql.y"))
 	if err != nil {
