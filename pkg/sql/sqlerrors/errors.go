@@ -304,6 +304,10 @@ func NewAggInAggError() error {
 var QueryTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to statement timeout")
 
+// TxnTimeoutError is an error representing a query timeout.
+var TxnTimeoutError = pgerror.New(
+	pgcode.QueryCanceled, "query execution canceled due to transaction timeout")
+
 // IsOutOfMemoryError checks whether this is an out of memory error.
 func IsOutOfMemoryError(err error) bool {
 	return errHasCode(err, pgcode.OutOfMemory)

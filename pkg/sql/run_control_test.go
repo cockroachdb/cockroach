@@ -545,6 +545,87 @@ func TestIdleInTransactionSessionTimeout(t *testing.T) {
 	}
 }
 
+func TestTransactionTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	numNodes := 1
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	defer tc.ServerConn(0).Close()
+
+	var TransactionStatus string
+
+	conn, err := tc.ServerConn(0).Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET transaction_timeout = '1s'`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `select pg_sleep(0.1);`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `select pg_sleep(10);`)
+	require.Regexp(t, "pq: query execution canceled due to transaction timeout", err)
+
+	err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+	require.NoError(t, err)
+
+	require.Equal(t, "Aborted", TransactionStatus)
+
+	_, err = conn.ExecContext(ctx, `SELECT 1;`)
+	require.Regexp(t, "current transaction is aborted", err)
+
+	_, err = conn.ExecContext(ctx, `ROLLBACK`)
+	require.NoError(t, err)
+
+	//Ensure the transaction times out when transaction is open and no statement
+	//is executed.
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	require.NoError(t, err)
+
+	time.Sleep(1010 * time.Millisecond)
+
+	_, err = conn.ExecContext(ctx, `SELECT 1;`)
+	require.Regexp(t, "pq: query execution canceled due to transaction timeout", err)
+
+	err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+	require.NoError(t, err)
+
+	require.Equal(t, "Aborted", TransactionStatus)
+
+	_, err = conn.ExecContext(ctx, `ROLLBACK`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET transaction_timeout = '10s'`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `BEGIN`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `select pg_sleep(0.1);`)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SELECT 1;`)
+	require.NoError(t, err)
+
+	err = conn.QueryRowContext(ctx, `SHOW TRANSACTION STATUS`).Scan(&TransactionStatus)
+	require.NoError(t, err)
+
+	require.Equal(t, "Open", TransactionStatus)
+
+	_, err = conn.ExecContext(ctx, `COMMIT`)
+	require.NoError(t, err)
+}
+
 func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
