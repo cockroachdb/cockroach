@@ -69,33 +69,33 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     [[Column:{DescID: 117, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 104
+      DescriptorID: 104
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 105
+      DescriptorID: 105
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 106
+      DescriptorID: 106
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 107
+      DescriptorID: 107
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 110
+      DescriptorID: 110
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 108
+      DescriptorID: 108
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 109
+      DescriptorID: 109
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 111
+      DescriptorID: 111
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 112
+      DescriptorID: 112
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 113
+      DescriptorID: 113
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 114
+      DescriptorID: 114
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 115
+      DescriptorID: 115
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 116
+      DescriptorID: 116
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 117
+      DescriptorID: 117
 PreCommitPhase stage 1 of 1 with 68 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
@@ -296,7 +296,7 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 104
+      DescriptorID: 104
     *scop.RemoveDatabaseRoleSettings
       DatabaseID: 104
     *scop.RemoveDatabaseComment
@@ -316,13 +316,13 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.MarkDescriptorAsDropped
-      DescID: 105
+      DescriptorID: 105
     *scop.RemoveSchemaParent
       Parent:
         ParentDatabaseID: 104
         SchemaID: 105
     *scop.MarkDescriptorAsDropped
-      DescID: 106
+      DescriptorID: 106
     *scop.RemoveSchemaParent
       Parent:
         ParentDatabaseID: 104
@@ -330,11 +330,11 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     *scop.RemoveSchemaComment
       SchemaID: 106
     *scop.MarkDescriptorAsDropped
-      DescID: 107
+      DescriptorID: 107
     *scop.RemoveAllTableComments
       TableID: 107
     *scop.MarkDescriptorAsDropped
-      DescID: 110
+      DescriptorID: 110
     *scop.RemoveAllTableComments
       TableID: 110
     *scop.RemoveColumnDefaultExpression
@@ -346,11 +346,11 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
       SequenceIDs:
       - 107
     *scop.MarkDescriptorAsDropped
-      DescID: 108
+      DescriptorID: 108
     *scop.RemoveAllTableComments
       TableID: 108
     *scop.MarkDescriptorAsDropped
-      DescID: 109
+      DescriptorID: 109
     *scop.RemoveAllTableComments
       TableID: 109
     *scop.RemoveColumnDefaultExpression
@@ -362,7 +362,7 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
       SequenceIDs:
       - 108
     *scop.MarkDescriptorAsDropped
-      DescID: 111
+      DescriptorID: 111
     *scop.RemoveViewBackReferencesInRelations
       BackReferencedViewID: 111
       RelationIDs:
@@ -370,7 +370,7 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     *scop.RemoveAllTableComments
       TableID: 111
     *scop.MarkDescriptorAsDropped
-      DescID: 112
+      DescriptorID: 112
     *scop.RemoveViewBackReferencesInRelations
       BackReferencedViewID: 112
       RelationIDs:
@@ -378,7 +378,7 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     *scop.RemoveAllTableComments
       TableID: 112
     *scop.MarkDescriptorAsDropped
-      DescID: 113
+      DescriptorID: 113
     *scop.RemoveViewBackReferencesInRelations
       BackReferencedViewID: 113
       RelationIDs:
@@ -387,7 +387,7 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     *scop.RemoveAllTableComments
       TableID: 113
     *scop.MarkDescriptorAsDropped
-      DescID: 114
+      DescriptorID: 114
     *scop.RemoveViewBackReferencesInRelations
       BackReferencedViewID: 114
       RelationIDs:
@@ -395,13 +395,13 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     *scop.RemoveAllTableComments
       TableID: 114
     *scop.MarkDescriptorAsDropped
-      DescID: 115
+      DescriptorID: 115
     *scop.MarkDescriptorAsDropped
-      DescID: 116
+      DescriptorID: 116
     *scop.MarkDescriptorAsDropped
-      DescID: 117
+      DescriptorID: 117
     *scop.RemoveBackReferenceInTypes
-      BackReferencedDescID: 117
+      BackReferencedDescriptorID: 117
       TypeIDs:
       - 115
       - 116
@@ -621,7 +621,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForDatabase
+    *scop.CreateGCJobForDatabase
       DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
@@ -671,7 +671,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
+    *scop.CreateGCJobForTable
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 107
@@ -688,11 +688,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
+    *scop.CreateGCJobForTable
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 110
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -703,7 +703,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
       TableID: 110
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -714,7 +714,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
       TableID: 110
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
         Authorization:
@@ -725,7 +725,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
       TableID: 110
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -736,7 +736,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
       TableID: 110
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -760,7 +760,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 6
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
+    *scop.CreateGCJobForTable
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 108
@@ -777,11 +777,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 6
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGcJobForTable
+    *scop.CreateGCJobForTable
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -792,7 +792,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 6
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -803,7 +803,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 6
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
         Authorization:
@@ -814,7 +814,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 6
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -825,7 +825,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 6
           SubWorkID: 1
       TableID: 109
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -857,7 +857,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 111
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -868,7 +868,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 8
           SubWorkID: 1
       TableID: 111
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -879,7 +879,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 8
           SubWorkID: 1
       TableID: 111
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -911,7 +911,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 112
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -922,7 +922,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 9
           SubWorkID: 1
       TableID: 112
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -933,7 +933,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 9
           SubWorkID: 1
       TableID: 112
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -944,7 +944,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 9
           SubWorkID: 1
       TableID: 112
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -981,7 +981,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 113
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -992,7 +992,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 10
           SubWorkID: 1
       TableID: 113
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -1003,7 +1003,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 10
           SubWorkID: 1
       TableID: 113
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -1014,7 +1014,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 10
           SubWorkID: 1
       TableID: 113
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -1047,7 +1047,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 114
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -1058,7 +1058,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 10
           SubWorkID: 1
       TableID: 114
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -1069,7 +1069,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 10
           SubWorkID: 1
       TableID: 114
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -1080,7 +1080,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 10
           SubWorkID: 1
       TableID: 114
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:
@@ -1159,7 +1159,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 117
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
         Authorization:
@@ -1170,7 +1170,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 12
           SubWorkID: 1
       TableID: 117
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -1181,7 +1181,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 12
           SubWorkID: 1
       TableID: 117
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
         Authorization:
@@ -1192,7 +1192,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 12
           SubWorkID: 1
       TableID: 117
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
       EventBase:
         Authorization:
@@ -1203,7 +1203,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
           SourceElementID: 12
           SubWorkID: 1
       TableID: 117
-    *scop.MakeColumnAbsent
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       EventBase:
         Authorization:

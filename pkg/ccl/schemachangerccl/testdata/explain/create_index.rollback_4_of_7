@@ -23,9 +23,9 @@ Schema change plan for rolling back CREATE INDEX ‹id1› ON ‹defaultdb›.pu
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
       │    │    └── PUBLIC      → ABSENT      IndexPartitioning:{DescID: 104, IndexID: 3}
       │    └── 6 Mutation operations
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":3,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
       │         ├── LogEvent {"TargetStatus":1}
-      │         ├── CreateGcJobForIndex {"IndexID":2,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
@@ -33,7 +33,7 @@ Schema change plan for rolling back CREATE INDEX ‹id1› ON ‹defaultdb›.pu
            ├── 1 element transitioning toward ABSENT
            │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
            └── 4 Mutation operations
-                ├── CreateGcJobForIndex {"IndexID":3,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

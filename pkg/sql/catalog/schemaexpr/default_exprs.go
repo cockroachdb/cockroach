@@ -90,7 +90,7 @@ func ProcessColumnSet(
 		colIDSet.Add(cols[i].GetID())
 	}
 
-	// Add all public or columns in DELETE_AND_WRITE_ONLY state
+	// Add all public or columns in WRITE_ONLY state
 	// that satisfy the condition.
 	ret := make([]catalog.Column, 0, len(tableDesc.AllColumns()))
 	ret = append(ret, cols...)

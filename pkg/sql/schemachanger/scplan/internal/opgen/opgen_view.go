@@ -28,7 +28,7 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.View) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
-						DescID: this.ViewID,
+						DescriptorID: this.ViewID,
 					}
 				}),
 			),
@@ -38,7 +38,7 @@ func init() {
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.MarkDescriptorAsSyntheticallyDropped {
 					return &scop.MarkDescriptorAsSyntheticallyDropped{
-						DescID: this.ViewID,
+						DescriptorID: this.ViewID,
 					}
 				}),
 			),
@@ -46,7 +46,7 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.View) *scop.MarkDescriptorAsDropped {
 					return &scop.MarkDescriptorAsDropped{
-						DescID: this.ViewID,
+						DescriptorID: this.ViewID,
 					}
 				}),
 				emit(func(this *scpb.View) *scop.RemoveBackReferenceInTypes {
@@ -54,8 +54,8 @@ func init() {
 						return nil
 					}
 					return &scop.RemoveBackReferenceInTypes{
-						BackReferencedDescID: this.ViewID,
-						TypeIDs:              this.UsesTypeIDs,
+						BackReferencedDescriptorID: this.ViewID,
+						TypeIDs:                    this.UsesTypeIDs,
 					}
 				}),
 				emit(func(this *scpb.View) *scop.RemoveViewBackReferencesInRelations {
@@ -77,12 +77,12 @@ func init() {
 				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.CreateGcJobForTable {
+				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.CreateGCJobForTable {
 					if !this.IsMaterialized {
 						return nil
 
 					}
-					return &scop.CreateGcJobForTable{
+					return &scop.CreateGCJobForTable{
 						TableID:             this.ViewID,
 						StatementForDropJob: statementForDropJob(this, md),
 					}

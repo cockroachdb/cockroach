@@ -441,6 +441,27 @@ values
  ├── fd: ()-->(1)
  └── (NULL,)
 
+# Regression test for issue #87605.
+norm expect=FoldBinary
+SELECT 1.333 // 1.0
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1,)
+
+norm expect=FoldBinary
+SELECT 2::INT // 1.0
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (2,)
+
 # --------------------------------------------------
 # FoldUnary
 # --------------------------------------------------

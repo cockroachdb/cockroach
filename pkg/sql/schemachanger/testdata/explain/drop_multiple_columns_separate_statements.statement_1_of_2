@@ -23,18 +23,18 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
  │         │    └── PUBLIC → ABSENT        IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
  │         └── 14 Mutation operations
- │              ├── MakeDroppedColumnDeleteAndWriteOnly {"ColumnID":2,"TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
  │              ├── LogEvent {"TargetStatus":1}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
- │              ├── MakeDroppedNonPrimaryIndexDeleteAndWriteOnly {"IndexID":2,"TableID":104}
+ │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
- │              ├── MakeAddedIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":4}}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":4}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
- │              ├── MakeAddedTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
+ │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":4,"Kind":2,"TableID":104}
- │              ├── MakeDroppedColumnDeleteAndWriteOnly {"ColumnID":4,"TableID":104}
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":4,"TableID":104}
  │              ├── LogEvent {"TargetStatus":1}
  │              └── SetColumnName {"ColumnID":4,"Name":"crdb_internal_co...","TableID":104}
  ├── PreCommitPhase
@@ -47,7 +47,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
  │    │    └── 3 Mutation operations
- │    │         ├── MakeAddedIndexDeleteAndWriteOnly {"IndexID":4,"TableID":104}
+ │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":4,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 2 of 7 in PostCommitPhase
@@ -85,7 +85,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
  │         └── 1 Validation operation
- │              └── ValidateUniqueIndex {"IndexID":3,"TableID":104}
+ │              └── ValidateIndex {"IndexID":3,"TableID":104}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC
@@ -108,14 +108,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
       │    │    └── VALIDATED  → DELETE_ONLY           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
       │    └── 10 Mutation operations
-      │         ├── MakeDroppedColumnDeleteOnly {"ColumnID":2,"TableID":104}
-      │         ├── MakeDroppedColumnDeleteOnly {"ColumnID":4,"TableID":104}
-      │         ├── MakeDroppedPrimaryIndexDeleteAndWriteOnly {"IndexID":1,"TableID":104}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4,"TableID":104}
+      │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":3,"Name":"t_pkey","TableID":104}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":4,"TableID":104}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":2,"TableID":104}
-      │         ├── MakeAddedPrimaryIndexPublic {"IndexID":3,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
+      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":3,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
@@ -128,12 +128,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    └── DELETE_ONLY           → ABSENT           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
       │    └── 9 Mutation operations
       │         ├── LogEvent {"TargetStatus":1}
-      │         ├── CreateGcJobForIndex {"IndexID":2,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
-      │         ├── CreateGcJobForIndex {"IndexID":4,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":1,"TableID":104}
-      │         ├── MakeColumnAbsent {"ColumnID":4,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
+      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
@@ -142,8 +142,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}
            │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
            └── 5 Mutation operations
-                ├── CreateGcJobForIndex {"IndexID":1,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
-                ├── MakeColumnAbsent {"ColumnID":2,"TableID":104}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
