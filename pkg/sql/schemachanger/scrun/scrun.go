@@ -65,7 +65,7 @@ func runTransactionPhase(
 	if len(state.Current) == 0 {
 		return scpb.CurrentState{}, jobspb.InvalidJobID, nil
 	}
-	sc, err := scplan.MakePlan(state, scplan.Params{
+	sc, err := scplan.MakePlan(ctx, state, scplan.Params{
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
 	})
@@ -112,7 +112,7 @@ func RunSchemaChangesInJob(
 		}
 		return errors.Wrapf(err, "failed to construct state for job %d", jobID)
 	}
-	sc, err := scplan.MakePlan(state, scplan.Params{
+	sc, err := scplan.MakePlan(ctx, state, scplan.Params{
 		ExecutionPhase:             scop.PostCommitPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 	})
