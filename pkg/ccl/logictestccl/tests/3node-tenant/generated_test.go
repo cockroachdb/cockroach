@@ -1681,6 +1681,13 @@ func TestTenantLogic_show_create_all_types(
 	runLogicTest(t, "show_create_all_types")
 }
 
+func TestTenantLogic_show_create_indexes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_create_indexes")
+}
+
 func TestTenantLogic_show_default_privileges(
 	t *testing.T,
 ) {
@@ -2169,6 +2176,13 @@ func TestTenantLogicCCL_schema_change_in_txn(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "schema_change_in_txn")
+}
+
+func TestTenantLogicCCL_show_create_indexes_partitioned(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "show_create_indexes_partitioned")
 }
 
 func TestTenantLogicCCL_tenant(
