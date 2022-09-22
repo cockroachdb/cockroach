@@ -347,7 +347,7 @@ func (s *server) gossipReceiver(
 }
 
 func (s *server) maybeTightenLocked() {
-	now := time.Now()
+	now := timeutil.Now()
 	if now.Before(s.mu.lastTighten.Add(gossipTightenInterval)) {
 		// It hasn't been long since we last tightened the network, so skip it.
 		return

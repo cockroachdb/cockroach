@@ -1467,7 +1467,7 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	now := time.Now()
+	now := timeutil.Now()
 	if now.Before(g.mu.lastTighten.Add(gossipTightenInterval)) {
 		// It hasn't been long since we last tightened the network, so skip it.
 		return
