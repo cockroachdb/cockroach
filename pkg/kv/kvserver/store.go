@@ -727,7 +727,7 @@ type Store struct {
 	engine          storage.Engine          // The underlying key-value store
 	tsCache         tscache.Cache           // Most recent timestamps for keys / key ranges
 	allocator       allocatorimpl.Allocator // Makes allocation decisions
-	replRankings    *replicaRankings
+	replRankings    *ReplicaRankings
 	storeRebalancer *StoreRebalancer
 	rangeIDAlloc    *idalloc.Allocator // Range ID allocator
 	mvccGCQueue     *mvccGCQueue       // MVCC GC queue
@@ -1221,7 +1221,7 @@ func NewStore(
 		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedLeaseTransferMetrics)
 		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedReplicaRebalanceMetrics)
 	}
-	s.replRankings = newReplicaRankings()
+	s.replRankings = NewReplicaRankings()
 
 	s.raftRecvQueues.mon = mon.NewUnlimitedMonitor(
 		ctx,
@@ -2990,7 +2990,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	replicaCount := s.metrics.ReplicaCount.Value()
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
-	rankingsAccumulator := s.replRankings.newAccumulator()
+	rankingsAccumulator := s.replRankings.NewAccumulator()
 
 	// Query the current L0 sublevels and record the updated maximum to metrics.
 	l0SublevelsMax = int64(syncutil.LoadFloat64(&s.metrics.l0SublevelsWindowedMax))
@@ -3016,9 +3016,9 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 			totalWritesPerSecond += wps
 			writesPerReplica = append(writesPerReplica, wps)
 		}
-		rankingsAccumulator.addReplica(replicaWithStats{
-			repl: r,
-			qps:  qps,
+		rankingsAccumulator.AddReplica(candidateReplica{
+			Replica: r,
+			qps:     qps,
 		})
 		return true
 	})
@@ -3036,7 +3036,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
-	s.replRankings.update(rankingsAccumulator)
+	s.replRankings.Update(rankingsAccumulator)
 
 	s.cachedCapacity.Lock()
 	s.cachedCapacity.StoreCapacity = capacity
@@ -3399,16 +3399,16 @@ type HotReplicaInfo struct {
 // Note that this uses cached information, so it's cheap but may be slightly
 // out of date.
 func (s *Store) HottestReplicas() []HotReplicaInfo {
-	topQPS := s.replRankings.topQPS()
+	topQPS := s.replRankings.TopQPS()
 	hotRepls := make([]HotReplicaInfo, len(topQPS))
 	for i := range topQPS {
-		hotRepls[i].Desc = topQPS[i].repl.Desc()
-		hotRepls[i].QPS = topQPS[i].qps
-		hotRepls[i].RequestsPerSecond = topQPS[i].repl.RequestsPerSecond()
-		hotRepls[i].WriteKeysPerSecond = topQPS[i].repl.WritesPerSecond()
-		hotRepls[i].ReadKeysPerSecond = topQPS[i].repl.ReadsPerSecond()
-		hotRepls[i].WriteBytesPerSecond = topQPS[i].repl.WriteBytesPerSecond()
-		hotRepls[i].ReadBytesPerSecond = topQPS[i].repl.ReadBytesPerSecond()
+		hotRepls[i].Desc = topQPS[i].Desc()
+		hotRepls[i].QPS = topQPS[i].QPS()
+		hotRepls[i].RequestsPerSecond = topQPS[i].Repl().RequestsPerSecond()
+		hotRepls[i].WriteKeysPerSecond = topQPS[i].Repl().WritesPerSecond()
+		hotRepls[i].ReadKeysPerSecond = topQPS[i].Repl().ReadsPerSecond()
+		hotRepls[i].WriteBytesPerSecond = topQPS[i].Repl().WriteBytesPerSecond()
+		hotRepls[i].ReadBytesPerSecond = topQPS[i].Repl().ReadBytesPerSecond()
 	}
 	return hotRepls
 }

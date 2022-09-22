@@ -1704,7 +1704,7 @@ func (a *Allocator) TransferLeaseTarget(
 		GetFirstIndex() uint64
 		Desc() *roachpb.RangeDescriptor
 	},
-	stats *replicastats.ReplicaStats,
+	statSummary *replicastats.RatedSummary,
 	forceDecisionWithoutStats bool,
 	opts allocator.TransferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
@@ -1746,7 +1746,7 @@ func (a *Allocator) TransferLeaseTarget(
 		// falls back to `leaseCountConvergence`. Rationalize this or refactor this
 		// logic to be more clear.
 		transferDec, repl := a.shouldTransferLeaseForAccessLocality(
-			ctx, source, existing, stats, nil, candidateLeasesMean,
+			ctx, source, existing, statSummary, nil, candidateLeasesMean,
 		)
 		if !excludeLeaseRepl {
 			switch transferDec {
@@ -1813,7 +1813,7 @@ func (a *Allocator) TransferLeaseTarget(
 		return candidates[a.randGen.Intn(len(candidates))]
 
 	case allocator.QPSConvergence:
-		leaseReplQPS, _ := stats.AverageRatePerSecond()
+		leaseReplQPS := statSummary.QPS
 		candidates := make([]roachpb.StoreID, 0, len(existing)-1)
 		for _, repl := range existing {
 			if repl.StoreID != leaseRepl.StoreID() {
@@ -1953,7 +1953,7 @@ func (a *Allocator) ShouldTransferLease(
 		GetFirstIndex() uint64
 		Desc() *roachpb.RangeDescriptor
 	},
-	stats *replicastats.ReplicaStats,
+	statSummary *replicastats.RatedSummary,
 ) bool {
 	if a.leaseholderShouldMoveDueToPreferences(ctx, conf, leaseRepl, existing) {
 		return true
@@ -1984,7 +1984,7 @@ func (a *Allocator) ShouldTransferLease(
 		ctx,
 		source,
 		existing,
-		stats,
+		statSummary,
 		nil,
 		sl.CandidateLeases.Mean,
 	)
@@ -2014,10 +2014,10 @@ func (a Allocator) FollowTheWorkloadPrefersLocal(
 	source roachpb.StoreDescriptor,
 	candidate roachpb.StoreID,
 	existing []roachpb.ReplicaDescriptor,
-	stats *replicastats.ReplicaStats,
+	statSummary *replicastats.RatedSummary,
 ) bool {
 	adjustments := make(map[roachpb.StoreID]float64)
-	decision, _ := a.shouldTransferLeaseForAccessLocality(ctx, source, existing, stats, adjustments, sl.CandidateLeases.Mean)
+	decision, _ := a.shouldTransferLeaseForAccessLocality(ctx, source, existing, statSummary, adjustments, sl.CandidateLeases.Mean)
 	if decision == decideWithoutStats {
 		return false
 	}
@@ -2035,13 +2035,15 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 	ctx context.Context,
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
-	stats *replicastats.ReplicaStats,
+	statSummary *replicastats.RatedSummary,
 	rebalanceAdjustments map[roachpb.StoreID]float64,
 	candidateLeasesMean float64,
 ) (transferDecision, roachpb.ReplicaDescriptor) {
 	// Only use load-based rebalancing if it's enabled and we have both
 	// stats and locality information to base our decision on.
-	if stats == nil || !enableLoadBasedLeaseRebalancing.Get(&a.StorePool.St.SV) {
+	if statSummary == nil ||
+		statSummary.LocalityCounts == nil ||
+		!enableLoadBasedLeaseRebalancing.Get(&a.StorePool.St.SV) {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
 	replicaLocalities := a.StorePool.GetLocalitiesByNode(existing)
@@ -2051,7 +2053,8 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 		}
 	}
 
-	qpsStats, qpsStatsDur := stats.PerLocalityDecayingRate()
+	qpsStats := statSummary.LocalityCounts
+	qpsStatsDur := statSummary.Duration
 
 	// If we haven't yet accumulated enough data, avoid transferring for now,
 	// unless we've been explicitly asked otherwise. Do not fall back to the

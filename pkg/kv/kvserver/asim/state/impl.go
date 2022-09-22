@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/google/btree"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 type state struct {
@@ -36,7 +38,7 @@ type state struct {
 	ranges      *rmap
 	clusterinfo ClusterInfo
 	usageInfo   *ClusterUsageInfo
-	clock       ManualSimClock
+	clock       *ManualSimClock
 	settings    *config.SimulationSettings
 
 	// Unique ID generators for Nodes and Stores. These are incremented
@@ -51,15 +53,17 @@ func NewState(settings *config.SimulationSettings) State {
 }
 
 func newState(settings *config.SimulationSettings) *state {
-	return &state{
+	s := &state{
 		nodes:      make(map[NodeID]*node),
 		stores:     make(map[StoreID]*store),
-		load:       map[RangeID]ReplicaLoad{FirstRangeID: &ReplicaLoadCounter{}},
 		loadsplits: make(map[StoreID]LoadSplitter),
+		clock:      &ManualSimClock{nanos: 0},
 		ranges:     newRMap(),
 		usageInfo:  newClusterUsageInfo(),
 		settings:   config.DefaultSimulationSettings(),
 	}
+	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
+	return s
 }
 
 type rmap struct {
@@ -298,7 +302,7 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 		storeID:   storeID,
 		nodeID:    nodeID,
 		desc:      roachpb.StoreDescriptor{StoreID: roachpb.StoreID(storeID), Node: node.Descriptor()},
-		storepool: NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClock(&s.clock, 0)),
+		storepool: NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClock(s.clock, 0)),
 		replicas:  make(map[RangeID]ReplicaID),
 	}
 
@@ -517,7 +521,7 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 		if replica.HoldsLease() {
 			// The successor range's leaseholder was on this store, copy the
 			// leaseholder store over for the new split range.
-			s.TransferLease(rangeID, storeID)
+			s.setLeaseHolder(r.rangeID, storeID)
 
 			// Reset the recorded load split statistics on the predecessor
 			// range.
@@ -548,14 +552,31 @@ func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 
 	rng := s.ranges.rangeMap[rangeID]
 
-	// Remove the old leaseholder.
 	oldLeaseHolderID := rng.leaseholder
 	for oldStoreID, repl := range rng.replicas {
 		if repl.replicaID == oldLeaseHolderID {
-			repl.holdsLease = false
 			// Reset the load stats on the old range, within the old
 			// leaseholder store.
 			s.loadsplits[oldStoreID].ResetRange(rangeID)
+			s.load[rangeID].ResetLoad()
+		}
+	}
+
+	// Apply the lease transfer to state.
+	s.setLeaseHolder(rangeID, storeID)
+
+	s.usageInfo.LeaseTransfers++
+	return true
+}
+
+func (s *state) setLeaseHolder(rangeID RangeID, storeID StoreID) {
+	rng := s.ranges.rangeMap[rangeID]
+
+	// Remove the old leaseholder.
+	oldLeaseHolderID := rng.leaseholder
+	for _, repl := range rng.replicas {
+		if repl.replicaID == oldLeaseHolderID {
+			repl.holdsLease = false
 		}
 	}
 
@@ -563,9 +584,6 @@ func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 	rng.replicas[storeID].holdsLease = true
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
-
-	s.usageInfo.LeaseTransfers++
-	return true
 }
 
 // ValidTransfer returns whether transferring the lease for the Range with ID
@@ -643,10 +661,17 @@ func (s *state) updateStoreCapacities() {
 	}
 }
 
-// UsageInfo returns the usage information for the Range with ID
-// RangeID.
-func (s *state) UsageInfo(rangeID RangeID) allocator.RangeUsageInfo {
-	return s.load[rangeID].Load()
+// ReplicaLoad returns the usage information for the Range with ID
+// RangeID on the store with ID StoreID.
+func (s *state) ReplicaLoad(rangeID RangeID, storeID StoreID) ReplicaLoad {
+	// NB: we only return the actual replica load, if the range leaseholder is
+	// currently on the store given. Otherwise, return an empty, zero counter
+	// value.
+	store, ok := s.LeaseholderStore(rangeID)
+	if ok && store.StoreID() == storeID {
+		return s.load[rangeID]
+	}
+	return &ReplicaLoadCounter{}
 }
 
 // ClusterUsageInfo returns the usage information for the Range with ID
@@ -706,7 +731,9 @@ func (s *state) MakeAllocator(storeID StoreID) allocatorimpl.Allocator {
 	return allocatorimpl.MakeAllocator(
 		s.stores[storeID].storepool,
 		func(addr string) (time.Duration, bool) { return 0, true },
-		nil,
+		&allocator.TestingKnobs{
+			AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+		},
 	)
 }
 
@@ -744,6 +771,40 @@ func (s *state) LeaseholderStore(rangeID RangeID) (Store, bool) {
 // LoadSplitterFor returns the load splitter for the Store with ID StoreID.
 func (s *state) LoadSplitterFor(storeID StoreID) LoadSplitter {
 	return s.loadsplits[storeID]
+}
+
+// RaftStatus returns the current raft status for the replica of the Range
+// with ID RangeID, on the store with ID StoreID.
+func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
+	status := &raft.Status{
+		Progress: make(map[uint64]tracker.Progress),
+	}
+
+	leader, ok := s.LeaseHolderReplica(rangeID)
+	if !ok {
+		return nil
+	}
+	rng, ok := s.rng(rangeID)
+	if !ok {
+		return nil
+	}
+
+	// TODO(kvoli): The raft leader will always be the current leaseholder
+	// here. This should change to enable testing this scenario.
+	status.Lead = uint64(leader.ReplicaID())
+	status.RaftState = raft.StateLeader
+	status.Commit = 2
+	// TODO(kvoli): A replica is never behind on their raft log, this should
+	// change to enable testing this scenario where replicas fall behind. e.g.
+	// FirstIndex on all replicas will return 2.
+	for _, replica := range rng.replicas {
+		status.Progress[uint64(replica.ReplicaID())] = tracker.Progress{
+			Match: 2,
+			State: tracker.StateReplicate,
+		}
+	}
+
+	return status
 }
 
 // node is an implementation of the Node interface.
@@ -916,4 +977,11 @@ func (r *replica) Range() RangeID {
 // HoldsLease returns whether this replica holds the lease for the range.
 func (r *replica) HoldsLease() bool {
 	return r.holdsLease
+}
+
+// String returns a string representing the state of the replica.
+func (r *replica) String() string {
+	builder := &strings.Builder{}
+	builder.WriteString(fmt.Sprintf("r%d,s%d/%d", r.rangeID, r.storeID, r.replicaID))
+	return builder.String()
 }

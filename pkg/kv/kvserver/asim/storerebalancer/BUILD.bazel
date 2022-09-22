@@ -1,0 +1,47 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "storerebalancer",
+    srcs = [
+        "candidate_replica.go",
+        "replica_rankings.go",
+        "store_rebalancer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/op",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/replicastats",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@io_etcd_go_etcd_raft_v3//:raft",
+    ],
+)
+
+go_test(
+    name = "storerebalancer_test",
+    srcs = [
+        "replica_rankings_test.go",
+        "store_rebalancer_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    embed = [":storerebalancer"],
+    deps = [
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/op",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/roachpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
