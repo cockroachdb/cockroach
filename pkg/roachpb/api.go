@@ -1159,20 +1159,11 @@ func NewPutInline(key Key, value Value) Request {
 // into the request.
 func NewConditionalPut(key Key, value Value, expValue []byte, allowNotExist bool) Request {
 	value.InitChecksum(key)
-	// Compatibility with 20.1 servers.
-	var expValueVal *Value
-	if expValue != nil {
-		expValueVal = &Value{}
-		expValueVal.SetTagAndData(expValue)
-		// The expected value does not need a checksum, so we don't initialize it.
-	}
-
 	return &ConditionalPutRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
 		Value:               value,
-		DeprecatedExpValue:  expValueVal,
 		ExpBytes:            expValue,
 		AllowIfDoesNotExist: allowNotExist,
 	}
@@ -1186,20 +1177,11 @@ func NewConditionalPut(key Key, value Value, expValue []byte, allowNotExist bool
 // into the request.
 func NewConditionalPutInline(key Key, value Value, expValue []byte, allowNotExist bool) Request {
 	value.InitChecksum(key)
-	// Compatibility with 20.1 servers.
-	var expValueVal *Value
-	if expValue != nil {
-		expValueVal = &Value{}
-		expValueVal.SetTagAndData(expValue)
-		// The expected value does not need a checksum, so we don't initialize it.
-	}
-
 	return &ConditionalPutRequest{
 		RequestHeader: RequestHeader{
 			Key: key,
 		},
 		Value:               value,
-		DeprecatedExpValue:  expValueVal,
 		ExpBytes:            expValue,
 		AllowIfDoesNotExist: allowNotExist,
 		Inline:              true,
