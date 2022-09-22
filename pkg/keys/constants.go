@@ -467,7 +467,19 @@ const (
 	SQLInstancesTableID                 = 46
 	SpanConfigurationsTableID           = 47
 	RoleIDSequenceID                    = 48
+
+	// reservedSystemTableID is a sentinel constant to reserve the use of the
+	// last remaining constant reserved descriptor ID. In 22.1, we added support
+	// for creating system tables with dynamically allocated IDs. Use of this ID
+	// should be well motivated. There are cases where having a constant ID can
+	// dramatically simplify cluster bootstrap. Any table which is not going to
+	// be used quite early in the server startup process should not need a
+	// constant ID. Note that there are some values we could reclaim, like 9 and
+	// 10, but let's not go there unless we need to.
+	reservedSystemTableID = 49
 )
+
+var _ = reservedSystemTableID // defeat the unused linter
 
 // CommentType the type of the schema object on which a comment has been
 // applied.
