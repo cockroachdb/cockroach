@@ -14,6 +14,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
 import { AppState, uiConfigActions } from "src/store";
+import { actions as nodesActions } from "../store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import {
   TransactionDetails,
@@ -89,6 +90,7 @@ const mapDispatchToProps = (
 ): TransactionDetailsDispatchProps => ({
   refreshData: (req?: StatementsRequest) =>
     dispatch(sqlStatsActions.refresh(req)),
+  refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
   onTimeScaleChange: (ts: TimeScale) => {
     dispatch(

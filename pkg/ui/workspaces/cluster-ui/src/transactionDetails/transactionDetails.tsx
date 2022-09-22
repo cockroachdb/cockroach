@@ -95,6 +95,7 @@ export interface TransactionDetailsStateProps {
 
 export interface TransactionDetailsDispatchProps {
   refreshData: (req?: StatementsRequest) => void;
+  refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
   onTimeScaleChange: (ts: TimeScale) => void;
 }
@@ -195,10 +196,16 @@ export class TransactionDetails extends React.Component<
   componentDidMount(): void {
     this.refreshData("");
     this.props.refreshUserSQLRoles();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
   }
 
   componentDidUpdate(prevProps: TransactionDetailsProps): void {
     this.getTransactionStateInfo(prevProps.transactionFingerprintId);
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
