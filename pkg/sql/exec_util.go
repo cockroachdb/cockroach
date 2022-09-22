@@ -3119,6 +3119,10 @@ func (m *sessionDataMutator) SetIdleInTransactionSessionTimeout(timeout time.Dur
 	m.data.IdleInTransactionSessionTimeout = timeout
 }
 
+func (m *sessionDataMutator) SetTransactionTimeout(timeout time.Duration) {
+	m.data.TransactionTimeout = timeout
+}
+
 func (m *sessionDataMutator) SetAllowPrepareAsOptPlan(val bool) {
 	m.data.AllowPrepareAsOptPlan = val
 }

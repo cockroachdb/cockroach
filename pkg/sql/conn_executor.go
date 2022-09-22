@@ -1850,6 +1850,7 @@ func (ex *connExecutor) run(
 			return err
 		}
 	}
+
 }
 
 // errDrainingComplete is returned by execCmd when the connExecutor previously got
@@ -1920,6 +1921,7 @@ func (ex *connExecutor) execCmd() error {
 			ev, payload, err = ex.execStmt(
 				ctx, tcmd.Statement, nil /* prepared */, nil /* pinfo */, stmtRes, canAutoCommit,
 			)
+
 			return err
 		}()
 		// Note: we write to ex.statsCollector.PhaseTimes, instead of ex.phaseTimes,
