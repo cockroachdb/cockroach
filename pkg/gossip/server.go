@@ -55,6 +55,9 @@ type server struct {
 		// composable. There's an open proposal to add them:
 		// https://github.com/golang/go/issues/16620
 		ready chan struct{}
+		// The time at which we last checked if the network should be tightened.
+		// Used to avoid burning CPU and mutex cycles on checking too frequently.
+		lastTighten time.Time
 	}
 	tighten chan struct{} // Sent on when we may want to tighten the network
 
@@ -344,6 +347,11 @@ func (s *server) gossipReceiver(
 }
 
 func (s *server) maybeTightenLocked() {
+	now := timeutil.Now()
+	if now.Before(s.mu.lastTighten.Add(gossipTightenInterval)) {
+		// It hasn't been long since we last tightened the network, so skip it.
+		return
+	}
 	select {
 	case s.tighten <- struct{}{}:
 	default:

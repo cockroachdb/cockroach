@@ -131,6 +131,10 @@ const (
 	// StoreTTL is time-to-live for store-related info.
 	StoreTTL = 2 * StoresInterval
 
+	// gossipTightenInterval is how long to wait between tightenNetwork checks if
+	// we didn't need to tighten the last time we checked.
+	gossipTightenInterval = time.Second
+
 	unknownNodeID roachpb.NodeID = 0
 )
 
@@ -1462,12 +1466,23 @@ func jitteredInterval(interval time.Duration) time.Duration {
 func (g *Gossip) tightenNetwork(ctx context.Context) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
+	now := timeutil.Now()
+	if now.Before(g.mu.lastTighten.Add(gossipTightenInterval)) {
+		// It hasn't been long since we last tightened the network, so skip it.
+		return
+	}
+	g.mu.lastTighten = now
+
 	if g.outgoing.hasSpace() {
 		distantNodeID, distantHops := g.mu.is.mostDistant(g.hasOutgoingLocked)
 		log.VEventf(ctx, 2, "distantHops: %d from %d", distantHops, distantNodeID)
 		if distantHops <= maxHops {
 			return
 		}
+		// If tightening is needed, then reset lastTighten to avoid restricting how
+		// soon we try again.
+		g.mu.lastTighten = time.Time{}
 		if nodeAddr, err := g.getNodeIDAddress(distantNodeID, true /* locked */); err != nil || nodeAddr == nil {
 			log.Health.Errorf(ctx, "unable to get address for n%d: %s", distantNodeID, err)
 		} else {
