@@ -347,7 +347,7 @@ func localRangeIDKeyParse(input string) (remainder string, key roachpb.Key) {
 	infix, input = mustShift(input)
 	var replicated bool
 	switch {
-	case bytes.Equal(localRangeIDUnreplicatedInfix, []byte(infix)):
+	case bytes.Equal(LocalRangeIDUnreplicatedInfix, []byte(infix)):
 	case bytes.Equal(LocalRangeIDReplicatedInfix, []byte(infix)):
 		replicated = true
 	default:

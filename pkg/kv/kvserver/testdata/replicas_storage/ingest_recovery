@@ -1,0 +1,66 @@
+# Test that an ingest that subsumes existing raft log entries is recovered
+# from correctly in ReplicasStorage.Init: note that the removal of the raft
+# log entry will be lost by the test and so the replica should appear in state
+# RecoveryInconsistentReplica.
+new
+----
+
+create-uninit range-id=1 replica-id=2
+----
+== r1/2 uninited ==
+  hs: term:0 vote:0 commit:0  trunc-state: index:0 term:0 
+
+# Initialize the replica.
+ingest-snapshot range-id=1 replica-id=2 raft-index=11 raft-term=5 span=a,f keys=a ts=12
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:11  trunc-state: index:11 term:5 
+  span: {a-f} desc-ts: 12 appliedState: index: 11, term: 5
+  global: "a"/0.000000012,0=a.12
+
+# Apply mutations that build up the raft log.
+mutation range-id=1 replica-id=2 raft-index=12 raft-term=5 keys=b ts=14
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:12  trunc-state: index:11 term:5 
+  raft-log: 12
+  span: {a-f} desc-ts: 12 appliedState: index: 12, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000014,0=b.14
+
+mutation range-id=1 replica-id=2 raft-index=13 raft-term=5 keys=e ts=15
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:13  trunc-state: index:11 term:5 
+  raft-log: 12, 13
+  span: {a-f} desc-ts: 12 appliedState: index: 13, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000014,0=b.14 "e"/0.000000015,0=e.15
+
+# Ensure we have synced everything in the raft log by doing a split. This
+# isn't actually necessary since the test sets RaftMutationBatch.MustSync=true
+# in the previous steps, but just in case.
+split-replica range-id=1 replica-id=2 rhs-range-id=21 rhs-replica-id=22 rhs-span=e,f ts=16
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:13  trunc-state: index:11 term:5 
+  raft-log: 12, 13
+  span: {a-e} desc-ts: 16 appliedState: index: 13, term: 5
+  global: "a"/0.000000012,0=a.12 "b"/0.000000014,0=b.14
+== r21/22 inited ==
+  hs: term:0 vote:0 commit:10  trunc-state: index:10 term:5 
+  span: {e-f} desc-ts: 16 appliedState: index: 10, term: 5
+  global: "e"/0.000000015,0=e.15
+
+# Ingest a snapshot ahead of all these log entries. The log entries will be
+# cleared without syncing, so when the test resets the strict-mem and creates
+# a new ReplicasStorage, the latter will need to again remove the raft log
+# entries.
+ingest-snapshot range-id=1 replica-id=2 raft-index=17 raft-term=5 span=a,e keys=c ts=17
+----
+== r1/2 inited ==
+  hs: term:0 vote:0 commit:17  trunc-state: index:17 term:5 
+  span: {a-e} desc-ts: 17 appliedState: index: 17, term: 5
+  global: "c"/0.000000017,0=c.17
+== r21/22 inited ==
+  hs: term:0 vote:0 commit:10  trunc-state: index:10 term:5 
+  span: {e-f} desc-ts: 16 appliedState: index: 10, term: 5
+  global: "e"/0.000000015,0=e.15

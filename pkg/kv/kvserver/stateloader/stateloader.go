@@ -344,6 +344,27 @@ func (rsl StateLoader) SetVersion(
 
 // LoadLastIndex loads the last index.
 func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader) (uint64, error) {
+	lastIndex, found, err := rsl.LoadLastIndexWithLogEntry(ctx, reader)
+	if err != nil {
+		return 0, err
+	}
+	if found {
+		return lastIndex, nil
+	}
+	// The log is empty, which means we are either starting from scratch
+	// or the entire log has been truncated away.
+	lastEnt, err := rsl.LoadRaftTruncatedState(ctx, reader)
+	if err != nil {
+		return 0, err
+	}
+	return lastEnt.Index, nil
+}
+
+// LoadLastIndexWithLogEntry loads the last index containing an actual log
+// entry.
+func (rsl StateLoader) LoadLastIndexWithLogEntry(
+	ctx context.Context, reader storage.Reader,
+) (uint64, bool, error) {
 	prefix := rsl.RaftLogPrefix()
 	// NB: raft log has no intents.
 	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
@@ -362,18 +383,9 @@ func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader)
 		if err != nil {
 			log.Fatalf(ctx, "unable to decode Raft log index key: %s; %v", key.String(), err)
 		}
+		return lastIndex, true, nil
 	}
-
-	if lastIndex == 0 {
-		// The log is empty, which means we are either starting from scratch
-		// or the entire log has been truncated away.
-		lastEnt, err := rsl.LoadRaftTruncatedState(ctx, reader)
-		if err != nil {
-			return 0, err
-		}
-		lastIndex = lastEnt.Index
-	}
-	return lastIndex, nil
+	return 0, false, nil
 }
 
 // LoadRaftTruncatedState loads the truncated state.
