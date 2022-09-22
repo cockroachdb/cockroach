@@ -13,6 +13,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
 import { AppState } from "src/store";
+import { actions as nodesActions } from "src/store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { TransactionsPage } from "./transactionsPage";
 import {
@@ -56,6 +57,7 @@ export const TransactionsPageConnected = withRouter(
     (dispatch: Dispatch) => ({
       refreshData: (req: StatementsRequest) =>
         dispatch(sqlStatsActions.refresh(req)),
+      refreshNodes: () => dispatch(nodesActions.refresh()),
       resetSQLStats: (req: StatementsRequest) =>
         dispatch(sqlStatsActions.reset(req)),
       onTimeScaleChange: (ts: TimeScale) => {

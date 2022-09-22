@@ -925,6 +925,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   refreshStatementDiagnosticsRequests: noop,
   refreshStatements: noop,
   refreshUserSQLRoles: noop,
+  refreshNodes: noop,
   resetSQLStats: noop,
   onTimeScaleChange: noop,
   onActivateStatementDiagnostics: noop,
