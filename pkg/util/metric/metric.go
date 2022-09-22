@@ -590,14 +590,6 @@ func ValueAtQuantileWindowed(histogram *prometheusgo.Histogram, q float64) float
 	// last bucket -- see [1].
 	//
 	// [1]: https://github.com/prometheus/prometheus/blob/d9162189/promql/quantile.go#L103.
-	// the buckets to provide a more accurate histogram. FWIW the Prometheus client
-	// library does the same when the resulting value is in the +Inf bucket and
-	// returns the upper bound of the second last bucket:
-	// It is cleaner/easier for them since they have access to the +Inf bucket
-	// internally.
-	// The 0.5 was added for rounding purposes. I went back and forth on whether to
-	// have it at all but thought it made sense for smaller SampleCount cases like
-	// in this test:
 	if val > *buckets[len(buckets)-1].UpperBound {
 		return *buckets[len(buckets)-1].UpperBound
 	}

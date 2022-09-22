@@ -57,6 +57,14 @@ type LocalityOracle func(roachpb.NodeID) string
 // PerLocalityCounts maps from the string representation of a locality to count.
 type PerLocalityCounts map[string]float64
 
+// RatedSummary returns a rated summary representing a snapshot of the current
+// replicastats state.
+type RatedSummary struct {
+	QPS            float64
+	LocalityCounts PerLocalityCounts
+	Duration       time.Duration
+}
+
 // ReplicaStats maintains statistics about the work done by a replica. Its
 // initial use is tracking the number of requests received from each
 // cluster locality in order to inform lease transfer decisions.
@@ -379,6 +387,19 @@ func (rs *ReplicaStats) ResetRequestCounts() {
 	rs.Mu.records[rs.Mu.idx].activate()
 	rs.Mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
 	rs.Mu.lastReset = rs.Mu.lastRotate
+}
+
+// SnapshotRatedSummary returns a RatedSummary representing a snapshot of the
+// current replica stats state, summarized by arithmetic mean count,
+// per-locality count and duration recorded over.
+func (rs *ReplicaStats) SnapshotRatedSummary() *RatedSummary {
+	qps, _ := rs.AverageRatePerSecond()
+	localityCounts, interval := rs.PerLocalityDecayingRate()
+	return &RatedSummary{
+		QPS:            qps,
+		LocalityCounts: localityCounts,
+		Duration:       interval,
+	}
 }
 
 // SetMeanRateForTesting is a testing helper to directly sey the mean rate.

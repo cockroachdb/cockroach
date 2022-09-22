@@ -1,0 +1,39 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "queue",
+    srcs = [
+        "queue.go",
+        "replicate_queue.go",
+        "split_queue.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+    ],
+)
+
+go_test(
+    name = "queue_test",
+    srcs = [
+        "replicate_queue_test.go",
+        "split_queue_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    embed = [":queue"],
+    deps = [
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/workload",
+        "//pkg/roachpb",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

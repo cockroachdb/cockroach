@@ -61,6 +61,41 @@ type RangeSplitChange struct {
 	Wait        time.Duration
 }
 
+// LeaseTransferChange contains information necessary to transfer the lease for a
+// range to a an existing replica, on the target store.
+type LeaseTransferChange struct {
+	RangeID        RangeID
+	TransferTarget StoreID
+	Wait           time.Duration
+}
+
+// Apply applies a change to the state.
+func (lt *LeaseTransferChange) Apply(s State) {
+	s.TransferLease(lt.RangeID, lt.TransferTarget)
+}
+
+// Target returns the recipient store of the change.
+func (lt *LeaseTransferChange) Target() StoreID {
+	return lt.TransferTarget
+}
+
+// Range returns the range id the change is for.
+func (lt *LeaseTransferChange) Range() RangeID {
+	return lt.RangeID
+}
+
+// Delay returns the duration taken to complete this state change.
+func (lt *LeaseTransferChange) Delay() time.Duration {
+	return lt.Wait
+}
+
+// Blocking indicates whether the change should wait for other changes on
+// the same target to complete, or if other changes should be blocking on
+// it. Lease transfers do not block.
+func (lt *LeaseTransferChange) Blocking() bool {
+	return false
+}
+
 // Apply applies a change to the state.
 func (rsc *RangeSplitChange) Apply(s State) {
 	s.SplitRange(rsc.SplitKey)
@@ -109,9 +144,7 @@ func (rc *ReplicaChange) Apply(s State) {
 			// We want to remove a replica, however we cannot currently. This can only
 			// be due to the requested remove store holding a lease. Check if it's
 			// possible to transfer to the incoming replica if we added one, if not
-			// fail.
-			// TODO(kvoli): Lease transfers should be a separate state change
-			// operation, when they are supported in simulating rebalancing.
+			// fail. This follows joint configuration lh removal in the real code.
 			if !s.ValidTransfer(rc.RangeID, rc.Add) {
 				// Cannot transfer lease, bail out and revert the added replica.
 				s.RemoveReplica(rc.RangeID, rc.Add)
