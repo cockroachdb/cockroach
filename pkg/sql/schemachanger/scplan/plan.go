@@ -74,19 +74,19 @@ func (p Plan) StagesForCurrentPhase() []scstage.Stage {
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
 // the initial state for a set of targets. Returns an error when planning fails.
-func MakePlan(initial scpb.CurrentState, params Params) (p Plan, err error) {
+func MakePlan(ctx context.Context, initial scpb.CurrentState, params Params) (p Plan, err error) {
 	p = Plan{
 		CurrentState: initial,
 		Params:       params,
 	}
-	err = makePlan(&p)
-	if err != nil {
+	err = makePlan(ctx, &p)
+	if err != nil && ctx.Err() == nil {
 		err = p.DecorateErrorWithPlanDetails(err)
 	}
 	return p, err
 }
 
-func makePlan(p *Plan) (err error) {
+func makePlan(ctx context.Context, p *Plan) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			rAsErr, ok := r.(error)
@@ -99,18 +99,18 @@ func makePlan(p *Plan) (err error) {
 	}()
 	{
 		start := timeutil.Now()
-		p.Graph = buildGraph(p.CurrentState)
-		if log.V(2) {
-			log.Infof(context.TODO(), "graph generation took %v", timeutil.Since(start))
+		p.Graph = buildGraph(ctx, p.CurrentState)
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Infof(ctx, "graph generation took %v", timeutil.Since(start))
 		}
 	}
 	{
 		start := timeutil.Now()
 		p.Stages = scstage.BuildStages(
-			p.CurrentState, p.Params.ExecutionPhase, p.Graph, p.Params.SchemaChangerJobIDSupplier,
+			ctx, p.CurrentState, p.Params.ExecutionPhase, p.Graph, p.Params.SchemaChangerJobIDSupplier,
 		)
-		if log.V(2) {
-			log.Infof(context.TODO(), "stage generation took %v", timeutil.Since(start))
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Infof(ctx, "stage generation took %v", timeutil.Since(start))
 		}
 	}
 	if n := len(p.Stages); n > 0 && p.Stages[n-1].Phase > scop.PreCommitPhase {
@@ -123,12 +123,12 @@ func makePlan(p *Plan) (err error) {
 	return nil
 }
 
-func buildGraph(cs scpb.CurrentState) *scgraph.Graph {
-	g, err := opgen.BuildGraph(cs)
+func buildGraph(ctx context.Context, cs scpb.CurrentState) *scgraph.Graph {
+	g, err := opgen.BuildGraph(ctx, cs)
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph op edges"))
 	}
-	err = rules.ApplyDepRules(g)
+	err = rules.ApplyDepRules(ctx, g)
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph dep edges"))
 	}
@@ -136,7 +136,7 @@ func buildGraph(cs scpb.CurrentState) *scgraph.Graph {
 	if err != nil {
 		panic(errors.Wrapf(err, "validate graph"))
 	}
-	g, err = rules.ApplyOpRules(g)
+	g, err = rules.ApplyOpRules(ctx, g)
 	if err != nil {
 		panic(errors.Wrapf(err, "mark op edges as no-op"))
 	}
