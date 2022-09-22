@@ -400,7 +400,7 @@ func (s *Storage) Insert(
 	k := s.makeSessionKey(sid)
 	v := encodeValue(expiration)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	if err := s.db.InitPut(ctx, k, &v, true); err != nil {
+	if err := s.db.CPutAllowingIfNotExists(ctx, k, &v, v.TagAndDataBytes()); err != nil {
 		s.metrics.WriteFailures.Inc(1)
 		return errors.Wrapf(err, "could not insert session %s", sid)
 	}
