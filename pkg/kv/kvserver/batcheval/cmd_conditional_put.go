@@ -54,24 +54,14 @@ func ConditionalPut(
 		ts = h.Timestamp
 	}
 
-	var expVal []byte
-	if len(args.ExpBytes) != 0 {
-		expVal = args.ExpBytes
-	} else {
-		// Compatibility with 20.1 requests.
-		if args.DeprecatedExpValue != nil {
-			expVal = args.DeprecatedExpValue.TagAndDataBytes()
-		}
-	}
-
 	handleMissing := storage.CPutMissingBehavior(args.AllowIfDoesNotExist)
 	var err error
 	if args.Blind {
 		err = storage.MVCCBlindConditionalPut(
-			ctx, readWriter, cArgs.Stats, args.Key, ts, cArgs.Now, args.Value, expVal, handleMissing, h.Txn)
+			ctx, readWriter, cArgs.Stats, args.Key, ts, cArgs.Now, args.Value, args.ExpBytes, handleMissing, h.Txn)
 	} else {
 		err = storage.MVCCConditionalPut(
-			ctx, readWriter, cArgs.Stats, args.Key, ts, cArgs.Now, args.Value, expVal, handleMissing, h.Txn)
+			ctx, readWriter, cArgs.Stats, args.Key, ts, cArgs.Now, args.Value, args.ExpBytes, handleMissing, h.Txn)
 	}
 	// NB: even if MVCC returns an error, it may still have written an intent
 	// into the batch. This allows callers to consume errors like WriteTooOld
