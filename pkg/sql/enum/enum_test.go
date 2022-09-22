@@ -186,3 +186,8 @@ func TestGenerateNEvenlySpacedBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestOne(t *testing.T) {
+	require.Equal(t, One, GenByteStringBetween(nil, nil, PackedSpacing))
+	require.Equal(t, One, GenByteStringBetween(nil, nil, SpreadSpacing))
+}
