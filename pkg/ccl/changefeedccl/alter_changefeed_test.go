@@ -1326,10 +1326,9 @@ func TestAlterChangefeedInitialScan(t *testing.T) {
 	}
 }
 
-/*
-This test checks that the time used to get table descriptors in alter changefeed command is
-highwatermark (if set).
-*/
+// This test checks that the time used to get table descriptors in alter
+// changefeed is the time from which changefeed will resume (check
+// validateNewTargets for more info on how this time is calculated).
 func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1374,12 +1373,11 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'after')`)
 
-		/*
-			Simulate that a significant time has passed since the create change
-			feed command was given - if the highwater mark is not used in the
-			following alter changefeed command, then we will get an error when
-			we try to get a table descriptors using cursor time.
-		*/
+		// Simulate that a significant time has passed since the create
+		// change feed command was given - if the highwater mark is not
+		// used in the following alter changefeed command, then we will
+		// get an error when we try to get a table descriptors using
+		// cursor time.
 		calculateCursor := func(currentTime *hlc.Timestamp) string {
 			return "-3h"
 		}
