@@ -1471,7 +1471,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	})
 
 	// We can now add the node registry.
-	s.recorder.AddNode( // XXX: Has to occur before
+	s.recorder.AddNode(
 		s.registry,
 		s.node.Descriptor,
 		s.node.startedAt,
