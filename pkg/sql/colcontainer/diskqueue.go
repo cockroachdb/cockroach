@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -545,7 +546,19 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 	return nil
 }
 
+func checkCancellation(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return cancelchecker.QueryCanceledError
+	default:
+		return nil
+	}
+}
+
 func (d *diskQueue) Enqueue(ctx context.Context, b coldata.Batch) error {
+	if err := checkCancellation(ctx); err != nil {
+		return err
+	}
 	if d.state == diskQueueStateDequeueing {
 		if d.cfg.CacheMode != DiskQueueCacheModeIntertwinedCalls {
 			return errors.Errorf(
@@ -719,6 +732,9 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 // Dequeue dequeues a batch from disk and deserializes it into b. Note that the
 // deserialized batch is only valid until the next call to Dequeue.
 func (d *diskQueue) Dequeue(ctx context.Context, b coldata.Batch) (bool, error) {
+	if err := checkCancellation(ctx); err != nil {
+		return false, err
+	}
 	if d.serializer != nil && d.numBufferedBatches > 0 {
 		if err := d.writeFooterAndFlush(ctx); err != nil {
 			return false, err
