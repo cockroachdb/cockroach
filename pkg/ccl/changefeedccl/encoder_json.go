@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -38,8 +39,9 @@ type jsonEncoder struct {
 	updatedField, mvccTimestampField, beforeField, keyInValue, topicInValue bool
 	envelopeType                                                            changefeedbase.EnvelopeType
 
-	targets changefeedbase.Targets
-	buf     bytes.Buffer
+	buf             bytes.Buffer
+	versionEncoder  func(ed *cdcevent.EventDescriptor) *versionEncoder
+	envelopeEncoder func(evCtx eventContext, updated, prev cdcevent.Row) (json.JSON, error)
 }
 
 var _ Encoder = &jsonEncoder{}
@@ -51,20 +53,29 @@ func canJSONEncodeMetadata(e changefeedbase.EnvelopeType) bool {
 	return e == changefeedbase.OptEnvelopeBare || e == changefeedbase.OptEnvelopeWrapped
 }
 
-func makeJSONEncoder(
-	opts changefeedbase.EncodingOptions, targets changefeedbase.Targets,
-) (*jsonEncoder, error) {
+func makeJSONEncoder(opts changefeedbase.EncodingOptions) (*jsonEncoder, error) {
+	versionCache := cache.NewUnorderedCache(cdcevent.DefaultCacheConfig)
 	e := &jsonEncoder{
-		targets:      targets,
-		envelopeType: opts.Envelope,
+		envelopeType:       opts.Envelope,
+		updatedField:       opts.UpdatedTimestamps,
+		mvccTimestampField: opts.MVCCTimestamps,
+		// In the bare envelope we don't output diff directly, it's incorporated into the
+		// projection as desired.
+		beforeField:  opts.Diff && opts.Envelope != changefeedbase.OptEnvelopeBare,
+		keyInValue:   opts.KeyInValue,
+		topicInValue: opts.TopicInValue,
+		versionEncoder: func(ed *cdcevent.EventDescriptor) *versionEncoder {
+			key := cdcevent.CacheKey{
+				ID:       ed.TableID,
+				Version:  ed.Version,
+				FamilyID: ed.FamilyID,
+			}
+			return cdcevent.GetCachedOrCreate(key, versionCache, func() interface{} {
+				return &versionEncoder{}
+			}).(*versionEncoder)
+		},
 	}
-	e.updatedField = opts.UpdatedTimestamps
-	e.mvccTimestampField = opts.MVCCTimestamps
-	// In the bare envelope we don't output diff directly, it's incorporated into the
-	// projection as desired.
-	e.beforeField = opts.Diff && opts.Envelope != changefeedbase.OptEnvelopeBare
-	e.keyInValue = opts.KeyInValue
-	e.topicInValue = opts.TopicInValue
+
 	if !canJSONEncodeMetadata(e.envelopeType) {
 		if e.keyInValue {
 			return nil, errors.Errorf(`%s is only usable with %s=%s`,
@@ -75,16 +86,28 @@ func makeJSONEncoder(
 				changefeedbase.OptTopicInValue, changefeedbase.OptEnvelope, changefeedbase.OptEnvelopeWrapped)
 		}
 	}
+
+	if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
+		if err := e.initWrappedEnvelope(); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := e.initRawEnvelope(); err != nil {
+			return nil, err
+		}
+	}
+
 	return e, nil
+}
+
+// versionEncoder memoizes version specific encoding state.
+type versionEncoder struct {
+	valueBuilder *json.FixedKeysObjectBuilder
 }
 
 // EncodeKey implements the Encoder interface.
 func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) ([]byte, error) {
-	jsonEntries, err := e.encodeKeyRaw(row)
-	if err != nil {
-		return nil, err
-	}
-	j, err := json.MakeJSON(jsonEntries)
+	j, err := e.versionEncoder(row.EventDescriptor).encodeKeyRaw(row)
 	if err != nil {
 		return nil, err
 	}
@@ -93,35 +116,228 @@ func (e *jsonEncoder) EncodeKey(_ context.Context, row cdcevent.Row) ([]byte, er
 	return e.buf.Bytes(), nil
 }
 
-func (e *jsonEncoder) encodeKeyRaw(row cdcevent.Row) ([]interface{}, error) {
-	var jsonEntries []interface{}
+func (e *versionEncoder) encodeKeyRaw(row cdcevent.Row) (json.JSON, error) {
+	kb := json.NewArrayBuilder(1)
 	if err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
 		if err != nil {
 			return err
 		}
-		jsonEntries = append(jsonEntries, j)
+		kb.Add(j)
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
-	return jsonEntries, nil
+	return kb.Build(), nil
 }
 
-func rowAsGoNative(row cdcevent.Row) (map[string]interface{}, error) {
+func (e *versionEncoder) encodeKeyInValue(
+	updated cdcevent.Row, b *json.FixedKeysObjectBuilder,
+) error {
+	keyEntries, err := e.encodeKeyRaw(updated)
+	if err != nil {
+		return err
+	}
+	return b.Set("key", keyEntries)
+}
+
+var emptyJSONValue = func() json.JSON {
+	j, err := json.MakeJSON(map[string]interface{}{})
+	if err != nil {
+		panic(err)
+	}
+	return j
+}()
+
+func (e *versionEncoder) rowAsGoNative(row cdcevent.Row, meta json.JSON) (json.JSON, error) {
 	if !row.HasValues() || row.IsDeleted() {
-		return nil, nil
+		if meta != nil {
+			b := json.NewObjectBuilder(1)
+			b.Add(jsonMetaSentinel, meta)
+			return b.Build(), nil
+		}
+		return json.NullJSONValue, nil
 	}
 
-	result := make(map[string]interface{})
-	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) (err error) {
-		result[col.Name], err = tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
-		return err
+	if e.valueBuilder == nil {
+		keys := make([]string, 0, len(row.ResultColumns()))
+		_ = row.ForEachColumn().Col(func(col cdcevent.ResultColumn) error {
+			keys = append(keys, col.Name)
+			return nil
+		})
+		if meta != nil {
+			keys = append(keys, jsonMetaSentinel)
+		}
+		b, err := json.NewFixedKeysObjectBuilder(keys)
+		if err != nil {
+			return nil, err
+		}
+		e.valueBuilder = b
+	}
+
+	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+		if err != nil {
+			return err
+		}
+		return e.valueBuilder.Set(col.Name, j)
 	}); err != nil {
 		return nil, err
 	}
-	return result, nil
+
+	if meta != nil {
+		if err := e.valueBuilder.Set(jsonMetaSentinel, meta); err != nil {
+			return nil, err
+		}
+	}
+
+	return e.valueBuilder.Build()
+}
+
+func (e *jsonEncoder) initRawEnvelope() error {
+	// Determine if we need to add crdb meta.
+	var metaKeys []string
+	if e.updatedField {
+		metaKeys = append(metaKeys, "updated")
+	}
+	if e.mvccTimestampField {
+		metaKeys = append(metaKeys, "mvcc_timestamp")
+	}
+	if e.keyInValue {
+		metaKeys = append(metaKeys, "key")
+	}
+	if e.topicInValue {
+		metaKeys = append(metaKeys, "topic")
+	}
+
+	// Setup builder for crdb meta if needed.
+	var metaBuilder *json.FixedKeysObjectBuilder
+	if len(metaKeys) > 0 {
+		b, err := json.NewFixedKeysObjectBuilder(metaKeys)
+		if err != nil {
+			return err
+		}
+		metaBuilder = b
+	}
+
+	e.envelopeEncoder = func(evCtx eventContext, updated, _ cdcevent.Row) (_ json.JSON, err error) {
+		ve := e.versionEncoder(updated.EventDescriptor)
+		if len(metaKeys) == 0 {
+			if updated.IsDeleted() {
+				return emptyJSONValue, nil
+			}
+			return ve.rowAsGoNative(updated, nil)
+		}
+
+		if e.updatedField {
+			if err := metaBuilder.Set("updated", json.FromString(evCtx.updated.AsOfSystemTime())); err != nil {
+				return nil, err
+			}
+		}
+
+		if e.mvccTimestampField {
+			if err := metaBuilder.Set("mvcc_timestamp", json.FromString(evCtx.mvcc.AsOfSystemTime())); err != nil {
+				return nil, err
+			}
+		}
+
+		if e.keyInValue {
+			if err := ve.encodeKeyInValue(updated, metaBuilder); err != nil {
+				return nil, err
+			}
+		}
+
+		if e.topicInValue {
+			if err := metaBuilder.Set("topic", json.FromString(evCtx.topic)); err != nil {
+				return nil, err
+			}
+		}
+
+		meta, err := metaBuilder.Build()
+		if err != nil {
+			return nil, err
+		}
+		return ve.rowAsGoNative(updated, meta)
+	}
+	return nil
+}
+
+func (e *jsonEncoder) initWrappedEnvelope() error {
+	keys := []string{"after"}
+	if e.beforeField {
+		keys = append(keys, "before")
+	}
+	if e.keyInValue {
+		keys = append(keys, "key")
+	}
+	if e.topicInValue {
+		keys = append(keys, "topic")
+	}
+	if e.updatedField {
+		keys = append(keys, "updated")
+	}
+	if e.mvccTimestampField {
+		keys = append(keys, "mvcc_timestamp")
+	}
+	b, err := json.NewFixedKeysObjectBuilder(keys)
+	if err != nil {
+		return err
+	}
+
+	e.envelopeEncoder = func(evCtx eventContext, updated, prev cdcevent.Row) (json.JSON, error) {
+		ve := e.versionEncoder(updated.EventDescriptor)
+		after, err := ve.rowAsGoNative(updated, nil)
+		if err != nil {
+			return nil, err
+		}
+		if err := b.Set("after", after); err != nil {
+			return nil, err
+		}
+
+		if e.beforeField {
+			var before json.JSON
+			if prev.IsInitialized() && !prev.IsDeleted() {
+				before, err = e.versionEncoder(prev.EventDescriptor).rowAsGoNative(prev, nil)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				before = json.NullJSONValue
+			}
+
+			if err := b.Set("before", before); err != nil {
+				return nil, err
+			}
+		}
+
+		if e.keyInValue {
+			if err := ve.encodeKeyInValue(updated, b); err != nil {
+				return nil, err
+			}
+		}
+
+		if e.topicInValue {
+			if err := b.Set("topic", json.FromString(evCtx.topic)); err != nil {
+				return nil, err
+			}
+		}
+
+		if e.updatedField {
+			if err := b.Set("updated", json.FromString(evCtx.updated.AsOfSystemTime())); err != nil {
+				return nil, err
+			}
+		}
+
+		if e.mvccTimestampField {
+			if err := b.Set("mvcc_timestamp", json.FromString(evCtx.mvcc.AsOfSystemTime())); err != nil {
+				return nil, err
+			}
+		}
+
+		return b.Build()
+	}
+	return nil
 }
 
 // EncodeValue implements the Encoder interface.
@@ -136,83 +352,7 @@ func (e *jsonEncoder) EncodeValue(
 		return nil, nil
 	}
 
-	after, err := rowAsGoNative(updatedRow)
-	if err != nil {
-		return nil, err
-	}
-
-	before, err := rowAsGoNative(prevRow)
-	if err != nil {
-		return nil, err
-	}
-
-	var jsonEntries map[string]interface{}
-	var meta map[string]interface{}
-	if canJSONEncodeMetadata(e.envelopeType) {
-		if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
-			if after != nil {
-				jsonEntries = map[string]interface{}{`after`: after}
-			} else {
-				jsonEntries = map[string]interface{}{`after`: nil}
-			}
-			meta = jsonEntries
-		} else {
-			meta = make(map[string]interface{}, 1)
-			if after != nil {
-				jsonEntries = after
-			} else {
-				jsonEntries = map[string]interface{}{}
-			}
-			jsonEntries[jsonMetaSentinel] = meta
-		}
-		if e.beforeField {
-			if before != nil {
-				jsonEntries[`before`] = before
-			} else {
-				jsonEntries[`before`] = nil
-			}
-		}
-		if e.keyInValue {
-			keyEntries, err := e.encodeKeyRaw(updatedRow)
-			if err != nil {
-				return nil, err
-			}
-			jsonEntries[`key`] = keyEntries
-		}
-		if e.topicInValue {
-			jsonEntries[`topic`] = evCtx.topic
-		}
-	} else {
-		jsonEntries = after
-	}
-
-	// TODO (zinger): Existing behavior special-cases these fields for
-	// no particular reason. Fold this into the above block.
-	if e.updatedField || e.mvccTimestampField {
-		if meta == nil {
-			if e.envelopeType == changefeedbase.OptEnvelopeWrapped {
-				meta = jsonEntries
-			} else {
-				meta = make(map[string]interface{}, 1)
-				jsonEntries[jsonMetaSentinel] = meta
-			}
-		}
-		if e.updatedField {
-			meta[`updated`] = evCtx.updated.AsOfSystemTime()
-		}
-		if e.mvccTimestampField {
-			meta[`mvcc_timestamp`] = evCtx.mvcc.AsOfSystemTime()
-		}
-	}
-
-	if metaFields, ok := jsonEntries[jsonMetaSentinel]; ok {
-		m, ok := metaFields.(map[string]interface{})
-		if !ok || len(m) == 0 {
-			delete(jsonEntries, jsonMetaSentinel)
-		}
-	}
-
-	j, err := json.MakeJSON(jsonEntries)
+	j, err := e.envelopeEncoder(evCtx, updatedRow, prevRow)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +401,7 @@ func EncodeAsJSONChangefeedWithFlags(r cdcevent.Row, flags ...string) ([]byte, e
 	// If this function ends up needing to be optimized, cache or pool these.
 	// Nontrivial to do as an encoder generally isn't safe to call on different
 	// rows in parallel.
-	e, err := makeJSONEncoder(opts, changefeedbase.Targets{})
+	e, err := makeJSONEncoder(opts)
 	if err != nil {
 		return nil, err
 	}

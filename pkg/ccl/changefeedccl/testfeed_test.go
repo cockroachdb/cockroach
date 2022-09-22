@@ -896,6 +896,16 @@ func (f *cloudFeedFactory) Feed(
 	if createStmt.SinkURI != nil {
 		return nil, errors.Errorf(`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
+
+	if createStmt.Select != nil {
+		createStmt.Options = append(createStmt.Options,
+			// Normally, cloud storage requires key_in_value; but if we use bare envelope,
+			// this option is not required.  However, we need it to make this
+			// test feed work -- so, set it.
+			tree.KVOption{Key: changefeedbase.OptKeyInValue},
+		)
+	}
+
 	feedDir := strconv.Itoa(f.feedIdx)
 	f.feedIdx++
 	sinkURI := `experimental-nodelocal://0/` + feedDir
@@ -921,6 +931,7 @@ func (f *cloudFeedFactory) Feed(
 		ss:             ss,
 		seenTrackerMap: make(map[string]struct{}),
 		dir:            feedDir,
+		isBare:         createStmt.Select != nil,
 	}
 	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
 		return nil, err
@@ -941,8 +952,9 @@ type cloudFeedEntry struct {
 type cloudFeed struct {
 	*jobFeed
 	seenTrackerMap
-	ss  *sinkSynchronizer
-	dir string
+	ss     *sinkSynchronizer
+	dir    string
+	isBare bool
 
 	resolved string
 	rows     []cloudFeedEntry
@@ -977,21 +989,53 @@ func reformatJSON(j interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// extractKeyFromJSONValue extracts the `WITH key_in_value` key from a `WITH
-// format=json, envelope=wrapped` value.
-func extractKeyFromJSONValue(wrapped []byte) (key []byte, value []byte, _ error) {
+func extractFieldFromJSONValue(
+	fieldName string, isBare bool, wrapped []byte,
+) (field gojson.RawMessage, value []byte, err error) {
 	parsed := make(map[string]gojson.RawMessage)
+
 	if err := gojson.Unmarshal(wrapped, &parsed); err != nil {
 		return nil, nil, err
 	}
-	keyParsed := parsed[`key`]
-	delete(parsed, `key`)
 
-	var err error
-	if key, err = reformatJSON(keyParsed); err != nil {
+	if isBare {
+		meta := make(map[string]gojson.RawMessage)
+		if metaVal, haveMeta := parsed[jsonMetaSentinel]; haveMeta {
+			if err := gojson.Unmarshal(metaVal, &meta); err != nil {
+				return nil, nil, err
+			}
+			field = meta[fieldName]
+			delete(meta, fieldName)
+			if len(meta) == 0 {
+				delete(parsed, jsonMetaSentinel)
+			} else {
+				if metaVal, err = reformatJSON(meta); err != nil {
+					return nil, nil, err
+				}
+				parsed[jsonMetaSentinel] = metaVal
+			}
+		}
+	} else {
+		field = parsed[fieldName]
+		delete(parsed, fieldName)
+	}
+
+	if value, err = reformatJSON(parsed); err != nil {
 		return nil, nil, err
 	}
-	if value, err = reformatJSON(parsed); err != nil {
+	return field, value, nil
+}
+
+// extractKeyFromJSONValue extracts the `WITH key_in_value` key from a `WITH
+// format=json, envelope=wrapped` value.
+func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []byte, err error) {
+	var keyParsed gojson.RawMessage
+	keyParsed, value, err = extractFieldFromJSONValue("key", isBare, wrapped)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if key, err = reformatJSON(keyParsed); err != nil {
 		return nil, nil, err
 	}
 	return key, value, nil
@@ -1027,7 +1071,7 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 					//
 					// TODO(dan): Leave the key in the value if the TestFeed user
 					// specifically requested it.
-					if m.Key, m.Value, err = extractKeyFromJSONValue(m.Value); err != nil {
+					if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
 						return nil, err
 					}
 					if isNew := c.markSeen(m); !isNew {
@@ -1531,7 +1575,12 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 
 	// required value
 	createStmt.Options = append(createStmt.Options, tree.KVOption{Key: changefeedbase.OptTopicInValue})
-
+	if createStmt.Select != nil {
+		// Normally, webhook requires key_in_value; but if we use bare envelope,
+		// this option is not required.  However, we need it to make this
+		// test feed work -- so, set it.
+		createStmt.Options = append(createStmt.Options, tree.KVOption{Key: changefeedbase.OptKeyInValue})
+	}
 	var sinkDest *cdctest.MockWebhookSink
 
 	cert, _, err := cdctest.NewCACertBase64Encoded()
@@ -1577,6 +1626,7 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 		jobFeed:        newJobFeed(f.jobsTableConn(), wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
+		isBare:         createStmt.Select != nil,
 		mockSink:       sinkDest,
 	}
 	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
@@ -1594,6 +1644,7 @@ type webhookFeed struct {
 	*jobFeed
 	seenTrackerMap
 	ss       *sinkSynchronizer
+	isBare   bool
 	mockSink *cdctest.MockWebhookSink
 }
 
@@ -1616,17 +1667,15 @@ func isResolvedTimestamp(message []byte) (bool, error) {
 
 // extractTopicFromJSONValue extracts the `WITH topic_in_value` topic from a `WITH
 // format=json, envelope=wrapped` value.
-func extractTopicFromJSONValue(wrapped []byte) (topic string, value []byte, _ error) {
-	parsedValue := make(map[string]gojson.RawMessage)
-	if err := gojson.Unmarshal(wrapped, &parsedValue); err != nil {
+func extractTopicFromJSONValue(
+	isBare bool, wrapped []byte,
+) (topic string, value []byte, err error) {
+	var topicRaw gojson.RawMessage
+	topicRaw, value, err = extractFieldFromJSONValue("topic", isBare, wrapped)
+	if err != nil {
 		return "", nil, err
 	}
-	if err := gojson.Unmarshal(parsedValue[`topic`], &topic); err != nil {
-		return "", nil, err
-	}
-	delete(parsedValue, `topic`)
-	var err error
-	if value, err = reformatJSON(parsedValue); err != nil {
+	if err := gojson.Unmarshal(topicRaw, &topic); err != nil {
 		return "", nil, err
 	}
 	return topic, value, nil
@@ -1685,10 +1734,10 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 						if err != nil {
 							return nil, err
 						}
-						if m.Key, m.Value, err = extractKeyFromJSONValue(wrappedValue); err != nil {
+						if m.Key, m.Value, err = extractKeyFromJSONValue(f.isBare, wrappedValue); err != nil {
 							return nil, err
 						}
-						if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
+						if m.Topic, m.Value, err = extractTopicFromJSONValue(f.isBare, m.Value); err != nil {
 							return nil, err
 						}
 						if isNew := f.markSeen(m); !isNew {
