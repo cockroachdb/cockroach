@@ -3300,3 +3300,37 @@ project
  └── projections
       ├── NULL [as="?column?":33, type=unknown]
       └── 1 [as="?column?":34, type=int]
+
+# Regression test for #85499. Avoid overflow when calculating distinct count.
+exec-ddl
+CREATE TABLE t85499 (c0 INT);
+----
+
+norm
+SELECT t85499.rowid FROM t85499
+WHERE (t85499.rowid) BETWEEN (0) AND (
+  CASE  WHEN NULL THEN t85499.rowid
+  ELSE IF(NULL, 1, 9223372036854775807) END
+)
+UNION SELECT t85499.rowid FROM t85499;
+----
+union
+ ├── columns: rowid:9(int!null)
+ ├── left columns: t85499.rowid:2(int)
+ ├── right columns: t85499.rowid:6(int)
+ ├── stats: [rows=1111.111, distinct(9)=1111.11, null(9)=0]
+ ├── key: (9)
+ ├── select
+ │    ├── columns: t85499.rowid:2(int!null)
+ │    ├── stats: [rows=111.1111, distinct(2)=111.111, null(2)=0]
+ │    ├── key: (2)
+ │    ├── scan t85499
+ │    │    ├── columns: t85499.rowid:2(int!null)
+ │    │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
+ │    │    └── key: (2)
+ │    └── filters
+ │         └── (t85499.rowid:2 >= 0) AND (t85499.rowid:2 <= 9223372036854775807) [type=bool, outer=(2), constraints=(/2: [/0 - /9223372036854775807]; tight)]
+ └── scan t85499
+      ├── columns: t85499.rowid:6(int!null)
+      ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
+      └── key: (6)
