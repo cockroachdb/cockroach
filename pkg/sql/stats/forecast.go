@@ -44,10 +44,6 @@ const minObservationsForForecast = 3
 // predictive models in a forecast must have for us to use the forecast.
 const minGoodnessOfFit = 0.95
 
-// maxForecastDistance is the farthest into the future we can forecast from the
-// latest observed statistics.
-const maxForecastDistance = time.Hour * 24 * 7
-
 // ForecastTableStatistics produces zero or more statistics forecasts based on
 // the given observed statistics. The observed statistics must be ordered by
 // collection time descending, with the latest collected statistics first. The
@@ -76,14 +72,9 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 	// To make forecasts deterministic, we must choose a time to forecast at based
 	// on only the observed statistics. We choose the time of the latest
 	// statistics + the average time between automatic stats collections, which
-	// should be roughly when the next automatic stats collection will occur. To
-	// avoid wildly futuristic predictions we cap this at maxForecastDistance.
+	// should be roughly when the next automatic stats collection will occur.
 	latest := observed[0].CreatedAt
-	horizon := latest.Add(maxForecastDistance)
 	at := latest.Add(avgRefreshTime(observed))
-	if at.After(horizon) {
-		at = horizon
-	}
 
 	// Group observed statistics by column set, and remove statistics with
 	// inverted histograms.
