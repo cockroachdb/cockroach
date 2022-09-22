@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMetadata(t *testing.T) {
@@ -408,4 +410,48 @@ func TestDuplicateTable(t *testing.T) {
 	if col == b {
 		t.Errorf("expected partial index predicate to reference new column ID %d, got %d", dupB, col)
 	}
+}
+
+// TestTableMeta_GetRegionsInDatabases exercises the multiregion.RegionConfig
+// annotation.
+func TestTableMeta_GetRegionsInDatabase(t *testing.T) {
+	cat := testcat.New()
+	_, err := cat.ExecuteDDL("CREATE TABLE a (b BOOL, b2 BOOL, INDEX (b2) WHERE b)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var md opt.Metadata
+	tn := tree.NewUnqualifiedTableName("a")
+	tab := cat.Table(tn)
+	tab.DatabaseID = 1 // must be non-zero to trigger the region lookup
+	a := md.AddTable(tab, tn)
+	tabMeta := md.TableMeta(a)
+
+	p := &fakeGetMultiregionConfigPlanner{}
+	// Call the function once, make sure our planner method gets invoked.
+	{
+		_, exists := tabMeta.GetRegionsInDatabase(p)
+		require.False(t, exists)
+		require.Equal(t, 1, p.getMultiregionConfigCalled)
+	}
+	// Call the function again, make sure that our planner method doesn't
+	// get invoked again.
+	{
+		_, exists := tabMeta.GetRegionsInDatabase(p)
+		require.False(t, exists)
+		require.Equal(t, 1, p.getMultiregionConfigCalled)
+	}
+}
+
+type fakeGetMultiregionConfigPlanner struct {
+	eval.Planner
+	getMultiregionConfigCalled int
+}
+
+func (f *fakeGetMultiregionConfigPlanner) GetMultiregionConfig(
+	databaseID descpb.ID,
+) (interface{}, bool) {
+	f.getMultiregionConfigCalled++
+	return nil, false
 }
