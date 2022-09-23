@@ -1482,3 +1482,28 @@ query ITT
 EXECUTE args_deduce_type_1(1,10,100);
 ----
 1  10  100
+
+# Test to check prepare statement with special characters works as expected
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (x int, y int);
+
+statement ok
+INSERT INTO t VALUES(10, 20);
+INSERT INTO t VALUES(30, 40);
+
+statement error pq: at or near "data": syntax error
+PREPARE read data(int) AS SELECT * FROM t WHERE t.x = $1;
+
+statement ok
+PREPARE "read data"(int) AS SELECT * FROM t WHERE t.x = $1;
+
+query error pq: at or near "data": syntax error
+EXECUTE read data(10)
+
+query II
+EXECUTE "read data"(10);
+----
+10 20

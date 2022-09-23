@@ -189,7 +189,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 
 		_, err = evalCtx.statementPreparer.addPreparedStmt(
 			evalCtx.Ctx(),
-			prepStmt.Name,
+			tree.Name(prepStmt.Name),
 			stmt,
 			placeholderTypes,
 			prepStmt.PlaceholderTypeHints,

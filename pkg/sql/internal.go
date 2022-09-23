@@ -1137,7 +1137,7 @@ func (icc *internalClientComm) CreateStatementResult(
 	_ sessiondatapb.DataConversionConfig,
 	_ *time.Location,
 	_ int,
-	_ string,
+	_ tree.Name,
 	_ bool,
 ) CommandResult {
 	return icc.createRes(pos, nil /* onClose */)

@@ -90,7 +90,7 @@ func (ex *connExecutor) execPrepare(
 // coming from the client via the wire protocol.
 func (ex *connExecutor) addPreparedStmt(
 	ctx context.Context,
-	name string,
+	name tree.Name,
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
 	rawTypeHints []oid.Oid,
@@ -484,7 +484,7 @@ func (ex *connExecutor) execBind(
 // for anonymous portals).
 func (ex *connExecutor) addPortal(
 	ctx context.Context,
-	portalName string,
+	portalName tree.Name,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
@@ -507,7 +507,7 @@ func (ex *connExecutor) addPortal(
 
 // exhaustPortal marks a portal with the provided name as "exhausted" and
 // panics if there is no portal with such name.
-func (ex *connExecutor) exhaustPortal(portalName string) {
+func (ex *connExecutor) exhaustPortal(portalName tree.Name) {
 	portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]
 	if !ok {
 		panic(errors.AssertionFailedf("portal %s doesn't exist", portalName))
@@ -516,7 +516,7 @@ func (ex *connExecutor) exhaustPortal(portalName string) {
 	ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
 }
 
-func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
+func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name tree.Name) {
 	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 	if !ok {
 		return
@@ -525,12 +525,12 @@ func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
 	delete(ex.extraTxnState.prepStmtsNamespace.prepStmts, name)
 }
 
-func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
+func (ex *connExecutor) deletePortal(ctx context.Context, name tree.Name) {
 	portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[name]
 	if !ok {
 		return
 	}
-	portal.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
+	portal.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, string(name))
 	delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 }
 
@@ -571,7 +571,7 @@ func (ex *connExecutor) execDescribe(
 
 	switch descCmd.Type {
 	case pgwirebase.PrepareStatement:
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(descCmd.Name)]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[descCmd.Name]
 		if !ok {
 			return retErr(pgerror.Newf(
 				pgcode.InvalidSQLStatementName,
@@ -583,7 +583,7 @@ func (ex *connExecutor) execDescribe(
 			// If we're describing an EXECUTE, we need to look up the statement type
 			// of the prepared statement that the EXECUTE refers to, or else we'll
 			// return the wrong information for describe.
-			innerPs, found := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(execute.Name)]
+			innerPs, found := ex.extraTxnState.prepStmtsNamespace.prepStmts[execute.Name]
 			if !found {
 				return retErr(pgerror.Newf(
 					pgcode.InvalidSQLStatementName,
@@ -601,9 +601,7 @@ func (ex *connExecutor) execDescribe(
 			res.SetPrepStmtOutput(ctx, ps.Columns)
 		}
 	case pgwirebase.PreparePortal:
-		// TODO(rimadeodhar): prepStmtsNamespace should also be updated to use tree.Name instead of string
-		// for indexing internal maps.
-		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[string(descCmd.Name)]
+		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[descCmd.Name]
 		if !ok {
 			// Check SQL-level cursors.
 			cursor := ex.getCursorAccessor().getCursor(descCmd.Name)

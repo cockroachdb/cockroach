@@ -4730,13 +4730,13 @@ statement ok
 PREPARE test_insert_statement (integer, timestamptz) AS INSERT INTO types VALUES ($2, $1)
 
 statement ok
-PREPARE test_select_statement AS SELECT * FROM types
+PREPARE "test select statement" AS SELECT * FROM types
 
 query TTTB
 select name, statement, parameter_types, from_sql from pg_prepared_statements ORDER BY 1, 2
 ----
+test select statement  PREPARE "test select statement" AS SELECT * FROM types                                 {}                                     true
 test_insert_statement  PREPARE test_insert_statement (int, timestamptz) AS INSERT INTO types VALUES ($2, $1)  {bigint,"'timestamp with time zone'"}  true
-test_select_statement  PREPARE test_select_statement AS SELECT * FROM types                                   {}                                     true
 
 subtest pg_catalog.pg_prepare_statement,with_possible_mismatch_num_types
 

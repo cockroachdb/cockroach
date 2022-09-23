@@ -574,6 +574,6 @@ func (ps *DummyPreparedStatementState) MigratablePreparedStatements() []sessiond
 }
 
 // HasPortal is part of the tree.PreparedStatementState interface.
-func (ps *DummyPreparedStatementState) HasPortal(_ string) bool {
+func (ps *DummyPreparedStatementState) HasPortal(_ tree.Name) bool {
 	return false
 }

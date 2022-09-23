@@ -2271,8 +2271,8 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 				return err
 			}
 			if err := addRow(
-				tree.NewDString(name),
-				tree.NewDString(fmt.Sprintf("PREPARE %s%s AS %s", name, argumentsStr, stmt.SQL)),
+				tree.NewDString(string(name)),
+				tree.NewDString(fmt.Sprintf("PREPARE %s%s AS %s", name.String(), argumentsStr, stmt.SQL)),
 				ts,
 				paramTypes,
 				fromSQL,

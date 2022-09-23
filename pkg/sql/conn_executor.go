@@ -996,12 +996,12 @@ func (s *Server) newConnExecutor(
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionInit, timeutil.Now())
 
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
-		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		prepStmts: make(map[tree.Name]*PreparedStatement),
+		portals:   make(map[tree.Name]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos = prepStmtNamespace{
-		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		prepStmts: make(map[tree.Name]*PreparedStatement),
+		portals:   make(map[tree.Name]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
@@ -1578,11 +1578,11 @@ func (ch *ctxHolder) unhijack() {
 type prepStmtNamespace struct {
 	// prepStmts contains the prepared statements currently available on the
 	// session.
-	prepStmts map[string]*PreparedStatement
+	prepStmts map[tree.Name]*PreparedStatement
 	// portals contains the portals currently available on the session. Note
 	// that PreparedPortal.accountForCopy needs to be called if a copy of a
 	// PreparedPortal is retained.
-	portals map[string]PreparedPortal
+	portals map[tree.Name]PreparedPortal
 }
 
 // HasActivePortals returns true if there are portals in the session.
@@ -1591,7 +1591,7 @@ func (ns prepStmtNamespace) HasActivePortals() bool {
 }
 
 // HasPortal returns true if there exists a given named portal in the session.
-func (ns prepStmtNamespace) HasPortal(s string) bool {
+func (ns prepStmtNamespace) HasPortal(s tree.Name) bool {
 	_, ok := ns.portals[s]
 	return ok
 }
@@ -1603,7 +1603,7 @@ func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.Migra
 		ret = append(
 			ret,
 			sessiondatapb.MigratableSession_PreparedStatement{
-				Name:                 name,
+				Name:                 string(name),
 				PlaceholderTypeHints: stmt.InferredTypes,
 				SQL:                  stmt.SQL,
 			},
@@ -1616,11 +1616,11 @@ func (ns prepStmtNamespace) String() string {
 	var sb strings.Builder
 	sb.WriteString("Prep stmts: ")
 	for name := range ns.prepStmts {
-		sb.WriteString(name + " ")
+		sb.WriteString(name.String() + " ")
 	}
 	sb.WriteString("Portals: ")
 	for name := range ns.portals {
-		sb.WriteString(name + " ")
+		sb.WriteString(name.String() + " ")
 	}
 	return sb.String()
 }
@@ -1648,7 +1648,7 @@ func (ns *prepStmtNamespace) resetTo(
 		delete(ns.prepStmts, name)
 	}
 	for name, p := range ns.portals {
-		p.close(ctx, prepStmtsNamespaceMemAcc, name)
+		p.close(ctx, prepStmtsNamespaceMemAcc, string(name))
 		delete(ns.portals, name)
 	}
 
@@ -1657,7 +1657,7 @@ func (ns *prepStmtNamespace) resetTo(
 		ns.prepStmts[name] = ps
 	}
 	for name, p := range to.portals {
-		if err := p.accountForCopy(ctx, prepStmtsNamespaceMemAcc, name); err != nil {
+		if err := p.accountForCopy(ctx, prepStmtsNamespaceMemAcc, string(name)); err != nil {
 			return err
 		}
 		ns.portals[name] = p
@@ -1690,7 +1690,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 
 	// Close all portals.
 	for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
-		p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
+		p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, string(name))
 		delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
 	}
 
@@ -1702,7 +1702,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 	switch ev.eventType {
 	case txnCommit, txnRollback:
 		for name, p := range ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals {
-			p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
+			p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, string(name))
 			delete(ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals, name)
 		}
 		ex.extraTxnState.savepoints.clear()
@@ -1945,7 +1945,7 @@ func (ex *connExecutor) execCmd() error {
 		// We use a closure for the body of the execution so as to
 		// guarantee that the full service time is captured below.
 		err := func() error {
-			portalName := tcmd.Name
+			portalName := tree.Name(tcmd.Name)
 			portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]
 			if !ok {
 				err := pgerror.Newf(
@@ -2283,7 +2283,7 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			case ExecPortal:
 				canAdvance = true
 				// The portal might have been deleted if DEALLOCATE was executed.
-				portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[tcmd.Name]
+				portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[tree.Name(tcmd.Name)]
 				if ok {
 					canAdvance = ex.stmtDoesntNeedRetry(portal.Stmt.AST)
 				}
@@ -3504,10 +3504,10 @@ type connExPrepStmtsAccessor struct {
 var _ preparedStatementsAccessor = connExPrepStmtsAccessor{}
 
 // List is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
+func (ps connExPrepStmtsAccessor) List() map[tree.Name]*PreparedStatement {
 	// Return a copy of the data, to prevent modification of the map.
 	stmts := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts
-	ret := make(map[string]*PreparedStatement, len(stmts))
+	ret := make(map[tree.Name]*PreparedStatement, len(stmts))
 	for key, stmt := range stmts {
 		ret[key] = stmt
 	}
@@ -3515,13 +3515,13 @@ func (ps connExPrepStmtsAccessor) List() map[string]*PreparedStatement {
 }
 
 // Get is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Get(name string) (*PreparedStatement, bool) {
+func (ps connExPrepStmtsAccessor) Get(name tree.Name) (*PreparedStatement, bool) {
 	s, ok := ps.ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 	return s, ok
 }
 
 // Delete is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool {
+func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name tree.Name) bool {
 	_, ok := ps.Get(name)
 	if !ok {
 		return false

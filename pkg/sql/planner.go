@@ -857,7 +857,7 @@ type statementPreparer interface {
 	// hints, and returns it.
 	addPreparedStmt(
 		ctx context.Context,
-		name string,
+		name tree.Name,
 		stmt Statement,
 		placeholderHints tree.PlaceholderTypes,
 		rawTypeHints []oid.Oid,

@@ -105,15 +105,15 @@ func (p *PreparedStatement) incRef(ctx context.Context) {
 type preparedStatementsAccessor interface {
 	// List returns all prepared statements as a map keyed by name.
 	// The map itself is a copy of the prepared statements.
-	List() map[string]*PreparedStatement
+	List() map[tree.Name]*PreparedStatement
 	// Get returns the prepared statement with the given name. The returned bool
 	// is false if a statement with the given name doesn't exist.
-	Get(name string) (*PreparedStatement, bool)
+	Get(name tree.Name) (*PreparedStatement, bool)
 	// Delete removes the PreparedStatement with the provided name from the
 	// collection. If a portal exists for that statement, it is also removed.
 	// The method returns true if statement with that name was found and removed,
 	// false otherwise.
-	Delete(ctx context.Context, name string) bool
+	Delete(ctx context.Context, name tree.Name) bool
 	// DeleteAll removes all prepared statements and portals from the collection.
 	DeleteAll(ctx context.Context)
 }
@@ -138,7 +138,7 @@ type PreparedPortal struct {
 // accountForCopy() doesn't need to be called on the prepared statement.
 func (ex *connExecutor) makePreparedPortal(
 	ctx context.Context,
-	name string,
+	name tree.Name,
 	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
@@ -148,7 +148,7 @@ func (ex *connExecutor) makePreparedPortal(
 		Qargs:      qargs,
 		OutFormats: outFormats,
 	}
-	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
+	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, string(name))
 }
 
 // accountForCopy updates the state to account for the copy of the
