@@ -114,6 +114,49 @@ data: "n"/3.000000000,0 -> /<empty>
 meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
 error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "l" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
 
+# Writing at the timestamp of a point or range key errors.
+run error
+del_range_ts k=e end=f ts=4 idempotent
+----
+>> at end:
+rangekey: {a-d}/[3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "e" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=l end=m ts=4 idempotent
+----
+>> at end:
+rangekey: {a-d}/[3.000000000,0=/<empty>]
+rangekey: {k-m}/[4.000000000,0=/<empty>]
+rangekey: {m-o}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "c"/4.000000000,0 -> /BYTES/c4
+data: "e"/4.000000000,0 -> /BYTES/e4
+data: "f"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} ts=6.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/6.000000000,0 -> /BYTES/i6
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "m"/1.000000000,0 -> /BYTES/m1
+data: "n"/3.000000000,0 -> /<empty>
+meta: "p"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/p0 mergeTs=<nil> txnDidNotUpdateMeta=false
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "l" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+
 # Writing below intents error.
 run error
 del_range_ts k=i end=j ts=3 idempotent
