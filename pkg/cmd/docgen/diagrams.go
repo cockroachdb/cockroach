@@ -479,6 +479,12 @@ var specs = []stmtSpec{
 		},
 	},
 	{
+		name:    "alter_func_stmt",
+		inline:  []string{"alter_func_options_stmt", "alter_func_rename_stmt", "alter_func_owner_stmt", "alter_func_set_schema_stmt", "alter_func_dep_extension_stmt", "alter_func_opt_list", "common_func_opt_item", "opt_restrict", "opt_no"},
+		unlink:  []string{"alter_func_options_stmt", "alter_func_rename_stmt", "alter_func_owner_stmt", "alter_func_set_schema_stmt", "alter_func_dep_extension_stmt", "alter_func_opt_list", "common_func_opt_item", "opt_restrict", "opt_no"},
+		nosplit: true,
+	},
+	{
 		name:   "alter_role_stmt",
 		inline: []string{"role_or_group_or_user", "opt_role_options", "opt_in_database", "set_or_reset_clause", "opt_with", "role_options", "set_rest", "generic_set", "var_list", "to_or_eq"},
 		replace: map[string]string{
@@ -758,6 +764,18 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name:   "create_func_stmt",
+		inline: []string{"opt_or_replace", "opt_func_arg_with_default_list", "opt_return_set", "func_return_type", "opt_create_func_opt_list", "create_func_opt_list", "common_func_opt_item", "create_func_opt_item", "routine_return_stmt", "func_arg_with_default_list", "func_arg_with_default"},
+		unlink: []string{"opt_or_replace", "opt_func_arg_with_default_list", "opt_return_set", "func_return_type", "opt_create_func_opt_list", "create_func_opt_list", "create_func_opt_item", "common_func_opt_item", "routine_return_stmt", "non_reserved_word_or_sconst", "func_arg_with_default_list", "func_arg_with_default", "a_expr"},
+		replace: map[string]string{
+			"non_reserved_word_or_sconst": "'SQL'",
+			"'DEFAULT'":                   "",
+			"'SETOF'":                     "",
+			"'='":                         "",
+			"a_expr":                      ""},
+		nosplit: true,
+	},
+	{
 		name:    "opt_locality",
 		inline:  []string{"locality"},
 		replace: map[string]string{" name": "column_name"},
@@ -838,6 +856,12 @@ var specs = []stmtSpec{
 		stmt:   "drop_database_stmt",
 		inline: []string{"opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'DATABASE'")},
+	},
+	{
+		name:    "drop_func_stmt",
+		inline:  []string{"opt_drop_behavior", "function_with_argtypes_list", "function_with_argtypes", "func_args"},
+		unlink:  []string{"func_name"},
+		replace: map[string]string{"db_object_name": "func_name"},
 	},
 	{
 		name:    "drop_external_connection_stmt",
@@ -1333,7 +1357,7 @@ var specs = []stmtSpec{
 			"'BACKUP' string_or_placeholder 'IN' string_or_placeholder": "'BACKUP' subdirectory 'IN' location",
 			"'BACKUP' 'SCHEMAS' string_or_placeholder":                  "'BACKUP' 'SCHEMAS' location",
 		},
-		unlink: []string{"subdirectory", "location"},
+		unlink: []string{"subdirectory", "location", "location_opt_list"},
 	},
 	{
 		name:    "show_jobs",

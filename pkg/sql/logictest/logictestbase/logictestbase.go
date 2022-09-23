@@ -463,7 +463,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
 		BootstrapVersion:            clusterversion.ByKey(clusterversion.V22_1),
-		BinaryVersion:               clusterversion.ByKey(clusterversion.PrioritizeSnapshots), //TODO: switch to 22.2.
+		BinaryVersion:               clusterversion.ByKey(clusterversion.EnableLeaseUpgrade), // TODO(dt): switch to 22.2.
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
