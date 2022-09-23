@@ -39,8 +39,8 @@ export function makeStatementInsightsColumns(): ColumnDescriptor<StatementInsigh
   const execType = InsightExecEnum.STATEMENT;
   return [
     {
-      name: "executionID",
-      title: insightsTableTitles.executionID(execType),
+      name: "latestExecutionID",
+      title: insightsTableTitles.latestExecutionID(execType),
       cell: (item: StatementInsightEvent) => (
         <Link to={`/insights/statement/${item.statementID}`}>
           {String(item.statementID)}
@@ -142,17 +142,17 @@ export function makeStatementInsightsColumns(): ColumnDescriptor<StatementInsigh
       showByDefault: false,
     },
     {
-      name: "transactionID",
-      title: insightsTableTitles.executionID(InsightExecEnum.TRANSACTION),
-      cell: (item: StatementInsightEvent) => item.transactionID,
-      sort: (item: StatementInsightEvent) => item.transactionID,
-      showByDefault: false,
-    },
-    {
       name: "transactionFingerprintID",
       title: insightsTableTitles.fingerprintID(InsightExecEnum.TRANSACTION),
       cell: (item: StatementInsightEvent) => item.transactionFingerprintID,
       sort: (item: StatementInsightEvent) => item.transactionFingerprintID,
+      showByDefault: false,
+    },
+    {
+      name: "transactionID",
+      title: insightsTableTitles.latestExecutionID(InsightExecEnum.TRANSACTION),
+      cell: (item: StatementInsightEvent) => item.transactionID,
+      sort: (item: StatementInsightEvent) => item.transactionID,
       showByDefault: false,
     },
   ];
