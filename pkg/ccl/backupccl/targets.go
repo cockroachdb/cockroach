@@ -241,9 +241,9 @@ func fullClusterTargets(
 	systemTablesToBackup := GetSystemTablesToIncludeInClusterBackup()
 
 	for _, desc := range allDescs {
-		// If a descriptor is in the DROP state at `EndTime` we do not want to
+		// If a descriptor is in the DROP or OFFLINE state at `EndTime` we do not want to
 		// include it in the backup.
-		if desc.Dropped() {
+		if desc.Dropped() || desc.Offline() {
 			continue
 		}
 		switch desc := desc.(type) {
@@ -325,11 +325,11 @@ func fullClusterTargetsBackup(
 // filters the descriptors based on the targets specified in the restore, and
 // calculates the max descriptor ID in the backup.
 // Post filtering, the method returns:
-//  - A list of all descriptors (table, type, database, schema) along with their
-//    parent databases.
-//  - A list of database descriptors IFF the user is restoring on the cluster or
-//    database level
-//  - A list of tenants to restore, if applicable.
+//   - A list of all descriptors (table, type, database, schema) along with their
+//     parent databases.
+//   - A list of database descriptors IFF the user is restoring on the cluster or
+//     database level
+//   - A list of tenants to restore, if applicable.
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,

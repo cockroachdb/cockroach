@@ -1,0 +1,207 @@
+# tests that cluster backup
+# - excludes offline tables from in-progress imports or restores
+# - reintroduces the table span from an import into rollback
+# tests that cluster restore
+# - handles in progress job resolution of offline tables that were excluded in th backup
+# - properly restores a table that had import rollback
+
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE INDEX foo_idx ON foo (s);
+CREATE INDEX foo_to_drop_idx ON foo (s);
+CREATE TABLE foofoo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foofoo VALUES (10, 'x0');
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://0/export1/' FROM SELECT * FROM baz;
+----
+
+
+# Pause the import job, in order to back up the importing data.
+import expect-pausepoint tag=a
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+import expect-pausepoint tag=aa
+IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+# Ensure cluster backup does not capture importing rows.
+exec-sql
+BACKUP INTO 'nodelocal://0/cluster/' with revision_history;
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/database/' with revision_history;
+----
+
+save-cluster-ts tag=t0
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+
+# Resume the job so the next set of incremental backups observes that tables are back online
+job cancel=a
+----
+
+job cancel=aa
+----
+
+job tag=a wait-for-state=cancelled
+----
+
+
+job tag=aa wait-for-state=cancelled
+----
+
+# Verify proper rollback
+query-sql
+SELECT count(*) FROM d.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d.foofoo;
+----
+1
+
+
+# Even though the full table will get backed up from ts=0 during the next round of incremental
+# backups, only active indexes (foo_idx and foo_new_idx) should appear in the restored cluster.
+exec-sql
+DROP INDEX foo_to_drop_idx;
+----
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+exec-sql
+CREATE INDEX foo_new_idx ON foo (s);
+----
+
+
+# Ensure incremental backups backup the newly online spans from ts=0, as the
+# import was rolled back via non-mvcc clear range. So, backup 0 rows from foo
+# (it was empty pre-import), and 1 row from foo (had 1 row pre-import);
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://0/cluster/' with revision_history;
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' with revision_history;
+----
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/cluster/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 0 incremental
+d foofoo table 0 incremental
+
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 0 incremental
+d foofoo table 0 incremental
+
+# To verify the incremental backed up the pre-import state table, restore d and ensure all tables
+# are in their pre-import state.
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/' with new_db_name=d2;
+----
+
+
+query-sql
+SELECT count(*) FROM d2.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d2.foofoo;
+----
+1
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/cluster/' with new_db_name=d3;
+----
+
+
+query-sql
+SELECT count(*) FROM d2.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d2.foofoo;
+----
+1
+
+
+query-sql
+select DISTINCT index_name FROM [SHOW INDEXES FROM d.foo];
+----
+foo_pkey
+foo_idx
+foo_new_idx
+
+# Verify database restore works if an in-progress import is in the target
+restore aost=t0
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/cluster/' AS OF SYSTEM TIME t0 WITH new_db_name=d3;
+----
+
+
+query-sql
+select table_name FROM [SHOW TABLES FROM d3];
+----
+baz
+
+new-server name=s2 share-io-dir=s1
+----
+
+restore aost=t0
+RESTORE FROM LATEST IN 'nodelocal://0/cluster/' AS OF SYSTEM TIME t0;
+----
+
+
+query-sql
+select table_name FROM [SHOW TABLES FROM d];
+----
+baz
