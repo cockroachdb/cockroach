@@ -38,7 +38,10 @@ func TestDockerCLI(t *testing.T) {
 
 	containerConfig := defaultContainerConfig()
 	containerConfig.Cmd = []string{"stat", cluster.CockroachBinaryInContainer}
-	containerConfig.Env = []string{fmt.Sprintf("PGUSER=%s", username.RootUser)}
+	containerConfig.Env = []string{
+		"CI=1", // Disables the initial color query by the termenv library.
+		fmt.Sprintf("PGUSER=%s", username.RootUser),
+	}
 	ctx := context.Background()
 	if err := testDockerOneShot(ctx, t, "cli_test", containerConfig); err != nil {
 		skip.IgnoreLintf(t, `TODO(dt): No binary in one-shot container, see #6086: %s`, err)
