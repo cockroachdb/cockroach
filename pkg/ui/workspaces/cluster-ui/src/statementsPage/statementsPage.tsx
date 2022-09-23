@@ -95,6 +95,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 export interface StatementsPageDispatchProps {
   refreshStatements: (req: StatementsRequest) => void;
   refreshStatementDiagnosticsRequests: () => void;
+  refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
   resetSQLStats: (req: StatementsRequest) => void;
   dismissAlertMessage: () => void;
@@ -343,8 +344,11 @@ export class StatementsPage extends React.Component<
     }
 
     this.props.refreshUserSQLRoles();
-    if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+      if (!this.props.hasViewActivityRedactedRole) {
+        this.props.refreshStatementDiagnosticsRequests();
+      }
     }
   }
 
@@ -382,8 +386,11 @@ export class StatementsPage extends React.Component<
 
   componentDidUpdate = (): void => {
     this.updateQueryParams();
-    if (!this.props.isTenant && !this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+      if (!this.props.hasViewActivityRedactedRole) {
+        this.props.refreshStatementDiagnosticsRequests();
+      }
     }
   };
 
