@@ -3472,8 +3472,7 @@ func (s *adminServer) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	conn, err := s.server.rpcContext.GRPCDialNode(
-		addr.String(), nodeID, rpc.DefaultClass).Connect(ctx)
+	conn, err := s.server.rpcContext.GRPCDialNode(addr.String(), nodeID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}

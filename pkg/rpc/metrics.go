@@ -12,13 +12,6 @@ package rpc
 
 import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
-// We want to have a way to track the number of connection
-// but we also want to have a way to know that connection health.
-//
-// For this we're going to add a variety of metrics.
-// One will be a gauge of how many heartbeat loops are in which state
-// and another will be a counter for heartbeat failures.
-
 var (
 	// The below gauges store the current state of running heartbeat loops.
 	// Gauges are useful for examining the current state of a system but can hide
@@ -28,107 +21,45 @@ var (
 	// Together these metrics should provide a picture of the state of current
 	// connections.
 
-	metaHeartbeatsInitializing = metric.Metadata{
-		Name:        "rpc.heartbeats.initializing",
-		Help:        "Gauge of current connections in the initializing state",
-		Measurement: "Connections",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaHeartbeatsNominal = metric.Metadata{
 		Name:        "rpc.heartbeats.nominal",
-		Help:        "Gauge of current connections in the nominal state",
-		Measurement: "Connections",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaHeartbeatsFailed = metric.Metadata{
-		Name:        "rpc.heartbeats.failed",
-		Help:        "Gauge of current connections in the failed state",
+		Help:        "Gauge of current connections in the nominal state (i.e. at least one successful heartbeat)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 
 	metaHeartbeatLoopsStarted = metric.Metadata{
-		Name: "rpc.heartbeats.loops.started",
-		Help: "Counter of the number of connection heartbeat loops which " +
-			"have been started",
+		Name:        "rpc.heartbeats.loops.started",
+		Help:        "Counter of connection attempts",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaHeartbeatLoopsExited = metric.Metadata{
 		Name: "rpc.heartbeats.loops.exited",
-		Help: "Counter of the number of connection heartbeat loops which " +
-			"have exited with an error",
+		Help: `Counter of failed connections.
+
+This includes both healthy connections that then terminated as well
+as connection attempts that failed outright during initial dialing.
+
+Connections that are terminated as part of shutdown are excluded.
+`,
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 )
 
-type heartbeatState int
-
-const (
-	heartbeatNotRunning heartbeatState = iota
-	heartbeatInitializing
-	heartbeatNominal
-	heartbeatFailed
-)
-
 func makeMetrics() Metrics {
 	return Metrics{
-		HeartbeatLoopsStarted:  metric.NewCounter(metaHeartbeatLoopsStarted),
-		HeartbeatLoopsExited:   metric.NewCounter(metaHeartbeatLoopsExited),
-		HeartbeatsInitializing: metric.NewGauge(metaHeartbeatsInitializing),
-		HeartbeatsNominal:      metric.NewGauge(metaHeartbeatsNominal),
-		HeartbeatsFailed:       metric.NewGauge(metaHeartbeatsFailed),
+		HeartbeatLoopsStarted: metric.NewCounter(metaHeartbeatLoopsStarted),
+		HeartbeatLoopsExited:  metric.NewCounter(metaHeartbeatLoopsExited),
+		HeartbeatsNominal:     metric.NewGauge(metaHeartbeatsNominal),
 	}
 }
 
 // Metrics is a metrics struct for Context metrics.
+// Field X is documented in metaX.
 type Metrics struct {
-
-	// HeartbeatLoopsStarted is a counter which tracks the number of heartbeat
-	// loops which have been started.
 	HeartbeatLoopsStarted *metric.Counter
-
-	// HeartbeatLoopsExited is a counter which tracks the number of heartbeat
-	// loops which have exited with an error. The only time a heartbeat loop
-	// exits without an error is during server shutdown.
-	HeartbeatLoopsExited *metric.Counter
-
-	// HeartbeatsInitializing tracks the current number of heartbeat loops
-	// which have not yet ever succeeded.
-	HeartbeatsInitializing *metric.Gauge
-	// HeartbeatsNominal tracks the current number of heartbeat loops which
-	// succeeded on their previous attempt.
-	HeartbeatsNominal *metric.Gauge
-	// HeartbeatsNominal tracks the current number of heartbeat loops which
-	// failed on their previous attempt.
-	HeartbeatsFailed *metric.Gauge
-}
-
-// updateHeartbeatState decrements the gauge for the current state and
-// increments the gauge for the new state, returning the new state.
-func updateHeartbeatState(m *Metrics, old, new heartbeatState) heartbeatState {
-	if old == new {
-		return new
-	}
-	if g := heartbeatGauge(m, new); g != nil {
-		g.Inc(1)
-	}
-	if g := heartbeatGauge(m, old); g != nil {
-		g.Dec(1)
-	}
-	return new
-}
-
-// heartbeatGauge returns the appropriate gauge for the given heartbeatState.
-func heartbeatGauge(m *Metrics, s heartbeatState) (g *metric.Gauge) {
-	switch s {
-	case heartbeatInitializing:
-		g = m.HeartbeatsInitializing
-	case heartbeatNominal:
-		g = m.HeartbeatsNominal
-	case heartbeatFailed:
-		g = m.HeartbeatsFailed
-	}
-	return g
+	HeartbeatLoopsExited  *metric.Counter
+	HeartbeatsNominal     *metric.Gauge
 }
