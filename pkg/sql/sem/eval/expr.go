@@ -246,11 +246,11 @@ func (e *evaluator) EvalComparisonExpr(expr *tree.ComparisonExpr) (tree.Datum, e
 		return ComparisonExprWithSubOperator(e.ctx(), expr, left, right)
 	}
 
-	_, newLeft, newRight, _, not := tree.FoldComparisonExpr(op, left, right)
+	_, newLeft, newRight, _, not := tree.FoldComparisonExprWithDatums(op, left, right)
 	if !expr.Op.CalledOnNullInput && (newLeft == tree.DNull || newRight == tree.DNull) {
 		return tree.DNull, nil
 	}
-	d, err := expr.Op.EvalOp.Eval(e, newLeft.(tree.Datum), newRight.(tree.Datum))
+	d, err := expr.Op.EvalOp.Eval(e, newLeft, newRight)
 	if d == tree.DNull || err != nil {
 		return d, err
 	}

@@ -86,8 +86,8 @@ func evalDatumsCmp(
 			continue
 		}
 
-		_, newLeft, newRight, _, not := tree.FoldComparisonExpr(subOp, left, elem)
-		d, err := BinaryOp(ctx, fn.EvalOp, newLeft.(tree.Datum), newRight.(tree.Datum))
+		_, newLeft, newRight, _, not := tree.FoldComparisonExprWithDatums(subOp, left, elem)
+		d, err := BinaryOp(ctx, fn.EvalOp, newLeft, newRight)
 		if err != nil {
 			return nil, err
 		}
