@@ -194,20 +194,8 @@ const noSpanTargetSize = 0
 func TestRestoreEntryCoverExample(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	mockTenantID := roachpb.MakeTenantID(10)
-	mockTenantPrefix := keys.MakeTenantPrefix(mockTenantID)
-
 	sp := func(start, end string) roachpb.Span {
-		// During makeSimpleImportSpans, a reIntroducedTableID is extracted from each passed in
-		// span, unless the span contains a tenantPrefix. If the span contains
-		// neither a tenant prefix nor a table prefix, makeSimpleImportSpans will
-		// return an error. Since the input spans in this test do not contain a
-		// table prefix, add a mock tenant prefix to each span to prevent spurious
-		// errors in makeSimpleImportSpans.
-		sp, err := keys.RewriteSpanToTenantPrefix(roachpb.Span{Key: roachpb.Key(start),
-			EndKey: roachpb.Key(end)}, mockTenantPrefix)
-		require.NoError(t, err)
-		return sp
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
 	}
 	f := func(start, end, path string) backuppb.BackupManifest_File {
 		return backuppb.BackupManifest_File{Span: sp(start, end), Path: path}
@@ -239,10 +227,10 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		}
 	}
 
-	introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+	emptySpanFrontier, err := spanUtils.MakeFrontier(roachpb.Span{})
 	require.NoError(t, err)
 
-	cover := makeSimpleImportSpans(spans, backups, nil, introducedSpanFrontier, nil, noSpanTargetSize)
+	cover := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, noSpanTargetSize)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "c"), Files: paths("1", "4", "6")},
 		{Span: sp("c", "e"), Files: paths("2", "4", "6")},
@@ -251,12 +239,26 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Span: sp("l", "m"), Files: paths("9")},
 	}, cover)
 
-	coverSized := makeSimpleImportSpans(spans, backups, nil, introducedSpanFrontier, nil, 2<<20)
+	coverSized := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, 2<<20)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "f"), Files: paths("1", "2", "4", "6")},
 		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
 		{Span: sp("l", "m"), Files: paths("9")},
 	}, coverSized)
+
+	// check that introduced spans are properly elided
+	backups[2].IntroducedSpans = []roachpb.Span{sp("a", "f")}
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+	require.NoError(t, err)
+
+	coverIntroduced := makeSimpleImportSpans(spans, backups, nil, introducedSpanFrontier, nil,
+		noSpanTargetSize)
+	require.Equal(t, []execinfrapb.RestoreSpanEntry{
+		{Span: sp("a", "f"), Files: paths("6")},
+		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
+		{Span: sp("l", "m"), Files: paths("9")},
+	}, coverIntroduced)
+
 }
 
 type mockBackupInfo struct {
@@ -462,7 +464,7 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 			for _, reIntroTable := range reIntroducedTables {
 				var coveredReIntroducedGroup roachpb.SpanGroup
 				for _, entry := range cover {
-					// If a restoreSpanEntry overlaps with re-introduced table span,
+					// If a restoreSpanEntry overlaps with re-introduced span,
 					// assert the entry only contains files from the incremental backup.
 					if reIntroTable.TableSpan(codec).Overlaps(entry.Span) {
 						coveredReIntroducedGroup.Add(entry.Span)
