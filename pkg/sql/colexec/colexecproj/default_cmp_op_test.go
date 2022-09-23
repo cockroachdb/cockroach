@@ -13,6 +13,8 @@ package colexecproj
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -129,16 +131,45 @@ func BenchmarkDefaultCmpProjOp(b *testing.B) {
 			Settings: st,
 		},
 	}
-	for _, useSel := range []bool{false, true} {
-		for _, hasNulls := range []bool{false, true} {
-			inputTypes := []*types.T{types.String, types.String}
-			name := fmt.Sprintf("IS DISTINCT FROM/useSel=%t/hasNulls=%t", useSel, hasNulls)
-			benchmarkProjOp(b, name, func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
-				return colexectestutils.CreateTestProjectingOperator(
-					ctx, flowCtx, source, inputTypes,
-					"@1 IS DISTINCT FROM @2", testMemAcc,
-				)
-			}, inputTypes, useSel, hasNulls)
+	var sb strings.Builder
+	sb.WriteString("@1 = ANY (")
+	for i := 0; i < 500; i++ {
+		if i > 1 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString("'abc")
+		sb.WriteString(strconv.Itoa(i))
+		sb.WriteByte('\'')
+	}
+	sb.WriteByte(')')
+	eqAny := sb.String()
+	benchCases := []struct {
+		name string
+		expr string
+		typs []*types.T
+	}{
+		{
+			name: "IS DISTINCT FROM",
+			expr: "@1 IS DISTINCT FROM @2",
+			typs: []*types.T{types.String, types.String},
+		},
+		{
+			name: "eq ANY const",
+			expr: eqAny,
+			typs: []*types.T{types.String},
+		},
+	}
+	for _, benchCase := range benchCases {
+		for _, useSel := range []bool{false, true} {
+			for _, hasNulls := range []bool{false, true} {
+				name := fmt.Sprintf("%s/useSel=%t/hasNulls=%t", benchCase.name, useSel, hasNulls)
+				benchmarkProjOp(b, name, func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
+					return colexectestutils.CreateTestProjectingOperator(
+						ctx, flowCtx, source, benchCase.typs,
+						benchCase.expr, testMemAcc,
+					)
+				}, benchCase.typs, useSel, hasNulls)
+			}
 		}
 	}
 }
