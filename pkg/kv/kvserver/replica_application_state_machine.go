@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -925,22 +924,11 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	ctx context.Context, cmd *replicatedCmd,
 ) {
-	raftAppliedIndex := cmd.ent.Index
-	if raftAppliedIndex == 0 {
+	if cmd.ent.Index == 0 {
 		log.Fatalf(ctx, "raft entry with index 0")
 	}
-	b.state.RaftAppliedIndex = raftAppliedIndex
-	rs := cmd.decodedRaftEntry.replicatedResult().State
-	// We are post migration or this replicatedCmd is doing the migration.
-	if b.state.RaftAppliedIndexTerm > 0 || (rs != nil &&
-		rs.RaftAppliedIndexTerm == stateloader.RaftLogTermSignalForAddRaftAppliedIndexTermMigration) {
-		// Once we populate b.state.RaftAppliedIndexTerm it will flow into the
-		// persisted RangeAppliedState and into the in-memory representation in
-		// Replica.mu.state. The latter is used to initialize b.state, so future
-		// calls to this method will see that the migration has already happened
-		// and will continue to populate the term.
-		b.state.RaftAppliedIndexTerm = cmd.ent.Term
-	}
+	b.state.RaftAppliedIndex = cmd.ent.Index
+	b.state.RaftAppliedIndexTerm = cmd.ent.Term
 
 	if leaseAppliedIndex := cmd.leaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
@@ -1001,8 +989,6 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	r := b.r
 	r.mu.Lock()
 	r.mu.state.RaftAppliedIndex = b.state.RaftAppliedIndex
-	// RaftAppliedIndexTerm will be non-zero only when the
-	// AddRaftAppliedIndexTermMigration has happened.
 	r.mu.state.RaftAppliedIndexTerm = b.state.RaftAppliedIndexTerm
 	r.mu.state.LeaseAppliedIndex = b.state.LeaseAppliedIndex
 

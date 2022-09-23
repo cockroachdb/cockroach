@@ -963,9 +963,7 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
 			state.RaftAppliedIndex, nonemptySnap.Metadata.Index)
 	}
-	// If we've migrated to populating RaftAppliedIndexTerm, check that the term
-	// from the two sources are equal.
-	if state.RaftAppliedIndexTerm != 0 && state.RaftAppliedIndexTerm != nonemptySnap.Metadata.Term {
+	if state.RaftAppliedIndexTerm != nonemptySnap.Metadata.Term {
 		log.Fatalf(ctx, "snapshot RaftAppliedIndexTerm %d doesn't match its metadata term %d",
 			state.RaftAppliedIndexTerm, nonemptySnap.Metadata.Term)
 	}
