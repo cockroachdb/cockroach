@@ -21,7 +21,7 @@ import (
 	"github.com/facebookgo/clock"
 )
 
-const maxBackoff = time.Second
+const rpcBreakerMaxBackoff = time.Second
 
 // breakerClock is an implementation of clock.Clock that internally uses an
 // hlc.WallClock. It is used to adapt the WallClock to the circuit breaker
@@ -83,7 +83,7 @@ func newBackOff(clock backoff.Clock) backoff.BackOff {
 		InitialInterval:     500 * time.Millisecond,
 		RandomizationFactor: 0.5,
 		Multiplier:          1.5,
-		MaxInterval:         maxBackoff,
+		MaxInterval:         rpcBreakerMaxBackoff,
 		MaxElapsedTime:      0,
 		Clock:               clock,
 	}
