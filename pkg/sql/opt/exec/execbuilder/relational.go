@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -732,7 +733,8 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
-	stats := scan.Relational().Stats
+	relProps := scan.Relational()
+	stats := relProps.Stats
 	if !tab.IsVirtualTable() && isUnfiltered {
 		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
@@ -747,16 +749,50 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		}
 	}
 
-	// Save the total estimated number of rows scanned and the time since stats
-	// were collected.
+	// Save some instrumentation info.
+	b.ScanCounts[exec.ScanCount]++
 	if stats.Available {
 		b.TotalScanRows += stats.RowCount
-		if tab.StatisticCount() > 0 {
-			// The first stat is the most recent one.
-			nanosSinceStatsCollected := timeutil.Since(tab.Statistic(0).CreatedAt())
+		b.ScanCounts[exec.ScanWithStatsCount]++
+
+		// The first stat is the most recent one. Check if it was a forecast.
+		var first int
+		if first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
+			if b.evalCtx.SessionData().OptimizerUseForecasts {
+				b.ScanCounts[exec.ScanWithStatsForecastCount]++
+
+				// Calculate time since the forecast (or negative time until the forecast).
+				nanosSinceStatsForecasted := timeutil.Since(tab.Statistic(first).CreatedAt())
+				if nanosSinceStatsForecasted.Abs() > b.NanosSinceStatsForecasted.Abs() {
+					b.NanosSinceStatsForecasted = nanosSinceStatsForecasted
+				}
+			}
+			// Find the first non-forecast stat.
+			for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
+				first++
+			}
+		}
+
+		if first < tab.StatisticCount() {
+			tabStat := tab.Statistic(first)
+
+			nanosSinceStatsCollected := timeutil.Since(tabStat.CreatedAt())
 			if nanosSinceStatsCollected > b.NanosSinceStatsCollected {
 				b.NanosSinceStatsCollected = nanosSinceStatsCollected
 			}
+
+			// Calculate another row count estimate using these (non-forecast)
+			// stats. If forecasts were not used, this should be the same as
+			// stats.RowCount.
+			rowCountWithoutForecast := float64(tabStat.RowCount())
+			rowCountWithoutForecast *= stats.Selectivity.AsFloat()
+			minCardinality, maxCardinality := relProps.Cardinality.Min, relProps.Cardinality.Max
+			if rowCountWithoutForecast > float64(maxCardinality) && maxCardinality != math.MaxUint32 {
+				rowCountWithoutForecast = float64(maxCardinality)
+			} else if rowCountWithoutForecast < float64(minCardinality) {
+				rowCountWithoutForecast = float64(minCardinality)
+			}
+			b.TotalScanRowsWithoutForecasts += rowCountWithoutForecast
 		}
 	}
 

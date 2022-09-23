@@ -656,9 +656,12 @@ func (opc *optPlanningCtx) runExecBuilder(
 		containsMutation = bld.ContainsMutation
 		planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
 		planTop.instrumentation.totalScanRows = bld.TotalScanRows
+		planTop.instrumentation.totalScanRowsWithoutForecasts = bld.TotalScanRowsWithoutForecasts
 		planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
+		planTop.instrumentation.nanosSinceStatsForecasted = bld.NanosSinceStatsForecasted
 		planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
 		planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
+		planTop.instrumentation.scanCounts = bld.ScanCounts
 
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
