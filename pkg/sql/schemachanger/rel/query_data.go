@@ -41,7 +41,7 @@ type slot struct {
 	// not holds a value which this slot must not be equal to. Additionally,
 	// the value which fills this slot must have the same type as the value
 	// in the not container.
-	not typedValue
+	not *typedValue
 }
 
 // typedValue is a value in its comparable form, which is to say, it is a
@@ -75,6 +75,10 @@ func (tv typedValue) toInterface() interface{} {
 	return tv.toValue().Interface()
 }
 
+// inlineValue populates the inline value for the typedValue. The inline
+// value is a single scalar which can be used to efficiently compare
+// values, but it only has meaning in the context of the current entitySet.
+// It must be cleared when moving to a new entity set.
 func (tv *typedValue) inlineValue(es *entitySet, attr ordinal) (uintptr, error) {
 	if tv.inlineSet {
 		return tv.inline, nil
@@ -85,6 +89,11 @@ func (tv *typedValue) inlineValue(es *entitySet, attr ordinal) (uintptr, error) 
 	}
 	tv.inline, tv.inlineSet = v, true
 	return tv.inline, nil
+}
+
+// resetInline clears the inline value.
+func (tv *typedValue) resetInline() {
+	tv.inlineSet, tv.inline = false, 0
 }
 
 func (s *slot) eq(other slot) bool {
@@ -105,6 +114,18 @@ func (s *slot) eq(other slot) bool {
 
 func (s *slot) empty() bool {
 	return s.value == nil
+}
+
+func (s *slot) reset() {
+	s.typedValue = typedValue{}
+	if s.any != nil {
+		for i := 0; i < len(s.any); i++ {
+			s.any[i].resetInline()
+		}
+	}
+	if s.not != nil {
+		s.not.resetInline()
+	}
 }
 
 func maybeSet(
@@ -131,7 +152,7 @@ func maybeSet(
 			}
 			return false, false
 		}
-		if s.not.typ != nil {
+		if s.not != nil {
 			if tv.typ != s.not.typ || eqNotNil(s.not.value, tv.value) {
 				return false, true
 			}

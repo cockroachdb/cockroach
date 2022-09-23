@@ -62,7 +62,10 @@ go_test(
         "//pkg/sql/schemachanger/rel/internal/cyclegraphtest",
         "//pkg/sql/schemachanger/rel/internal/entitynodetest",
         "//pkg/sql/schemachanger/rel/reltest",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
