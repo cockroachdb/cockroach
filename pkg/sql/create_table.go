@@ -1324,13 +1324,17 @@ func NewTableDesc(
 		id, dbID, sc.GetID(), n.Table.Table(), creationTime, privileges, persistence,
 	)
 
+	setter := tablestorageparam.NewSetter(&desc)
 	if err := storageparam.Set(
 		semaCtx,
 		evalCtx,
 		n.StorageParams,
-		tablestorageparam.NewSetter(&desc),
+		setter,
 	); err != nil {
 		return nil, err
+	}
+	if updatedRowLevelTTL := setter.UpdatedRowLevelTTL; updatedRowLevelTTL != nil {
+		setter.TableDesc.RowLevelTTL = updatedRowLevelTTL
 	}
 
 	indexEncodingVersion := descpb.StrictIndexColumnIDGuaranteesVersion
@@ -1466,34 +1470,37 @@ func NewTableDesc(
 	}
 
 	// Create the TTL automatic column (crdb_internal_expiration) if one does not already exist.
-	if ttl := desc.GetRowLevelTTL(); ttl != nil && ttl.HasDurationExpr() {
-		hasRowLevelTTLColumn := false
-		for _, def := range n.Defs {
-			switch def := def.(type) {
-			case *tree.ColumnTableDef:
-				if def.Name == colinfo.TTLDefaultExpirationColumnName {
-					// If we find the column, make sure it has the expected type.
-					if def.Type.SQLString() != types.TimestampTZ.SQLString() {
-						return nil, pgerror.Newf(
-							pgcode.InvalidTableDefinition,
-							`table %s has TTL defined, but column %s is not a %s`,
-							def.Name,
-							colinfo.TTLDefaultExpirationColumnName,
-							types.TimestampTZ.SQLString(),
-						)
+	if desc.HasRowLevelTTL() {
+		ttl := desc.GetRowLevelTTL()
+		if ttl.HasDurationExpr() {
+			hasRowLevelTTLColumn := false
+			for _, def := range n.Defs {
+				switch def := def.(type) {
+				case *tree.ColumnTableDef:
+					if def.Name == colinfo.TTLDefaultExpirationColumnName {
+						// If we find the column, make sure it has the expected type.
+						if def.Type.SQLString() != types.TimestampTZ.SQLString() {
+							return nil, pgerror.Newf(
+								pgcode.InvalidTableDefinition,
+								`table %s has TTL defined, but column %s is not a %s`,
+								def.Name,
+								colinfo.TTLDefaultExpirationColumnName,
+								types.TimestampTZ.SQLString(),
+							)
+						}
+						hasRowLevelTTLColumn = true
+						break
 					}
-					hasRowLevelTTLColumn = true
-					break
 				}
 			}
-		}
-		if !hasRowLevelTTLColumn {
-			col, err := rowLevelTTLAutomaticColumnDef(ttl)
-			if err != nil {
-				return nil, err
+			if !hasRowLevelTTLColumn {
+				col, err := rowLevelTTLAutomaticColumnDef(ttl)
+				if err != nil {
+					return nil, err
+				}
+				n.Defs = append(n.Defs, col)
+				cdd = append(cdd, nil)
 			}
-			n.Defs = append(n.Defs, col)
-			cdd = append(cdd, nil)
 		}
 	}
 
@@ -2347,8 +2354,9 @@ func newTableDesc(
 	}
 
 	// Row level TTL tables require a scheduled job to be created as well.
-	if ttl := ret.RowLevelTTL; ttl != nil {
-		if err := schemaexpr.ValidateTTLExpirationExpression(params.ctx, ret, params.p.SemaCtx(), &n.Table); err != nil {
+	if ret.HasRowLevelTTL() {
+		ttl := ret.GetRowLevelTTL()
+		if err := schemaexpr.ValidateTTLExpirationExpression(params.ctx, ret, params.p.SemaCtx(), &n.Table, ttl); err != nil {
 			return nil, err
 		}
 
