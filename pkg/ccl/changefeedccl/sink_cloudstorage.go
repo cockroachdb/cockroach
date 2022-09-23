@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -287,7 +286,7 @@ type cloudStorageSink struct {
 	ext          string
 	rowDelimiter []byte
 
-	compression string
+	compression compressionAlgo
 
 	es cloud.ExternalStorage
 
@@ -306,8 +305,6 @@ type cloudStorageSink struct {
 	prevFilename      string
 	metrics           metricsRecorder
 }
-
-const sinkCompressionGzip = "gzip"
 
 var cloudStorageSinkIDAtomic int64
 
@@ -411,12 +408,12 @@ func makeCloudStorageSink(
 	}
 
 	if codec := encodingOpts.Compression; codec != "" {
-		if strings.EqualFold(codec, "gzip") {
-			s.compression = sinkCompressionGzip
-			s.ext = s.ext + ".gz"
-		} else {
-			return nil, errors.Errorf(`unsupported compression codec %q`, codec)
+		algo, ext, err := compressionFromString(codec)
+		if err != nil {
+			return nil, err
 		}
+		s.compression = algo
+		s.ext = s.ext + ext
 	}
 
 	// We make the external storage with a nil IOAccountingInterceptor since we
@@ -434,7 +431,7 @@ func makeCloudStorageSink(
 
 func (s *cloudStorageSink) getOrCreateFile(
 	topic TopicDescriptor, eventMVCC hlc.Timestamp,
-) *cloudStorageSinkFile {
+) (*cloudStorageSinkFile, error) {
 	name, _ := s.topicNamer.Name(topic)
 	key := cloudStorageSinkKey{name, int64(topic.GetVersion())}
 	if item := s.files.Get(key); item != nil {
@@ -442,19 +439,24 @@ func (s *cloudStorageSink) getOrCreateFile(
 		if eventMVCC.Less(f.oldestMVCC) {
 			f.oldestMVCC = eventMVCC
 		}
-		return f
+		return f, nil
 	}
 	f := &cloudStorageSinkFile{
 		created:             timeutil.Now(),
 		cloudStorageSinkKey: key,
 		oldestMVCC:          eventMVCC,
 	}
-	switch s.compression {
-	case sinkCompressionGzip:
-		f.codec = gzip.NewWriter(&f.buf)
+
+	if s.compression.enabled() {
+		codec, err := NewCompressionCodec(s.compression, &s.settings.SV, &f.buf)
+		if err != nil {
+			return nil, err
+		}
+		f.codec = codec
 	}
+
 	s.files.ReplaceOrInsert(f)
-	return f
+	return f, nil
 }
 
 // EmitRow implements the Sink interface.
@@ -470,7 +472,10 @@ func (s *cloudStorageSink) EmitRow(
 	}
 
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
-	file := s.getOrCreateFile(topic, mvcc)
+	file, err := s.getOrCreateFile(topic, mvcc)
+	if err != nil {
+		return err
+	}
 	file.alloc.Merge(&alloc)
 
 	if _, err := file.Write(value); err != nil {
