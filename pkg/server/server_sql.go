@@ -249,6 +249,10 @@ type sqlServerArgs struct {
 
 	stopper *stop.Stopper
 
+	// errChan is used to surface unrecoverable errors up to the server level to
+	// initiate shutdown and exit with non-zero code
+	errChan chan error
+
 	// SQL uses the clock to assign timestamps to transactions, among many
 	// other things.
 	clock *hlc.Clock
@@ -435,7 +439,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.sqlInstanceProvider = sqlinstance.NewFakeSQLProvider()
 	} else {
 		cfg.sqlInstanceProvider = instanceprovider.New(
-			cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.Locality, cfg.rangeFeedFactory, cfg.clock,
+			cfg.stopper, cfg.errChan, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.Locality, cfg.rangeFeedFactory, cfg.clock,
 		)
 	}
 

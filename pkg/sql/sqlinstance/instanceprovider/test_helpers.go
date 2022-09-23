@@ -30,12 +30,13 @@ type TestInstanceProvider interface {
 // NewTestInstanceProvider initializes a instanceprovider.provider
 // for test purposes
 func NewTestInstanceProvider(
-	stopper *stop.Stopper, session sqlliveness.Instance, addr string,
+	stopper *stop.Stopper, errChan chan error, session sqlliveness.Instance, addr string,
 ) TestInstanceProvider {
 	storage := instancestorage.NewFakeStorage()
 	p := &provider{
 		storage:      storage,
 		stopper:      stopper,
+		errChan:      errChan,
 		session:      session,
 		instanceAddr: addr,
 		initialized:  make(chan struct{}),
