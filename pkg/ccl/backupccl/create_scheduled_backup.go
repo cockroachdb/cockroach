@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -307,12 +308,13 @@ func doCreateBackupSchedules(
 	if err != nil {
 		return err
 	}
-	fullRecurrence, err := computeScheduleRecurrence(env.Now(), eval.fullBackupRecurrence)
+	origFullRecurrence, err := computeScheduleRecurrence(env.Now(), eval.fullBackupRecurrence)
 	if err != nil {
 		return err
 	}
 
 	fullRecurrencePicked := false
+	fullRecurrence := origFullRecurrence
 	if incRecurrence != nil && fullRecurrence == nil {
 		// It's an enterprise user; let's see if we can pick a reasonable
 		// full  backup recurrence based on requested incremental recurrence.
@@ -377,7 +379,8 @@ func doCreateBackupSchedules(
 
 	// Run full backup in dry-run mode.  This will do all of the sanity checks
 	// and validation we need to make in order to ensure the schedule is sane.
-	if err := dryRunBackup(ctx, p, backupNode); err != nil {
+	backupEvent, err := dryRunBackup(ctx, p, backupNode)
+	if err != nil {
 		return errors.Wrapf(err, "failed to dry run backup")
 	}
 
@@ -398,7 +401,8 @@ func doCreateBackupSchedules(
 	}
 
 	// Check if backups were already taken to this collection.
-	if _, ignoreExisting := scheduleOptions[optIgnoreExistingBackups]; !ignoreExisting {
+	_, ignoreExisting := scheduleOptions[optIgnoreExistingBackups]
+	if !ignoreExisting {
 		if err := checkForExistingBackupsInCollection(ctx, p, destinations); err != nil {
 			return err
 		}
@@ -510,7 +514,7 @@ func doCreateBackupSchedules(
 		}
 	}
 
-	collectScheduledBackupTelemetry(incRecurrence, firstRun, fullRecurrencePicked, details)
+	collectScheduledBackupTelemetry(ctx, incRecurrence, fullRecurrence, firstRun, fullRecurrencePicked, ignoreExisting, details, backupEvent)
 	return emitSchedule(full, backupNode, destinations, nil, /* incrementalFrom */
 		kmsURIs, nil, resultsCh)
 }
@@ -676,27 +680,31 @@ func checkScheduleAlreadyExists(
 
 // dryRunBackup executes backup in dry-run mode: we simply execute backup
 // under transaction savepoint, and then rollback to that save point.
-func dryRunBackup(ctx context.Context, p sql.PlanHookState, backupNode *tree.Backup) error {
+func dryRunBackup(
+	ctx context.Context, p sql.PlanHookState, backupNode *tree.Backup,
+) (eventpb.RecoveryEvent, error) {
 	sp, err := p.ExtendedEvalContext().Txn.CreateSavepoint(ctx)
 	if err != nil {
-		return err
+		return eventpb.RecoveryEvent{}, err
 	}
-	err = dryRunInvokeBackup(ctx, p, backupNode)
+	backupEvent, err := dryRunInvokeBackup(ctx, p, backupNode)
 	if rollbackErr := p.ExtendedEvalContext().Txn.RollbackToSavepoint(ctx, sp); rollbackErr != nil {
-		return rollbackErr
+		return backupEvent, rollbackErr
 	}
-	return err
+	return backupEvent, err
 }
 
-func dryRunInvokeBackup(ctx context.Context, p sql.PlanHookState, backupNode *tree.Backup) error {
+func dryRunInvokeBackup(
+	ctx context.Context, p sql.PlanHookState, backupNode *tree.Backup,
+) (eventpb.RecoveryEvent, error) {
 	// IsDryRun prevents the backup planning from performing operations that
 	// cannot be rolled back.
 	backupNode.IsDryRun = true
 	backupFn, err := planBackup(ctx, p, backupNode)
 	if err != nil {
-		return err
+		return eventpb.RecoveryEvent{}, err
 	}
-	return invokeBackup(ctx, backupFn)
+	return invokeBackup(ctx, backupFn, p.ExecCfg().JobRegistry, p.ExtendedEvalContext().Txn)
 }
 
 func fullyQualifyScheduledBackupTargetTables(
@@ -893,10 +901,14 @@ var scheduledBackupHeader = colinfo.ResultColumns{
 }
 
 func collectScheduledBackupTelemetry(
+	ctx context.Context,
 	incRecurrence *scheduleRecurrence,
+	fullRecurrence *scheduleRecurrence,
 	firstRun *time.Time,
 	fullRecurrencePicked bool,
+	ignoreExisting bool,
 	details jobspb.ScheduleDetails,
+	backupEvent eventpb.RecoveryEvent,
 ) {
 	telemetry.Count("scheduled-backup.create.success")
 	if incRecurrence != nil {
@@ -924,6 +936,8 @@ func collectScheduledBackupTelemetry(
 	case jobspb.ScheduleDetails_PAUSE_SCHED:
 		telemetry.Count("scheduled-backup.error-policy.pause-schedule")
 	}
+
+	logCreateScheduleTelemetry(ctx, incRecurrence, fullRecurrence, firstRun, ignoreExisting, details, backupEvent)
 }
 
 func createBackupScheduleHook(

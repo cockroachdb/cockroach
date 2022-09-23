@@ -275,7 +275,13 @@ func fullClusterTargets(
 
 func fullClusterTargetsRestore(
 	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
-) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
+) (
+	[]catalog.Descriptor,
+	[]catalog.DatabaseDescriptor,
+	map[tree.TablePattern]catalog.Descriptor,
+	[]descpb.TenantInfoWithUsage,
+	error,
+) {
 	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	var filteredDescs []catalog.Descriptor
 	var filteredDBs []catalog.DatabaseDescriptor
@@ -290,9 +296,9 @@ func fullClusterTargetsRestore(
 		}
 	}
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	return filteredDescs, filteredDBs, lastBackupManifest.GetTenants(), nil
+	return filteredDescs, filteredDBs, nil, lastBackupManifest.GetTenants(), nil
 }
 
 // fullClusterTargetsBackup returns the same descriptors referenced in
@@ -328,7 +334,9 @@ func fullClusterTargetsBackup(
 //  - A list of all descriptors (table, type, database, schema) along with their
 //    parent databases.
 //  - A list of database descriptors IFF the user is restoring on the cluster or
-//    database level
+//    database level.
+//  - A map of table patterns to the resolved descriptor IFF the user is
+//    restoring on the table leve.
 //  - A list of tenants to restore, if applicable.
 func selectTargets(
 	ctx context.Context,
@@ -338,7 +346,13 @@ func selectTargets(
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
 	restoreSystemUsers bool,
-) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfoWithUsage, error) {
+) (
+	[]catalog.Descriptor,
+	[]catalog.DatabaseDescriptor,
+	map[tree.TablePattern]catalog.Descriptor,
+	[]descpb.TenantInfoWithUsage,
+	error,
+) {
 	allDescs, lastBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, asOf)
 
 	if descriptorCoverage == tree.AllDescriptors {
@@ -361,9 +375,9 @@ func selectTargets(
 			}
 		}
 		if users == nil {
-			return nil, nil, nil, errors.Errorf("cannot restore system users as no system.users table in the backup")
+			return nil, nil, nil, nil, errors.Errorf("cannot restore system users as no system.users table in the backup")
 		}
-		return systemTables, nil, nil, nil
+		return systemTables, nil, nil, nil, nil
 	}
 
 	if targets.TenantID.IsSet() {
@@ -371,29 +385,29 @@ func selectTargets(
 			// TODO(dt): for now it is zero-or-one but when that changes, we should
 			// either keep it sorted or build a set here.
 			if tenant.ID == targets.TenantID.ToUint64() {
-				return nil, nil, []descpb.TenantInfoWithUsage{tenant}, nil
+				return nil, nil, nil, []descpb.TenantInfoWithUsage{tenant}, nil
 			}
 		}
-		return nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.TenantID.ToUint64())
+		return nil, nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.TenantID.ToUint64())
 	}
 
 	matched, err := backupresolver.DescriptorsMatchingTargets(ctx,
 		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets, asOf)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	if len(matched.Descs) == 0 {
-		return nil, nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
+		return nil, nil, nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
 	}
 
 	if lastBackupManifest.FormatVersion >= BackupFormatDescriptorTrackingVersion {
 		if err := matched.CheckExpansions(lastBackupManifest.CompleteDbs); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 	}
 
-	return matched.Descs, matched.RequestedDBs, nil, nil
+	return matched.Descs, matched.RequestedDBs, matched.DescsByTablePattern, nil, nil
 }
 
 // EntryFiles is a group of sst files of a backup table range

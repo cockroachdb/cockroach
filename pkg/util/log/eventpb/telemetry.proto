@@ -199,5 +199,123 @@ message ChangefeedFailed {
 
   // The reason / environment with which the changefeed failed (ex:
   // connection_closed, changefeed_behind)
-  string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+  string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
+// RecoveryEvent is an event that is logged on every invocation of BACKUP,
+// RESTORE, and on every BACKUP schedule creation, with the appropriate subset
+// of fields populated depending on the type of event. This event is is also
+// logged whenever a BACKUP and RESTORE job completes or fails.
+message RecoveryEvent {
+  // Common fields for all events.
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // RecoveryType is the type of recovery described by this event, which is one of
+  // - backup
+  // - scheduled_backup
+  // - create_schedule
+  // - restore
+  //
+  // It can also be a job event corresponding to the recovery, which is one of
+  // - backup_job
+  // - scheduled_backup_job
+  // - restore_job
+  string recovery_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "RecoveryEventType", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Fields that are common to BACKUP and RESTORE statements.
+
+  // TargetScope is the largest scope of the targets that the user is backing up
+  // or restoring based on the following order:
+  // table < schema < database < full cluster.
+  string target_scope = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // IsMultiregionTarget is true if any of the targets contain objects with
+  // multi-region primitives.
+  bool is_multiregion_target = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // TargetCount is the number of targets the in the BACKUP/RESTORE.
+  uint32 target_count = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // DestinationSubdirType is
+  // - latest: if using the latest subdir
+  // - standard: if using a date-based subdir
+  // - custom: if using a custom subdir that's not date-based
+  string destination_subdir_type = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // DestinationStorageTypes are the types of storage that the user is backing
+  // up to or restoring from.
+  repeated string destination_storage_types = 7 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // DestinationAuthTypes are the types of authentication methods that the user
+  // is using to access the destination storage.
+  repeated string destination_auth_types = 8 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // IsLocalityAware indicates if the BACKUP or RESTORE is locality aware.
+  bool is_locality_aware = 9 [(gogoproto.jsontag) = ",omitempty"];
+
+  // AsOfInterval is the time interval in nanoseconds between the statement
+  // timestamp and the timestamp resolved by the AS OF SYSTEM TIME expression.
+  // The interval is expressed in nanoseconds.
+  int64 as_of_interval = 10 [(gogoproto.jsontag) = ",omitempty"];
+
+  // WithRevisionHistory is true if the BACKUP includes revision history.
+  bool with_revision_history = 11 [(gogoproto.jsontag) = ",omitempty"];
+
+  // HasEncryptionPassphrase is true if the user provided an encryption
+  // passphrase to encrypt/decrypt their backup.
+  bool has_encryption_passphrase = 13 [(gogoproto.jsontag) = ",omitempty"];
+
+  // KMSType is the type of KMS the user is using to encrypt/decrypt their
+  // backup.
+  string kms_type = 14 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "KMSType", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // KMSCount is the number of KMS the user is using.
+  uint32 kms_count = 15 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "KMSCount"];
+
+  // Options contain all the names of the options specified by the user in the
+  // BACKUP or RESTORE statement. For options that are accompanied by a value,
+  // only those with non-empty values will be present.
+  //
+  // It's important to note that there are no option values anywhere in the
+  // event payload. Future changes to telemetry should refrain from adding
+  // values to the payload unless they are properly redacted.
+  repeated string options = 16 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // DebugPauseOn is the type of event that the restore should pause on for
+  // debugging purposes. Currently only "error" is supported.
+  string debug_pause_on = 17 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Fields that are common to BACKUP and RESTORE jobs.
+
+  // JobID is the ID of the BACKUP/RESTORE job.
+  uint64 job_id = 18 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "JobID"];
+  // ResultStatus indicates whether the job succeeded or failed.
+  string result_status = 20 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // ErrorText is the text of the error that caused the job to fail.
+  string error_text = 21 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
+
+  // Fields only for BACKUP schedules.
+
+  // RecurringCron is the crontab for the incremental backup.
+  string recurring_cron = 24 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // FullBackupCron is the crontab for the full backup.
+  string full_backup_cron = 25 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // CustomFirstRunTime is the timestamp for the user configured first run time.
+  // Expressed as nanoseconds since the Unix epoch.
+  int64 custom_first_run_time = 26 [(gogoproto.jsontag) = ",omitempty"];
+
+  // OnExecutionFailure describes the desired behavior if the schedule fails to
+  // execute.
+  string on_execution_failure = 27 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // OnPreviousRunning describes the desired behavior if the previously
+  // scheduled BACKUP is still running.
+  string on_previous_running = 28 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // IgnoreExistingBackup is true iff the BACKUP schedule should still be
+  // created even if a backup is already present in its destination.
+  bool ignore_existing_backup = 29 [(gogoproto.jsontag) = ",omitempty"];
+
 }

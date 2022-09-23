@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -89,32 +90,38 @@ func (e *scheduledBackupExecutor) executeBackup(
 	}
 	backupStmt.AsOf = tree.AsOfClause{Expr: endTime}
 
-	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
-		if knobs.OverrideAsOfClause != nil {
-			knobs.OverrideAsOfClause(&backupStmt.AsOf)
-		}
-	}
-
 	log.Infof(ctx, "Starting scheduled backup %d: %s",
 		sj.ScheduleID(), tree.AsString(backupStmt))
 
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker("exec-backup", txn, sj.Owner())
 	defer cleanup()
+
+	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
+		if knobs.OverrideAsOfClause != nil {
+			knobs.OverrideAsOfClause(&backupStmt.AsOf, hook.(sql.PlanHookState).ExtendedEvalContext().StmtTimestamp)
+		}
+	}
+
 	backupFn, err := planBackup(ctx, hook.(sql.PlanHookState), backupStmt)
 	if err != nil {
 		return err
 	}
-	return invokeBackup(ctx, backupFn)
+	_, err = invokeBackup(ctx, backupFn, nil, nil)
+	return err
 }
 
-func invokeBackup(ctx context.Context, backupFn sql.PlanHookRowFn) error {
+func invokeBackup(
+	ctx context.Context, backupFn sql.PlanHookRowFn, registry *jobs.Registry, txn *kv.Txn,
+) (eventpb.RecoveryEvent, error) {
 	resultCh := make(chan tree.Datums) // No need to close
 	g := ctxgroup.WithContext(ctx)
 
+	var backupEvent eventpb.RecoveryEvent
 	g.GoCtx(func(ctx context.Context) error {
 		select {
-		case <-resultCh:
+		case res := <-resultCh:
+			backupEvent = getBackupFnTelemetry(ctx, registry, txn, res)
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -125,7 +132,8 @@ func invokeBackup(ctx context.Context, backupFn sql.PlanHookRowFn) error {
 		return backupFn(ctx, nil, resultCh)
 	})
 
-	return g.Wait()
+	err := g.Wait()
+	return backupEvent, err
 }
 
 func planBackup(
@@ -462,6 +470,50 @@ func (e *scheduledBackupExecutor) OnDrop(
 	}
 	return releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
 		args.ProtectedTimestampRecord)
+}
+
+// getBackupFnTelemetry collects the telemetry from the dry-run backup
+// corresponding to backupFnResult.
+func getBackupFnTelemetry(
+	ctx context.Context, registry *jobs.Registry, txn *kv.Txn, backupFnResult tree.Datums,
+) eventpb.RecoveryEvent {
+	if registry == nil {
+		return eventpb.RecoveryEvent{}
+	}
+
+	getInitialDetails := func() (jobspb.BackupDetails, error) {
+		if len(backupFnResult) == 0 {
+			return jobspb.BackupDetails{}, errors.New("unexpected empty result")
+		}
+
+		jobIDDatum := backupFnResult[0]
+		if jobIDDatum == tree.DNull {
+			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
+		}
+
+		jobID, ok := tree.AsDInt(jobIDDatum)
+		if !ok {
+			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
+		}
+
+		job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn)
+		if err != nil {
+			return jobspb.BackupDetails{}, errors.Wrap(err, "failed to load dry-run backup job")
+		}
+
+		backupDetails, ok := job.Details().(jobspb.BackupDetails)
+		if !ok {
+			return jobspb.BackupDetails{}, errors.Newf("unexpected job details type %T", job.Details())
+		}
+		return backupDetails, nil
+	}
+
+	initialDetails, err := getInitialDetails()
+	if err != nil {
+		log.Warningf(ctx, "error collecting telemetry from dry-run backup during schedule creation: %v", err)
+		return eventpb.RecoveryEvent{}
+	}
+	return createBackupRecoveryEvent(ctx, initialDetails, 0)
 }
 
 func init() {
