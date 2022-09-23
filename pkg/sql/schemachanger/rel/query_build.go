@@ -244,7 +244,7 @@ func (p *queryBuilder) processValueExpr(rawValue expr) slotIdx {
 		if err != nil {
 			panic(err)
 		}
-		return p.fillSlot(slot{not: tv}, false)
+		return p.fillSlot(slot{not: &tv}, false)
 	default:
 		panic(errors.AssertionFailedf("unknown expr type %T", rawValue))
 	}
