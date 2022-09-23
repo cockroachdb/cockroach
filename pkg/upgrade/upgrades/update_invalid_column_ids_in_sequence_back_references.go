@@ -42,7 +42,7 @@ func updateInvalidColumnIDsInSequenceBackReferences(
 		) (err error) {
 			currSeqID = lastSeqID
 			for {
-				done, currSeqID, err = findNextTableToUpgrade(ctx, ie, currSeqID,
+				done, currSeqID, err = findNextTableToUpgrade(ctx, ie, txn, currSeqID,
 					func(table *descpb.TableDescriptor) bool {
 						return table.IsSequence()
 					})
