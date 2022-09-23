@@ -54,6 +54,7 @@ var (
 		"mvcc-histories-deleterange-tombstome-known-stats", false)
 	mvccHistoriesReader = util.ConstantWithMetamorphicTestChoice("mvcc-histories-reader",
 		"engine", "readonly", "batch", "snapshot").(string)
+	mvccHistoriesUseBatch   = util.ConstantWithMetamorphicTestBool("mvcc-histories-use-batch", false)
 	sstIterVerify           = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
 	metamorphicIteratorSeed = util.ConstantWithMetamorphicTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
 	separateEngineBlocks    = util.ConstantWithMetamorphicTestBool("mvcc-histories-separate-engine-blocks", false)
@@ -868,7 +869,9 @@ func cmdResolveIntent(e *evalCtx) error {
 	key := e.getKey()
 	status := e.getTxnStatus()
 	clockWhilePending := hlc.ClockTimestamp(e.getTsWithName("clockWhilePending"))
-	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status, clockWhilePending)
+	return e.withWriter("resolve_intent", func(rw ReadWriter) error {
+		return e.resolveIntent(rw, key, txn, status, clockWhilePending)
+	})
 }
 
 func cmdResolveIntentRange(e *evalCtx) error {
@@ -878,8 +881,11 @@ func cmdResolveIntentRange(e *evalCtx) error {
 
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: start, EndKey: end})
 	intent.Status = status
-	_, _, err := MVCCResolveWriteIntentRange(e.ctx, e.tryWrapForIntentPrinting(e.engine), e.ms, intent, 0)
-	return err
+
+	return e.withWriter("resolve_intent_range", func(rw ReadWriter) error {
+		_, _, err := MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent, 0)
+		return err
+	})
 }
 
 func (e *evalCtx) resolveIntent(
@@ -941,23 +947,29 @@ func cmdAddLock(e *evalCtx) error {
 func cmdClear(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(nil)
-	return e.engine.ClearMVCC(MVCCKey{Key: key, Timestamp: ts})
+	return e.withWriter("clear", func(rw ReadWriter) error {
+		return rw.ClearMVCC(MVCCKey{Key: key, Timestamp: ts})
+	})
 }
 
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
-	// NB: We can't test ClearRawRange or ClearRangeUsingHeuristic here, because
-	// it does not handle separated intents.
-	if clearRangeUsingIter {
-		return e.engine.ClearMVCCIteratorRange(key, endKey, true, true)
-	}
-	return e.engine.ClearMVCCRange(key, endKey, true, true)
+	return e.withWriter("clear_range", func(rw ReadWriter) error {
+		// NB: We can't test ClearRawRange or ClearRangeUsingHeuristic here, because
+		// it does not handle separated intents.
+		if clearRangeUsingIter {
+			return rw.ClearMVCCIteratorRange(key, endKey, true, true)
+		}
+		return rw.ClearMVCCRange(key, endKey, true, true)
+	})
 }
 
 func cmdClearRangeKey(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(nil)
-	return e.engine.ClearMVCCRangeKey(MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts})
+	return e.withWriter("clear_rangekey", func(rw ReadWriter) error {
+		return rw.ClearMVCCRangeKey(MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts})
+	})
 }
 
 func cmdClearTimeRange(e *evalCtx) error {
@@ -975,6 +987,7 @@ func cmdClearTimeRange(e *evalCtx) error {
 		e.scanArg("maxBatchByteSize", &maxBatchByteSize)
 	}
 
+	// NB: Must use a batch, since it requires consistent iterators.
 	batch := e.engine.NewBatch()
 	defer batch.Close()
 
@@ -2094,31 +2107,37 @@ func (e *evalCtx) withReader(fn func(Reader) error) error {
 	return fn(r)
 }
 
+// withWriter calls the given closure with a writer. The writer is
+// metamorphically chosen to be a batch, which will be committed and closed when
+// done.
 func (e *evalCtx) withWriter(cmd string, fn func(_ ReadWriter) error) error {
 	var rw ReadWriter
 	rw = e.engine
 	var batch Batch
-	if e.hasArg("batched") {
+	if e.hasArg("batched") || mvccHistoriesUseBatch {
 		batch = e.engine.NewBatch()
 		defer batch.Close()
 		rw = batch
 	}
 	rw = e.tryWrapForIntentPrinting(rw)
-	origErr := fn(rw)
-	if batch != nil {
+	err := fn(rw)
+	if e.hasArg("batched") {
 		batchStatus := "non-empty"
 		if batch.Empty() {
 			batchStatus = "empty"
 		}
 		e.results.buf.Printf("%s: batch after write is %s\n", cmd, batchStatus)
 	}
-	if origErr != nil {
-		return origErr
-	}
 	if batch != nil {
-		return batch.Commit(true)
+		// WriteTooOldError is sometimes expected to leave behind a provisional
+		// value at a higher timestamp. We commit this for parity with the engine.
+		if err == nil || errors.HasType(err, &roachpb.WriteTooOldError{}) {
+			if err := batch.Commit(true); err != nil {
+				return err
+			}
+		}
 	}
-	return nil
+	return err
 }
 
 func (e *evalCtx) getVal() roachpb.Value { return e.getValInternal("v") }
