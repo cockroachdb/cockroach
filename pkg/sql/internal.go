@@ -900,10 +900,10 @@ func (ie *InternalExecutor) execInternal(
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)
-	if err := ie.checkIfStmtIsAllowed(parsed.AST, txn); err != nil {
+	if err != nil {
 		return nil, err
 	}
-	if err != nil {
+	if err := ie.checkIfStmtIsAllowed(parsed.AST, txn); err != nil {
 		return nil, err
 	}
 	parseEnd := timeutil.Now()
