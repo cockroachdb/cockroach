@@ -203,6 +203,7 @@
 /pkg/ccl/cmdccl/enc_utils/   @cockroachdb/storage
 /pkg/ccl/cmdccl/stub-schema-registry/ @cockroachdb/cdc-prs
 /pkg/ccl/gssapiccl/          @cockroachdb/unowned
+/pkg/ccl/jwtauthccl/         @cockroachdb/cloud-identity
 /pkg/ccl/kvccl/              @cockroachdb/kv-noreview
 /pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/multi-tenant
 /pkg/ccl/upgradeccl/         @cockroachdb/unowned
@@ -217,6 +218,7 @@
 /pkg/ccl/serverccl/tenant_*  @cockroachdb/multi-tenant @cockroachdb/server-prs
 /pkg/ccl/serverccl/statusccl @cockroachdb/sql-observability @cockroachdb/multi-tenant
 /pkg/ccl/telemetryccl/       @cockroachdb/obs-inf-prs
+/pkg/ccl/testccl/authccl/    @cockroachdb/cloud-identity
 /pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-schema
 /pkg/ccl/testutilsccl/       @cockroachdb/test-eng-noreview

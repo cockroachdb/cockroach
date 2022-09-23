@@ -1,0 +1,59 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "jwtauthccl",
+    srcs = [
+        "authentication_jwt.go",
+        "settings.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/utilccl",
+        "//pkg/security/username",
+        "//pkg/server/telemetry",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/pgwire",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_lestrrat_go_jwx//jwk",
+        "@com_github_lestrrat_go_jwx//jwt",
+    ],
+)
+
+go_test(
+    name = "jwtauthccl_test",
+    size = "small",
+    srcs = [
+        "authentication_jwt_test.go",
+        "main_test.go",
+        "settings_test.go",
+    ],
+    args = ["-test.timeout=55s"],
+    embed = [":jwtauthccl"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/utilccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_lestrrat_go_jwx//jwa",
+        "@com_github_lestrrat_go_jwx//jwk",
+        "@com_github_lestrrat_go_jwx//jwt",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -1469,6 +1469,46 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 			},
 		},
 		{
+			desc:  "success parsing crdb:jwt_auth_enabled from true option",
+			query: "user=root&options=-c crdb:jwt_auth_enabled=1",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.True(t, args.JWTAuthEnabled)
+			},
+		},
+		{
+			desc:  "success parsing crdb:jwt_auth_enabled from false option",
+			query: "user=root&options=-c crdb:jwt_auth_enabled=false",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.False(t, args.JWTAuthEnabled)
+			},
+		},
+		{
+			desc:  "success parsing crdb:jwt_auth_enabled when there is some capitalization",
+			query: "user=root&options=-c CrDb:JwT_AUth_eNaBLEd=False",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.False(t, args.JWTAuthEnabled)
+			},
+		},
+		{
+			desc:  "default crdb:jwt_auth_enabled value is false if not provided",
+			query: "user=root",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.NoError(t, err)
+				require.False(t, args.JWTAuthEnabled)
+			},
+		},
+		{
+			desc:  "crdb:jwt_auth_enabled must be a boolean if provided",
+			query: "user=root&options=-c crdb:jwt_auth_enabled=notaboolean",
+			assert: func(t *testing.T, args sql.SessionArgs, err error) {
+				require.Error(t, err)
+				require.Regexp(t, "crdb:jwt_auth_enabled: strconv.ParseBool: parsing \"notaboolean\": invalid syntax", err)
+			},
+		},
+		{
 			desc:  "remote_addr missing port",
 			query: "user=root&crdb:remote_addr=5.4.3.2",
 			assert: func(t *testing.T, args sql.SessionArgs, err error) {
