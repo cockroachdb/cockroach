@@ -297,11 +297,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 				tc := testcluster.StartTestCluster(t, testCase.totalNodes, clusterArgs)
 				defer tc.Stopper().Stop(ctx)
 
-				grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(
-					tc.Server(0).ServingRPCAddr(),
-					tc.Server(0).NodeID(),
-					rpc.DefaultClass,
-				).Connect(ctx)
+				grpcConn, err := tc.Server(0).RPCContext().GRPCDialNode(tc.Server(0).ServingRPCAddr(), tc.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}

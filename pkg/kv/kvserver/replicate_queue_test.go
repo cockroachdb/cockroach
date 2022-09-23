@@ -656,8 +656,7 @@ func TestReplicateQueueTracingOnError(t *testing.T) {
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
 	adminSrv := tc.Server(decomNodeIdx)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(
-		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
+	conn, err := adminSrv.RPCContext().GRPCDialNode(adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
 	require.NoError(t, err)
 	adminClient := serverpb.NewAdminClient(conn)
 	_, err = adminClient.Decommission(
@@ -784,8 +783,7 @@ func TestReplicateQueueDecommissionPurgatoryError(t *testing.T) {
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
 	adminSrv := tc.Server(decomNodeIdx)
-	conn, err := adminSrv.RPCContext().GRPCDialNode(
-		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
+	conn, err := adminSrv.RPCContext().GRPCDialNode(adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
 	require.NoError(t, err)
 	adminClient := serverpb.NewAdminClient(conn)
 	_, err = adminClient.Decommission(

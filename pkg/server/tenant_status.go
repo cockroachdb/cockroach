@@ -703,7 +703,7 @@ func (t *tenantStatusServer) parseInstanceID(
 func (t *tenantStatusServer) dialPod(
 	ctx context.Context, instanceID base.SQLInstanceID, addr string,
 ) (serverpb.StatusClient, error) {
-	conn, err := t.rpcCtx.GRPCDialPod(addr, instanceID, rpc.DefaultClass).Connect(ctx)
+	conn, err := t.rpcCtx.GRPCDialPod(ctx, addr, instanceID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}

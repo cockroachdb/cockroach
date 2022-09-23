@@ -102,7 +102,7 @@ func (t *tenantAdminServer) Health(
 func (t *tenantAdminServer) dialPod(
 	ctx context.Context, instanceID base.SQLInstanceID, addr string,
 ) (serverpb.AdminClient, error) {
-	conn, err := t.sqlServer.execCfg.RPCContext.GRPCDialPod(addr, instanceID, rpc.DefaultClass).Connect(ctx)
+	conn, err := t.sqlServer.execCfg.RPCContext.GRPCDialPod(ctx, addr, instanceID, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
