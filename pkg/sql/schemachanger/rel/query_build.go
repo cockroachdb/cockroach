@@ -303,7 +303,7 @@ func (p *queryBuilder) processValueExpr(rawValue expr) slotIdx {
 		if err != nil {
 			panic(err)
 		}
-		return p.fillSlot(slot{not: tv}, false /* isEntity */)
+		return p.fillSlot(slot{not: &tv}, false /* isEntity */)
 	case containsExpr:
 		return p.processValueExpr(v.v)
 	default:
