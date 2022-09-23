@@ -415,6 +415,7 @@ func TestCopyTrace(t *testing.T) {
 		{`SET CLUSTER SETTING sql.trace.log_statement_execute = true`},
 		{`SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true`},
 		{`SET CLUSTER SETTING sql.log.unstructured_entries.enabled = true`, `SET CLUSTER SETTING sql.trace.log_statement_execute = true`},
+		{`SET CLUSTER SETTING sql.log.admin_audit.enabled = true`},
 	} {
 		t.Run(strs[0], func(t *testing.T) {
 			params, _ := tests.CreateTestServerParams()
@@ -433,7 +434,11 @@ func TestCopyTrace(t *testing.T) {
 				require.NoError(t, err)
 			}
 
+			// We have to start a new connection every time to exercise all possible paths.
 			t.Run("success", func(t *testing.T) {
+				db := serverutils.OpenDBConn(
+					t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+				require.NoError(t, err)
 				txn, err := db.Begin()
 				const val = 2
 				require.NoError(t, err)
@@ -452,6 +457,8 @@ func TestCopyTrace(t *testing.T) {
 			})
 
 			t.Run("error in statement", func(t *testing.T) {
+				db := serverutils.OpenDBConn(
+					t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -463,6 +470,8 @@ func TestCopyTrace(t *testing.T) {
 			})
 
 			t.Run("error during copy", func(t *testing.T) {
+				db := serverutils.OpenDBConn(
+					t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{

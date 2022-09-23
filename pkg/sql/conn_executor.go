@@ -2182,7 +2182,7 @@ func (ex *connExecutor) execCopyIn(
 	ann := tree.MakeAnnotations(0)
 	ex.planner.extendedEvalCtx.Annotations = &ann
 	ex.planner.extendedEvalCtx.Placeholders = &tree.PlaceholderInfo{}
-	ex.planner.curPlan.stmt = &ex.planner.stmt
+	ex.planner.curPlan.init(&ex.planner.stmt, &ex.planner.instrumentation)
 
 	var cm copyMachineInterface
 	var copyErr error
