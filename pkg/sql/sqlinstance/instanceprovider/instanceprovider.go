@@ -42,6 +42,7 @@ type provider struct {
 	*instancestorage.Reader
 	storage      writer
 	stopper      *stop.Stopper
+	errChan      chan error
 	instanceAddr string
 	session      sqlliveness.Instance
 	locality     roachpb.Locality
@@ -59,6 +60,7 @@ type provider struct {
 // New constructs a new Provider.
 func New(
 	stopper *stop.Stopper,
+	errChan chan error,
 	db *kv.DB,
 	codec keys.SQLCodec,
 	slProvider sqlliveness.Provider,
@@ -72,6 +74,7 @@ func New(
 	p := &provider{
 		storage:      storage,
 		stopper:      stopper,
+		errChan:      errChan,
 		Reader:       reader,
 		session:      slProvider,
 		instanceAddr: addr,
@@ -176,6 +179,7 @@ func (p *provider) initialize(ctx context.Context) error {
 		go func() {
 			ctx, sp := p.stopper.Tracer().StartSpanCtx(context.Background(), "instance shutdown")
 			defer sp.Finish()
+			p.errChan <- errors.Errorf("sqlliveness: session expired")
 			p.shutdownSQLInstance(ctx)
 		}()
 	})

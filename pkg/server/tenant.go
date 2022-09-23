@@ -64,11 +64,12 @@ import (
 func StartTenant(
 	ctx context.Context,
 	stopper *stop.Stopper,
+	errChan chan error,
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (*SQLServerWrapper, error) {
-	sqlServer, authServer, drainServer, pgAddr, httpAddr, err := startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	sqlServer, authServer, drainServer, pgAddr, httpAddr, err := startTenantInternal(ctx, stopper, errChan, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +117,7 @@ func (s *SQLServerWrapper) Drain(
 func startTenantInternal(
 	ctx context.Context,
 	stopper *stop.Stopper,
+	errChan chan error,
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
@@ -135,8 +137,7 @@ func startTenantInternal(
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
-
-	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, errChan, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, nil, nil, "", "", err
 	}
@@ -384,6 +385,7 @@ func startTenantInternal(
 func makeTenantSQLServerArgs(
 	startupCtx context.Context,
 	stopper *stop.Stopper,
+	errChan chan error,
 	kvClusterName string,
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
@@ -596,6 +598,7 @@ func makeTenantSQLServerArgs(
 		SQLConfig:                &sqlCfg,
 		BaseConfig:               &baseCfg,
 		stopper:                  stopper,
+		errChan:                  errChan,
 		clock:                    clock,
 		runtime:                  runtime,
 		rpcContext:               rpcContext,

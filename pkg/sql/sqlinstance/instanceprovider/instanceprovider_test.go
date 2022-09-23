@@ -63,7 +63,8 @@ func TestInstanceProvider(t *testing.T) {
 		const expectedInstanceID = base.SQLInstanceID(1)
 		stopper, slInstance, storage, clock := setup(t)
 		defer stopper.Stop(ctx)
-		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, addr)
+		errChan := make(chan error, 1)
+		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, errChan, slInstance, addr)
 		slInstance.Start(ctx)
 		instanceProvider.InitAndWaitForTest(ctx)
 		instanceID, sessionID, err := instanceProvider.Instance(ctx)
@@ -94,12 +95,23 @@ func TestInstanceProvider(t *testing.T) {
 			}
 			return nil
 		})
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case <-errChan:
+				return nil
+			case <-ctx.Done():
+				return errors.Errorf("errChan is not written to on session expiry")
+			case <-stopper.ShouldQuiesce():
+				return errors.Errorf("errChan is not written to on session expiry")
+			}
+		})
 	})
 
 	t.Run("test-shutdown-before-init", func(t *testing.T) {
 		stopper, slInstance, _, _ := setup(t)
 		defer stopper.Stop(ctx)
-		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, "addr")
+		errChan := make(chan error, 1)
+		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, errChan, slInstance, "addr")
 		slInstance.Start(ctx)
 		instanceProvider.ShutdownSQLInstanceForTest(ctx)
 		instanceProvider.InitAndWaitForTest(ctx)
