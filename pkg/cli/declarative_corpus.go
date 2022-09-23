@@ -50,7 +50,7 @@ a given corpus file.
 						return jobID
 					},
 				}
-				_, err := scplan.MakePlan(*state, params)
+				_, err := scplan.MakePlan(cmd.Context(), *state, params)
 				if err != nil {
 					fmt.Printf("failed to validate %s with error %v\n", name, err)
 				} else {

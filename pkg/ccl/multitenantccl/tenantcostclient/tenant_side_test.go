@@ -322,7 +322,7 @@ func (ts *testState) request(
 	return ""
 }
 
-func (ts *testState) externalIngress(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) externalIngress(t *testing.T, _ *datadriven.TestData, args cmdArgs) string {
 	usage := multitenant.ExternalIOUsage{IngressBytes: args.bytes}
 	if err := ts.controller.OnExternalIOWait(context.Background(), usage); err != nil {
 		t.Errorf("OnExternalIOWait error: %s", err)
@@ -341,12 +341,12 @@ func (ts *testState) externalEgress(t *testing.T, d *datadriven.TestData, args c
 	return ""
 }
 
-func (ts *testState) enableRUAccounting(t *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
+func (ts *testState) enableRUAccounting(_ *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
 	tenantcostclient.ExternalIORUAccountingMode.Override(context.Background(), &ts.settings.SV, "on")
 	return ""
 }
 
-func (ts *testState) disableRUAccounting(t *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
+func (ts *testState) disableRUAccounting(_ *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
 	tenantcostclient.ExternalIORUAccountingMode.Override(context.Background(), &ts.settings.SV, "off")
 	return ""
 }
@@ -424,7 +424,7 @@ func (ts *testState) advance(t *testing.T, d *datadriven.TestData, args cmdArgs)
 
 // waitForEvent waits until the tenant controller reports the given event
 // type(s), at the current time.
-func (ts *testState) waitForEvent(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) waitForEvent(t *testing.T, d *datadriven.TestData, _ cmdArgs) string {
 	typs := make(map[string]tenantcostclient.TestEventType)
 	for ev, evStr := range eventTypeStr {
 		typs[evStr] = ev
@@ -444,7 +444,7 @@ func (ts *testState) waitForEvent(t *testing.T, d *datadriven.TestData, args cmd
 
 // unblockRequest resumes a token bucket request that was blocked by the
 // "blockRequest" configuration option.
-func (ts *testState) unblockRequest(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) unblockRequest(t *testing.T, _ *datadriven.TestData, _ cmdArgs) string {
 	ts.provider.unblockRequest(t)
 	return ""
 }
@@ -461,7 +461,7 @@ func (ts *testState) unblockRequest(t *testing.T, d *datadriven.TestData, args c
 //	----
 //	00:00:01.000
 //	00:00:02.000
-func (ts *testState) timers(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) timers(t *testing.T, d *datadriven.TestData, _ cmdArgs) string {
 	// If we are rewriting the test, just sleep a bit before returning the
 	// timers.
 	if d.Rewrite {
@@ -491,7 +491,7 @@ func timesToString(times []time.Time) string {
 }
 
 // configure the test provider.
-func (ts *testState) configure(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) configure(t *testing.T, d *datadriven.TestData, _ cmdArgs) string {
 	var cfg testProviderConfig
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &cfg); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
@@ -501,13 +501,13 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData, args cmdArg
 }
 
 // tokenBucket dumps the current state of the tenant's token bucket.
-func (ts *testState) tokenBucket(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) tokenBucket(*testing.T, *datadriven.TestData, cmdArgs) string {
 	return tenantcostclient.TestingTokenBucketString(ts.controller)
 }
 
 // cpu adds CPU usage which will be observed by the controller on the next main
 // loop tick.
-func (ts *testState) cpu(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) cpu(t *testing.T, d *datadriven.TestData, _ cmdArgs) string {
 	duration, err := time.ParseDuration(d.Input)
 	if err != nil {
 		d.Fatalf(t, "error parsing cpu duration: %v", err)
@@ -518,7 +518,7 @@ func (ts *testState) cpu(t *testing.T, d *datadriven.TestData, args cmdArgs) str
 
 // pgwire adds PGWire egress usage which will be observed by the controller on the next
 // main loop tick.
-func (ts *testState) pgwireEgress(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) pgwireEgress(t *testing.T, d *datadriven.TestData, _ cmdArgs) string {
 	bytes, err := strconv.Atoi(d.Input)
 	if err != nil {
 		d.Fatalf(t, "error parsing pgwire bytes value: %v", err)
@@ -529,7 +529,7 @@ func (ts *testState) pgwireEgress(t *testing.T, d *datadriven.TestData, args cmd
 
 // usage prints out the latest consumption. Callers are responsible for
 // triggering calls to the token bucket provider and waiting for responses.
-func (ts *testState) usage(t *testing.T, d *datadriven.TestData, args cmdArgs) string {
+func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 	c := ts.provider.consumption()
 	return fmt.Sprintf(""+
 		"RU:  %.2f\n"+
@@ -695,7 +695,7 @@ func (tp *testProvider) unblockRequest(t *testing.T) {
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
 func (tp *testProvider) TokenBucket(
-	ctx context.Context, in *roachpb.TokenBucketRequest,
+	_ context.Context, in *roachpb.TokenBucketRequest,
 ) (*roachpb.TokenBucketResponse, error) {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
@@ -930,7 +930,7 @@ func TestSQLLivenessExemption(t *testing.T) {
 	// Make the tenant heartbeat like crazy.
 	ctx := context.Background()
 	//slinstance.DefaultTTL.Override(ctx, &st.SV, 20*time.Millisecond)
-	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, time.Millisecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, 50*time.Millisecond)
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		TenantID:                    tenantID,
@@ -960,7 +960,6 @@ func TestSQLLivenessExemption(t *testing.T) {
 
 	// Verify that heartbeats can go through and update the expiration time.
 	val := livenessValue()
-	time.Sleep(2 * time.Millisecond)
 	testutils.SucceedsSoon(
 		t,
 		func() error {
