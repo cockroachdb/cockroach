@@ -4266,6 +4266,42 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, ']')
 	}
 
+	if m.ScanCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ScanCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ScanCount), 10)
+	}
+
+	if m.ScanWithStatsCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ScanWithStatsCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ScanWithStatsCount), 10)
+	}
+
+	if m.ScanWithStatsForecastCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ScanWithStatsForecastCount\":"...)
+		b = strconv.AppendInt(b, int64(m.ScanWithStatsForecastCount), 10)
+	}
+
+	if m.TotalScanWithStatsForecastRowsEstimate != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TotalScanWithStatsForecastRowsEstimate\":"...)
+		b = strconv.AppendFloat(b, float64(m.TotalScanWithStatsForecastRowsEstimate), 'f', -1, 64)
+	}
+
 	return printComma, b
 }
 
