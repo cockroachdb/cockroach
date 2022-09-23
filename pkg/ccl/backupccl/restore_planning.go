@@ -1592,6 +1592,11 @@ func doRestorePlan(
 				"use SHOW BACKUP to find correct targets")
 	}
 
+	if err := checkMissingIntroducedSpans(sqlDescs, mainBackupManifests, endTime,
+		p.ExecCfg().Codec); err != nil {
+		return err
+	}
+
 	var revalidateIndexes []jobspb.RestoreDetails_RevalidateIndex
 	for _, desc := range sqlDescs {
 		tbl, ok := desc.(catalog.TableDescriptor)
