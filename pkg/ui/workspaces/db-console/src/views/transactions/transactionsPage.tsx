@@ -11,7 +11,7 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshStatements } from "src/redux/apiReducers";
+import { refreshNodes, refreshStatements } from "src/redux/apiReducers";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
@@ -95,6 +95,7 @@ export const transactionColumnsLocalSetting = new LocalSetting(
 
 const fingerprintsPageActions = {
   refreshData: refreshStatements,
+  refreshNodes,
   resetSQLStats: resetSQLStatsAction,
   onTimeScaleChange: setGlobalTimeScaleAction,
   // We use `null` when the value was never set and it will show all columns.
