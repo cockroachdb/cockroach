@@ -165,6 +165,20 @@ func (s *PersistedSQLStats) GetNextFlushAt() time.Time {
 	return s.atomic.nextFlushAt.Load().(time.Time)
 }
 
+// GetSQLInstanceID returns the SQLInstanceID.
+func (s *PersistedSQLStats) GetSQLInstanceID() base.SQLInstanceID {
+	return s.cfg.SQLIDContainer.SQLInstanceID()
+}
+
+// GetEnabledSQLInstanceID returns the SQLInstanceID when gateway node is enabled,
+// and zero otherwise.
+func (s *PersistedSQLStats) GetEnabledSQLInstanceID() base.SQLInstanceID {
+	if sqlstats.GatewayNodeEnabled.Get(&s.cfg.Settings.SV) {
+		return s.cfg.SQLIDContainer.SQLInstanceID()
+	}
+	return 0
+}
+
 // nextFlushInterval calculates the wait interval that is between:
 // [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
 //
