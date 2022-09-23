@@ -67,6 +67,8 @@ proc eexpect {text} {
 	$text {}
 	timeout { handle_timeout $text }
     }
+    # Wait for the line reader to wake up.
+    after 10
 }
 
 # eexpect_re is like eexpect, but takes a regular expression argument
