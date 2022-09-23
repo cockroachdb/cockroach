@@ -13,11 +13,11 @@
 #     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
 #
 run ok
-put_rangekey k=a end=f ts=1
-put_rangekey k=h end=k ts=1
-put_rangekey k=b end=d ts=3
-put_rangekey k=n end=o ts=3
-put_rangekey k=l end=o ts=5
+del_range_ts k=a end=f ts=1
+del_range_ts k=h end=k ts=1
+del_range_ts k=b end=d ts=3
+del_range_ts k=n end=o ts=3
+del_range_ts k=l end=o ts=5
 put k=a ts=2 v=a2
 del k=a ts=4
 del k=b ts=4
@@ -26,11 +26,11 @@ put k=d ts=4 v=d4
 put k=e ts=3 v=e3
 put k=f ts=2 v=f2
 put k=g ts=2 v=g2
-put_rangekey k=f end=h ts=3 localTs=4
+del_range_ts k=f end=h ts=3 localTs=4
 put k=f ts=4 v=f4
-put k=f ts=6 v=f6
 put k=g ts=4 v=g4
-put_rangekey k=c end=h ts=5
+del_range_ts k=c end=h ts=5
+put k=f ts=6 v=f6
 put k=h ts=3 v=h3
 put k=k ts=5 v=k5
 with t=A
@@ -46,7 +46,7 @@ rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0={localTs=4.000000000,0}/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {l-n}/[5.000000000,0=/<empty>]
 rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -95,11 +95,11 @@ iter_scan: "e"/3.000000000,0=/BYTES/e3
 iter_scan: "f"/6.000000000,0=/BYTES/f6
 iter_scan: "f"/5.000000000,0=/<empty>
 iter_scan: "f"/4.000000000,0=/BYTES/f4
-iter_scan: "f"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_scan: "f"/3.000000000,0=/<empty>
 iter_scan: "f"/2.000000000,0=/BYTES/f2
 iter_scan: "g"/5.000000000,0=/<empty>
 iter_scan: "g"/4.000000000,0=/BYTES/g4
-iter_scan: "g"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_scan: "g"/3.000000000,0=/<empty>
 iter_scan: "g"/2.000000000,0=/BYTES/g2
 iter_scan: "h"/3.000000000,0=/BYTES/h3
 iter_scan: "h"/1.000000000,0=/<empty>
@@ -126,11 +126,11 @@ iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000
 iter_scan: "h"/1.000000000,0=/<empty>
 iter_scan: "h"/3.000000000,0=/BYTES/h3
 iter_scan: "g"/2.000000000,0=/BYTES/g2
-iter_scan: "g"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_scan: "g"/3.000000000,0=/<empty>
 iter_scan: "g"/4.000000000,0=/BYTES/g4
 iter_scan: "g"/5.000000000,0=/<empty>
 iter_scan: "f"/2.000000000,0=/BYTES/f2
-iter_scan: "f"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_scan: "f"/3.000000000,0=/<empty>
 iter_scan: "f"/4.000000000,0=/BYTES/f4
 iter_scan: "f"/5.000000000,0=/<empty>
 iter_scan: "f"/6.000000000,0=/BYTES/f6
@@ -452,7 +452,7 @@ iter_seek_ge: "f"/6.000000000,0=/BYTES/f6
 iter_seek_ge: "f"/6.000000000,0=/BYTES/f6
 iter_seek_ge: "f"/5.000000000,0=/<empty>
 iter_seek_ge: "f"/4.000000000,0=/BYTES/f4
-iter_seek_ge: "f"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_seek_ge: "f"/3.000000000,0=/<empty>
 iter_seek_ge: "f"/2.000000000,0=/BYTES/f2
 iter_seek_ge: "g"/5.000000000,0=/<empty>
 
@@ -468,7 +468,7 @@ iter_seek_ge k=g ts=1
 iter_seek_ge: "g"/5.000000000,0=/<empty>
 iter_seek_ge: "g"/5.000000000,0=/<empty>
 iter_seek_ge: "g"/4.000000000,0=/BYTES/g4
-iter_seek_ge: "g"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_seek_ge: "g"/3.000000000,0=/<empty>
 iter_seek_ge: "g"/2.000000000,0=/BYTES/g2
 iter_seek_ge: "h"/3.000000000,0=/BYTES/h3
 
@@ -723,7 +723,7 @@ iter_seek_lt k=f ts=6
 iter_seek_lt k=f ts=7
 ----
 iter_seek_lt: "f"/2.000000000,0=/BYTES/f2
-iter_seek_lt: "f"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_seek_lt: "f"/3.000000000,0=/<empty>
 iter_seek_lt: "f"/4.000000000,0=/BYTES/f4
 iter_seek_lt: "f"/5.000000000,0=/<empty>
 iter_seek_lt: "f"/6.000000000,0=/BYTES/f6
@@ -740,7 +740,7 @@ iter_seek_lt k=g ts=5
 iter_seek_lt k=g ts=6
 ----
 iter_seek_lt: "g"/2.000000000,0=/BYTES/g2
-iter_seek_lt: "g"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_seek_lt: "g"/3.000000000,0=/<empty>
 iter_seek_lt: "g"/4.000000000,0=/BYTES/g4
 iter_seek_lt: "g"/5.000000000,0=/<empty>
 iter_seek_lt: "f"/2.000000000,0=/BYTES/f2
@@ -888,7 +888,7 @@ iter_seek_lt: "f"/2.000000000,0=/BYTES/f2
 iter_scan: "f"/2.000000000,0=/BYTES/f2
 iter_scan: "g"/5.000000000,0=/<empty>
 iter_scan: "g"/4.000000000,0=/BYTES/g4
-iter_scan: "g"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_scan: "g"/3.000000000,0=/<empty>
 iter_scan: "g"/2.000000000,0=/BYTES/g2
 iter_scan: "h"/3.000000000,0=/BYTES/h3
 iter_scan: "h"/1.000000000,0=/<empty>
@@ -905,8 +905,8 @@ iter_new types=pointsAndRanges pointSynthesis
 iter_seek_lt k=g ts=2
 iter_scan
 ----
-iter_seek_lt: "g"/3.000000000,0={localTs=4.000000000,0}/<empty>
-iter_scan: "g"/3.000000000,0={localTs=4.000000000,0}/<empty>
+iter_seek_lt: "g"/3.000000000,0=/<empty>
+iter_scan: "g"/3.000000000,0=/<empty>
 iter_scan: "g"/2.000000000,0=/BYTES/g2
 iter_scan: "h"/3.000000000,0=/BYTES/h3
 iter_scan: "h"/1.000000000,0=/<empty>
