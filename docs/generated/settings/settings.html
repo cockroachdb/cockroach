@@ -166,6 +166,7 @@
 <tr><td><code>sql.metrics.max_mem_txn_fingerprints</code></td><td>integer</td><td><code>100000</code></td><td>the maximum number of transaction fingerprints stored in memory</td></tr>
 <tr><td><code>sql.metrics.statement_details.dump_to_logs</code></td><td>boolean</td><td><code>false</code></td><td>dump collected statement statistics to node logs when periodically cleared</td></tr>
 <tr><td><code>sql.metrics.statement_details.enabled</code></td><td>boolean</td><td><code>true</code></td><td>collect per-statement query statistics</td></tr>
+<tr><td><code>sql.metrics.statement_details.gateway_node.enabled</code></td><td>boolean</td><td><code>true</code></td><td>save the gateway node for each statement fingerprint. If false, the value will be stored as 0.</td></tr>
 <tr><td><code>sql.metrics.statement_details.plan_collection.enabled</code></td><td>boolean</td><td><code>false</code></td><td>periodically save a logical plan for each fingerprint</td></tr>
 <tr><td><code>sql.metrics.statement_details.plan_collection.period</code></td><td>duration</td><td><code>5m0s</code></td><td>the time until a new logical plan is collected</td></tr>
 <tr><td><code>sql.metrics.statement_details.threshold</code></td><td>duration</td><td><code>0s</code></td><td>minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.</td></tr>
