@@ -1701,6 +1701,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("type name will be used as row.RowLimit by other packages, and that stutters; consider calling this Limit"),
 				stream.GrepNot("type name will be used as tracing.TracingMode by other packages, and that stutters; consider calling this Mode"),
 				stream.GrepNot("pkg/build/bazel/bes/.*empty.go.*don't use an underscore in package name"),
+				stream.GrepNot("pkg/sql/types/types.go.*var Json should be JSON"),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {
