@@ -128,9 +128,9 @@ func alterChangefeedPlanHook(
 		}
 
 		annotatedStmt := &annotatedChangefeedStatement{
-			CreateChangefeed:      newChangefeedStmt,
-			originalSpecs:         originalSpecs,
-			overRideStatementTime: &resolveTime,
+			CreateChangefeed:    newChangefeedStmt,
+			originalSpecs:       originalSpecs,
+			alterChangefeedAsOf: resolveTime,
 		}
 
 		jobRecord, err := createChangefeedJobRecord(

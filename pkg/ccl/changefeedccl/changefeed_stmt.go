@@ -84,8 +84,8 @@ func init() {
 
 type annotatedChangefeedStatement struct {
 	*tree.CreateChangefeed
-	originalSpecs         map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification
-	overRideStatementTime *hlc.Timestamp
+	originalSpecs       map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification
+	alterChangefeedAsOf hlc.Timestamp
 }
 
 func getChangefeedStatement(stmt tree.Statement) *annotatedChangefeedStatement {
@@ -349,8 +349,8 @@ func createChangefeedJobRecord(
 		statementTime = initialHighWater
 	}
 
-	if changefeedStmt.overRideStatementTime != nil {
-		statementTime = *changefeedStmt.overRideStatementTime
+	if !changefeedStmt.alterChangefeedAsOf.IsEmpty() {
+		statementTime = changefeedStmt.alterChangefeedAsOf
 	}
 
 	endTime := hlc.Timestamp{}
