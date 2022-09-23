@@ -13,6 +13,8 @@ package colexecproj
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -137,6 +139,37 @@ func BenchmarkDefaultCmpProjOp(b *testing.B) {
 				return colexectestutils.CreateTestProjectingOperator(
 					ctx, flowCtx, source, inputTypes,
 					"@1 IS DISTINCT FROM @2", testMemAcc,
+				)
+			}, inputTypes, useSel, hasNulls)
+			// TODO(mgartner): This benchmark doesn't show the speed-up for some
+			// reason.
+			inputTypes = []*types.T{types.String, types.String}
+			var sb strings.Builder
+			sb.WriteString("@1 IN (")
+			for i := 0; i < 1000; i++ {
+				if i > 1 {
+					sb.WriteByte(',')
+				}
+				sb.WriteString("'abcdefghijklmnop")
+				sb.WriteString(strconv.Itoa(i))
+				sb.WriteByte('\'')
+			}
+			sb.WriteString(") OR @2 IN (")
+			for i := 0; i < 2000; i++ {
+				if i > 1 {
+					sb.WriteByte(',')
+				}
+				sb.WriteString("'abcdefghijklmnop")
+				sb.WriteString(strconv.Itoa(i))
+				sb.WriteByte('\'')
+			}
+			sb.WriteByte(')')
+			projectingExpr := sb.String()
+			name = fmt.Sprintf("IN/useSel=%t/hasNulls=%t", useSel, hasNulls)
+			benchmarkProjOp(b, name, func(source *colexecop.RepeatableBatchSource) (colexecop.Operator, error) {
+				return colexectestutils.CreateTestProjectingOperator(
+					ctx, flowCtx, source, inputTypes,
+					projectingExpr, testMemAcc,
 				)
 			}, inputTypes, useSel, hasNulls)
 		}
