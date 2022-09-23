@@ -97,6 +97,11 @@ type ProcOutputHelper struct {
 
 // Reset resets this ProcOutputHelper, retaining allocated memory in its slices.
 func (h *ProcOutputHelper) Reset() {
+	// Deeply reset the render expressions. Note that we don't bother deeply
+	// resetting the types slice since the types are small objects.
+	for i := range h.renderExprs {
+		h.renderExprs[i] = execinfrapb.ExprHelper{}
+	}
 	*h = ProcOutputHelper{
 		renderExprs: h.renderExprs[:0],
 		OutputTypes: h.OutputTypes[:0],
@@ -153,7 +158,6 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes = make([]*types.T, nRenders)
 		}
 		for i, expr := range post.RenderExprs {
-			h.renderExprs[i] = execinfrapb.ExprHelper{}
 			if err := h.renderExprs[i].Init(expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
 				return err
 			}
