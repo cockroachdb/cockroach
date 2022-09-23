@@ -496,6 +496,17 @@ func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
 	return nil
 }
 
+// TestingKnobsForTenant returns a TestingKnobs that is used when starting Test
+// Tenants. These knobs are a copy of the Server's TestingKnobs with any knobs
+// that have been found to be problematic to share by default removed.
+func (ts *TestServer) TestingKnobsForTenant() base.TestingKnobs {
+	knobs := *ts.TestingKnobs()
+	// TODO(ssd): We don't share the Server knobs the testcluster setup code
+	// installed an RPC listener that is inappropriate for the tenant.
+	knobs.Server = nil
+	return knobs
+}
+
 // TenantStatusServer returns the TenantStatusServer used by the TestServer.
 func (ts *TestServer) TenantStatusServer() interface{} {
 	return ts.status
@@ -546,10 +557,14 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		UseDatabase:                 ts.params.UseDatabase,
 		SSLCertsDir:                 ts.params.SSLCertsDir,
 		AllowSettingClusterSettings: true,
+	}
+	if ts.params.ShareMostTestingKnobsWithTenant {
+		params.TestingKnobs = ts.TestingKnobsForTenant()
+	} else {
 		// These settings are inherited from the SQL server creation in
 		// logicTest.newCluster, and are required to run the logic test suite
 		// successfully.
-		TestingKnobs: base.TestingKnobs{
+		params.TestingKnobs = base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				DeterministicExplain:            true,
 				UseTransactionalDescIDGenerator: useTransactionalDescIDGenerator,
@@ -558,7 +573,7 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 				AOSTClause: "AS OF SYSTEM TIME '-1us'",
 			},
 			RangeFeed: ts.TestingKnobs().RangeFeed,
-		},
+		}
 	}
 
 	tenant, err := ts.StartTenant(ctx, params)
