@@ -243,7 +243,7 @@ func checkExplainDiagrams(
 		params.InRollback = true
 		params.ExecutionPhase = scop.PostCommitNonRevertiblePhase
 	}
-	pl, err := scplan.MakePlan(state, params)
+	pl, err := scplan.MakePlan(context.Background(), state, params)
 	require.NoErrorf(t, err, "%s: %s", fileNameSuffix, explainedStmt)
 	action(explainDir, "ddl", pl.ExplainCompact)
 	action(explainVerboseDir, "ddl, verbose", pl.ExplainVerbose)

@@ -11,6 +11,7 @@
 package corpus_test
 
 import (
+	"context"
 	"flag"
 	"testing"
 
@@ -40,7 +41,7 @@ func TestValidateCorpuses(t *testing.T) {
 		jobID := jobspb.InvalidJobID
 		name, state := reader.GetCorpus(corpusIdx)
 		t.Run(name, func(t *testing.T) {
-			_, err := scplan.MakePlan(*state, scplan.Params{
+			_, err := scplan.MakePlan(context.Background(), *state, scplan.Params{
 				ExecutionPhase: scop.LatestPhase,
 				InRollback:     state.InRollback,
 				SchemaChangerJobIDSupplier: func() jobspb.JobID {
