@@ -1145,7 +1145,9 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
 					sc, err := p.Descriptors().GetImmutableSchemaByID(
-						ctx, p.txn, table.GetParentSchemaID(), tree.SchemaLookupFlags{})
+						ctx, p.txn, table.GetParentSchemaID(), tree.SchemaLookupFlags{
+							Required: true,
+						})
 					if err != nil {
 						return false, err
 					}

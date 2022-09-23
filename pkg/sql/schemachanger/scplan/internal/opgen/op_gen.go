@@ -81,17 +81,19 @@ func IterateTransitions(
 
 // BuildGraph constructs a graph with operation edges populated from an initial
 // state.
-func BuildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
-	return opRegistry.buildGraph(cs)
+func BuildGraph(ctx context.Context, cs scpb.CurrentState) (*scgraph.Graph, error) {
+	return opRegistry.buildGraph(ctx, cs)
 }
 
-func (r *registry) buildGraph(cs scpb.CurrentState) (_ *scgraph.Graph, err error) {
+func (r *registry) buildGraph(
+	ctx context.Context, cs scpb.CurrentState,
+) (_ *scgraph.Graph, err error) {
 	start := timeutil.Now()
 	defer func() {
-		if err != nil || !log.V(2) {
+		if err != nil || !log.ExpensiveLogEnabled(ctx, 2) {
 			return
 		}
-		log.Infof(context.TODO(), "operation graph generation took %v", timeutil.Since(start))
+		log.Infof(ctx, "operation graph generation took %v", timeutil.Since(start))
 	}()
 	g, err := scgraph.New(cs)
 	if err != nil {

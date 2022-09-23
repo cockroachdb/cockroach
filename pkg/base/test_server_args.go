@@ -157,6 +157,12 @@ type TestServerArgs struct {
 	// or if some of the functionality being tested is not accessible from
 	// within tenants.
 	DisableDefaultTestTenant bool
+
+	// ShareMostTestingKnobsWithTenant should be set by tests that want their
+	// testing knobs shared with the any DefaultTestTenant that the server starts.
+	// See (*testserver).TestingKnobsForTenant for details on which knobs aren't
+	// shared.
+	ShareMostTestingKnobsWithTenant bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
