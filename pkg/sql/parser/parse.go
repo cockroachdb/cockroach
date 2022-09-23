@@ -43,6 +43,9 @@ type Statement struct {
 	// AST is the root of the AST tree for the parsed statement.
 	AST tree.Statement
 
+	// Comments is the list of parsed SQL comments.
+	Comments []string
+
 	// SQL is the original SQL from which the statement was parsed. Note that this
 	// is not appropriate for use in logging, as it may contain passwords and
 	// other sensitive data.
@@ -235,6 +238,7 @@ func (p *Parser) parse(
 	return Statement{
 		AST:             p.lexer.stmt,
 		SQL:             sql,
+		Comments:        p.scanner.Comments,
 		NumPlaceholders: p.lexer.numPlaceholders,
 		NumAnnotations:  p.lexer.numAnnotations,
 	}, nil
