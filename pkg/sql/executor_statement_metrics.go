@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -173,6 +175,12 @@ func (ex *connExecutor) recordStatementSummary(
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
 
+	// We only have node information when it was collected with trace, but we know at least the current
+	// node should be on the list.
+	nodeID, err := strconv.ParseInt(ex.server.sqlStats.GetSQLInstanceID().String(), 10, 64)
+	if err != nil {
+		log.Warningf(ctx, "failed to convert node ID to int: %s", err)
+	}
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.sessionID,
 		StatementID:          planner.stmt.QueryID,
@@ -187,7 +195,7 @@ func (ex *connExecutor) recordStatementSummary(
 		BytesRead:            stats.bytesRead,
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,
-		Nodes:                getNodesFromPlanner(planner),
+		Nodes:                util.CombineUniqueInt64(getNodesFromPlanner(planner), []int64{nodeID}),
 		StatementType:        stmt.AST.StatementType(),
 		Plan:                 planner.instrumentation.PlanForStats(ctx),
 		PlanGist:             planner.instrumentation.planGist.String(),
