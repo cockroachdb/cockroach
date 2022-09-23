@@ -34,26 +34,29 @@ import (
 func upgradeSequenceToBeReferencedByID(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
 ) error {
-	var lastUpgradedID descpb.ID
-	// Upgrade each table/view, one at a time, until we exhaust all of them.
-	for {
-		done, idToUpgrade, err := findNextTableToUpgrade(ctx, d.InternalExecutor, lastUpgradedID,
-			func(table *descpb.TableDescriptor) bool {
-				return table.IsTable() || table.IsView()
-			})
-		if err != nil || done {
-			return err
-		}
+	return d.CollectionFactory.TxnWithExecutor(ctx, d.DB, d.SessionData, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	) (err error) {
+		var lastUpgradedID descpb.ID
+		// Upgrade each table/view, one at a time, until we exhaust all of them.
+		for {
+			done, idToUpgrade, err := findNextTableToUpgrade(ctx, d.InternalExecutor, txn, lastUpgradedID,
+				func(table *descpb.TableDescriptor) bool {
+					return table.IsTable() || table.IsView()
+				})
+			if err != nil || done {
+				return err
+			}
 
-		// Table/View `idToUpgrade` might contain reference to sequences by name. If so, we need to upgrade
-		// those references to be by ID.
-		err = maybeUpgradeSeqReferencesInTableOrView(ctx, idToUpgrade, d)
-		if err != nil {
-			return err
+			// Table/View `idToUpgrade` might contain reference to sequences by name. If so, we need to upgrade
+			// those references to be by ID.
+			err = maybeUpgradeSeqReferencesInTableOrView(ctx, idToUpgrade, d)
+			if err != nil {
+				return err
+			}
+			lastUpgradedID = idToUpgrade
 		}
-
-		lastUpgradedID = idToUpgrade
-	}
+	})
 }
 
 // Find the next table descriptor ID that is > `lastUpgradedID`
@@ -62,11 +65,12 @@ func upgradeSequenceToBeReferencedByID(
 func findNextTableToUpgrade(
 	ctx context.Context,
 	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
 	lastUpgradedID descpb.ID,
 	tableSelector func(table *descpb.TableDescriptor) bool,
 ) (done bool, idToUpgrade descpb.ID, err error) {
 	var rows sqlutil.InternalRows
-	rows, err = ie.QueryIterator(ctx, "upgrade-seq-find-desc", nil,
+	rows, err = ie.QueryIterator(ctx, "upgrade-seq-find-desc", txn,
 		`SELECT id, descriptor, crdb_internal_mvcc_timestamp FROM system.descriptor WHERE id > $1 ORDER BY ID ASC`, lastUpgradedID)
 	if err != nil {
 		return false, 0, err
