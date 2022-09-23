@@ -1,0 +1,606 @@
+# Tests MVCCPredicateDeleteRange with a more complex dataset.
+#
+# Sets up the following dataset, where x is tombstone, o-o is range tombstone, [] is intent.
+#
+#  T
+#  6                      f6              x                       p6
+#  5          o-------------------o   i5          o-----------o
+#  4  x   x       d4      f4  g4
+#  3      o-------o   e3  o-------oh3                     o---o
+#  2  a2          d2      f2  g2          j2  k2
+#  1  o-------------------o       o-----------o
+#     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+#
+run stats ok
+del_range_ts k=a end=f ts=1
+del_range_ts k=h end=k ts=1
+del_range_ts k=b end=d ts=3
+del_range_ts k=n end=o ts=3
+del_range_ts k=l end=o ts=5
+put k=a ts=2 v=a2
+del k=a ts=4
+del k=b ts=4
+put k=d ts=2 v=d2
+put k=d ts=4 v=d4
+put k=e ts=3 v=e3
+put k=f ts=2 v=f2
+put k=g ts=2 v=g2
+put k=i ts=5 v=i5
+put k=j ts=2 v=j2
+del k=j ts=6
+put k=k ts=2 v=k2
+del_range_ts k=f end=h ts=3 localTs=4
+put k=f ts=4 v=f4
+put k=g ts=4 v=g4
+del_range_ts k=c end=h ts=5
+put k=f ts=6 v=f6
+put k=h ts=3 v=h3
+put k=p ts=6 v=p6
+----
+>> del_range_ts k=a end=f ts=1
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1287
+>> del_range_ts k=h end=k ts=1
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1287
+>> del_range_ts k=b end=d ts=3
+stats: range_key_count=+2 range_key_bytes=+35 range_val_count=+3 gc_bytes_age=+3439
+>> del_range_ts k=n end=o ts=3
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1261
+>> del_range_ts k=l end=o ts=5
+stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 gc_bytes_age=+2082
+>> put k=a ts=2 v=a2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del k=a ts=4
+del: "a": found key true
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
+>> del k=b ts=4
+del: "b": found key false
+stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1344
+>> put k=d ts=2 v=d2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=d ts=4 v=d4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 gc_bytes_age=+1824
+>> put k=e ts=3 v=e3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=f ts=2 v=f2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=g ts=2 v=g2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=i ts=5 v=i5
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=j ts=2 v=j2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del k=j ts=6
+del: "j": found key true
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3102
+>> put k=k ts=2 v=k2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del_range_ts k=f end=h ts=3 localTs=4
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-2 live_bytes=-42 gc_bytes_age=+5335
+>> put k=f ts=4 v=f4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
+>> put k=g ts=4 v=g4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
+>> del_range_ts k=c end=h ts=5
+stats: range_key_count=+1 range_key_bytes=+49 range_val_count=+5 live_count=-4 live_bytes=-84 gc_bytes_age=+12665
+>> put k=f ts=6 v=f6
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-190
+>> put k=h ts=3 v=h3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=p ts=6 v=p6
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
+
+# Delete the entire span, using both point and range tombstones.
+run stats ok
+del_range_pred k=a end=z ts=10 startTime=0 rangeThreshold=10
+----
+>> del_range_pred k=a end=z ts=10 startTime=0 rangeThreshold=10
+stats: key_bytes=+60 val_count=+5 live_count=-5 live_bytes=-105 gc_bytes_age=+14850
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/10.000000000,0 -> /<empty>
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/10.000000000,0 -> /<empty>
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/10.000000000,0 -> /<empty>
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/10.000000000,0 -> /<empty>
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/10.000000000,0 -> /<empty>
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=286 val_count=22 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 gc_bytes_age=51066
+
+run stats ok
+clear_time_range k=a end=z ts=10 targetTs=6
+----
+>> clear_time_range k=a end=z ts=10 targetTs=6
+stats: key_bytes=-60 val_count=-5 live_count=+5 live_bytes=+105 gc_bytes_age=-14850
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
+
+run stats ok
+del_range_pred k=a end=z ts=10 startTime=0 rangeThreshold=1
+----
+>> del_range_pred k=a end=z ts=10 startTime=0 rangeThreshold=1
+stats: range_key_count=+2 range_key_bytes=+63 range_val_count=+6 live_count=-5 live_bytes=-105 gc_bytes_age=+15024
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[10.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {k-l}/[10.000000000,0=/<empty>]
+rangekey: {l-n}/[10.000000000,0=/<empty> 5.000000000,0=/<empty>]
+rangekey: {n-o}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {o-p\x00}/[10.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=10 range_key_bytes=221 range_val_count=20 gc_bytes_age=51240
+
+run stats ok
+clear_time_range k=a end=z ts=10 targetTs=6
+----
+>> clear_time_range k=a end=z ts=10 targetTs=6
+stats: range_key_count=-2 range_key_bytes=-63 range_val_count=-6 live_count=+5 live_bytes=+105 gc_bytes_age=-15024
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
+
+# Range tombstone deletion of times (5-10].
+run stats ok
+del_range_pred k=a end=z ts=10 startTime=5 rangeThreshold=1
+----
+>> del_range_pred k=a end=z ts=10 startTime=5 rangeThreshold=1
+stats: range_key_count=+2 range_key_bytes=+47 range_val_count=+4 live_count=-2 live_bytes=-42 gc_bytes_age=+8123
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: f{-\x00}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {f\x00-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: p{-\x00}/[10.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=10 range_key_bytes=205 range_val_count=18 live_count=3 live_bytes=63 gc_bytes_age=44339
+
+run stats ok
+clear_time_range k=a end=z ts=10 targetTs=6
+----
+>> clear_time_range k=a end=z ts=10 targetTs=6
+stats: range_key_count=-2 range_key_bytes=-47 range_val_count=-4 live_count=+2 live_bytes=+42 gc_bytes_age=-8123
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
+
+# Range tombstone deletion of times (5-10].
+run stats ok
+del_range_pred k=a end=z ts=10 startTime=5 rangeThreshold=1
+----
+>> del_range_pred k=a end=z ts=10 startTime=5 rangeThreshold=1
+stats: range_key_count=+2 range_key_bytes=+47 range_val_count=+4 live_count=-2 live_bytes=-42 gc_bytes_age=+8123
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: f{-\x00}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {f\x00-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: p{-\x00}/[10.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=10 range_key_bytes=205 range_val_count=18 live_count=3 live_bytes=63 gc_bytes_age=44339
+
+run stats ok
+clear_time_range k=a end=z ts=10 targetTs=6
+----
+>> clear_time_range k=a end=z ts=10 targetTs=6
+stats: range_key_count=-2 range_key_bytes=-47 range_val_count=-4 live_count=+2 live_bytes=+42 gc_bytes_age=-8123
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
+
+# Range tombstone deletion of times (4-10].
+run stats ok
+del_range_pred k=a end=z ts=10 startTime=4 rangeThreshold=1
+----
+>> del_range_pred k=a end=z ts=10 startTime=4 rangeThreshold=1
+stats: range_key_count=+4 range_key_bytes=+84 range_val_count=+7 live_count=-3 live_bytes=-63 gc_bytes_age=+13550
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: f{-\x00}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {f\x00-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-i}/[1.000000000,0=/<empty>]
+rangekey: i{-\x00}/[10.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {i\x00-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: p{-\x00}/[10.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=12 range_key_bytes=242 range_val_count=21 live_count=2 live_bytes=42 gc_bytes_age=49766
+
+run stats ok
+clear_time_range k=a end=z ts=10 targetTs=6
+----
+>> clear_time_range k=a end=z ts=10 targetTs=6
+stats: range_key_count=-4 range_key_bytes=-84 range_val_count=-7 live_count=+3 live_bytes=+63 gc_bytes_age=-13550
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
+
+# Range tombstone deletion of times (3-10].
+run stats ok
+del_range_pred k=a end=z ts=10 startTime=3 rangeThreshold=1
+----
+>> del_range_pred k=a end=z ts=10 startTime=3 rangeThreshold=1
+stats: range_key_count=+4 range_key_bytes=+84 range_val_count=+7 live_count=-3 live_bytes=-63 gc_bytes_age=+13550
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: f{-\x00}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {f\x00-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-i}/[1.000000000,0=/<empty>]
+rangekey: i{-\x00}/[10.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {i\x00-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: p{-\x00}/[10.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=12 range_key_bytes=242 range_val_count=21 live_count=2 live_bytes=42 gc_bytes_age=49766
+
+run stats ok
+clear_time_range k=a end=z ts=10 targetTs=6
+----
+>> clear_time_range k=a end=z ts=10 targetTs=6
+stats: range_key_count=-4 range_key_bytes=-84 range_val_count=-7 live_count=+3 live_bytes=+63 gc_bytes_age=-13550
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
+
+# Range tombstone deletion of times (2-10].
+run stats ok
+del_range_pred k=a end=z ts=10 startTime=2 rangeThreshold=1
+----
+>> del_range_pred k=a end=z ts=10 startTime=2 rangeThreshold=1
+stats: range_key_count=+2 range_key_bytes=+47 range_val_count=+4 live_count=-4 live_bytes=-84 gc_bytes_age=+11860
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-i\x00}/[10.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {i\x00-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: p{-\x00}/[10.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=10 range_key_bytes=205 range_val_count=18 live_count=1 live_bytes=21 gc_bytes_age=48076
+
+run stats ok
+clear_time_range k=a end=z ts=10 targetTs=6
+----
+>> clear_time_range k=a end=z ts=10 targetTs=6
+stats: range_key_count=-2 range_key_bytes=-47 range_val_count=-4 live_count=+4 live_bytes=+84 gc_bytes_age=-11860
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/5.000000000,0 -> /BYTES/i5
+data: "j"/6.000000000,0 -> /<empty>
+data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/6.000000000,0 -> /BYTES/p6
+stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
