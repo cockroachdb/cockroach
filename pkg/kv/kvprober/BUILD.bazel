@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "kvprober.go",
         "planner.go",
+        "quarantine_pool.go",
         "settings.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvprober",
@@ -22,6 +23,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/randutil",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
@@ -37,6 +39,7 @@ go_test(
         "kvprober_test.go",
         "main_test.go",
         "planner_test.go",
+        "quarantine_pool_test.go",
     ],
     args = ["-test.timeout=295s"],
     embed = [":kvprober"],
