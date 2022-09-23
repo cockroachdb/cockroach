@@ -34,12 +34,13 @@
 
   p {
     @include text--body;
+    overflow-wrap: anywhere;
   }
 }
 
 .icon {
   &__container {
-    display: inline-flex;
+    display: inline;
     align-items: center;
   }
 
@@ -71,9 +72,11 @@
 
 .index-stats {
   &__summary-card {
-    width: fit-content;
-    padding: 0;
-    margin-left: 9px;
+    width: 75%;
+    padding-right: 9px;
+    padding-left: 9px;
+    margin-right: -9px;
+    margin-left: -9px;
   }
 
   &__header {
@@ -108,9 +111,10 @@
       &-indexes {
         font-family: $font-family--semi-bold;
         width: 30em;
+        overflow-wrap: anywhere;
       }
       &-last-used {
-        width: 30em;
+        width: 25em;
       }
     }
   }
