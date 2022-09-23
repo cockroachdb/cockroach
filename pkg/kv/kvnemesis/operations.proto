@@ -149,6 +149,7 @@ message Result {
   bytes value = 4;
   // Only set if Type is ResultType_Values. The RawBytes of a roachpb.Value.
   repeated KeyValue values = 5 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp optional_timestamp = 6 [(gogoproto.nullable) = false];
 }
 
 message Step {
