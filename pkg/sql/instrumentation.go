@@ -155,6 +155,11 @@ type instrumentationHelper struct {
 	// as estimated by the optimizer.
 	totalScanRows float64
 
+	// totalScanRowsWithoutForecasts is the total number of rows read by all scans
+	// in the query, as estimated by the optimizer without using forecasts. (If
+	// forecasts were not used, this should be the same as totalScanRows.)
+	totalScanRowsWithoutForecasts float64
+
 	// outputRows is the number of rows output by the query, as estimated by the
 	// optimizer.
 	outputRows float64
@@ -167,6 +172,12 @@ type instrumentationHelper struct {
 	// passed since stats were collected on any table scanned by this query.
 	nanosSinceStatsCollected time.Duration
 
+	// nanosSinceStatsForecasted is the greatest quantity of nanoseconds that have
+	// passed since the forecast time (or until the forecast time, if it is in the
+	// future, in which case it will be negative) for any table with forecasted
+	// stats scanned by this query.
+	nanosSinceStatsForecasted time.Duration
+
 	// joinTypeCounts records the number of times each type of logical join was
 	// used in the query.
 	joinTypeCounts map[descpb.JoinType]int
@@ -174,6 +185,9 @@ type instrumentationHelper struct {
 	// joinAlgorithmCounts records the number of times each type of join algorithm
 	// was used in the query.
 	joinAlgorithmCounts map[exec.JoinAlgorithm]int
+
+	// scanCounts records the number of times scans were used in the query.
+	scanCounts [exec.NumScanCountTypes]int
 }
 
 // outputMode indicates how the statement output needs to be populated (for
