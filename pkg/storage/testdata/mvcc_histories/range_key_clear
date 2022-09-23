@@ -1,4 +1,4 @@
-# Tests MVCC range key clearing.
+# Tests MVCC range key clearing, using the engine directly.
 #
 # Sets up following dataset, where x is tombstone, o-o is range tombstone, [] is intent.
 #
