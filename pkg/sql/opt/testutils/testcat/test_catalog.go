@@ -667,6 +667,7 @@ func (tv *View) CollectTypes(ord int) (descpb.IDs, error) {
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
 	TabID      cat.StableID
+	DatabaseID descpb.ID
 	TabVersion int
 	TabName    tree.TableName
 	Columns    []cat.Column
@@ -869,7 +870,7 @@ func (tt *Table) HomeRegionColName() (colName string, ok bool) {
 
 // GetDatabaseID is part of the cat.Table interface.
 func (tt *Table) GetDatabaseID() descpb.ID {
-	return 0
+	return tt.DatabaseID
 }
 
 // FindOrdinal returns the ordinal of the column with the given name.
