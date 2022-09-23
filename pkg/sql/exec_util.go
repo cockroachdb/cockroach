@@ -1381,6 +1381,11 @@ type BackupRestoreTestingKnobs struct {
 	// testing. This is typically the bulk mem monitor if not
 	// specified here.
 	BackupMemMonitor *mon.BytesMonitor
+
+	// SkipDescriptorChangeIntroduction skips checking the
+	// backupManifest.DescriptorChanges when deciding which spans to reintroduce.
+	// This helps simulate the bug described in 88042.
+	SkipDescriptorChangeIntroduction bool
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
@@ -2035,8 +2040,10 @@ func (st *SessionTracing) getRecording() []tracingpb.RecordedSpan {
 //
 // Args:
 // kvTracingEnabled: If set, the traces will also include "KV trace" messages -
-//   verbose messages around the interaction of SQL with KV. Some of the messages
-//   are per-row.
+//
+//	verbose messages around the interaction of SQL with KV. Some of the messages
+//	are per-row.
+//
 // showResults: If set, result rows are reported in the trace.
 func (st *SessionTracing) StartTracing(
 	recType tracing.RecordingType, kvTracingEnabled, showResults bool,
@@ -2257,11 +2264,11 @@ type traceRow [traceNumCols]tree.Datum
 
 // A regular expression to split log messages.
 // It has three parts:
-// - the (optional) code location, with at least one forward slash and a period
-//   in the file name:
-//   ((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?)
-// - the (optional) tag: ((?:\[(?:[^][]|\[[^]]*\])*\])?)
-// - the message itself: the rest.
+//   - the (optional) code location, with at least one forward slash and a period
+//     in the file name:
+//     ((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?)
+//   - the (optional) tag: ((?:\[(?:[^][]|\[[^]]*\])*\])?)
+//   - the message itself: the rest.
 var logMessageRE = regexp.MustCompile(
 	`(?s:^((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?) *((?:\[(?:[^][]|\[[^]]*\])*\])?) *(.*))`)
 
