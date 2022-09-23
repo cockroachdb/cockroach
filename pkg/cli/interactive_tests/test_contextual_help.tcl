@@ -62,7 +62,10 @@ eexpect root@
 end_test
 
 start_test "Check that a useful reminder is given if the user mistakenly uses a single ?."
-send "select ?\r"
+# Note: the editor captures regular control feeds. We can only detect a final
+# question mark either when running with --no-line-editor, or when forcing
+# the input with alt+enter. We do the latter here.
+send "select ?\x1b\r"
 eexpect "Note:"
 eexpect JSON
 eexpect "use '??'"
