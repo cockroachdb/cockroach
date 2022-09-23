@@ -912,9 +912,11 @@ func (ts *TestServer) StartTenant(
 	if params.RPCHeartbeatInterval != 0 {
 		baseCfg.RPCHeartbeatInterval = params.RPCHeartbeatInterval
 	}
+	errChan := make(chan error, 1)
 	sqlServer, authServer, drainServer, addr, httpAddr, err := startTenantInternal(
 		ctx,
 		stopper,
+		errChan,
 		ts.Cfg.ClusterName,
 		baseCfg,
 		sqlCfg,
