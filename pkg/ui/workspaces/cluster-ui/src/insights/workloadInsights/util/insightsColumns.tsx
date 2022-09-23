@@ -17,6 +17,7 @@ import { contentionTime, readFromDisk, writtenToDisk } from "../../../util";
 
 export const insightsColumnLabels = {
   executionID: "Execution ID",
+  latestExecutionID: "Latest Execution ID",
   query: "Execution",
   insights: "Insights",
   startTime: "Start Time (UTC)",
@@ -47,8 +48,14 @@ export function getLabel(
 ): string {
   switch (execType) {
     case InsightExecEnum.TRANSACTION:
+      if (key === "latestExecutionID") {
+        return "Latest Transaction Execution ID";
+      }
       return "Transaction " + insightsColumnLabels[key];
     case InsightExecEnum.STATEMENT:
+      if (key === "latestExecutionID") {
+        return "Latest Statement Execution ID";
+      }
       return "Statement " + insightsColumnLabels[key];
     default:
       return insightsColumnLabels[key];
@@ -77,11 +84,18 @@ export const insightsTableTitles: InsightsTableTitleType = {
   },
   executionID: (execType: InsightExecEnum) => {
     return makeToolTip(
+      <p>The ID of the execution with the {execType} fingerprint.</p>,
+      "executionID",
+      execType,
+    );
+  },
+  latestExecutionID: (execType: InsightExecEnum) => {
+    return makeToolTip(
       <p>
         The execution ID of the latest execution with the {execType}{" "}
         fingerprint.
       </p>,
-      "executionID",
+      "latestExecutionID",
       execType,
     );
   },

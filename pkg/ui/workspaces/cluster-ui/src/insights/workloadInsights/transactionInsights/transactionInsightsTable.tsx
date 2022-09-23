@@ -32,8 +32,8 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<TransactionIn
   const execType = InsightExecEnum.TRANSACTION;
   return [
     {
-      name: "executionID",
-      title: insightsTableTitles.executionID(execType),
+      name: "latestExecutionID",
+      title: insightsTableTitles.latestExecutionID(execType),
       cell: (item: TransactionInsightEvent) => (
         <Link to={`/insights/transaction/${item.transactionID}`}>
           {String(item.transactionID)}
