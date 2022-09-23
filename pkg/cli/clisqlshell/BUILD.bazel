@@ -5,9 +5,11 @@ go_library(
     name = "clisqlshell",
     srcs = [
         "api.go",
+        "complete.go",
         "context.go",
         "doc.go",
         "editor.go",
+        "editor_bubbline.go",
         "editor_bufio.go",
         "editor_editline.go",
         "parser.go",
@@ -35,7 +37,11 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",
+        "@com_github_charmbracelet_bubbles//cursor",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_knz_bubbline//:bubbline",
+        "@com_github_knz_bubbline//computil",
+        "@com_github_knz_bubbline//editline",
         "@com_github_knz_go_libedit//:go-libedit",
     ],
 )
@@ -43,6 +49,8 @@ go_library(
 go_test(
     name = "clisqlshell_test",
     srcs = [
+        "complete_test.go",
+        "editor_bubbline_test.go",
         "main_test.go",
         "sql_internal_test.go",
         "sql_test.go",
