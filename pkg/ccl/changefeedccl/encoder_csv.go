@@ -32,7 +32,7 @@ func newCSVEncoder(opts changefeedbase.EncodingOptions) *csvEncoder {
 	newBuf := bytes.NewBuffer([]byte{})
 	newEncoder := &csvEncoder{
 		buf:       newBuf,
-		formatter: tree.NewFmtCtx(tree.FmtSimple),
+		formatter: tree.NewFmtCtx(tree.FmtExport),
 		writer:    csv.NewWriter(newBuf),
 	}
 	newEncoder.writer.SkipNewline = true
