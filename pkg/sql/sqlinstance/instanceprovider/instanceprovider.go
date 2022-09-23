@@ -177,6 +177,7 @@ func (p *provider) initialize(ctx context.Context) error {
 			ctx, sp := p.stopper.Tracer().StartSpanCtx(context.Background(), "instance shutdown")
 			defer sp.Finish()
 			p.shutdownSQLInstance(ctx)
+			log.Fatalf(ctx, "sqlliveness session expired")
 		}()
 	})
 	return nil
