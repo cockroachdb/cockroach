@@ -2817,6 +2817,11 @@ contains common SQL event/execution details.
 | `KVRowsRead` | The number of rows read at the KV layer for this query. | no |
 | `NetworkMessages` | The number of network messages sent by nodes for this query. | no |
 | `IndexRecommendations` | Generated index recommendations for this query. | no |
+| `ScanCount` | The number of scans in the query plan. | no |
+| `ScanWithStatsCount` | The number of scans using statistics (including forecasted statistics) in the query plan. | no |
+| `ScanWithStatsForecastCount` | The number of scans using forecasted statistics in the query plan. | no |
+| `TotalScanRowsWithoutForecastsEstimate` | Total number of rows read by all scans in the query, as estimated by the optimizer without using forecasts. | no |
+| `NanosSinceStatsForecasted` | The greatest quantity of nanoseconds that have passed since the forecast time (or until the forecast time, if it is in the future, in which case it will be negative) for any table with forecasted stats scanned by this query. | no |
 
 
 #### Common fields

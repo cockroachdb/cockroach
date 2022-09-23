@@ -638,9 +638,13 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
 	planTop.instrumentation.totalScanRows = bld.TotalScanRows
+	planTop.instrumentation.totalScanRowsWithoutForecasts = bld.TotalScanRowsWithoutForecasts
 	planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
+	planTop.instrumentation.nanosSinceStatsForecasted = bld.NanosSinceStatsForecasted
 	planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
 	planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
+	planTop.instrumentation.scanCounts = bld.ScanCounts
+
 	if gf != nil {
 		planTop.instrumentation.planGist = gf.PlanGist()
 	}

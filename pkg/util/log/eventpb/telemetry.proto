@@ -164,6 +164,26 @@ message SampledQuery {
   // Generated index recommendations for this query.
   repeated string index_recommendations = 45 [(gogoproto.jsontag) = ',omitempty', (gogoproto.moretags) = "redact:\"nonsensitive\""];
 
+  // The number of scans in the query plan.
+  int64 scan_count = 46 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of scans using statistics (including forecasted statistics) in
+  // the query plan.
+  int64 scan_with_stats_count = 47 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The number of scans using forecasted statistics in the query plan.
+  int64 scan_with_stats_forecast_count = 48 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Total number of rows read by all scans in the query, as estimated by the
+  // optimizer without using forecasts.
+  double total_scan_rows_without_forecasts_estimate = 49 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The greatest quantity of nanoseconds that have passed since the forecast
+  // time (or until the forecast time, if it is in the future, in which case it
+  // will be negative) for any table with forecasted stats scanned by this
+  // query.
+  int64 nanos_since_stats_forecasted = 50 [(gogoproto.jsontag) = ",omitempty"];
+
   reserved 12;
 }
 
