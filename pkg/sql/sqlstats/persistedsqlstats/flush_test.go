@@ -426,6 +426,36 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	})
 }
 
+func TestSQLStatsGatewayNodeSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, conn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+
+	// Gateway Node ID enabled, so should persist the value.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.metrics.statement_details.gateway_node.enabled = true")
+	sqlConn.Exec(t, "SET application_name = 'gateway_enabled'")
+	sqlConn.Exec(t, "SELECT 1")
+	s.SQLServer().(*sql.Server).
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
+	verifyNodeID(t, sqlConn, "SELECT _", true, "gateway_enabled")
+
+	// Gateway Node ID disabled, so shouldn't persist the value on the node_id column, but it should
+	// still store the value on the statistics column.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.metrics.statement_details.gateway_node.enabled = false")
+	sqlConn.Exec(t, "SET application_name = 'gateway_disabled'")
+	sqlConn.Exec(t, "SELECT 1")
+	s.SQLServer().(*sql.Server).
+		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
+	verifyNodeID(t, sqlConn, "SELECT _", false, "gateway_disabled")
+}
+
 type stubTime struct {
 	syncutil.RWMutex
 	t           time.Time
@@ -574,4 +604,36 @@ func verifyInMemoryStatsEmpty(
 
 		require.NoError(t, err)
 	}
+}
+
+func verifyNodeID(
+	t *testing.T,
+	sqlConn *sqlutils.SQLRunner,
+	fingerprint string,
+	gatewayEnabled bool,
+	appName string,
+) {
+	row := sqlConn.DB.QueryRowContext(context.Background(),
+		`
+SELECT
+  node_id,
+  statistics -> 'statistics' ->> 'nodes' as nodes
+FROM
+	system.statement_statistics
+WHERE
+	metadata ->> 'query' = $1 AND
+  app_name = $2
+`, fingerprint, appName)
+
+	var gatewayNodeID int64
+	var allNodesIds string
+
+	e := row.Scan(&gatewayNodeID, &allNodesIds)
+	require.NoError(t, e)
+	nodeID := int64(1)
+	if !gatewayEnabled {
+		nodeID = int64(0)
+	}
+	require.Equal(t, nodeID, gatewayNodeID, "Gateway NodeID")
+	require.Equal(t, "[1]", allNodesIds, "All NodeIDs from statistics")
 }

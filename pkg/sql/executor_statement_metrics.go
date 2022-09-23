@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -100,11 +101,11 @@ func (GuardrailMetrics) MetricStruct() {}
 // recordStatementSummery gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
-// - distSQLUsed reports whether the query was distributed.
-// - automaticRetryCount is the count of implicit txn retries
-//   so far.
-// - result is the result set computed by the query/statement.
-// - err is the error encountered, if any.
+//   - distSQLUsed reports whether the query was distributed.
+//   - automaticRetryCount is the count of implicit txn retries
+//     so far.
+//   - result is the result set computed by the query/statement.
+//   - err is the error encountered, if any.
 func (ex *connExecutor) recordStatementSummary(
 	ctx context.Context,
 	planner *planner,
@@ -187,6 +188,12 @@ func (ex *connExecutor) recordStatementSummary(
 			roachpb.TransactionFingerprintID(txnFingerprintHash.Sum())
 	}
 
+	// We only have node information when it was collected with trace, but we know at least the current
+	// node should be on the list.
+	nodeID, err := strconv.ParseInt(ex.server.sqlStats.GetSQLInstanceID().String(), 10, 64)
+	if err != nil {
+		log.Warningf(ctx, "failed to convert node ID to int: %s", err)
+	}
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		AutoRetryCount:  automaticRetryCount,
 		RowsAffected:    rowsAffected,
@@ -198,7 +205,7 @@ func (ex *connExecutor) recordStatementSummary(
 		BytesRead:       stats.bytesRead,
 		RowsRead:        stats.rowsRead,
 		RowsWritten:     stats.rowsWritten,
-		Nodes:           getNodesFromPlanner(planner),
+		Nodes:           util.CombineUniqueInt64(getNodesFromPlanner(planner), []int64{nodeID}),
 		StatementType:   stmt.AST.StatementType(),
 		Plan:            planner.instrumentation.PlanForStats(ctx),
 		StatementError:  stmtErr,

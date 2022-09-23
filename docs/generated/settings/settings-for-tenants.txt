@@ -139,6 +139,7 @@ sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of state
 sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory
 sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statement statistics to node logs when periodically cleared
 sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics
+sql.metrics.statement_details.gateway_node.enabled	boolean	true	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.
 sql.metrics.statement_details.plan_collection.enabled	boolean	true	periodically save a logical plan for each fingerprint
 sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected
 sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.
