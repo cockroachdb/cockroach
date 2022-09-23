@@ -172,6 +172,19 @@ func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID
 func getPublicIndexTableSpans(
 	table catalog.TableDescriptor, added map[tableAndIndex]bool, codec keys.SQLCodec,
 ) ([]roachpb.Span, error) {
+	// We do not backup spans for views here as they do not contain data.
+	//
+	// Additionally, because we do not split ranges at view boundaries, it is
+	// possible that the range the view span belongs to is shared by another
+	// object in the cluster (that we may or may not be backing up) that might
+	// have its own bespoke zone configurations, namely one with a short GC TTL.
+	// This could lead to a situation where the short GC TTL on the range we are
+	// not backing up causes our protectedts verification to fail when attempting
+	// to backup the view span.
+	if !table.IsPhysicalTable() {
+		return nil, nil
+	}
+
 	publicIndexSpans := make([]roachpb.Span, 0)
 	if err := catalog.ForEachActiveIndex(table, func(idx catalog.Index) error {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
