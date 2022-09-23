@@ -1,7 +1,7 @@
 statement ok
 CREATE TABLE ab (
-a INT PRIMARY KEY,
-b INT
+  a INT PRIMARY KEY,
+  b INT
 )
 
 statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
@@ -2151,3 +2151,67 @@ a  text
 
 statement error pgcode 22001 value too long for type CHAR
 SELECT stoc('abc')
+
+
+subtest ddl
+
+# DDL is not currently supported in UDF bodies.
+statement error pgcode 0A000 unimplemented: CREATE TABLE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'CREATE TABLE t (a INT)'
+
+statement error pgcode 0A000 unimplemented: ALTER TABLE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'ALTER TABLE t ADD COLUMN b BOOL'
+
+statement error pgcode 0A000 unimplemented: DROP TABLE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DROP TABLE t'
+
+
+subtest mutation
+
+# Mutations are not currently supported in UDF bodies.
+statement error pgcode 0A000 unimplemented: INSERT usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'INSERT INTO t VALUES (1)'
+
+statement error pgcode 0A000 unimplemented: INSERT usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'UPSERT INTO t VALUES (1)'
+
+statement error pgcode 0A000 unimplemented: UPDATE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'UPDATE t SET a = 1'
+
+statement error pgcode 0A000 unimplemented: DELETE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'DELETE FROM t WHERE a = 1'
+
+
+subtest prepared_statement
+
+# Prepared statements are not currently supported in UDF bodies.
+statement error pgcode 0A000 unimplemented: PREPARE usage inside a function definition
+CREATE FUNCTION err() RETURNS VOID LANGUAGE SQL AS 'PREPARE p AS SELECT * FROM t'
+
+
+subtest cte
+
+# CTEs are not currently supported in UDF bodies.
+statement error pgcode 0A000 unimplemented: CTE usage inside a function definition
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'WITH s AS (SELECT a FROM t) SELECT a FROM s'
+
+
+subtest recursion
+
+# Recursive UDFs are not currently supported.
+statement error pgcode 42883 unknown function: rec()
+CREATE FUNCTION rec(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT CASE i WHEN 0 THEN 0 ELSE i + rec(i-1) END'
+
+# References to other UDFs in UDF bodies are not currently supported.
+statement ok
+CREATE FUNCTION other_udf() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+statement error pgcode 42883 unknown function: other_udf()
+CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT other_udf()'
+
+
+subtest subqueries
+
+# UDFs with subqueries are not currently supported.
+statement error pgcode 0A000 unimplemented: subquery usage inside a function definition
+CREATE FUNCTION rec(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT * FROM t WHERE a = (SELECT max(i) FROM s)'
