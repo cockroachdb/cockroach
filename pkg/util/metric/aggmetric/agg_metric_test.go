@@ -19,6 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -88,59 +90,7 @@ func TestAggMetric(t *testing.T) {
 		f3.Update(2.5)
 		h2.RecordValue(10)
 		h3.RecordValue(90)
-		require.Equal(t,
-			`bar_gauge 4
-bar_gauge{tenant_id="2"} 2
-bar_gauge{tenant_id="3"} 2
-baz_gauge 4
-baz_gauge{tenant_id="2"} 1.5
-baz_gauge{tenant_id="3"} 2.5
-foo_counter 6
-foo_counter{tenant_id="2"} 2
-foo_counter{tenant_id="3"} 4
-histo_gram_bucket{le="+Inf"} 2
-histo_gram_bucket{le="1"} 0
-histo_gram_bucket{le="1024"} 2
-histo_gram_bucket{le="128"} 2
-histo_gram_bucket{le="16"} 1
-histo_gram_bucket{le="2"} 0
-histo_gram_bucket{le="256"} 2
-histo_gram_bucket{le="32"} 1
-histo_gram_bucket{le="4"} 0
-histo_gram_bucket{le="512"} 2
-histo_gram_bucket{le="64"} 1
-histo_gram_bucket{le="8"} 0
-histo_gram_bucket{tenant_id="2",le="+Inf"} 1
-histo_gram_bucket{tenant_id="2",le="1"} 0
-histo_gram_bucket{tenant_id="2",le="1024"} 1
-histo_gram_bucket{tenant_id="2",le="128"} 1
-histo_gram_bucket{tenant_id="2",le="16"} 1
-histo_gram_bucket{tenant_id="2",le="2"} 0
-histo_gram_bucket{tenant_id="2",le="256"} 1
-histo_gram_bucket{tenant_id="2",le="32"} 1
-histo_gram_bucket{tenant_id="2",le="4"} 0
-histo_gram_bucket{tenant_id="2",le="512"} 1
-histo_gram_bucket{tenant_id="2",le="64"} 1
-histo_gram_bucket{tenant_id="2",le="8"} 0
-histo_gram_bucket{tenant_id="3",le="+Inf"} 1
-histo_gram_bucket{tenant_id="3",le="1"} 0
-histo_gram_bucket{tenant_id="3",le="1024"} 1
-histo_gram_bucket{tenant_id="3",le="128"} 1
-histo_gram_bucket{tenant_id="3",le="16"} 0
-histo_gram_bucket{tenant_id="3",le="2"} 0
-histo_gram_bucket{tenant_id="3",le="256"} 1
-histo_gram_bucket{tenant_id="3",le="32"} 0
-histo_gram_bucket{tenant_id="3",le="4"} 0
-histo_gram_bucket{tenant_id="3",le="512"} 1
-histo_gram_bucket{tenant_id="3",le="64"} 0
-histo_gram_bucket{tenant_id="3",le="8"} 0
-histo_gram_count 2
-histo_gram_count{tenant_id="2"} 1
-histo_gram_count{tenant_id="3"} 1
-histo_gram_sum 100
-histo_gram_sum{tenant_id="2"} 10
-histo_gram_sum{tenant_id="3"} 90`,
-			writePrometheusMetrics(t))
+		echotest.Require(t, writePrometheusMetrics(t), testutils.TestDataPath(t, "basic.txt"))
 	})
 
 	t.Run("destroy", func(t *testing.T) {
@@ -148,42 +98,7 @@ histo_gram_sum{tenant_id="3"} 90`,
 		c2.Destroy()
 		f3.Destroy()
 		h3.Destroy()
-		require.Equal(t,
-			`bar_gauge 2
-bar_gauge{tenant_id="2"} 2
-baz_gauge 1.5
-baz_gauge{tenant_id="2"} 1.5
-foo_counter 6
-foo_counter{tenant_id="3"} 4
-histo_gram_bucket{le="+Inf"} 2
-histo_gram_bucket{le="1"} 0
-histo_gram_bucket{le="1024"} 2
-histo_gram_bucket{le="128"} 2
-histo_gram_bucket{le="16"} 1
-histo_gram_bucket{le="2"} 0
-histo_gram_bucket{le="256"} 2
-histo_gram_bucket{le="32"} 1
-histo_gram_bucket{le="4"} 0
-histo_gram_bucket{le="512"} 2
-histo_gram_bucket{le="64"} 1
-histo_gram_bucket{le="8"} 0
-histo_gram_bucket{tenant_id="2",le="+Inf"} 1
-histo_gram_bucket{tenant_id="2",le="1"} 0
-histo_gram_bucket{tenant_id="2",le="1024"} 1
-histo_gram_bucket{tenant_id="2",le="128"} 1
-histo_gram_bucket{tenant_id="2",le="16"} 1
-histo_gram_bucket{tenant_id="2",le="2"} 0
-histo_gram_bucket{tenant_id="2",le="256"} 1
-histo_gram_bucket{tenant_id="2",le="32"} 1
-histo_gram_bucket{tenant_id="2",le="4"} 0
-histo_gram_bucket{tenant_id="2",le="512"} 1
-histo_gram_bucket{tenant_id="2",le="64"} 1
-histo_gram_bucket{tenant_id="2",le="8"} 0
-histo_gram_count 2
-histo_gram_count{tenant_id="2"} 1
-histo_gram_sum 100
-histo_gram_sum{tenant_id="2"} 10`,
-			writePrometheusMetrics(t))
+		echotest.Require(t, writePrometheusMetrics(t), testutils.TestDataPath(t, "destroy.txt"))
 	})
 
 	t.Run("panic on already exists", func(t *testing.T) {
@@ -204,59 +119,7 @@ histo_gram_sum{tenant_id="2"} 10`,
 		c2 = c.AddChild(tenant2.String())
 		f3 = f.AddChild(tenant3.String())
 		h3 = h.AddChild(tenant3.String())
-		require.Equal(t,
-			`bar_gauge 2
-bar_gauge{tenant_id="2"} 2
-bar_gauge{tenant_id="3"} 0
-baz_gauge 1.5
-baz_gauge{tenant_id="2"} 1.5
-baz_gauge{tenant_id="3"} 0
-foo_counter 6
-foo_counter{tenant_id="2"} 0
-foo_counter{tenant_id="3"} 4
-histo_gram_bucket{le="+Inf"} 2
-histo_gram_bucket{le="1"} 0
-histo_gram_bucket{le="1024"} 2
-histo_gram_bucket{le="128"} 2
-histo_gram_bucket{le="16"} 1
-histo_gram_bucket{le="2"} 0
-histo_gram_bucket{le="256"} 2
-histo_gram_bucket{le="32"} 1
-histo_gram_bucket{le="4"} 0
-histo_gram_bucket{le="512"} 2
-histo_gram_bucket{le="64"} 1
-histo_gram_bucket{le="8"} 0
-histo_gram_bucket{tenant_id="2",le="+Inf"} 1
-histo_gram_bucket{tenant_id="2",le="1"} 0
-histo_gram_bucket{tenant_id="2",le="1024"} 1
-histo_gram_bucket{tenant_id="2",le="128"} 1
-histo_gram_bucket{tenant_id="2",le="16"} 1
-histo_gram_bucket{tenant_id="2",le="2"} 0
-histo_gram_bucket{tenant_id="2",le="256"} 1
-histo_gram_bucket{tenant_id="2",le="32"} 1
-histo_gram_bucket{tenant_id="2",le="4"} 0
-histo_gram_bucket{tenant_id="2",le="512"} 1
-histo_gram_bucket{tenant_id="2",le="64"} 1
-histo_gram_bucket{tenant_id="2",le="8"} 0
-histo_gram_bucket{tenant_id="3",le="+Inf"} 0
-histo_gram_bucket{tenant_id="3",le="1"} 0
-histo_gram_bucket{tenant_id="3",le="1024"} 0
-histo_gram_bucket{tenant_id="3",le="128"} 0
-histo_gram_bucket{tenant_id="3",le="16"} 0
-histo_gram_bucket{tenant_id="3",le="2"} 0
-histo_gram_bucket{tenant_id="3",le="256"} 0
-histo_gram_bucket{tenant_id="3",le="32"} 0
-histo_gram_bucket{tenant_id="3",le="4"} 0
-histo_gram_bucket{tenant_id="3",le="512"} 0
-histo_gram_bucket{tenant_id="3",le="64"} 0
-histo_gram_bucket{tenant_id="3",le="8"} 0
-histo_gram_count 2
-histo_gram_count{tenant_id="2"} 1
-histo_gram_count{tenant_id="3"} 0
-histo_gram_sum 100
-histo_gram_sum{tenant_id="2"} 10
-histo_gram_sum{tenant_id="3"} 0`,
-			writePrometheusMetrics(t))
+		echotest.Require(t, writePrometheusMetrics(t), testutils.TestDataPath(t, "add_after_destroy.txt"))
 	})
 
 	t.Run("panic on label length mismatch", func(t *testing.T) {

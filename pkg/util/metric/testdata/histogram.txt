@@ -1,0 +1,44 @@
+echo
+----
+{
+  "sample_count": 4,
+  "sample_sum": 21,
+  "bucket": [
+    {
+      "cumulative_count": 1,
+      "upper_bound": 1
+    },
+    {
+      "cumulative_count": 1,
+      "upper_bound": 2
+    },
+    {
+      "cumulative_count": 1,
+      "upper_bound": 3
+    },
+    {
+      "cumulative_count": 1,
+      "upper_bound": 4
+    },
+    {
+      "cumulative_count": 3,
+      "upper_bound": 5
+    },
+    {
+      "cumulative_count": 3,
+      "upper_bound": 6
+    },
+    {
+      "cumulative_count": 4,
+      "upper_bound": 10
+    },
+    {
+      "cumulative_count": 4,
+      "upper_bound": 20
+    },
+    {
+      "cumulative_count": 4,
+      "upper_bound": 30
+    }
+  ]
+}
