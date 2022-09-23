@@ -246,6 +246,7 @@ sql.metrics.max_mem_stmt_fingerprints	integer	100000	the maximum number of state
 sql.metrics.max_mem_txn_fingerprints	integer	100000	the maximum number of transaction fingerprints stored in memory
 sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statement statistics to node logs when periodically cleared
 sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics
+sql.metrics.statement_details.gateway_node.enabled	boolean	true	save the gateway node for each statement fingerprint. If false, the value will be stored as 0.
 sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID
 sql.metrics.statement_details.max_mem_reported_idx_recommendations	integer	5000	the maximum number of reported index recommendation info stored in memory
 sql.metrics.statement_details.plan_collection.enabled	boolean	false	periodically save a logical plan for each fingerprint
