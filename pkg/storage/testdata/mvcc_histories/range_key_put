@@ -1,4 +1,4 @@
-# Test basic MVCC range key mutations.
+# Test basic MVCC range key mutations, using the engine directly.
 
 run trace
 # Write three range keys that extend each other on both sides.
