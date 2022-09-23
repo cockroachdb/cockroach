@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -156,7 +157,7 @@ func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 // Get implements SideloadStorage.
 func (ss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]byte, error) {
 	filename := ss.filename(ctx, index, term)
-	b, err := ss.eng.ReadFile(filename)
+	b, err := fs.ReadFile(ss.eng, filename)
 	if oserror.IsNotExist(err) {
 		return nil, errSideloadedFileNotFound
 	}

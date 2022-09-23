@@ -1690,40 +1690,11 @@ func (p *Pebble) CompactRange(start, end roachpb.Key) error {
 	return p.db.Compact(bufStart, bufEnd, true /* parallel */)
 }
 
-// InMem returns true if the receiver is an in-memory engine and false
-// otherwise.
-func (p *Pebble) InMem() bool {
-	return p.path == ""
-}
-
 // RegisterFlushCompletedCallback implements the Engine interface.
 func (p *Pebble) RegisterFlushCompletedCallback(cb func()) {
 	p.mu.Lock()
 	p.mu.flushCompletedCallback = cb
 	p.mu.Unlock()
-}
-
-// ReadFile implements the Engine interface.
-func (p *Pebble) ReadFile(filename string) ([]byte, error) {
-	file, err := p.fs.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	return io.ReadAll(file)
-}
-
-// WriteFile writes data to a file in this RocksDB's env.
-func (p *Pebble) WriteFile(filename string, data []byte) error {
-	file, err := p.fs.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	_, err = io.Copy(file, bytes.NewReader(data))
-	return err
 }
 
 // Remove implements the FS interface.
