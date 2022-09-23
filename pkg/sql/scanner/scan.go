@@ -57,6 +57,9 @@ type Scanner struct {
 	in            string
 	pos           int
 	bytesPrealloc []byte
+
+	// Comments is the list of parsed comments from the SQL statement.
+	Comments []string
 }
 
 // In returns the input string.
@@ -453,6 +456,7 @@ func (s *Scanner) next() int {
 func (s *Scanner) skipWhitespace(lval ScanSymType, allowComments bool) (newline, ok bool) {
 	newline = false
 	for {
+		startPos := s.pos
 		ch := s.peek()
 		if ch == '\n' {
 			s.pos++
@@ -467,6 +471,8 @@ func (s *Scanner) skipWhitespace(lval ScanSymType, allowComments bool) (newline,
 			if present, cok := s.ScanComment(lval); !cok {
 				return false, false
 			} else if present {
+				// Mark down the comments that we found.
+				s.Comments = append(s.Comments, s.in[startPos:s.pos])
 				continue
 			}
 		}
