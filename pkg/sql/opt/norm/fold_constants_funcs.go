@@ -11,6 +11,7 @@
 package norm
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -41,7 +42,7 @@ import (
 //
 // Examples illustrating the various cases:
 //
-//  1) Prepare and execute query with placeholders
+//  1. Prepare and execute query with placeholders
 //
 //     SELECT * FROM t WHERE time > now() - $1
 //
@@ -51,7 +52,7 @@ import (
 //     folded, along with the subtraction. If we have an index on time, we will
 //     use it.
 //
-//  2) Prepare and execute query without placeholders
+//  2. Prepare and execute query without placeholders
 //
 //     SELECT * FROM t WHERE time > now() - '1 minute'::INTERVAL
 //
@@ -63,7 +64,7 @@ import (
 //     placeholders here, but AssignPlaceholders will nevertheless recreate the
 //     expression, allowing folding to happen.
 //
-//  3) Execute query without placeholders
+//  3. Execute query without placeholders
 //
 //     SELECT * FROM t WHERE time > now() - '1 minute'::INTERVAL
 //
@@ -73,7 +74,6 @@ import (
 //     the plan cache. In the future, we may want to detect queries that are
 //     re-executed frequently and cache a non-folded version like in the prepare
 //     case.
-//
 type FoldingControl struct {
 	// allowStable controls whether canFoldOperator returns true or false for
 	// volatility.Stable.
@@ -370,6 +370,15 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 
 	result, err := eval.Expr(c.f.evalCtx, texpr)
 	if err != nil {
+		// Casts can require KV operations. KV errors are not safe to swallow.
+		// Check if the error is a KV error, and, if so, propagate it rather
+		// than swallowing it. See #85677.
+		// TODO(mgartner): Ideally, casts that can error and cause adverse
+		// side-effects would be marked as volatile so that they are not folded.
+		// That would eliminate the need for this special error handling.
+		if errors.HasInterface(err, (*roachpb.ErrorDetailInterface)(nil)) {
+			panic(err)
+		}
 		return nil, false
 	}
 
@@ -396,6 +405,15 @@ func (c *CustomFuncs) FoldAssignmentCast(
 	datum := memo.ExtractConstDatum(input)
 	result, err := eval.PerformAssignmentCast(c.f.evalCtx, datum, typ)
 	if err != nil {
+		// Casts can require KV operations. KV errors are not safe to swallow.
+		// Check if the error is a KV error, and, if so, propagate it rather
+		// than swallowing it. See #85677.
+		// TODO(mgartner): Ideally, casts that can error and cause adverse
+		// side-effects would be marked as volatile so that they are not folded.
+		// That would eliminate the need for this special error handling.
+		if errors.HasInterface(err, (*roachpb.ErrorDetailInterface)(nil)) {
+			panic(err)
+		}
 		return nil, false
 	}
 
@@ -406,20 +424,20 @@ func (c *CustomFuncs) FoldAssignmentCast(
 // TO is monotonic.
 // That is, if a and b are values of type FROM, then
 //
-//   1. a = b implies a::TO = b::TO and
-//   2. a < b implies a::TO <= b::TO
+//  1. a = b implies a::TO = b::TO and
+//  2. a < b implies a::TO <= b::TO
 //
 // Property (1) can be violated by cases like:
 //
-//   '-0'::FLOAT = '0'::FLOAT, but '-0'::FLOAT::STRING != '0'::FLOAT::STRING
+//	'-0'::FLOAT = '0'::FLOAT, but '-0'::FLOAT::STRING != '0'::FLOAT::STRING
 //
 // Property (2) can be violated by cases like:
 //
-//   2 < 10, but  2::STRING > 10::STRING.
+//	2 < 10, but  2::STRING > 10::STRING.
 //
 // Note that the stronger version of (2),
 //
-//   a < b implies a::TO < b::TO
+//	a < b implies a::TO < b::TO
 //
 // is not required, for instance this is not generally true of conversion from
 // a TIMESTAMP to a DATE, but certain such conversions can still generate spans
@@ -557,9 +575,9 @@ func (c *CustomFuncs) FoldColumnAccess(
 // to Null when any of its arguments are Null. A function can be folded to Null
 // in this case if all of the following are true:
 //
-//   1. It is not evaluated when any of its arguments are null
-//      (CalledOnNullInput=false).
-//   2. It is a normal function, not an aggregate, window, or generator.
+//  1. It is not evaluated when any of its arguments are null
+//     (CalledOnNullInput=false).
+//  2. It is a normal function, not an aggregate, window, or generator.
 //
 // See FoldFunctionWithNullArg for more details.
 func (c *CustomFuncs) CanFoldFunctionWithNullArg(private *memo.FunctionPrivate) bool {

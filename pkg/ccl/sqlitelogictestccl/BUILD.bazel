@@ -12,6 +12,7 @@ go_test(
     name = "sqlitelogictestccl_test",
     size = "small",
     srcs = ["doc_test.go"],
+    args = ["-test.timeout=55s"],
     data = [
         "@com_github_cockroachdb_sqllogictest//:testfiles",
     ],

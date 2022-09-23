@@ -31,7 +31,7 @@ func makeNameCache() nameCache {
 // All methods are thread-safe.
 type nameCache struct {
 	mu          syncutil.RWMutex
-	descriptors nstree.Map
+	descriptors nstree.NameMap
 }
 
 // Resolves a (qualified) name to the descriptor's ID.

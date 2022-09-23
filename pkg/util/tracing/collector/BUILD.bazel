@@ -27,6 +27,7 @@ go_test(
         "collector_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         ":collector",
         "//pkg/base",

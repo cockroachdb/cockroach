@@ -218,17 +218,18 @@ type retryConfig struct {
 }
 
 // proper JSON schema for webhook sink config:
-// {
-//   "Flush": {
-//	   "Messages":  ...,
-//	   "Bytes":     ...,
-//	   "Frequency": ...,
-//   },
-//	 "Retry": {
-//	   "Max":     ...,
-//	   "Backoff": ...,
-//   }
-// }
+//
+//	{
+//	  "Flush": {
+//		   "Messages":  ...,
+//		   "Bytes":     ...,
+//		   "Frequency": ...,
+//	  },
+//		 "Retry": {
+//		   "Max":     ...,
+//		   "Backoff": ...,
+//	  }
+//	}
 type webhookSinkConfig struct {
 	Flush batchConfig `json:",omitempty"`
 	Retry retryConfig `json:",omitempty"`
@@ -288,13 +289,13 @@ func makeWebhookSink(
 	}
 
 	switch encodingOpts.Envelope {
-	case changefeedbase.OptEnvelopeWrapped:
+	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	if !encodingOpts.KeyInValue {
+	if encodingOpts.Envelope != changefeedbase.OptEnvelopeBare && !encodingOpts.KeyInValue {
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 

@@ -455,6 +455,7 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 const predefinedLogFiles = `
 sinks:
  file-groups:
+  kv-distribution:        { channels: KV_DISTRIBUTION }
   default:
     channels:
       INFO: [DEV, OPS]

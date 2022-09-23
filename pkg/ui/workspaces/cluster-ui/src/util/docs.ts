@@ -82,12 +82,16 @@ export const nodeLivenessIssues = docsURL(
 export const howItWork = docsURL("cockroach-quit.html#how-it-works");
 export const clusterStore = docsURL("cockroach-start.html#store");
 export const clusterGlossary = docsURL("architecture/overview.html#glossary");
+export const clusterSettings = docsURL("cluster-settings");
 export const reviewOfCockroachTerminology = docsURL(
   "ui-replication-dashboard.html#review-of-cockroachdb-terminology",
 );
 export const sessionsTable = docsURL("ui-sessions-page.html");
 export const tableStatsClusterSetting = docsURL(
   "cost-based-optimizer.html#control-automatic-statistics",
+);
+export const performanceBestPractices = docsURL(
+  "performance-best-practices-overview",
 );
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
@@ -114,6 +118,7 @@ export const secondaryIndex = docsURL("schema-design-indexes.html");
 export const onlineSchemaChanges = docsURL("online-schema-changes.html");
 export const createIndex = docsURL("create-index.html");
 export const dropIndex = docsURL("drop-index.html");
+export const alterIndex = docsURL("alter-index.html");
 export const lockingStrength = docsURL(
   "explain.html#find-out-if-a-statement-is-using-select-for-update-locking",
 );
@@ -133,3 +138,4 @@ export const performanceTuningRecipes = docsURLNoVersion(
 export const transactionContention = docsURL(
   "transactions.html#transaction-contention",
 );
+export const insights = docsURL("ui-insights-page.html");

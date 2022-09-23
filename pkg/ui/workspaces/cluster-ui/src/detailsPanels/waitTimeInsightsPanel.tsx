@@ -21,10 +21,11 @@ import { capitalize, Duration } from "../util";
 import { Heading } from "@cockroachlabs/ui-components";
 import { ExecutionContentionTable } from "../activeExecutions/activeTransactionsTable/execContentionTable";
 import styles from "../statementDetails/statementDetails.module.scss";
+
 const cx = classNames.bind(styles);
 
 export const WaitTimeInsightsLabels = {
-  SECTION_HEADING: "Contention Time Insights",
+  SECTION_HEADING: "Contention Insights",
   BLOCKED_SCHEMA: "Blocked Schema",
   BLOCKED_DATABASE: "Blocked Database",
   BLOCKED_TABLE: "Blocked Table",
@@ -36,6 +37,12 @@ export const WaitTimeInsightsLabels = {
     `${capitalize(execType)} ID: ${id} waiting on`,
   WAITING_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
     `${capitalize(execType)}s waiting for ID: ${id}`,
+  BLOCKED_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
+    `${capitalize(execType)} with ID ${id} waited on`,
+  WAITED_TXNS_TABLE_TITLE: (id: string, execType: ExecutionType): string =>
+    `${capitalize(execType)}s that waited for ${capitalize(
+      execType,
+    )}s with ID ${id}`,
 };
 
 type WaitTimeInsightsPanelProps = {
@@ -45,7 +52,6 @@ type WaitTimeInsightsPanelProps = {
   schemaName?: string;
   tableName?: string;
   indexName?: string;
-  contendedKey?: string;
   waitTime?: moment.Duration;
   waitingExecutions: ContendedExecution[];
   blockingExecutions: ContendedExecution[];
@@ -58,7 +64,6 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
   schemaName,
   tableName,
   indexName,
-  contendedKey,
   waitTime,
   waitingExecutions,
   blockingExecutions,
@@ -80,7 +85,9 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
                   <SummaryCardItem
                     label={WaitTimeInsightsLabels.WAIT_TIME}
                     value={
-                      waitTime ? Duration(waitTime.milliseconds() * 1e6) : "N/A"
+                      waitTime
+                        ? Duration(waitTime.asMilliseconds() * 1e6)
+                        : "no samples"
                     }
                   />
                   {schemaName && (
@@ -108,12 +115,6 @@ export const WaitTimeInsightsPanel: React.FC<WaitTimeInsightsPanelProps> = ({
                       <SummaryCardItem
                         label={WaitTimeInsightsLabels.BLOCKED_INDEX}
                         value={indexName}
-                      />
-                    )}
-                    {contendedKey && (
-                      <SummaryCardItem
-                        label={WaitTimeInsightsLabels.CONTENDED_KEY}
-                        value={contendedKey}
                       />
                     )}
                   </SummaryCard>

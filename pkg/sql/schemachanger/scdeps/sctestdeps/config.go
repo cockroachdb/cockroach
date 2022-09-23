@@ -39,9 +39,9 @@ var _ Option = (optionFunc)(nil)
 // WithNamespace sets the TestState namespace to the provided value.
 func WithNamespace(c nstree.Catalog) Option {
 	return optionFunc(func(state *TestState) {
-		_ = c.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
-			state.committed.UpsertNamespaceEntry(e, e.GetID())
-			state.uncommitted.UpsertNamespaceEntry(e, e.GetID())
+		_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+			state.committed.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
+			state.uncommitted.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
 			return nil
 		})
 	})

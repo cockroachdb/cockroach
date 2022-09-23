@@ -28,14 +28,14 @@ import (
 // rule efficiently enumerates all possible combinations of its sub-expressions
 // in order to look for matches. For example:
 //
-//  // [AssociateJoin]
-//  (InnerJoin
-//    (InnerJoin $r:* $s:* $lowerOn:*)
-//    $t:*
-//    $upperOn:*
-//  )
-//  =>
-//  ...
+//	// [AssociateJoin]
+//	(InnerJoin
+//	  (InnerJoin $r:* $s:* $lowerOn:*)
+//	  $t:*
+//	  $upperOn:*
+//	)
+//	=>
+//	...
 //
 // Say the memo group containing the upper inner-join has 3 expressions in it,
 // and the memo group containing the lower inner-join has 4 expressions. Then
@@ -57,22 +57,22 @@ import (
 // For each expression combination that matches, a replace expression is
 // constructed and added to the same memo group as the matched expression:
 //
-//  // [AssociateJoin]
-//  (InnerJoin
-//    (InnerJoin $r:* $s:* $lowerOn:*)
-//    $t:*
-//    $upperOn:*
-//  )
-//  =>
-//  (InnerJoin
-//    (InnerJoin
-//      $r
-//      $t
-//      (ConstructFiltersNotUsing $s $lowerOn $upperOn)
-//    )
-//    $s
-//    (ConstructFiltersUsing $s $lowerOn $upperOn)
-//  )
+//	// [AssociateJoin]
+//	(InnerJoin
+//	  (InnerJoin $r:* $s:* $lowerOn:*)
+//	  $t:*
+//	  $upperOn:*
+//	)
+//	=>
+//	(InnerJoin
+//	  (InnerJoin
+//	    $r
+//	    $t
+//	    (ConstructFiltersNotUsing $s $lowerOn $upperOn)
+//	  )
+//	  $s
+//	  (ConstructFiltersUsing $s $lowerOn $upperOn)
+//	)
 //
 // In this example, if the upper and lower groups each contain two InnerJoin
 // expressions, then four new expressions will be added to the memo group of the
@@ -113,16 +113,16 @@ func (e *explorer) init(o *Optimizer) {
 // pass. Each time exploreGroup is called, the end of the previous pass becomes
 // the start of the next pass. For example:
 //
-//   pass1         pass2         pass3
-//      <-start
-//   e0            e0            e0
-//      <-end         <-start
-//   e1 (new)      e1            e1
+//	pass1         pass2         pass3
+//	   <-start
+//	e0            e0            e0
+//	   <-end         <-start
+//	e1 (new)      e1            e1
 //
-//   e2 (new)      e2            e2
-//                    <-end         <-start
-//                 e3 (new)      e3
-//                                  <-end
+//	e2 (new)      e2            e2
+//	                 <-end         <-start
+//	              e3 (new)      e3
+//	                               <-end
 //
 // For rules which match one or more sub-expressions in addition to the top-
 // level expression, there is extra complexity because every combination needs
@@ -136,11 +136,11 @@ func (e *explorer) init(o *Optimizer) {
 // Optgen. Each non-scalar match pattern or sub-pattern uses a loop to
 // enumerate the expressions in the corresponding memo group. For example:
 //
-//   $join:(InnerJoin
-//     $left:(InnerJoin)
-//     $right:(Select)
-//     $on:*
-//   )
+//	$join:(InnerJoin
+//	  $left:(InnerJoin)
+//	  $right:(Select)
+//	  $on:*
+//	)
 //
 // This match pattern would be implemented with 3 nested loops: 1 each for the
 // $join, $left, and $right memo groups. If $join had 2 expressions, $left had
@@ -148,12 +148,11 @@ func (e *explorer) init(o *Optimizer) {
 // be considered. The innermost loop can skip iteration if all outer loops are
 // bound to expressions which have already been explored in previous passes:
 //
-//   for e1 in memo-exprs($join):
-//     for e2 in memo-exprs($left):
-//       for e3 in memo-exprs($right):
-//         if ordinal(e3) >= state.start:
-//           ... explore (e1, e2, e3) combo ...
-//
+//	for e1 in memo-exprs($join):
+//	  for e2 in memo-exprs($left):
+//	    for e3 in memo-exprs($right):
+//	      if ordinal(e3) >= state.start:
+//	        ... explore (e1, e2, e3) combo ...
 func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
 	// Do nothing if this group has already been fully explored.
 	state := e.ensureExploreState(grp)

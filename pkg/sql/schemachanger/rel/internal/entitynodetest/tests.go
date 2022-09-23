@@ -37,6 +37,45 @@ var (
 	nb = r.Register("nb", &node{Value: b, Left: na}).(*node)
 	nc = r.Register("nc", &node{Value: c, Right: nb}).(*node)
 
+	entityHasi16 = schema.Def3("entityHasI16Eq", "node", "entity", "i16", func(
+		node, entity, i16v rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{
+			node.AttrEqVar(value, entity),
+			entity.AttrEqVar(i16, i16v),
+		}
+	})
+	entityNoti16 = schema.DefNotJoin2("nodeWithValuei16NotEq", "node", "i16", func(
+		node, i16v rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{entityHasi16(node, "entity", i16v)}
+	})
+	joinParentLeft = schema.Def2("joinParentLeft", "parent", "child", func(
+		parent, child rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{parent.AttrEqVar(left, child)}
+	})
+	joinParentRight = schema.Def2("joinParentRight", "parent", "child", func(
+		parent, child rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{parent.AttrEqVar(right, child)}
+	})
+	notExistsLeft = schema.DefNotJoin1("leftNotExists", "node", func(
+		node rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{joinParentLeft("parent", node)}
+	})
+	notExistsRight = schema.DefNotJoin1("rightNotExists", "node", func(
+		node rel.Var,
+	) rel.Clauses {
+		return rel.Clauses{joinParentRight("parent", node)}
+	})
+	hasNoChildren = schema.Def1("hasNoChildren", "node", func(node rel.Var) rel.Clauses {
+		return rel.Clauses{
+			notExistsLeft(node),
+			notExistsRight(node),
+		}
+	})
 	nodeEntity = schema.Def2("nodeEntity", "node", "entity", func(
 		node, entity rel.Var,
 	) rel.Clauses {
@@ -130,6 +169,21 @@ var (
 				{ // 6
 					{Attrs: []rel.Attr{rel.Self}, Exists: []rel.Attr{rel.Self}},
 				},
+				{ // 7
+					{
+						Where: []rel.IndexWhere{
+							{Attr: rel.Type, Eq: reflect.TypeOf((*node)(nil))},
+						},
+					},
+					{
+						Attrs:  []rel.Attr{left},
+						Exists: []rel.Attr{left},
+					},
+					{
+						Attrs:  []rel.Attr{right},
+						Exists: []rel.Attr{right},
+					},
+				},
 			},
 			QueryCases: []reltest.QueryTest{
 				{
@@ -145,7 +199,7 @@ var (
 					Results: [][]interface{}{
 						{a, int8(1), int8(1)},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
 				{
 					Name: "a-c-b join",
@@ -161,7 +215,7 @@ var (
 					Results: [][]interface{}{
 						{a, b, c},
 					},
-					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "nil values don't show up",
@@ -173,7 +227,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
-					UnsatisfiableIndexes: []int{2, 4, 5, 6},
+					UnsatisfiableIndexes: []int{2, 4, 5, 6, 7},
 				},
 				{
 					Name: "nil values don't show up, scalar pointers same as pointers",
@@ -185,7 +239,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
-					UnsatisfiableIndexes: []int{2, 4, 5, 6},
+					UnsatisfiableIndexes: []int{2, 4, 5, 6, 7},
 				},
 				{
 					Name: "list all the values",
@@ -199,7 +253,7 @@ var (
 						{b, int8(2)},
 						{c, int8(2)},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "list all the values with type constraint",
@@ -214,7 +268,7 @@ var (
 						{b, int8(2)},
 						{c, int8(2)},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
 				{
 					Name: "nodes with elements where i8=2",
@@ -229,7 +283,7 @@ var (
 						{nb, b},
 						{nc, c},
 					},
-					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "nodes with elements where i8=2 (rule)",
@@ -244,7 +298,7 @@ var (
 						{nb, b},
 						{nc, c},
 					},
-					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "list all the i8 values",
@@ -261,7 +315,7 @@ var (
 						{int8(2)},
 						{int8(2)},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
 				{
 					Name: "use a filter",
@@ -276,7 +330,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "types of all the entities",
@@ -293,7 +347,7 @@ var (
 						{nb, reflect.TypeOf((*node)(nil))},
 						{nc, reflect.TypeOf((*node)(nil))},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "nodes by type",
@@ -351,7 +405,7 @@ var (
 						{nb},
 						{nc},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
 				{
 					Name: "self eq value",
@@ -363,7 +417,7 @@ var (
 					Results: [][]interface{}{
 						{c},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3},
+					UnsatisfiableIndexes: []int{}, // trivially unifies
 				},
 				{
 					Name: "contradiction due to missing attribute",
@@ -374,7 +428,7 @@ var (
 					Entities:             []v{"entity"},
 					ResVars:              []v{"entity", "pi8"},
 					Results:              [][]interface{}{},
-					UnsatisfiableIndexes: []int{1, 2, 3},
+					UnsatisfiableIndexes: []int{}, // trivially unifies
 				},
 				{
 					Name: "self eq self",
@@ -386,7 +440,7 @@ var (
 					Results: [][]interface{}{
 						{a}, {b}, {c}, {na}, {nb}, {nc},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "variable type mismatch",
@@ -412,7 +466,7 @@ var (
 						{na, a, na, a},
 						{na, a, nc, c},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "entity bound via variable with ne filter",
@@ -432,7 +486,7 @@ var (
 					Results: [][]interface{}{
 						{na, a, nc, c},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "any value type mismatch",
@@ -452,7 +506,7 @@ var (
 					Entities:             []v{"e"},
 					ResVars:              []v{"e", "i8"},
 					Results:              [][]interface{}{},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "pointer scalar values any",
@@ -464,7 +518,7 @@ var (
 					Results: [][]interface{}{
 						{a}, {b}, {c},
 					},
-					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "pointer scalar values",
@@ -476,7 +530,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
-					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "nil pointer scalar values any",
@@ -500,7 +554,7 @@ var (
 					Entities:             []v{"e"},
 					ResVars:              []v{"e"},
 					Results:              [][]interface{}{},
-					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "any clause no match on variable eq",
@@ -511,7 +565,7 @@ var (
 					Entities:             []v{"e"},
 					ResVars:              []v{"e", "i8"},
 					Results:              [][]interface{}{},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "using blank, bind all",
@@ -523,7 +577,7 @@ var (
 					Results: [][]interface{}{
 						{a}, {b}, {c},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "using blank, bind non-nil pointer",
@@ -535,7 +589,7 @@ var (
 					Results: [][]interface{}{
 						{a},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6, 7},
 				},
 				{
 					Name: "e[i8] != 1",
@@ -549,7 +603,7 @@ var (
 						{b},
 						{c},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
 				{
 					Name: "e != a",
@@ -563,7 +617,7 @@ var (
 						{b},
 						{c},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
 				{
 					Name: "e[i8] = v; v != 1",
@@ -578,7 +632,7 @@ var (
 						{b, int8(2)},
 						{c, int8(2)},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
 				{
 					Name: "e[i8] = v; v != 2",
@@ -592,7 +646,7 @@ var (
 					Results: [][]interface{}{
 						{a, int8(1)},
 					},
-					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
 				},
 				{
 					// This case flexes the semantics of Neq to note that Neq forces
@@ -610,6 +664,62 @@ var (
 					Entities:             []rel.Var{"e"},
 					ResVars:              []v{"e", "v"},
 					Results:              [][]interface{}{},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6, 7},
+				},
+				{
+					Name: "node which is neither the left or right of another node (not-join)",
+					Query: rel.Clauses{
+						v("n").Type((*node)(nil)),
+						notExistsLeft("n"),
+						notExistsRight("n"),
+					},
+					Entities: []rel.Var{"n"},
+					ResVars:  []v{"n"},
+					Results: [][]interface{}{
+						{nc},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+				},
+				{
+					Name: "node which is neither the left or right of another node (not-join), composed",
+					Query: rel.Clauses{
+						v("n").Type((*node)(nil)),
+						hasNoChildren("n"),
+					},
+					Entities: []rel.Var{"n"},
+					ResVars:  []v{"n"},
+					Results: [][]interface{}{
+						{nc},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 4, 5, 6},
+				},
+				{
+					Name: "node with entity with i16 not 1",
+					Query: rel.Clauses{
+						v("n").Type((*node)(nil)),
+						v("i16").Eq(int16(1)),
+						entityNoti16("n", "i16"),
+					},
+					Entities: []rel.Var{"n"},
+					ResVars:  []v{"n", "i16"},
+					Results: [][]interface{}{
+						{nb, int16(1)},
+					},
+					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
+				},
+				{
+					Name: "node with entity with i16 not 2",
+					Query: rel.Clauses{
+						v("n").Type((*node)(nil)),
+						v("i16").Eq(int16(2)),
+						entityNoti16("n", "i16"),
+					},
+					Entities: []rel.Var{"n"},
+					ResVars:  []v{"n", "i16"},
+					Results: [][]interface{}{
+						{na, int16(2)},
+						{nc, int16(2)},
+					},
 					UnsatisfiableIndexes: []int{1, 2, 3, 5, 6},
 				},
 			},

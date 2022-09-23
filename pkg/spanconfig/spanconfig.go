@@ -84,15 +84,20 @@ type KVAccessor interface {
 // for the span[3].
 //
 // [1]: The contents of the StoreReader and ProtectedTSReader at t1 corresponds
-//      exactly to the contents of the global span configuration state at t0
-//      where t0 <= t1. If the StoreReader or ProtectedTSReader is read from at
-//      t2 where t2 > t1, it's guaranteed to observe a view of the global state
-//      at t >= t0.
+//
+//	exactly to the contents of the global span configuration state at t0
+//	where t0 <= t1. If the StoreReader or ProtectedTSReader is read from at
+//	t2 where t2 > t1, it's guaranteed to observe a view of the global state
+//	at t >= t0.
+//
 // [2]: For the canonical KVSubscriber implementation, this is typically lagging
-//      by the closed timestamp target duration.
+//
+//	by the closed timestamp target duration.
+//
 // [3]: The canonical KVSubscriber implementation is bounced whenever errors
-//      occur, which may result in the re-transmission of earlier updates
-//      (typically through a coarsely targeted [min,max) span).
+//
+//	occur, which may result in the re-transmission of earlier updates
+//	(typically through a coarsely targeted [min,max) span).
 type KVSubscriber interface {
 	StoreReader
 	ProtectedTSReader
@@ -106,15 +111,15 @@ type KVSubscriber interface {
 //
 // Concretely, for the following zone configuration hierarchy:
 //
-//    CREATE DATABASE db;
-//    CREATE TABLE db.t1();
-//    ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
-//    ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
+//	CREATE DATABASE db;
+//	CREATE TABLE db.t1();
+//	ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
+//	ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
 //
 // The SQLTranslator produces the following translation (represented as a diff
 // against RANGE DEFAULT for brevity):
 //
-// 		Table/5{3-4}                  num_replicas=7 num_voters=5
+//	Table/5{3-4}                  num_replicas=7 num_voters=5
 type SQLTranslator interface {
 	// Translate generates the span configuration state given a list of
 	// {descriptor, named zone} IDs. Entries are unique, and are omitted for IDs
@@ -286,28 +291,27 @@ type Limiter interface {
 // indexes, partitions and sub-partitions) and figures out the actual key
 // boundaries that we may need to split over. For example:
 //
-//		CREATE TABLE db.parts(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
-//			PARTITION one_and_five    VALUES IN (1, 5),
-//			PARTITION four_and_three  VALUES IN (4, 3),
-//			PARTITION everything_else VALUES IN (6, default)
-//		);
+//	CREATE TABLE db.parts(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+//		PARTITION one_and_five    VALUES IN (1, 5),
+//		PARTITION four_and_three  VALUES IN (4, 3),
+//		PARTITION everything_else VALUES IN (6, default)
+//	);
 //
 // We'd spit out 15:
 //
-//	+ 1  between start of table and start of 1st index
-//	+ 1  between start of index and start of 1st partition-by-list value
-//	+ 1  for 1st partition-by-list value
-//	+ 1  for 2nd partition-by-list value
-//	+ 1  for 3rd partition-by-list value
-//	+ 1  for 4th partition-by-list value
-//	+ 1  for 5th partition-by-list value
-//	+ 1  for 6th partition-by-list value
-//	+ 5  gap(s) between 6 partition-by-list value spans
-//	+ 1  between end of 6th partition-by-list value span and end of index
-//	+ 13 for 1st index
-//	+ 1  between end of 1st index and end of table
-//	= 15
-//
+//   - 1  between start of table and start of 1st index
+//   - 1  between start of index and start of 1st partition-by-list value
+//   - 1  for 1st partition-by-list value
+//   - 1  for 2nd partition-by-list value
+//   - 1  for 3rd partition-by-list value
+//   - 1  for 4th partition-by-list value
+//   - 1  for 5th partition-by-list value
+//   - 1  for 6th partition-by-list value
+//   - 5  gap(s) between 6 partition-by-list value spans
+//   - 1  between end of 6th partition-by-list value span and end of index
+//   - 13 for 1st index
+//   - 1  between end of 1st index and end of table
+//     = 15
 type Splitter interface {
 	Splits(ctx context.Context, table catalog.TableDescriptor) (int, error)
 }

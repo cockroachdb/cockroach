@@ -82,7 +82,15 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 	if !short && filter == "" {
-		args := []string{"build", "//pkg/cmd/cockroach-short", "--//build/toolchains:nogo_flag"}
+		args := []string{
+			"build",
+			"//pkg/cmd/cockroach-short",
+			"//pkg/cmd/dev",
+			"//pkg/obsservice/cmd/obsservice",
+			"//pkg/cmd/roachprod",
+			"//pkg/cmd/roachtest",
+			"--//build/toolchains:nogo_flag",
+		}
 		if numCPUs != 0 {
 			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 		}

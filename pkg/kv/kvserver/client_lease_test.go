@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -372,19 +373,19 @@ func TestTransferLeaseToVoterDemotingWithIncoming(t *testing.T) {
 // and makes sure that if lease transfer fails during a joint configuration
 // the previous leaseholder will successfully re-aquire the lease.
 // The test proceeds as follows:
-// - Creates a range with 3 replicas n1, n2, n3, and makes sure the lease is on n1
-// - Makes sure lease transfers on this range fail from now on
-// - Invokes AdminChangeReplicas to remove n1 and add n4
-// - This causes the range to go into a joint configuration. A lease transfer
-//   is attempted to move the lease from n1 to n4 before exiting the joint config,
-//   but that fails, causing us to remain in the joint configuration with the original
-//   leaseholder having revoked its lease, but everyone else thinking it's still
-//   the leaseholder. In this situation, only n1 can re-aquire the lease as long as it is live.
-// - We re-enable lease transfers on this range.
-// - n1 is able to re-aquire the lease, due to the fix in #83686 which enables a
-//   VOTER_DEMOTING_LEARNER (n1) replica to get the lease if there's also a VOTER_INCOMING
-//   which is the case here (n4).
-// - n1 transfers the lease away and the range leaves the joint configuration.
+//   - Creates a range with 3 replicas n1, n2, n3, and makes sure the lease is on n1
+//   - Makes sure lease transfers on this range fail from now on
+//   - Invokes AdminChangeReplicas to remove n1 and add n4
+//   - This causes the range to go into a joint configuration. A lease transfer
+//     is attempted to move the lease from n1 to n4 before exiting the joint config,
+//     but that fails, causing us to remain in the joint configuration with the original
+//     leaseholder having revoked its lease, but everyone else thinking it's still
+//     the leaseholder. In this situation, only n1 can re-aquire the lease as long as it is live.
+//   - We re-enable lease transfers on this range.
+//   - n1 is able to re-aquire the lease, due to the fix in #83686 which enables a
+//     VOTER_DEMOTING_LEARNER (n1) replica to get the lease if there's also a VOTER_INCOMING
+//     which is the case here (n4).
+//   - n1 transfers the lease away and the range leaves the joint configuration.
 func TestTransferLeaseFailureDuringJointConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -701,8 +702,9 @@ func TestLeaseholderRelocate(t *testing.T) {
 	// We start with having the range under test on (1,2,3).
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 
-	// Make sure the lease is on 3
+	// Make sure the lease is on 3 and is fully upgraded.
 	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(2))
+	tc.WaitForLeaseUpgrade(ctx, t, rhsDesc)
 
 	// Check that the lease moved to 3.
 	leaseHolder, err := tc.FindRangeLeaseHolder(rhsDesc, nil)
@@ -730,7 +732,7 @@ func TestLeaseholderRelocate(t *testing.T) {
 		return nil
 	})
 
-	// Make sure lease moved to the preferred region, if .
+	// Make sure lease moved to the preferred region.
 	leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
 	require.NoError(t, err)
 	require.Equal(t, tc.Target(3), leaseHolder)
@@ -739,10 +741,13 @@ func TestLeaseholderRelocate(t *testing.T) {
 	repl := tc.GetFirstStoreFromServer(t, 3).
 		LookupReplica(roachpb.RKey(rhsDesc.StartKey.AsRawKey()))
 	history := repl.GetLeaseHistory()
+
 	require.Equal(t, leaseHolder.NodeID,
 		history[len(history)-1].Replica.NodeID)
+	require.Equal(t, leaseHolder.NodeID,
+		history[len(history)-2].Replica.NodeID) // account for the lease upgrade
 	require.Equal(t, tc.Target(2).NodeID,
-		history[len(history)-2].Replica.NodeID)
+		history[len(history)-3].Replica.NodeID)
 }
 
 func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
@@ -1303,9 +1308,16 @@ func TestAcquireLeaseTimeout(t *testing.T) {
 	}
 }
 
+// TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes does what it
+// says on the tin.
 func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	mu := struct {
+		syncutil.Mutex
+		lease *roachpb.Lease
+	}{}
 
 	ctx := context.Background()
 
@@ -1315,10 +1327,21 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
+					// Never ticked -- demonstrating that we're not relying on
+					// internal timers to upgrade leases.
 					WallClock: manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
-					LeaseRenewalDurationOverride: 10 * time.Millisecond, // speed up the test
+					// Outlandishly high to disable proactive renewal of
+					// expiration based leases. Lease upgrades happen
+					// immediately after applying without needing active
+					// renewal.
+					LeaseRenewalDurationOverride: 100 * time.Hour,
+					LeaseUpgradeInterceptor: func(lease *roachpb.Lease) {
+						mu.Lock()
+						defer mu.Unlock()
+						mu.lease = lease
+					},
 				},
 			},
 		},
@@ -1333,8 +1356,7 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 	n2 := tc.Server(1)
 	n2Target := tc.Target(1)
 
-	// Transfer the lease from n1 to n2. Expect it to be transferred as an
-	// expiration based lease.
+	// Transfer the lease from n1 to n2.
 	tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
 	testutils.SucceedsSoon(t, func() error {
 		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
@@ -1346,6 +1368,11 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 		return nil
 	})
 
-	tc.IncrClockForLeaseUpgrade(t, manualClock)
+	// Expect it to be upgraded to an epoch based lease.
 	tc.WaitForLeaseUpgrade(ctx, t, desc)
+
+	// Expect it to have been upgraded from an expiration based lease.
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, roachpb.LeaseExpiration, mu.lease.Type())
 }

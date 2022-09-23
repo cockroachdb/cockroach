@@ -33,6 +33,7 @@ go_test(
     name = "dbdesc_test",
     size = "small",
     srcs = ["database_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":dbdesc"],
     deps = [
         "//pkg/clusterversion",

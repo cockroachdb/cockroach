@@ -1,0 +1,1290 @@
+// Copyright 2020 The Bazel Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// This file's messages describe any failure(s) that occurred during Bazel's
+// handling of a request. The intent is to provide more detail to a Bazel client
+// than is conveyed with an exit code, to help those clients decide how to
+// respond to, or classify, a failure.
+
+syntax = "proto3";
+
+package failure_details;
+
+option java_package = "com.google.devtools.build.lib.server";
+
+import "google/protobuf/descriptor.proto";
+
+message FailureDetailMetadata {
+  uint32 exit_code = 1;
+}
+
+extend google.protobuf.EnumValueOptions {
+  FailureDetailMetadata metadata = 1078;
+}
+
+// The FailureDetail message type is designed such that consumers can extract a
+// basic classification of a FailureDetail message even if the consumer was
+// built with a stale definition. This forward compatibility is implemented via
+// conventions on FailureDetail and its submessage types, as follows.
+//
+// *** FailureDetail field numbers
+//
+// Field numbers 1 through 100 (inclusive) are reserved for generally applicable
+// values. Any number of these fields may be set on a FailureDetail message.
+//
+// Field numbers 101 through 10,000 (inclusive) are reserved for use inside the
+// "oneof" structure. Only one of these values should be set on a FailureDetail
+// message.
+//
+// Additional fields numbers are unlikely to be needed, but, for extreme future-
+// proofing purposes, field numbers 10,001 through 1,000,000 (inclusive;
+// excluding protobuf's reserved range 19000 through 19999) are reserved for
+// additional generally applicable values.
+//
+// *** FailureDetail's "oneof" submessages
+//
+// Each field in the "oneof" structure is a submessage corresponding to a
+// category of failure.
+//
+// In each of these submessage types, field number 1 is an enum whose values
+// correspond to a subcategory of the failure. Generally, the enum's constant
+// which maps to 0 should be interpreted as "unspecified", though this is not
+// required.
+//
+// *** Recommended forward compatibility strategy
+//
+// The recommended forward compatibility strategy is to reduce a FailureDetail
+// message to a pair of integers.
+//
+// The first integer corresponds to the field number of the submessage set
+// inside FailureDetail's "oneof", which corresponds with the failure's
+// category.
+//
+// The second integer corresponds to the value of the enum at field number 1
+// within that submessage, which corresponds with the failure's subcategory.
+//
+// WARNING: This functionality is experimental and should not be relied on at
+// this time.
+// TODO(mschaller): remove experimental warning
+message FailureDetail {
+  // A short human-readable message describing the failure, for debugging.
+  //
+  // This value is *not* intended to be used algorithmically.
+  string message = 1;
+
+  // Reserved for future generally applicable values. Any of these may be set.
+  reserved 2 to 100;
+
+  oneof category {
+    Interrupted interrupted = 101;
+    ExternalRepository external_repository = 103;
+    BuildProgress build_progress = 104;
+    RemoteOptions remote_options = 106;
+    ClientEnvironment client_environment = 107;
+    Crash crash = 108;
+    SymlinkForest symlink_forest = 110;
+    PackageOptions package_options = 114;
+    RemoteExecution remote_execution = 115;
+    Execution execution = 116;
+    Workspaces workspaces = 117;
+    CrashOptions crash_options = 118;
+    Filesystem filesystem = 119;
+    ExecutionOptions execution_options = 121;
+    Command command = 122;
+    Spawn spawn = 123;
+    GrpcServer grpc_server = 124;
+    CanonicalizeFlags canonicalize_flags = 125;
+    BuildConfiguration build_configuration = 126;
+    InfoCommand info_command = 127;
+    MemoryOptions memory_options = 129;
+    Query query = 130;
+    LocalExecution local_execution = 132;
+    ActionCache action_cache = 134;
+    FetchCommand fetch_command = 135;
+    SyncCommand sync_command = 136;
+    Sandbox sandbox = 137;
+    IncludeScanning include_scanning = 139;
+    TestCommand test_command = 140;
+    ActionQuery action_query = 141;
+    TargetPatterns target_patterns = 142;
+    CleanCommand clean_command = 144;
+    ConfigCommand config_command = 145;
+    ConfigurableQuery configurable_query = 146;
+    DumpCommand dump_command = 147;
+    HelpCommand help_command = 148;
+    MobileInstall mobile_install = 150;
+    ProfileCommand profile_command = 151;
+    RunCommand run_command = 152;
+    VersionCommand version_command = 153;
+    PrintActionCommand print_action_command = 154;
+    WorkspaceStatus workspace_status = 158;
+    JavaCompile java_compile = 159;
+    ActionRewinding action_rewinding = 160;
+    CppCompile cpp_compile = 161;
+    StarlarkAction starlark_action = 162;
+    NinjaAction ninja_action = 163;
+    DynamicExecution dynamic_execution = 164;
+    FailAction fail_action = 166;
+    SymlinkAction symlink_action = 167;
+    CppLink cpp_link = 168;
+    LtoAction lto_action = 169;
+    TestAction test_action = 172;
+    Worker worker = 173;
+    Analysis analysis = 174;
+    PackageLoading package_loading = 175;
+    Toolchain toolchain = 177;
+    StarlarkLoading starlark_loading = 179;
+    ExternalDeps external_deps = 181;
+    DiffAwareness diff_awareness = 182;
+    ModqueryCommand modquery_command = 183;
+  }
+
+  reserved 102; // For internal use
+  reserved 105; // For internal use
+  reserved 109; // For internal use
+  reserved 111 to 113; // For internal use
+  reserved 120; // For internal use
+  reserved 128; // For internal use
+  reserved 131; // For internal use
+  reserved 133; // For internal use
+  reserved 138; // For internal use
+  reserved 143; // For internal use
+  reserved 149; // For internal use
+  reserved 155 to 157; // For internal use
+  reserved 165; // For internal use
+  reserved 170 to 171; // For internal use
+  reserved 176; // For internal use
+  reserved 178; // For internal use
+  reserved 180; // For internal use
+}
+
+message Interrupted {
+  enum Code {
+    // Unknown interrupt. Avoid using this code, instead use INTERRUPTED.
+    INTERRUPTED_UNKNOWN = 0 [(metadata) = { exit_code: 8 }];
+
+    // Command was interrupted (cancelled).
+    INTERRUPTED = 28 [(metadata) = { exit_code: 8 }];
+
+    // The following more specific interrupt codes have been deprecated and
+    // consolidated into INTERRUPTED.
+    DEPRECATED_BUILD = 4 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_BUILD_COMPLETION = 5 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_PACKAGE_LOADING_SYNC = 6 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_EXECUTOR_COMPLETION = 7 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_COMMAND_DISPATCH = 8 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_INFO_ITEM = 9 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_AFTER_QUERY = 10 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_FETCH_COMMAND = 17 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_SYNC_COMMAND = 18 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_CLEAN_COMMAND = 20 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_MOBILE_INSTALL_COMMAND = 21 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_QUERY = 22 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_RUN_COMMAND = 23 [(metadata) = { exit_code: 8 }];
+    DEPRECATED_OPTIONS_PARSING = 27 [(metadata) = { exit_code: 8 }];
+
+    reserved 1 to 3; // For internal use
+    reserved 11 to 16; // For internal use
+    reserved 19; // For internal use
+    reserved 24 to 26; // For internal use
+  }
+
+  Code code = 1;
+}
+
+message Spawn {
+  enum Code {
+    SPAWN_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    // See the SpawnResult.Status Java enum for definitions of the following
+    // Spawn failure codes.
+    NON_ZERO_EXIT = 1 [(metadata) = { exit_code: 1 }];
+    TIMEOUT = 2 [(metadata) = { exit_code: 1 }];
+    // Note: Spawn OUT_OF_MEMORY leads to a BUILD_FAILURE exit_code because the
+    // build tool itself did not run out of memory.
+    OUT_OF_MEMORY = 3 [(metadata) = { exit_code: 1 }];
+    EXECUTION_FAILED = 4 [(metadata) = { exit_code: 34 }];
+    EXECUTION_DENIED = 5 [(metadata) = { exit_code: 1 }];
+    REMOTE_CACHE_FAILED = 6 [(metadata) = { exit_code: 34 }];
+    COMMAND_LINE_EXPANSION_FAILURE = 7 [(metadata) = { exit_code: 1 }];
+    EXEC_IO_EXCEPTION = 8 [(metadata) = { exit_code: 36 }];
+    INVALID_TIMEOUT = 9 [(metadata) = { exit_code: 1 }];
+    INVALID_REMOTE_EXECUTION_PROPERTIES = 10 [(metadata) = { exit_code: 1 }];
+    NO_USABLE_STRATEGY_FOUND = 11 [(metadata) = { exit_code: 1 }];
+    // TODO(b/138456686): this code should be deprecated when SpawnResult is
+    //   refactored to prohibit undetailed failures
+    UNSPECIFIED_EXECUTION_FAILURE = 12 [(metadata) = { exit_code: 1 }];
+    FORBIDDEN_INPUT = 13 [(metadata) = { exit_code: 1 }];
+  }
+  Code code = 1;
+
+  // For Codes describing generic failure to spawn (eg. EXECUTION_FAILED and
+  // EXECUTION_DENIED) the `catastrophic` field may be set to true indicating a
+  // failure that immediately terminated the entire build tool.
+  bool catastrophic = 2;
+
+  // If Code is NON_ZERO_EXIT, the `spawn_exit_code` field may be set to the
+  // non-zero exit code returned by the spawned process to the OS.
+  //
+  // NOTE: This field must not be confused with the build tool's overall
+  // exit code.
+  int32 spawn_exit_code = 3;
+}
+
+message ExternalRepository {
+  enum Code {
+    EXTERNAL_REPOSITORY_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    OVERRIDE_DISALLOWED_MANAGED_DIRECTORIES = 1 [(metadata) = { exit_code: 2 }];
+    BAD_DOWNLOADER_CONFIG = 2 [(metadata) = { exit_code: 2 }];
+  }
+  Code code = 1;
+  // Additional data could include external repository names.
+}
+
+message BuildProgress {
+  enum Code {
+    BUILD_PROGRESS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    OUTPUT_INITIALIZATION = 3 [(metadata) = { exit_code: 36 }];
+    BES_RUNS_PER_TEST_LIMIT_UNSUPPORTED = 4 [(metadata) = { exit_code: 2 }];
+    BES_LOCAL_WRITE_ERROR = 5 [(metadata) = { exit_code: 36 }];
+    BES_INITIALIZATION_ERROR = 6 [(metadata) = { exit_code: 36 }];
+    BES_UPLOAD_TIMEOUT_ERROR = 7 [(metadata) = { exit_code: 38 }];
+    BES_FILE_WRITE_TIMEOUT = 8 [(metadata) = { exit_code: 38 }];
+    BES_FILE_WRITE_IO_ERROR = 9 [(metadata) = { exit_code: 38 }];
+    BES_FILE_WRITE_INTERRUPTED = 10 [(metadata) = { exit_code: 38 }];
+    BES_FILE_WRITE_CANCELED = 11 [(metadata) = { exit_code: 38 }];
+    BES_FILE_WRITE_UNKNOWN_ERROR = 12 [(metadata) = { exit_code: 38 }];
+    BES_UPLOAD_LOCAL_FILE_ERROR = 13 [(metadata) = { exit_code: 38 }];
+    BES_STREAM_NOT_RETRYING_FAILURE = 14 [(metadata) = { exit_code: 45 }];
+    BES_STREAM_COMPLETED_WITH_UNACK_EVENTS_ERROR = 15
+        [(metadata) = { exit_code: 45 }];
+    BES_STREAM_COMPLETED_WITH_UNSENT_EVENTS_ERROR = 16
+        [(metadata) = { exit_code: 45 }];
+    BES_STREAM_COMPLETED_WITH_REMOTE_ERROR = 19
+        [(metadata) = { exit_code: 45 }];
+    BES_UPLOAD_RETRY_LIMIT_EXCEEDED_FAILURE = 17
+        [(metadata) = { exit_code: 38 }];
+    reserved 1, 2, 18; // For internal use
+  }
+  Code code = 1;
+  // Additional data could include the build progress upload endpoint.
+}
+
+message RemoteOptions {
+  enum Code {
+    REMOTE_OPTIONS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    REMOTE_DEFAULT_EXEC_PROPERTIES_LOGIC_ERROR = 1
+        [(metadata) = { exit_code: 2 }];
+    // Credentials could not be read from the requested file/socket/process/etc.
+    CREDENTIALS_READ_FAILURE = 2 [(metadata) = { exit_code: 36 }];
+    // Credentials could not be written to a shared, temporary file.
+    CREDENTIALS_WRITE_FAILURE = 3 [(metadata) = { exit_code: 36 }];
+    DOWNLOADER_WITHOUT_GRPC_CACHE = 4 [(metadata) = { exit_code: 2 }];
+    EXECUTION_WITH_INVALID_CACHE = 5 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message ClientEnvironment {
+  enum Code {
+    CLIENT_ENVIRONMENT_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    CLIENT_CWD_MALFORMED = 1 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message Crash {
+  enum Code {
+    CRASH_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    CRASH_OOM = 1 [(metadata) = { exit_code: 33 }];
+  }
+
+  Code code = 1;
+
+  // The cause chain of the crash, with the outermost throwable first. Limited
+  // to the outermost exception and at most 4 nested causes (so, max size of 5).
+  repeated Throwable causes = 2;
+}
+
+message Throwable {
+  // The class name of the java.lang.Throwable.
+  string throwable_class = 1;
+  // The throwable's message.
+  string message = 2;
+  // The result of calling toString on the deepest (i.e. closest to the
+  // throwable's construction site) 1000 (or fewer) StackTraceElements.
+  // Unstructured to simplify string matching.
+  repeated string stack_trace = 3;
+}
+
+message SymlinkForest {
+  enum Code {
+    SYMLINK_FOREST_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    TOPLEVEL_OUTDIR_PACKAGE_PATH_CONFLICT = 1 [(metadata) = { exit_code: 2 }];
+    TOPLEVEL_OUTDIR_USED_AS_SOURCE = 2 [(metadata) = { exit_code: 2 }];
+    CREATION_FAILED = 3 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message PackageOptions {
+  enum Code {
+    reserved 2, 3;  // For internal use
+
+    PACKAGE_OPTIONS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    PACKAGE_PATH_INVALID = 1 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message RemoteExecution {
+  // The association of some of these options with exit code 2, "command line
+  // error", seems sketchy. Especially worth reconsidering are the channel init
+  // failure modes, which can correspond to failures occurring in gRPC setup.
+  // These all correspond with current Bazel behavior.
+  enum Code {
+    REMOTE_EXECUTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    CAPABILITIES_QUERY_FAILURE = 1 [(metadata) = { exit_code: 34 }];
+    CREDENTIALS_INIT_FAILURE = 2 [(metadata) = { exit_code: 2 }];
+    CACHE_INIT_FAILURE = 3 [(metadata) = { exit_code: 2 }];
+    RPC_LOG_FAILURE = 4 [(metadata) = { exit_code: 2 }];
+    EXEC_CHANNEL_INIT_FAILURE = 5 [(metadata) = { exit_code: 2 }];
+    CACHE_CHANNEL_INIT_FAILURE = 6 [(metadata) = { exit_code: 2 }];
+    DOWNLOADER_CHANNEL_INIT_FAILURE = 7 [(metadata) = { exit_code: 2 }];
+    LOG_DIR_CLEANUP_FAILURE = 8 [(metadata) = { exit_code: 36 }];
+    CLIENT_SERVER_INCOMPATIBLE = 9 [(metadata) = { exit_code: 34 }];
+    DOWNLOADED_INPUTS_DELETION_FAILURE = 10 [(metadata) = { exit_code: 34 }];
+    REMOTE_DOWNLOAD_OUTPUTS_MINIMAL_WITHOUT_INMEMORY_DOTD = 11
+        [(metadata) = { exit_code: 2 }];
+    REMOTE_DOWNLOAD_OUTPUTS_MINIMAL_WITHOUT_INMEMORY_JDEPS = 12
+        [(metadata) = { exit_code: 2 }];
+    INCOMPLETE_OUTPUT_DOWNLOAD_CLEANUP_FAILURE = 13
+        [(metadata) = { exit_code: 36 }];
+    REMOTE_DEFAULT_PLATFORM_PROPERTIES_PARSE_FAILURE = 14
+        [(metadata) = { exit_code: 1 }];
+    ILLEGAL_OUTPUT = 15 [(metadata) = { exit_code: 1 }];
+    INVALID_EXEC_AND_PLATFORM_PROPERTIES = 16 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message Execution {
+  enum Code {
+    EXECUTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    EXECUTION_LOG_INITIALIZATION_FAILURE = 1 [(metadata) = { exit_code: 2 }];
+    EXECUTION_LOG_WRITE_FAILURE = 2 [(metadata) = { exit_code: 36 }];
+    EXECROOT_CREATION_FAILURE = 3 [(metadata) = { exit_code: 36 }];
+    TEMP_ACTION_OUTPUT_DIRECTORY_DELETION_FAILURE = 4
+        [(metadata) = { exit_code: 36 }];
+    TEMP_ACTION_OUTPUT_DIRECTORY_CREATION_FAILURE = 5
+        [(metadata) = { exit_code: 36 }];
+    PERSISTENT_ACTION_OUTPUT_DIRECTORY_CREATION_FAILURE = 6
+        [(metadata) = { exit_code: 36 }];
+    LOCAL_OUTPUT_DIRECTORY_SYMLINK_FAILURE = 7 [(metadata) = { exit_code: 36 }];
+    reserved 8;  // was ACTION_INPUT_FILES_MISSING, now mostly
+                 // SOURCE_INPUT_MISSING
+    LOCAL_TEMPLATE_EXPANSION_FAILURE = 9 [(metadata) = { exit_code: 36 }];
+    INPUT_DIRECTORY_CHECK_IO_EXCEPTION = 10 [(metadata) = { exit_code: 36 }];
+    EXTRA_ACTION_OUTPUT_CREATION_FAILURE = 11 [(metadata) = { exit_code: 36 }];
+    TEST_RUNNER_IO_EXCEPTION = 12 [(metadata) = { exit_code: 36 }];
+    FILE_WRITE_IO_EXCEPTION = 13 [(metadata) = { exit_code: 36 }];
+    TEST_OUT_ERR_IO_EXCEPTION = 14 [(metadata) = { exit_code: 36 }];
+    SYMLINK_TREE_MANIFEST_COPY_IO_EXCEPTION = 15
+        [(metadata) = { exit_code: 36 }];
+    SYMLINK_TREE_MANIFEST_LINK_IO_EXCEPTION = 16
+        [(metadata) = { exit_code: 36 }];
+    SYMLINK_TREE_CREATION_IO_EXCEPTION = 17 [(metadata) = { exit_code: 36 }];
+    SYMLINK_TREE_CREATION_COMMAND_EXCEPTION = 18
+        [(metadata) = { exit_code: 36 }];
+    ACTION_INPUT_READ_IO_EXCEPTION = 19 [(metadata) = { exit_code: 36 }];
+    ACTION_NOT_UP_TO_DATE = 20 [(metadata) = { exit_code: 1 }];
+    PSEUDO_ACTION_EXECUTION_PROHIBITED = 21 [(metadata) = { exit_code: 1 }];
+    DISCOVERED_INPUT_DOES_NOT_EXIST = 22 [(metadata) = { exit_code: 36 }];
+    ACTION_OUTPUTS_DELETION_FAILURE = 23 [(metadata) = { exit_code: 1 }];
+    ACTION_OUTPUTS_NOT_CREATED = 24 [(metadata) = { exit_code: 1 }];
+    ACTION_FINALIZATION_FAILURE = 25 [(metadata) = { exit_code: 1 }];
+    ACTION_INPUT_LOST = 26 [(metadata) = { exit_code: 1 }];
+    FILESYSTEM_CONTEXT_UPDATE_FAILURE = 27 [(metadata) = { exit_code: 1 }];
+    ACTION_OUTPUT_CLOSE_FAILURE = 28 [(metadata) = { exit_code: 1 }];
+    INPUT_DISCOVERY_IO_EXCEPTION = 29 [(metadata) = { exit_code: 1 }];
+    TREE_ARTIFACT_DIRECTORY_CREATION_FAILURE = 30
+        [(metadata) = { exit_code: 1 }];
+    ACTION_OUTPUT_DIRECTORY_CREATION_FAILURE = 31
+        [(metadata) = { exit_code: 1 }];
+    ACTION_FS_OUTPUT_DIRECTORY_CREATION_FAILURE = 32
+        [(metadata) = { exit_code: 1 }];
+    ACTION_FS_OUT_ERR_DIRECTORY_CREATION_FAILURE = 33
+        [(metadata) = { exit_code: 1 }];
+    NON_ACTION_EXECUTION_FAILURE = 34 [(metadata) = { exit_code: 1 }];
+    CYCLE = 35 [(metadata) = { exit_code: 1 }];
+    SOURCE_INPUT_MISSING = 36 [(metadata) = { exit_code: 1 }];
+    UNEXPECTED_EXCEPTION = 37 [(metadata) = { exit_code: 1 }];
+    reserved 38;
+    SOURCE_INPUT_IO_EXCEPTION = 39 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+// Failure details about Bazel's WORKSPACE features.
+message Workspaces {
+  enum Code {
+    WORKSPACES_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    WORKSPACES_LOG_INITIALIZATION_FAILURE = 1 [(metadata) = { exit_code: 2 }];
+    WORKSPACES_LOG_WRITE_FAILURE = 2 [(metadata) = { exit_code: 36 }];
+
+    // See `managed_directories` in
+    // https://bazel.build/rules/lib/globals#workspace.
+    ILLEGAL_WORKSPACE_FILE_SYMLINK_WITH_MANAGED_DIRECTORIES = 3
+        [(metadata) = { exit_code: 1 }];
+    WORKSPACE_FILE_READ_FAILURE_WITH_MANAGED_DIRECTORIES = 4
+        [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message CrashOptions {
+  enum Code {
+    CRASH_OPTIONS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    reserved 1; // For internal use
+  }
+
+  Code code = 1;
+}
+
+message Filesystem {
+  enum Code {
+    FILESYSTEM_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    reserved 1;
+    reserved 2;
+    EMBEDDED_BINARIES_ENUMERATION_FAILURE = 3 [(metadata) = { exit_code: 36 }];
+    SERVER_PID_TXT_FILE_READ_FAILURE = 4 [(metadata) = { exit_code: 36 }];
+    SERVER_FILE_WRITE_FAILURE = 5 [(metadata) = { exit_code: 36 }];
+    DEFAULT_DIGEST_HASH_FUNCTION_INVALID_VALUE = 6
+        [(metadata) = { exit_code: 2 }];
+
+    reserved 7; // For internal use
+  }
+
+  Code code = 1;
+}
+
+message ExecutionOptions {
+  // All numerical exit code associations correspond to pre-existing Bazel
+  // behavior. These associations are suspicious:
+  // - REQUESTED_STRATEGY_INCOMPATIBLE_WITH_SANDBOXING (instead: 2?)
+  // - DEPRECATED_LOCAL_RESOURCES_USED (instead: 2?)
+  // TODO(b/138456686): Revise these after the (intentionally non-breaking)
+  //  initial rollout of FailureDetail-based encoding.
+  enum Code {
+    EXECUTION_OPTIONS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    INVALID_STRATEGY = 3 [(metadata) = { exit_code: 2 }];
+    REQUESTED_STRATEGY_INCOMPATIBLE_WITH_SANDBOXING = 4
+        [(metadata) = { exit_code: 36 }];
+    DEPRECATED_LOCAL_RESOURCES_USED = 5 [(metadata) = { exit_code: 36 }];
+    INVALID_CYCLIC_DYNAMIC_STRATEGY = 6 [(metadata) = { exit_code: 36 }];
+    RESTRICTION_UNMATCHED_TO_ACTION_CONTEXT = 7 [(metadata) = { exit_code: 2 }];
+    REMOTE_FALLBACK_STRATEGY_NOT_ABSTRACT_SPAWN = 8
+        [(metadata) = { exit_code: 2 }];
+    STRATEGY_NOT_FOUND = 9 [(metadata) = { exit_code: 2 }];
+    DYNAMIC_STRATEGY_NOT_SANDBOXED = 10 [(metadata) = { exit_code: 2 }];
+
+    reserved 1, 2; // For internal use
+  }
+
+  Code code = 1;
+}
+
+message Command {
+  enum Code {
+    // The name "COMMAND_UNKNOWN" might reasonably be interpreted as "command
+    // not found". The enum's default value should represent a lack of knowledge
+    // about the failure instead.
+    COMMAND_FAILURE_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    COMMAND_NOT_FOUND = 1 [(metadata) = { exit_code: 2 }];
+    ANOTHER_COMMAND_RUNNING = 2 [(metadata) = { exit_code: 9 }];
+    PREVIOUSLY_SHUTDOWN = 3 [(metadata) = { exit_code: 36 }];
+    STARLARK_CPU_PROFILE_FILE_INITIALIZATION_FAILURE = 4
+        [(metadata) = { exit_code: 36 }];
+    STARLARK_CPU_PROFILING_INITIALIZATION_FAILURE = 5
+        [(metadata) = { exit_code: 36 }];
+    STARLARK_CPU_PROFILE_FILE_WRITE_FAILURE = 6
+        [(metadata) = { exit_code: 36 }];
+    INVOCATION_POLICY_PARSE_FAILURE = 7 [(metadata) = { exit_code: 2 }];
+    INVOCATION_POLICY_INVALID = 8 [(metadata) = { exit_code: 2 }];
+    OPTIONS_PARSE_FAILURE = 9 [(metadata) = { exit_code: 2 }];
+    STARLARK_OPTIONS_PARSE_FAILURE = 10 [(metadata) = { exit_code: 2 }];
+    ARGUMENTS_NOT_RECOGNIZED = 11 [(metadata) = { exit_code: 2 }];
+    NOT_IN_WORKSPACE = 12 [(metadata) = { exit_code: 2 }];
+    SPACES_IN_WORKSPACE_PATH = 13 [(metadata) = { exit_code: 36 }];
+    IN_OUTPUT_DIRECTORY = 14 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message GrpcServer {
+  enum Code {
+    GRPC_SERVER_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    GRPC_SERVER_NOT_COMPILED_IN = 1 [(metadata) = { exit_code: 37 }];
+    SERVER_BIND_FAILURE = 2 [(metadata) = { exit_code: 1 }];
+    BAD_COOKIE = 3 [(metadata) = { exit_code: 36 }];
+    NO_CLIENT_DESCRIPTION = 4 [(metadata) = { exit_code: 36 }];
+    reserved 5; // For internal use
+  }
+
+  Code code = 1;
+}
+
+message CanonicalizeFlags {
+  enum Code {
+    CANONICALIZE_FLAGS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    FOR_COMMAND_INVALID = 1 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+// Failure modes described by this category pertain to the Bazel invocation
+// configuration consumed by Bazel's analysis phase. This category is not
+// intended as a grab-bag for all Bazel flag value constraint violations, which
+// instead generally belong in the category for the subsystem whose flag values
+// participate in the constraint.
+message BuildConfiguration {
+  enum Code {
+    BUILD_CONFIGURATION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    PLATFORM_MAPPING_EVALUATION_FAILURE = 1 [(metadata) = { exit_code: 2 }];
+    PLATFORM_MAPPINGS_FILE_IS_DIRECTORY = 2 [(metadata) = { exit_code: 1 }];
+    PLATFORM_MAPPINGS_FILE_NOT_FOUND = 3 [(metadata) = { exit_code: 1 }];
+    TOP_LEVEL_CONFIGURATION_CREATION_FAILURE = 4
+        [(metadata) = { exit_code: 1 }];
+    INVALID_CONFIGURATION = 5 [(metadata) = { exit_code: 2 }];
+    INVALID_BUILD_OPTIONS = 6 [(metadata) = { exit_code: 2 }];
+    MULTI_CPU_PREREQ_UNMET = 7 [(metadata) = { exit_code: 2 }];
+    HEURISTIC_INSTRUMENTATION_FILTER_INVALID = 8
+        [(metadata) = { exit_code: 2 }];
+    CYCLE = 9 [(metadata) = { exit_code: 2 }];
+    CONFLICTING_CONFIGURATIONS = 10 [(metadata) = { exit_code: 2 }];
+    // This can come from either an invalid user-specified option or a
+    // configuration transition. There's no sure-fire way to distinguish the two
+    // possibilities in Bazel, so we go with the more straightforward
+    // command-line error exit code 2.
+    INVALID_OUTPUT_DIRECTORY_MNEMONIC = 11 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message InfoCommand {
+  // The distinction between a failure to write a single info item and a failure
+  // to write them all seems sketchy. Why do they have different exit codes?
+  // This reflects current Bazel behavior, but deserves more thought.
+  enum Code {
+    INFO_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    TOO_MANY_KEYS = 1 [(metadata) = { exit_code: 2 }];
+    KEY_NOT_RECOGNIZED = 2 [(metadata) = { exit_code: 2 }];
+    INFO_BLOCK_WRITE_FAILURE = 3 [(metadata) = { exit_code: 7 }];
+    ALL_INFO_WRITE_FAILURE = 4 [(metadata) = { exit_code: 36 }];
+  }
+
+  Code code = 1;
+}
+
+message MemoryOptions {
+  enum Code {
+    MEMORY_OPTIONS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    EXPERIMENTAL_OOM_MORE_EAGERLY_THRESHOLD_INVALID_VALUE = 1
+        [(metadata) = { exit_code: 2 }];
+    EXPERIMENTAL_OOM_MORE_EAGERLY_NO_TENURED_COLLECTORS_FOUND = 2
+        [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message Query {
+  enum Code {
+    QUERY_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    QUERY_FILE_WITH_COMMAND_LINE_EXPRESSION = 1 [(metadata) = { exit_code: 2 }];
+    QUERY_FILE_READ_FAILURE = 2 [(metadata) = { exit_code: 2 }];
+    COMMAND_LINE_EXPRESSION_MISSING = 3 [(metadata) = { exit_code: 2 }];
+    OUTPUT_FORMAT_INVALID = 4 [(metadata) = { exit_code: 2 }];
+    GRAPHLESS_PREREQ_UNMET = 5 [(metadata) = { exit_code: 2 }];
+    QUERY_OUTPUT_WRITE_FAILURE = 6 [(metadata) = { exit_code: 36 }];
+    QUERY_STDOUT_FLUSH_FAILURE = 13 [(metadata) = { exit_code: 36 }];
+    ANALYSIS_QUERY_PREREQ_UNMET = 14 [(metadata) = { exit_code: 2 }];
+    QUERY_RESULTS_FLUSH_FAILURE = 15 [(metadata) = { exit_code: 36 }];
+    // Deprecated - folded into SYNTAX_ERROR.
+    DEPRECATED_UNCLOSED_QUOTATION_EXPRESSION_ERROR = 16
+        [(metadata) = { exit_code: 2 }];
+    VARIABLE_NAME_INVALID = 17 [(metadata) = { exit_code: 7 }];
+    VARIABLE_UNDEFINED = 18 [(metadata) = { exit_code: 7 }];
+    BUILDFILES_AND_LOADFILES_CANNOT_USE_OUTPUT_LOCATION_ERROR = 19
+        [(metadata) = { exit_code: 2 }];
+    BUILD_FILE_ERROR = 20 [(metadata) = { exit_code: 7 }];
+    CYCLE = 21 [(metadata) = { exit_code: 7 }];
+    UNIQUE_SKYKEY_THRESHOLD_EXCEEDED = 22 [(metadata) = { exit_code: 7 }];
+    TARGET_NOT_IN_UNIVERSE_SCOPE = 23 [(metadata) = { exit_code: 2 }];
+    INVALID_FULL_UNIVERSE_EXPRESSION = 24 [(metadata) = { exit_code: 7 }];
+    UNIVERSE_SCOPE_LIMIT_EXCEEDED = 25 [(metadata) = { exit_code: 7 }];
+    INVALIDATION_LIMIT_EXCEEDED = 26 [(metadata) = { exit_code: 7 }];
+    OUTPUT_FORMAT_PREREQ_UNMET = 27 [(metadata) = { exit_code: 2 }];
+    ARGUMENTS_MISSING = 28 [(metadata) = { exit_code: 7 }];
+    RBUILDFILES_FUNCTION_REQUIRES_SKYQUERY = 29 [(metadata) = { exit_code: 7 }];
+    FULL_TARGETS_NOT_SUPPORTED = 30 [(metadata) = { exit_code: 7 }];
+    // Deprecated - folded into SYNTAX_ERROR.
+    DEPRECATED_UNEXPECTED_TOKEN_ERROR = 31 [(metadata) = { exit_code: 2 }];
+    // Deprecated - folded into SYNTAX_ERROR.
+    DEPRECATED_INTEGER_LITERAL_MISSING = 32 [(metadata) = { exit_code: 2 }];
+    // Deprecated - folded into SYNTAX_ERROR.
+    DEPRECATED_INVALID_STARTING_CHARACTER_ERROR = 33
+        [(metadata) = { exit_code: 2 }];
+    // Deprecated - folded into SYNTAX_ERROR.
+    DEPRECATED_PREMATURE_END_OF_INPUT_ERROR = 34
+        [(metadata) = { exit_code: 2 }];
+    // Indicates the user specified invalid query syntax.
+    SYNTAX_ERROR = 35 [(metadata) = { exit_code: 2 }];
+    OUTPUT_FORMATTER_IO_EXCEPTION = 36 [(metadata) = { exit_code: 36 }];
+    SKYQUERY_TRANSITIVE_TARGET_ERROR = 37 [(metadata) = { exit_code: 7 }];
+    SKYQUERY_TARGET_EXCEPTION = 38 [(metadata) = { exit_code: 7 }];
+    INVALID_LABEL_IN_TEST_SUITE = 39 [(metadata) = { exit_code: 7 }];
+    // Indicates any usage of flags that must not be combined.
+    ILLEGAL_FLAG_COMBINATION = 40 [(metadata) = { exit_code: 2 }];
+    // Indicates a non-detailed exception that halted a query. This is a
+    // deficiency in Blaze/Bazel and code should be changed to attach a detailed
+    // exit code to this failure mode.
+    NON_DETAILED_ERROR = 41 [(metadata) = { exit_code: 1 }];
+
+    reserved 7 to 12; // For internal use
+  }
+
+  Code code = 1;
+}
+
+message LocalExecution {
+  enum Code {
+    LOCAL_EXECUTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    LOCKFREE_OUTPUT_PREREQ_UNMET = 1 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message ActionCache {
+  enum Code {
+    ACTION_CACHE_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    INITIALIZATION_FAILURE = 1 [(metadata) = { exit_code: 36 }];
+  }
+
+  Code code = 1;
+}
+
+message FetchCommand {
+  enum Code {
+    FETCH_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    EXPRESSION_MISSING = 1 [(metadata) = { exit_code: 2 }];
+    OPTIONS_INVALID = 2 [(metadata) = { exit_code: 2 }];
+    QUERY_PARSE_ERROR = 3 [(metadata) = { exit_code: 2 }];
+    QUERY_EVALUATION_ERROR = 4 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message SyncCommand {
+  enum Code {
+    SYNC_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    PACKAGE_LOOKUP_ERROR = 1 [(metadata) = { exit_code: 7 }];
+    WORKSPACE_EVALUATION_ERROR = 2 [(metadata) = { exit_code: 7 }];
+    REPOSITORY_FETCH_ERRORS = 3 [(metadata) = { exit_code: 7 }];
+    REPOSITORY_NAME_INVALID = 4 [(metadata) = { exit_code: 7 }];
+  }
+
+  Code code = 1;
+}
+
+message Sandbox {
+  enum Code {
+    SANDBOX_FAILURE_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    INITIALIZATION_FAILURE = 1 [(metadata) = { exit_code: 36 }];
+    EXECUTION_IO_EXCEPTION = 2 [(metadata) = { exit_code: 36 }];
+    DOCKER_COMMAND_FAILURE = 3 [(metadata) = { exit_code: 1 }];
+    NO_DOCKER_IMAGE = 4 [(metadata) = { exit_code: 1 }];
+    DOCKER_IMAGE_PREPARATION_FAILURE = 5 [(metadata) = { exit_code: 1 }];
+    BIND_MOUNT_ANALYSIS_FAILURE = 6 [(metadata) = { exit_code: 1 }];
+    MOUNT_SOURCE_DOES_NOT_EXIST = 7 [(metadata) = { exit_code: 1 }];
+    MOUNT_SOURCE_TARGET_TYPE_MISMATCH = 8 [(metadata) = { exit_code: 1 }];
+    MOUNT_TARGET_DOES_NOT_EXIST = 9 [(metadata) = { exit_code: 1 }];
+    SUBPROCESS_START_FAILED = 10 [(metadata) = { exit_code: 36 }];
+    FORBIDDEN_INPUT = 11 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message IncludeScanning {
+  enum Code {
+    INCLUDE_SCANNING_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    INITIALIZE_INCLUDE_HINTS_ERROR = 1 [(metadata) = { exit_code: 36 }];
+    SCANNING_IO_EXCEPTION = 2 [(metadata) = { exit_code: 36 }];
+    INCLUDE_HINTS_FILE_NOT_IN_PACKAGE = 3 [(metadata) = { exit_code: 36 }];
+    INCLUDE_HINTS_READ_FAILURE = 4 [(metadata) = { exit_code: 36 }];
+    ILLEGAL_ABSOLUTE_PATH = 5 [(metadata) = { exit_code: 1 }];
+    // TODO(b/166268889): this code should be deprecated in favor of more finely
+    //  resolved loading-phase codes.
+    PACKAGE_LOAD_FAILURE = 6 [(metadata) = { exit_code: 1 }];
+    USER_PACKAGE_LOAD_FAILURE = 7 [(metadata) = { exit_code: 1 }];
+    SYSTEM_PACKAGE_LOAD_FAILURE = 8 [(metadata) = { exit_code: 36 }];
+    UNDIFFERENTIATED_PACKAGE_LOAD_FAILURE = 9 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+  PackageLoading.Code package_loading_code = 2;
+}
+
+message TestCommand {
+  enum Code {
+    TEST_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    NO_TEST_TARGETS = 1 [(metadata) = { exit_code: 4 }];
+    TEST_WITH_NOANALYZE = 2 [(metadata) = { exit_code: 1 }];
+    TESTS_FAILED = 3 [(metadata) = { exit_code: 3 }];
+  }
+
+  Code code = 1;
+}
+
+message ActionQuery {
+  // All numerical exit code associations correspond to pre-existing Bazel
+  // behavior. These associations are suspicious:
+  // - COMMAND_LINE_EXPANSION_FAILURE: this is associated with 2, the numerical
+  //     exit code for "bad Bazel command line", but is generated when an
+  //     action's command line fails to expand, which sounds similar but is
+  //     completely different.
+  // - OUTPUT_FAILURE: this is associated with 6, an undocumented exit code.
+  // - INVALID_AQUERY_EXPRESSION: this is associate with 1, which is not
+  //    documented for (a)query.
+  // TODO(b/138456686): Revise these after the (intentionally non-breaking)
+  //  initial rollout of FailureDetail-based encoding.
+  enum Code {
+    ACTION_QUERY_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    COMMAND_LINE_EXPANSION_FAILURE = 1 [(metadata) = { exit_code: 2 }];
+    OUTPUT_FAILURE = 2 [(metadata) = { exit_code: 6 }];
+    COMMAND_LINE_EXPRESSION_MISSING = 3 [(metadata) = { exit_code: 2 }];
+    EXPRESSION_PARSE_FAILURE = 4 [(metadata) = { exit_code: 2 }];
+    SKYFRAME_STATE_WITH_COMMAND_LINE_EXPRESSION = 5
+        [(metadata) = { exit_code: 2 }];
+    INVALID_AQUERY_EXPRESSION = 6 [(metadata) = { exit_code: 1 }];
+    SKYFRAME_STATE_PREREQ_UNMET = 7 [(metadata) = { exit_code: 2 }];
+    AQUERY_OUTPUT_TOO_BIG = 8 [(metadata) = { exit_code: 7 }];
+    ILLEGAL_PATTERN_SYNTAX = 9 [(metadata) = { exit_code: 2 }];
+    INCORRECT_ARGUMENTS = 10 [(metadata) = { exit_code: 2 }];
+    TOP_LEVEL_TARGETS_WITH_SKYFRAME_STATE_NOT_SUPPORTED = 11
+        [(metadata) = { exit_code: 2 }];
+    SKYFRAME_STATE_AFTER_EXECUTION = 12 [(metadata) = { exit_code: 1 }];
+    LABELS_FUNCTION_NOT_SUPPORTED = 13 [(metadata) = { exit_code: 2 }];
+    TEMPLATE_EXPANSION_FAILURE = 14 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message TargetPatterns {
+  enum Code {
+    TARGET_PATTERNS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    TARGET_PATTERN_FILE_WITH_COMMAND_LINE_PATTERN = 1
+        [(metadata) = { exit_code: 2 }];
+    TARGET_PATTERN_FILE_READ_FAILURE = 2 [(metadata) = { exit_code: 2 }];
+    TARGET_PATTERN_PARSE_FAILURE = 3 [(metadata) = { exit_code: 1 }];
+    PACKAGE_NOT_FOUND = 4 [(metadata) = { exit_code: 1 }];
+    TARGET_FORMAT_INVALID = 5 [(metadata) = { exit_code: 1 }];
+    ABSOLUTE_TARGET_PATTERN_INVALID = 6 [(metadata) = { exit_code: 1 }];
+    CANNOT_DETERMINE_TARGET_FROM_FILENAME = 7 [(metadata) = { exit_code: 1 }];
+    LABEL_SYNTAX_ERROR = 8 [(metadata) = { exit_code: 1 }];
+    TARGET_CANNOT_BE_EMPTY_STRING = 9 [(metadata) = { exit_code: 1 }];
+    PACKAGE_PART_CANNOT_END_IN_SLASH = 10 [(metadata) = { exit_code: 1 }];
+    CYCLE = 11 [(metadata) = { exit_code: 1 }];
+    CANNOT_PRELOAD_TARGET = 12 [(metadata) = { exit_code: 1 }];
+    TARGETS_MISSING = 13 [(metadata) = { exit_code: 1 }];
+    RECURSIVE_TARGET_PATTERNS_NOT_ALLOWED = 14 [(metadata) = { exit_code: 1 }];
+    UP_LEVEL_REFERENCES_NOT_ALLOWED = 15 [(metadata) = { exit_code: 1 }];
+    NEGATIVE_TARGET_PATTERN_NOT_ALLOWED = 16 [(metadata) = { exit_code: 1 }];
+    TARGET_MUST_BE_A_FILE = 17 [(metadata) = { exit_code: 1 }];
+    DEPENDENCY_NOT_FOUND = 18 [(metadata) = { exit_code: 1 }];
+    PACKAGE_NAME_INVALID = 19 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message CleanCommand {
+  enum Code {
+    CLEAN_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    OUTPUT_SERVICE_CLEAN_FAILURE = 1 [(metadata) = { exit_code: 6 }];
+    ACTION_CACHE_CLEAN_FAILURE = 2 [(metadata) = { exit_code: 36 }];
+    OUT_ERR_CLOSE_FAILURE = 3 [(metadata) = { exit_code: 36 }];
+    OUTPUT_BASE_DELETE_FAILURE = 4 [(metadata) = { exit_code: 36 }];
+    OUTPUT_BASE_TEMP_MOVE_FAILURE = 5 [(metadata) = { exit_code: 36 }];
+    ASYNC_OUTPUT_BASE_DELETE_FAILURE = 6 [(metadata) = { exit_code: 6 }];
+    EXECROOT_DELETE_FAILURE = 7 [(metadata) = { exit_code: 36 }];
+    EXECROOT_TEMP_MOVE_FAILURE = 8 [(metadata) = { exit_code: 36 }];
+    ASYNC_EXECROOT_DELETE_FAILURE = 9 [(metadata) = { exit_code: 6 }];
+    ARGUMENTS_NOT_RECOGNIZED = 10 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message ConfigCommand {
+  enum Code {
+    CONFIG_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    TOO_MANY_CONFIG_IDS = 1 [(metadata) = { exit_code: 2 }];
+    CONFIGURATION_NOT_FOUND = 2 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message ConfigurableQuery {
+  enum Code {
+    CONFIGURABLE_QUERY_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    COMMAND_LINE_EXPRESSION_MISSING = 1 [(metadata) = { exit_code: 2 }];
+    EXPRESSION_PARSE_FAILURE = 2 [(metadata) = { exit_code: 2 }];
+    FILTERS_NOT_SUPPORTED = 3 [(metadata) = { exit_code: 2 }];
+    BUILDFILES_FUNCTION_NOT_SUPPORTED = 4 [(metadata) = { exit_code: 2 }];
+    SIBLINGS_FUNCTION_NOT_SUPPORTED = 5 [(metadata) = { exit_code: 2 }];
+    VISIBLE_FUNCTION_NOT_SUPPORTED = 6 [(metadata) = { exit_code: 2 }];
+    ATTRIBUTE_MISSING = 7 [(metadata) = { exit_code: 2 }];
+    INCORRECT_CONFIG_ARGUMENT_ERROR = 8 [(metadata) = { exit_code: 2 }];
+    TARGET_MISSING = 9 [(metadata) = { exit_code: 2 }];
+    STARLARK_SYNTAX_ERROR = 10 [(metadata) = { exit_code: 2 }];
+    STARLARK_EVAL_ERROR = 11 [(metadata) = { exit_code: 2 }];
+    // Indicates failure to correctly define a format function
+    FORMAT_FUNCTION_ERROR = 12 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message DumpCommand {
+  enum Code {
+    DUMP_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    NO_OUTPUT_SPECIFIED = 1 [(metadata) = { exit_code: 7 }];
+    ACTION_CACHE_DUMP_FAILED = 2 [(metadata) = { exit_code: 7 }];
+    COMMAND_LINE_EXPANSION_FAILURE = 3 [(metadata) = { exit_code: 7 }];
+    ACTION_GRAPH_DUMP_FAILED = 4 [(metadata) = { exit_code: 7 }];
+    STARLARK_HEAP_DUMP_FAILED = 5 [(metadata) = { exit_code: 8 }];
+     reserved 6; // For internal use
+  }
+
+  Code code = 1;
+}
+
+message HelpCommand {
+  enum Code {
+    HELP_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    MISSING_ARGUMENT = 1 [(metadata) = { exit_code: 2 }];
+    COMMAND_NOT_FOUND = 2 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message MobileInstall {
+  enum Code {
+    MOBILE_INSTALL_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    CLASSIC_UNSUPPORTED = 1 [(metadata) = { exit_code: 2 }];
+    NO_TARGET_SPECIFIED = 2 [(metadata) = { exit_code: 2 }];
+    MULTIPLE_TARGETS_SPECIFIED = 3 [(metadata) = { exit_code: 2 }];
+    TARGET_TYPE_INVALID = 4 [(metadata) = { exit_code: 6 }];
+    NON_ZERO_EXIT = 5 [(metadata) = { exit_code: 6 }];
+    ERROR_RUNNING_PROGRAM = 6 [(metadata) = { exit_code: 6 }];
+  }
+
+  Code code = 1;
+}
+
+message ProfileCommand {
+  enum Code {
+    PROFILE_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    OLD_BINARY_FORMAT_UNSUPPORTED = 1 [(metadata) = { exit_code: 1 }];
+    FILE_READ_FAILURE = 2 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message RunCommand {
+  enum Code {
+    RUN_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    NO_TARGET_SPECIFIED = 1 [(metadata) = { exit_code: 2 }];
+    TOO_MANY_TARGETS_SPECIFIED = 2 [(metadata) = { exit_code: 2 }];
+    TARGET_NOT_EXECUTABLE = 3 [(metadata) = { exit_code: 2 }];
+    TARGET_BUILT_BUT_PATH_NOT_EXECUTABLE = 4 [(metadata) = { exit_code: 1 }];
+    TARGET_BUILT_BUT_PATH_VALIDATION_FAILED = 5
+        [(metadata) = { exit_code: 36 }];
+    RUN_UNDER_TARGET_NOT_BUILT = 6 [(metadata) = { exit_code: 2 }];
+    RUN_PREREQ_UNMET = 7 [(metadata) = { exit_code: 2 }];
+    TOO_MANY_TEST_SHARDS_OR_RUNS = 8 [(metadata) = { exit_code: 2 }];
+    TEST_ENVIRONMENT_SETUP_FAILURE = 9 [(metadata) = { exit_code: 36 }];
+    COMMAND_LINE_EXPANSION_FAILURE = 10 [(metadata) = { exit_code: 36 }];
+    NO_SHELL_SPECIFIED = 11 [(metadata) = { exit_code: 2 }];
+    SCRIPT_WRITE_FAILURE = 12 [(metadata) = { exit_code: 6 }];
+    RUNFILES_DIRECTORIES_CREATION_FAILURE = 13 [(metadata) = { exit_code: 36 }];
+    RUNFILES_SYMLINKS_CREATION_FAILURE = 14 [(metadata) = { exit_code: 36 }];
+    TEST_ENVIRONMENT_SETUP_INTERRUPTED = 15 [(metadata) = { exit_code: 8 }];
+  }
+
+  Code code = 1;
+}
+
+message VersionCommand {
+  enum Code {
+    VERSION_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    NOT_AVAILABLE = 1 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message PrintActionCommand {
+  enum Code {
+    PRINT_ACTION_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    TARGET_NOT_FOUND = 1 [(metadata) = { exit_code: 1 }];
+    COMMAND_LINE_EXPANSION_FAILURE = 2 [(metadata) = { exit_code: 1 }];
+    TARGET_KIND_UNSUPPORTED = 3 [(metadata) = { exit_code: 1 }];
+    ACTIONS_NOT_FOUND = 4 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message WorkspaceStatus {
+  enum Code {
+    WORKSPACE_STATUS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    NON_ZERO_EXIT = 1 [(metadata) = { exit_code: 1 }];
+    ABNORMAL_TERMINATION = 2 [(metadata) = { exit_code: 1 }];
+    EXEC_FAILED = 3 [(metadata) = { exit_code: 1 }];
+    PARSE_FAILURE = 4 [(metadata) = { exit_code: 36 }];
+    VALIDATION_FAILURE = 5 [(metadata) = { exit_code: 1 }];
+    CONTENT_UPDATE_IO_EXCEPTION = 6 [(metadata) = { exit_code: 1 }];
+    STDERR_IO_EXCEPTION = 7 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message JavaCompile {
+  enum Code {
+    JAVA_COMPILE_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    REDUCED_CLASSPATH_FAILURE = 1 [(metadata) = { exit_code: 1 }];
+    COMMAND_LINE_EXPANSION_FAILURE = 2 [(metadata) = { exit_code: 1 }];
+    JDEPS_READ_IO_EXCEPTION = 3 [(metadata) = { exit_code: 36 }];
+    REDUCED_CLASSPATH_FALLBACK_CLEANUP_FAILURE = 4
+        [(metadata) = { exit_code: 36 }];
+  }
+
+  Code code = 1;
+}
+
+message ActionRewinding {
+  enum Code {
+    ACTION_REWINDING_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    LOST_INPUT_TOO_MANY_TIMES = 1 [(metadata) = { exit_code: 1 }];
+    LOST_INPUT_IS_SOURCE = 2 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message CppCompile {
+  enum Code {
+    CPP_COMPILE_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    FIND_USED_HEADERS_IO_EXCEPTION = 1 [(metadata) = { exit_code: 36 }];
+    COPY_OUT_ERR_FAILURE = 2 [(metadata) = { exit_code: 36 }];
+    D_FILE_READ_FAILURE = 3 [(metadata) = { exit_code: 36 }];
+    COMMAND_GENERATION_FAILURE = 4 [(metadata) = { exit_code: 1 }];
+    MODULE_EXPANSION_TIMEOUT = 5 [(metadata) = { exit_code: 1 }];
+    INCLUDE_PATH_OUTSIDE_EXEC_ROOT = 6 [(metadata) = { exit_code: 1 }];
+    FAKE_COMMAND_GENERATION_FAILURE = 7 [(metadata) = { exit_code: 1 }];
+    UNDECLARED_INCLUSIONS = 8 [(metadata) = { exit_code: 1 }];
+    D_FILE_PARSE_FAILURE = 9 [(metadata) = { exit_code: 1 }];
+    COVERAGE_NOTES_CREATION_FAILURE = 10 [(metadata) = { exit_code: 1 }];
+    MODULE_EXPANSION_MISSING_DATA = 11 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message StarlarkAction {
+  enum Code {
+    STARLARK_ACTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    UNUSED_INPUT_LIST_READ_FAILURE = 1 [(metadata) = { exit_code: 36 }];
+    UNUSED_INPUT_LIST_FILE_NOT_FOUND = 2 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message NinjaAction {
+  enum Code {
+    NINJA_ACTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    INVALID_DEPFILE_DECLARED_DEPENDENCY = 1 [(metadata) = { exit_code: 36 }];
+    D_FILE_PARSE_FAILURE = 2 [(metadata) = { exit_code: 36 }];
+  }
+
+  Code code = 1;
+}
+
+message DynamicExecution {
+  enum Code {
+    DYNAMIC_EXECUTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    XCODE_RELATED_PREREQ_UNMET = 1 [(metadata) = { exit_code: 36 }];
+    ACTION_LOG_MOVE_FAILURE = 2 [(metadata) = { exit_code: 1 }];
+    RUN_FAILURE = 3 [(metadata) = { exit_code: 1 }];
+    NO_USABLE_STRATEGY_FOUND = 4 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}
+
+message FailAction {
+  enum Code {
+    FAIL_ACTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    INTENTIONAL_FAILURE = 1 [(metadata) = { exit_code: 1 }];
+    INCORRECT_PYTHON_VERSION = 2 [(metadata) = { exit_code: 1 }];
+    PROGUARD_SPECS_MISSING = 3 [(metadata) = { exit_code: 1 }];
+    DYNAMIC_LINKING_NOT_SUPPORTED = 4 [(metadata) = { exit_code: 1 }];
+    SOURCE_FILES_MISSING = 5 [(metadata) = { exit_code: 1 }];
+    INCORRECT_TOOLCHAIN = 6 [(metadata) = { exit_code: 1 }];
+    FRAGMENT_CLASS_MISSING = 7 [(metadata) = { exit_code: 1 }];
+    reserved 8, 9; // For internal use
+    CANT_BUILD_INCOMPATIBLE_TARGET = 10 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message SymlinkAction {
+  enum Code {
+    SYMLINK_ACTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    EXECUTABLE_INPUT_NOT_FILE = 1 [(metadata) = { exit_code: 1 }];
+    EXECUTABLE_INPUT_IS_NOT = 2 [(metadata) = { exit_code: 1 }];
+    EXECUTABLE_INPUT_CHECK_IO_EXCEPTION = 3 [(metadata) = { exit_code: 1 }];
+    LINK_CREATION_IO_EXCEPTION = 4 [(metadata) = { exit_code: 1 }];
+    LINK_TOUCH_IO_EXCEPTION = 5 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message CppLink {
+  enum Code {
+    CPP_LINK_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    COMMAND_GENERATION_FAILURE = 1 [(metadata) = { exit_code: 1 }];
+    FAKE_COMMAND_GENERATION_FAILURE = 2 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message LtoAction {
+  enum Code {
+    LTO_ACTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    INVALID_ABSOLUTE_PATH_IN_IMPORTS = 1 [(metadata) = { exit_code: 1 }];
+    MISSING_BITCODE_FILES = 2 [(metadata) = { exit_code: 1 }];
+    IMPORTS_READ_IO_EXCEPTION = 3 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message TestAction {
+  enum Code {
+    TEST_ACTION_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    NO_KEEP_GOING_TEST_FAILURE = 1 [(metadata) = { exit_code: 1 }];
+    LOCAL_TEST_PREREQ_UNMET = 2 [(metadata) = { exit_code: 1 }];
+    COMMAND_LINE_EXPANSION_FAILURE = 3 [(metadata) = { exit_code: 1 }];
+    DUPLICATE_CPU_TAGS = 4 [(metadata) = { exit_code: 1 }];
+    INVALID_CPU_TAG = 5 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message Worker {
+  enum Code {
+    WORKER_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    MULTIPLEXER_INSTANCE_REMOVAL_FAILURE = 1 [(metadata) = { exit_code: 1 }];
+    MULTIPLEXER_DOES_NOT_EXIST = 2 [(metadata) = { exit_code: 1 }];
+    NO_TOOLS = 3 [(metadata) = { exit_code: 1 }];
+    NO_FLAGFILE = 4 [(metadata) = { exit_code: 1 }];
+    VIRTUAL_INPUT_MATERIALIZATION_FAILURE = 5 [(metadata) = { exit_code: 1 }];
+    BORROW_FAILURE = 6 [(metadata) = { exit_code: 1 }];
+    PREFETCH_FAILURE = 7 [(metadata) = { exit_code: 36 }];
+    PREPARE_FAILURE = 8 [(metadata) = { exit_code: 1 }];
+    REQUEST_FAILURE = 9 [(metadata) = { exit_code: 1 }];
+    PARSE_RESPONSE_FAILURE = 10 [(metadata) = { exit_code: 1 }];
+    NO_RESPONSE = 11 [(metadata) = { exit_code: 1 }];
+    FINISH_FAILURE = 12 [(metadata) = { exit_code: 1 }];
+    FORBIDDEN_INPUT = 13 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message Analysis {
+  enum Code {
+    ANALYSIS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    LOAD_FAILURE = 1 [(metadata) = { exit_code: 1 }];
+    // TODO(b/138456686): this code should be deprecated in favor of more finely
+    //   resolved loading-phase codes.
+    GENERIC_LOADING_PHASE_FAILURE = 2 [(metadata) = { exit_code: 1 }];
+    NOT_ALL_TARGETS_ANALYZED = 3 [(metadata) = { exit_code: 1 }];
+    CYCLE = 4 [(metadata) = { exit_code: 1 }];
+    PARAMETERIZED_TOP_LEVEL_ASPECT_INVALID = 5 [(metadata) = { exit_code: 1 }];
+    ASPECT_LABEL_SYNTAX_ERROR = 6 [(metadata) = { exit_code: 1 }];
+    ASPECT_PREREQ_UNMET = 7 [(metadata) = { exit_code: 1 }];
+    ASPECT_NOT_FOUND = 8 [(metadata) = { exit_code: 1 }];
+    ACTION_CONFLICT = 9 [(metadata) = { exit_code: 1 }];
+    ARTIFACT_PREFIX_CONFLICT = 10 [(metadata) = { exit_code: 1 }];
+    UNEXPECTED_ANALYSIS_EXCEPTION = 11 [(metadata) = { exit_code: 1 }];
+    TARGETS_MISSING_ENVIRONMENTS = 12 [(metadata) = { exit_code: 1 }];
+    INVALID_ENVIRONMENT = 13 [(metadata) = { exit_code: 1 }];
+    ENVIRONMENT_MISSING_FROM_GROUPS = 14 [(metadata) = { exit_code: 1 }];
+    EXEC_GROUP_MISSING = 15 [(metadata) = { exit_code: 1 }];
+    INVALID_EXECUTION_PLATFORM = 16 [(metadata) = { exit_code: 1 }];
+    ASPECT_CREATION_FAILED = 17 [(metadata) = { exit_code: 1 }];
+    CONFIGURED_VALUE_CREATION_FAILED = 18 [(metadata) = { exit_code: 1 }];
+    INCOMPATIBLE_TARGET_REQUESTED = 19 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message PackageLoading {
+  enum Code {
+    PACKAGE_LOADING_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    WORKSPACE_FILE_ERROR = 1 [(metadata) = { exit_code: 1 }];
+    MAX_COMPUTATION_STEPS_EXCEEDED = 2 [(metadata) = { exit_code: 1 }];
+    BUILD_FILE_MISSING = 3 [(metadata) = { exit_code: 1 }];
+    REPOSITORY_MISSING = 4 [(metadata) = { exit_code: 1 }];
+    PERSISTENT_INCONSISTENT_FILESYSTEM_ERROR = 5
+        [(metadata) = { exit_code: 36 }];
+    TRANSIENT_INCONSISTENT_FILESYSTEM_ERROR = 6
+        [(metadata) = { exit_code: 36 }];
+    INVALID_NAME = 7 [(metadata) = { exit_code: 1 }];
+    // was: PRELUDE_FILE_READ_ERROR. Replaced by IMPORT_STARLARK_FILE_ERROR
+    // when the prelude was changed to be loaded as a Starlark module.
+    reserved 8;
+    EVAL_GLOBS_SYMLINK_ERROR = 9 [(metadata) = { exit_code: 1 }];
+    IMPORT_STARLARK_FILE_ERROR = 10 [(metadata) = { exit_code: 1 }];
+    PACKAGE_MISSING = 11 [(metadata) = { exit_code: 1 }];
+    TARGET_MISSING = 12 [(metadata) = { exit_code: 1 }];
+    NO_SUCH_THING = 13 [(metadata) = { exit_code: 1 }];
+    GLOB_IO_EXCEPTION = 14 [(metadata) = { exit_code: 36 }];
+    DUPLICATE_LABEL = 15 [(metadata) = { exit_code: 1 }];
+    INVALID_PACKAGE_SPECIFICATION = 16 [(metadata) = { exit_code: 1 }];
+    SYNTAX_ERROR = 17 [(metadata) = { exit_code: 1 }];
+    ENVIRONMENT_IN_DIFFERENT_PACKAGE = 18 [(metadata) = { exit_code: 1 }];
+    DEFAULT_ENVIRONMENT_UNDECLARED = 19 [(metadata) = { exit_code: 1 }];
+    ENVIRONMENT_IN_MULTIPLE_GROUPS = 20 [(metadata) = { exit_code: 1 }];
+    ENVIRONMENT_DOES_NOT_EXIST = 21 [(metadata) = { exit_code: 1 }];
+    ENVIRONMENT_INVALID = 22 [(metadata) = { exit_code: 1 }];
+    ENVIRONMENT_NOT_IN_GROUP = 23 [(metadata) = { exit_code: 1 }];
+    PACKAGE_NAME_INVALID = 24 [(metadata) = { exit_code: 1 }];
+    STARLARK_EVAL_ERROR = 25 [(metadata) = { exit_code: 1 }];
+    LICENSE_PARSE_FAILURE = 26 [(metadata) = { exit_code: 1 }];
+    DISTRIBUTIONS_PARSE_FAILURE = 27 [(metadata) = { exit_code: 1 }];
+    LABEL_CROSSES_PACKAGE_BOUNDARY = 28 [(metadata) = { exit_code: 1 }];
+    // Failure while evaluating or applying @_builtins injection. Since the
+    // builtins .bzl files are always packaged with Blaze in production, a
+    // failure here generally indicates a bug in Blaze.
+    BUILTINS_INJECTION_FAILURE = 29 [(metadata) = { exit_code: 1 }];
+    SYMLINK_CYCLE_OR_INFINITE_EXPANSION = 30 [(metadata) = { exit_code: 1 }];
+    OTHER_IO_EXCEPTION = 31 [(metadata) = { exit_code: 36 }];
+  }
+
+  Code code = 1;
+}
+
+message Toolchain {
+  enum Code {
+    TOOLCHAIN_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    MISSING_PROVIDER = 1 [(metadata) = { exit_code: 1 }];
+    INVALID_CONSTRAINT_VALUE = 2 [(metadata) = { exit_code: 1 }];
+    INVALID_PLATFORM_VALUE = 3 [(metadata) = { exit_code: 1 }];
+    INVALID_TOOLCHAIN = 4 [(metadata) = { exit_code: 1 }];
+    NO_MATCHING_EXECUTION_PLATFORM = 5 [(metadata) = { exit_code: 1 }];
+    NO_MATCHING_TOOLCHAIN = 6 [(metadata) = { exit_code: 1 }];
+    INVALID_TOOLCHAIN_TYPE = 7 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message StarlarkLoading {
+  enum Code {
+    STARLARK_LOADING_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    CYCLE = 1 [(metadata) = { exit_code: 1 }];
+    COMPILE_ERROR = 2 [(metadata) = { exit_code: 1 }];
+    PARSE_ERROR = 3 [(metadata) = { exit_code: 1 }];
+    EVAL_ERROR = 4 [(metadata) = { exit_code: 1 }];
+    CONTAINING_PACKAGE_NOT_FOUND = 5 [(metadata) = { exit_code: 1 }];
+    PACKAGE_NOT_FOUND = 6 [(metadata) = { exit_code: 1 }];
+    IO_ERROR = 7 [(metadata) = { exit_code: 1 }];
+    LABEL_CROSSES_PACKAGE_BOUNDARY = 8 [(metadata) = { exit_code: 1 }];
+    BUILTINS_ERROR = 9 [(metadata) = { exit_code: 1 }];
+    VISIBILITY_ERROR = 10 [(metadata) = { exit_code: 1 }];
+  }
+
+  Code code = 1;
+}
+
+message ExternalDeps {
+  enum Code {
+    EXTERNAL_DEPS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    MODULE_NOT_FOUND = 1 [(metadata) = { exit_code: 48 }];
+    BAD_MODULE = 2 [(metadata) = { exit_code: 48 }];
+    VERSION_RESOLUTION_ERROR = 3 [(metadata) = { exit_code: 48 }];
+    INVALID_REGISTRY_URL = 4 [(metadata) = { exit_code: 48 }];
+    ERROR_ACCESSING_REGISTRY = 5 [(metadata) = { exit_code: 32 }];
+  }
+
+  Code code = 1;
+}
+
+message DiffAwareness {
+  enum Code {
+    DIFF_AWARENESS_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    DIFF_STAT_FAILED = 1 [(metadata) = { exit_code: 36 }];
+  }
+
+  Code code = 1;
+}
+
+message ModqueryCommand {
+  enum Code {
+    MODQUERY_COMMAND_UNKNOWN = 0 [(metadata) = { exit_code: 37 }];
+    MISSING_ARGUMENTS = 1 [(metadata) = { exit_code: 2 }];
+    TOO_MANY_ARGUMENTS = 2 [(metadata) = { exit_code: 2 }];
+    INVALID_ARGUMENTS = 3 [(metadata) = { exit_code: 2 }];
+  }
+
+  Code code = 1;
+}

@@ -1,3 +1,8 @@
+# Backing up and restoring a descriptor will increment the version of the
+# descriptor before restoring it so we cannot achieve the expected behaviour in
+# this test.
+# BackupRestoreProbability: 0.0
+
 # Regression test for a situation involving creating a table in a transaction
 # and altering the index when referenced by name.
 subtest index_resolution_does_not_lead_to_new_version

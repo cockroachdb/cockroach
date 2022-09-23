@@ -29,38 +29,38 @@ import (
 //
 // It is designed to be used roughly as follows:
 //
-//   rs := keys.Range(requests)
-//   ri.Seek(scanDir, rs.Key)
-//   if !ri.NeedAnother(rs) {
-//     // All requests fit within a single range, don't use the helper.
-//     ...
-//   }
-//   helper := NewBatchTruncationHelper(scanDir, requests)
-//   for ri.Valid() {
-//     curRangeRS := rs.Intersect(ri.Token().Desc())
-//     curRangeReqs, positions, seekKey := helper.Truncate(curRangeRS)
-//     // Process curRangeReqs that touch a single range and then use positions
-//     // to reassemble the result.
-//     ...
-//     ri.Seek(scanDir, seekKey)
-//   }
+//	rs := keys.Range(requests)
+//	ri.Seek(scanDir, rs.Key)
+//	if !ri.NeedAnother(rs) {
+//	  // All requests fit within a single range, don't use the helper.
+//	  ...
+//	}
+//	helper := NewBatchTruncationHelper(scanDir, requests)
+//	for ri.Valid() {
+//	  curRangeRS := rs.Intersect(ri.Token().Desc())
+//	  curRangeReqs, positions, seekKey := helper.Truncate(curRangeRS)
+//	  // Process curRangeReqs that touch a single range and then use positions
+//	  // to reassemble the result.
+//	  ...
+//	  ri.Seek(scanDir, seekKey)
+//	}
 //
 // The helper utilizes two different strategies depending on whether the
 // requests use local keys or not:
 //
-// - a "legacy" strategy is used when requests use local keys. This strategy
-//   utilizes "legacy" methods that operate on the original requests without
-//   keeping any additional bookkeeping. In particular, it leads to truncating
-//   already processed requests as well as to iterating over the fully processed
-//   requests when searching for the next seek key.
+//   - a "legacy" strategy is used when requests use local keys. This strategy
+//     utilizes "legacy" methods that operate on the original requests without
+//     keeping any additional bookkeeping. In particular, it leads to truncating
+//     already processed requests as well as to iterating over the fully processed
+//     requests when searching for the next seek key.
 //
-// - an "optimized" strategy is used when requests only use global keys.
-//   Although this strategy has the same worst-case complexity of O(N * R) as
-//   the "legacy" strategy (where N is the number of requests, R is the number
-//   of ranges that all requests fit int, the worst-case is achieved when all
-//   requests are range-spanning and each request spans all R ranges), in
-//   practice it is much faster. See the comments on truncateAsc() and
-//   truncateDesc() for the details.
+//   - an "optimized" strategy is used when requests only use global keys.
+//     Although this strategy has the same worst-case complexity of O(N * R) as
+//     the "legacy" strategy (where N is the number of requests, R is the number
+//     of ranges that all requests fit int, the worst-case is achieved when all
+//     requests are range-spanning and each request spans all R ranges), in
+//     practice it is much faster. See the comments on truncateAsc() and
+//     truncateDesc() for the details.
 //
 // The gist of the optimized strategy is sorting all of the requests according
 // to the keys upfront and then, on each truncation iteration, examining only a
@@ -328,9 +328,9 @@ func (h *BatchTruncationHelper) MemUsage() int64 {
 //
 // For example, if
 //
-//   reqs = Put[a], Put[c], Put[b],
-//   rs = [a,bb],
-//   BatchTruncationHelper.Init(Ascending, reqs)
+//	reqs = Put[a], Put[c], Put[b],
+//	rs = [a,bb],
+//	BatchTruncationHelper.Init(Ascending, reqs)
 //
 // then BatchTruncationHelper.Truncate(rs) returns (Put[a], Put[b]), positions
 // [0,2] as well as seekKey 'c'.
@@ -340,9 +340,9 @@ func (h *BatchTruncationHelper) MemUsage() int64 {
 // Init().
 //
 // NOTE: it is assumed that
-// 1. Truncate has been called on the previous ranges that intersect with
-//    keys.Range(reqs);
-// 2. rs is intersected with the current range boundaries.
+//  1. Truncate has been called on the previous ranges that intersect with
+//     keys.Range(reqs);
+//  2. rs is intersected with the current range boundaries.
 func (h *BatchTruncationHelper) Truncate(
 	rs roachpb.RSpan,
 ) ([]roachpb.RequestUnion, []int, roachpb.RKey, error) {
@@ -397,18 +397,18 @@ func (h *BatchTruncationHelper) Truncate(
 //
 // Let's go through an example. Say we have seven original requests:
 //
-//  requests : Scan(i, l), Get(d), Scan(h, k), Scan(g, i), Get(i), Scan(d, f), Scan(b, h)
-//  positions:      0          1        2           3          4        5           6
+//	requests : Scan(i, l), Get(d), Scan(h, k), Scan(g, i), Get(i), Scan(d, f), Scan(b, h)
+//	positions:      0          1        2           3          4        5           6
 //
 // as well three ranges to iterate over:
 //
-//  ranges: range[a, e), range[e, i), range[i, m).
+//	ranges: range[a, e), range[e, i), range[i, m).
 //
 // In Init(), we have reordered the requests according to their start keys:
 //
-//  requests : Scan(b, h), Get(d), Scan(d, f), Scan(g, i), Scan(h, k), Get(i), Scan(i, l)
-//  positions:      6          1        5           3           2          4        0
-//  headers  :     [b, h)     [d)      [d, f)      [g, i)      [h, k)     [i)      [i, l)
+//	requests : Scan(b, h), Get(d), Scan(d, f), Scan(g, i), Scan(h, k), Get(i), Scan(i, l)
+//	positions:      6          1        5           3           2          4        0
+//	headers  :     [b, h)     [d)      [d, f)      [g, i)      [h, k)     [i)      [i, l)
 //
 // On the first call to Truncate(), we're using the range [a, e). We only need
 // to look at the first four requests since the fourth request starts after the
@@ -418,12 +418,14 @@ func (h *BatchTruncationHelper) Truncate(
 // mark the 2nd request Get(d) as fully processed.
 //
 // The first call prepares
-//   truncReqs = [Scan(b, e), Get(d), Scan(d, e)], positions = [6, 1, 5]
+//
+//	truncReqs = [Scan(b, e), Get(d), Scan(d, e)], positions = [6, 1, 5]
+//
 // and the internal state is now
 //
-//  requests : Scan(b, h), Get(d), Scan(d, f), Scan(g, i), Scan(h, k), Get(i), Scan(i, l)
-//  positions:      6         -1        5           3           2          4        0
-//  headers  :     [e, h)    <nil>     [e, f)      [g, i)      [h, k)     [i)      [i, l)
+//	requests : Scan(b, h), Get(d), Scan(d, f), Scan(g, i), Scan(h, k), Get(i), Scan(i, l)
+//	positions:      6         -1        5           3           2          4        0
+//	headers  :     [e, h)    <nil>     [e, f)      [g, i)      [h, k)     [i)      [i, l)
 //
 // Then the optimized next() function determines the seekKey as 'e' and keeps
 // the startIdx at 0.
@@ -437,12 +439,14 @@ func (h *BatchTruncationHelper) Truncate(
 // 3rd, and the 4th requests as fully processed.
 //
 // The second call prepares
-//   truncReqs = [Scan(e, h), Scan(e, f), Scan(g, i), Scan(h, i)], positions = [6, 5, 3, 2]
+//
+//	truncReqs = [Scan(e, h), Scan(e, f), Scan(g, i), Scan(h, i)], positions = [6, 5, 3, 2]
+//
 // and the internal state is now
 //
-//  requests : Scan(b, h), Get(d), Scan(d, f), Scan(g, i), Scan(h, k), Get(i), Scan(i, l)
-//  positions:     -1         -1       -1          -1           2          4        0
-//  headers  :    <nil>      <nil>    <nil>       <nil>        [i, k)     [i)      [i, l)
+//	requests : Scan(b, h), Get(d), Scan(d, f), Scan(g, i), Scan(h, k), Get(i), Scan(i, l)
+//	positions:     -1         -1       -1          -1           2          4        0
+//	headers  :    <nil>      <nil>    <nil>       <nil>        [i, k)     [i)      [i, l)
 //
 // Then the optimized next() function determines the seekKey as 'i' and sets
 // the startIdx at 4 (meaning that all first four requests have been fully
@@ -454,12 +458,14 @@ func (h *BatchTruncationHelper) Truncate(
 // value and mark all of them as processed.
 //
 // The third call prepares
-//   truncReqs = [Scan(i, k), Get(i), Scan(i, l)], positions = [2, 4, 0]
+//
+//	truncReqs = [Scan(i, k), Get(i), Scan(i, l)], positions = [2, 4, 0]
+//
 // and the internal state is now
 //
-//  requests : Scan(b, h), Get(d), Scan(d, f), Scan(g, i), Scan(h, k), Get(i), Scan(i, l)
-//  positions:     -1         -1       -1          -1          -1         -1       -1
-//  headers  :    <nil>      <nil>    <nil>       <nil>       <nil>      <nil>    <nil>
+//	requests : Scan(b, h), Get(d), Scan(d, f), Scan(g, i), Scan(h, k), Get(i), Scan(i, l)
+//	positions:     -1         -1       -1          -1          -1         -1       -1
+//	headers  :    <nil>      <nil>    <nil>       <nil>       <nil>      <nil>    <nil>
 //
 // Then the optimized next() function determines the seekKey as KeyMax and sets
 // the startIdx at 7 (meaning that all requests have been fully processed), and
@@ -552,19 +558,19 @@ func (h *BatchTruncationHelper) truncateAsc(
 //
 // Let's go through an example. Say we have seven original requests:
 //
-//  requests : Scan(i, l), Get(d), Scan(h, k), Scan(g, i), Get(i), Scan(d, f), Scan(b, h)
-//  positions:      0          1        2           3          4        5           6
+//	requests : Scan(i, l), Get(d), Scan(h, k), Scan(g, i), Get(i), Scan(d, f), Scan(b, h)
+//	positions:      0          1        2           3          4        5           6
 //
 // as well three ranges to iterate over:
 //
-//  ranges: range[i, m), range[e, i), range[a, e).
+//	ranges: range[i, m), range[e, i), range[a, e).
 //
 // In Init(), we have reordered the requests according to their end keys with
 // the descending direction (below, i' denotes Key("i").Next()):
 //
-//  requests : Scan(i, l), Scan(h, k), Get(i), Scan(g, i), Scan(b, h), Scan(d, f), Get(d)
-//  positions:      0           2          4        3           6          5           1
-//  headers  :     [i, l)      [h, k)   [i, i')    [g, i)      [b, h)     [d, f)    [d, d')
+//	requests : Scan(i, l), Scan(h, k), Get(i), Scan(g, i), Scan(b, h), Scan(d, f), Get(d)
+//	positions:      0           2          4        3           6          5           1
+//	headers  :     [i, l)      [h, k)   [i, i')    [g, i)      [b, h)     [d, f)    [d, d')
 //
 // On the first call to Truncate(), we're using the range [i, m). We only need
 // to look at the first four requests since the fourth request ends before the
@@ -574,12 +580,14 @@ func (h *BatchTruncationHelper) truncateAsc(
 // mark the 1st and the 3rd requests as fully processed.
 //
 // The first call prepares
-//   truncReqs = [Scan(i, l), Scan(i, k), Get(i)], positions = [0, 2, 4]
+//
+//	truncReqs = [Scan(i, l), Scan(i, k), Get(i)], positions = [0, 2, 4]
+//
 // and the internal state is now
 //
-//  requests : Scan(i, l), Scan(h, k), Get(i), Scan(g, i), Scan(b, h), Scan(d, f), Get(d)
-//  positions:     -1           2         -1        3           6          5           1
-//  headers  :    <nil>        [h, i)    <nil>     [g, i)      [b, h)     [d, f)    [d, d')
+//	requests : Scan(i, l), Scan(h, k), Get(i), Scan(g, i), Scan(b, h), Scan(d, f), Get(d)
+//	positions:     -1           2         -1        3           6          5           1
+//	headers  :    <nil>        [h, i)    <nil>     [g, i)      [b, h)     [d, f)    [d, d')
 //
 // Then the optimized prev() function determines the seekKey as 'i' and moves
 // the startIdx to 1.
@@ -592,12 +600,14 @@ func (h *BatchTruncationHelper) truncateAsc(
 // mark the 2nd and the 4th requests as fully processed.
 //
 // The second call prepares
-//   truncReqs = [Scan(h, i), Scan(g, i), Scan(e, h), Scan(e, f)], positions = [2, 3, 6, 5]
+//
+//	truncReqs = [Scan(h, i), Scan(g, i), Scan(e, h), Scan(e, f)], positions = [2, 3, 6, 5]
+//
 // and the internal state is now
 //
-//  requests : Scan(i, l), Scan(h, k), Get(i), Scan(g, i), Scan(b, h), Scan(d, f), Get(d)
-//  positions:     -1          -1         -1       -1           6          5           1
-//  headers  :    <nil>       <nil>      <nil>    <nil>        [b, e)     [d, e)    [d, d')
+//	requests : Scan(i, l), Scan(h, k), Get(i), Scan(g, i), Scan(b, h), Scan(d, f), Get(d)
+//	positions:     -1          -1         -1       -1           6          5           1
+//	headers  :    <nil>       <nil>      <nil>    <nil>        [b, e)     [d, e)    [d, d')
 //
 // Then the optimized prev() function determines the seekKey as 'e' and sets
 // the startIdx at 4 (meaning that all first four requests have been fully
@@ -609,12 +619,14 @@ func (h *BatchTruncationHelper) truncateAsc(
 // value and mark all of them as processed.
 //
 // The third call prepares
-//   truncReqs = [Scan(b, e), Scan(d, e), Get(d)], positions = [6, 5, 1]
+//
+//	truncReqs = [Scan(b, e), Scan(d, e), Get(d)], positions = [6, 5, 1]
+//
 // and the internal state is now
 //
-//  requests : Scan(i, l), Scan(h, k), Get(i), Scan(g, i), Scan(b, h), Scan(d, f), Get(d)
-//  positions:     -1          -1         -1       -1          -1          -1          -1
-//  headers  :    <nil>       <nil>      <nil>    <nil>       <nil>       <nil>       <nil>
+//	requests : Scan(i, l), Scan(h, k), Get(i), Scan(g, i), Scan(b, h), Scan(d, f), Get(d)
+//	positions:     -1          -1         -1       -1          -1          -1          -1
+//	headers  :    <nil>       <nil>      <nil>    <nil>       <nil>       <nil>       <nil>
 //
 // Then the optimized prev() function determines the seekKey as KeyMin and sets
 // the startIdx at 7 (meaning that all requests have been fully processed), and
@@ -1014,11 +1026,11 @@ func (h *orderRestorationHelper) memUsage() int64 {
 // Let's go through a quick example. Say we have five original requests and the
 // following setup:
 //
-//  truncReqs = [Scan(a, c), Get(b), Scan(c, d)], positions = [3, 0, 4]
+//	truncReqs = [Scan(a, c), Get(b), Scan(c, d)], positions = [3, 0, 4]
 //
 // We first populate the found map:
 //
-//  found = [1, -1, -1, 0, 2]
+//	found = [1, -1, -1, 0, 2]
 //
 // meaning that requests at positions 0, 3, 4 are present in truncReqs. Then we
 // iterate over the found map, and for all non-negative found values, we include

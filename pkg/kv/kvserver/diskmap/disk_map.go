@@ -26,16 +26,17 @@ type Factory interface {
 // SortedDiskMapIterator is a simple iterator used to iterate over keys and/or
 // values.
 // Example use of iterating over all keys:
-// 	var i SortedDiskMapIterator
-// 	for i.Rewind(); ; i.Next() {
-// 		if ok, err := i.Valid(); err != nil {
+//
+//	var i SortedDiskMapIterator
+//	for i.Rewind(); ; i.Next() {
+//		if ok, err := i.Valid(); err != nil {
 //			// Handle error.
-// 		} else if !ok {
+//		} else if !ok {
 //			break
-// 		}
-// 		key := i.UnsafeKey()
+//		}
+//		key := i.UnsafeKey()
 //		// Do something.
-// 	}
+//	}
 type SortedDiskMapIterator interface {
 	// SeekGE sets the iterator's position to the first key greater than or equal
 	// to the provided key.

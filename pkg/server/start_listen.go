@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 // startListenRPCAndSQL starts the RPC and SQL listeners.
@@ -89,11 +90,14 @@ func startListenRPCAndSQL(
 		pgL = m.Match(func(r io.Reader) bool {
 			return pgwire.Match(r)
 		})
-		// Also if the pg port is not split, the actual listen
-		// and advertise addresses for SQL become equal to that
-		// of RPC, regardless of what was configured.
+		// Also if the pg port is not split, the actual listen address for
+		// SQL become equal to that of RPC.
 		cfg.SQLAddr = cfg.Addr
-		cfg.SQLAdvertiseAddr = cfg.AdvertiseAddr
+		// Then we update the advertised addr with the right port, if
+		// the port had been auto-allocated.
+		if err := UpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, ln.Addr()); err != nil {
+			return nil, nil, errors.Wrapf(err, "internal error")
+		}
 	}
 
 	anyL := m.Match(cmux.Any())

@@ -62,11 +62,12 @@ import (
 // Similar to exec-sql, but also traces the input statement and analyzes the
 // trace. Currently, the trace analysis only works for "simple" queries which
 // perform a single kv operation. The trace is analyzed for the following:
-// 	 - served locally: prints true iff the query was routed to the local
-//   replica.
+//   - served locally: prints true iff the query was routed to the local
+//     replica.
 //   - served via follower read: prints true iff the query was served using a
-//   follower read. This is omitted completely if the query was not served
-//   locally.
+//     follower read. This is omitted completely if the query was not served
+//     locally.
+//
 // This is because it the replica the query is routed to may or may not be the
 // leaseholder.
 //

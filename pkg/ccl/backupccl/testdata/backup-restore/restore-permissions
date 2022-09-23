@@ -1,6 +1,4 @@
-# We allow implicit access to non-admins as well to simplify our test of
-# grantable privileges.
-new-server name=s1 allow-implicit-access
+new-server name=s1
 ----
 
 exec-sql
@@ -64,6 +62,17 @@ exec-sql
 GRANT SYSTEM RESTORE TO testuser;
 ----
 
+# This won't be sufficient since we are restoring from nodelocal, we also need
+# `EXTERNALIOIMPLICITACCESS` as a non-admin.
+exec-sql user=testuser
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup_nonroot_fail;
+----
+pq: only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI
+
+exec-sql
+GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser;
+----
+
 exec-sql user=testuser
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/foo' WITH new_db_name = ddup_nonroot_fail;
 ----
@@ -76,7 +85,7 @@ SELECT * FROM ddup_nonroot_fail.ds.t;
 3 hi
 
 exec-sql
-REVOKE SYSTEM RESTORE FROM testuser;
+REVOKE SYSTEM RESTORE, EXTERNALIOIMPLICITACCESS FROM testuser;
 ----
 
 subtest end
@@ -125,6 +134,11 @@ REVOKE ADMIN FROM testuser;
 
 exec-sql
 CREATE DATABASE nonadmin;
+----
+
+# Need to allow testuser to use `nodelocal`.
+exec-sql
+GRANT SYSTEM EXTERNALIOIMPLICITACCESS TO testuser;
 ----
 
 # Non-admin cannot run table restore unless they have CREATE on the database

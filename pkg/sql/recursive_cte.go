@@ -25,9 +25,10 @@ import (
 //     a "working" table.
 //  2. So long as the working table is not empty:
 //     * evaluate the recursive query, substituting the current contents of
-//       the working table for the recursive self-reference;
+//     the working table for the recursive self-reference;
 //     * emit all resulting rows, and save them as the next iteration's
-//       working table.
+//     working table.
+//
 // The recursive query tree is regenerated each time using a callback
 // (implemented by the execbuilder).
 type recursiveCTENode struct {

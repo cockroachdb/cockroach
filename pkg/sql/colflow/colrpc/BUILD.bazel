@@ -33,6 +33,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 
@@ -45,6 +46,7 @@ go_test(
         "main_test.go",
         "outbox_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":colrpc"],
     deps = [
         "//pkg/base",

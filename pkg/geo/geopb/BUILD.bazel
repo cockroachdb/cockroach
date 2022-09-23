@@ -34,6 +34,7 @@ go_proto_library(
 go_test(
     name = "geopb_test",
     srcs = ["types_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":geopb"],
     deps = ["@com_github_stretchr_testify//require"],
 )

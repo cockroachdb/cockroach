@@ -62,6 +62,7 @@ go_test(
         "operations_test.go",
         "validator_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":kvnemesis"],
     deps = [
         "//pkg/base",

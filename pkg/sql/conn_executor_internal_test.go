@@ -322,7 +322,7 @@ func startConnExecutor(
 			gw,
 			stopper,
 			func(base.SQLInstanceID) bool { return true }, // everybody is available
-			nil, /* nodeDialer */
+			nil, /* connHealthCheckerSystem */
 			nil, /* podNodeDialer */
 			keys.SystemSQLCodec,
 			nil, /* sqlInstanceProvider */

@@ -41,6 +41,7 @@ go_test(
         "main_test.go",
         "span_assembler_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":colexecspan"],  # keep
     tags = ["no-remote"],
     deps = [

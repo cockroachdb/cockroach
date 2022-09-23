@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -46,13 +47,19 @@ type Schema struct {
 func Upgrade(
 	t *testing.T, sqlDB *gosql.DB, key clusterversion.Key, done chan struct{}, expectError bool,
 ) {
+	UpgradeToVersion(t, sqlDB, clusterversion.ByKey(key), done, expectError)
+}
+
+func UpgradeToVersion(
+	t *testing.T, sqlDB *gosql.DB, v roachpb.Version, done chan struct{}, expectError bool,
+) {
 	defer func() {
 		if done != nil {
 			done <- struct{}{}
 		}
 	}()
 	_, err := sqlDB.Exec(`SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(key).String())
+		v.String())
 	if expectError {
 		assert.Error(t, err)
 		return
@@ -147,3 +154,6 @@ func GetTable(
 	require.NoError(t, err)
 	return table
 }
+
+// WaitForJobStatement is exported so that it can be detected by a testing knob.
+const WaitForJobStatement = waitForJobStatement

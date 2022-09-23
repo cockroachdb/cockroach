@@ -113,19 +113,36 @@ func (m *Manager) WaitForNoVersion(
 
 // WaitForOneVersion returns once there are no unexpired leases on the
 // previous version of the descriptor. It returns the descriptor with the
-// current version.
+// current version, though note that it will not be validated or hydrated.
+//
 // After returning there can only be versions of the descriptor >= to the
 // returned version. Lease acquisition (see acquire()) maintains the
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
+//
+// If the descriptor is not found, an error will be returned. The error
+// can be detected by using errors.Is(err, catalog.ErrDescriptorNotFound).
 func (m *Manager) WaitForOneVersion(
 	ctx context.Context, id descpb.ID, retryOpts retry.Options,
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			version := m.storage.settings.Version.ActiveVersion(ctx)
-			desc, err = catkv.MustGetDescriptorByID(ctx, version, m.Codec(), txn, nil /* vd */, id, catalog.Any)
-			return err
+			sc := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
+			// Use the lower-level MaybeGetDescriptorByIDUnvalidated to avoid
+			// performing validation while waiting for leases to drain.
+			// Validation is somewhat expensive but more importantly, is not
+			// particularly desirable in this context: there are valid cases where
+			// descriptors can be removed or made invalid. For instance, the
+			// descriptor could be a type or a schema which is dropped by a subsequent
+			// concurrent schema change.
+			desc, err = sc.MaybeGetDescriptorByIDUnvalidated(ctx, txn, id)
+			if err != nil {
+				return err
+			}
+			if desc == nil {
+				return errors.Wrapf(catalog.ErrDescriptorNotFound, "waiting for leases to drain on descriptor %d", id)
+			}
+			return nil
 		}); err != nil {
 			return nil, err
 		}
@@ -198,7 +215,9 @@ type historicalDescriptor struct {
 //
 // In the following scenario v4 is our oldest active lease
 // [v1@t1			][v2@t3			][v3@t5				][v4@t7
-// 		 [start												end]
+//
+//	[start												end]
+//
 // getDescriptorsFromStoreForInterval(..., start, end) will get back:
 // [v3, v2] (reverse order)
 //
@@ -257,7 +276,13 @@ func getDescriptorsFromStoreForInterval(
 	subsequentModificationTime := upperBound
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
-			it, err := kvstorage.NewMemSSTIterator(file.SST, false /* verify */)
+			it, err := kvstorage.NewMemSSTIterator(file.SST, false, /* verify */
+				kvstorage.IterOptions{
+					// NB: We assume there will be no MVCC range tombstones here.
+					KeyTypes:   kvstorage.IterKeyTypePointsOnly,
+					LowerBound: keys.MinKey,
+					UpperBound: keys.MaxKey,
+				})
 			if err != nil {
 				return err
 			}
@@ -314,10 +339,10 @@ func getDescriptorsFromStoreForInterval(
 // descriptor version we are interested in, resulting at most 2 KV calls.
 //
 // TODO(vivek, james): Future work:
-// 1. Translate multiple simultaneous calls to this method into a single call
-//    as is done for acquireNodeLease().
-// 2. Figure out a sane policy on when these descriptors should be purged.
-//    They are currently purged in PurgeOldVersions.
+//  1. Translate multiple simultaneous calls to this method into a single call
+//     as is done for acquireNodeLease().
+//  2. Figure out a sane policy on when these descriptors should be purged.
+//     They are currently purged in PurgeOldVersions.
 func (m *Manager) readOlderVersionForTimestamp(
 	ctx context.Context, id descpb.ID, timestamp hlc.Timestamp,
 ) ([]historicalDescriptor, error) {
@@ -895,7 +920,8 @@ func (m *Manager) resolveName(
 			return err
 		}
 		var err error
-		id, err = catkv.LookupID(ctx, txn, m.storage.codec, parentID, parentSchemaID, name)
+		direct := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
+		id, err = direct.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
 		return err
 	}); err != nil {
 		return id, err

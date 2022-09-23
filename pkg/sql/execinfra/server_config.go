@@ -143,9 +143,6 @@ type ServerConfig struct {
 	// draining state.
 	Gossip gossip.OptionalGossip
 
-	// Dialer for communication between SQL and KV nodes.
-	NodeDialer *nodedialer.Dialer
-
 	// Dialer for communication between SQL nodes/pods.
 	PodNodeDialer *nodedialer.Dialer
 
@@ -291,6 +288,10 @@ type TestingKnobs struct {
 	// IndexBackfillMergerTestingKnobs are the index backfill merger specific
 	// testing knobs.
 	IndexBackfillMergerTestingKnobs base.ModuleTestingKnobs
+
+	// ProcessorNoTracingSpan is used to disable the creation of a tracing span
+	// in ProcessorBase.StartInternal if the tracing is enabled.
+	ProcessorNoTracingSpan bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

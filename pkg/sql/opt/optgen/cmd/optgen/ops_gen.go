@@ -130,7 +130,8 @@ func sortDefines(defines lang.DefineSetExpr) lang.DefineSetExpr {
 // dashCase converts camel-case identifiers into "dash case", where uppercase
 // letters in the middle of the identifier are replaced by a dash followed
 // by the lowercase version the letter. Example:
-//   InnerJoinApply => inner-join-apply
+//
+//	InnerJoinApply => inner-join-apply
 func dashCase(s string) string {
 	var buf bytes.Buffer
 	for i, ch := range s {
@@ -150,7 +151,8 @@ func dashCase(s string) string {
 // syntaxCase converts camel-case identifiers into "syntax case", where
 // uppercase letters in the middle of the identifier are interpreted as new
 // words and separated by a space from the previous word. Example:
-//   InnerJoinApply => INNER JOIN APPLY
+//
+//	InnerJoinApply => INNER JOIN APPLY
 func syntaxCase(s string) string {
 	var buf bytes.Buffer
 	for i, ch := range s {

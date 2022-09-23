@@ -13,7 +13,7 @@ package democluster
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"testing"
 	"time"
 
@@ -218,7 +218,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 				true /* includeAppName */, false /* isTenant */)
 			require.NoError(t, err)
 			sqlConnCtx := clisqlclient.Context{}
-			conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, url.ToPQ().String())
+			conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.ToPQ().String())
 			defer func() {
 				if err := conn.Close(); err != nil {
 					t.Fatal(err)
@@ -312,7 +312,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 			true /* includeAppName */, true /* isTenant */)
 		require.NoError(t, err)
 		sqlConnCtx := clisqlclient.Context{}
-		conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, url.ToPQ().String())
+		conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.ToPQ().String())
 		defer func() {
 			if err := conn.Close(); err != nil {
 				t.Fatal(err)

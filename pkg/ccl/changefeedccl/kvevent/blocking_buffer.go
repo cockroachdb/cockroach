@@ -38,11 +38,12 @@ type blockingBuffer struct {
 
 	mu struct {
 		syncutil.Mutex
-		closed  bool                   // True when buffer closed.
-		reason  error                  // Reason buffer is closed.
-		drainCh chan struct{}          // Set when Drain request issued.
-		blocked bool                   // Set when event is blocked, waiting to acquire quota.
-		queue   *bufferEventChunkQueue // Queue of added events.
+		closed     bool          // True when buffer closed.
+		reason     error         // Reason buffer is closed.
+		drainCh    chan struct{} // Set when Drain request issued.
+		numBlocked int           // Number of waitors blocked to acquire quota.
+		canFlush   bool
+		queue      *bufferEventChunkQueue // Queue of added events.
 	}
 }
 
@@ -50,29 +51,62 @@ type blockingBuffer struct {
 // It will grow the bound account to buffer more messages but will block if it
 // runs out of space. If ever any entry exceeds the allocatable size of the
 // account, an error will be returned when attempting to buffer it.
-func NewMemBuffer(
-	acc mon.BoundAccount, sv *settings.Values, metrics *Metrics, opts ...quotapool.Option,
+func NewMemBuffer(acc mon.BoundAccount, sv *settings.Values, metrics *Metrics) Buffer {
+	return newMemBuffer(acc, sv, metrics, nil)
+}
+
+// TestingNewMemBuffer allows test to construct buffer which will invoked
+// specified notification function when blocked, waiting for memory.
+func TestingNewMemBuffer(
+	acc mon.BoundAccount,
+	sv *settings.Values,
+	metrics *Metrics,
+	onWaitStart quotapool.OnWaitStartFunc,
+) Buffer {
+	return newMemBuffer(acc, sv, metrics, onWaitStart)
+}
+
+func newMemBuffer(
+	acc mon.BoundAccount,
+	sv *settings.Values,
+	metrics *Metrics,
+	onWaitStart quotapool.OnWaitStartFunc,
 ) Buffer {
 	const slowAcquisitionThreshold = 5 * time.Second
-
-	opts = append(opts,
-		quotapool.OnSlowAcquisition(slowAcquisitionThreshold, logSlowAcquisition(slowAcquisitionThreshold)),
-		quotapool.OnWaitFinish(
-			func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) {
-				metrics.BufferPushbackNanos.Inc(timeutil.Since(start).Nanoseconds())
-			}))
 
 	b := &blockingBuffer{
 		signalCh: make(chan struct{}, 1),
 		metrics:  metrics,
 		sv:       sv,
 	}
+	b.mu.queue = &bufferEventChunkQueue{}
+
+	// Quota pool notifies out of quota events through notifyOutOfQuota
 	quota := &memQuota{acc: acc, notifyOutOfQuota: b.notifyOutOfQuota}
+
+	opts := []quotapool.Option{
+		quotapool.OnSlowAcquisition(slowAcquisitionThreshold, logSlowAcquisition(slowAcquisitionThreshold)),
+		// OnWaitStart invoked once by quota pool when request cannot acquire quota.
+		quotapool.OnWaitStart(func(ctx context.Context, poolName string, r quotapool.Request) {
+			if onWaitStart != nil {
+				onWaitStart(ctx, poolName, r)
+			}
+			b.producerBlocked()
+		}),
+		// Similarly, this function is invoked by quota pool once, when the quota
+		// have been obtained *after* OnWaitStart
+		quotapool.OnWaitFinish(
+			func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) {
+				metrics.BufferPushbackNanos.Inc(timeutil.Since(start).Nanoseconds())
+				b.quotaAcquiredAfterWait()
+			},
+		),
+	}
+
 	b.qp = allocPool{
 		AbstractPool: quotapool.New("changefeed", quota, opts...),
 		metrics:      metrics,
 	}
-	b.mu.queue = &bufferEventChunkQueue{}
 
 	return b
 }
@@ -87,8 +121,7 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 	}
 
 	e, ok = b.mu.queue.dequeue()
-
-	if !ok && b.mu.blocked {
+	if !ok && b.mu.canFlush {
 		// Here, we know that we are blocked, waiting for memory; yet we have nothing queued up
 		// (and thus, no resources that could be released by draining the queue).
 		// This means that all the previously added entries have been read by the consumer,
@@ -98,10 +131,11 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 		// If the batching event consumer does not have periodic flush configured,
 		// we may never be able to make forward progress.
 		// So, we issue the flush request to the consumer to ensure that we release some memory.
-		e = Event{flush: true}
+		e = Event{et: TypeFlush}
 		ok = true
-		// Ensure we notify only once.
-		b.mu.blocked = false
+		// Ensure we notify only once.  If we're still out of quota,
+		// subsequent notifyOutOfQuota will reset this field.
+		b.mu.canFlush = false
 	}
 
 	if b.mu.drainCh != nil && b.mu.queue.empty() {
@@ -113,19 +147,43 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 
 // notifyOutOfQuota is invoked by memQuota to notify blocking buffer that
 // event is blocked, waiting for more resources.
-func (b *blockingBuffer) notifyOutOfQuota() {
+func (b *blockingBuffer) notifyOutOfQuota(canFlush bool) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.mu.canFlush = canFlush
+	b.mu.Unlock()
 
-	if b.mu.closed {
-		return
+	if canFlush {
+		select {
+		case b.signalCh <- struct{}{}:
+		default:
+		}
 	}
-	b.mu.blocked = true
+}
 
-	select {
-	case b.signalCh <- struct{}{}:
-	default:
+// producerBlocked in invoked by quota pool to notify blocking buffer
+// that producer is blocked.
+func (b *blockingBuffer) producerBlocked() {
+	b.mu.Lock()
+	b.mu.numBlocked++
+	b.mu.Unlock()
+}
+
+// quotaAcquiredAfterWait is invoked by quota pool to notify blocking buffer
+// that quota has been acquired after being blocked.
+// NB: always called after producerBlocked
+func (b *blockingBuffer) quotaAcquiredAfterWait() {
+	b.mu.Lock()
+	if b.mu.numBlocked > 0 {
+		b.mu.numBlocked--
+	} else {
+		logcrash.ReportOrPanic(context.Background(), b.sv,
+			"quotaAcquiredAfterWait called with 0 blocked consumers")
 	}
+	if b.mu.numBlocked == 0 {
+		// Clear out canFlush since we know that producers no longer blocked.
+		b.mu.canFlush = false
+	}
+	b.mu.Unlock()
 }
 
 // Get implements kvevent.Reader interface.
@@ -160,7 +218,6 @@ func (b *blockingBuffer) enqueue(ctx context.Context, e Event) (err error) {
 	}
 
 	b.metrics.BufferEntriesIn.Inc(1)
-	b.mu.blocked = false
 	b.mu.queue.enqueue(e)
 
 	select {
@@ -172,13 +229,15 @@ func (b *blockingBuffer) enqueue(ctx context.Context, e Event) (err error) {
 
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
-	if e.alloc.ap != nil {
-		// Use allocation associated with the event itself.
+	// Immediately enqueue event if it already has allocation,
+	// or if it's a Flush request -- which has no allocations.
+	// Such events happen when we switch from backfill to rangefeed mode.
+	if e.alloc.ap != nil || e.et == TypeFlush {
 		return b.enqueue(ctx, e)
 	}
 
 	// Acquire the quota first.
-	alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.approxSize))
+	alloc := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.ApproximateSize()))
 	if l := changefeedbase.PerChangefeedMemLimit.Get(b.sv); alloc > l {
 		return errors.Newf("event size %d exceeds per changefeed limit %d", alloc, l)
 	}
@@ -290,7 +349,7 @@ type memQuota struct {
 	// When memQuota blocks waiting for resources, invoke the callback
 	// to notify about this. The notification maybe invoked multiple
 	// times for a single request that's blocked.
-	notifyOutOfQuota func()
+	notifyOutOfQuota func(canFlush bool)
 
 	acc mon.BoundAccount
 }
@@ -306,9 +365,26 @@ func (r *memRequest) Acquire(
 	quota := resource.(*memQuota)
 	fulfilled, tryAgainAfter = r.acquireQuota(ctx, quota)
 	if !fulfilled {
-		quota.notifyOutOfQuota()
+		// canFlush indicates to the consumer (Get() caller) that it may issue flush
+		// request if necessary.
+		//
+		// Consider the case when we have 2 producers that are blocked (Pa, Pb).
+		// Consumer will issue flush request if no events are buffered in this
+		// blocking buffer, and we have blocked producers (i.e. Pa and Pb). As soon
+		// as flush completes and releases lots of resources (actually, the entirety
+		// of mem buffer limit worth of resources are released), Pa manages to put
+		// in the event into the queue. If the consumer consumes that message, plus
+		// attempts to consume the next message, before Pb had a chance to unblock
+		// itself, the consumer will mistakenly think that it must flush to release
+		// resources (i.e. just after 1 message).
+		//
+		// canFlush is set to true if we are *really* blocked -- i.e. we
+		// have non-zero canAllocateBelow threshold; OR in the corner case when
+		// nothing is allocated (and  we are still blocked -- see comment in
+		// acquireQuota)
+		canFlush := quota.allocated == 0 || quota.canAllocateBelow > 0
+		quota.notifyOutOfQuota(canFlush)
 	}
-
 	return fulfilled, tryAgainAfter
 }
 

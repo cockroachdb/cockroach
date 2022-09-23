@@ -89,14 +89,6 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - column:
-  ...
 create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8"
   descriptor IDs: [106]
 # end PreCommitPhase
@@ -120,7 +112,7 @@ upsert descriptor #106
        direction: ADD
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: tbl
      nextColumnId: 3
   ...
@@ -178,7 +170,7 @@ upsert descriptor #106
   -        width: 64
   -    direction: ADD
   -    mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +  modificationTime: {}
   +  mutations: []
      name: tbl

@@ -51,7 +51,10 @@ var writeTests = []struct {
 	{Input: [][]string{{"a", "a", ""}}, Output: "a,a,\n"},
 	{Input: [][]string{{"a", "a", "a"}}, Output: "a,a,a\n"},
 	{Input: [][]string{{`\.`}}, Output: "\"\\.\"\n"},
-	{Input: [][]string{{`"`, `,`, `x"`, `x`, `xx,`}}, Escape: 'x', Output: `"x"",",","xxx"",x,"xxxx,"` + "\n"},
+	{Input: [][]string{{`\.ab☃`}}, Output: "\\.ab☃\n"},
+	// Previous versions of csv.Writer didn't quote a string containing a custom escape character, which was
+	// probably a bug despite previously being asserted in this test. But also nothing actually used a custom escape character.
+	{Input: [][]string{{`"`, `,`, `x"`, `x`, `xx,`}}, Escape: 'x', Output: `"x"",",","xxx"","xx","xxxx,"` + "\n"},
 }
 
 func TestWrite(t *testing.T) {

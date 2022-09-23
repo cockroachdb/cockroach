@@ -20,6 +20,7 @@ go_test(
         "config_test.go",
         "opbench_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":opbench"],
     deps = [

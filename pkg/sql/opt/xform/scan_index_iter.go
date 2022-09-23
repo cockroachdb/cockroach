@@ -25,8 +25,7 @@ import (
 // iteration. For example, the iterator would skip over inverted and partial
 // indexes given these flags:
 //
-//   flags := rejectInvertedIndexes|rejectPartialIndexes
-//
+//	flags := rejectInvertedIndexes|rejectPartialIndexes
 type indexRejectFlags int8
 
 const (
@@ -119,10 +118,10 @@ func (it *scanIndexIter) Init(
 //
 // Consider the indexes and query:
 //
-//   CREATE INDEX idx1 ON t (a) WHERE c > 0
-//   CREATE INDEX idx2 ON t (b) WHERE c > 0
+//	CREATE INDEX idx1 ON t (a) WHERE c > 0
+//	CREATE INDEX idx2 ON t (b) WHERE c > 0
 //
-//   SELECT * FROM t WHERE a = 1 AND b = 2 AND c > 0
+//	SELECT * FROM t WHERE a = 1 AND b = 2 AND c > 0
 //
 // The optimal query plan is a zigzag join over idx1 and idx2. Planning a zigzag
 // join requires a nested loop over the indexes of a table. The outer loop will
@@ -143,10 +142,10 @@ func (it *scanIndexIter) Init(
 //
 // Consider the indexes and query:
 //
-//   CREATE INDEX idx1 ON t (a) WHERE b > 0
-//   CREATE INDEX idx2 ON t (c) WHERE d > 0
+//	CREATE INDEX idx1 ON t (a) WHERE b > 0
+//	CREATE INDEX idx2 ON t (c) WHERE d > 0
 //
-//   SELECT * FROM t WHERE a = 1 AND b > 0 AND c = 2 AND d > 0
+//	SELECT * FROM t WHERE a = 1 AND b > 0 AND c = 2 AND d > 0
 //
 // The optimal query plan is a zigzag join over idx1 and idx2 with no remaining
 // Select filters. If the original filters were passed to the inner loop's Init,

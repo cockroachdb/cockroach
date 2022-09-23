@@ -103,6 +103,26 @@ func (u *URL) ToPQ() *url.URL {
 	return nu
 }
 
+// ToPQRedacted converts the URL to a connection string supported
+// by drivers using libpq or compatible, with the password redacted.
+func (u *URL) ToPQRedacted() *url.URL {
+	nu, opts := u.baseURL()
+
+	if u.username != "" {
+		nu.User = url.User(u.username)
+	}
+	switch u.authn {
+	case authnPassword, authnPasswordWithClientCert:
+		if u.hasPassword {
+			// Use '~' since it does not need to be escaped.
+			nu.User = url.UserPassword(u.username, "~~~~~~")
+		}
+	}
+
+	nu.RawQuery = opts.Encode()
+	return nu
+}
+
 // String makes URL printable.
 func (u *URL) String() string { return u.ToPQ().String() }
 

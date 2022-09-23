@@ -902,9 +902,13 @@ func TestCorruptDescriptorRepair(t *testing.T) {
 	// back-reference.
 	tdb.Exec(t, `CREATE DATABASE testdb`)
 	tdb.Exec(t, `CREATE TABLE testdb.parent (k INT PRIMARY KEY, v STRING)`)
+	tdb.Exec(t, `INSERT INTO testdb.parent (k, v) VALUES (1, 'a')`)
 	tdb.Exec(t, `CREATE TABLE testdb.child (k INT NOT NULL, FOREIGN KEY (k) REFERENCES testdb.parent (k))`)
 	tdb.Exec(t, `SELECT crdb_internal.unsafe_delete_descriptor(id) FROM system.namespace WHERE name = 'child'`)
 	tdb.Exec(t, `SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id) FROM system.namespace WHERE name = 'child'`)
+
+	// Querying the table should succeed in spite of the dangling back-reference.
+	tdb.CheckQueryResults(t, `SELECT * FROM testdb.parent`, [][]string{{"1", "a"}})
 
 	// Dropping the table should fail, because the table descriptor will fail
 	// the validation checks when being read from storage.

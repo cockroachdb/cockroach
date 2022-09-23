@@ -43,7 +43,7 @@ sinks:
   stderr:
     channels: {INFO: [DEV], WARNING: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA,
         USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF,
-        TELEMETRY]}
+        TELEMETRY, KV_DISTRIBUTION]}
     format: crdb-v2-tty
     redact: false
     redactable: true

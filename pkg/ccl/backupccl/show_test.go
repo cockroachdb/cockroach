@@ -12,7 +12,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -700,11 +699,11 @@ func TestShowBackupPrivileges(t *testing.T) {
 
 	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
 	require.True(t, testutils.IsError(err,
-		"only users with the admin role are allowed to SHOW BACKUP from the specified nodelocal URI"))
+		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
 
 	_, err = testuser.Exec(`SHOW BACKUP $1`, full)
 	require.True(t, testutils.IsError(err,
-		"only users with the admin role are allowed to SHOW BACKUP from the specified nodelocal URI"))
+		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
 
 	sqlDB.Exec(t, `GRANT admin TO testuser`)
 	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
@@ -723,7 +722,7 @@ func TestShowUpgradedForeignKeys(t *testing.T) {
 		fkRevDirs    = testdataBase + "/fk-rev-history"
 	)
 
-	dirs, err := ioutil.ReadDir(fkRevDirs)
+	dirs, err := os.ReadDir(fkRevDirs)
 	require.NoError(t, err)
 	for _, dir := range dirs {
 		require.True(t, dir.IsDir())
@@ -870,7 +869,6 @@ func TestShowBackupCheckFiles(t *testing.T) {
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts,
 		InitManualReplication)
 	defer cleanupFn()
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true`)
 
 	collectionRoot := "full"
 	incLocRoot := "inc"

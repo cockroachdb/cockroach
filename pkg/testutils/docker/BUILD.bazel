@@ -5,11 +5,13 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_test(
     name = "docker_test",
     srcs = ["single_node_docker_test.go"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]) + [
         "//pkg/testutils/docker:testdata",
         "//pkg/testutils/docker/docker-fsnotify:docker-fsnotify",
     ],
     gotags = ["docker"],
+    tags = ["integration"],
     deps = [
         "//pkg/util/contextutil",
         "//pkg/util/log",

@@ -92,7 +92,6 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
 			Settings:      st,
-			NodeDialer:    nodeDialer,
 			PodNodeDialer: nodeDialer,
 			Stopper:       outboxStopper,
 		},

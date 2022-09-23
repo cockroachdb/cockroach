@@ -310,7 +310,7 @@ func runMultiTenantFairness(
 	c.Run(ctx, c.Node(1), cmd)
 
 	// get cluster timeseries data into artifacts
-	err := c.FetchTimeseriesData(ctx, t)
+	err := c.FetchTimeseriesData(ctx, t.L())
 	require.NoError(t, err)
 }
 

@@ -36,6 +36,7 @@ go_test(
         "signal_test.go",
         ":latch_interval_btree_test.go",  # keep
     ],
+    args = ["-test.timeout=895s"],
     embed = [":spanlatch"],
     shard_count = 16,
     deps = [

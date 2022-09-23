@@ -352,23 +352,24 @@ var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-
 // NewStoreSpec parses the string passed into a --store flag and returns a
 // StoreSpec if it is correctly parsed.
 // There are five possible fields that can be passed in, comma separated:
-// - path=xxx The directory in which to the rocks db instance should be
-//   located, required unless using a in memory storage.
-// - type=mem This specifies that the store is an in memory storage instead of
-//   an on disk one. mem is currently the only other type available.
-// - size=xxx The optional maximum size of the storage. This can be in one of a
-//   few different formats.
+//   - path=xxx The directory in which to the rocks db instance should be
+//     located, required unless using a in memory storage.
+//   - type=mem This specifies that the store is an in memory storage instead of
+//     an on disk one. mem is currently the only other type available.
+//   - size=xxx The optional maximum size of the storage. This can be in one of a
+//     few different formats.
 //   - 10000000000     -> 10000000000 bytes
 //   - 20GB            -> 20000000000 bytes
 //   - 20GiB           -> 21474836480 bytes
 //   - 0.02TiB         -> 21474836480 bytes
 //   - 20%             -> 20% of the available space
 //   - 0.2             -> 20% of the available space
-// - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
-// - provisioned-rate=disk-name=<disk-name>[:bandwidth=<bandwidth-bytes/s>] The
-//   provisioned-rate can be used for admission control for operations on the
-//   store. The bandwidth is optional, and if unspecified, a cluster setting
-//   (kv.store.admission.provisioned_bandwidth) will be used.
+//   - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
+//   - provisioned-rate=disk-name=<disk-name>[:bandwidth=<bandwidth-bytes/s>] The
+//     provisioned-rate can be used for admission control for operations on the
+//     store. The bandwidth is optional, and if unspecified, a cluster setting
+//     (kv.store.admission.provisioned_bandwidth) will be used.
+//
 // Note that commas are forbidden within any field name or value.
 func NewStoreSpec(value string) (StoreSpec, error) {
 	const pathField = "path"

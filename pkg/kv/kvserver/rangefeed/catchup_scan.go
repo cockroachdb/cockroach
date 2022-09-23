@@ -27,10 +27,10 @@ import (
 // (often) more efficient MVCCIncrementalIterator. When the caller wants to
 // iterate to see older versions of a key, the desire of the caller needs to
 // be expressed using one of two methods:
-// - Next: when it wants to omit any versions that are not within the time
-//   bounds.
-// - NextIgnoringTime: when it wants to see the next older version even if it
-//   is not within the time bounds.
+//   - Next: when it wants to omit any versions that are not within the time
+//     bounds.
+//   - NextIgnoringTime: when it wants to see the next older version even if it
+//     is not within the time bounds.
 type simpleCatchupIter interface {
 	storage.SimpleMVCCIterator
 	NextIgnoringTime()

@@ -141,10 +141,6 @@ var (
 	}
 )
 
-// See pkg/sql/mem_metrics.go
-// log10int64times1000 = log10(math.MaxInt64) * 1000, rounded up somewhat
-const log10int64times1000 = 19 * 1000
-
 // MakeDistSQLMetrics instantiates the metrics holder for DistSQL monitoring.
 func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 	return DistSQLMetrics{
@@ -155,12 +151,12 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		FlowsTotal:            metric.NewCounter(metaFlowsTotal),
 		FlowsQueued:           metric.NewGauge(metaFlowsQueued),
 		FlowsScheduled:        metric.NewCounter(metaFlowsScheduled),
-		QueueWaitHist:         metric.NewLatency(metaQueueWaitHist, histogramWindow),
-		MaxBytesHist:          metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
+		QueueWaitHist:         metric.NewHistogram(metaQueueWaitHist, histogramWindow, metric.IOLatencyBuckets),
+		MaxBytesHist:          metric.NewHistogram(metaMemMaxBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
 		CurBytesCount:         metric.NewGauge(metaMemCurBytes),
 		VecOpenFDs:            metric.NewGauge(metaVecOpenFDs),
 		CurDiskBytesCount:     metric.NewGauge(metaDiskCurBytes),
-		MaxDiskBytesHist:      metric.NewHistogram(metaDiskMaxBytes, histogramWindow, log10int64times1000, 3),
+		MaxDiskBytesHist:      metric.NewHistogram(metaDiskMaxBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
 		QueriesSpilled:        metric.NewCounter(metaQueriesSpilled),
 		SpilledBytesWritten:   metric.NewCounter(metaSpilledBytesWritten),
 		SpilledBytesRead:      metric.NewCounter(metaSpilledBytesRead),

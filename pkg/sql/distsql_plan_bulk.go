@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SetupAllNodesPlanning creates a planCtx and sets up the planCtx.NodeStatuses
+// SetupAllNodesPlanning creates a planCtx and sets up the planCtx.nodeStatuses
 // map for all nodes. It returns all nodes that can be used for planning.
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
@@ -48,13 +48,13 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 		return nil, nil, err
 	}
 	// Because we're not going through the normal pathways, we have to set up the
-	// planCtx.NodeStatuses map ourselves. CheckInstanceHealthAndVersion() will
+	// planCtx.nodeStatuses map ourselves. checkInstanceHealthAndVersionSystem() will
 	// populate it.
 	for _, node := range resp.Nodes {
-		_ /* NodeStatus */ = dsp.CheckInstanceHealthAndVersion(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
+		_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
 	}
-	nodes := make([]base.SQLInstanceID, 0, len(planCtx.NodeStatuses))
-	for nodeID, status := range planCtx.NodeStatuses {
+	nodes := make([]base.SQLInstanceID, 0, len(planCtx.nodeStatuses))
+	for nodeID, status := range planCtx.nodeStatuses {
 		if status == NodeOK {
 			nodes = append(nodes, nodeID)
 		}

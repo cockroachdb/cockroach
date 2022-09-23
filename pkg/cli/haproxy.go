@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"sort"
@@ -80,7 +79,7 @@ func nodeStatusesToNodeInfos(nodes *serverpb.NodesResponse) []haProxyNodeInfo {
 	fs.Var(aliasStrVar{&httpPort}, cliflags.ListenHTTPPort.Name, "" /* usage */)
 
 	// Discard parsing output.
-	fs.SetOutput(ioutil.Discard)
+	fs.SetOutput(io.Discard)
 
 	nodeInfos := make([]haProxyNodeInfo, 0, len(nodes.Nodes))
 

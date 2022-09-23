@@ -117,7 +117,7 @@ func NewTraceDumper(ctx context.Context, dir string, st *cluster.Settings) *Trac
 		return nil
 	}
 
-	log.Infof(ctx, "writing job trace dumps to %s", dir)
+	log.Infof(ctx, "writing job trace dumps to %s", log.SafeManaged(dir))
 
 	td := &TraceDumper{
 		currentTime: timeutil.Now,

@@ -376,9 +376,9 @@ func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 	return sessiondata.SearchPath{}
 }
 
-// CommonLookupFlags implements the resolver.SchemaResolver interface.
-func (r *fkResolver) CommonLookupFlags(required bool) tree.CommonLookupFlags {
-	return tree.CommonLookupFlags{}
+// CommonLookupFlagsRequired implements the resolver.SchemaResolver interface.
+func (r *fkResolver) CommonLookupFlagsRequired() tree.CommonLookupFlags {
+	return tree.CommonLookupFlags{Required: true}
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.

@@ -61,17 +61,16 @@ var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 // instrumentationHelper encapsulates the logic around extracting information
 // about the execution of a statement, like bundles and traces. Typical usage:
 //
-//  - SetOutputMode() can be used as necessary if we are running an EXPLAIN
-//    ANALYZE variant.
+//   - SetOutputMode() can be used as necessary if we are running an EXPLAIN
+//     ANALYZE variant.
 //
-//  - Setup() is called before query execution.
+//   - Setup() is called before query execution.
 //
-//  - SetDiscardRows(), ShouldDiscardRows(), ShouldSaveFlows(),
-//    ShouldBuildExplainPlan(), RecordExplainPlan(), RecordPlanInfo(),
-//    PlanForStats() can be called at any point during execution.
+//   - SetDiscardRows(), ShouldDiscardRows(), ShouldSaveFlows(),
+//     ShouldBuildExplainPlan(), RecordExplainPlan(), RecordPlanInfo(),
+//     PlanForStats() can be called at any point during execution.
 //
-//  - Finish() is called after query execution.
-//
+//   - Finish() is called after query execution.
 type instrumentationHelper struct {
 	outputMode outputMode
 	// explainFlags is used when outputMode is explainAnalyzePlanOutput or
@@ -258,14 +257,16 @@ func (ih *instrumentationHelper) Setup(
 	ih.savePlanForStats =
 		statsCollector.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, p.SessionData().Database)
 
-	if ih.ShouldBuildExplainPlan() {
-		// Populate traceMetadata early in case we short-circuit the execution
-		// before reaching the bottom of this method.
-		ih.traceMetadata = make(execNodeTraceMetadata)
-	}
+	defer func() {
+		if ih.ShouldBuildExplainPlan() {
+			// Populate traceMetadata at the end once we have all properties of
+			// the helper setup.
+			ih.traceMetadata = make(execNodeTraceMetadata)
+		}
+	}()
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
-		if sp.IsVerbose() && !cfg.TestingKnobs.NoStatsCollectionWithVerboseTracing {
+		if sp.IsVerbose() {
 			// If verbose tracing was enabled at a higher level, stats
 			// collection is enabled so that stats are shown in the traces, but
 			// no extra work is needed by the instrumentationHelper.
@@ -308,9 +309,6 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	ih.collectExecStats = true
-	if ih.traceMetadata == nil {
-		ih.traceMetadata = make(execNodeTraceMetadata)
-	}
 	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(tracingpb.RecordingVerbose))
 	ih.shouldFinishSpan = true
@@ -440,7 +438,8 @@ func (ih *instrumentationHelper) ShouldUseJobForCreateStats() bool {
 // ShouldBuildExplainPlan returns true if we should build an explain plan and
 // call RecordExplainPlan.
 func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
-	return ih.collectBundle || ih.savePlanForStats || ih.outputMode == explainAnalyzePlanOutput ||
+	return ih.collectBundle || ih.collectExecStats || ih.savePlanForStats ||
+		ih.outputMode == explainAnalyzePlanOutput ||
 		ih.outputMode == explainAnalyzeDistSQLOutput
 }
 
@@ -452,7 +451,7 @@ func (ih *instrumentationHelper) ShouldCollectExecStats() bool {
 
 // ShouldSaveMemo returns true if we should save the memo and catalog in planTop.
 func (ih *instrumentationHelper) ShouldSaveMemo() bool {
-	return ih.ShouldBuildExplainPlan()
+	return ih.collectBundle
 }
 
 // RecordExplainPlan records the explain.Plan for this query.

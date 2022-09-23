@@ -652,7 +652,7 @@ func noteKeyVal(
 	validator *streamClientValidator, keyVal roachpb.KeyValue, spec streamclient.SubscriptionToken,
 ) {
 	if validator.rekeyer != nil {
-		rekey, _, err := validator.rekeyer.RewriteKey(keyVal.Key)
+		rekey, _, err := validator.rekeyer.RewriteKey(keyVal.Key, 0 /* wallTime*/)
 		if err != nil {
 			panic(err.Error())
 		}

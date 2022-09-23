@@ -99,6 +99,11 @@ type loggingT struct {
 		// to this logger already.
 		active        bool
 		firstUseStack string
+
+		// redactionPolicyManaged indicates whether we're running as part of a managed
+		// service (sourced from COCKROACH_REDACTION_POLICY_MANAGED env var). Impacts
+		// log redaction policies for log args marked with SafeManaged.
+		redactionPolicyManaged bool
 	}
 
 	allSinkInfos sinkInfoRegistry
@@ -215,6 +220,24 @@ func (l *loggingT) signalFatalCh() {
 	default:
 		close(l.mu.fatalCh)
 	}
+}
+
+// setManagedRedactionPolicy configures the logging setup to indicate if
+// we are running as part of a managed service. see SafeManaged for details
+// on how this impacts log redaction policies.
+func (l *loggingT) setManagedRedactionPolicy(isManaged bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.mu.redactionPolicyManaged = isManaged
+}
+
+// hasManagedRedactionPolicy indicates if the logging setup is being run
+// as part of a managed service. see SafeManaged for details on how this
+// impacts log redaction policies.
+func (l *loggingT) hasManagedRedactionPolicy() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.mu.redactionPolicyManaged
 }
 
 // outputLogEntry marshals a log entry proto into bytes, and writes

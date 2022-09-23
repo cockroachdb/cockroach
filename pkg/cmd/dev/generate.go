@@ -95,6 +95,13 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	for _, target := range targets {
 		targetsMap[target] = struct{}{}
 	}
+	// NB: We have to run the bazel generator first if it's specified.
+	if _, ok := targetsMap["bazel"]; ok {
+		delete(targetsMap, "bazel")
+		if err := generatorTargetMapping["bazel"](cmd); err != nil {
+			return err
+		}
+	}
 	{
 		// In this case, generating both go and cgo would duplicate work.
 		// Generate go_nocgo instead.

@@ -15,7 +15,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	stdos "os"
 	stdexec "os/exec"
@@ -40,8 +39,8 @@ import (
 // DataDriven divvies up these files as subtests, so individual "files" are
 // runnable through:
 //
-//  		dev test pkg/cmd/dev -f TestRecorderDriven/<fname>
-// 	OR  go test ./pkg/cmd/dev -run TestRecorderDriven/<fname>
+//	 		dev test pkg/cmd/dev -f TestRecorderDriven/<fname>
+//		OR  go test ./pkg/cmd/dev -run TestRecorderDriven/<fname>
 //
 // Recordings are used to mock out "system" behavior. When --rewrite is
 // specified, attempts to shell out to bazel or perform other OS operations
@@ -49,7 +48,7 @@ import (
 // responses are recorded for future playback. To update the test files with new
 // capture data, try:
 //
-// 		go test ./pkg/cmd/dev -run TestRecorderDriven/<fname> -rewrite
+//	go test ./pkg/cmd/dev -run TestRecorderDriven/<fname> -rewrite
 //
 // NB: This test is worth contrasting to TestDataDriven, where all operations
 // are run in "dry-run" mode when --rewrite is specified. Here we'll actually
@@ -69,7 +68,6 @@ import (
 // bazel rules, we should re-evaluate whether this harness provides much value.
 // Probably dev commands that require writing a TestRecorderDriven test is worth
 // re-writing.
-//
 func TestRecorderDriven(t *testing.T) {
 	rewriting := false
 	if f := flag.Lookup("rewrite"); f != nil && f.Value.String() == "true" {
@@ -98,7 +96,7 @@ func TestRecorderDriven(t *testing.T) {
 
 		if !verbose {
 			// Suppress all internal output unless told otherwise.
-			execOpts = append(execOpts, exec.WithStdOutErr(ioutil.Discard, ioutil.Discard))
+			execOpts = append(execOpts, exec.WithStdOutErr(io.Discard, io.Discard))
 		}
 
 		if rewriting {
@@ -140,8 +138,8 @@ func TestRecorderDriven(t *testing.T) {
 			dev.knobs.devBinOverride = "dev"
 
 			if !verbose {
-				dev.cli.SetErr(ioutil.Discard)
-				dev.cli.SetOut(ioutil.Discard)
+				dev.cli.SetErr(io.Discard)
+				dev.cli.SetOut(io.Discard)
 			}
 
 			require.Equalf(t, d.Cmd, "dev", "unknown command: %s", d.Cmd)

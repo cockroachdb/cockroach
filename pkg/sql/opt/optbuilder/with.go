@@ -290,11 +290,11 @@ func (b *Builder) buildCTE(
 	bindingProps.Cardinality = props.AnyCardinality.AtLeast(props.OneCardinality)
 	// We don't really know the input row count, except for the first time we run
 	// the recursive query. We don't have anything better though.
-	bindingProps.Stats.RowCount = initialScope.expr.Relational().Stats.RowCount
+	bindingProps.Statistics().RowCount = initialScope.expr.Relational().Statistics().RowCount
 	// Row count must be greater than 0 or the stats code will throw an error.
 	// Set it to 1 to match the cardinality.
-	if bindingProps.Stats.RowCount < 1 {
-		bindingProps.Stats.RowCount = 1
+	if bindingProps.Statistics().RowCount < 1 {
+		bindingProps.Statistics().RowCount = 1
 	}
 	cteSrc.expr = b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
 		Props: bindingProps,
@@ -388,7 +388,9 @@ func (b *Builder) getCTECols(cteScope *scope, name tree.AliasClause) physical.Pr
 }
 
 // splitRecursiveCTE splits a CTE statement of the form
-//   initial_query UNION [ALL] recursive_query
+//
+//	initial_query UNION [ALL] recursive_query
+//
 // into the initial and recursive parts.
 // If the statement is not of this form, returns ok=false.
 func (b *Builder) splitRecursiveCTE(

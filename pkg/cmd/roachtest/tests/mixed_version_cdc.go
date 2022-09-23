@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -103,14 +102,8 @@ func newCDCMixedVersionTester(
 func (cmvt *cdcMixedVersionTester) StartKafka(t test.Test, c cluster.Cluster) {
 	t.Status("starting Kafka node")
 	cmvt.kafka, cmvt.cleanup = setupKafka(cmvt.ctx, t, c, cmvt.kafkaNodes)
-
-	// try to create a Kafka topic for some time. Without waiting, a
-	// `kafka controller not available` error is seen with 1-5%
-	// probability
-	if err := retry.ForDuration(1*time.Minute, func() error {
-		return cmvt.kafka.createTopic(cmvt.ctx, targetTable)
-	}); err != nil {
-		t.Fatal(fmt.Errorf("timed out trying to create kafka topic: %w", err))
+	if err := cmvt.kafka.createTopic(cmvt.ctx, targetTable); err != nil {
+		t.Fatal(err)
 	}
 }
 

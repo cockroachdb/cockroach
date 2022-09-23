@@ -40,15 +40,16 @@ type expressionCarrier interface {
 // tableWriter handles writing kvs and forming table rows.
 //
 // Usage:
-//   err := tw.init(txn, evalCtx)
-//   // Handle err.
-//   for {
-//      values := ...
-//      row, err := tw.row(values)
-//      // Handle err.
-//   }
-//   err := tw.finalize()
-//   // Handle err.
+//
+//	err := tw.init(txn, evalCtx)
+//	// Handle err.
+//	for {
+//	   values := ...
+//	   row, err := tw.row(values)
+//	   // Handle err.
+//	}
+//	err := tw.finalize()
+//	// Handle err.
 type tableWriter interface {
 	expressionCarrier
 

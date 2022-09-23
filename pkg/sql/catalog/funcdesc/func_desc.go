@@ -221,8 +221,8 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	}
 }
 
-// ValidateCrossReferences implements the catalog.Descriptor interface.
-func (desc *immutable) ValidateCrossReferences(
+// ValidateForwardReferences implements the catalog.Descriptor interface.
+func (desc *immutable) ValidateForwardReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Check that parent DB exists.
@@ -240,14 +240,33 @@ func (desc *immutable) ValidateCrossReferences(
 	} else if scDesc.Dropped() {
 		vea.Report(errors.AssertionFailedf("parent schema %q (%d) is dropped", scDesc.GetName(), scDesc.GetID()))
 	}
-	vea.Report(desc.validateFuncExistsInSchema(scDesc))
 
 	for _, depID := range desc.DependsOn {
-		vea.Report(catalog.ValidateOutboundTableRef(desc.ID, depID, vdg))
+		vea.Report(catalog.ValidateOutboundTableRef(depID, vdg))
 	}
 
 	for _, typeID := range desc.DependsOnTypes {
-		vea.Report(catalog.ValidateOutboundTypeRef(desc.ID, typeID, vdg))
+		vea.Report(catalog.ValidateOutboundTypeRef(typeID, vdg))
+	}
+}
+
+// ValidateBackReferences implements the catalog.Descriptor interface.
+func (desc *immutable) ValidateBackReferences(
+	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+) {
+	// Check that function exists in parent schema.
+	if sc, err := vdg.GetSchemaDescriptor(desc.GetParentSchemaID()); err == nil {
+		vea.Report(desc.validateFuncExistsInSchema(sc))
+	}
+
+	for _, depID := range desc.DependsOn {
+		tbl, _ := vdg.GetTableDescriptor(depID)
+		vea.Report(catalog.ValidateOutboundTableRefBackReference(desc.GetID(), tbl))
+	}
+
+	for _, typeID := range desc.DependsOnTypes {
+		typ, _ := vdg.GetTypeDescriptor(typeID)
+		vea.Report(catalog.ValidateOutboundTypeRefBackReference(desc.GetID(), typ))
 	}
 
 	// Currently, we don't support cross function references yet.
@@ -255,7 +274,6 @@ func (desc *immutable) ValidateCrossReferences(
 	for _, by := range desc.DependedOnBy {
 		vea.Report(desc.validateInboundTableRef(by, vdg))
 	}
-
 }
 
 func (desc *immutable) validateFuncExistsInSchema(scDesc catalog.SchemaDescriptor) error {

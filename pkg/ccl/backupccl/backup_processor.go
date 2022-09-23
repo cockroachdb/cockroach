@@ -394,7 +394,7 @@ func runBackupProcessor(
 						// after creating a single SST.
 						header.TargetBytes = 1
 						admissionHeader := roachpb.AdmissionHeader{
-							// Export requests are currently assigned NormalPri.
+							// Export requests are currently assigned BulkNormalPri.
 							//
 							// TODO(dt): Consider linking this to/from the UserPriority field.
 							Priority:                 int32(admissionpb.BulkNormalPri),

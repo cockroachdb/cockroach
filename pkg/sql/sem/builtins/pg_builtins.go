@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -95,7 +96,7 @@ func PGIOBuiltinPrefix(typ *types.T) string {
 }
 
 // initPGBuiltins adds all of the postgres builtins to the builtins map.
-func initPGBuiltins() {
+func init() {
 	for k, v := range pgBuiltins {
 		v.props.Category = builtinconstants.CategoryCompatibility
 		registerBuiltin(k, v)
@@ -263,8 +264,15 @@ func makePGGetViewDef(argTypes tree.ArgTypes) tree.Overload {
 			r, err := ctx.Planner.QueryRowEx(
 				ctx.Ctx(), "pg_get_viewdef",
 				sessiondata.NoSessionDataOverride,
-				"SELECT definition FROM pg_catalog.pg_views v JOIN pg_catalog.pg_class c ON "+
-					"c.relname=v.viewname WHERE oid=$1", args[0])
+				`SELECT definition
+ FROM pg_catalog.pg_views v
+ JOIN pg_catalog.pg_class c ON c.relname=v.viewname
+WHERE c.oid=$1
+UNION ALL
+SELECT definition
+ FROM pg_catalog.pg_matviews v
+ JOIN pg_catalog.pg_class c ON c.relname=v.matviewname
+WHERE c.oid=$1`, args[0])
 			if err != nil {
 				return nil, err
 			}
@@ -639,11 +647,48 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	// pg_get_function_result returns the types of the result of an builtin
+	"pg_get_functiondef": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"func_oid", types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				idToQuery := catid.DescID(tree.MustBeDOid(args[0]).Oid)
+				getFuncQuery := `SELECT prosrc FROM pg_proc WHERE oid=$1`
+				if catid.IsOIDUserDefined(oid.Oid(idToQuery)) {
+					getFuncQuery = `SELECT create_statement FROM crdb_internal.create_function_statements WHERE function_id=$1`
+					var err error
+					idToQuery, err = catid.UserDefinedOIDToID(oid.Oid(idToQuery))
+					if err != nil {
+						return nil, err
+					}
+				}
+				results, err := ctx.Planner.QueryRowEx(
+					ctx.Ctx(), "pg_get_functiondef",
+					sessiondata.NoSessionDataOverride,
+					getFuncQuery,
+					idToQuery,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if len(results) == 0 {
+					return tree.DNull, nil
+				}
+				return results[0], nil
+			},
+			Info: "For user-defined functions, returns the definition of the specified function. " +
+				"For builtin functions, returns the name of the function.",
+			Volatility: volatility.Stable,
+		},
+	),
+
+	// pg_get_function_result returns the types of the result of a builtin
 	// function. Multi-return builtins currently are returned as anyelement, which
 	// is a known incompatibility with Postgres.
 	// https://www.postgresql.org/docs/11/functions-info.html
-	"pg_get_function_result": makeBuiltin(defProps(),
+	"pg_get_function_result": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"func_oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -661,7 +706,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				}
 				return t[0], nil
 			},
-			Info:       notUsableInfo,
+			Info:       "Returns the types of the result of the specified function.",
 			Volatility: volatility.Stable,
 		},
 	),
@@ -670,7 +715,8 @@ var pgBuiltins = map[string]builtinDefinition{
 	// identify a function, in the form it would need to appear in within ALTER
 	// FUNCTION, for instance. This form omits default values.
 	// https://www.postgresql.org/docs/11/functions-info.html
-	"pg_get_function_identity_arguments": makeBuiltin(defProps(),
+	"pg_get_function_identity_arguments": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"func_oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
@@ -707,21 +753,24 @@ var pgBuiltins = map[string]builtinDefinition{
 				}
 				return tree.NewDString(sb.String()), nil
 			},
-			Info:       notUsableInfo,
+			Info: "Returns the argument list (without defaults) necessary to identify a function, " +
+				"in the form it would need to appear in within ALTER FUNCTION, for instance.",
 			Volatility: volatility.Stable,
 		},
 	),
 
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
-	"pg_get_indexdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
+	"pg_get_indexdef": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
 		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}}),
 		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}, {"column_no", types.Int}, {"pretty_bool", types.Bool}}),
 	),
 
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
 	// PostgreSQL leaving out the actual 'CREATE VIEW table_name AS' portion of the statement.
-	"pg_get_viewdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
+	"pg_get_viewdef": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
 		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}}),
 		makePGGetViewDef(tree.ArgTypes{{"view_oid", types.Oid}, {"pretty_bool", types.Bool}}),
 	),
@@ -758,7 +807,8 @@ var pgBuiltins = map[string]builtinDefinition{
 	// pg_my_temp_schema returns the OID of session's temporary schema, or 0 if
 	// none.
 	// https://www.postgresql.org/docs/11/functions-info.html
-	"pg_my_temp_schema": makeBuiltin(defProps(),
+	"pg_my_temp_schema": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Oid),
@@ -790,7 +840,8 @@ var pgBuiltins = map[string]builtinDefinition{
 	// pg_is_other_temp_schema returns true if the given OID is the OID of another
 	// session's temporary schema.
 	// https://www.postgresql.org/docs/11/functions-info.html
-	"pg_is_other_temp_schema": makeBuiltin(defProps(),
+	"pg_is_other_temp_schema": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -2125,6 +2176,8 @@ func getCatalogOidForComments(catalogName string) (id int, ok bool) {
 		return catconstants.PgCatalogDescriptionTableID, true
 	case "pg_constraint":
 		return catconstants.PgCatalogConstraintTableID, true
+	case "pg_namespace":
+		return catconstants.PgCatalogNamespaceTableID, true
 	default:
 		// We currently only support comments on pg_class objects
 		// (columns, tables) in this context.

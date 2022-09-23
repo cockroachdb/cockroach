@@ -8,7 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { executeSql, SqlExecutionRequest, SqlTxnResult } from "./sqlApi";
+import {
+  SqlExecutionRequest,
+  SqlTxnResult,
+  executeInternalSql,
+  LONG_TIMEOUT,
+} from "./sqlApi";
 import {
   InsightRecommendation,
   InsightType,
@@ -98,6 +103,9 @@ function createIndexRecommendationsToSchemaInsight(
         case "drop":
           idxType = "DropIndex";
           break;
+        case "alteration":
+          idxType = "AlterIndex";
+          break;
       }
 
       results.push({
@@ -174,8 +182,9 @@ export function getSchemaInsights(): Promise<InsightRecommendation[]> {
       sql: insightQuery.query,
     })),
     execute: true,
+    timeout: LONG_TIMEOUT,
   };
-  return executeSql<SchemaInsightResponse>(request).then(result => {
+  return executeInternalSql<SchemaInsightResponse>(request).then(result => {
     const results: InsightRecommendation[] = [];
     if (result.execution.txn_results.length === 0) {
       // No data.

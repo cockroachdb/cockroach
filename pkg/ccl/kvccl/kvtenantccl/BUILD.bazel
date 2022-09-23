@@ -49,6 +49,7 @@ go_test(
         "tenant_trace_test.go",
         "tenant_upgrade_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":kvtenantccl"],
     shard_count = 16,
     deps = [

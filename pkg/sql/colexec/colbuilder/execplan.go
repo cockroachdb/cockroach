@@ -69,7 +69,6 @@ func wrapRowSources(
 	flowCtx *execinfra.FlowCtx,
 	inputs []colexecargs.OpWithMetaInfo,
 	inputTypes [][]*types.T,
-	streamingMemAcc *mon.BoundAccount,
 	monitorRegistry *colexecargs.MonitorRegistry,
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
@@ -121,15 +120,13 @@ func wrapRowSources(
 	if !isProcessor {
 		return nil, nil, errors.AssertionFailedf("unexpectedly %T is not an execinfra.Processor", toWrap)
 	}
+	batchAllocator := colmem.NewAllocator(ctx, monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
+	metadataAllocator := colmem.NewAllocator(ctx, monitorRegistry.NewStreamingMemAccount(flowCtx), factory)
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
-		c = colexec.NewStreamingColumnarizer(
-			colmem.NewAllocator(ctx, streamingMemAcc, factory), flowCtx, processorID, toWrap,
-		)
+		c = colexec.NewStreamingColumnarizer(batchAllocator, metadataAllocator, flowCtx, processorID, toWrap)
 	} else {
-		c = colexec.NewBufferingColumnarizer(
-			colmem.NewAllocator(ctx, streamingMemAcc, factory), flowCtx, processorID, toWrap,
-		)
+		c = colexec.NewBufferingColumnarizer(batchAllocator, metadataAllocator, flowCtx, processorID, toWrap)
 	}
 	return c, releasables, nil
 }
@@ -550,7 +547,6 @@ func (r opResult) createAndWrapRowSource(
 		flowCtx,
 		inputs,
 		inputTypes,
-		args.StreamingMemAccount,
 		args.MonitorRegistry,
 		processorID,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
@@ -724,7 +720,9 @@ func NewColOperator(
 					getStreamingAllocator(ctx, args), int(core.Values.NumRows), nil, /* opToInitialize */
 				)
 			} else {
-				result.Root = colexec.NewValuesOp(getStreamingAllocator(ctx, args), core.Values)
+				result.Root = colexec.NewValuesOp(
+					getStreamingAllocator(ctx, args), core.Values, execinfra.GetWorkMemLimit(flowCtx),
+				)
 			}
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
@@ -806,25 +804,6 @@ func NewColOperator(
 				return r, err
 			}
 			aggSpec := core.Aggregator
-			if len(aggSpec.Aggregations) == 0 {
-				// We can get an aggregator when no aggregate functions are
-				// present if HAVING clause is present, for example, with a
-				// query as follows: SELECT 1 FROM t HAVING true. In this case,
-				// we plan a special operator that outputs a batch of length 1
-				// without actual columns once and then zero-length batches. The
-				// actual "data" will be added by projections below.
-				// TODO(solon): The distsql plan for this case includes a
-				// TableReader, so we end up creating an orphaned colBatchScan.
-				// We should avoid that. Ideally the optimizer would not plan a
-				// scan in this unusual case.
-				result.Root, err = colexecutils.NewFixedNumTuplesNoInputOp(
-					getStreamingAllocator(ctx, args), 1 /* numTuples */, inputs[0].Root,
-				), nil
-				// We make ColumnTypes non-nil so that sanity check doesn't
-				// panic.
-				result.ColumnTypes = []*types.T{}
-				break
-			}
 			if aggSpec.IsRowCount() {
 				result.Root, err = colexec.NewCountOp(getStreamingAllocator(ctx, args), inputs[0].Root), nil
 				result.ColumnTypes = []*types.T{types.Int}
@@ -2689,7 +2668,7 @@ func appendOneType(typs []*types.T, t *types.T) []*types.T {
 // require special null-handling logic).
 func useDefaultCmpOpForIn(tuple *tree.DTuple) bool {
 	tupleContents := tuple.ResolvedType().TupleContents()
-	if len(tupleContents) == 0 {
+	if len(tupleContents) == 0 || len(tuple.D) == 0 {
 		return true
 	}
 	for _, typ := range tupleContents {

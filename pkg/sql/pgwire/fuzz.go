@@ -16,7 +16,6 @@ package pgwire
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"net"
 	"time"
 
@@ -49,7 +48,7 @@ func FuzzServeConn(data []byte) int {
 	}()
 	go func() {
 		// Discard all data sent from the server.
-		_, _ = io.Copy(ioutil.Discard, client)
+		_, _ = io.Copy(io.Discard, client)
 	}()
 	err := s.ServeConn(context.Background(), srv)
 	if err != nil {

@@ -126,10 +126,10 @@ func (c *SyncedCluster) localVMDir(n Node) string {
 // TargetNodes is the fully expanded, ordered list of nodes that any given
 // roachprod command is intending to target.
 //
-//  $ roachprod create local -n 4
-//  $ roachprod start local          # [1, 2, 3, 4]
-//  $ roachprod start local:2-4      # [2, 3, 4]
-//  $ roachprod start local:2,1,4    # [1, 2, 4]
+//	$ roachprod create local -n 4
+//	$ roachprod start local          # [1, 2, 3, 4]
+//	$ roachprod start local:2-4      # [2, 3, 4]
+//	$ roachprod start local:2,1,4    # [1, 2, 4]
 func (c *SyncedCluster) TargetNodes() Nodes {
 	return append(Nodes{}, c.Nodes...)
 }
@@ -170,25 +170,25 @@ func (c *SyncedCluster) GetInternalIP(ctx context.Context, n Node) (string, erro
 // correct process, when monitoring or stopping.
 //
 // Normally, the value is of the form:
-//   [<local-cluster-name>/]<node-id>[/tag]
+//
+//	[<local-cluster-name>/]<node-id>[/tag]
 //
 // Examples:
 //
-//  - non-local cluster without tags:
-//      ROACHPROD=1
+//   - non-local cluster without tags:
+//     ROACHPROD=1
 //
-//  - non-local cluster with tag foo:
-//      ROACHPROD=1/foo
+//   - non-local cluster with tag foo:
+//     ROACHPROD=1/foo
 //
-//  - non-local cluster with hierarchical tag foo/bar:
-//      ROACHPROD=1/foo/bar
+//   - non-local cluster with hierarchical tag foo/bar:
+//     ROACHPROD=1/foo/bar
 //
-//  - local cluster:
-//      ROACHPROD=local-foo/1
+//   - local cluster:
+//     ROACHPROD=local-foo/1
 //
-//  - local cluster with tag bar:
-//      ROACHPROD=local-foo/1/bar
-//
+//   - local cluster with tag bar:
+//     ROACHPROD=local-foo/1/bar
 func (c *SyncedCluster) roachprodEnvValue(node Node) string {
 	var parts []string
 	if c.IsLocal() {
@@ -850,12 +850,12 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 // added to the hosts via the c.AuthorizedKeys field. It does so in the following
 // steps:
 //
-//   1. Creates an ssh key pair on the first host to be used on all hosts if
-//      none exists.
-//   2. Distributes the public key, private key, and authorized_keys file from
-//      the first host to the others.
-//   3. Merges the data in c.AuthorizedKeys with the existing authorized_keys
-//      files on all hosts.
+//  1. Creates an ssh key pair on the first host to be used on all hosts if
+//     none exists.
+//  2. Distributes the public key, private key, and authorized_keys file from
+//     the first host to the others.
+//  3. Merges the data in c.AuthorizedKeys with the existing authorized_keys
+//     files on all hosts.
 //
 // This call strives to be idempotent.
 func (c *SyncedCluster) SetupSSH(ctx context.Context, l *logger.Logger) error {
@@ -1686,9 +1686,9 @@ func (c *SyncedCluster) Put(
 // For example, if dest is "tpcc-test.logs" then the logs for each node will be
 // stored like:
 //
-//  tpcc-test.logs/1.logs/...
-//  tpcc-test.logs/2.logs/...
-//  ...
+//	tpcc-test.logs/1.logs/...
+//	tpcc-test.logs/2.logs/...
+//	...
 //
 // Log file syncing uses rsync which attempts to be efficient when deciding
 // which files to update. The logs are merged by calling
@@ -2221,7 +2221,7 @@ func (c *SyncedCluster) ParallelE(
 	var writer ui.Writer
 	out := l.Stdout
 	if display == "" {
-		out = ioutil.Discard
+		out = io.Discard
 	}
 
 	var ticker *time.Ticker

@@ -209,7 +209,7 @@ CREATE TABLE db.t (
 			}),
 			ops: func() []scop.Op {
 				return []scop.Op{
-					&scop.MakeAddedTempIndexDeleteOnly{
+					&scop.MakeAbsentTempIndexDeleteOnly{
 						Index: scpb.Index{
 							TableID:      table.ID,
 							IndexID:      indexToAdd.ID,
@@ -523,14 +523,14 @@ func (noopMetadataUpdater) DeleteAllCommentsForTables(ids catalog.DescriptorIDSe
 	return nil
 }
 
-//UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
+// UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) UpsertConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
 ) error {
 	return nil
 }
 
-//DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
+// DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) DeleteConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID,
 ) error {

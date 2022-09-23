@@ -122,7 +122,7 @@ func makeFileTableStorage(
 
 	// cfg.User is already a normalized SQL username.
 	user := username.MakeSQLUsernameFromPreNormalizedString(cfg.User)
-	executor := filetable.MakeInternalFileToTableExecutor(args.InternalExecutor, args.DB)
+	executor := filetable.MakeInternalFileToTableExecutor(args.InternalExecutor, args.CollectionFactory, args.DB)
 
 	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx,
 		cfg.QualifiedTableName, executor, user)

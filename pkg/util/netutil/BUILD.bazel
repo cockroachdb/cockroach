@@ -29,6 +29,7 @@ go_test(
         "net_test.go",
         "srv_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":netutil"],
     deps = [
         "//pkg/util/contextutil",

@@ -108,7 +108,7 @@ func ReadNamespaceFromDB(t *testing.T, tdb *sqlutils.SQLRunner) nstree.MutableCa
 	// Fetch namespace state.
 	var cb nstree.MutableCatalog
 	nsRows := tdb.QueryStr(t, `
-SELECT "parentID", "parentSchemaID", name, id 
+SELECT "parentID", "parentSchemaID", name, id
 FROM system.namespace
 ORDER BY id`)
 	for _, nsRow := range nsRows {
@@ -134,7 +134,7 @@ ORDER BY id`)
 			ParentSchemaID: descpb.ID(parentSchemaID),
 			Name:           name,
 		}
-		cb.UpsertNamespaceEntry(key, descpb.ID(id))
+		cb.UpsertNamespaceEntry(key, descpb.ID(id), hlc.Timestamp{})
 	}
 	return cb
 }

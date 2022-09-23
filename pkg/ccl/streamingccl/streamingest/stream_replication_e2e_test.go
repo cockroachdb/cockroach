@@ -191,6 +191,7 @@ func createTenantStreamingClusters(
 			DistSQL: &execinfra.TestingKnobs{
 				StreamingTestingKnobs: args.testingKnobs,
 			},
+			Streaming: args.testingKnobs,
 		},
 	}
 
@@ -214,8 +215,6 @@ func createTenantStreamingClusters(
 	// Start the source cluster.
 	srcCluster, srcURL, srcCleanup := startTestCluster(ctx, t, serverArgs, args.srcNumNodes)
 
-	// Start the src cluster tenant with tenant pods on every node in the cluster,
-	// ensuring they're all active beofre proceeding.
 	tenantArgs := base.TestTenantArgs{
 		TenantID: args.srcTenantID,
 		TestingKnobs: base.TestingKnobs{
@@ -223,17 +222,8 @@ func createTenantStreamingClusters(
 				AllowSplitAndScatter: true,
 			}},
 	}
-	tenantConns := make([]*gosql.DB, 0)
 	srcTenantServer, srcTenantConn := serverutils.StartTenant(t, srcCluster.Server(0), tenantArgs)
-	tenantConns = append(tenantConns, srcTenantConn)
-	for i := 1; i < args.srcNumNodes; i++ {
-		tenantPodArgs := tenantArgs
-		tenantPodArgs.DisableCreateTenant = true
-		tenantPodArgs.SkipTenantCheck = true
-		_, srcTenantPodConn := serverutils.StartTenant(t, srcCluster.Server(i), tenantPodArgs)
-		tenantConns = append(tenantConns, srcTenantPodConn)
-	}
-	waitForTenantPodsActive(t, srcTenantServer, args.srcNumNodes)
+	waitForTenantPodsActive(t, srcTenantServer, 1)
 
 	// Start the destination cluster.
 	destCluster, _, destCleanup := startTestCluster(ctx, t, serverArgs, args.destNumNodes)
@@ -265,11 +255,7 @@ func createTenantStreamingClusters(
 	// Enable stream replication on dest by default.
 	tsc.destSysSQL.Exec(t, `SET enable_experimental_stream_replication = true;`)
 	return tsc, func() {
-		for _, tenantConn := range tenantConns {
-			if tenantConn != nil {
-				require.NoError(t, tenantConn.Close())
-			}
-		}
+		require.NoError(t, srcTenantConn.Close())
 		destCleanup()
 		srcCleanup()
 	}
@@ -279,7 +265,7 @@ func (c *tenantStreamingClusters) srcExec(exec srcInitExecFunc) {
 	exec(c.t, c.srcSysSQL, c.srcTenantSQL)
 }
 
-func createScatteredTable(t *testing.T, c *tenantStreamingClusters) {
+func createScatteredTable(t *testing.T, c *tenantStreamingClusters, numNodes int) {
 	// Create a source table with multiple ranges spread across multiple nodes
 	numRanges := 50
 	rowsPerRange := 20
@@ -289,7 +275,7 @@ func createScatteredTable(t *testing.T, c *tenantStreamingClusters) {
   ALTER TABLE d.scattered SPLIT AT (SELECT * FROM generate_series(%d, %d, %d));
   ALTER TABLE d.scattered SCATTER;
   `, numRanges*rowsPerRange, rowsPerRange, (numRanges-1)*rowsPerRange, rowsPerRange))
-	c.srcSysSQL.CheckQueryResultsRetry(t, "SELECT count(distinct lease_holder) from crdb_internal.ranges", [][]string{{"4"}})
+	c.srcSysSQL.CheckQueryResultsRetry(t, "SELECT count(distinct lease_holder) from crdb_internal.ranges", [][]string{{fmt.Sprint(numNodes)}})
 }
 
 var defaultSrcClusterSetting = map[string]string{
@@ -330,6 +316,11 @@ func streamIngestionStats(
 	return stats
 }
 
+func runningStatus(t *testing.T, sqlRunner *sqlutils.SQLRunner, ingestionJobID int) string {
+	p := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
+	return p.RunningStatus
+}
+
 func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -368,8 +359,13 @@ func TestTenantStreamingSuccessfulIngestion(t *testing.T) {
 	// <-time.NewTimer(2 * time.Second).C
 	// _, err := c.destSysServer.StartTenant(context.Background(), base.TestTenantArgs{TenantID: c.args.destTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
 	// require.Error(t, err)
+	require.Equal(t, "running the SQL flow for the stream ingestion job",
+		runningStatus(t, c.destSysSQL, ingestionJobID))
 
 	c.cutover(producerJobID, ingestionJobID, cutoverTime)
+
+	require.Equal(t, "stream ingestion finished successfully",
+		runningStatus(t, c.destSysSQL, ingestionJobID))
 
 	cleanupTenant := c.createDestTenantSQL(ctx)
 	defer func() {
@@ -429,7 +425,9 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	})...)
 
 	jobutils.WaitForJobToFail(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	// The ingestion job will stop retrying as this is a permanent job error.
 	jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+	require.Regexp(t, "ingestion job failed .* but is being paused", runningStatus(t, c.destSysSQL, ingestionJobID))
 
 	// Make dest cluster to ingest KV events faster.
 	c.srcSysSQL.ExecMultiple(t, configureClusterSettings(map[string]string{
@@ -505,7 +503,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 		streamIngestionStats(t, c.destSysSQL, ingestionJobID).IngestionProgress.StartTime)
 }
 
-func TestTenantStreamingPauseOnError(t *testing.T) {
+func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -515,10 +513,20 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 
 	ctx := context.Background()
 	ingestErrCh := make(chan error, 1)
+	ingestionStarts := 0
 	args := defaultTenantStreamingClustersArgs
-	args.testingKnobs = &sql.StreamingTestingKnobs{RunAfterReceivingEvent: func(ctx context.Context) error {
-		return <-ingestErrCh
-	}}
+	args.testingKnobs = &sql.StreamingTestingKnobs{
+		RunAfterReceivingEvent: func(ctx context.Context) error {
+			return <-ingestErrCh
+		},
+		BeforeIngestionStart: func(ctx context.Context) error {
+			ingestionStarts++
+			if ingestionStarts == 2 {
+				return jobs.MarkAsPermanentJobError(errors.New("test error"))
+			}
+			return nil
+		},
+	}
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
@@ -529,6 +537,9 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 	producerJobID, ingestionJobID := c.startStreamReplication()
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+	// Ingestion is retried once after having an ingestion error.
+	require.Equal(t, 2, ingestionStarts)
 
 	// Check we didn't make any progress.
 	require.Nil(t, streamIngestionStats(t, c.destSysSQL, ingestionJobID).ReplicationLagInfo)
@@ -548,6 +559,9 @@ func TestTenantStreamingPauseOnError(t *testing.T) {
 
 	c.compareResult("SELECT * FROM d.t1")
 	c.compareResult("SELECT * FROM d.t2")
+
+	// Ingestion happened one more time after resuming the ingestion job.
+	require.Equal(t, 3, ingestionStarts)
 
 	// Confirm this new run resumed from the empty checkpoint.
 	require.True(t,
@@ -743,16 +757,17 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long with multiple nodes")
-	skip.WithIssue(t, 86287)
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
-	args.srcNumNodes = 4
-	args.destNumNodes = 4
+
+	args.srcNumNodes = 3
+	args.destNumNodes = 3
+
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	createScatteredTable(t, c)
+	createScatteredTable(t, c, 3)
 	srcScatteredData := c.srcTenantSQL.QueryStr(c.t, "SELECT * FROM d.scattered ORDER BY key")
 
 	producerJobID, ingestionJobID := c.startStreamReplication()
@@ -778,7 +793,8 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 
 	// Once srcCluster.Server(0) is shut down queries must be ran against a different server
 	alternateSrcSysSQL := sqlutils.MakeSQLRunner(c.srcCluster.ServerConn(1))
-	_, alternateSrcTenantConn := serverutils.StartTenant(t, c.srcCluster.Server(1), base.TestTenantArgs{TenantID: c.args.srcTenantID, DisableCreateTenant: true, SkipTenantCheck: true})
+	_, alternateSrcTenantConn := serverutils.StartTenant(t, c.srcCluster.Server(1),
+		base.TestTenantArgs{TenantID: c.args.srcTenantID, DisableCreateTenant: true})
 	defer alternateSrcTenantConn.Close()
 	alternateSrcTenantSQL := sqlutils.MakeSQLRunner(alternateSrcTenantConn)
 
@@ -931,12 +947,11 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long with multiple nodes")
-	skip.WithIssue(t, 86206)
 
 	ctx := context.Background()
 	args := defaultTenantStreamingClustersArgs
-	args.srcNumNodes = 4
-	args.destNumNodes = 4
+	args.srcNumNodes = 3
+	args.destNumNodes = 3
 
 	// Track the number of unique addresses that were connected to
 	clientAddresses := make(map[string]struct{})
@@ -952,7 +967,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 	c, cleanup := createTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	createScatteredTable(t, c)
+	createScatteredTable(t, c, 3)
 
 	producerJobID, ingestionJobID := c.startStreamReplication()
 	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))

@@ -18,6 +18,9 @@
   .table-link {
     color: $colors--link
   }
+  a {
+    color: $colors--link
+  }
 }
 
 .margin-bottom {
@@ -31,4 +34,8 @@
 .section {
   flex: 0 0 auto;
   padding: 12px 24px 12px 0px;
+}
+
+.inline {
+  display: inline-flex;
 }

@@ -209,8 +209,8 @@ func (s *children) truncate(index int) {
 // node is an internal node in a tree.
 //
 // It must at all times maintain the invariant that either
-//   * len(children) == 0, len(interfaces) unconstrained
-//   * len(children) == len(interfaces) + 1
+//   - len(children) == 0, len(interfaces) unconstrained
+//   - len(children) == len(interfaces) + 1
 type node struct {
 	// Range is the node range which covers all the ranges in the subtree rooted
 	// at the node. Range.Start is the leftmost position. Range.End is the
@@ -256,21 +256,21 @@ func (n *node) mutableChild(i int) *node {
 // this function returns the Interface that existed at that index and a new node
 // containing all interfaces/children after it. Before splitting:
 //
-//          +-----------+
-//          |   x y z   |
-//          ---/-/-\-\--+
+//	+-----------+
+//	|   x y z   |
+//	---/-/-\-\--+
 //
 // After splitting:
 //
-//          +-----------+
-//          |     y     |
-//          -----/-\----+
-//              /   \
-//             v     v
+//	+-----------+
+//	|     y     |
+//	-----/-\----+
+//	    /   \
+//	   v     v
+//
 // +-----------+     +-----------+
 // |         x |     | z         |
 // +-----------+     +-----------+
-//
 func (n *node) split(i int, fast bool) (Interface, *node) {
 	e := n.items[i]
 	second := n.cow.newNode()
@@ -634,15 +634,20 @@ func (n *node) removeFromLeaf(i int, fast bool) (out Interface, shrunk bool) {
 // actually remove it.
 //
 // Most documentation says we have to do two sets of special casing:
-//   1) interface is in this node
-//   2) interface is in child
+//  1. interface is in this node
+//  2. interface is in child
+//
 // In both cases, we need to handle the two subcases:
-//   A) node has enough values that it can spare one
-//   B) node doesn't have enough values
+//
+//	A) node has enough values that it can spare one
+//	B) node doesn't have enough values
+//
 // For the latter, we have to check:
-//   a) left sibling has node to spare
-//   b) right sibling has node to spare
-//   c) we must merge
+//
+//	a) left sibling has node to spare
+//	b) right sibling has node to spare
+//	c) we must merge
+//
 // To simplify our code here, we handle cases #1 and #2 the same:
 // If a node doesn't have enough Interfaces, we make sure it does (using a,b,c).
 // We then simply redo our remove call, and the second time (regardless of
@@ -666,32 +671,35 @@ func (n *node) growChildAndRemove(
 
 // Steal from left child. Before stealing:
 //
-//          +-----------+
-//          |     y     |
-//          -----/-\----+
-//              /   \
-//             v     v
+//	+-----------+
+//	|     y     |
+//	-----/-\----+
+//	    /   \
+//	   v     v
+//
 // +-----------+     +-----------+
 // |         x |     |           |
 // +----------\+     +-----------+
-//             \
-//              v
-//              a
+//
+//	\
+//	 v
+//	 a
 //
 // After stealing:
 //
-//          +-----------+
-//          |     x     |
-//          -----/-\----+
-//              /   \
-//             v     v
+//	+-----------+
+//	|     x     |
+//	-----/-\----+
+//	    /   \
+//	   v     v
+//
 // +-----------+     +-----------+
 // |           |     | y         |
 // +-----------+     +/----------+
-//                   /
-//                  v
-//                  a
 //
+//	 /
+//	v
+//	a
 func (n *node) stealFromLeftChild(i int, fast bool) {
 	// steal
 	stealTo := n.mutableChild(i)
@@ -723,32 +731,35 @@ func (n *node) stealFromLeftChild(i int, fast bool) {
 
 // Steal from right child. Before stealing:
 //
-//          +-----------+
-//          |     y     |
-//          -----/-\----+
-//              /   \
-//             v     v
+//	+-----------+
+//	|     y     |
+//	-----/-\----+
+//	    /   \
+//	   v     v
+//
 // +-----------+     +-----------+
 // |           |     | x         |
 // +---------- +     +/----------+
-//                   /
-//                  v
-//                  a
+//
+//	 /
+//	v
+//	a
 //
 // After stealing:
 //
-//          +-----------+
-//          |     x     |
-//          -----/-\----+
-//              /   \
-//             v     v
+//	+-----------+
+//	|     x     |
+//	-----/-\----+
+//	    /   \
+//	   v     v
+//
 // +-----------+     +-----------+
 // |         y |     |           |
 // +----------\+     +-----------+
-//             \
-//              v
-//              a
 //
+//	\
+//	 v
+//	 a
 func (n *node) stealFromRightChild(i int, fast bool) {
 	// steal
 	stealTo := n.mutableChild(i)
@@ -780,26 +791,26 @@ func (n *node) stealFromRightChild(i int, fast bool) {
 
 // Merge with right child. Before merging:
 //
-//          +-----------+
-//          |   u y v   |
-//          -----/-\----+
-//              /   \
-//             v     v
+//	+-----------+
+//	|   u y v   |
+//	-----/-\----+
+//	    /   \
+//	   v     v
+//
 // +-----------+     +-----------+
 // |         x |     | z         |
 // +---------- +     +-----------+
 //
 // After merging:
 //
-//          +-----------+
-//          |    u v    |
-//          ------|-----+
-//                |
-//                v
-//          +-----------+
-//          |   x y z   |
-//          +---------- +
-//
+//	+-----------+
+//	|    u v    |
+//	------|-----+
+//	      |
+//	      v
+//	+-----------+
+//	|   x y z   |
+//	+---------- +
 func (n *node) mergeWithRightChild(i int, fast bool) {
 	// merge
 	child := n.mutableChild(i)
@@ -1107,13 +1118,14 @@ func (t *btree) Iterator() TreeIterator {
 // for use by the new one, instead of being lost to the garbage collector.
 //
 // This call takes:
-//   O(1): when addNodesToFreelist is false, this is a single operation.
-//   O(1): when the freelist is already full, it breaks out immediately
-//   O(freelist size):  when the freelist is empty and the nodes are all owned
-//       by this tree, nodes are added to the freelist until full.
-//   O(tree size):  when all nodes are owned by another tree, all nodes are
-//       iterated over looking for nodes to add to the freelist, and due to
-//       ownership, none are.
+//
+//	O(1): when addNodesToFreelist is false, this is a single operation.
+//	O(1): when the freelist is already full, it breaks out immediately
+//	O(freelist size):  when the freelist is empty and the nodes are all owned
+//	    by this tree, nodes are added to the freelist until full.
+//	O(tree size):  when all nodes are owned by another tree, all nodes are
+//	    iterated over looking for nodes to add to the freelist, and due to
+//	    ownership, none are.
 func (t *btree) ClearWithOpt(addNodesToFreelist bool) {
 	if t.root != nil && addNodesToFreelist {
 		t.root.reset(t.cow)

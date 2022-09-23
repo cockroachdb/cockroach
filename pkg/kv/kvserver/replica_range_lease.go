@@ -63,7 +63,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"go.etcd.io/etcd/raft/v3"
 )
 
 var leaseStatusLogLimiter = func() *log.EveryN {
@@ -589,7 +588,7 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 // to serve a request at a specific timestamp (which may be a future timestamp)
 // under the lease, as well as a notion of the current hlc time (now).
 //
-// Explanation
+// # Explanation
 //
 // A status of ERROR indicates a failure to determine the correct lease status,
 // and should not occur under normal operations. The caller's only recourse is
@@ -621,7 +620,7 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 // Finally, for requests timestamps falling before the stasis period of a lease
 // that is not EXPIRED and also not PROSCRIBED, the status is VALID.
 //
-// Implementation Note
+// # Implementation Note
 //
 // On the surface, it might seem like we could easily abandon the lease stasis
 // concept in favor of consulting a request's uncertainty interval. We would
@@ -637,15 +636,14 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 // occur for two non-transactional requests operating on a single register
 // during a lease change:
 //
-// * a range lease gets committed on the new lease holder (but not the old).
-// * client proposes and commits a write on new lease holder (with a timestamp
-//   just greater than the expiration of the old lease).
-// * client tries to read what it wrote, but hits a slow coordinator (which
-//   assigns a timestamp covered by the old lease).
-// * the read is served by the old lease holder (which has not processed the
-//   change in lease holdership).
-// * the client fails to read their own write.
-//
+//   - a range lease gets committed on the new lease holder (but not the old).
+//   - client proposes and commits a write on new lease holder (with a timestamp
+//     just greater than the expiration of the old lease).
+//   - client tries to read what it wrote, but hits a slow coordinator (which
+//     assigns a timestamp covered by the old lease).
+//   - the read is served by the old lease holder (which has not processed the
+//     change in lease holdership).
+//   - the client fails to read their own write.
 func (r *Replica) leaseStatus(
 	ctx context.Context,
 	lease roachpb.Lease,
@@ -801,30 +799,6 @@ func (r *Replica) requestLeaseLocked(
 		return r.mu.pendingLeaseRequest.newResolvedHandle(pErr)
 	}
 
-	// If we're draining, we'd rather not take any new leases (since we're also
-	// trying to move leases away elsewhere). But if we're the leader, we don't
-	// really have a choice and we take the lease - there might not be any other
-	// replica available to take this lease (perhaps they're all draining).
-	if r.store.IsDraining() {
-		// NB: Replicas that are not the Raft leader will not take leases anyway
-		// (see the check inside propBuf.FlushLockedWithRaftGroup()), so we don't
-		// really need any special behavior for draining nodes here. This check
-		// serves mostly as a means to get more granular logging and as a defensive
-		// precaution.
-		if r.raftBasicStatusRLocked().RaftState != raft.StateLeader {
-			log.VEventf(ctx, 2, "refusing to take the lease because we're draining")
-			return r.mu.pendingLeaseRequest.newResolvedHandle(
-				roachpb.NewError(
-					newNotLeaseHolderError(
-						roachpb.Lease{}, r.store.StoreID(), r.mu.state.Desc,
-						"refusing to take the lease; node is draining",
-					),
-				),
-			)
-		}
-		log.Info(ctx, "trying to take the lease while we're draining since we're the raft leader")
-	}
-
 	// Propose a Raft command to get a lease for this replica.
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
@@ -914,7 +888,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			r.store.metrics.LeaseTransferErrorCount.Inc(1)
 			log.VEventf(ctx, 2, "not initiating lease transfer because the target %s may "+
 				"need a snapshot: %s", nextLeaseHolder, snapStatus)
-			err := newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(nextLeaseHolder, snapStatus)
+			err := NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(nextLeaseHolder, snapStatus)
 			return nil, nil, err
 		}
 
@@ -1060,10 +1034,10 @@ func newNotLeaseHolderErrorWithSpeculativeLease(
 	return newNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)
 }
 
-// newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError return an error
+// NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError return an error
 // indicating that a lease transfer failed because the current leaseholder could
 // not prove that the lease transfer target did not need a Raft snapshot.
-func newLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
+func NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
 	target roachpb.ReplicaDescriptor, snapStatus raftutil.ReplicaNeedsSnapshotStatus,
 ) error {
 	err := errors.Errorf("refusing to transfer lease to %d because target may need a Raft snapshot: %s",
@@ -1115,16 +1089,23 @@ func (r *Replica) checkRequestTimeRLocked(now hlc.ClockTimestamp, reqTS hlc.Time
 // The method can has four possible outcomes:
 //
 // (1) the request timestamp is too far in the future. In this case,
-//     a nonstructured error is returned. This shouldn't happen.
+//
+//	a nonstructured error is returned. This shouldn't happen.
+//
 // (2) the lease is invalid or otherwise unable to serve a request at
-//     the specified timestamp. In this case, an InvalidLeaseError is
-//     returned, which is caught in executeBatchWithConcurrencyRetries
-//     and used to trigger a lease acquisition/extension.
+//
+//	the specified timestamp. In this case, an InvalidLeaseError is
+//	returned, which is caught in executeBatchWithConcurrencyRetries
+//	and used to trigger a lease acquisition/extension.
+//
 // (3) the lease is valid but held by a different replica. In this case,
-//     a NotLeaseHolderError is returned, which is propagated back up to
-//     the DistSender and triggers a redirection of the request.
+//
+//	a NotLeaseHolderError is returned, which is propagated back up to
+//	the DistSender and triggers a redirection of the request.
+//
 // (4) the lease is valid, held locally, and capable of serving the
-//     given request. In this case, no error is returned.
+//
+//	given request. In this case, no error is returned.
 //
 // In addition to the lease status, the method also returns whether the
 // lease should be considered for extension using maybeExtendLeaseAsync
@@ -1222,10 +1203,11 @@ func (r *Replica) leaseGoodToGo(
 // served.
 //
 // TODO(spencer): for write commands, don't wait while requesting
-//  the range lease. If the lease acquisition fails, the write cmd
-//  will fail as well. If it succeeds, as is likely, then the write
-//  will not incur latency waiting for the command to complete.
-//  Reads, however, must wait.
+//
+//	the range lease. If the lease acquisition fails, the write cmd
+//	will fail as well. If it succeeds, as is likely, then the write
+//	will not incur latency waiting for the command to complete.
+//	Reads, however, must wait.
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *roachpb.Error) {

@@ -320,13 +320,12 @@ func (s String) IsKeyword(v string) bool {
 // ParseAndNormalize parses the HBA configuration from the provided
 // string and performs two tasks:
 //
-// - it unicode-normalizes the usernames. Since usernames are
-//   initialized during pgwire session initialization, this
-//   ensures that string comparisons can be used to match usernames.
+//   - it unicode-normalizes the usernames. Since usernames are
+//     initialized during pgwire session initialization, this
+//     ensures that string comparisons can be used to match usernames.
 //
-// - it ensures there is one entry per username. This simplifies
-//   the code in the authentication logic.
-//
+//   - it ensures there is one entry per username. This simplifies
+//     the code in the authentication logic.
 func ParseAndNormalize(val string) (*Conf, error) {
 	conf, err := Parse(val)
 	if err != nil {

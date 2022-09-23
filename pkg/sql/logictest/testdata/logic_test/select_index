@@ -703,3 +703,20 @@ query I
 SELECT c2 FROM t76289_2@t76289_2_pk2_idx WHERE pk2 = 0;
 ----
 NULL
+
+# Regression test for incorrectly splitting a row to scan (with NULL values in
+# the row) into family spans when reading from the secondary index if the KV
+# is omitted for some column families (#88110).
+statement ok
+CREATE TABLE t88110 (
+  _i INT8 NOT NULL, _bool BOOL, _int INT8,
+  UNIQUE (_bool) STORING(_int),
+  FAMILY (_bool),
+  FAMILY (_i, _int)
+);
+INSERT INTO t88110 (_i, _bool, _int) VALUES (0, false, NULL);
+
+query I
+SELECT DISTINCT _int FROM t88110 WHERE NOT _bool;
+----
+NULL

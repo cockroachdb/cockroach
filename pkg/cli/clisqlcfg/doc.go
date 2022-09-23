@@ -17,13 +17,12 @@
 //
 // 2. load customizations from e.g. command-line flags, env vars, etc.
 //
-// 3. validate the configuration and open the input/output streams via
-//    `(*Context).Open()`. Defer a call to the returned cleanup function.
+//  3. validate the configuration and open the input/output streams via
+//     `(*Context).Open()`. Defer a call to the returned cleanup function.
 //
-// 4. open a client connection via `(*Context).MakeConn()`.
-//    Note: this must occur after the call to `Open()`, as the configuration
-//    may not be ready before that point.
+//  4. open a client connection via `(*Context).MakeConn()`.
+//     Note: this must occur after the call to `Open()`, as the configuration
+//     may not be ready before that point.
 //
 // 5. call `(*Context).Run()`.
-//
 package clisqlcfg

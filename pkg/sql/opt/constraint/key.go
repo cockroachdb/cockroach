@@ -93,8 +93,9 @@ func (k Key) Value(nth int) tree.Datum {
 // extensions specify whether each key is conceptually suffixed with negative
 // or positive infinity for purposes of comparison. For example, if k is /1/2,
 // then:
-//   k (kExt = ExtendLow) : /1/2/Low
-//   k (kExt = ExtendHigh): /1/2/High
+//
+//	k (kExt = ExtendLow) : /1/2/Low
+//	k (kExt = ExtendHigh): /1/2/High
 //
 // These extensions have no effect if one key is not a prefix of the other,
 // since the comparison would already have concluded in previous values. But
@@ -102,10 +103,11 @@ func (k Key) Value(nth int) tree.Datum {
 // extension determines which key is greater. This enables correct comparison
 // of start and end keys in spans which may be either inclusive or exclusive.
 // Here is the mapping:
-//   [/1/2 - ...] (inclusive start key): ExtendLow : /1/2/Low
-//   (/1/2 - ...] (exclusive start key): ExtendHigh: /1/2/High
-//   [... - /1/2] (inclusive end key)  : ExtendHigh: /1/2/High
-//   [... - /1/2) (exclusive end key)  : ExtendLow : /1/2/Low
+//
+//	[/1/2 - ...] (inclusive start key): ExtendLow : /1/2/Low
+//	(/1/2 - ...] (exclusive start key): ExtendHigh: /1/2/High
+//	[... - /1/2] (inclusive end key)  : ExtendHigh: /1/2/High
+//	[... - /1/2) (exclusive end key)  : ExtendLow : /1/2/Low
 func (k Key) Compare(keyCtx *KeyContext, l Key, kext, lext KeyExtension) int {
 	klen := k.Length()
 	llen := l.Length()
@@ -162,7 +164,8 @@ func (k Key) Concat(l Key) Key {
 
 // CutFront returns the key with the first numCols values removed.
 // Example:
-//   [/1/2 - /1/3].CutFront(1) = [/2 - /3]
+//
+//	[/1/2 - /1/3].CutFront(1) = [/2 - /3]
 func (k Key) CutFront(numCols int) Key {
 	if numCols == 0 {
 		return k
@@ -178,7 +181,8 @@ func (k Key) CutFront(numCols int) Key {
 
 // CutBack returns the key with the last numCols values removed.
 // Example:
-//   '/1/2'.CutBack(1) = '/1'
+//
+//	'/1/2'.CutBack(1) = '/1'
 func (k Key) CutBack(numCols int) Key {
 	if numCols == 0 {
 		return k
@@ -193,10 +197,11 @@ func (k Key) CutBack(numCols int) Key {
 }
 
 // IsNextKey returns true if:
-//  - k and other have the same length;
-//  - on all but the last column, k and other have the same values;
-//  - on the last column, k has the datum that follows other's datum (for
-//    types that support it).
+//   - k and other have the same length;
+//   - on all but the last column, k and other have the same values;
+//   - on the last column, k has the datum that follows other's datum (for
+//     types that support it).
+//
 // For example: /2.IsNextKey(/1) is true.
 func (k Key) IsNextKey(keyCtx *KeyContext, other Key) bool {
 	n := k.Length()
@@ -216,16 +221,19 @@ func (k Key) IsNextKey(keyCtx *KeyContext, other Key) bool {
 
 // Next returns the next key; this only works for discrete types like integers.
 // It is guaranteed that there are no  possible keys in the span
-//   ( key, Next(keu) ).
+//
+//	( key, Next(keu) ).
 //
 // Examples:
-//   Next(/1/2) = /1/3
-//   Next(/1/false) = /1/true
-//   Next(/1/true) returns !ok
-//   Next(/'foo') = /'foo\x00'
+//
+//	Next(/1/2) = /1/3
+//	Next(/1/false) = /1/true
+//	Next(/1/true) returns !ok
+//	Next(/'foo') = /'foo\x00'
 //
 // If a column is descending, the values on that column go backwards:
-//   Next(/2) = /1
+//
+//	Next(/2) = /1
 //
 // The key cannot be empty.
 func (k Key) Next(keyCtx *KeyContext) (_ Key, ok bool) {
@@ -252,13 +260,15 @@ func (k Key) Next(keyCtx *KeyContext) (_ Key, ok bool) {
 // Prev returns the next key; this only works for discrete types like integers.
 //
 // Examples:
-//   Prev(/1/2) = /1/1
-//   Prev(/1/true) = /1/false
-//   Prev(/1/false) returns !ok.
-//   Prev(/'foo') returns !ok.
+//
+//	Prev(/1/2) = /1/1
+//	Prev(/1/true) = /1/false
+//	Prev(/1/false) returns !ok.
+//	Prev(/'foo') returns !ok.
 //
 // If a column is descending, the values on that column go backwards:
-//   Prev(/1) = /2
+//
+//	Prev(/1) = /2
 //
 // If this is the minimum possible key, returns EmptyKey.
 func (k Key) Prev(keyCtx *KeyContext) (_ Key, ok bool) {
@@ -278,10 +288,11 @@ func (k Key) Prev(keyCtx *KeyContext) (_ Key, ok bool) {
 }
 
 // String formats a key like this:
-//  EmptyKey         : empty string
-//  Key with 1 value : /2
-//  Key with 2 values: /5/1
-//  Key with 3 values: /3/6/4
+//
+//	EmptyKey         : empty string
+//	Key with 1 value : /2
+//	Key with 2 values: /5/1
+//	Key with 3 values: /3/6/4
 func (k Key) String() string {
 	var buf bytes.Buffer
 	for i := 0; i < k.Length(); i++ {

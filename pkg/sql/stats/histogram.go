@@ -168,7 +168,7 @@ func EquiDepthHistogram(
 		lowerBound = getNextLowerBound(compareCtx, upper)
 	}
 
-	h.adjustCounts(compareCtx, float64(numRows), float64(distinctCount))
+	h.adjustCounts(compareCtx, colType, float64(numRows), float64(distinctCount))
 	histogramData, err := h.toHistogramData(colType)
 	return histogramData, h.buckets, err
 }
@@ -185,7 +185,7 @@ type histogram struct {
 // count and estimated distinct count should not include NULL values, and the
 // histogram should not contain any buckets for NULL values.
 func (h *histogram) adjustCounts(
-	compareCtx tree.CompareContext, rowCountTotal, distinctCountTotal float64,
+	compareCtx tree.CompareContext, colType *types.T, rowCountTotal, distinctCountTotal float64,
 ) {
 	// Empty table cases.
 	if rowCountTotal <= 0 || distinctCountTotal <= 0 {
@@ -298,7 +298,7 @@ func (h *histogram) adjustCounts(
 	remDistinctCount = distinctCountTotal - distinctCountRange - distinctCountEq
 	if remDistinctCount > 0 {
 		h.addOuterBuckets(
-			compareCtx, remDistinctCount, &rowCountEq, &distinctCountEq, &rowCountRange, &distinctCountRange,
+			compareCtx, colType, remDistinctCount, &rowCountEq, &distinctCountEq, &rowCountRange, &distinctCountRange,
 		)
 	}
 
@@ -344,39 +344,106 @@ func (h *histogram) removeZeroBuckets() {
 	h.buckets = h.buckets[:j]
 }
 
+// getMinVal returns the minimum value for the minimum "outer" bucket if the
+// value exists. The boolean indicates whether it exists and the bucket needs to
+// be created.
+func getMinVal(
+	upperBound tree.Datum, t *types.T, compareCtx tree.CompareContext,
+) (tree.Datum, bool) {
+	if t.Family() == types.IntFamily {
+		// INT2 and INT4 require special handling.
+		// TODO(yuzefovich): other types might need it too, but it's less
+		// pressing to fix that.
+		bound, ok := upperBound.(*tree.DInt)
+		if !ok {
+			// This shouldn't happen, but we want to be defensive.
+			return nil, false
+		}
+		i := int64(*bound)
+		switch t.Width() {
+		case 16:
+			if i <= math.MinInt16 { // use inequality to be conservative
+				return nil, false
+			}
+			return tree.NewDInt(tree.DInt(math.MinInt16)), true
+		case 32:
+			if i <= math.MinInt32 { // use inequality to be conservative
+				return nil, false
+			}
+			return tree.NewDInt(tree.DInt(math.MinInt32)), true
+		}
+	}
+	if upperBound.IsMin(compareCtx) {
+		return nil, false
+	}
+	return upperBound.Min(compareCtx)
+}
+
+// getMaxVal returns the maximum value for the maximum "outer" bucket if the
+// value exists. The boolean indicates whether it exists and the bucket needs to
+// be created.
+func getMaxVal(
+	upperBound tree.Datum, t *types.T, compareCtx tree.CompareContext,
+) (tree.Datum, bool) {
+	if t.Family() == types.IntFamily {
+		// INT2 and INT4 require special handling.
+		// TODO(yuzefovich): other types might need it too, but it's less
+		// pressing to fix that.
+		bound, ok := upperBound.(*tree.DInt)
+		if !ok {
+			// This shouldn't happen, but we want to be defensive.
+			return nil, false
+		}
+		i := int64(*bound)
+		switch t.Width() {
+		case 16:
+			if i >= math.MaxInt16 { // use inequality to be conservative
+				return nil, false
+			}
+			return tree.NewDInt(tree.DInt(math.MaxInt16)), true
+		case 32:
+			if i >= math.MaxInt32 { // use inequality to be conservative
+				return nil, false
+			}
+			return tree.NewDInt(tree.DInt(math.MaxInt32)), true
+		}
+	}
+	if upperBound.IsMax(compareCtx) {
+		return nil, false
+	}
+	return upperBound.Max(compareCtx)
+}
+
 // addOuterBuckets adds buckets above and below the existing buckets in the
 // histogram to include the remaining distinct values in remDistinctCount. It
 // also increments the counters rowCountEq, distinctCountEq, rowCountRange, and
 // distinctCountRange as needed.
 func (h *histogram) addOuterBuckets(
 	compareCtx tree.CompareContext,
+	colType *types.T,
 	remDistinctCount float64,
 	rowCountEq, distinctCountEq, rowCountRange, distinctCountRange *float64,
 ) {
 	var maxDistinctCountExtraBuckets float64
 	var addedMin, addedMax bool
 	var newBuckets int
-	if !h.buckets[0].UpperBound.IsMin(compareCtx) {
-		if minVal, ok := h.buckets[0].UpperBound.Min(compareCtx); ok {
-			lowerBound := minVal
-			upperBound := h.buckets[0].UpperBound
-			maxDistRange, _ := maxDistinctRange(compareCtx, lowerBound, upperBound)
-			maxDistinctCountExtraBuckets += maxDistRange
-			h.buckets = append([]cat.HistogramBucket{{UpperBound: minVal}}, h.buckets...)
-			addedMin = true
-			newBuckets++
-		}
+	if minVal, ok := getMinVal(h.buckets[0].UpperBound, colType, compareCtx); ok {
+		lowerBound := minVal
+		upperBound := h.buckets[0].UpperBound
+		maxDistRange, _ := maxDistinctRange(compareCtx, lowerBound, upperBound)
+		maxDistinctCountExtraBuckets += maxDistRange
+		h.buckets = append([]cat.HistogramBucket{{UpperBound: minVal}}, h.buckets...)
+		addedMin = true
+		newBuckets++
 	}
-	if !h.buckets[len(h.buckets)-1].UpperBound.IsMax(compareCtx) {
-		if maxVal, ok := h.buckets[len(h.buckets)-1].UpperBound.Max(compareCtx); ok {
-			lowerBound := h.buckets[len(h.buckets)-1].UpperBound
-			upperBound := maxVal
-			maxDistRange, _ := maxDistinctRange(compareCtx, lowerBound, upperBound)
-			maxDistinctCountExtraBuckets += maxDistRange
-			h.buckets = append(h.buckets, cat.HistogramBucket{UpperBound: maxVal})
-			addedMax = true
-			newBuckets++
-		}
+	if maxVal, ok := getMaxVal(h.buckets[len(h.buckets)-1].UpperBound, colType, compareCtx); ok {
+		lowerBound := h.buckets[len(h.buckets)-1].UpperBound
+		upperBound := maxVal
+		maxDistRange, _ := maxDistinctRange(compareCtx, lowerBound, upperBound)
+		maxDistinctCountExtraBuckets += maxDistRange
+		h.buckets = append(h.buckets, cat.HistogramBucket{UpperBound: maxVal})
+		addedMax = true
+		newBuckets++
 	}
 
 	if newBuckets == 0 {
@@ -386,8 +453,7 @@ func (h *histogram) addOuterBuckets(
 
 	// If this is an enum or bool histogram, increment numEq for the upper
 	// bounds.
-	if typFam := h.buckets[0].UpperBound.ResolvedType().Family(); typFam == types.EnumFamily ||
-		typFam == types.BoolFamily {
+	if typFam := colType.Family(); typFam == types.EnumFamily || typFam == types.BoolFamily {
 		if addedMin {
 			h.buckets[0].NumEq++
 		}
@@ -420,7 +486,7 @@ func (h *histogram) addOuterBuckets(
 		maxDistRange, countable := maxDistinctRange(compareCtx, lowerBound, upperBound)
 
 		inc := avgRemPerBucket
-		if countable && h.buckets[0].UpperBound.ResolvedType().Family() == types.EnumFamily {
+		if countable && colType.Family() == types.EnumFamily {
 			// Set the increment proportional to the remaining number of
 			// distinct values in the bucket. This only really matters for
 			// enums.

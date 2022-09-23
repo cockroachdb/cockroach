@@ -248,7 +248,7 @@ sql.metrics.statement_details.dump_to_logs	boolean	false	dump collected statemen
 sql.metrics.statement_details.enabled	boolean	true	collect per-statement query statistics
 sql.metrics.statement_details.index_recommendation_collection.enabled	boolean	true	generate an index recommendation for each fingerprint ID
 sql.metrics.statement_details.max_mem_reported_idx_recommendations	integer	5000	the maximum number of reported index recommendation info stored in memory
-sql.metrics.statement_details.plan_collection.enabled	boolean	true	periodically save a logical plan for each fingerprint
+sql.metrics.statement_details.plan_collection.enabled	boolean	false	periodically save a logical plan for each fingerprint
 sql.metrics.statement_details.plan_collection.period	duration	5m0s	the time until a new logical plan is collected
 sql.metrics.statement_details.threshold	duration	0s	minimum execution time to cause statement statistics to be collected. If configured, no transaction stats are collected.
 sql.metrics.transaction_details.enabled	boolean	true	collect per-application transaction statistics
@@ -271,7 +271,7 @@ sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum rete
 sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables
 sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job
 sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request
-sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements endpoint. This endpoint is used to display statistics on the Statement and Transaction fingerprint pages under SQL Activity
+sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages
 sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer
 sql.stats.system_tables_autostats.enabled	boolean	true	when true, enables automatic collection of statistics on system tables
 sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel
@@ -295,4 +295,4 @@ trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
 trace.span_registry.enabled	boolean	true	if set, ongoing traces can be seen at https://<ui>/#/debug/tracez
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	1000022.1-66	set the active cluster version in the format '<major>.<minor>'
+version	version	1000022.1-70	set the active cluster version in the format '<major>.<minor>'

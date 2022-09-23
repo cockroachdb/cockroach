@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -154,6 +155,7 @@ var sqlPerfInternalLogger log.ChannelLogger = log.SqlInternalPerf
 func (p *planner) maybeLogStatement(
 	ctx context.Context,
 	execType executorType,
+	isCopy bool,
 	numRetries, txnCounter, rows int,
 	err error,
 	queryReceived time.Time,
@@ -162,12 +164,13 @@ func (p *planner) maybeLogStatement(
 	stmtFingerprintID roachpb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID, queryStats)
+	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID, queryStats)
 }
 
 func (p *planner) maybeLogStatementInternal(
 	ctx context.Context,
 	execType executorType,
+	isCopy bool,
 	numRetries, txnCounter, rows int,
 	err error,
 	startTime time.Time,
@@ -341,7 +344,7 @@ func (p *planner) maybeLogStatementInternal(
 				AccessMode:           mode,
 			}
 		}
-		p.logEventsOnlyExternally(ctx, entries...)
+		p.logEventsOnlyExternally(ctx, isCopy, entries...)
 	}
 
 	if slowQueryLogEnabled && (
@@ -353,12 +356,12 @@ func (p *planner) maybeLogStatementInternal(
 		switch {
 		case execType == executorTypeExec:
 			// Non-internal queries are always logged to the slow query log.
-			p.logEventsOnlyExternally(ctx, &eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
+			p.logEventsOnlyExternally(ctx, isCopy, &eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
 
 		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
-			p.logEventsOnlyExternally(ctx, &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
+			p.logEventsOnlyExternally(ctx, isCopy, &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
 		}
 	}
 
@@ -373,31 +376,42 @@ func (p *planner) maybeLogStatementInternal(
 				// see a copy of the execution on the DEV Channel.
 				dst:               LogExternally | LogToDevChannelIfVerbose,
 				verboseTraceLevel: execType.vLevel(),
+				isCopy:            isCopy,
 			},
 			&eventpb.QueryExecute{CommonSQLExecDetails: execDetails})
 	}
 
 	if shouldLogToAdminAuditLog {
-		p.logEventsOnlyExternally(ctx, &eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
+		p.logEventsOnlyExternally(ctx, isCopy, &eventpb.AdminQuery{CommonSQLExecDetails: execDetails})
 	}
 
 	if telemetryLoggingEnabled && !p.SessionData().TroubleshootingMode {
 		// We only log to the telemetry channel if enough time has elapsed from
 		// the last event emission.
 		requiredTimeElapsed := 1.0 / float64(maxEventFrequency)
-		_, tracingEnabled := p.curPlan.instrumentation.Tracing()
+		tracingEnabled := telemetryMetrics.isTracing(p.curPlan.instrumentation.Tracing())
 		// Always sample if the current statement is not of type DML or tracing
 		// is enabled for this statement.
 		if p.stmt.AST.StatementType() != tree.TypeDML || tracingEnabled {
 			requiredTimeElapsed = 0
 		}
 		if telemetryMetrics.maybeUpdateLastEmittedTime(telemetryMetrics.timeNow(), requiredTimeElapsed) {
-			var contentionNanos int64
-			if queryLevelStats, ok := p.instrumentation.GetQueryLevelStats(); ok {
-				contentionNanos = queryLevelStats.ContentionTime.Nanoseconds()
+			var txnID string
+			// p.txn can be nil for COPY.
+			if p.txn != nil {
+				txnID = p.txn.ID().String()
 			}
 
-			contentionNanos = telemetryMetrics.getContentionTime(contentionNanos)
+			var stats execstats.QueryLevelStats
+			if queryLevelStats, ok := p.instrumentation.GetQueryLevelStats(); ok {
+				stats = *queryLevelStats
+			}
+
+			stats = telemetryMetrics.getQueryLevelStats(stats)
+			indexRecs := make([]string, 0, len(p.curPlan.instrumentation.indexRecs))
+			for _, rec := range p.curPlan.instrumentation.indexRecs {
+				indexRecs = append(indexRecs, rec.SQL)
+			}
 
 			skippedQueries := telemetryMetrics.resetSkippedQueryCount()
 			sampledQuery := eventpb.SampledQuery{
@@ -409,7 +423,7 @@ func (p *planner) maybeLogStatementInternal(
 				SessionID:                p.extendedEvalCtx.SessionID.String(),
 				Database:                 p.CurrentDatabase(),
 				StatementID:              p.stmt.QueryID.String(),
-				TransactionID:            p.txn.ID().String(),
+				TransactionID:            txnID,
 				StatementFingerprintID:   uint64(stmtFingerprintID),
 				MaxFullScanRowsEstimate:  p.curPlan.instrumentation.maxFullScanRows,
 				TotalScanRowsEstimate:    p.curPlan.instrumentation.totalScanRows,
@@ -434,22 +448,31 @@ func (p *planner) maybeLogStatementInternal(
 				InvertedJoinCount:        int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.InvertedJoin]),
 				ApplyJoinCount:           int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ApplyJoin]),
 				ZigZagJoinCount:          int64(p.curPlan.instrumentation.joinAlgorithmCounts[exec.ZigZagJoin]),
-				ContentionNanos:          contentionNanos,
+				ContentionNanos:          stats.ContentionTime.Nanoseconds(),
 				Regions:                  p.curPlan.instrumentation.regions,
+				NetworkBytesSent:         stats.NetworkBytesSent,
+				MaxMemUsage:              stats.MaxMemUsage,
+				MaxDiskUsage:             stats.MaxDiskUsage,
+				KVBytesRead:              stats.KVBytesRead,
+				KVRowsRead:               stats.KVRowsRead,
+				NetworkMessages:          stats.NetworkMessages,
+				IndexRecommendations:     indexRecs,
 			}
-			p.logOperationalEventsOnlyExternally(ctx, &sampledQuery)
+			p.logOperationalEventsOnlyExternally(ctx, isCopy, &sampledQuery)
 		} else {
 			telemetryMetrics.incSkippedQueryCount()
 		}
 	}
 }
 
-func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...logpb.EventPayload) {
+func (p *planner) logEventsOnlyExternally(
+	ctx context.Context, isCopy bool, entries ...logpb.EventPayload,
+) {
 	// The API contract for logEventsWithOptions() is that it returns
 	// no error when system.eventlog is not written to.
 	_ = p.logEventsWithOptions(ctx,
 		2, /* depth: we want to use the caller location */
-		eventLogOptions{dst: LogExternally},
+		eventLogOptions{dst: LogExternally, isCopy: isCopy},
 		entries...)
 }
 
@@ -457,13 +480,13 @@ func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...logpb.
 // options to omit SQL Name redaction. This is used when logging to
 // the telemetry channel when we want additional metadata available.
 func (p *planner) logOperationalEventsOnlyExternally(
-	ctx context.Context, entries ...logpb.EventPayload,
+	ctx context.Context, isCopy bool, entries ...logpb.EventPayload,
 ) {
 	// The API contract for logEventsWithOptions() is that it returns
 	// no error when system.eventlog is not written to.
 	_ = p.logEventsWithOptions(ctx,
 		2, /* depth: we want to use the caller location */
-		eventLogOptions{dst: LogExternally, rOpts: redactionOptions{omitSQLNameRedaction: true}},
+		eventLogOptions{dst: LogExternally, isCopy: isCopy, rOpts: redactionOptions{omitSQLNameRedaction: true}},
 		entries...)
 }
 

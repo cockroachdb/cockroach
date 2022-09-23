@@ -19,11 +19,11 @@ package errorutil
 // and which will be inaccessible from a SQL tenant server. Their uses in SQL
 // fall into two categories:
 //
-// - functionality essential for multi-tenancy, i.e. a use which will
-//   have to be removed before we can start SQL tenant servers.
-// - non-essential functionality, which will be disabled when run in
-//   a SQL tenant server. It may or may not be a long-term goal to remove
-//   this usage; this is determined on a case-by-case basis.
+//   - functionality essential for multi-tenancy, i.e. a use which will
+//     have to be removed before we can start SQL tenant servers.
+//   - non-essential functionality, which will be disabled when run in
+//     a SQL tenant server. It may or may not be a long-term goal to remove
+//     this usage; this is determined on a case-by-case basis.
 //
 // As work towards multi-tenancy is taking place, semi-dedicated SQL tenant
 // servers are supported. These are essentially SQL tenant servers that get

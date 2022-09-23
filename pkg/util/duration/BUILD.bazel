@@ -22,6 +22,7 @@ go_test(
     name = "duration_test",
     size = "small",
     srcs = ["duration_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":duration"],
     deps = [
         "//pkg/util/log",

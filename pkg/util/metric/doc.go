@@ -22,8 +22,7 @@ while creating new rules. The exported rules are intended to be used as is or mo
 to set up alerts and dashboards within Prometheus by SREs (Cockroach Cloud clusters) and
 our customers(self-hosted CockroachDB clusters).
 
-
-Adding a new metric
+# Adding a new metric
 
 First, add the metric to a Registry.
 
@@ -48,7 +47,7 @@ updated as follows:
 To add the metric to the web UI, modify the appropriate file in
 "ui/ts/pages/*.ts". Someone more qualified than me can elaborate, like @maxlang.
 
-Sub-registries
+# Sub-registries
 
 It's common for a Registry to become part of another Registry through the "Add"
 and "MustAdd" methods.
@@ -66,39 +65,40 @@ Node-level sub-registries are added by calling:
 
 	(*metric.MetricRecorder).AddNodeRegistry(YOUR_NODE_SUBREGISTRY)
 
-Adding a new rule
+# Adding a new rule
 
 There are two types of rules:
-1. AlertingRule: This rule is used to provide guidelines on how
-   one or metrics can be used for alerts.
-2. AggregationRule: This rule is used to provide guidelines on
-   how one or more metrics can be aggregated to provide indicators
-   about system health.
+ 1. AlertingRule: This rule is used to provide guidelines on how
+    one or metrics can be used for alerts.
+ 2. AggregationRule: This rule is used to provide guidelines on
+    how one or more metrics can be aggregated to provide indicators
+    about system health.
+
 Both rules use PromQL syntax for specifying the expression for the rule.
 The expression is validated while initializing a new rule using the
 Prometheus library.
 
 To export a new aggregation or alerting rule:
-1. Create a new rule using the NewAlertingRule / NewAggregationRule
-   constructor. For example:
-	 rule := metric.NewAlertingRule(
-			ruleName,
-      promQLExpression,
-      annotations,
-      labels,
-		  recommendedHoldDuration,
-		  help,
-		  isKV,
-	 )
-   The isKV field is a boolean field and should be set to true
-   for all rules involving KV metrics. For alerting rules, it is highly
-   recommended providing runbook-like information about what steps need
-   to be taken to handle the alert. You can provide this information in
-   the annotations field of the AlertingRule.
-2. Register the rules with the ruleRegistry parameter of the KV server
-   using AddRule() method within the RuleRegistry.
+ 1. Create a new rule using the NewAlertingRule / NewAggregationRule
+    constructor. For example:
+    rule := metric.NewAlertingRule(
+    ruleName,
+    promQLExpression,
+    annotations,
+    labels,
+    recommendedHoldDuration,
+    help,
+    isKV,
+    )
+    The isKV field is a boolean field and should be set to true
+    for all rules involving KV metrics. For alerting rules, it is highly
+    recommended providing runbook-like information about what steps need
+    to be taken to handle the alert. You can provide this information in
+    the annotations field of the AlertingRule.
+ 2. Register the rules with the ruleRegistry parameter of the KV server
+    using AddRule() method within the RuleRegistry.
 
-Testing
+# Testing
 
 After your test does something to trigger your new metric update, you'll
 probably want to call methods in TestServer such as MustGetSQLCounter() to
@@ -125,6 +125,5 @@ DB server locally and viewing the rules' endpoint. To view the endpoint, you can
 the Advanced Debug page of DB Console or as follows:
 
 $ curl http://localhost:8080/api/v2/rules/
-
 */
 package metric

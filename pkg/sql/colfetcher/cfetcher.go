@@ -182,21 +182,22 @@ const noOutputColumn = -1
 // cFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
 // Usage:
-//   var cf cFetcher
-//   err := cf.Init(..)
-//   // Handle err
-//   err := cf.StartScan(..)
-//   // Handle err
-//   for {
-//      res, err := cf.NextBatch()
-//      // Handle err
-//      if res.colBatch.Length() == 0 {
-//         // Done
-//         break
-//      }
-//      // Process res.colBatch
-//   }
-//   cf.Close(ctx)
+//
+//	var cf cFetcher
+//	err := cf.Init(..)
+//	// Handle err
+//	err := cf.StartScan(..)
+//	// Handle err
+//	for {
+//	   res, err := cf.NextBatch()
+//	   // Handle err
+//	   if res.colBatch.Length() == 0 {
+//	      // Done
+//	      break
+//	   }
+//	   // Process res.colBatch
+//	}
+//	cf.Close(ctx)
 type cFetcher struct {
 	cFetcherArgs
 
@@ -853,15 +854,17 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// make sure that we don't bother filling in extra data if we
 				// don't need to.
 				emitBatch = true
-				// Update the limit hint to track the expected remaining rows to
-				// be fetched.
-				//
-				// Note that limitHint might become negative at which point we
-				// will start ignoring it.
-				cf.machine.limitHint -= cf.machine.rowIdx
 			}
 
 			if emitBatch {
+				if cf.machine.limitHint > 0 {
+					// Update the limit hint to track the expected remaining
+					// rows to be fetched.
+					//
+					// Note that limitHint might become negative at which point
+					// we will start ignoring it.
+					cf.machine.limitHint -= cf.machine.rowIdx
+				}
 				cf.pushState(stateResetBatch)
 				cf.finalizeBatch()
 				return cf.machine.batch, nil

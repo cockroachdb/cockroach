@@ -135,8 +135,10 @@ type Overload struct {
 	// statement which will be executed as a common table expression in the query.
 	SQLFn SQLFnOverload
 
-	// OnTypeCheck is incremented every time this overload is type checked.
-	OnTypeCheck func()
+	// OnTypeCheck is called every time this overload is type checked.
+	// This is a pointer so that it can be set in a builtinsregistry hook, which
+	// gets a copy of the overload struct.
+	OnTypeCheck *func()
 
 	// SpecializedVecBuiltin is used to let the vectorized engine
 	// know when an Overload has a specialized vectorized operator.
@@ -574,9 +576,11 @@ type typeCheckOverloadState struct {
 // expression parameters, along with an optional desired return type. It returns the expression
 // parameters after being type checked, along with a slice of candidate overloadImpls. The
 // slice may have length:
-//   0: overload resolution failed because no compatible overloads were found
-//   1: overload resolution succeeded
-//  2+: overload resolution failed because of ambiguity
+//
+//	 0: overload resolution failed because no compatible overloads were found
+//	 1: overload resolution succeeded
+//	2+: overload resolution failed because of ambiguity
+//
 // The inBinOp parameter denotes whether this type check is occurring within a binary operator,
 // in which case we may need to make a guess that the two parameters are of the same type if one
 // of them is NULL.

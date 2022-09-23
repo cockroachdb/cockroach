@@ -13,7 +13,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -788,7 +788,7 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 		url.User(username.RootUser))
 	defer cleanup()
 
-	conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard, rootURL.String())
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, rootURL.String())
 	defer func() {
 		if err := conn.Close(); err != nil {
 			t.Fatal(err)

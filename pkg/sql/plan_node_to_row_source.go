@@ -141,7 +141,7 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 }
 
 func (p *planNodeToRowSource) Start(ctx context.Context) {
-	ctx = p.StartInternalNoSpan(ctx)
+	ctx = p.StartInternal(ctx, nodeName(p.node))
 	p.params.ctx = ctx
 	// This starts all of the nodes below this node.
 	if err := startExec(p.params, p.node); err != nil {

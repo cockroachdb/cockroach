@@ -370,6 +370,11 @@ var specs = []stmtSpec{
 		unlink: []string{"subdirectory", "collectionURI", "kmsURI"},
 	},
 	{
+		name:    "alter_backup_schedule",
+		replace: map[string]string{"iconst64": "schedule_id", "alter_backup_schedule_cmds": "options ( ',' options )*", "options": "'SET' ( 'LABEL' schedule_label | 'INTO' collectionURI | 'WITH' option | 'RECURRING' crontab | 'FULL BACKUP' ( crontab | 'ALWAYS' ) | 'SCHEDULE OPTION' schedule_option )"},
+		unlink:  []string{"schedule_id", "options", "option", "schedule_label", "collectionURI", "crontab", "schedule_option"},
+	},
+	{
 		name:    "alter_changefeed",
 		stmt:    "alter_changefeed_stmt",
 		replace: map[string]string{"a_expr": "job_id", "alter_changefeed_cmds": "( 'ADD' target ( ( ',' target ) )* ( 'WITH' ( initial_scan | no_initial_scan ) )? | 'DROP' target ( ( ',' target ) )* | ( 'SET' | 'UNSET' ) option ( ( ',' option ) )* )+"},
@@ -559,7 +564,7 @@ var specs = []stmtSpec{
 		name:   "backup",
 		stmt:   "backup_stmt",
 		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
-		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
+		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' backup_targets 'INTO'")},
 		replace: map[string]string{
 			"grant_targets":                  "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"backup_targets":                 "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
@@ -591,16 +596,16 @@ var specs = []stmtSpec{
 		},
 	},
 	{
-		name: "check_column_level",
-		stmt: "stmt_block",
+		name:    "check_column_level",
+		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'CHECK' '(' check_expr ')' ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
-		unlink: []string{"table_name", "column_name", "column_type", "check_expr", "column_constraints", "table_constraints"},
+		unlink:  []string{"table_name", "column_name", "column_type", "check_expr", "column_constraints", "table_constraints"},
 	},
 	{
-		name: "check_table_level",
-		stmt: "stmt_block",
+		name:    "check_table_level",
+		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' constraint_name | ) 'CHECK' '(' check_expr ')' ( table_constraints | ) ')'"},
-		unlink: []string{"table_name", "check_expr", "table_constraints"},
+		unlink:  []string{"table_name", "check_expr", "table_constraints"},
 	},
 	{
 		name:   "column_table_def",
@@ -686,6 +691,11 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "sink", "option", "value"},
 	},
 	{
+		name:    "create_external_connection_stmt",
+		replace: map[string]string{"label_spec": "connection_name", "string_or_placeholder": "connection_URI"},
+		unlink:  []string{"connection_name", "connection_URI"},
+	},
+	{
 		name:   "create_index_stmt",
 		inline: []string{"opt_unique", "opt_storing", "storing", "index_params", "index_elem", "opt_asc_desc", "opt_index_access_method", "opt_hash_sharded", "opt_concurrently", "opt_with_storage_parameter_list", "storage_parameter_list"},
 		replace: map[string]string{
@@ -714,9 +724,12 @@ var specs = []stmtSpec{
 		name:   "create_schedule_for_backup_stmt",
 		inline: []string{"string_or_placeholder_opt_list", "string_or_placeholder_list", "opt_with_backup_options", "cron_expr", "opt_full_backup_clause", "opt_with_schedule_options", "opt_backup_targets"},
 		replace: map[string]string{
-			"string_or_placeholder 'FOR'":       "label 'FOR'",
-			"'RECURRING' sconst_or_placeholder": "'RECURRING' cronexpr",
-			"backup_targets":                    "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
+			"string_or_placeholder": "collectionURI",
+			"sconst_or_placeholder": "crontab",
+			"schedule_label_spec":   "( 'IF NOT EXISTS' | )  schedule_label",
+			"backup_targets":        "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"kv_option_list":        "schedule_option"},
+		unlink: []string{"schedule_label", "collection_URI", "crontab", "schedule_option"},
 	},
 	{
 		name:    "create_schema_stmt",
@@ -825,6 +838,11 @@ var specs = []stmtSpec{
 		stmt:   "drop_database_stmt",
 		inline: []string{"opt_drop_behavior"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'DROP' 'DATABASE'")},
+	},
+	{
+		name:    "drop_external_connection_stmt",
+		replace: map[string]string{"string_or_placeholder": "connection_name"},
+		unlink:  []string{"connection_name"},
 	},
 	{
 		name:   "drop_index",
@@ -944,16 +962,16 @@ var specs = []stmtSpec{
 		inline: []string{"privileges", "opt_privileges_clause", "opt_with_grant_option"},
 	},
 	{
-		name: "foreign_key_column_level",
-		stmt: "stmt_block",
+		name:    "foreign_key_column_level",
+		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'REFERENCES' parent_table ( '(' ref_column_name ')' | ) ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
-		unlink: []string{"table_name", "column_name", "column_type", "parent_table", "table_constraints"},
+		unlink:  []string{"table_name", "column_name", "column_type", "parent_table", "table_constraints"},
 	},
 	{
-		name: "foreign_key_table_level",
-		stmt: "stmt_block",
+		name:    "foreign_key_table_level",
+		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' constraint_name | ) 'FOREIGN KEY' '(' ( fk_column_name ( ',' fk_column_name )* ) ')' 'REFERENCES' parent_table ( '(' ( ref_column_name ( ',' ref_column_name )* ) ')' | ) ( table_constraints | ) ')'"},
-		unlink: []string{"table_name", "column_name", "parent_table", "table_constraints"},
+		unlink:  []string{"table_name", "column_name", "parent_table", "table_constraints"},
 	},
 	{
 		name:   "index_def",
@@ -1030,10 +1048,10 @@ var specs = []stmtSpec{
 	},
 	{name: "iso_level"},
 	{
-		name: "not_null_column_level",
-		stmt: "stmt_block",
+		name:    "not_null_column_level",
+		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'NOT NULL' ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
-		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
+		unlink:  []string{"table_name", "column_name", "column_type", "table_constraints"},
 	},
 	{
 		name:   "opt_with_storage_parameter_list",
@@ -1052,16 +1070,16 @@ var specs = []stmtSpec{
 		unlink:  []string{"schedule_id"},
 	},
 	{
-		name: "primary_key_column_level",
-		stmt: "stmt_block",
+		name:    "primary_key_column_level",
+		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'PRIMARY KEY' ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
-		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
+		unlink:  []string{"table_name", "column_name", "column_type", "table_constraints"},
 	},
 	{
-		name: "primary_key_table_level",
-		stmt: "stmt_block",
+		name:    "primary_key_table_level",
+		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' name | ) 'PRIMARY KEY' '(' ( column_name ( ',' column_name )* ) ')' ( table_constraints | ) ')'"},
-		unlink: []string{"table_name", "column_name", "table_constraints"},
+		unlink:  []string{"table_name", "column_name", "table_constraints"},
 	},
 	{
 		name: "refresh_materialized_views",
@@ -1283,6 +1301,11 @@ var specs = []stmtSpec{
 		unlink:  []string{"object_name"},
 	},
 	{
+		name:    "show_create_external_connections_stmt",
+		replace: map[string]string{"string_or_placeholder": "connection_name"},
+		unlink:  []string{"connection_name"},
+	},
+	{
 		name:   "show_databases_stmt",
 		inline: []string{"with_comment"},
 	},
@@ -1463,16 +1486,16 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name"},
 	},
 	{
-		name: "unique_column_level",
-		stmt: "stmt_block",
+		name:    "unique_column_level",
+		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' column_name column_type 'UNIQUE' ( column_constraints | ) ( ',' ( column_table_def ( ',' column_table_def )* ) | ) ( table_constraints | ) ')' ')'"},
-		unlink: []string{"table_name", "column_name", "column_type", "table_constraints"},
+		unlink:  []string{"table_name", "column_name", "column_type", "table_constraints"},
 	},
 	{
-		name: "unique_table_level",
-		stmt: "stmt_block",
+		name:    "unique_table_level",
+		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' name | ) 'UNIQUE' '(' ( column_name ( ',' column_name )* ) ')' ( table_constraints | ) ')'"},
-		unlink: []string{"table_name", "check_expr", "table_constraints"},
+		unlink:  []string{"table_name", "check_expr", "table_constraints"},
 	},
 	{
 		name:    "unsplit_index_at",

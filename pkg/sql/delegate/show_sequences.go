@@ -19,7 +19,8 @@ import (
 
 // ShowSequences returns all the schemas in the given or current database.
 // Privileges: None.
-//   Notes: postgres does not have a SHOW SEQUENCES statement.
+//
+//	Notes: postgres does not have a SHOW SEQUENCES statement.
 func (d *delegator) delegateShowSequences(n *tree.ShowSequences) (tree.Statement, error) {
 	name, err := d.getSpecifiedOrCurrentDatabase(n.Database)
 	if err != nil {

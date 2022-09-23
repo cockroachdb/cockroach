@@ -290,8 +290,8 @@ func (r *Replica) updateRangefeedFilterLocked() bool {
 	return false
 }
 
-// The size of an event is 112 bytes, so this will result in an allocation on
-// the order of ~512KB per RangeFeed. That's probably ok given the number of
+// The size of an event is 72 bytes, so this will result in an allocation on
+// the order of ~300KB per RangeFeed. That's probably ok given the number of
 // ranges on a node that we'd like to support with active rangefeeds, but it's
 // certainly on the upper end of the range.
 //

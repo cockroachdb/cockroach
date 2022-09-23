@@ -21,6 +21,7 @@ go_library(
 go_test(
     name = "cacheutil_test",
     srcs = ["cache_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":cacheutil"],
     deps = [
         "//pkg/settings/cluster",

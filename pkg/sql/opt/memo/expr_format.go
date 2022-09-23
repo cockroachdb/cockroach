@@ -55,15 +55,17 @@ type ExprFmtFlags int
 // )
 
 // In our example here, 1 means the flag is on and 0 means the flag is off.
-//const (
-//	ExprFmtShowAll int = 0 // iota is 0, but it's not used    0000 0000
-//	ExprFmtHideMiscProps int = 1 << (iota - 1)
-//                             // iota is 1, 1 << (1 - 1) 0000 0001 = 1
-//	ExprFmtHideConstraints     // iota is 2, 1 << (2 - 1) 0000 0010 = 2
-//	ExprFmtHideFuncDeps        // iota is 3, 1 << (3 - 1) 0000 0100 = 4
-//  ...
-//  ExprFmtHideAll             // (1 << iota) - 1
-//)
+// const (
+//
+//		ExprFmtShowAll int = 0 // iota is 0, but it's not used    0000 0000
+//		ExprFmtHideMiscProps int = 1 << (iota - 1)
+//	                            // iota is 1, 1 << (1 - 1) 0000 0001 = 1
+//		ExprFmtHideConstraints     // iota is 2, 1 << (2 - 1) 0000 0010 = 2
+//		ExprFmtHideFuncDeps        // iota is 3, 1 << (3 - 1) 0000 0100 = 4
+//	 ...
+//	 ExprFmtHideAll             // (1 << iota) - 1
+//
+// )
 // If we want to set ExprFmtHideMiscProps and ExprFmtHideConstraints on, we
 // would have f := ExprFmtHideMiscProps | ExprFmtHideConstraints 0000 0011.
 // ExprFmtShowAll has all 0000 0000. This is because all flags represent when
@@ -221,8 +223,12 @@ func (f *ExprFmtCtx) formatExpr(e opt.Expr, tp treeprinter.Node) {
 
 func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	md := f.Memo.Metadata()
-	relational := e.Relational()
 	required := e.RequiredPhysical()
+	if r, ok := e.(RelRequiredPropsExpr); ok {
+		e = r.RelExpr
+		required = r.PhysProps
+	}
+	relational := e.Relational()
 	if required == nil {
 		// required can be nil before optimization has taken place.
 		required = physical.MinRequired
@@ -293,7 +299,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		if opt.IsJoinNonApplyOp(t) {
 			// All join ops that weren't handled above execute as a hash join.
-			if leftEqCols, _, _ := ExtractJoinEqualityColumns(
+			if leftEqCols := ExtractJoinEqualityLeftColumns(
 				e.Child(0).(RelExpr).Relational().OutputCols,
 				e.Child(1).(RelExpr).Relational().OutputCols,
 				*e.Child(2).(*FiltersExpr),
@@ -791,9 +797,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	if !f.HasFlags(ExprFmtHideStats) {
 		if f.HasFlags(ExprFmtHideHistograms) {
-			tp.Childf("stats: %s", relational.Stats.StringWithoutHistograms())
+			tp.Childf("stats: %s", relational.Statistics().StringWithoutHistograms())
 		} else {
-			tp.Childf("stats: %s", &relational.Stats)
+			tp.Childf("stats: %s", relational.Statistics())
 		}
 	}
 
@@ -1064,7 +1070,8 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 
 // scalarPropsStrings returns a slice of strings, each describing a property;
 // for example:
-//   {"type=bool", "outer=(1)", "constraints=(/1: [/1 - /1]; tight)"}
+//
+//	{"type=bool", "outer=(1)", "constraints=(/1: [/1 - /1]; tight)"}
 func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 	typ := scalar.DataType()
 	if typ == nil {
@@ -1120,7 +1127,8 @@ func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 
 // FormatScalarProps writes out a string representation of the scalar
 // properties (with a preceding space); for example:
-//  " [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]"
+//
+//	" [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]"
 func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 	props := f.scalarPropsStrings(scalar)
 	if len(props) != 0 {
@@ -1218,7 +1226,7 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 // formatIndex outputs the specified index into the context's buffer with the
 // format:
 //
-//   table_alias@index_name
+//	table_alias@index_name
 //
 // If reverse is true, ",rev" is appended.
 //
@@ -1370,8 +1378,7 @@ func (f *ExprFmtCtx) formatOptionalColList(
 // given list. Each child shows how the column will be mutated, with the id of
 // the "before" and "after" columns, similar to this:
 //
-//   a:1 => x:4
-//
+//	a:1 => x:4
 func (f *ExprFmtCtx) formatMutationCols(
 	nd RelExpr, tp treeprinter.Node, heading string, colList opt.OptionalColList, tabID opt.TableID,
 ) {
@@ -1410,7 +1417,8 @@ func (f *ExprFmtCtx) ColumnString(id opt.ColumnID) string {
 
 // formatColSimple outputs the specified column into the context's buffer using the
 // following format:
-//   label:id
+//
+//	label:id
 //
 // The :id part is omitted if the formatting flags include ExprFmtHideColumns.
 //
@@ -1446,10 +1454,12 @@ func (f *ExprFmtCtx) formatColSimpleToBuffer(buf *bytes.Buffer, label string, id
 
 // formatCol outputs the specified column into the context's buffer using the
 // following format:
-//   label:id(type)
+//
+//	label:id(type)
 //
 // If the column is not nullable, then this is the format:
-//   label:id(type!null)
+//
+//	label:id(type!null)
 //
 // Some of the components can be omitted depending on formatting flags.
 //

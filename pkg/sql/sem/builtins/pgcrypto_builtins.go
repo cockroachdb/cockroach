@@ -34,7 +34,7 @@ import (
 	_ "golang.org/x/crypto/bcrypt" // linked to by go:linkname
 )
 
-func initPgcryptoBuiltins() {
+func init() {
 	// Add all pgcryptoBuiltins to the builtins map after a sanity check.
 	for k, v := range pgcryptoBuiltins {
 		registerBuiltin(k, v)
@@ -281,6 +281,7 @@ func cryptMD5(password, salt []byte) ([]byte, error) {
 }
 
 // bcryptLinked accesses private method bcrypt.bcrypt by using go:linkname.
+//
 //go:linkname bcryptLinked golang.org/x/crypto/bcrypt.bcrypt
 func bcryptLinked(password []byte, cost int, salt []byte) ([]byte, error)
 

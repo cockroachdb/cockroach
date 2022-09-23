@@ -317,15 +317,18 @@ func LikeEscape(pattern string) (string, error) {
 // For example, suppose we have escape token `\` (e.g. `B` is escaped in
 // `A\BC` and `\` is escaped in `A\\C`).
 // We need to convert
-//    `\` --> ``
-//    `\\` --> `\`
+//
+//	`\` --> ``
+//	`\\` --> `\`
+//
 // We cannot simply use strings.Replace for each conversion since the first
-// conversion will incorrectly replace our escaped escape token `\\` with ``.
+// conversion will incorrectly replace our escaped escape token `\\` with “.
 // Another example is if our escape token is `\\` (e.g. after
 // regexp.QuoteMeta).
 // We need to convert
-//    `\\` --> ``
-//    `\\\\` --> `\\`
+//
+//	`\\` --> ``
+//	`\\\\` --> `\\`
 func unescapePattern(
 	pattern, escapeToken string, emitEscapeCharacterLastError bool,
 ) (string, error) {
@@ -369,11 +372,14 @@ func unescapePattern(
 // replaceUnescaped replaces all instances of oldStr that are not escaped (read:
 // preceded) with the specified unescape token with newStr.
 // For example, with an escape token of `\\`
-//    replaceUnescaped("TE\\__ST", "_", ".", `\\`) --> "TE\\_.ST"
-//    replaceUnescaped("TE\\%%ST", "%", ".*", `\\`) --> "TE\\%.*ST"
+//
+//	replaceUnescaped("TE\\__ST", "_", ".", `\\`) --> "TE\\_.ST"
+//	replaceUnescaped("TE\\%%ST", "%", ".*", `\\`) --> "TE\\%.*ST"
+//
 // If the preceding escape token is escaped, then oldStr will be replaced.
 // For example
-//    replaceUnescaped("TE\\\\_ST", "_", ".", `\\`) --> "TE\\\\.ST"
+//
+//	replaceUnescaped("TE\\\\_ST", "_", ".", `\\`) --> "TE\\\\.ST"
 func replaceUnescaped(s, oldStr, newStr string, escapeToken string) string {
 	// We count the number of occurrences of 'oldStr'.
 	// This however can be an overestimate since the oldStr token could be
@@ -447,20 +453,23 @@ OldLoop:
 
 // Replaces all custom escape characters in s with `\\` only when they are unescaped.          (1)
 // E.g. original pattern       after QuoteMeta       after replaceCustomEscape with '@' as escape
-//        '@w@w'          ->      '@w@w'        ->        '\\w\\w'
-//        '@\@\'          ->      '@\\@\\'      ->        '\\\\\\\\'
+//
+//	'@w@w'          ->      '@w@w'        ->        '\\w\\w'
+//	'@\@\'          ->      '@\\@\\'      ->        '\\\\\\\\'
 //
 // When an escape character is escaped, we replace it with its single occurrence.              (2)
 // E.g. original pattern       after QuoteMeta       after replaceCustomEscape with '@' as escape
-//        '@@w@w'         ->      '@@w@w'       ->        '@w\\w'
-//        '@@@\'          ->      '@@@\\'       ->        '@\\\\'
+//
+//	'@@w@w'         ->      '@@w@w'       ->        '@w\\w'
+//	'@@@\'          ->      '@@@\\'       ->        '@\\\\'
 //
 // At the same time, we do not want to confuse original backslashes (which
 // after QuoteMeta are '\\') with backslashes that replace our custom escape characters,
 // so we escape these original backslashes again by converting '\\' into '\\\\'.               (3)
 // E.g. original pattern       after QuoteMeta       after replaceCustomEscape with '@' as escape
-//        '@\'            ->      '@\\'         ->        '\\\\\\'
-//        '@\@@@\'        ->      '@\\@@@\\'    ->        '\\\\\\@\\\\\\'
+//
+//	'@\'            ->      '@\\'         ->        '\\\\\\'
+//	'@\@@@\'        ->      '@\\@@@\\'    ->        '\\\\\\@\\\\\\'
 //
 // Explanation of the last example:
 // 1. we replace '@' with '\\' since it's unescaped;
@@ -891,7 +900,9 @@ func similarEscapeCustomChar(pattern string, escapeChar rune, isEscapeNonEmpty b
 }
 
 // caseInsensitive surrounds the transformed input string with
-//   (?i: ... )
+//
+//	(?i: ... )
+//
 // which uses a non-capturing set of parens to turn a case sensitive
 // regular expression pattern into a case insensitive regular
 // expression pattern.
@@ -900,7 +911,9 @@ func caseInsensitive(pattern string) string {
 }
 
 // anchorPattern surrounds the transformed input string with
-//   ^(?s: ... )$
+//
+//	^(?s: ... )$
+//
 // which requires some explanation.  We need "^" and "$" to force
 // the pattern to match the entire input string as per SQL99 spec.
 // The "(?:" and ")" are a non-capturing set of parens; we have to have

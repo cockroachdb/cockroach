@@ -16,7 +16,7 @@ eexpect $prompt
 
 start_test "Expect partitioning succeeds"
 # test that partitioning works if a license could be acquired
-send "$argv demo --multitenant=false --geo-partitioned-replicas\r"
+send "$argv demo --no-line-editor --multitenant=false --geo-partitioned-replicas\r"
 
 # wait for the shell to start up
 eexpect "Partitioning the demo database"
@@ -80,7 +80,7 @@ eexpect $prompt
 end_test
 
 start_test "test multi-region setup"
-send "$argv demo movr --geo-partitioned-replicas --multi-region\r"
+send "$argv demo movr --no-line-editor --geo-partitioned-replicas --multi-region\r"
 eexpect "Partitioning the demo database"
 eexpect "movr>"
 
@@ -102,7 +102,7 @@ eexpect "movr>"
 send_eof
 eexpect $prompt
 
-send "$argv demo movr --geo-partitioned-replicas --multi-region --survive=region\r"
+send "$argv demo movr --no-line-editor --geo-partitioned-replicas --multi-region --survive=region\r"
 eexpect "Partitioning the demo database"
 eexpect "movr>"
 
@@ -130,7 +130,7 @@ eexpect $prompt
 end_test
 
 start_test "Expect an error if geo-partitioning is requested with multitenant mode"
-send "$argv demo --geo-partitioned-replicas\r"
+send "$argv demo --no-line-editor --geo-partitioned-replicas\r"
 # expect a failure
 eexpect "operation is unsupported in multi-tenancy mode"
 eexpect $prompt
@@ -138,7 +138,7 @@ end_test
 
 start_test "Expect an error if geo-partitioning is requested and license acquisition is disabled"
 # set the proper environment variable
-send "$argv demo --geo-partitioned-replicas --disable-demo-license\r"
+send "$argv demo --no-line-editor --geo-partitioned-replicas --disable-demo-license\r"
 # expect a failure
 eexpect "enterprise features are needed for this demo"
 eexpect $prompt

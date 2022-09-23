@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -41,6 +42,7 @@ CREATE TABLE foo (
   PRIMARY KEY (b, a)
 )`)
 
+	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	encDatums := makeEncDatumRow(tree.NewDInt(1), tree.NewDString("one"), tree.DNull)
 
@@ -59,7 +61,7 @@ CREATE TABLE foo (
 		idx := 0
 		require.NoError(t, input.ForEachColumn().Datum(func(d tree.Datum, col ResultColumn) error {
 			p.AddValueColumn(col.Name, col.Typ)
-			err := p.SetValueDatumAt(idx, d)
+			err := p.SetValueDatumAt(&evalCtx, idx, d)
 			idx++
 			return err
 		}))
@@ -74,9 +76,9 @@ CREATE TABLE foo (
 		input := TestingMakeEventRow(desc, 0, encDatums, false)
 		p := MakeProjection(input.EventDescriptor)
 		p.AddValueColumn("wrong_type", types.Int)
-		require.Regexp(t, "expected type int", p.SetValueDatumAt(0, tree.NewDString("fail")))
+		require.Regexp(t, "expected type int", p.SetValueDatumAt(&evalCtx, 0, tree.NewDString("fail")))
 		// But we allow NULL.
-		require.NoError(t, p.SetValueDatumAt(0, tree.DNull))
+		require.NoError(t, p.SetValueDatumAt(&evalCtx, 0, tree.DNull))
 	})
 
 	t.Run("project_extra_column", func(t *testing.T) {
@@ -85,12 +87,12 @@ CREATE TABLE foo (
 		idx := 0
 		require.NoError(t, input.ForEachColumn().Datum(func(d tree.Datum, col ResultColumn) error {
 			p.AddValueColumn(col.Name, col.Typ)
-			err := p.SetValueDatumAt(idx, d)
+			err := p.SetValueDatumAt(&evalCtx, idx, d)
 			idx++
 			return err
 		}))
 		p.AddValueColumn("test", types.Int)
-		require.NoError(t, p.SetValueDatumAt(idx, tree.NewDInt(5)))
+		require.NoError(t, p.SetValueDatumAt(&evalCtx, idx, tree.NewDInt(5)))
 
 		pr, err := p.Project(input)
 		require.NoError(t, err)

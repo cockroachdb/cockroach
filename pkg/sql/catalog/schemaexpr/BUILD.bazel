@@ -53,6 +53,7 @@ go_test(
         "partial_index_test.go",
         "testutils_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":schemaexpr"],
     deps = [

@@ -11,22 +11,19 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -37,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -315,48 +311,6 @@ func getBackupStatement(stmt tree.Statement) *annotatedBackupStatement {
 	}
 }
 
-// checkBackupDestinationPrivileges iterates over the External Storage URIs and
-// ensures the user has adequate privileges to use each of them.
-func checkBackupDestinationPrivileges(ctx context.Context, p sql.PlanHookState, to []string) error {
-	if p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound {
-		return nil
-	}
-
-	// Check destination specific privileges.
-	for _, uri := range to {
-		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
-		if err != nil {
-			return err
-		}
-
-		// Check if the destination requires the user to be an admin.
-		if !conf.AccessIsWithExplicitAuth() {
-			return pgerror.Newf(
-				pgcode.InsufficientPrivilege,
-				"only users with the admin role are allowed to BACKUP to the specified %s URI",
-				conf.Provider.String())
-		}
-
-		// If the backup is running to an External Connection, check that the user
-		// has adequate privileges.
-		if conf.Provider == cloudpb.ExternalStorageProvider_external {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemExternalConnectionsTable) {
-				return pgerror.Newf(pgcode.FeatureNotSupported,
-					"version %v must be finalized to backup to an External Connection",
-					clusterversion.ByKey(clusterversion.SystemExternalConnectionsTable))
-			}
-			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
-				ConnectionName: conf.ExternalConnectionConfig.Name,
-			}
-			if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 // backupPrivilegesDeprecationNotice returns a notice that outlines the
 // deprecation of the existing privilege model for backups, and the steps to
 // take to adopt the new privilege model, based on the type of backup being run.
@@ -435,7 +389,7 @@ func checkPrivilegesForBackup(
 		}
 
 		if requiresBackupSystemPrivilege && hasBackupSystemPrivilege {
-			return checkBackupDestinationPrivileges(ctx, p, to)
+			return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
 		} else if requiresBackupSystemPrivilege && !hasBackupSystemPrivilege {
 			return pgerror.Newf(
 				pgcode.InsufficientPrivilege,
@@ -486,7 +440,7 @@ func checkPrivilegesForBackup(
 	// If a user has the BACKUP privilege on the target databases or tables we can
 	// move on to checking the destination URIs.
 	if hasRequiredBackupPrivileges {
-		return checkBackupDestinationPrivileges(ctx, p, to)
+		return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
 	}
 
 	// The following checks are to maintain compatability with pre-22.2 privilege
@@ -513,10 +467,14 @@ func checkPrivilegesForBackup(
 			if err := p.CheckPrivilege(ctx, desc, privilege.USAGE); err != nil {
 				return errors.WithHint(err, notice)
 			}
+		case catalog.FunctionDescriptor:
+			if err := p.CheckPrivilege(ctx, desc, privilege.EXECUTE); err != nil {
+				return errors.WithHint(err, notice)
+			}
 		}
 	}
 
-	return checkBackupDestinationPrivileges(ctx, p, to)
+	return cloudprivilege.CheckDestinationPrivileges(ctx, p, to)
 }
 
 func requireEnterprise(execCfg *sql.ExecutorConfig, feature string) error {
@@ -746,6 +704,7 @@ func backupPlanHook(
 			EncryptionOptions:   &encryptionParams,
 			AsOfInterval:        asOfInterval,
 			Detached:            detached,
+			ApplicationName:     p.SessionData().ApplicationName,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID
@@ -1259,122 +1218,6 @@ func checkForNewTables(
 	return nil
 }
 
-func getBackupDetailAndManifest(
-	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
-	initialDetails jobspb.BackupDetails,
-	user username.SQLUsername,
-	backupDestination backupdest.ResolvedDestination,
-) (jobspb.BackupDetails, backuppb.BackupManifest, error) {
-	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
-
-	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig,
-		execCfg.DB, user, execCfg.InternalExecutor)
-
-	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
-	defer mem.Close(ctx)
-
-	prevBackups, encryptionOptions, memSize, err := backupinfo.FetchPreviousBackups(ctx, &mem, user,
-		makeCloudStorage, backupDestination.PrevBackupURIs, *initialDetails.EncryptionOptions, &kmsEnv)
-
-	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
-	}
-	defer func() {
-		mem.Shrink(ctx, memSize)
-	}()
-
-	if len(prevBackups) > 0 {
-		baseManifest := prevBackups[0]
-		if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
-			!initialDetails.FullCluster {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
-		}
-
-		if err := requireEnterprise(execCfg, "incremental"); err != nil {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
-		}
-		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
-		if lastEndTime.Compare(initialDetails.EndTime) > 0 {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{},
-				errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
-					"the previous backup's end time of %s.",
-					initialDetails.EndTime.GoTime(), lastEndTime.GoTime())
-		}
-	}
-
-	localityKVs := make([]string, len(backupDestination.URIsByLocalityKV))
-	i := 0
-	for k := range backupDestination.URIsByLocalityKV {
-		localityKVs[i] = k
-		i++
-	}
-
-	for i := range prevBackups {
-		prevBackup := prevBackups[i]
-		// IDs are how we identify tables, and those are only meaningful in the
-		// context of their own cluster, so we need to ensure we only allow
-		// incremental previous backups that we created.
-		if fromCluster := prevBackup.ClusterID; !fromCluster.Equal(execCfg.NodeInfo.LogicalClusterID()) {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
-		}
-
-		prevLocalityKVs := prevBackup.LocalityKVs
-
-		// Checks that each layer in the backup uses the same localities
-		// Does NOT check that each locality/layer combination is actually at the
-		// expected locations.
-		// This is complex right now, but should be easier shortly.
-		// TODO(benbardin): Support verifying actual existence of localities for
-		// each layer after deprecating TO-syntax in 22.2
-		sort.Strings(localityKVs)
-		sort.Strings(prevLocalityKVs)
-		if !(len(localityKVs) == 0 && len(prevLocalityKVs) == 0) && !reflect.DeepEqual(localityKVs,
-			prevLocalityKVs) {
-			// Note that this won't verify the default locality. That's not
-			// necessary, because the default locality defines the backup manifest
-			// location. If that URI isn't right, the backup chain will fail to
-			// load.
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf(
-				"Requested backup has localities %s, but a previous backup layer in this collection has localities %s. "+
-					"Mismatched backup layers are not supported. Please take a new full backup with the new localities, or an "+
-					"incremental backup with matching localities.",
-				localityKVs, prevLocalityKVs,
-			)
-		}
-	}
-
-	// updatedDetails and backupManifest should be treated as read-only after
-	// they're returned from their respective functions. Future changes to those
-	// objects should be made within those functions.
-	updatedDetails, err := updateBackupDetails(
-		ctx,
-		initialDetails,
-		backupDestination.CollectionURI,
-		backupDestination.DefaultURI,
-		backupDestination.ChosenSubdir,
-		backupDestination.URIsByLocalityKV,
-		prevBackups,
-		encryptionOptions,
-		&kmsEnv)
-	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
-	}
-
-	backupManifest, err := createBackupManifest(
-		ctx,
-		execCfg,
-		txn,
-		updatedDetails,
-		prevBackups)
-	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
-	}
-
-	return updatedDetails, backupManifest, nil
-}
-
 func getTenantInfo(
 	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, jobDetails jobspb.BackupDetails,
 ) ([]roachpb.Span, []descpb.TenantInfoWithUsage, error) {
@@ -1463,7 +1306,7 @@ func createBackupManifest(
 		}
 	}
 
-	var newSpans roachpb.Spans
+	var newSpans, reintroducedSpans roachpb.Spans
 	var priorIDs map[descpb.ID]descpb.ID
 
 	var revs []backuppb.BackupManifest_DescriptorRevision
@@ -1519,11 +1362,11 @@ func createBackupManifest(
 
 		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
 
-		tableSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
+		reintroducedSpans, err = getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
 			return backuppb.BackupManifest{}, err
 		}
-		newSpans = append(newSpans, tableSpans...)
+		newSpans = append(newSpans, reintroducedSpans...)
 	}
 
 	// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion

@@ -26,6 +26,9 @@ const (
 
 	// DiscardModeSequences represents a DISCARD SEQUENCES statement
 	DiscardModeSequences
+
+	// DiscardModeTemp represents a DISCARD TEMPORARY statement
+	DiscardModeTemp
 )
 
 // Format implements the NodeFormatter interface.
@@ -35,6 +38,8 @@ func (node *Discard) Format(ctx *FmtCtx) {
 		ctx.WriteString("DISCARD ALL")
 	case DiscardModeSequences:
 		ctx.WriteString("DISCARD SEQUENCES")
+	case DiscardModeTemp:
+		ctx.WriteString("DISCARD TEMPORARY")
 	}
 }
 

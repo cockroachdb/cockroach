@@ -60,8 +60,6 @@ func BuildOptAndHypTableMaps(
 			// index with the same key. Inverted indexes do not have stored columns,
 			// so we should not make a recommendation if the same index already
 			// exists.
-			// TODO(wenyihu6): We should still consider not visible indexes and make a
-			// recommendation to mark the index as visible if it is chosen.
 			if !inverted || hypTable.existingRedundantIndex(&hypIndex) == nil {
 				hypIndexes = append(hypIndexes, hypIndex)
 			}
@@ -138,35 +136,18 @@ func (ht *HypotheticalTable) Index(i cat.IndexOrdinal) cat.Index {
 	return &ht.hypotheticalIndexes[i-existingIndexCount]
 }
 
-// existingRedundantIndex checks whether an index with the same explicit columns
-// as the index argument is present in the HypotheticalTable's embedded table.
-// If so, it returns the first instance of such an existing index (that is not a
-// partial index). Existing partial indexes and hypothetical standard indexes
-// are not considered redundant. Otherwise, the function returns nil.
+// existingRedundantIndex checks whether a visible index with the same explicit
+// columns as the index argument is present in the HypotheticalTable's embedded
+// table. If so, it returns the first instance of such an existing index (that
+// is not a partial index and visible). Existing partial indexes and
+// hypothetical standard indexes are not considered redundant. Otherwise, the
+// function returns nil.
 func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
 	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
-		indexCols := index.cols
 		existingIndex := ht.Table.Index(i)
-		if existingIndex.ExplicitColumnCount() != len(indexCols) {
-			continue
-		}
-		indexExists := true
-		for j, m := 0, existingIndex.ExplicitColumnCount(); j < m; j++ {
-			indexCol := existingIndex.Column(j)
-			// If the columns are inverted, compare the source columns. Otherwise,
-			// compare the columns directly.
-			if index.IsInverted() && existingIndex.IsInverted() && j == m-1 {
-				if indexCol.InvertedSourceColumnOrdinal() != indexCols[j].InvertedSourceColumnOrdinal() {
-					indexExists = false
-					break
-				}
-			} else if indexCol != indexCols[j] {
-				indexExists = false
-				break
-			}
-		}
+		indexExists := index.hasSameExplicitCols(existingIndex, index.IsInverted())
 		_, isPartialIndex := existingIndex.Predicate()
-		if indexExists && !isPartialIndex {
+		if indexExists && !isPartialIndex && !existingIndex.IsNotVisible() {
 			return existingIndex
 		}
 	}

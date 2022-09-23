@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -56,17 +55,11 @@ func NewMetadataUpdater(
 	txn *kv.Txn,
 	sessionData *sessiondata.SessionData,
 ) scexec.DescriptorMetadataUpdater {
-	// Unfortunately, we can't use the session data unmodified, previously the
-	// code modifying this metadata would use a circular executor that would ignore
-	// any settings set later on. We will intentionally, unset problematic settings
-	// here.
-	modifiedSessionData := sessionData.Clone()
-	modifiedSessionData.ExperimentalDistSQLPlanningMode = sessiondatapb.ExperimentalDistSQLPlanningOn
 	return metadataUpdater{
 		ctx:          ctx,
 		txn:          txn,
 		ieFactory:    ieFactory,
-		sessionData:  modifiedSessionData,
+		sessionData:  sessionData,
 		descriptors:  descriptors,
 		cacheEnabled: sessioninit.CacheEnabled.Get(settings),
 	}

@@ -32,7 +32,7 @@ chmod +x cockroach
 
 run_bazel <<'EOF'
 bazel build --config ci --config crosslinux //pkg/cmd/workload //pkg/cmd/roachtest //pkg/cmd/roachprod
-BAZEL_BIN=$(bazel info bazel-bin --config crosslinux --config ci --config with_ui -c opt)
+BAZEL_BIN=$(bazel info bazel-bin --config ci --config crosslinux)
 cp $BAZEL_BIN/pkg/cmd/roachprod/roachprod_/roachprod bin
 cp $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest bin
 cp $BAZEL_BIN/pkg/cmd/workload/workload_/workload    bin

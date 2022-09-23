@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
@@ -95,6 +96,10 @@ type Factory struct {
 	// methods. It is incremented when a constructor function is called, and
 	// decremented when a constructor function returns.
 	constructorStackDepth int
+
+	// disabledRules is a set of rules that are not allowed to run, used when
+	// rules are disabled during testing to prevent rule cycles.
+	disabledRules util.FastIntSet
 }
 
 // maxConstructorStackDepth is the maximum allowed depth of a constructor call
@@ -195,6 +200,14 @@ func (f *Factory) NotifyOnAppliedRule(appliedRule AppliedRuleFunc) {
 	f.appliedRule = appliedRule
 }
 
+// SetDisabledRules is used to prevent normalization rule cycles when rules are
+// disabled during testing. SetDisabledRules does not prevent rules from
+// matching - rather, it notifies the Factory that rules have been prevented
+// from matching using NotifyOnMatchedRule.
+func (f *Factory) SetDisabledRules(disabledRules util.FastIntSet) {
+	f.disabledRules = disabledRules
+}
+
 // Memo returns the memo structure that the factory is operating upon.
 func (f *Factory) Memo() *memo.Memo {
 	return f.mem
@@ -233,17 +246,17 @@ func (f *Factory) EvalContext() *eval.Context {
 //
 // Sample usage:
 //
-//   var replaceFn ReplaceFunc
-//   replaceFn = func(e opt.Expr) opt.Expr {
-//     if e.Op() == opt.PlaceholderOp {
-//       return f.ConstructConst(evalPlaceholder(e))
-//     }
+//	var replaceFn ReplaceFunc
+//	replaceFn = func(e opt.Expr) opt.Expr {
+//	  if e.Op() == opt.PlaceholderOp {
+//	    return f.ConstructConst(evalPlaceholder(e))
+//	  }
 //
-//     // Copy e, calling replaceFn on its inputs recursively.
-//     return f.CopyAndReplaceDefault(e, replaceFn)
-//   }
+//	  // Copy e, calling replaceFn on its inputs recursively.
+//	  return f.CopyAndReplaceDefault(e, replaceFn)
+//	}
 //
-//   f.CopyAndReplace(from, fromProps, replaceFn)
+//	f.CopyAndReplace(from, fromProps, replaceFn)
 //
 // NOTE: Callers must take care to always create brand new copies of non-
 // singleton source nodes rather than referencing existing nodes. The source

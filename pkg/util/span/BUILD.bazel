@@ -18,6 +18,7 @@ go_test(
     name = "span_test",
     size = "small",
     srcs = ["frontier_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":span"],
     deps = [
         "//pkg/roachpb",

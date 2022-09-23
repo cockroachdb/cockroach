@@ -32,6 +32,7 @@ func registerCostFuzz(r registry.Registry) {
 		RequiresLicense: true,
 		Tags:            nil,
 		Cluster:         r.MakeClusterSpec(1),
+		NativeLibs:      registry.LibGEOS,
 		Run:             runCostFuzz,
 	})
 }

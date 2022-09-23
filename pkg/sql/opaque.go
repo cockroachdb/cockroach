@@ -262,6 +262,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowVar(ctx, &tree.ShowVar{Name: "transaction_status"})
 	case *tree.Truncate:
 		return p.Truncate(ctx, n)
+	case *tree.Unlisten:
+		return p.Unlisten(ctx, n)
 	case tree.CCLOnlyStatement:
 		plan, err := p.maybePlanHook(ctx, stmt)
 		if plan == nil && err == nil {
@@ -369,6 +371,7 @@ func init() {
 		&tree.ShowVar{},
 		&tree.ShowTransactionStatus{},
 		&tree.Truncate{},
+		&tree.Unlisten{},
 
 		// CCL statements (without Export which has an optimizer operator).
 		&tree.AlterBackup{},

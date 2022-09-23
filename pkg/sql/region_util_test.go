@@ -444,7 +444,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				nil,
 				descpb.ZoneConfigExtensions{
 					Regional: &zonepb.ZoneConfig{
-						NumReplicas:               proto.Int32(3),
+						NumReplicas:               proto.Int32(6),
 						Constraints:               nil,
 						InheritedLeasePreferences: true,
 					},
@@ -466,7 +466,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				},
 			),
 			expected: zonepb.ZoneConfig{
-				NumReplicas: proto.Int32(3),
+				NumReplicas: proto.Int32(6),
 				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
 					{

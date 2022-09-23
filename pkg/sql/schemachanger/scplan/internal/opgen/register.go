@@ -62,7 +62,20 @@ func (r *registry) register(e scpb.Element, targetSpecs ...targetSpec) {
 	targets, err := buildTargets(e, fullTargetSpecs)
 	onErrPanic(err)
 	onErrPanic(validateTargets(targets))
+	start := len(r.targets)
 	r.targets = append(r.targets, targets...)
+	elType := reflect.TypeOf(e)
+	for i := range targets {
+		r.targetMap[makeTargetKey(elType, targets[i].status)] = start + i
+	}
+
+}
+
+func makeTargetKey(elType reflect.Type, status scpb.Status) targetKey {
+	return targetKey{
+		elType:       elType,
+		targetStatus: status,
+	}
 }
 
 func populateAndValidateSpecs(targetSpecs []targetSpec) ([]targetSpec, error) {
@@ -217,10 +230,10 @@ func validateTargets(targets []target) error {
 	}
 
 	for s := range allStatuses {
-		if !absentStatuses[s] {
+		if nonAbsentStatuses[s] && !absentStatuses[s] {
 			return errors.Errorf("status %s is featured in non-ABSENT targets but not in the ABSENT target", s)
 		}
-		if !nonAbsentStatuses[s] {
+		if absentStatuses[s] && !nonAbsentStatuses[s] {
 			return errors.Errorf("status %s is featured in ABSENT target but not in any non-ABSENT targets", s)
 		}
 	}

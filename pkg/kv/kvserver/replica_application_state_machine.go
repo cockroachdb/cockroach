@@ -200,7 +200,7 @@ var noopOnProbeCommandErr = roachpb.NewErrorf("no-op on ProbeRequest")
 //  1. verify that the command was proposed under the current lease. This is
 //     determined using the proposal's ProposerLeaseSequence.
 //     1.1. lease requests instead check for specifying the current lease
-//          as the lease they follow.
+//     as the lease they follow.
 //     1.2. ProbeRequest instead always fail this step with noopOnProbeCommandErr.
 //  2. verify that the command hasn't been re-ordered with other commands that
 //     were proposed after it and which already applied. This is determined

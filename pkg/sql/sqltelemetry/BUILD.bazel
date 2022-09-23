@@ -35,6 +35,8 @@ go_library(
         "//pkg/settings",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/builtins/builtinsregistry",
+        "//pkg/sql/sem/tree",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "@com_github_cockroachdb_errors//:errors",

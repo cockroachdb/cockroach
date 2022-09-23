@@ -168,7 +168,7 @@ on-txn-updated txn=txn1 status=aborted
 [-] update txn: aborting txn1
 [4] sequence req1r: detected pusher aborted
 [4] sequence req1r: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 0.000s
-[4] sequence req1r: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[4] sequence req1r: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [6] sequence req3r: resolving intent "a" for txn 00000001 with ABORTED status
 [6] sequence req3r: lock wait-queue event: done waiting
 [6] sequence req3r: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 0.000s
@@ -402,7 +402,7 @@ on-txn-updated txn=txn1 status=aborted
 [4] sequence req4w: sequencing complete, returned guard
 [5] sequence req1w2: detected pusher aborted
 [5] sequence req1w2: conflicted with 00000002-0000-0000-0000-000000000000 on "b" for 0.000s
-[5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [7] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
 [7] sequence req3w2: lock wait-queue event: wait for (distinguished) txn 00000004 running request @ key "a" (queuedWriters: 1, queuedReaders: 0)
 [7] sequence req3w2: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 0.000s
@@ -651,7 +651,7 @@ on-txn-updated txn=txn4 status=aborted
 [-] update txn: aborting txn4
 [4] sequence req4w: detected pusher aborted
 [4] sequence req4w: conflicted with 00000003-0000-0000-0000-000000000000 on "c" for 0.000s
-[4] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[4] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [5] sequence req1w2: lock wait-queue event: done waiting
 [5] sequence req1w2: conflicted with 00000004-0000-0000-0000-000000000000 on "b" for 0.000s
 [5] sequence req1w2: acquiring latches
@@ -889,7 +889,7 @@ on-txn-updated txn=txn1 status=aborted
 [-] update txn: aborting txn1
 [5] sequence req1w2: detected pusher aborted
 [5] sequence req1w2: conflicted with 00000004-0000-0000-0000-000000000000 on "b" for 0.000s
-[5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[5] sequence req1w2: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [6] sequence req3w2: resolving intent "a" for txn 00000001 with ABORTED status
 [6] sequence req3w2: lock wait-queue event: done waiting
 [6] sequence req3w2: conflicted with 00000001-0000-0000-0000-000000000000 on "a" for 0.000s
@@ -1154,7 +1154,7 @@ on-txn-updated txn=txn4 status=aborted
 [-] update txn: aborting txn4
 [5] sequence req4w: detected pusher aborted
 [5] sequence req4w: conflicted with 00000005-0000-0000-0000-000000000000 on "b" for 0.000s
-[5] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED): <nil>
+[5] sequence req4w: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [6] sequence req3w2: lock wait-queue event: done waiting
 [6] sequence req3w2: conflicted with 00000004-0000-0000-0000-000000000000 on "a" for 0.000s
 [6] sequence req3w2: acquiring latches

@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"strings"
@@ -326,9 +325,9 @@ func decompressingReader(
 	case roachpb.IOFileFormat_Gzip:
 		return gzip.NewReader(in)
 	case roachpb.IOFileFormat_Bzip:
-		return ioutil.NopCloser(bzip2.NewReader(in)), nil
+		return io.NopCloser(bzip2.NewReader(in)), nil
 	default:
-		return ioutil.NopCloser(in), nil
+		return io.NopCloser(in), nil
 	}
 }
 

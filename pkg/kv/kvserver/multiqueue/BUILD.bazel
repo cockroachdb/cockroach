@@ -15,6 +15,7 @@ go_library(
 go_test(
     name = "multiqueue_test",
     srcs = ["multi_queue_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":multiqueue"],
     deps = [
         "//pkg/testutils",

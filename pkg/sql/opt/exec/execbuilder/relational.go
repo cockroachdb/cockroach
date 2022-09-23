@@ -41,7 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -388,7 +390,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 // ExplainFactory and annotates the node with more information if so.
 func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 	if ef, ok := b.factory.(exec.ExplainFactory); ok {
-		stats := &e.Relational().Stats
+		stats := e.Relational().Statistics()
 		val := exec.EstimatedStats{
 			TableStatsAvailable: stats.Available,
 			RowCount:            stats.RowCount,
@@ -398,22 +400,31 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 			tab := b.mem.Metadata().Table(scan.Table)
 			if tab.StatisticCount() > 0 {
 				// The first stat is the most recent one.
-				stat := tab.Statistic(0)
-				val.TableStatsRowCount = stat.RowCount()
-				if val.TableStatsRowCount == 0 {
-					val.TableStatsRowCount = 1
+				var first int
+				if !b.evalCtx.SessionData().OptimizerUseForecasts {
+					for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
+						first++
+					}
 				}
-				val.TableStatsCreatedAt = stat.CreatedAt()
-				val.LimitHint = scan.RequiredPhysical().LimitHint
-				val.Forecast = stat.IsForecast()
-				if val.Forecast {
-					val.ForecastAt = stat.CreatedAt()
-					// Find the first non-forecast stat.
-					for i := 0; i < tab.StatisticCount(); i++ {
-						nextStat := tab.Statistic(i)
-						if !nextStat.IsForecast() {
-							val.TableStatsCreatedAt = nextStat.CreatedAt()
-							break
+
+				if first < tab.StatisticCount() {
+					stat := tab.Statistic(first)
+					val.TableStatsRowCount = stat.RowCount()
+					if val.TableStatsRowCount == 0 {
+						val.TableStatsRowCount = 1
+					}
+					val.TableStatsCreatedAt = stat.CreatedAt()
+					val.LimitHint = scan.RequiredPhysical().LimitHint
+					val.Forecast = stat.IsForecast()
+					if val.Forecast {
+						val.ForecastAt = stat.CreatedAt()
+						// Find the first non-forecast stat.
+						for i := first + 1; i < tab.StatisticCount(); i++ {
+							nextStat := tab.Statistic(i)
+							if !nextStat.IsForecast() {
+								val.TableStatsCreatedAt = nextStat.CreatedAt()
+								break
+							}
 						}
 					}
 				}
@@ -616,8 +627,8 @@ func (b *Builder) scanParams(
 	// been removed by DetachMemo. Update that function if the column stats are
 	// needed here in the future.
 	var rowCount float64
-	if relProps.Stats.Available {
-		rowCount = relProps.Stats.RowCount
+	if relProps.Statistics().Available {
+		rowCount = relProps.Statistics().RowCount
 	}
 
 	if scan.PartitionConstrainedScan {
@@ -715,7 +726,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 
 	// Save if we planned a full table/index scan on the builder so that the
 	// planner can be made aware later. We only do this for non-virtual tables.
-	stats := scan.Relational().Stats
+	stats := scan.Relational().Statistics()
 	if !tab.IsVirtualTable() && isUnfiltered {
 		large := !stats.Available || stats.RowCount > b.evalCtx.SessionData().LargeFullScanRows
 		if scan.Index == cat.PrimaryIndex {
@@ -1015,12 +1026,35 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	//
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
-	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (exec.Plan, error) {
+	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (_ exec.Plan, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				// This code allows us to propagate internal errors without having to add
+				// error checks everywhere throughout the code. This is only possible
+				// because the code does not update shared state and does not manipulate
+				// locks.
+				//
+				// This is the same panic-catching logic that exists in
+				// o.Optimize() below. It's required here because it's possible
+				// for factory functions to panic below, like
+				// CopyAndReplaceDefault.
+				if ok, e := errorutil.ShouldCatch(r); ok {
+					err = e
+					log.VEventf(ctx, 1, "%v", err)
+				} else {
+					// Other panic objects can't be considered "safe" and thus are
+					// propagated as crashes that terminate the session.
+					panic(r)
+				}
+			}
+		}()
+
 		o.Init(ctx, b.evalCtx, b.catalog)
 		f := o.Factory()
 
 		// Copy the right expression into a new memo, replacing each bound column
 		// with the corresponding value from the left row.
+		addedWithBindings := false
 		var replaceFn norm.ReplaceFunc
 		replaceFn = func(e opt.Expr) opt.Expr {
 			switch t := e.(type) {
@@ -1030,15 +1064,26 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				}
 
 			case *memo.WithScanExpr:
-				// Allow referring to "outer" With expressions. The bound expressions
-				// are not part of this Memo but they are used only for their relational
-				// properties, which should be valid.
-				for i := range withExprs {
-					if withExprs[i].id == t.With {
-						memoExpr := b.mem.Metadata().WithBinding(t.With)
-						f.Metadata().AddWithBinding(t.With, memoExpr)
-						break
+				// Allow referring to "outer" With expressions. The bound
+				// expressions are not part of this Memo, but they are used only
+				// for their relational properties, which should be valid.
+				//
+				// We must add all With expressions to the metadata even if they
+				// aren't referred to directly because they might be referred to
+				// transitively through other With expressions. For example, if
+				// the RHS refers to With expression &1, and &1 refers to With
+				// expression &2, we must include &2 in the metadata so that
+				// its relational properties are available. See #87733.
+				//
+				// We lazily add these With expressions to the metadata here
+				// because the call to Factory.CopyAndReplace below clears With
+				// expressions in the metadata.
+				if !addedWithBindings {
+					for i, n := opt.WithID(1), b.mem.MaxWithID(); i <= n; i++ {
+						memoExpr := b.mem.Metadata().WithBinding(i)
+						f.Metadata().AddWithBinding(i, memoExpr)
 					}
+					addedWithBindings = true
 				}
 				// Fall through.
 			}
@@ -1167,8 +1212,8 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		// it during the costing.
 		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
 		// choosing a side.
-		leftRowCount := leftExpr.Relational().Stats.RowCount
-		rightRowCount := rightExpr.Relational().Stats.RowCount
+		leftRowCount := leftExpr.Relational().Statistics().RowCount
+		rightRowCount := rightExpr.Relational().Statistics().RowCount
 		if leftRowCount < rightRowCount {
 			if joinType == descpb.LeftSemiJoin {
 				joinType = descpb.RightSemiJoin
@@ -1179,7 +1224,7 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (execPlan, error) {
 		}
 	}
 
-	leftEq, rightEq, _ := memo.ExtractJoinEqualityColumns(
+	leftEq, rightEq := memo.ExtractJoinEqualityColumns(
 		leftExpr.Relational().OutputCols,
 		rightExpr.Relational().OutputCols,
 		*filters,
@@ -1252,8 +1297,8 @@ func (b *Builder) buildMergeJoin(join *memo.MergeJoinExpr) (execPlan, error) {
 		// it during the costing.
 		// TODO(raduberinde): we might also need to look at memo.JoinFlags when
 		// choosing a side.
-		leftRowCount := leftExpr.Relational().Stats.RowCount
-		rightRowCount := rightExpr.Relational().Stats.RowCount
+		leftRowCount := leftExpr.Relational().Statistics().RowCount
+		rightRowCount := rightExpr.Relational().Statistics().RowCount
 		if leftRowCount < rightRowCount {
 			if joinType == descpb.LeftSemiJoin {
 				joinType = descpb.RightSemiJoin
@@ -2578,7 +2623,7 @@ func (b *Builder) buildWith(with *memo.WithExpr) (execPlan, error) {
 		// to behave like a spoolNode) and using the EXISTS mode.
 		Mode:     exec.SubqueryAllRows,
 		Root:     buffer,
-		RowCount: int64(with.Relational().Stats.RowCountIfAvailable()),
+		RowCount: int64(with.Relational().Statistics().RowCountIfAvailable()),
 	})
 
 	b.addBuiltWithExpr(with.ID, value.outputCols, buffer)
@@ -2632,7 +2677,7 @@ func (b *Builder) buildRecursiveCTE(rec *memo.RecursiveCTEExpr) (execPlan, error
 		if err != nil {
 			return nil, err
 		}
-		rootRowCount := int64(rec.Recursive.Relational().Stats.RowCountIfAvailable())
+		rootRowCount := int64(rec.Recursive.Relational().Statistics().RowCountIfAvailable())
 		return innerBld.factory.ConstructPlan(plan.root, innerBld.subqueries, innerBld.cascades, innerBld.checks, rootRowCount)
 	}
 

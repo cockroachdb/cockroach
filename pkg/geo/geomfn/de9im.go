@@ -68,12 +68,12 @@ func MatchesDE9IM(relation string, pattern string) (bool, error) {
 // relationByteMatchesPatternByte matches a single byte of a DE-9IM relation
 // against the DE-9IM pattern.
 // Pattern matches are as follows:
-// * '*': allow anything.
-// * '0' / '1' / '2': match exactly.
-// * 't'/'T': allow only if the relation is true. This means the relation must be
-//   '0' (point), '1' (line) or '2' (area) - which is the dimensionality of the
-//   intersection.
-// * 'f'/'F': allow only if relation is also false, which is of the form 'f'/'F'.
+//   - '*': allow anything.
+//   - '0' / '1' / '2': match exactly.
+//   - 't'/'T': allow only if the relation is true. This means the relation must be
+//     '0' (point), '1' (line) or '2' (area) - which is the dimensionality of the
+//     intersection.
+//   - 'f'/'F': allow only if relation is also false, which is of the form 'f'/'F'.
 func relationByteMatchesPatternByte(r byte, p byte) (bool, error) {
 	switch util.ToLowerSingleByte(p) {
 	case '*':

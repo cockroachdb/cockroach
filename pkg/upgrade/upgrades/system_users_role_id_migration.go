@@ -28,11 +28,12 @@ import (
 )
 
 // The migration is broken down into four steps.
-// 1. Adding the "user_id" column as NULL.
-// 	All newly created users will have an ID after step 1, this gives us a
-//	cut off point on which users we need to backfill.
-// 2. Manually backfill the id column.
-// 3. Set the column to not null.
+//  1. Adding the "user_id" column as NULL.
+//     All newly created users will have an ID after step 1, this gives us a
+//     cut off point on which users we need to backfill.
+//  2. Manually backfill the id column.
+//  3. Set the column to not null.
+//
 // We need to do this because we cannot add a column with a nextval call as a
 // default expression.
 // It results in: unimplemented: cannot evaluate scalar expressions

@@ -18,6 +18,7 @@ import (
 	"go/types"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
@@ -26,12 +27,14 @@ import (
 // Doc documents this pass.
 const Doc = `check for comparison of error objects`
 
+const name = "errcmp"
+
 var errorType = types.Universe.Lookup("error").Type()
 
 // Analyzer checks for usage of errors.Is instead of direct ==/!=
 // comparisons.
 var Analyzer = &analysis.Analyzer{
-	Name:     "errcmp",
+	Name:     name,
 	Doc:      Doc,
 	Requires: []*analysis.Analyzer{inspect.Analyzer},
 	Run:      run,
@@ -78,7 +81,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 }
 
 func checkErrSwitch(pass *analysis.Pass, s *ast.SwitchStmt) {
-	if pass.TypesInfo.Types[s.Tag].Type == errorType {
+	if pass.TypesInfo.Types[s.Tag].Type == errorType &&
+		!passesutil.HasNolintComment(pass, s, name) {
 		pass.Reportf(s.Switch, escNl(`invalid direct comparison of error object
 Tip:
    switch err { case errRef:...
@@ -88,7 +92,8 @@ Tip:
 }
 
 func checkErrCast(pass *analysis.Pass, texpr *ast.TypeAssertExpr) {
-	if pass.TypesInfo.Types[texpr.X].Type == errorType {
+	if pass.TypesInfo.Types[texpr.X].Type == errorType &&
+		!passesutil.HasNolintComment(pass, texpr, name) {
 		pass.Reportf(texpr.Lparen, escNl(`invalid direct cast on error object
 Alternatives:
    if _, ok := err.(*T); ok        ->   if errors.HasType(err, (*T)(nil))
@@ -119,7 +124,8 @@ func checkErrCmp(pass *analysis.Pass, binaryExpr *ast.BinaryExpr) {
 			// We have a special case: when the RHS is io.EOF or io.ErrUnexpectedEOF.
 			// They are nearly always used with APIs that return
 			// an undecorated error.
-			if isEOFError(binaryExpr.Y) {
+			if isEOFError(binaryExpr.Y) ||
+				passesutil.HasNolintComment(pass, binaryExpr, name) {
 				return
 			}
 

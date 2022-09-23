@@ -43,6 +43,7 @@ go_test(
         "encoding_test.go",
         "settings_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":settings"],
     deps = [
         "//pkg/testutils",

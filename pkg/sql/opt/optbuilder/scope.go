@@ -654,7 +654,9 @@ func (s *scope) findFuncArgCol(idx tree.PlaceholderIdx) *scopeColumn {
 // startAggFunc is called when the builder starts building an aggregate
 // function. It is used to disallow nested aggregates and ensure that a
 // grouping error is not called on the aggregate arguments. For example:
-//   SELECT max(v) FROM kv GROUP BY k
+//
+//	SELECT max(v) FROM kv GROUP BY k
+//
 // should not throw an error, even though v is not a grouping column.
 // Non-grouping columns are allowed inside aggregate functions.
 //

@@ -45,12 +45,11 @@ const (
 // If tableName is anonymous then no table name is included in the formatted
 // string. For example:
 //
-//   INDEX i (a) WHERE b > 0
+//	INDEX i (a) WHERE b > 0
 //
 // If tableName is not anonymous, then "ON" and the name is included:
 //
-//   INDEX i ON t (a) WHERE b > 0
-//
+//	INDEX i ON t (a) WHERE b > 0
 func IndexForDisplay(
 	ctx context.Context,
 	table catalog.TableDescriptor,
@@ -220,7 +219,8 @@ func FormatIndexElements(
 		} else {
 			f.FormatNameP(&index.KeyColumnNames[i])
 		}
-		if index.Type == descpb.IndexDescriptor_INVERTED && len(index.InvertedColumnKinds) > 0 {
+		if index.Type == descpb.IndexDescriptor_INVERTED &&
+			col.GetID() == index.InvertedColumnID() && len(index.InvertedColumnKinds) > 0 {
 			switch index.InvertedColumnKinds[0] {
 			case catpb.InvertedIndexColumnKind_TRIGRAM:
 				f.WriteString(" gin_trgm_ops")

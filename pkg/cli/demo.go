@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -176,7 +177,7 @@ func checkDemoConfiguration(
 		}
 
 		// If the geo-partitioned replicas flag was given and the nodes have changed, throw an error.
-		if f.Lookup(cliflags.DemoNodes.Name).Changed {
+		if fl := f.Lookup(cliflags.DemoNodes.Name); fl != nil && fl.Changed {
 			if demoCtx.NumNodes != 9 {
 				return nil, errors.Newf("--nodes with a value different from 9 cannot be used with %s", geoFlag)
 			}
@@ -205,7 +206,15 @@ func checkDemoConfiguration(
 	return gen, nil
 }
 
-func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
+func runDemo(cmd *cobra.Command, gen workload.Generator) error {
+	return runDemoInternal(cmd, gen, func(context.Context, clisqlclient.Conn) error { return nil })
+}
+
+func runDemoInternal(
+	cmd *cobra.Command,
+	gen workload.Generator,
+	extraInit func(context.Context, clisqlclient.Conn) error,
+) (resErr error) {
 	closeFn, err := sqlCtx.Open(os.Stdin)
 	if err != nil {
 		return err
@@ -355,5 +364,10 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (resErr error) {
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
 	sqlCtx.ShellCtx.ParseURL = clienturl.MakeURLParserFn(cmd, cliCtx.clientOpts)
+
+	if err := extraInit(ctx, conn); err != nil {
+		return err
+	}
+
 	return sqlCtx.Run(ctx, conn)
 }

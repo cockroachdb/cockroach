@@ -218,7 +218,7 @@ var _ Command = PrepareStmt{}
 // DescribeStmt is the Command for producing info about a prepared statement or
 // portal.
 type DescribeStmt struct {
-	Name string
+	Name tree.Name
 	Type pgwirebase.PrepareType
 }
 
@@ -321,13 +321,21 @@ var _ Command = Flush{}
 
 // CopyIn is the command for execution of the Copy-in pgwire subprotocol.
 type CopyIn struct {
-	Stmt *tree.CopyFrom
+	ParsedStmt parser.Statement
+	Stmt       *tree.CopyFrom
 	// Conn is the network connection. Execution of the CopyFrom statement takes
 	// control of the connection.
 	Conn pgwirebase.Conn
 	// CopyDone is decremented once execution finishes, signaling that control of
 	// the connection is being handed back to the network routine.
 	CopyDone *sync.WaitGroup
+	// TimeReceived is the time at which the message was received
+	// from the client. Used to compute the service latency.
+	TimeReceived time.Time
+	// ParseStart/ParseEnd are the timing info for parsing of the query. Used for
+	// stats reporting.
+	ParseStart time.Time
+	ParseEnd   time.Time
 }
 
 // command implements the Command interface.

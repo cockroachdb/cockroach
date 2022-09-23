@@ -27,6 +27,7 @@ import (
 // fixtures, you will need to run acceptance/version-upgrade with the
 // checkpoint option enabled to create the missing store directory
 // fixture (see runVersionUpgrade).
+//
 //go:embed predecessor_version.json
 var verMapJSON []byte
 

@@ -220,11 +220,6 @@ func (i *MVCCIterator) IsPrefix() bool {
 	return i.i.IsPrefix()
 }
 
-// SupportsPrev is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SupportsPrev() bool {
-	return i.i.SupportsPrev()
-}
-
 // EngineIterator wraps a storage.EngineIterator and ensures that it can
 // only be used to access spans in a SpanSet.
 type EngineIterator struct {
@@ -422,36 +417,6 @@ func (s spanSetReader) Close() {
 
 func (s spanSetReader) Closed() bool {
 	return s.r.Closed()
-}
-
-func (s spanSetReader) MVCCGet(key storage.MVCCKey) ([]byte, error) {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: key.Key}, s.ts); err != nil {
-			return nil, err
-		}
-	}
-	//lint:ignore SA1019 implementing deprecated interface function (Get) is OK
-	return s.r.MVCCGet(key)
-}
-
-func (s spanSetReader) MVCCGetProto(
-	key storage.MVCCKey, msg protoutil.Message,
-) (bool, int64, int64, error) {
-	if s.spansOnly {
-		if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
-			return false, 0, 0, err
-		}
-	} else {
-		if err := s.spans.CheckAllowedAt(SpanReadOnly, roachpb.Span{Key: key.Key}, s.ts); err != nil {
-			return false, 0, 0, err
-		}
-	}
-	//lint:ignore SA1019 implementing deprecated interface function (MVCCGetProto) is OK
-	return s.r.MVCCGetProto(key, msg)
 }
 
 func (s spanSetReader) MVCCIterate(
@@ -822,6 +787,19 @@ func DisableReaderAssertions(reader storage.Reader) storage.Reader {
 		return DisableReaderAssertions(v.r)
 	default:
 		return reader
+	}
+}
+
+// DisableReadWriterAssertions unwraps any storage.ReadWriter implementations
+// that may assert access against a given SpanSet.
+func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
+	switch v := rw.(type) {
+	case ReadWriter:
+		return DisableReadWriterAssertions(v.w.(storage.ReadWriter))
+	case *spanSetBatch:
+		return DisableReadWriterAssertions(v.w.(storage.ReadWriter))
+	default:
+		return rw
 	}
 }
 

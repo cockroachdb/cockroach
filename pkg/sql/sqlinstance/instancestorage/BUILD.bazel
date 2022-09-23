@@ -45,6 +45,7 @@ go_test(
         "instancestorage_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         ":instancestorage",
         "//pkg/base",

@@ -130,14 +130,20 @@ func scanBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Or
 	// We generate the longest ordering that this scan can provide, then we trim
 	// it. This is the longest prefix of index columns that are output by the scan
 	// (ignoring constant columns, in the case of constrained scans).
-	// We start the for loop at the exact prefix since all columns in the exact
-	// prefix are constant and can be ignored.
+	outCols := expr.Relational().OutputCols
 	constCols := fds.ComputeClosure(opt.ColSet{})
 	numCols := index.KeyColumnCount()
 	provided := make(opt.Ordering, 0, numCols)
-	for i := scan.ExactPrefix; i < numCols; i++ {
+	for i := 0; i < numCols; i++ {
 		indexCol := index.Column(i)
 		colID := scan.Table.ColumnID(indexCol.Ordinal())
+		if i < scan.ExactPrefix && !outCols.Contains(colID) {
+			// All columns in the exact prefix are constant and can be ignored as long
+			// as they are not in the output of the scan. If an exact-prefix column is
+			// in the output, it may still be constant, but can only be ignored if the
+			// FDs "know" it is constant. This latter case is handled below as normal.
+			continue
+		}
 		if constCols.Contains(colID) {
 			// Column constrained to a constant, ignore.
 			continue

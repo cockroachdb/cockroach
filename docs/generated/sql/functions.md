@@ -1067,6 +1067,8 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_typeof"></a><code>jsonb_typeof(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the type of the outermost JSON value as a text string.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="to_json"></a><code>to_json(val: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the value as JSON or JSONB.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="to_jsonb"></a><code>to_jsonb(val: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the value as JSON or JSONB.</p>
@@ -1105,15 +1107,6 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="rehome_row"></a><code>rehome_row() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the region of the connection’s current node as defined by
 the locality flag on node startup. Returns an error if no region is set.</p>
-</span></td><td>Stable</td></tr></tbody>
-</table>
-
-### Multi-tenancy functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
-<tbody>
-<tr><td><a name="crdb_internal.sql_liveness_is_alive"></a><code>crdb_internal.sql_liveness_is_alive(session_id: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks is given sqlliveness session id is not expired</p>
 </span></td><td>Stable</td></tr></tbody>
 </table>
 
@@ -3025,7 +3018,7 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.assignment_cast"></a><code>crdb_internal.assignment_cast(val: anyelement, type: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used internally to perform assignment casts during mutations.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.check_consistency"></a><code>crdb_internal.check_consistency(stats_only: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail}</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range. an empty start or end key is treated as the minimum and maximum possible, respectively. stats_only should only be set to false when targeting a small number of ranges to avoid overloading the cluster. Each returned row contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), and verbose detail.</p>
+<tr><td><a name="crdb_internal.check_consistency"></a><code>crdb_internal.check_consistency(stats_only: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail, interval AS duration}</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range. an empty start or end key is treated as the minimum and maximum possible, respectively. stats_only should only be set to false when targeting a small number of ranges to avoid overloading the cluster. Each returned row contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), and verbose detail.</p>
 <p>Example usage:
 SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td><td>Volatile</td></tr>
@@ -3152,14 +3145,8 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.table_span"></a><code>crdb_internal.table_span(table_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given table.</p>
 </span></td><td>Leakproof</td></tr>
-<tr><td><a name="crdb_internal.tenant_span"></a><code>crdb_internal.tenant_span(tenant_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function returns the span that contains the keys for the given tenant.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.trace_id"></a><code>crdb_internal.trace_id() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the current trace ID or an error if no trace is open.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.trim_tenant_prefix"></a><code>crdb_internal.trim_tenant_prefix(key: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function assumes the given bytes are a CockroachDB key and trims any tenant prefix from the key.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.trim_tenant_prefix"></a><code>crdb_internal.trim_tenant_prefix(keys: <a href="bytes.html">bytes</a>[]) &rarr; <a href="bytes.html">bytes</a>[]</code></td><td><span class="funcdesc"><p>This function assumes the given bytes are a CockroachDB key and trims any tenant prefix from the key.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.unsafe_clear_gossip_info"></a><code>crdb_internal.unsafe_clear_gossip_info(key: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.validate_session_revival_token"></a><code>crdb_internal.validate_session_revival_token(token: <a href="bytes.html">bytes</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validate a token that was created by create_session_revival_token. Intended for testing.</p>
@@ -3228,34 +3215,6 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="localtime"></a><code>localtime(precision: <a href="int.html">int</a>) &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns the current transaction’s time with time zone.</p>
 </span></td><td>Stable</td></tr></tbody>
-</table>
-
-### TUPLE functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
-<tbody>
-<tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
-</span></td><td>Stable</td></tr></tbody>
-</table>
-
-### TUPLE{INT AS RANGE_ID, STRING AS ERROR, INT AS END_TO_END_LATENCY_MS, STRING AS VERBOSE_TRACE} functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
-<tbody>
-<tr><td><a name="crdb_internal.probe_ranges"></a><code>crdb_internal.probe_ranges(timeout: <a href="interval.html">interval</a>, probe_type: unknown_enum) &rarr; tuple{int AS range_id, string AS error, int AS end_to_end_latency_ms, string AS verbose_trace}</code></td><td><span class="funcdesc"><p>Returns rows of range data based on the results received when using the prober.
-Parameters
-timeout: interval for the maximum time the user wishes the prober to probe a range.
-probe_type: enum indicating which kind of probe the prober should conduct (options are read or write).
-Example usage
-number of failed write probes: select count(1) from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, ‘write’) where error != ‘’;
-50 slowest probes: select range_id, error, end_to_end_latency_ms from crdb_internal.probe_ranges(INTERVAL ‘1000ms’, true) order by end_to_end_latency_ms desc limit 50;
-Notes
-If a probe should fail, the latency will be set to MaxInt64 in order to naturally sort above other latencies.
-Read probes are cheaper than write probes. If write probes have already ran, it’s not necessary to also run a read probe.
-A write probe will effectively probe reads as well.</p>
-</span></td><td>Volatile</td></tr></tbody>
 </table>
 
 ### Trigrams functions
@@ -3463,6 +3422,12 @@ A write probe will effectively probe reads as well.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_column_size"></a><code>pg_column_size(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="pg_get_function_identity_arguments"></a><code>pg_get_function_identity_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list (without defaults) necessary to identify a function, in the form it would need to appear in within ALTER FUNCTION, for instance.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_function_result"></a><code>pg_get_function_result(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the types of the result of the specified function.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_functiondef"></a><code>pg_get_functiondef(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>For user-defined functions, returns the definition of the specified function. For builtin functions, returns the name of the function.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_serial_sequence"></a><code>pg_get_serial_sequence(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the name of the sequence used by the given column_name in the table table_name.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_viewdef"></a><code>pg_get_viewdef(view_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE statement for an existing view.</p>

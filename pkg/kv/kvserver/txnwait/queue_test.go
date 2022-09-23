@@ -222,6 +222,8 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 	cancel()
 	pErr := <-waitingRes
 	require.NotNil(t, pErr)
+	s := pErr.String()
+	_ = s
 	require.Regexp(t, context.Canceled.Error(), pErr)
 	require.Equal(t, 0, q.mu.txns[txn.ID].waitingPushes.Len())
 

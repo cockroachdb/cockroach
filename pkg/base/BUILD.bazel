@@ -56,6 +56,7 @@ go_test(
         "node_id_test.go",
         "store_spec_test.go",
     ],
+    args = ["-test.timeout=55s"],
     deps = [
         ":base",
         "//pkg/roachpb",

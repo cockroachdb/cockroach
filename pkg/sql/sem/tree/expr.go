@@ -346,8 +346,10 @@ func (node *ParenExpr) TypedInnerExpr() TypedExpr {
 
 // StripParens strips any parentheses surrounding an expression and
 // returns the inner expression. For instance:
-//   1   -> 1
-//  (1)  -> 1
+//
+//	 1   -> 1
+//	(1)  -> 1
+//
 // ((1)) -> 1
 func StripParens(expr Expr) Expr {
 	if p, ok := expr.(*ParenExpr); ok {

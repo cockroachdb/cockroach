@@ -37,17 +37,20 @@ import (
 )
 
 var (
-	l           *logger.Logger
-	flags       = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
-	flagP       = flags.Int("p", runtime.GOMAXPROCS(0), "run `N` processes in parallel")
-	flagTimeout = flags.Duration("timeout", 0, "timeout each process after `duration`")
-	_           = flags.Bool("kill", true, "kill timed out processes if true, otherwise just print pid (to attach with gdb)")
-	flagFailure = flags.String("failure", "", "fail only if output matches `regexp`")
-	flagIgnore  = flags.String("ignore", "", "ignore failure if output matches `regexp`")
-	flagMaxTime = flags.Duration("maxtime", 0, "maximum time to run")
-	flagMaxRuns = flags.Int("maxruns", 0, "maximum number of runs")
-	_           = flags.Int("maxfails", 1, "maximum number of failures")
-	flagStderr  = flags.Bool("stderr", true, "output failures to STDERR instead of to a temp file")
+	l             *logger.Logger
+	flags         = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	flagP         = flags.Int("p", runtime.GOMAXPROCS(0), "run `N` processes in parallel")
+	flagTimeout   = flags.Duration("timeout", 0, "timeout each process after `duration`")
+	flagFailure   = flags.String("failure", "", "fail only if output matches `regexp`")
+	flagIgnore    = flags.String("ignore", "", "ignore failure if output matches `regexp`")
+	flagMaxTime   = flags.Duration("maxtime", 0, "maximum time to run")
+	flagMaxRuns   = flags.Int("maxruns", 0, "maximum number of runs")
+	flagStderr    = flags.Bool("stderr", true, "output failures to STDERR instead of to a temp file")
+	flagTestBin   = flags.String("testbin", "", "location of the test binary")
+	flagStressBin = flags.String("stressbin", "bin.docker_amd64/stress", "location of the stress binary")
+	flagLibDir    = flags.String("libdir", "lib.docker_amd64", "location of the directory containing the built geos directories")
+	_             = flags.Bool("kill", true, "kill timed out processes if true, otherwise just print pid (to attach with gdb)")
+	_             = flags.Int("maxfails", 1, "maximum number of failures")
 )
 
 func init() {
@@ -65,67 +68,29 @@ func init() {
 	}
 }
 
-func roundToSeconds(d time.Duration) time.Duration {
-	return time.Duration(d.Seconds()+0.5) * time.Second
+func verifySourcesAndArtifactsExist(pkg, localTestBin string) error {
+	// Verify that the given package exists.
+	fi, err := os.Stat(pkg)
+	if err != nil {
+		return errors.Wrapf(err, "the pkg flag %q is not a directory relative to the current working directory", pkg)
+	}
+	if !fi.Mode().IsDir() {
+		return fmt.Errorf("the pkg flag %q is not a directory relative to the current working directory", pkg)
+	}
+
+	// Verify that the test binary exists.
+	fi, err = os.Stat(localTestBin)
+	if err != nil {
+		return errors.Wrapf(err, "test binary %q does not exist", localTestBin)
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("test binary %q is not a file", localTestBin)
+	}
+
+	return nil
 }
 
-func roachprodRun(clusterName string, cmdArray []string) error {
-	return roachprod.Run(context.Background(), l, clusterName, "", "", false, os.Stdout, os.Stderr, cmdArray)
-}
-
-func run() error {
-	flags.Usage = func() {
-		fmt.Fprintf(flags.Output(), "usage: %s <cluster> <pkg> [<flags>] -- [<args>]\n", flags.Name())
-		flags.PrintDefaults()
-	}
-
-	if len(os.Args) < 2 {
-		var b bytes.Buffer
-		flags.SetOutput(&b)
-		flags.Usage()
-		return errors.Newf("%s", b.String())
-	}
-
-	cluster := os.Args[1]
-	if err := flags.Parse(os.Args[2:]); err != nil {
-		return err
-	}
-
-	if !*flagStderr {
-		return errors.New("-stderr=false is unsupported, please tee to a file (or implement the feature)")
-	}
-
-	pkg := os.Args[2]
-	localTestBin := filepath.Base(pkg) + ".test"
-	{
-		fi, err := os.Stat(pkg)
-		if err != nil {
-			return errors.Wrapf(err, "the pkg flag %q is not a directory relative to the current working directory", pkg)
-		}
-		if !fi.Mode().IsDir() {
-			return fmt.Errorf("the pkg flag %q is not a directory relative to the current working directory", pkg)
-		}
-
-		// Verify that the test binary exists.
-		fi, err = os.Stat(localTestBin)
-		if err != nil {
-			return errors.Wrapf(err, "test binary %q does not exist", localTestBin)
-		}
-		if !fi.Mode().IsRegular() {
-			return fmt.Errorf("test binary %q is not a file", localTestBin)
-		}
-	}
-	flagsAndArgs := os.Args[3:]
-	stressArgs := flagsAndArgs
-	var testArgs []string
-	for i, arg := range flagsAndArgs {
-		if arg == "--" {
-			stressArgs = flagsAndArgs[:i]
-			testArgs = flagsAndArgs[i+1:]
-			break
-		}
-	}
-
+func verifyFlags() error {
 	if *flagP <= 0 || *flagTimeout < 0 || len(flags.Args()) == 0 {
 		var b bytes.Buffer
 		flags.SetOutput(&b)
@@ -142,21 +107,87 @@ func run() error {
 			return errors.Wrap(err, "bad ignore regexp")
 		}
 	}
+	return nil
+}
+
+func getStressSpecificArgs() (ret []string) {
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name != "testbin" && f.Name != "stressbin" && f.Name != "libdir" {
+			ret = append(ret, fmt.Sprintf("-%s=%s", f.Name, f.Value))
+		}
+	})
+	return ret
+}
+
+func getTestArgs() (ret []string) {
+	if len(os.Args) > 3 {
+		flagsAndArgs := os.Args[3:]
+		for i, arg := range flagsAndArgs {
+			if arg == "--" {
+				ret = flagsAndArgs[i+1:]
+				break
+			}
+		}
+	}
+	return ret
+}
+
+func roundToSeconds(d time.Duration) time.Duration {
+	return time.Duration(d.Seconds()+0.5) * time.Second
+}
+
+func roachprodRun(clusterName string, cmdArray []string) error {
+	return roachprod.Run(context.Background(), l, clusterName, "", "", false, os.Stdout, os.Stderr, cmdArray)
+}
+
+func run() error {
+	flags.Usage = func() {
+		fmt.Fprintf(flags.Output(), "usage: %s <cluster> <pkg> [<flags>] -- [<args>]\n", flags.Name())
+		flags.PrintDefaults()
+	}
+
+	if len(os.Args) < 3 {
+		var b bytes.Buffer
+		flags.SetOutput(&b)
+		flags.Usage()
+		return errors.Newf("%s", b.String())
+	}
+
+	if err := flags.Parse(os.Args[3:]); err != nil {
+		return err
+	}
+
+	cluster := os.Args[1]
+	if !*flagStderr {
+		return errors.New("-stderr=false is unsupported, please tee to a file (or implement the feature)")
+	}
+
+	pkg := os.Args[2]
+	localTestBin := filepath.Base(pkg) + ".test"
+	if *flagTestBin != "" {
+		localTestBin = *flagTestBin
+	}
+
+	if err := verifySourcesAndArtifactsExist(pkg, localTestBin); err != nil {
+		return err
+	}
+
+	if err := verifyFlags(); err != nil {
+		return err
+	}
 
 	statuses, err := roachprod.Status(context.Background(), l, cluster, "")
 	if err != nil {
 		return err
 	}
-	nodes := len(statuses)
+	numNodes := len(statuses)
 
-	const stressBin = "bin.docker_amd64/stress"
-	if err := roachprod.Put(context.Background(), l, cluster, stressBin, "stress", true); err != nil {
+	if err := roachprod.Put(context.Background(), l, cluster, *flagStressBin, "stress", true); err != nil {
 		return err
 	}
 
-	const localLibDir = "lib.docker_amd64/"
-	if fi, err := os.Stat(localLibDir); err == nil && fi.IsDir() {
-		if err := roachprod.Put(context.Background(), l, cluster, localLibDir, "lib", true); err != nil {
+	if fi, err := os.Stat(*flagLibDir); err == nil && fi.IsDir() {
+		if err := roachprod.Put(context.Background(), l, cluster, *flagLibDir, "lib", true); err != nil {
 			return err
 		}
 	}
@@ -174,7 +205,7 @@ func run() error {
 			return errors.Wrap(err, "failed to copy testdata")
 		}
 	}
-	testBin := filepath.Join(pkg, localTestBin)
+	testBin := filepath.Join(pkg, filepath.Base(localTestBin))
 	if err := roachprod.Put(context.Background(), l, cluster, localTestBin, testBin, true); err != nil {
 		return errors.Wrap(err, "failed to copy testdata")
 	}
@@ -220,8 +251,8 @@ func run() error {
 
 	statusRE := regexp.MustCompile(`(\d+) runs (so far|completed), (\d+) failures, over .*`)
 
-	wg.Add(nodes)
-	for i := 1; i <= nodes; i++ {
+	wg.Add(numNodes)
+	for i := 1; i <= numNodes; i++ {
 		go func(i int) {
 			stdoutR, stdoutW := io.Pipe()
 			defer func() {
@@ -266,11 +297,12 @@ func run() error {
 			}()
 
 			cmdArray := []string{
-				fmt.Sprintf("cd %s; GOTRACEBACK=all ~/stress %s ./%s %s",
+				fmt.Sprintf("cd %s; GOTRACEBACK=all ~/%s %s ./%s %s",
 					pkg,
-					strings.Join(stressArgs, " "),
+					filepath.Base(*flagStressBin),
+					strings.Join(getStressSpecificArgs(), " "),
 					filepath.Base(testBin),
-					strings.Join(testArgs, " ")),
+					strings.Join(getTestArgs(), " ")),
 			}
 			if err := roachprodRun(fmt.Sprintf("%s:%d", cluster, i), cmdArray); err != nil {
 				error(err.Error())

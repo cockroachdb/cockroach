@@ -181,8 +181,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 	skip.UnderStressRace(t, "test is too slow to run under race")
 
 	ctx := context.Background()
-	helper, helperCleanup := newTestHelper(t, nil /* sqlStatsKnobs */)
-	helper.sqlDB.SucceedsSoonDuration = 2 * time.Minute
+	helper, helperCleanup := newTestHelper(t, &sqlstats.TestingKnobs{JobMonitorUpdateCheckInterval: time.Second})
 	defer helperCleanup()
 
 	schedID := getSQLStatsCompactionSchedule(t, helper).ScheduleID()
@@ -218,7 +217,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 			helper.sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.cleanup.recurrence = $1", expr)
 
 			var err error
-			testutils.SucceedsWithin(t, func() error {
+			testutils.SucceedsSoon(t, func() error {
 				// Reload schedule from DB.
 				sj := getSQLStatsCompactionSchedule(t, helper)
 				err = persistedsqlstats.CheckScheduleAnomaly(sj)
@@ -227,7 +226,7 @@ func TestSQLStatsScheduleOperations(t *testing.T) {
 				}
 				require.Equal(t, expr, sj.ScheduleExpr())
 				return nil
-			}, time.Minute*2)
+			})
 
 			require.True(t, errors.Is(
 				errors.Unwrap(err), persistedsqlstats.ErrScheduleIntervalTooLong),

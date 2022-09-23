@@ -24,39 +24,38 @@ import (
 //
 // Sequence numbers serve a few roles in the transaction model:
 //
-// 1. they are used to enforce an ordering between read and write operations in a
-//    single transaction that go to the same key. Each read request that travels
-//    through the interceptor is assigned the sequence number of the most recent
-//    write. Each write request that travels through the interceptor is assigned
-//    a sequence number larger than any previously allocated.
+//  1. they are used to enforce an ordering between read and write operations in a
+//     single transaction that go to the same key. Each read request that travels
+//     through the interceptor is assigned the sequence number of the most recent
+//     write. Each write request that travels through the interceptor is assigned
+//     a sequence number larger than any previously allocated.
 //
-//    This is true even for leaf transaction coordinators. In their case, they are
-//    provided the sequence number of the most recent write during construction.
-//    Because they only perform read operations and never issue writes, they assign
-//    each read this sequence number without ever incrementing their own counter.
-//    In this way, sequence numbers are maintained correctly across a distributed
-//    tree of transaction coordinators.
+//     This is true even for leaf transaction coordinators. In their case, they are
+//     provided the sequence number of the most recent write during construction.
+//     Because they only perform read operations and never issue writes, they assign
+//     each read this sequence number without ever incrementing their own counter.
+//     In this way, sequence numbers are maintained correctly across a distributed
+//     tree of transaction coordinators.
 //
-// 2. they are used to uniquely identify write operations. Because every write
-//    request is given a new sequence number, the tuple (txn_id, txn_epoch, seq)
-//    uniquely identifies a write operation across an entire cluster. This property
-//    is exploited when determining the status of an individual write by looking
-//    for its intent. We perform such an operation using the QueryIntent request
-//    type when pipelining transactional writes. We will do something similar
-//    during the recovery stage of implicitly committed transactions.
+//  2. they are used to uniquely identify write operations. Because every write
+//     request is given a new sequence number, the tuple (txn_id, txn_epoch, seq)
+//     uniquely identifies a write operation across an entire cluster. This property
+//     is exploited when determining the status of an individual write by looking
+//     for its intent. We perform such an operation using the QueryIntent request
+//     type when pipelining transactional writes. We will do something similar
+//     during the recovery stage of implicitly committed transactions.
 //
-// 3. they are used to determine whether a batch contains the entire write set
-//    for a transaction. See BatchRequest.IsCompleteTransaction.
+//  3. they are used to determine whether a batch contains the entire write set
+//     for a transaction. See BatchRequest.IsCompleteTransaction.
 //
-// 4. they are used to provide idempotency for replays and re-issues. The MVCC
-//    layer is sequence number-aware and ensures that reads at a given sequence
-//    number ignore writes in the same transaction at larger sequence numbers.
-//    Likewise, writes at a sequence number become no-ops if an intent with the
-//    same sequence is already present. If an intent with the same sequence is not
-//    already present but an intent with a larger sequence number is, an error is
-//    returned. Likewise, if an intent with the same sequence is present but its
-//    value is different than what we recompute, an error is returned.
-//
+//  4. they are used to provide idempotency for replays and re-issues. The MVCC
+//     layer is sequence number-aware and ensures that reads at a given sequence
+//     number ignore writes in the same transaction at larger sequence numbers.
+//     Likewise, writes at a sequence number become no-ops if an intent with the
+//     same sequence is already present. If an intent with the same sequence is not
+//     already present but an intent with a larger sequence number is, an error is
+//     returned. Likewise, if an intent with the same sequence is present but its
+//     value is different than what we recompute, an error is returned.
 type txnSeqNumAllocator struct {
 	wrapped lockedSender
 

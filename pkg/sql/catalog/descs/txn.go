@@ -138,6 +138,10 @@ func (cf *CollectionFactory) TxnWithExecutor(
 				}
 			} else {
 				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
+				// If the descriptor has been deleted, just wait for leases to drain.
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					err = cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				}
 				if err != nil {
 					return err
 				}
@@ -146,10 +150,10 @@ func (cf *CollectionFactory) TxnWithExecutor(
 		return nil
 	}
 	for {
-		var modifiedDescriptors []lease.IDVersion
+		var withNewVersion []lease.IDVersion
 		var deletedDescs catalog.DescriptorIDSet
-		if err := run(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			modifiedDescriptors, deletedDescs = nil, catalog.DescriptorIDSet{}
+		if err := run(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			withNewVersion, deletedDescs = nil, catalog.DescriptorIDSet{}
 			descsCol := cf.NewCollection(
 				ctx, nil, /* temporarySchemaProvider */
 				cf.ieFactoryWithTxn.MemoryMonitor(),
@@ -160,13 +164,16 @@ func (cf *CollectionFactory) TxnWithExecutor(
 				return err
 			}
 			deletedDescs = descsCol.deletedDescs
-			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
+			withNewVersion, err = descsCol.GetOriginalPreviousIDVersionsForUncommitted()
+			if err != nil {
+				return err
+			}
 			return commitTxnFn(ctx)
 		}); IsTwoVersionInvariantViolationError(err) {
 			continue
 		} else {
 			if err == nil {
-				err = waitForDescriptors(modifiedDescriptors, deletedDescs)
+				err = waitForDescriptors(withNewVersion, deletedDescs)
 			}
 			return err
 		}
@@ -206,9 +213,9 @@ func CheckTwoVersionInvariant(
 	txn *kv.Txn,
 	onRetryBackoff func(),
 ) error {
-	withNewVersion := descsCol.GetDescriptorsWithNewVersion()
-	if withNewVersion == nil {
-		return nil
+	withNewVersion, err := descsCol.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil || withNewVersion == nil {
+		return err
 	}
 	if txn.IsCommitted() {
 		panic("transaction has already committed")
@@ -292,14 +299,9 @@ func CheckSpanCountLimit(
 	if !descsCol.codec().ForSystemTenant() {
 		var totalSpanCountDelta int
 		for _, ut := range descsCol.GetUncommittedTables() {
-			uncommittedMutTable, err := descsCol.GetUncommittedMutableTableByID(ut.GetID())
+			originalTableDesc, uncommittedMutTable, err := descsCol.GetUncommittedMutableTableByID(ut.GetID())
 			if err != nil {
 				return err
-			}
-
-			var originalTableDesc catalog.TableDescriptor
-			if originalDesc := uncommittedMutTable.OriginalDescriptor(); originalDesc != nil {
-				originalTableDesc = originalDesc.(catalog.TableDescriptor)
 			}
 			delta, err := spanconfig.Delta(ctx, splitter, originalTableDesc, uncommittedMutTable)
 			if err != nil {

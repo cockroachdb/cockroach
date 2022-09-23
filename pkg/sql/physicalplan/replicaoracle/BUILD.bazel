@@ -23,6 +23,7 @@ go_test(
     name = "replicaoracle_test",
     size = "small",
     srcs = ["oracle_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":replicaoracle"],
     deps = [
         "//pkg/config/zonepb",

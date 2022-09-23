@@ -50,7 +50,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	typs := types.OneIntCol
 	input := execinfra.NewRepeatableRowSource(typs, randgen.MakeIntRows(nRows, nCols))
 
-	col := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 0 /* processorID */, input)
+	col := colexec.NewBufferingColumnarizerForTests(testAllocator, &flowCtx, 0 /* processorID */, input)
 	vee := newTestVectorizedInternalPanicEmitter(col)
 	mat := colexec.NewMaterializer(
 		nil, /* allocator */
@@ -86,7 +86,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	typs := types.OneIntCol
 	input := execinfra.NewRepeatableRowSource(typs, randgen.MakeIntRows(nRows, nCols))
 
-	col := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 0 /* processorID */, input)
+	col := colexec.NewBufferingColumnarizerForTests(testAllocator, &flowCtx, 0 /* processorID */, input)
 	nvee := newTestNonVectorizedPanicEmitter(col)
 	mat := colexec.NewMaterializer(
 		nil, /* allocator */

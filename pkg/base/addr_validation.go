@@ -23,12 +23,12 @@ import (
 
 // ValidateAddrs controls the address fields in the Config object
 // and "fills in" the blanks:
-// - the host part of Addr and HTTPAddr is resolved to an IP address
-//   if specified (it stays blank if blank to mean "all addresses").
-// - the host part of AdvertiseAddr is filled in if blank, either
-//   from Addr if non-empty or os.Hostname(). It is also checked
-//   for resolvability.
-// - non-numeric port numbers are resolved to numeric.
+//   - the host part of Addr and HTTPAddr is resolved to an IP address
+//     if specified (it stays blank if blank to mean "all addresses").
+//   - the host part of AdvertiseAddr is filled in if blank, either
+//     from Addr if non-empty or os.Hostname(). It is also checked
+//     for resolvability.
+//   - non-numeric port numbers are resolved to numeric.
 //
 // The addresses fields must be guaranteed by the caller to either be
 // completely empty, or have both a host part and a port part

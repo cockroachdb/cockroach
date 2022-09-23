@@ -605,8 +605,8 @@ launching test in a real browser. Extra flags are passed directly to the
 // buildBazelYarnArgv returns the provided argv formatted so it can be run with
 // the bazel-provided version of yarn via `d.exec.CommandContextWithEnv`, e.g.:
 //
-//     argv := buildBazelYarnArgv("--cwd", "/path/to/dir", "run", "some-target")
-//     d.exec.CommandContextWithEnv(ctx, env, "bazel", argv)
+//	argv := buildBazelYarnArgv("--cwd", "/path/to/dir", "run", "some-target")
+//	d.exec.CommandContextWithEnv(ctx, env, "bazel", argv)
 func buildBazelYarnArgv(argv ...string) []string {
 	return append([]string{
 		"run", "@yarn//:yarn", "--",

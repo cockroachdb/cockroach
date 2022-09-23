@@ -237,20 +237,19 @@ func (*scopeColumn) Variable() {}
 // optbuilder builds expressions, but added to the metadata and displayed in opt
 // trees with another. This is useful for:
 //
-//   1. Creating more descriptive metadata names, while having refNames that are
-//      required for column resolution while building expressions. This is
-//      particularly useful in mutations where there are multiple versions of
-//      target table columns for fetching, inserting, and updating that must be
-//      referenced by the same name.
+//  1. Creating more descriptive metadata names, while having refNames that are
+//     required for column resolution while building expressions. This is
+//     particularly useful in mutations where there are multiple versions of
+//     target table columns for fetching, inserting, and updating that must be
+//     referenced by the same name.
 //
-//   2. Creating descriptive metadata names for anonymous columns that
-//      cannot be referenced. This is useful for columns like synthesized
-//      check constraint columns and partial index columns which cannot be
-//      referenced by other expressions. Prior to the creation of
-//      scopeColumnName, the same descriptive name added to the metadata
-//      could be referenced, making optbuilder vulnerable to "ambiguous
-//      column" bugs when a user table had a column with the same name.
-//
+//  2. Creating descriptive metadata names for anonymous columns that
+//     cannot be referenced. This is useful for columns like synthesized
+//     check constraint columns and partial index columns which cannot be
+//     referenced by other expressions. Prior to the creation of
+//     scopeColumnName, the same descriptive name added to the metadata
+//     could be referenced, making optbuilder vulnerable to "ambiguous
+//     column" bugs when a user table had a column with the same name.
 type scopeColumnName struct {
 	// refName is the name used when resolving columns while building an
 	// expression. If it is empty, the column is anonymous and cannot be

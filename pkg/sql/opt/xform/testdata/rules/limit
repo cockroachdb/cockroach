@@ -2379,3 +2379,241 @@ top-k
       │    ├── [/10/2 - /10/2]
       │    └── [/10/4 - /10/4]
       └── key: (1-4)
+
+# Repro for #82730
+exec-ddl
+CREATE TABLE table1 (
+  col1_0 NAME,
+  col1_1 INT8,
+  col1_3 INT8,
+  col1_5 VARCHAR,
+  PRIMARY KEY (col1_0 ASC),
+  UNIQUE (col1_1 ASC, col1_3 ASC)
+    PARTITION BY LIST (col1_1,col1_3) (
+      PARTITION table1_part_0 VALUES IN (
+                                (
+                                  1,
+                                  NULL
+                                )
+                              ),
+      PARTITION table1_part_1 VALUES IN (
+                                (
+                                  1000000000,
+                                  NULL
+                                )
+                              ),
+      PARTITION table1_part_2 VALUES IN (
+                                (
+                                  2000000000,
+                                  NULL
+                                )
+                              )
+      )
+)
+----
+
+opt expect-not=SplitLimitedSelectIntoUnionSelects
+UPDATE table1
+     SET col1_5 = col1_5
+   WHERE col1_0 ILIKE col1_0
+ORDER BY col1_3
+   LIMIT 84
+----
+update table1
+ ├── columns: <none>
+ ├── fetch columns: col1_0:7 col1_1:8 col1_3:9 col1_5:10
+ ├── update-mapping:
+ │    └── col1_5:10 => col1_5:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── top-k
+      ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+      ├── internal-ordering: +9
+      ├── k: 84
+      ├── cardinality: [0 - 84]
+      ├── key: (7)
+      ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
+      └── select
+           ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           ├── key: (7)
+           ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           ├── scan table1
+           │    ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           │    ├── key: (7)
+           │    └── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           └── filters
+                └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
+
+exec-ddl
+CREATE TABLE table2 (
+  col1_0 NAME,
+  col1_1 INT8,
+  col1_3 INT8,
+  col1_5 VARCHAR,
+  PRIMARY KEY (col1_0 ASC),
+  UNIQUE (col1_1 ASC, col1_3 ASC)
+    PARTITION BY LIST (col1_1,col1_3) (
+      PARTITION table2_part_0 VALUES IN (
+                                (
+                                  1,
+                                  NULL
+                                )
+                              ),
+      PARTITION table2_part_1 VALUES IN (
+                                (
+                                  5,
+                                  NULL
+                                )
+                              ),
+      PARTITION table2_part_2 VALUES IN (
+                                (
+                                  5000000,
+                                  NULL
+                                )
+                              )
+      )
+)
+----
+
+opt expect=SplitLimitedSelectIntoUnionSelects
+UPDATE table2 AS tab_41831
+     SET col1_5 = col1_5
+   WHERE col1_0 ILIKE col1_0
+ORDER BY col1_3
+   LIMIT 84
+----
+update table2 [as=tab_41831]
+ ├── columns: <none>
+ ├── fetch columns: col1_0:7 col1_1:8 col1_3:9 col1_5:10
+ ├── update-mapping:
+ │    └── col1_5:10 => col1_5:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── index-join table2
+      ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+      ├── cardinality: [0 - 84]
+      ├── key: (7)
+      ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
+      └── limit
+           ├── columns: col1_0:7!null col1_1:8 col1_3:9
+           ├── internal-ordering: +9
+           ├── cardinality: [0 - 84]
+           ├── key: (7)
+           ├── fd: (7)-->(8,9), (8,9)~~>(7)
+           ├── union-all
+           │    ├── columns: col1_0:7!null col1_1:8 col1_3:9
+           │    ├── left columns: col1_0:37 col1_1:38 col1_3:39
+           │    ├── right columns: col1_0:43 col1_1:44 col1_3:45
+           │    ├── cardinality: [0 - 336]
+           │    ├── ordering: +9
+           │    ├── limit hint: 84.00
+           │    ├── union-all
+           │    │    ├── columns: col1_0:37!null col1_1:38!null col1_3:39
+           │    │    ├── left columns: col1_0:31 col1_1:32 col1_3:33
+           │    │    ├── right columns: col1_0:25 col1_1:26 col1_3:27
+           │    │    ├── cardinality: [0 - 252]
+           │    │    ├── ordering: +39
+           │    │    ├── limit hint: 84.00
+           │    │    ├── union-all
+           │    │    │    ├── columns: col1_0:31!null col1_1:32!null col1_3:33
+           │    │    │    ├── left columns: col1_0:13 col1_1:14 col1_3:15
+           │    │    │    ├── right columns: col1_0:19 col1_1:20 col1_3:21
+           │    │    │    ├── cardinality: [0 - 168]
+           │    │    │    ├── ordering: +33
+           │    │    │    ├── limit hint: 84.00
+           │    │    │    ├── limit
+           │    │    │    │    ├── columns: col1_0:13!null col1_1:14!null col1_3:15
+           │    │    │    │    ├── cardinality: [0 - 84]
+           │    │    │    │    ├── key: (13)
+           │    │    │    │    ├── fd: ()-->(14), (13)-->(15), (14,15)~~>(13)
+           │    │    │    │    ├── ordering: +15 opt(14) [actual: +15]
+           │    │    │    │    ├── limit hint: 84.00
+           │    │    │    │    ├── select
+           │    │    │    │    │    ├── columns: col1_0:13!null col1_1:14!null col1_3:15
+           │    │    │    │    │    ├── key: (13)
+           │    │    │    │    │    ├── fd: ()-->(14), (13)-->(15), (14,15)~~>(13)
+           │    │    │    │    │    ├── ordering: +15 opt(14) [actual: +15]
+           │    │    │    │    │    ├── limit hint: 84.00
+           │    │    │    │    │    ├── scan table2@table2_col1_1_col1_3_key [as=tab_41831]
+           │    │    │    │    │    │    ├── columns: col1_0:13!null col1_1:14!null col1_3:15
+           │    │    │    │    │    │    ├── constraint: /14/15: [/2 - /2]
+           │    │    │    │    │    │    ├── key: (13)
+           │    │    │    │    │    │    ├── fd: ()-->(14), (13)-->(15), (14,15)~~>(13)
+           │    │    │    │    │    │    └── ordering: +15 opt(14) [actual: +15]
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── col1_0:13 ILIKE col1_0:13 [outer=(13), constraints=(/13: (/NULL - ])]
+           │    │    │    │    └── 84
+           │    │    │    └── limit
+           │    │    │         ├── columns: col1_0:19!null col1_1:20!null col1_3:21
+           │    │    │         ├── cardinality: [0 - 84]
+           │    │    │         ├── key: (19)
+           │    │    │         ├── fd: ()-->(20), (19)-->(21), (20,21)~~>(19)
+           │    │    │         ├── ordering: +21 opt(20) [actual: +21]
+           │    │    │         ├── limit hint: 84.00
+           │    │    │         ├── select
+           │    │    │         │    ├── columns: col1_0:19!null col1_1:20!null col1_3:21
+           │    │    │         │    ├── key: (19)
+           │    │    │         │    ├── fd: ()-->(20), (19)-->(21), (20,21)~~>(19)
+           │    │    │         │    ├── ordering: +21 opt(20) [actual: +21]
+           │    │    │         │    ├── limit hint: 84.00
+           │    │    │         │    ├── scan table2@table2_col1_1_col1_3_key [as=tab_41831]
+           │    │    │         │    │    ├── columns: col1_0:19!null col1_1:20!null col1_3:21
+           │    │    │         │    │    ├── constraint: /20/21: [/3 - /3]
+           │    │    │         │    │    ├── key: (19)
+           │    │    │         │    │    ├── fd: ()-->(20), (19)-->(21), (20,21)~~>(19)
+           │    │    │         │    │    └── ordering: +21 opt(20) [actual: +21]
+           │    │    │         │    └── filters
+           │    │    │         │         └── col1_0:19 ILIKE col1_0:19 [outer=(19), constraints=(/19: (/NULL - ])]
+           │    │    │         └── 84
+           │    │    └── limit
+           │    │         ├── columns: col1_0:25!null col1_1:26!null col1_3:27
+           │    │         ├── cardinality: [0 - 84]
+           │    │         ├── key: (25)
+           │    │         ├── fd: ()-->(26), (25)-->(27), (26,27)~~>(25)
+           │    │         ├── ordering: +27 opt(26) [actual: +27]
+           │    │         ├── limit hint: 84.00
+           │    │         ├── select
+           │    │         │    ├── columns: col1_0:25!null col1_1:26!null col1_3:27
+           │    │         │    ├── key: (25)
+           │    │         │    ├── fd: ()-->(26), (25)-->(27), (26,27)~~>(25)
+           │    │         │    ├── ordering: +27 opt(26) [actual: +27]
+           │    │         │    ├── limit hint: 84.00
+           │    │         │    ├── scan table2@table2_col1_1_col1_3_key [as=tab_41831]
+           │    │         │    │    ├── columns: col1_0:25!null col1_1:26!null col1_3:27
+           │    │         │    │    ├── constraint: /26/27: [/4 - /4]
+           │    │         │    │    ├── key: (25)
+           │    │         │    │    ├── fd: ()-->(26), (25)-->(27), (26,27)~~>(25)
+           │    │         │    │    └── ordering: +27 opt(26) [actual: +27]
+           │    │         │    └── filters
+           │    │         │         └── col1_0:25 ILIKE col1_0:25 [outer=(25), constraints=(/25: (/NULL - ])]
+           │    │         └── 84
+           │    └── sort
+           │         ├── columns: col1_0:43!null col1_1:44 col1_3:45
+           │         ├── cardinality: [0 - 84]
+           │         ├── key: (43)
+           │         ├── fd: (43)-->(44,45), (44,45)~~>(43)
+           │         ├── ordering: +45
+           │         ├── limit hint: 84.00
+           │         └── limit
+           │              ├── columns: col1_0:43!null col1_1:44 col1_3:45
+           │              ├── cardinality: [0 - 84]
+           │              ├── key: (43)
+           │              ├── fd: (43)-->(44,45), (44,45)~~>(43)
+           │              ├── select
+           │              │    ├── columns: col1_0:43!null col1_1:44 col1_3:45
+           │              │    ├── key: (43)
+           │              │    ├── fd: (43)-->(44,45), (44,45)~~>(43)
+           │              │    ├── limit hint: 84.00
+           │              │    ├── scan table2@table2_col1_1_col1_3_key [as=tab_41831]
+           │              │    │    ├── columns: col1_0:43!null col1_1:44 col1_3:45
+           │              │    │    ├── constraint: /44/45
+           │              │    │    │    ├── [/NULL - /0]
+           │              │    │    │    ├── [/6 - /4999999]
+           │              │    │    │    └── [/5000001 - ]
+           │              │    │    ├── key: (43)
+           │              │    │    ├── fd: (43)-->(44,45), (44,45)~~>(43)
+           │              │    │    └── limit hint: 252.00
+           │              │    └── filters
+           │              │         └── col1_0:43 ILIKE col1_0:43 [outer=(43), constraints=(/43: (/NULL - ])]
+           │              └── 84
+           └── 84

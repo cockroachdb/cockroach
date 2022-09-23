@@ -285,9 +285,10 @@ func (g *defaultSpanGenerator) close(ctx context.Context) {
 // columns can take on multiple constant values. For example, the
 // multiSpanGenerator would be used for a left lookup join in the following
 // case:
-//  - The index has key columns (region, id)
-//  - The input columns are (a, b, c)
-//  - The join condition is region IN ('east', 'west') AND id = a
+//   - The index has key columns (region, id)
+//   - The input columns are (a, b, c)
+//   - The join condition is region IN ('east', 'west') AND id = a
+//
 // In this case, the multiSpanGenerator would generate two spans for each input
 // row: [/'east'/<val_a> - /'east'/<val_a>] [/'west'/<val_a> - /'west'/<val_a>].
 type multiSpanGenerator struct {

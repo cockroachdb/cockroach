@@ -20,23 +20,23 @@
 // it. This package provides a way to do this safely with (hopefully) minimal
 // disruption. It works as follows:
 //
-// - Each node in the cluster is running a binary that was released at some
-//   version ("binary version"). We allow for rolling upgrades, so two nodes in
-//   the cluster may be running different binary versions. All nodes in a given
-//   cluster must be within 1 major release of each other (i.e. to upgrade two
-//   major releases, the cluster must first be rolled onto X+1 and then to X+2).
-// - Separate from the build versions of the binaries, the cluster itself has a
-//   logical "active cluster version", the version all the binaries are
-//   currently operating at. This is used for two related things: first as a
-//   promise from the user that they'll never downgrade any nodes in the cluster
-//   to a binary below some "minimum supported version", and second, to unlock
-//   features that are not backwards compatible (which is now safe given that
-//   the old binary will never be used).
-// - Each binary can operate within a "range of supported versions". When a
-// 	 cluster is initialized, the binary doing the initialization uses the upper
-//	 end of its supported range as the initial "active cluster version". Each
-//	 node that joins this cluster then must be compatible with this cluster
-//	 version.
+//   - Each node in the cluster is running a binary that was released at some
+//     version ("binary version"). We allow for rolling upgrades, so two nodes in
+//     the cluster may be running different binary versions. All nodes in a given
+//     cluster must be within 1 major release of each other (i.e. to upgrade two
+//     major releases, the cluster must first be rolled onto X+1 and then to X+2).
+//   - Separate from the build versions of the binaries, the cluster itself has a
+//     logical "active cluster version", the version all the binaries are
+//     currently operating at. This is used for two related things: first as a
+//     promise from the user that they'll never downgrade any nodes in the cluster
+//     to a binary below some "minimum supported version", and second, to unlock
+//     features that are not backwards compatible (which is now safe given that
+//     the old binary will never be used).
+//   - Each binary can operate within a "range of supported versions". When a
+//     cluster is initialized, the binary doing the initialization uses the upper
+//     end of its supported range as the initial "active cluster version". Each
+//     node that joins this cluster then must be compatible with this cluster
+//     version.
 package clusterversion
 
 import (

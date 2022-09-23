@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -56,6 +57,24 @@ const (
 	// tagSnapshotTiming is the tracing span tag that the *snapshotTimingTag
 	// lives under.
 	tagSnapshotTiming = "snapshot_timing_tag"
+
+	// DefaultSnapshotSendLimit is the max number of snapshots concurrently sent.
+	// See server.KVConfig for more info.
+	DefaultSnapshotSendLimit = 2
+
+	// DefaultSnapshotApplyLimit is the number of snapshots concurrently applied.
+	// See server.KVConfig for more info.
+	DefaultSnapshotApplyLimit = 1
+)
+
+// snapshotPrioritizationEnabled will allow the sender and receiver of snapshots
+// to prioritize the snapshots. If disabled, the behavior will be FIFO on both
+// send and receive sides.
+var snapshotPrioritizationEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.snapshot_prioritization.enabled",
+	"if true, then prioritize enqueued snapshots on both the send or receive sides",
+	true,
 )
 
 // incomingSnapshotStream is the minimal interface on a GRPC stream required
@@ -659,10 +678,12 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 func (s *Store) reserveReceiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSnapshot")
+	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveReceiveSnapshot")
 	defer sp.Finish()
-	return s.throttleSnapshot(
-		ctx, s.snapshotApplySem, header.RangeSize,
+
+	return s.throttleSnapshot(ctx, s.snapshotApplyQueue,
+		int(header.SenderQueueName), header.SenderQueuePriority,
+		header.RangeSize,
 		header.RaftMessageRequest.RangeID, header.RaftMessageRequest.ToReplica.ReplicaID,
 		s.metrics.RangeSnapshotRecvQueueLength,
 		s.metrics.RangeSnapshotRecvInProgress, s.metrics.RangeSnapshotRecvTotalInProgress,
@@ -675,14 +696,13 @@ func (s *Store) reserveSendSnapshot(
 ) (_cleanup func(), _err error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.Tracer(), "reserveSendSnapshot")
 	defer sp.Finish()
-	sem := s.initialSnapshotSendSem
-	if req.Type == kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE {
-		sem = s.raftSnapshotSendSem
-	}
 	if fn := s.cfg.TestingKnobs.BeforeSendSnapshotThrottle; fn != nil {
 		fn()
 	}
-	return s.throttleSnapshot(ctx, sem, rangeSize,
+
+	return s.throttleSnapshot(ctx, s.snapshotSendQueue,
+		int(req.SenderQueueName), req.SenderQueuePriority,
+		rangeSize,
 		req.RangeID, req.DelegatedSender.ReplicaID,
 		s.metrics.RangeSnapshotSendQueueLength,
 		s.metrics.RangeSnapshotSendInProgress, s.metrics.RangeSnapshotSendTotalInProgress,
@@ -694,18 +714,28 @@ func (s *Store) reserveSendSnapshot(
 // release its resources.
 func (s *Store) throttleSnapshot(
 	ctx context.Context,
-	snapshotSem chan struct{},
+	snapshotQueue *multiqueue.MultiQueue,
+	requestSource int,
+	requestPriority float64,
 	rangeSize int64,
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	waitingSnapshotMetric, inProgressSnapshotMetric, totalInProgressSnapshotMetric *metric.Gauge,
-) (_cleanup func(), _err error) {
+) (cleanup func(), err error) {
 	tBegin := timeutil.Now()
+	var permit *multiqueue.Permit
 	// Empty snapshots are exempt from rate limits because they're so cheap to
 	// apply. This vastly speeds up rebalancing any empty ranges created by a
 	// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 	// getting stuck behind large snapshots managed by the replicate queue.
 	if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
+		task := snapshotQueue.Add(requestSource, requestPriority)
+		defer func() {
+			if err != nil {
+				snapshotQueue.Cancel(task)
+			}
+		}()
+
 		waitingSnapshotMetric.Inc(1)
 		defer waitingSnapshotMetric.Dec(1)
 		queueCtx := ctx
@@ -721,13 +751,14 @@ func (s *Store) throttleSnapshot(
 			defer cancel()
 		}
 		select {
-		case snapshotSem <- struct{}{}:
-			// Got a spot in the semaphore, continue with sending the snapshot.
+		case permit = <-task.GetWaitChan():
+			// Got a spot in the snapshotQueue, continue with sending the snapshot.
 			if fn := s.cfg.TestingKnobs.AfterSendSnapshotThrottle; fn != nil {
 				fn()
 			}
-			log.Event(ctx, "acquired spot in the snapshot semaphore")
+			log.Event(ctx, "acquired spot in the snapshot snapshotQueue")
 		case <-queueCtx.Done():
+			// We need to cancel the task so that it doesn't ever get a permit.
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
@@ -772,7 +803,7 @@ func (s *Store) throttleSnapshot(
 
 		if rangeSize != 0 || s.cfg.TestingKnobs.ThrottleEmptySnapshots {
 			inProgressSnapshotMetric.Dec(1)
-			<-snapshotSem
+			snapshotQueue.Release(permit)
 		}
 	}, nil
 }
@@ -1145,7 +1176,7 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 // snapshot's total timeout that it is allowed to spend queued on the receiver
 // waiting for a reservation.
 //
-// Enforcement of this snapshotApplySem-scoped timeout is intended to prevent
+// Enforcement of this snapshotApplyQueue-scoped timeout is intended to prevent
 // starvation of snapshots in cases where a queue of snapshots waiting for
 // reservations builds and no single snapshot acquires the semaphore with
 // sufficient time to complete, but each holds the semaphore long enough to
@@ -1163,18 +1194,18 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 // that it will itself fail during sending, while the next snapshot wastes
 // enough time waiting for us that it will itself fail, ad infinitum:
 //
-//  t   | snap1 snap2 snap3 snap4 snap5 ...
-//  ----+------------------------------------
-//  0   | send
-//  15  |       queue queue
-//  30  |                   queue
-//  45  | ok    send
-//  60  |                         queue
-//  75  |       fail  fail  send
-//  90  |                   fail  send
-//  105 |
-//  120 |                         fail
-//  135 |
+//	t   | snap1 snap2 snap3 snap4 snap5 ...
+//	----+------------------------------------
+//	0   | send
+//	15  |       queue queue
+//	30  |                   queue
+//	45  | ok    send
+//	60  |                         queue
+//	75  |       fail  fail  send
+//	90  |                   fail  send
+//	105 |
+//	120 |                         fail
+//	135 |
 //
 // If we limit the amount of time we are willing to wait for a reservation to
 // something that is small enough to, on success, give us enough time to
@@ -1182,18 +1213,18 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 // timeout, 45s needed to stream the data, we can wait at most 15s for a
 // reservation and still avoid starvation:
 //
-//  t   | snap1 snap2 snap3 snap4 snap5 ...
-//  ----+------------------------------------
-//  0   | send
-//  15  |       queue queue
-//  30  |       fail  fail  send
-//  45  |
-//  60  | ok                      queue
-//  75  |                   ok    send
-//  90  |
-//  105 |
-//  120 |                         ok
-//  135 |
+//	t   | snap1 snap2 snap3 snap4 snap5 ...
+//	----+------------------------------------
+//	0   | send
+//	15  |       queue queue
+//	30  |       fail  fail  send
+//	45  |
+//	60  | ok                      queue
+//	75  |                   ok    send
+//	90  |
+//	105 |
+//	120 |                         ok
+//	135 |
 //
 // In practice, the snapshot reservation logic (reserveReceiveSnapshot) doesn't know
 // how long sending the snapshot will actually take. But it knows the timeout it
@@ -1208,7 +1239,7 @@ var snapshotSenderBatchSize = settings.RegisterByteSizeSetting(
 // as the average streaming time is less than the guaranteed processing time for
 // any snapshot that succeeds in acquiring a reservation:
 //
-//  guaranteed_processing_time = (1 - reservation_queue_timeout_fraction) x timeout
+//	guaranteed_processing_time = (1 - reservation_queue_timeout_fraction) x timeout
 //
 // The timeout for the snapshot and replicate queues bottoms out at 60s (by
 // default, see kv.queue.process.guaranteed_time_budget). Given a default
@@ -1535,7 +1566,7 @@ func sendSnapshot(
 	if err := stream.Send(&kvserverpb.SnapshotRequest{Final: true}); err != nil {
 		return err
 	}
-	log.Infof(
+	log.KvDistribution.Infof(
 		ctx,
 		"streamed %s to %s with %s in %.2fs @ %s/s: %s, rate-limit: %s/s, queued: %.2fs",
 		snap,

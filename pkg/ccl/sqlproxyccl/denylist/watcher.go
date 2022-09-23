@@ -104,9 +104,11 @@ func newWatcher(list *Denylist, next chan *Denylist) *Watcher {
 // is returned immediately.
 //
 // Example Usage:
-// remove, err := w.ListenForDenied(connection, func(err error) {
-//   /* connection was added to the deny list */
-// })
+//
+//	remove, err := w.ListenForDenied(connection, func(err error) {
+//	  /* connection was added to the deny list */
+//	})
+//
 // if err != nil { /*connection already on the denylist*/ }
 // defer remove()
 //

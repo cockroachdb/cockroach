@@ -18,9 +18,9 @@ var EnumNamesSparseTensorIndex = map[SparseTensorIndex]string{
 	SparseTensorIndexSparseMatrixIndexCSR: "SparseMatrixIndexCSR",
 }
 
-/// ----------------------------------------------------------------------
-/// Data structures for dense tensors
-/// Shape data for a single axis in a tensor
+// / ----------------------------------------------------------------------
+// / Data structures for dense tensors
+// / Shape data for a single axis in a tensor
 type TensorDim struct {
 	_tab flatbuffers.Table
 }
@@ -41,7 +41,7 @@ func (rcv *TensorDim) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// Length of dimension
+// / Length of dimension
 func (rcv *TensorDim) Size() int64 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -50,12 +50,12 @@ func (rcv *TensorDim) Size() int64 {
 	return 0
 }
 
-/// Length of dimension
+// / Length of dimension
 func (rcv *TensorDim) MutateSize(n int64) bool {
 	return rcv._tab.MutateInt64Slot(4, n)
 }
 
-/// Name of the dimension, optional
+// / Name of the dimension, optional
 func (rcv *TensorDim) Name() []byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
@@ -64,7 +64,7 @@ func (rcv *TensorDim) Name() []byte {
 	return nil
 }
 
-/// Name of the dimension, optional
+// / Name of the dimension, optional
 func TensorDimStart(builder *flatbuffers.Builder) {
 	builder.StartObject(2)
 }
@@ -110,8 +110,8 @@ func (rcv *Tensor) MutateTypeType(n byte) bool {
 	return rcv._tab.MutateByteSlot(4, n)
 }
 
-/// The type of data contained in a value cell. Currently only fixed-width
-/// value types are supported, no strings or nested types
+// / The type of data contained in a value cell. Currently only fixed-width
+// / value types are supported, no strings or nested types
 func (rcv *Tensor) Type(obj *flatbuffers.Table) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
@@ -121,9 +121,9 @@ func (rcv *Tensor) Type(obj *flatbuffers.Table) bool {
 	return false
 }
 
-/// The type of data contained in a value cell. Currently only fixed-width
-/// value types are supported, no strings or nested types
-/// The dimensions of the tensor, optionally named
+// / The type of data contained in a value cell. Currently only fixed-width
+// / value types are supported, no strings or nested types
+// / The dimensions of the tensor, optionally named
 func (rcv *Tensor) Shape(obj *TensorDim, j int) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
@@ -144,8 +144,8 @@ func (rcv *Tensor) ShapeLength() int {
 	return 0
 }
 
-/// The dimensions of the tensor, optionally named
-/// Non-negative byte offsets to advance one value cell along each dimension
+// / The dimensions of the tensor, optionally named
+// / Non-negative byte offsets to advance one value cell along each dimension
 func (rcv *Tensor) Strides(j int) int64 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
 	if o != 0 {
@@ -163,8 +163,8 @@ func (rcv *Tensor) StridesLength() int {
 	return 0
 }
 
-/// Non-negative byte offsets to advance one value cell along each dimension
-/// The location and size of the tensor's data
+// / Non-negative byte offsets to advance one value cell along each dimension
+// / The location and size of the tensor's data
 func (rcv *Tensor) Data(obj *Buffer) *Buffer {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
@@ -178,7 +178,7 @@ func (rcv *Tensor) Data(obj *Buffer) *Buffer {
 	return nil
 }
 
-/// The location and size of the tensor's data
+// / The location and size of the tensor's data
 func TensorStart(builder *flatbuffers.Builder) {
 	builder.StartObject(5)
 }
@@ -207,9 +207,9 @@ func TensorEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// ----------------------------------------------------------------------
-/// EXPERIMENTAL: Data structures for sparse tensors
-/// Coordinate format of sparse tensor index.
+// / ----------------------------------------------------------------------
+// / EXPERIMENTAL: Data structures for sparse tensors
+// / Coordinate format of sparse tensor index.
 type SparseTensorIndexCOO struct {
 	_tab flatbuffers.Table
 }
@@ -230,29 +230,29 @@ func (rcv *SparseTensorIndexCOO) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// COO's index list are represented as a NxM matrix,
-/// where N is the number of non-zero values,
-/// and M is the number of dimensions of a sparse tensor.
-/// indicesBuffer stores the location and size of this index matrix.
-/// The type of index value is long, so the stride for the index matrix is unnecessary.
-///
-/// For example, let X be a 2x3x4x5 tensor, and it has the following 6 non-zero values:
-///
-///   X[0, 1, 2, 0] := 1
-///   X[1, 1, 2, 3] := 2
-///   X[0, 2, 1, 0] := 3
-///   X[0, 1, 3, 0] := 4
-///   X[0, 1, 2, 1] := 5
-///   X[1, 2, 0, 4] := 6
-///
-/// In COO format, the index matrix of X is the following 4x6 matrix:
-///
-///   [[0, 0, 0, 0, 1, 1],
-///    [1, 1, 1, 2, 1, 2],
-///    [2, 2, 3, 1, 2, 0],
-///    [0, 1, 0, 0, 3, 4]]
-///
-/// Note that the indices are sorted in lexicographical order.
+// / COO's index list are represented as a NxM matrix,
+// / where N is the number of non-zero values,
+// / and M is the number of dimensions of a sparse tensor.
+// / indicesBuffer stores the location and size of this index matrix.
+// / The type of index value is long, so the stride for the index matrix is unnecessary.
+// /
+// / For example, let X be a 2x3x4x5 tensor, and it has the following 6 non-zero values:
+// /
+// /   X[0, 1, 2, 0] := 1
+// /   X[1, 1, 2, 3] := 2
+// /   X[0, 2, 1, 0] := 3
+// /   X[0, 1, 3, 0] := 4
+// /   X[0, 1, 2, 1] := 5
+// /   X[1, 2, 0, 4] := 6
+// /
+// / In COO format, the index matrix of X is the following 4x6 matrix:
+// /
+// /   [[0, 0, 0, 0, 1, 1],
+// /    [1, 1, 1, 2, 1, 2],
+// /    [2, 2, 3, 1, 2, 0],
+// /    [0, 1, 0, 0, 3, 4]]
+// /
+// / Note that the indices are sorted in lexicographical order.
 func (rcv *SparseTensorIndexCOO) IndicesBuffer(obj *Buffer) *Buffer {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -266,29 +266,29 @@ func (rcv *SparseTensorIndexCOO) IndicesBuffer(obj *Buffer) *Buffer {
 	return nil
 }
 
-/// COO's index list are represented as a NxM matrix,
-/// where N is the number of non-zero values,
-/// and M is the number of dimensions of a sparse tensor.
-/// indicesBuffer stores the location and size of this index matrix.
-/// The type of index value is long, so the stride for the index matrix is unnecessary.
-///
-/// For example, let X be a 2x3x4x5 tensor, and it has the following 6 non-zero values:
-///
-///   X[0, 1, 2, 0] := 1
-///   X[1, 1, 2, 3] := 2
-///   X[0, 2, 1, 0] := 3
-///   X[0, 1, 3, 0] := 4
-///   X[0, 1, 2, 1] := 5
-///   X[1, 2, 0, 4] := 6
-///
-/// In COO format, the index matrix of X is the following 4x6 matrix:
-///
-///   [[0, 0, 0, 0, 1, 1],
-///    [1, 1, 1, 2, 1, 2],
-///    [2, 2, 3, 1, 2, 0],
-///    [0, 1, 0, 0, 3, 4]]
-///
-/// Note that the indices are sorted in lexicographical order.
+// / COO's index list are represented as a NxM matrix,
+// / where N is the number of non-zero values,
+// / and M is the number of dimensions of a sparse tensor.
+// / indicesBuffer stores the location and size of this index matrix.
+// / The type of index value is long, so the stride for the index matrix is unnecessary.
+// /
+// / For example, let X be a 2x3x4x5 tensor, and it has the following 6 non-zero values:
+// /
+// /   X[0, 1, 2, 0] := 1
+// /   X[1, 1, 2, 3] := 2
+// /   X[0, 2, 1, 0] := 3
+// /   X[0, 1, 3, 0] := 4
+// /   X[0, 1, 2, 1] := 5
+// /   X[1, 2, 0, 4] := 6
+// /
+// / In COO format, the index matrix of X is the following 4x6 matrix:
+// /
+// /   [[0, 0, 0, 0, 1, 1],
+// /    [1, 1, 1, 2, 1, 2],
+// /    [2, 2, 3, 1, 2, 0],
+// /    [0, 1, 0, 0, 3, 4]]
+// /
+// / Note that the indices are sorted in lexicographical order.
 func SparseTensorIndexCOOStart(builder *flatbuffers.Builder) {
 	builder.StartObject(1)
 }
@@ -301,7 +301,7 @@ func SparseTensorIndexCOOEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT 
 	return builder.EndObject()
 }
 
-/// Compressed Sparse Row format, that is matrix-specific.
+// / Compressed Sparse Row format, that is matrix-specific.
 type SparseMatrixIndexCSR struct {
 	_tab flatbuffers.Table
 }
@@ -322,28 +322,28 @@ func (rcv *SparseMatrixIndexCSR) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// indptrBuffer stores the location and size of indptr array that
-/// represents the range of the rows.
-/// The i-th row spans from indptr[i] to indptr[i+1] in the data.
-/// The length of this array is 1 + (the number of rows), and the type
-/// of index value is long.
-///
-/// For example, let X be the following 6x4 matrix:
-///
-///   X := [[0, 1, 2, 0],
-///         [0, 0, 3, 0],
-///         [0, 4, 0, 5],
-///         [0, 0, 0, 0],
-///         [6, 0, 7, 8],
-///         [0, 9, 0, 0]].
-///
-/// The array of non-zero values in X is:
-///
-///   values(X) = [1, 2, 3, 4, 5, 6, 7, 8, 9].
-///
-/// And the indptr of X is:
-///
-///   indptr(X) = [0, 2, 3, 5, 5, 8, 10].
+// / indptrBuffer stores the location and size of indptr array that
+// / represents the range of the rows.
+// / The i-th row spans from indptr[i] to indptr[i+1] in the data.
+// / The length of this array is 1 + (the number of rows), and the type
+// / of index value is long.
+// /
+// / For example, let X be the following 6x4 matrix:
+// /
+// /   X := [[0, 1, 2, 0],
+// /         [0, 0, 3, 0],
+// /         [0, 4, 0, 5],
+// /         [0, 0, 0, 0],
+// /         [6, 0, 7, 8],
+// /         [0, 9, 0, 0]].
+// /
+// / The array of non-zero values in X is:
+// /
+// /   values(X) = [1, 2, 3, 4, 5, 6, 7, 8, 9].
+// /
+// / And the indptr of X is:
+// /
+// /   indptr(X) = [0, 2, 3, 5, 5, 8, 10].
 func (rcv *SparseMatrixIndexCSR) IndptrBuffer(obj *Buffer) *Buffer {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -357,35 +357,35 @@ func (rcv *SparseMatrixIndexCSR) IndptrBuffer(obj *Buffer) *Buffer {
 	return nil
 }
 
-/// indptrBuffer stores the location and size of indptr array that
-/// represents the range of the rows.
-/// The i-th row spans from indptr[i] to indptr[i+1] in the data.
-/// The length of this array is 1 + (the number of rows), and the type
-/// of index value is long.
-///
-/// For example, let X be the following 6x4 matrix:
-///
-///   X := [[0, 1, 2, 0],
-///         [0, 0, 3, 0],
-///         [0, 4, 0, 5],
-///         [0, 0, 0, 0],
-///         [6, 0, 7, 8],
-///         [0, 9, 0, 0]].
-///
-/// The array of non-zero values in X is:
-///
-///   values(X) = [1, 2, 3, 4, 5, 6, 7, 8, 9].
-///
-/// And the indptr of X is:
-///
-///   indptr(X) = [0, 2, 3, 5, 5, 8, 10].
-/// indicesBuffer stores the location and size of the array that
-/// contains the column indices of the corresponding non-zero values.
-/// The type of index value is long.
-///
-/// For example, the indices of the above X is:
-///
-///   indices(X) = [1, 2, 2, 1, 3, 0, 2, 3, 1].
+// / indptrBuffer stores the location and size of indptr array that
+// / represents the range of the rows.
+// / The i-th row spans from indptr[i] to indptr[i+1] in the data.
+// / The length of this array is 1 + (the number of rows), and the type
+// / of index value is long.
+// /
+// / For example, let X be the following 6x4 matrix:
+// /
+// /   X := [[0, 1, 2, 0],
+// /         [0, 0, 3, 0],
+// /         [0, 4, 0, 5],
+// /         [0, 0, 0, 0],
+// /         [6, 0, 7, 8],
+// /         [0, 9, 0, 0]].
+// /
+// / The array of non-zero values in X is:
+// /
+// /   values(X) = [1, 2, 3, 4, 5, 6, 7, 8, 9].
+// /
+// / And the indptr of X is:
+// /
+// /   indptr(X) = [0, 2, 3, 5, 5, 8, 10].
+// / indicesBuffer stores the location and size of the array that
+// / contains the column indices of the corresponding non-zero values.
+// / The type of index value is long.
+// /
+// / For example, the indices of the above X is:
+// /
+// /   indices(X) = [1, 2, 2, 1, 3, 0, 2, 3, 1].
 func (rcv *SparseMatrixIndexCSR) IndicesBuffer(obj *Buffer) *Buffer {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
@@ -399,13 +399,13 @@ func (rcv *SparseMatrixIndexCSR) IndicesBuffer(obj *Buffer) *Buffer {
 	return nil
 }
 
-/// indicesBuffer stores the location and size of the array that
-/// contains the column indices of the corresponding non-zero values.
-/// The type of index value is long.
-///
-/// For example, the indices of the above X is:
-///
-///   indices(X) = [1, 2, 2, 1, 3, 0, 2, 3, 1].
+// / indicesBuffer stores the location and size of the array that
+// / contains the column indices of the corresponding non-zero values.
+// / The type of index value is long.
+// /
+// / For example, the indices of the above X is:
+// /
+// /   indices(X) = [1, 2, 2, 1, 3, 0, 2, 3, 1].
 func SparseMatrixIndexCSRStart(builder *flatbuffers.Builder) {
 	builder.StartObject(2)
 }
@@ -455,9 +455,9 @@ func (rcv *SparseTensor) MutateTypeType(n byte) bool {
 	return rcv._tab.MutateByteSlot(4, n)
 }
 
-/// The type of data contained in a value cell.
-/// Currently only fixed-width value types are supported,
-/// no strings or nested types.
+// / The type of data contained in a value cell.
+// / Currently only fixed-width value types are supported,
+// / no strings or nested types.
 func (rcv *SparseTensor) Type(obj *flatbuffers.Table) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
@@ -467,10 +467,10 @@ func (rcv *SparseTensor) Type(obj *flatbuffers.Table) bool {
 	return false
 }
 
-/// The type of data contained in a value cell.
-/// Currently only fixed-width value types are supported,
-/// no strings or nested types.
-/// The dimensions of the tensor, optionally named.
+// / The type of data contained in a value cell.
+// / Currently only fixed-width value types are supported,
+// / no strings or nested types.
+// / The dimensions of the tensor, optionally named.
 func (rcv *SparseTensor) Shape(obj *TensorDim, j int) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
@@ -491,8 +491,8 @@ func (rcv *SparseTensor) ShapeLength() int {
 	return 0
 }
 
-/// The dimensions of the tensor, optionally named.
-/// The number of non-zero values in a sparse tensor.
+// / The dimensions of the tensor, optionally named.
+// / The number of non-zero values in a sparse tensor.
 func (rcv *SparseTensor) NonZeroLength() int64 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
 	if o != 0 {
@@ -501,7 +501,7 @@ func (rcv *SparseTensor) NonZeroLength() int64 {
 	return 0
 }
 
-/// The number of non-zero values in a sparse tensor.
+// / The number of non-zero values in a sparse tensor.
 func (rcv *SparseTensor) MutateNonZeroLength(n int64) bool {
 	return rcv._tab.MutateInt64Slot(10, n)
 }
@@ -518,7 +518,7 @@ func (rcv *SparseTensor) MutateSparseIndexType(n byte) bool {
 	return rcv._tab.MutateByteSlot(12, n)
 }
 
-/// Sparse tensor index
+// / Sparse tensor index
 func (rcv *SparseTensor) SparseIndex(obj *flatbuffers.Table) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
 	if o != 0 {
@@ -528,8 +528,8 @@ func (rcv *SparseTensor) SparseIndex(obj *flatbuffers.Table) bool {
 	return false
 }
 
-/// Sparse tensor index
-/// The location and size of the tensor's data
+// / Sparse tensor index
+// / The location and size of the tensor's data
 func (rcv *SparseTensor) Data(obj *Buffer) *Buffer {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
 	if o != 0 {
@@ -543,7 +543,7 @@ func (rcv *SparseTensor) Data(obj *Buffer) *Buffer {
 	return nil
 }
 
-/// The location and size of the tensor's data
+// / The location and size of the tensor's data
 func SparseTensorStart(builder *flatbuffers.Builder) {
 	builder.StartObject(7)
 }

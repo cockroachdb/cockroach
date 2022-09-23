@@ -29,12 +29,13 @@ import (
 // TODO(marc): we should really keep our metric objects here so we can avoid creating
 // new prometheus.Metric every time we are scraped.
 // see: https://github.com/cockroachdb/cockroach/issues/9326
-//  pe := MakePrometheusExporter()
-//  pe.AddMetricsFromRegistry(nodeRegistry)
-//  pe.AddMetricsFromRegistry(storeOneRegistry)
-//  ...
-//  pe.AddMetricsFromRegistry(storeNRegistry)
-//  pe.Export(w)
+//
+//	pe := MakePrometheusExporter()
+//	pe.AddMetricsFromRegistry(nodeRegistry)
+//	pe.AddMetricsFromRegistry(storeOneRegistry)
+//	...
+//	pe.AddMetricsFromRegistry(storeNRegistry)
+//	pe.Export(w)
 type PrometheusExporter struct {
 	muScrapeAndPrint syncutil.Mutex
 	families         map[string]*prometheusgo.MetricFamily

@@ -28,6 +28,7 @@ go_test(
     name = "stateloader_test",
     size = "small",
     srcs = ["initial_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":stateloader"],
     deps = [
         "//pkg/roachpb",

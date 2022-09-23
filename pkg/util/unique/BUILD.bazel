@@ -12,6 +12,7 @@ go_test(
     name = "unique_test",
     size = "small",
     srcs = ["unique_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":unique"],
 )
 

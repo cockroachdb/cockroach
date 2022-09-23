@@ -16,16 +16,21 @@
 // are `--mode=(strip|omit|convert)`, where:
 //
 // strip: omit output for non-failing tests, pass everything else through. In
-//   particular, non-test output and tests that never terminate are passed through.
+//
+//	particular, non-test output and tests that never terminate are passed through.
+//
 // omit: print only failing tests. Note that test2json does not close scopes for
-//   tests that are running in parallel (in the same package) with a "foreground"
-//   test that panics, so it will pass through *only* the one foreground test.
-//   Note also that package scopes are omitted; test2json does not reliably close
-//   them on panic/Exit anyway.
+//
+//	tests that are running in parallel (in the same package) with a "foreground"
+//	test that panics, so it will pass through *only* the one foreground test.
+//	Note also that package scopes are omitted; test2json does not reliably close
+//	them on panic/Exit anyway.
+//
 // convert:
-//   no filtering is performed, but any test2json input is translated back into
-//   its pure Go test framework text representation. This is useful for output
-//   intended for human eyes.
+//
+//	no filtering is performed, but any test2json input is translated back into
+//	its pure Go test framework text representation. This is useful for output
+//	intended for human eyes.
 //
 // [test2json]: https://golang.org/cmd/test2json/
 package main

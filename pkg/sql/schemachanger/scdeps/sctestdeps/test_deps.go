@@ -28,17 +28,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -48,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -435,7 +433,7 @@ func (s *TestState) ReadObjectNamesAndIDs(
 	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
 ) (names tree.TableNames, ids descpb.IDs) {
 	m := make(map[string]descpb.ID)
-	_ = s.uncommitted.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+	_ = s.uncommitted.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
 		if e.GetParentID() == db.GetID() && e.GetParentSchemaID() == schema.GetID() {
 			m[e.GetName()] = e.GetID()
 			names = append(names, tree.MakeTableNameWithSchema(
@@ -560,13 +558,25 @@ func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	return desc
 }
 
+var _ scmutationexec.SyntheticDescriptorStateUpdater = (*TestState)(nil)
+
+// AddSyntheticDescriptor is part of the
+// scmutationexec.SyntheticDescriptorStateUpdater interface.
+func (s *TestState) AddSyntheticDescriptor(desc catalog.Descriptor) {
+	s.LogSideEffectf("add synthetic descriptor #%d:\n%s", desc.GetID(), s.descriptorDiff(desc))
+}
+
 // mustReadImmutableDescriptor looks up a descriptor and returns a immutable
 // deep copy.
 func (s *TestState) mustReadImmutableDescriptor(id descpb.ID) (catalog.Descriptor, error) {
-	if u := s.uncommitted.LookupDescriptorEntry(id); u != nil {
-		return u.NewBuilder().BuildImmutable(), nil
+	mut, err := s.mustReadMutableDescriptor(id)
+	if err != nil {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading immutable descriptor #%d", id)
+		}
+		return nil, err
 	}
-	return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading immutable descriptor #%d", id)
+	return mut.ImmutableCopy(), nil
 }
 
 // mustReadMutableDescriptor looks up a descriptor and returns a mutable
@@ -768,30 +778,7 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		b.s.uncommitted.DeleteNamespaceEntry(nameInfo)
 	}
 	for _, desc := range b.descs {
-		var old protoutil.Message
-		if d, _ := b.s.mustReadImmutableDescriptor(desc.GetID()); d != nil {
-			old = d.DescriptorProto()
-		}
-		diff := sctestutils.ProtoDiff(old, desc.DescriptorProto(), sctestutils.DiffArgs{
-			Indent:       "  ",
-			CompactLevel: 3,
-		}, func(i interface{}) {
-			scviz.RewriteEmbeddedIntoParent(i)
-			if m, ok := i.(map[string]interface{}); ok {
-				ds, exists := m["declarativeSchemaChangerState"].(map[string]interface{})
-				if !exists {
-					return
-				}
-				for _, k := range []string{
-					"currentStatuses", "targetRanks", "targets",
-				} {
-					if _, kExists := ds[k]; kExists {
-						ds[k] = "<redacted>"
-					}
-				}
-			}
-		})
-		b.s.LogSideEffectf("upsert descriptor #%d\n%s", desc.GetID(), diff)
+		b.s.LogSideEffectf("upsert descriptor #%d\n%s", desc.GetID(), b.s.descriptorDiff(desc))
 		b.s.uncommitted.UpsertDescriptorEntry(desc)
 	}
 	for _, deletedID := range b.descriptorsToDelete.Ordered() {
@@ -801,7 +788,13 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	for _, deletedID := range b.zoneConfigsToDelete.Ordered() {
 		b.s.LogSideEffectf("deleting zone config for #%d", deletedID)
 	}
-	ve := b.s.uncommitted.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...)
+	ve := b.s.uncommitted.Validate(
+		ctx,
+		clusterversion.TestingClusterVersion,
+		catalog.NoValidationTelemetry,
+		catalog.ValidationLevelAllPreTxnCommit,
+		b.descs...,
+	)
 	return ve.CombinedError()
 }
 

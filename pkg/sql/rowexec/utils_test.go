@@ -194,7 +194,8 @@ func (r *rowDisposer) NumRowsDisposed() int {
 
 // makeFetchSpec creates an IndexFetchSpec for the given index, with the columns
 // specified by name, separated by a comma. For example:
-//   makeFetchSpec(t, table, "idx_c", "a,b,c")
+//
+//	makeFetchSpec(t, table, "idx_c", "a,b,c")
 func makeFetchSpec(
 	t testing.TB, table catalog.TableDescriptor, indexName string, colNames string,
 ) descpb.IndexFetchSpec {

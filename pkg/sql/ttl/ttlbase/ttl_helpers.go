@@ -38,8 +38,9 @@ AND (%s) IN (%s)`
 
 // MakeColumnNamesSQL converts columns into an escape string
 // for an order by clause, e.g.:
-//   {"a", "b"} => a, b
-//   {"escape-me", "b"} => "escape-me", b
+//
+//	{"a", "b"} => a, b
+//	{"escape-me", "b"} => "escape-me", b
 func MakeColumnNamesSQL(columns []string) string {
 	var b bytes.Buffer
 	for i, pkColumn := range columns {

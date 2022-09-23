@@ -619,7 +619,7 @@ func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) er
 }
 
 func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
-	rekey, ok, err := sip.rekeyer.RewriteKey(key)
+	rekey, ok, err := sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
 	if !ok {
 		return nil, errors.New("every key is expected to match tenant prefix")
 	}

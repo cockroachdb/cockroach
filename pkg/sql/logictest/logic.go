@@ -40,7 +40,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -67,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -147,9 +151,9 @@ import (
 // A link to the issue will be printed out if the -print-blocklist-issues flag
 // is specified.
 //
-// There is a special directive '!metamorphic' that adjusts the server to force
-// the usage of production values for some constants that might change via the
-// metamorphic testing.
+// There is a special directive '!metamorphic-batch-sizes' that adjusts the
+// server to force the usage of production values related for some constants,
+// mostly related to batch sizes, that might change via metamorphic testing.
 //
 //
 // ###########################################################
@@ -530,6 +534,25 @@ var (
 		"declarative-corpus", "",
 		"enables generation and storage of a declarative schema changer	corpus",
 	)
+
+	// globalMVCCRangeTombstone will write a global MVCC range tombstone across
+	// the entire user keyspace during cluster bootstrapping. This should not
+	// semantically affect the test data written above it, but will activate MVCC
+	// range tombstone code paths in the storage layer for testing.
+	globalMVCCRangeTombstone = util.ConstantWithMetamorphicTestBool(
+		"logictest-global-mvcc-range-tombstone", false)
+
+	// useMVCCRangeTombstonesForPointDeletes will use point-sized MVCC range
+	// tombstones for point deletions, on a best-effort basis. These should be
+	// indistinguishable to a KV client, but activate MVCC range tombstone
+	// code paths in the storage/KV layer, for testing. This may result in
+	// incorrect MVCC stats for RangeKey* fields in rare cases, due to point
+	// writes not holding appropriate latches for range key stats update.
+	useMVCCRangeTombstonesForPointDeletes = util.ConstantWithMetamorphicTestBool(
+		"logictest-use-mvcc-range-tombstones-for-point-deletes", false)
+
+	// BackupRestoreProbability is the environment variable for `3node-backup` config.
+	backupRestoreProbability = envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0)
 )
 
 const queryRewritePlaceholderPrefix = "__async_query_rewrite_placeholder"
@@ -599,6 +622,10 @@ type pendingQuery struct {
 func (ls *logicStatement) readSQL(
 	t *logicTest, s *logictestbase.LineScanner, allowSeparator bool,
 ) (separator bool, _ error) {
+	if err := t.maybeBackupRestore(t.rng, t.cfg); err != nil {
+		return false, err
+	}
+
 	var buf bytes.Buffer
 	hasVars := false
 	for s.Scan() {
@@ -1186,6 +1213,13 @@ func (t *logicTest) newCluster(
 	// when run with fakedist-disk config, so we'll use a larger limit here.
 	// There isn't really a downside to doing so.
 	tempStorageDiskLimit := int64(512 << 20) /* 512 MiB */
+	// MVCC range tombstones are only available in 22.2 or newer.
+	supportsMVCCRangeTombstones := (t.cfg.BootstrapVersion.Equal(roachpb.Version{}) ||
+		!t.cfg.BootstrapVersion.Less(clusterversion.ByKey(clusterversion.SetSystemUsersUserIDColumnNotNull))) &&
+		(t.cfg.BinaryVersion.Equal(roachpb.Version{}) ||
+			!t.cfg.BinaryVersion.Less(clusterversion.ByKey(clusterversion.SetSystemUsersUserIDColumnNotNull)))
+	ignoreMVCCRangeTombstoneErrors := supportsMVCCRangeTombstones &&
+		(globalMVCCRangeTombstone || useMVCCRangeTombstonesForPointDeletes)
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -1197,7 +1231,13 @@ func (t *logicTest) newCluster(
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// The consistency queue makes a lot of noisy logs during logic tests.
-					DisableConsistencyQueue: true,
+					DisableConsistencyQueue:  true,
+					GlobalMVCCRangeTombstone: supportsMVCCRangeTombstones && globalMVCCRangeTombstone,
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						DisableInitPutFailOnTombstones: ignoreMVCCRangeTombstoneErrors,
+						UseRangeTombstonesForPointDeletes: supportsMVCCRangeTombstones &&
+							useMVCCRangeTombstonesForPointDeletes,
+					},
 				},
 				SQLEvalContext: &eval.TestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
@@ -1216,6 +1256,9 @@ func (t *logicTest) newCluster(
 				},
 				SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 					BeforeStage: corpusCollectionCallback,
+				},
+				RangeFeed: &rangefeed.TestingKnobs{
+					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
 				},
 			},
 			ClusterName:   "testclustername",
@@ -1337,6 +1380,7 @@ func (t *logicTest) newCluster(
 					TenantTestingKnobs: &sql.TenantTestingKnobs{
 						AllowSplitAndScatter: cfg.AllowSplitAndScatter,
 					},
+					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
 				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
@@ -1378,6 +1422,12 @@ func (t *logicTest) newCluster(
 			t.Fatal(err)
 		}
 
+		// Reduce the schema GC job's MVCC polling interval for faster tests.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '3s'",
+		); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// If we've created a tenant (either explicitly, or probabilistically and
@@ -1623,6 +1673,7 @@ func (t *logicTest) shutdownCluster() {
 
 // resetCluster cleans up the current cluster, and creates a fresh one.
 func (t *logicTest) resetCluster() {
+	t.traceStop()
 	t.shutdownCluster()
 	if t.serverArgs == nil {
 		// We expect the server args to be persisted to the test during test
@@ -1666,7 +1717,7 @@ CREATE DATABASE test; USE test;
 		t.Fatal(err)
 	}
 
-	if !t.cfg.BootstrapVersion.Equal(roachpb.Version{}) && t.cfg.BootstrapVersion.Less(roachpb.Version{Major: 22, Minor: 2}) {
+	if !t.cfg.BootstrapVersion.Equal(roachpb.Version{}) && t.cfg.BootstrapVersion.Less(clusterversion.ByKey(clusterversion.SetSystemUsersUserIDColumnNotNull)) {
 		// Hacky way to create user with an ID if we're on a
 		// bootstrapped binary less than 22.2. The version gate
 		// causes the regular CREATE USER to fail since it will not
@@ -1938,9 +1989,6 @@ type subtestDetails struct {
 }
 
 func (t *logicTest) processTestFile(path string, config logictestbase.TestClusterConfig) error {
-	rng, seed := randutil.NewPseudoRand()
-	t.outf("rng seed: %d\n", seed)
-
 	subtests, err := fetchSubtests(path)
 	if err != nil {
 		return err
@@ -1958,7 +2006,7 @@ func (t *logicTest) processTestFile(path string, config logictestbase.TestCluste
 		// If subtest has no name, then it is not a subtest, so just run the lines
 		// in the overall test. Note that this can only happen in the first subtest.
 		if len(subtest.name) == 0 {
-			if err := t.processSubtest(subtest, path, config, rng); err != nil {
+			if err := t.processSubtest(subtest, path, config); err != nil {
 				return err
 			}
 		} else {
@@ -1968,7 +2016,7 @@ func (t *logicTest) processTestFile(path string, config logictestbase.TestCluste
 				defer func() {
 					t.subtestT = nil
 				}()
-				if err := t.processSubtest(subtest, path, config, rng); err != nil {
+				if err := t.processSubtest(subtest, path, config); err != nil {
 					t.Error(err)
 				}
 			})
@@ -1999,9 +2047,10 @@ func (t *logicTest) hasOpenTxns(ctx context.Context) bool {
 		existingTxnPriority := "NORMAL"
 		err := user.QueryRow("SHOW TRANSACTION PRIORITY").Scan(&existingTxnPriority)
 		if err != nil {
-			// Ignore an error if we are unable to see transaction priority.
+			// If we are unable to see transaction priority assume we're in the middle
+			// of an explicit txn.
 			log.Warningf(ctx, "failed to check txn priority with %v", err)
-			continue
+			return true
 		}
 		if _, err := user.Exec("SET TRANSACTION PRIORITY NORMAL;"); !testutils.IsError(err, "there is no transaction in progress") {
 			// Reset the txn priority to what it was before we checked for open txns.
@@ -2022,11 +2071,6 @@ func (t *logicTest) hasOpenTxns(ctx context.Context) bool {
 func (t *logicTest) maybeBackupRestore(
 	rng *rand.Rand, config logictestbase.TestClusterConfig,
 ) error {
-	if config.BackupRestoreProbability != 0 && !config.IsCCLConfig {
-		return errors.Newf("logic test config %s specifies a backup restore probability but is not CCL",
-			config.Name)
-	}
-
 	// We decide if we want to take a backup here based on a probability
 	// specified in the logic test config.
 	if rng.Float64() > config.BackupRestoreProbability {
@@ -2047,6 +2091,8 @@ func (t *logicTest) maybeBackupRestore(
 	defer func() {
 		t.setUser(oldUser, 0 /* nodeIdxOverride */)
 	}()
+
+	log.Info(context.Background(), "Running cluster backup and restore")
 
 	// To restore the same state in for the logic test, we need to restore the
 	// data and the session state. The session state includes things like session
@@ -2096,13 +2142,13 @@ func (t *logicTest) maybeBackupRestore(
 		userToSessionVars[user] = userSessionVars
 	}
 
-	backupLocation := fmt.Sprintf("nodelocal://1/logic-test-backup-%s",
+	backupLocation := fmt.Sprintf("gs://cockroachdb-backup-testing/logic-test-backup-restore-nightly/%s?AUTH=implicit",
 		strconv.FormatInt(timeutil.Now().UnixNano(), 10))
 
 	// Perform the backup and restore as root.
 	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
 
-	if _, err := t.db.Exec(fmt.Sprintf("BACKUP TO '%s'", backupLocation)); err != nil {
+	if _, err := t.db.Exec(fmt.Sprintf("BACKUP INTO '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "backing up cluster")
 	}
 
@@ -2112,7 +2158,7 @@ func (t *logicTest) maybeBackupRestore(
 
 	// Run the restore as root.
 	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
-	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM '%s'", backupLocation)); err != nil {
+	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM LATEST IN '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "restoring cluster")
 	}
 
@@ -2200,8 +2246,16 @@ func fetchSubtests(path string) ([]subtestDetails, error) {
 	return subtests, nil
 }
 
+func (t *logicTest) purgeZoneConfig() {
+	for i := 0; i < t.cluster.NumServers(); i++ {
+		sysconfigProvider := t.cluster.Server(i).SystemConfigProvider()
+		sysconfig := sysconfigProvider.GetSystemConfig()
+		sysconfig.PurgeZoneConfigCache()
+	}
+}
+
 func (t *logicTest) processSubtest(
-	subtest subtestDetails, path string, config logictestbase.TestClusterConfig, rng *rand.Rand,
+	subtest subtestDetails, path string, config logictestbase.TestClusterConfig,
 ) error {
 	defer t.traceStop()
 
@@ -2231,9 +2285,6 @@ func (t *logicTest) processSubtest(
 			return errors.Errorf("%s:%d: no expected error provided",
 				path, s.Line+subtest.lineLineIndexIntoFile,
 			)
-		}
-		if err := t.maybeBackupRestore(rng, config); err != nil {
-			return err
 		}
 		switch cmd {
 		case "repeat":
@@ -2704,12 +2755,14 @@ func (t *logicTest) processSubtest(
 				for i := 0; i < repeat; i++ {
 					if query.retry && !*rewriteResultsInTestfiles {
 						if err := testutils.SucceedsSoonError(func() error {
+							t.purgeZoneConfig()
 							return t.execQuery(query)
 						}); err != nil {
 							t.Error(err)
 						}
 					} else {
 						if query.retry && *rewriteResultsInTestfiles {
+							t.purgeZoneConfig()
 							// The presence of the retry flag indicates that we expect this
 							// query may need some time to succeed. If we are rewriting, wait
 							// 500ms before executing the query.
@@ -2824,6 +2877,10 @@ func (t *logicTest) processSubtest(
 						issue = fields[3]
 					}
 					s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, issue))
+				}
+			case "backup-restore":
+				if config.BackupRestoreProbability > 0.0 {
+					s.SetSkip("backup-restore interferes with this check")
 				}
 				continue
 			default:
@@ -3390,7 +3447,16 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		}
 		for i := range query.expectedResults {
 			expected, actual := query.expectedResults[i], actualResults[i]
-			resultMatches := expected == actual
+			var resultMatches bool
+			if query.noticetrace {
+				resultMatches, err = regexp.MatchString(expected, actual)
+				if err != nil {
+					return errors.CombineErrors(makeError(), err)
+				}
+			} else {
+				resultMatches = expected == actual
+			}
+
 			// Results are flattened into columns for each row.
 			// To find the coltype for the given result, mod the result number
 			// by the number of coltypes.
@@ -3817,7 +3883,8 @@ func RunLogicTest(
 	}
 
 	// Check whether the test can only be run in non-metamorphic mode.
-	_, onlyNonMetamorphic := logictestbase.ReadTestFileConfigs(t, path, logictestbase.ConfigSet{configIdx})
+	_, nonMetamorphicBatchSizes :=
+		logictestbase.ReadTestFileConfigs(t, path, logictestbase.ConfigSet{configIdx})
 	config := logictestbase.LogicTestConfigs[configIdx]
 
 	// The tests below are likely to run concurrently; `log` is shared
@@ -3869,10 +3936,22 @@ func RunLogicTest(
 	}
 	// Each test needs a copy because of Parallel
 	serverArgsCopy := serverArgs
-	serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || onlyNonMetamorphic
+	serverArgsCopy.ForceProductionValues = serverArgs.ForceProductionValues || nonMetamorphicBatchSizes
+	if serverArgsCopy.ForceProductionValues {
+		if err := coldata.SetBatchSizeForTests(coldata.DefaultColdataBatchSize); err != nil {
+			panic(errors.Wrapf(err, "could not set batch size for test"))
+		}
+	}
+	hasOverride, overriddenBackupRestoreProbability := logictestbase.ReadBackupRestoreProbabilityOverride(t, path)
+	config.BackupRestoreProbability = backupRestoreProbability
+	if hasOverride {
+		config.BackupRestoreProbability = overriddenBackupRestoreProbability
+	}
+
 	lt.setup(
 		config, serverArgsCopy, readClusterOptions(t, path), readKnobOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
 	)
+
 	lt.runFile(path, config)
 
 	progress.total += lt.progress

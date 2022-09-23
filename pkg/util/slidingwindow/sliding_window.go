@@ -15,11 +15,17 @@ import "time"
 // Swag represents a sliding window aggregator over a binary operation.
 // The aggregator will aggregate recorded values in two ways:
 // (1) Within each window, the binary operation is applied when recording a new
-//     value into the current window.
+//
+//	value into the current window.
+//
 // (2) On Query, the binary operation is accumulated over every window, from
-//     most to least recent.
+//
+//	most to least recent.
+//
 // The binary operator function must therefore be:
-//     associative :: binOp(binOp(a,b), c) = binOp(a,binOp(b,c))
+//
+//	associative :: binOp(binOp(a,b), c) = binOp(a,binOp(b,c))
+//
 // In order to have correct results. Note that this does not allow for a more
 // general class of aggregators that may be  associative, such as geometric
 // mean, bloom filters etc. These require special treatment with user defined

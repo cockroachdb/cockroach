@@ -43,6 +43,10 @@ type operation struct {
 	schemaExistsFn func(catalog.TableDescriptor, catalog.TableDescriptor, string) (bool, error)
 }
 
+// waitForJobStatement is the statement used to wait for an ongoing job to
+// complete.
+const waitForJobStatement = "SHOW JOBS WHEN COMPLETE VALUES ($1)"
+
 // migrateTable is run during an upgrade to a new version and changes an existing
 // table's schema based on schemaChangeQuery. The schema-change is ignored if the
 // table already has the required changes.
@@ -92,7 +96,7 @@ func migrateTable(
 			for _, mutation := range mutations {
 				log.Infof(ctx, "waiting for the mutation job %v to complete", mutation.JobID)
 				if _, err := d.InternalExecutor.Exec(ctx, "migration-mutations-wait",
-					nil, "SHOW JOB WHEN COMPLETE $1", mutation.JobID); err != nil {
+					nil, waitForJobStatement, mutation.JobID); err != nil {
 					return err
 				}
 			}
@@ -242,6 +246,8 @@ func hasIndex(storedTable, expectedTable catalog.TableDescriptor, indexName stri
 	expectedCopy.StoreColumnNames = []string{}
 	storedCopy.StoreColumnIDs = []descpb.ColumnID{0, 0, 0}
 	expectedCopy.StoreColumnIDs = []descpb.ColumnID{0, 0, 0}
+	storedCopy.CreatedAtNanos = 0
+	expectedCopy.CreatedAtNanos = 0
 
 	if err = ensureProtoMessagesAreEqual(&expectedCopy, &storedCopy); err != nil {
 		return false, err

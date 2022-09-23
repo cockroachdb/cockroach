@@ -173,13 +173,13 @@ func (c *CustomFuncs) ConstructValuesFromZips(zip memo.ZipExpr) memo.RelExpr {
 // wraps a DArray or an ArrayExpr. The complete set of expressions within a
 // static array can be determined during planning:
 //
-//   ARRAY[1,2]
-//   ARRAY[x,y]
+//	ARRAY[1,2]
+//	ARRAY[x,y]
 //
 // By contrast, expressions within a dynamic array can only be determined at
 // run-time:
 //
-//   SELECT (SELECT array_agg(x) FROM xy)
+//	SELECT (SELECT array_agg(x) FROM xy)
 //
 // Here, the length of the array is only known at run-time.
 func (c *CustomFuncs) IsStaticArray(scalar opt.ScalarExpr) bool {

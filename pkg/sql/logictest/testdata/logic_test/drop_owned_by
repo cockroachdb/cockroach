@@ -1,4 +1,5 @@
 # LogicTest: !local-legacy-schema-changer
+# Skipped on legacy schema changer since it unsupported.
 
 # Test dropping nothing.
 statement ok

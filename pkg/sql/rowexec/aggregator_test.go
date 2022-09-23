@@ -49,14 +49,15 @@ func aggregations(aggTestSpecs []aggTestSpec) []execinfrapb.AggregatorSpec_Aggre
 }
 
 // TODO(irfansharif): Add tests to verify the following aggregation functions:
-//      AVG
-//      BOOL_AND
-//      BOOL_OR
-//      CONCAT_AGG
-//      JSON_AGG
-//      JSONB_AGG
-//      STDDEV
-//      VARIANCE
+//
+//	AVG
+//	BOOL_AND
+//	BOOL_OR
+//	CONCAT_AGG
+//	JSON_AGG
+//	JSONB_AGG
+//	STDDEV
+//	VARIANCE
 func TestAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

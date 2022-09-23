@@ -33,7 +33,7 @@ func EngineStats(t *testing.T, engine storage.Reader, nowNanos int64) *enginepb.
 func SSTStats(t *testing.T, sst []byte, nowNanos int64) *enginepb.MVCCStats {
 	t.Helper()
 
-	iter, err := storage.NewPebbleMemSSTIterator(sst, true /* verify */, storage.IterOptions{
+	iter, err := storage.NewMemSSTIterator(sst, true /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,

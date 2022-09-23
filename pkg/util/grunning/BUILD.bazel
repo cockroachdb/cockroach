@@ -18,6 +18,7 @@ go_test(
         "disabled_test.go",
         "enabled_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = select({
         "@io_bazel_rules_go//go/platform:aix_ppc64": [
             ":grunning",

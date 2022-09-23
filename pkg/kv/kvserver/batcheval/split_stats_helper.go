@@ -16,42 +16,42 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 // split. The quantities known during a split (i.e. while the split trigger
 // is evaluating) are
 //
-// - AbsPreSplitBothEstimated: the stats of the range before the split trigger,
-//   i.e. without accounting for any writes in the batch. This can have
-//   ContainsEstimates set.
-// - DeltaBatchEstimated: the writes in the batch, i.e. the stats delta accrued
-//   from the evaluation of the EndTxn so far (this is mostly the write to the
-//   transaction record, as well as resolving the intent on the range descriptor,
-//   but nothing in this code relies on that). Since we have no reason to
-//   introduce ContainsEstimates in a split trigger, this typically has
-//   ContainsEstimates unset, but the results will be estimate free either way.
-// - AbsPostSplit{Left,Right}: the stats of either the left or right hand side
-//   range after applying the split, i.e. accounting both for the shrinking as
-//   well as for the writes in DeltaBatch related to the shrunk keyrange. In
-//   practice, we obtain this by recomputing the stats using the corresponding
-//   AbsPostSplit{Left,Right}Fn, and so we don't expect ContainsEstimates to be
-//   set in them. The choice of which side to scan is controlled by ScanRightFirst.
-// - DeltaRangeKey: the stats delta that must be added to the non-computed
-//   half's stats to account for the splitting of range keys straddling the split
-//   point. See computeSplitRangeKeyStatsDelta() for details.
+//   - AbsPreSplitBothEstimated: the stats of the range before the split trigger,
+//     i.e. without accounting for any writes in the batch. This can have
+//     ContainsEstimates set.
+//   - DeltaBatchEstimated: the writes in the batch, i.e. the stats delta accrued
+//     from the evaluation of the EndTxn so far (this is mostly the write to the
+//     transaction record, as well as resolving the intent on the range descriptor,
+//     but nothing in this code relies on that). Since we have no reason to
+//     introduce ContainsEstimates in a split trigger, this typically has
+//     ContainsEstimates unset, but the results will be estimate free either way.
+//   - AbsPostSplit{Left,Right}: the stats of either the left or right hand side
+//     range after applying the split, i.e. accounting both for the shrinking as
+//     well as for the writes in DeltaBatch related to the shrunk keyrange. In
+//     practice, we obtain this by recomputing the stats using the corresponding
+//     AbsPostSplit{Left,Right}Fn, and so we don't expect ContainsEstimates to be
+//     set in them. The choice of which side to scan is controlled by ScanRightFirst.
+//   - DeltaRangeKey: the stats delta that must be added to the non-computed
+//     half's stats to account for the splitting of range keys straddling the split
+//     point. See computeSplitRangeKeyStatsDelta() for details.
 //
-// We are interested in computing from this the quantities
+// # We are interested in computing from this the quantities
 //
-// - AbsPostSplitRight(): the stats of the right hand side created by the split,
-//   i.e. the data taken over from the left hand side plus whatever was written to
-//   the right hand side in the process (metadata etc). We can recompute this, but
-//   try to avoid it unless necessary (when CombinedErrorDelta below is nonzero).
-// - DeltaPostSplitLeft(): the stats delta that should be emitted by the split
-//   trigger itself, i.e. the data which the left hand side (initially comprising
-//   both halves) loses by moving data into the right hand side (including whatever
-//   DeltaBatch contained in contributions attributable to the keyspace on the
-//   left).
-// - CombinedErrorDelta: the difference between (AbsPreSplitBoth+DeltaBatch) and
-//   the recomputation of the pre-split range including the batch. This is zero if
-//   neither of the inputs contains estimates. If it's not zero, we need to
-//   recompute from scratch to obtain AbsPostSplitRight. What's interesting about
-//   this quantity is that we never care what exactly it is, but we do care
-//   whether it's zero or not because if it's zero we get to do less work.
+//   - AbsPostSplitRight(): the stats of the right hand side created by the split,
+//     i.e. the data taken over from the left hand side plus whatever was written to
+//     the right hand side in the process (metadata etc). We can recompute this, but
+//     try to avoid it unless necessary (when CombinedErrorDelta below is nonzero).
+//   - DeltaPostSplitLeft(): the stats delta that should be emitted by the split
+//     trigger itself, i.e. the data which the left hand side (initially comprising
+//     both halves) loses by moving data into the right hand side (including whatever
+//     DeltaBatch contained in contributions attributable to the keyspace on the
+//     left).
+//   - CombinedErrorDelta: the difference between (AbsPreSplitBoth+DeltaBatch) and
+//     the recomputation of the pre-split range including the batch. This is zero if
+//     neither of the inputs contains estimates. If it's not zero, we need to
+//     recompute from scratch to obtain AbsPostSplitRight. What's interesting about
+//     this quantity is that we never care what exactly it is, but we do care
+//     whether it's zero or not because if it's zero we get to do less work.
 //
 // Moreover, we want both neither of AbsPostSplit{Right,Left} to end up with
 // estimates. The way splits are set up right now, we sort of get this "for
@@ -64,7 +64,7 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 // because
 //
 // (1) AbsPreSplitBoth + DeltaBatch + DeltaRangeKey
-// 	                   - CombinedErrorDelta = AbsPostSplitLeft + AbsPostSplitRight
+//   - CombinedErrorDelta = AbsPostSplitLeft + AbsPostSplitRight
 //
 // In words, this corresponds to "all bytes are accounted for": from the initial
 // stats that we have (accounting for the fact that AbsPreSplitBoth+DeltaBatch
@@ -84,23 +84,23 @@ import "github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 // These two equations are easily solved for the unknowns. First, we can express
 // DeltaPostSplitLeft() in known quantities via (2) as
 //
-//     DeltaPostSplitLeft() = AbsPostSplitLeft - AbsPreSplitBothEstimated.
+//	DeltaPostSplitLeft() = AbsPostSplitLeft - AbsPreSplitBothEstimated.
 //
 // Note that if we start out with estimates, DeltaPostSplitLeft() will wipe out
 // those estimates when added to the absolute stats.
 //
 // For AbsPostSplitRight(), there are two cases. First, due to the identity
 //
-//     CombinedErrorDelta = AbsPreSplitBothEstimated + DeltaBatchEstimated
-//                          -(AbsPostSplitLeft + AbsPostSplitRight)
-//                          + DeltaRangeKey.
+//	CombinedErrorDelta = AbsPreSplitBothEstimated + DeltaBatchEstimated
+//	                     -(AbsPostSplitLeft + AbsPostSplitRight)
+//	                     + DeltaRangeKey.
 //
 // and the fact that the second and third lines contain no estimates, we know
 // that CombinedErrorDelta is zero if the first line contains no estimates.
 // Using this, we can rearrange as
 //
-//     AbsPostSplitRight() = AbsPreSplitBoth + DeltaBatch - AbsPostSplitLeft
-//                           + DeltaRangeKey.
+//	AbsPostSplitRight() = AbsPreSplitBoth + DeltaBatch - AbsPostSplitLeft
+//	                      + DeltaRangeKey.
 //
 // where all quantities on the right are known. If CombinedErrorDelta is
 // nonzero, we effectively have one more unknown in our linear system and we

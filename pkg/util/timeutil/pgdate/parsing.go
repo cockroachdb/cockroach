@@ -85,13 +85,12 @@ var (
 // ParseDate converts a string into Date.
 //
 // Any specified timezone is inconsequential. Examples:
-//  - "now": parses to the local date (in the current timezone)
-//  - "2020-06-26 01:09:15.511971": parses to '2020-06-26'
-//  - "2020-06-26 01:09:15.511971-05": parses to '2020-06-26'
+//   - "now": parses to the local date (in the current timezone)
+//   - "2020-06-26 01:09:15.511971": parses to '2020-06-26'
+//   - "2020-06-26 01:09:15.511971-05": parses to '2020-06-26'
 //
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).
-//
 func ParseDate(
 	now time.Time, dateStyle DateStyle, s string,
 ) (_ Date, dependsOnContext bool, _ error) {
@@ -148,8 +147,8 @@ func ParseTime(
 // location.
 //
 // Any specified timezone is inconsequential. Examples:
-//  - "now": parses to the local time of day (in the current timezone)
-//  - "01:09:15.511971" and "01:09:15.511971-05" parse to the same result
+//   - "now": parses to the local time of day (in the current timezone)
+//   - "01:09:15.511971" and "01:09:15.511971-05" parse to the same result
 //
 // The dependsOnContext return value indicates if we had to consult the given
 // `now` value (either for the time or the local timezone).

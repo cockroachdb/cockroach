@@ -273,7 +273,8 @@ type cleanupOperations struct {
 }
 
 // N.B. when changing the constraint queries below, make sure also change
-//      the test file in pkg/sql/opt/exec/execbuilder/testdata/sql_activity_stats_compaction.
+//
+//	the test file in pkg/sql/opt/exec/execbuilder/testdata/sql_activity_stats_compaction.
 var (
 	stmtStatsCleanupOps = &cleanupOperations{
 		initialScanStmtTemplate: `

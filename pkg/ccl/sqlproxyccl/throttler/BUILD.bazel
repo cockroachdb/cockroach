@@ -24,6 +24,7 @@ go_test(
         "local_test.go",
         "throttle_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":throttler"],
     deps = [
         "//pkg/util/timeutil",

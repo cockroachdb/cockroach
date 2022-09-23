@@ -42,16 +42,40 @@ export function makeInsightDetailsColumns(
       sort: (item: EventExecution) => item.queries.length,
     },
     {
-      name: "startTime",
-      title: insightsTableTitles.startTime(execType),
+      name: "contentionStartTime",
+      title: insightsTableTitles.contentionStartTime(execType),
       cell: (item: EventExecution) => item.startTime.format(DATE_FORMAT),
       sort: (item: EventExecution) => item.startTime.unix(),
     },
     {
-      name: "elapsedTime",
-      title: insightsTableTitles.elapsedTime(execType),
-      cell: (item: EventExecution) => Duration(item.elapsedTime * 1e6),
-      sort: (item: EventExecution) => item.elapsedTime,
+      name: "contention",
+      title: insightsTableTitles.contention(execType),
+      cell: (item: EventExecution) => Duration(item.contentionTimeMs * 1e6),
+      sort: (item: EventExecution) => item.contentionTimeMs,
+    },
+    {
+      name: "schemaName",
+      title: insightsTableTitles.schemaName(execType),
+      cell: (item: EventExecution) => item.schemaName,
+      sort: (item: EventExecution) => item.schemaName,
+    },
+    {
+      name: "databaseName",
+      title: insightsTableTitles.databaseName(execType),
+      cell: (item: EventExecution) => item.databaseName,
+      sort: (item: EventExecution) => item.databaseName,
+    },
+    {
+      name: "tableName",
+      title: insightsTableTitles.tableName(execType),
+      cell: (item: EventExecution) => item.tableName,
+      sort: (item: EventExecution) => item.tableName,
+    },
+    {
+      name: "indexName",
+      title: insightsTableTitles.indexName(execType),
+      cell: (item: EventExecution) => item.indexName,
+      sort: (item: EventExecution) => item.indexName,
     },
   ];
 }

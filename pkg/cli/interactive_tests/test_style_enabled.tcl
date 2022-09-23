@@ -6,7 +6,7 @@ start_server $argv
 
 # Try connect and check the session variables match.
 
-spawn $argv sql --url "postgresql://root@localhost:26257?options=-cintervalstyle%3Diso_8601"
+spawn $argv sql --no-line-editor --url "postgresql://root@localhost:26257?options=-cintervalstyle%3Diso_8601"
 eexpect root@
 send "SHOW intervalstyle;\r"
 eexpect "iso_8601"
@@ -14,7 +14,7 @@ eexpect root@
 send_eof
 eexpect eof
 
-spawn $argv sql --url "postgresql://root@localhost:26257?options=-cdatestyle%3Dymd"
+spawn $argv sql --no-line-editor --url "postgresql://root@localhost:26257?options=-cdatestyle%3Dymd"
 eexpect root@
 send "SHOW datestyle;\r"
 eexpect "ISO, YMD"

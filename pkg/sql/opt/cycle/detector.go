@@ -15,13 +15,12 @@ package cycle
 //
 // Example usage:
 //
-//   var d Detector
-//   d.AddEdge(Vertex(0), Vertex(1))
-//   d.AddEdge(Vertex(1), Vertex(2))
-//   d.AddEdge(Vertex(2), Vertex(0))
-//   d.FindCycleStartingAtVertex(Vertex(0))
-//   => [0, 1, 2, 0], true
-//
+//	var d Detector
+//	d.AddEdge(Vertex(0), Vertex(1))
+//	d.AddEdge(Vertex(1), Vertex(2))
+//	d.AddEdge(Vertex(2), Vertex(0))
+//	d.FindCycleStartingAtVertex(Vertex(0))
+//	=> [0, 1, 2, 0], true
 type Detector struct {
 	// edges are the directed edges in the graph.
 	edges map[Vertex][]Vertex

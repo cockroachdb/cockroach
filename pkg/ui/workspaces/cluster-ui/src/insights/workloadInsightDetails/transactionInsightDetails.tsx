@@ -15,18 +15,13 @@ import { Heading } from "@cockroachlabs/ui-components";
 import { Col, Row } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
-import moment from "moment";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { Duration } from "src/util";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import { getMatchParamByName } from "src/util/query";
-import {
-  WaitTimeInsightsLabels,
-  WaitTimeInsightsPanel,
-} from "src/detailsPanels/waitTimeInsightsPanel";
+import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
 import {
   TransactionInsightEventDetailsRequest,
   TransactionInsightEventDetailsResponse,
@@ -95,15 +90,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
     if (!insightDetails) {
       return null;
     }
-    const insightQueries = insightDetails.queries
-      .map((query, idx) => {
-        if (idx != 0) {
-          return "\n" + query;
-        } else {
-          return query;
-        }
-      })
-      .toString();
+    const insightQueries = insightDetails.queries.join("");
     const isCockroachCloud = useContext(CockroachCloudContext);
     const insightsColumns = makeInsightsColumns(isCockroachCloud);
 
@@ -112,11 +99,11 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
       let rec: InsightRecommendation;
       insightDetails.insights.forEach(insight => {
         switch (insight.name) {
-          case InsightNameEnum.highContentionTime:
+          case InsightNameEnum.highContention:
             rec = {
-              type: "HighContentionTime",
+              type: "HighContention",
               details: {
-                duration: insightDetails.elapsedTime,
+                duration: insightDetails.totalContentionTime,
                 description: insight.description,
               },
             };
@@ -128,16 +115,22 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
     }
 
     const tableData = insightsTableData();
-    const waitingExecutions: EventExecution[] = [
-      {
-        executionID: insightDetails.waitingExecutionID,
-        fingerprintID: insightDetails.waitingFingerprintID,
-        queries: insightDetails.waitingQueries,
-        startTime: insightDetails.startTime,
-        elapsedTime: insightDetails.elapsedTime,
-        execType: insightDetails.execType,
-      },
-    ];
+    const blockingExecutions: EventExecution[] =
+      insightDetails.blockingContentionDetails.map(x => {
+        return {
+          executionID: x.blockingExecutionID,
+          fingerprintID: x.blockingFingerprintID,
+          queries: x.blockingQueries,
+          startTime: x.collectionTimeStamp,
+          contentionTimeMs: x.contentionTimeMs,
+          execType: insightDetails.execType,
+          schemaName: x.schemaName,
+          databaseName: x.databaseName,
+          tableName: x.tableName,
+          indexName: x.indexName,
+        };
+      });
+
     return (
       <>
         <section className={tableCx("section")}>
@@ -153,10 +146,6 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
                   label="Start Time"
                   value={insightDetails.startTime.format(DATE_FORMAT_24_UTC)}
                 />
-                <SummaryCardItem
-                  label="Elapsed Time"
-                  value={Duration(insightDetails.elapsedTime * 1e6)}
-                />
               </SummaryCard>
             </Col>
             <Col className="gutter-row" span={12}>
@@ -169,38 +158,28 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
             </Col>
           </Row>
           <Row gutter={24} className={tableCx("margin-bottom")}>
-            <InsightsSortedTable columns={insightsColumns} data={tableData} />
+            {/* TO DO (ericharmeling): We might want this table to span the entire page when other types of insights
+            are added*/}
+            <Col className="gutter-row" span={12}>
+              <InsightsSortedTable columns={insightsColumns} data={tableData} />
+            </Col>
           </Row>
         </section>
         <section className={tableCx("section")}>
-          <WaitTimeInsightsPanel
-            execType={insightDetails.execType}
-            executionID={insightDetails.executionID}
-            schemaName={insightDetails.schemaName}
-            tableName={insightDetails.tableName}
-            indexName={insightDetails.indexName}
-            databaseName={insightDetails.databaseName}
-            contendedKey={String(insightDetails.contendedKey)}
-            waitTime={moment.duration(insightDetails.elapsedTime)}
-            waitingExecutions={[]}
-            blockingExecutions={[]}
-          />
           <Row gutter={24}>
-            <Col>
-              <Row>
-                <Heading type="h5">
-                  {WaitTimeInsightsLabels.WAITING_TXNS_TABLE_TITLE(
-                    insightDetails.executionID,
-                    insightDetails.execType,
-                  )}
-                </Heading>
-                <div className={tableCx("margin-bottom-large")}>
-                  <WaitTimeDetailsTable
-                    data={waitingExecutions}
-                    execType={insightDetails.execType}
-                  />
-                </div>
-              </Row>
+            <Col className="gutter-row">
+              <Heading type="h5">
+                {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
+                  insightDetails.executionID,
+                  insightDetails.execType,
+                )}
+              </Heading>
+              <div className={tableCx("margin-bottom-large")}>
+                <WaitTimeDetailsTable
+                  data={blockingExecutions}
+                  execType={insightDetails.execType}
+                />
+              </div>
             </Col>
           </Row>
         </section>

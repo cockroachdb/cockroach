@@ -189,7 +189,6 @@ func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
 // guaranteed to be sorted by timestamp. A duplicate of some records might exist
 // in a different file or even in the same file.
 //
-//
 // The resolved timestamp files are named `<timestamp>.RESOLVED`. This is
 // carefully done so that we can offer the following external guarantee: At any
 // given time, if the files are iterated in lexicographic filename order,
@@ -276,7 +275,6 @@ func (f *cloudStorageSinkFile) Write(p []byte) (int, error) {
 // satisfies requirements of lemma 1. So we can consider these k jobs conceptually as one
 // job (call it P). Now, we're back to the case where k = 2 with jobs P and Q. Thus, by
 // induction we have the required proof.
-//
 type cloudStorageSink struct {
 	srcID             base.SQLInstanceID
 	sinkID            int64
@@ -401,13 +399,13 @@ func makeCloudStorageSink(
 	}
 
 	switch encodingOpts.Envelope {
-	case changefeedbase.OptEnvelopeWrapped:
+	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
 	}
 
-	if !encodingOpts.KeyInValue {
+	if encodingOpts.Envelope != changefeedbase.OptEnvelopeBare && !encodingOpts.KeyInValue {
 		return nil, errors.Errorf(`this sink requires the WITH %s option`, changefeedbase.OptKeyInValue)
 	}
 
@@ -482,6 +480,7 @@ func (s *cloudStorageSink) EmitRow(
 	}
 
 	if int64(file.buf.Len()) > s.targetMaxFileSize {
+		s.metrics.recordSizeBasedFlush()
 		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
 			return err
 		}

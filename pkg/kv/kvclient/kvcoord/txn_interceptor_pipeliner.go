@@ -105,30 +105,30 @@ var rejectTxnOverTrackedWritesBudget = settings.RegisterBoolSetting(
 // Chaining on to in-flight async writes is important for two main reasons to
 // txnPipeliner:
 //
-// 1. requests proposed to Raft will not necessarily succeed. For any number of
-//    reasons, the request may make it through Raft and be discarded or fail to
-//    ever even be replicated. A transaction must check that all async writes
-//    succeeded before committing. However, when these proposals do fail, their
-//    errors aren't particularly interesting to a transaction. This is because
-//    these errors are not deterministic Transaction-domain errors that a
-//    transaction must adhere to for correctness such as conditional-put errors or
-//    other symptoms of constraint violations. These kinds of errors are all
-//    discovered during write *evaluation*, which an async write will perform
-//    synchronously before consensus. Any error during consensus is outside of the
-//    Transaction-domain and can always trigger a transaction retry.
+//  1. requests proposed to Raft will not necessarily succeed. For any number of
+//     reasons, the request may make it through Raft and be discarded or fail to
+//     ever even be replicated. A transaction must check that all async writes
+//     succeeded before committing. However, when these proposals do fail, their
+//     errors aren't particularly interesting to a transaction. This is because
+//     these errors are not deterministic Transaction-domain errors that a
+//     transaction must adhere to for correctness such as conditional-put errors or
+//     other symptoms of constraint violations. These kinds of errors are all
+//     discovered during write *evaluation*, which an async write will perform
+//     synchronously before consensus. Any error during consensus is outside of the
+//     Transaction-domain and can always trigger a transaction retry.
 //
-// 2. transport layers beneath the txnPipeliner do not provide strong enough
-//    ordering guarantees between concurrent requests in the same transaction to
-//    avoid needing explicit chaining. For instance, DistSender uses unary gRPC
-//    requests instead of gRPC streams, so it can't natively expose strong ordering
-//    guarantees. Perhaps more importantly, even when a command has acquired latches
-//    and evaluated on a Replica, it is not guaranteed to be applied before
-//    interfering commands. This is because the command may be retried outside of
-//    the serialization of the spanlatch manager for any number of reasons, such as
-//    leaseholder changes. When the command re-acquired its latches, it's possible
-//    that interfering commands may jump ahead of it. To combat this, the
-//    txnPipeliner uses chaining to throw an error when these re-orderings would
-//    have affected the order that transactional requests evaluate in.
+//  2. transport layers beneath the txnPipeliner do not provide strong enough
+//     ordering guarantees between concurrent requests in the same transaction to
+//     avoid needing explicit chaining. For instance, DistSender uses unary gRPC
+//     requests instead of gRPC streams, so it can't natively expose strong ordering
+//     guarantees. Perhaps more importantly, even when a command has acquired latches
+//     and evaluated on a Replica, it is not guaranteed to be applied before
+//     interfering commands. This is because the command may be retried outside of
+//     the serialization of the spanlatch manager for any number of reasons, such as
+//     leaseholder changes. When the command re-acquired its latches, it's possible
+//     that interfering commands may jump ahead of it. To combat this, the
+//     txnPipeliner uses chaining to throw an error when these re-orderings would
+//     have affected the order that transactional requests evaluate in.
 //
 // The interceptor proves all in-flight writes before explicitly committing a
 // transaction by tacking on a QueryIntent request for each one to the front of
@@ -161,28 +161,28 @@ var rejectTxnOverTrackedWritesBudget = settings.RegisterBoolSetting(
 // possible, even if no other overlapping requests force them to be proven. The
 // approaches are:
 //
-// 1. launch a background process after each successful async write to query its
-//    intents and wait for it to succeed. This would effectively solve the issue,
-//    but at the cost of many more goroutines and many more QueryIntent requests,
-//    most of which would be redundant because their corresponding write wouldn't
-//    complete until after an EndTxn synchronously needed to prove them anyway.
+//  1. launch a background process after each successful async write to query its
+//     intents and wait for it to succeed. This would effectively solve the issue,
+//     but at the cost of many more goroutines and many more QueryIntent requests,
+//     most of which would be redundant because their corresponding write wouldn't
+//     complete until after an EndTxn synchronously needed to prove them anyway.
 //
-// 2. to address the issue of an unbounded number of background goroutines
-//    proving writes in approach 1, a single background goroutine could be run
-//    that repeatedly loops over all in-flight writes and attempts to prove
-//    them. This approach was used in an early revision of #26599 and has the nice
-//    property that only one batch of QueryIntent requests is ever active at a
-//    given time. It may be revisited, but for now it is not used for the same
-//    reason as approach 1: most of its QueryIntent requests will be useless
-//    because a transaction will send an EndTxn immediately after sending all
-//    of its writes.
+//  2. to address the issue of an unbounded number of background goroutines
+//     proving writes in approach 1, a single background goroutine could be run
+//     that repeatedly loops over all in-flight writes and attempts to prove
+//     them. This approach was used in an early revision of #26599 and has the nice
+//     property that only one batch of QueryIntent requests is ever active at a
+//     given time. It may be revisited, but for now it is not used for the same
+//     reason as approach 1: most of its QueryIntent requests will be useless
+//     because a transaction will send an EndTxn immediately after sending all
+//     of its writes.
 //
-// 3. turn the KV interface into a streaming protocol (#8360) that could support
-//    returning multiple results. This would allow clients to return immediately
-//    after a writes "evaluation" phase completed but hold onto a handle to the
-//    request and be notified immediately after its "replication" phase completes.
-//    This would allow txnPipeliner to prove in-flight writes immediately after
-//    they finish consensus without any extra RPCs.
+//  3. turn the KV interface into a streaming protocol (#8360) that could support
+//     returning multiple results. This would allow clients to return immediately
+//     after a writes "evaluation" phase completed but hold onto a handle to the
+//     request and be notified immediately after its "replication" phase completes.
+//     This would allow txnPipeliner to prove in-flight writes immediately after
+//     they finish consensus without any extra RPCs.
 //
 // So far, none of these approaches have been integrated.
 //

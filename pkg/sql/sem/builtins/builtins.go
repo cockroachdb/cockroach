@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -96,7 +95,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/knz/strtime"
-	"github.com/lib/pq/oid"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -161,28 +159,7 @@ func arrayProps() tree.FunctionProperties {
 	return tree.FunctionProperties{Category: builtinconstants.CategoryArray}
 }
 
-// builtinFuncOIDCnt is used as a counter to assign OIDs to builtin function
-// overloads. OIDs are assigned in the order of overloads being initialized by
-// go. That is, OIDs are given by alphabetical order of the file name a function
-// is declared and the order of tree.Overload is declared in that file. So
-// changing file names or function declaration position will change OIDs.
-var builtinFuncOIDCnt = 0
-
-// Please always use this function to creat builtinDefinition instead of
-// construct it directly. Otherwise, the new builtin function will not have an
-// OID.
 func makeBuiltin(props tree.FunctionProperties, overloads ...tree.Overload) builtinDefinition {
-	for i := range overloads {
-		builtinFuncOIDCnt++
-		if builtinFuncOIDCnt > oidext.CockroachPredefinedOIDMax {
-			panic(
-				errors.AssertionFailedf(
-					"builtin function oid exceeds maximum predefined oid %d", oidext.CockroachPredefinedOIDMax,
-				),
-			)
-		}
-		overloads[i].Oid = oid.Oid(builtinFuncOIDCnt)
-	}
 	return builtinDefinition{
 		props:     props,
 		overloads: overloads,
@@ -207,7 +184,7 @@ func mustBeDIntInTenantRange(e tree.Expr) (tree.DInt, error) {
 	return tenID, nil
 }
 
-func initRegularBuiltins() {
+func init() {
 	for k, v := range regularBuiltins {
 		registerBuiltin(k, v)
 	}
@@ -3013,7 +2990,7 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
-	"row_to_json": makeBuiltin(defProps(),
+	"row_to_json": makeBuiltin(jsonProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"row", types.AnyTuple}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
@@ -5230,7 +5207,8 @@ value if you rely on the HLC for accuracy.`,
 
 	"crdb_internal.trim_tenant_prefix": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:     builtinconstants.CategoryMultiTenancy,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5275,7 +5253,8 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.tenant_span": makeBuiltin(
 		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
+			Category:     builtinconstants.CategoryMultiTenancy,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -6133,7 +6112,10 @@ value if you rely on the HLC for accuracy.`,
 
 	// Returns true iff the given sqlliveness session is not expired.
 	"crdb_internal.sql_liveness_is_alive": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryMultiTenancy},
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategorySystemInfo,
+			Undocumented: true,
+		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"session_id", types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -6145,7 +6127,7 @@ value if you rely on the HLC for accuracy.`,
 				}
 				return tree.MakeDBool(tree.DBool(live)), nil
 			},
-			Info:       "Checks is given sqlliveness session id is not expired",
+			Info:       "Checks if given sqlliveness session id is not expired",
 			Volatility: volatility.Stable,
 		},
 	),

@@ -51,7 +51,7 @@ func (c *CustomFuncs) ConstructNonLeftJoin(
 
 // SimplifyNotNullEquality simplifies an expression of the following form:
 //
-//   (Is | IsNot (Eq) (True | False | Null))
+//	(Is | IsNot (Eq) (True | False | Null))
 //
 // in the case where the Eq expression is guaranteed to never result in null.
 // The testOp argument must be IsOp or IsNotOp, and the constOp argument must be
@@ -137,7 +137,10 @@ func (c *CustomFuncs) canMapJoinOpEquivalenceGroup(
 	found := 0
 	for i := range filters {
 		fd := &filters[i].ScalarProps().FuncDeps
-		filterEqCols := fd.ComputeEquivClosure(fd.EquivReps())
+
+		// Note that EquivReps creates a new ColSet, so it is safe to modify it
+		// in-place with ComputeEquivClosureNoCopy.
+		filterEqCols := fd.ComputeEquivClosureNoCopy(fd.EquivReps())
 		if filterEqCols.Intersects(leftCols) && filterEqCols.Intersects(rightCols) &&
 			filterEqCols.SubsetOf(eqCols) {
 			found++
@@ -186,15 +189,14 @@ func (c *CustomFuncs) MapJoinOpEqualities(
 // there is a single condition with one left column and one right column.
 // For example, consider this query:
 //
-//   SELECT * FROM a, b WHERE a.x = b.x AND a.x = a.y AND a.y = b.y
+//	SELECT * FROM a, b WHERE a.x = b.x AND a.x = a.y AND a.y = b.y
 //
 // It has an equivalence group {a.x, a.y, b.x, b.y}. The columns a.x and a.y
 // are on the left side, and b.x and b.y are on the right side. Initially there
 // are two conditions that cross both sides. After mapping, the query would be
 // converted to:
 //
-//   SELECT * FROM a, b WHERE a.x = a.y AND b.x = b.y AND a.x = b.x
-//
+//	SELECT * FROM a, b WHERE a.x = a.y AND b.x = b.y AND a.x = b.x
 func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
 	filters memo.FiltersExpr,
 	col opt.ColumnID,
@@ -207,7 +209,10 @@ func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
 	newFilters := make(memo.FiltersExpr, 0, len(filters))
 	for i := range filters {
 		fd := &filters[i].ScalarProps().FuncDeps
-		filterEqCols := fd.ComputeEquivClosure(fd.EquivReps())
+
+		// Note that EquivReps creates a new ColSet, so it is safe to modify it
+		// in-place with ComputeEquivClosureNoCopy.
+		filterEqCols := fd.ComputeEquivClosureNoCopy(fd.EquivReps())
 		if !filterEqCols.Empty() && filterEqCols.SubsetOf(eqCols) {
 			continue
 		}
@@ -267,7 +272,7 @@ func (c *CustomFuncs) mapJoinOpEquivalenceGroup(
 //
 // For example, consider this query:
 //
-//   SELECT * FROM a INNER JOIN b ON a.x=b.x AND a.x + b.y = 5
+//	SELECT * FROM a INNER JOIN b ON a.x=b.x AND a.x + b.y = 5
 //
 // Since there is an equality predicate on a.x=b.x, it is possible to map
 // a.x + b.y = 5 to b.x + b.y = 5, and that allows the filter to be pushed down
@@ -319,7 +324,7 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 //
 // For example, consider this query:
 //
-//   SELECT * FROM a INNER JOIN b ON a.x=b.x AND a.x + b.y = 5
+//	SELECT * FROM a INNER JOIN b ON a.x=b.x AND a.x + b.y = 5
 //
 // If MapJoinOpFilter is called with src as a.x + b.y = 5 and dst as (Scan b),
 // it returns b.x + b.y = 5. MapJoinOpFilter should not be called with the
@@ -390,16 +395,16 @@ func (c *CustomFuncs) MapJoinOpFilter(
 // In general, replacing composite columns with "equivalent" (equal) columns
 // might change the result of an expression. For example, consider this query:
 //
-//   SELECT * FROM
-//     (VALUES (1.0)) AS t1(x),
-//     (VALUES (1.00)) AS t2(y)
-//   WHERE x=y AND x::text = '1.0';
+//	SELECT * FROM
+//	  (VALUES (1.0)) AS t1(x),
+//	  (VALUES (1.00)) AS t2(y)
+//	WHERE x=y AND x::text = '1.0';
 //
 // It should return the following result:
 //
-//     x  |  y
-//   -----+------
-//    1.0 | 1.00
+//	  x  |  y
+//	-----+------
+//	 1.0 | 1.00
 //
 // But if we use the equality predicate x=y to map x to y and infer an
 // additional filter y::text = '1.0', the query would return nothing.

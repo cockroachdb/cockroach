@@ -20,6 +20,7 @@ go_test(
     name = "keysutils_test",
     size = "small",
     srcs = ["pretty_scanner_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":keysutils"],
     deps = [
         "//pkg/keys",

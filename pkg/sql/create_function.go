@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type createFunctionNode struct {
@@ -58,24 +60,46 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
 	}
 
-	scDesc, err := params.p.descCollection.GetMutableSchemaByName(
-		params.ctx, params.p.Txn(), n.dbDesc, n.scDesc.GetName(),
-		tree.SchemaLookupFlags{Required: true, RequireMutable: true},
+	for _, dep := range n.planDeps {
+		if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
+			return pgerror.Newf(pgcode.FeatureNotSupported, "the function cannot refer to other databases")
+		}
+	}
+
+	mutFlags := tree.SchemaLookupFlags{Required: true, RequireMutable: true}
+	mutScDesc, err := params.p.descCollection.GetMutableSchemaByName(
+		params.ctx, params.p.Txn(), n.dbDesc, n.scDesc.GetName(), mutFlags,
 	)
 	if err != nil {
 		return err
 	}
-	mutScDesc := scDesc.(*schemadesc.Mutable)
 
-	udfMutableDesc, isNew, err := n.getMutableFuncDesc(mutScDesc, params)
-	if err != nil {
-		return err
-	}
+	var retErr error
+	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
+		retErr = func() error {
+			udfMutableDesc, isNew, err := n.getMutableFuncDesc(mutScDesc, params)
+			if err != nil {
+				return err
+			}
 
-	if isNew {
-		return n.createNewFunction(udfMutableDesc, mutScDesc, params)
-	}
-	return n.replaceFunction(udfMutableDesc, params)
+			fnName := tree.MakeQualifiedFunctionName(n.dbDesc.GetName(), n.scDesc.GetName(), n.cf.FuncName.String())
+			event := eventpb.CreateFunction{
+				FunctionName: fnName.FQString(),
+				IsReplace:    !isNew,
+			}
+			if isNew {
+				err = n.createNewFunction(udfMutableDesc, mutScDesc, params)
+			} else {
+				err = n.replaceFunction(udfMutableDesc, params)
+			}
+			if err != nil {
+				return err
+			}
+			return params.p.logEvent(params.ctx, udfMutableDesc.GetID(), &event)
+		}()
+	})
+
+	return retErr
 }
 
 func (*createFunctionNode) Next(params runParams) (bool, error) { return false, nil }
@@ -404,7 +428,11 @@ func setFuncOption(params runParams, udfDesc *funcdesc.Mutable, option tree.Func
 		if err != nil {
 			return err
 		}
-		udfDesc.SetFuncBody(seqReplacedFuncBody)
+		typeReplacedFuncBody, err := serializeUserDefinedTypes(params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */)
+		if err != nil {
+			return err
+		}
+		udfDesc.SetFuncBody(typeReplacedFuncBody)
 	default:
 		return pgerror.Newf(pgcode.InvalidParameterValue, "Unknown function option %q", t)
 	}

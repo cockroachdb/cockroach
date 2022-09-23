@@ -25,6 +25,7 @@ go_test(
         "context_test.go",
         "timeout_error_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":contextutil"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",

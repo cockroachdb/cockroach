@@ -31,6 +31,7 @@ go_test(
     name = "scrun_test",
     size = "small",
     srcs = ["make_state_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":scrun"],
     deps = [
         "//pkg/jobs/jobspb",

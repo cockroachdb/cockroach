@@ -19,7 +19,7 @@ type TestingKnobs struct {
 	// BeforeScanRequest is a callback invoked before issuing Scan request.
 	BeforeScanRequest func(b *kv.Batch) error
 	// OnRangeFeedValue invoked when rangefeed receives a value.
-	OnRangeFeedValue func(kv roachpb.KeyValue) error
+	OnRangeFeedValue func() error
 	// ShouldSkipCheckpoint invoked when rangefed receives a checkpoint.
 	// Returns true if checkpoint should be skipped.
 	ShouldSkipCheckpoint func(*roachpb.RangeFeedCheckpoint) bool

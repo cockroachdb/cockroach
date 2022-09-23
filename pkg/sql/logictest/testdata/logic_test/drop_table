@@ -1,3 +1,5 @@
+# LogicTest: default-configs local-mixed-22.1-22.2
+
 statement ok
 CREATE TABLE a (id INT PRIMARY KEY)
 
@@ -30,6 +32,7 @@ DROP TABLE a
 # run by an unrelated startup migration.
 # TODO (lucy): Update this if/when we decide to change how these jobs queued by
 # the startup migration are handled.
+skipif config local-mixed-22.1-22.2
 query TT
 SELECT replace(job_type, 'NEW SCHEMA CHANGE', 'SCHEMA CHANGE'), status
   FROM [SHOW JOBS]

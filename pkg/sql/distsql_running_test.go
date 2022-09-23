@@ -293,6 +293,12 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 		// events.
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
+
+		// Disable sampling so that only our query (below) gets a trace.
+		// Otherwise, we're subject to flakes when internal queries experience contention.
+		_, err := db.Exec("SET CLUSTER SETTING sql.txn_stats.sample_rate = 0")
+		require.NoError(t, err)
+
 		sqlutils.CreateTable(
 			t, db, "test", "x INT PRIMARY KEY", 1, sqlutils.ToRowFn(sqlutils.RowIdxFn),
 		)

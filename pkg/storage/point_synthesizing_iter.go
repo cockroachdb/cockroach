@@ -45,13 +45,13 @@ var pointSynthesizingIterPool = sync.Pool{
 // The relative positioning of pointSynthesizingIter and the underlying iterator
 // is as follows in the forward direction:
 //
-// - atPoint=true: rangeKeysIdx points to a range key following the point key,
-//   or beyond rangeKeysEnd when there are no further range keys at this
-//   key position.
+//   - atPoint=true: rangeKeysIdx points to a range key following the point key,
+//     or beyond rangeKeysEnd when there are no further range keys at this
+//     key position.
 //
-// - atPoint=false: the underlying iterator is on a following key or exhausted.
-//   This can either be a different version of the current key or a different
-//   point/range key.
+//   - atPoint=false: the underlying iterator is on a following key or exhausted.
+//     This can either be a different version of the current key or a different
+//     point/range key.
 //
 // This positioning is mirrored in the reverse direction. For example, when
 // atPoint=true and rangeKeys are exhausted, rangeKeysIdx will be rangeKeysEnd
@@ -576,20 +576,22 @@ func (i *pointSynthesizingIter) Prev() {
 
 // Valid implements MVCCIterator.
 func (i *pointSynthesizingIter) Valid() (bool, error) {
-	if util.RaceEnabled {
+	valid := i.iterValid ||
+		// On synthetic point key.
+		(i.iterErr == nil && !i.atPoint && i.rangeKeysIdx >= 0 && i.rangeKeysIdx < i.rangeKeysEnd)
+
+	if util.RaceEnabled && valid {
 		if err := i.assertInvariants(); err != nil {
 			panic(err)
 		}
 	}
-	if i.iterErr == nil && !i.atPoint && i.rangeKeysIdx >= 0 && i.rangeKeysIdx < i.rangeKeysEnd {
-		return true, nil // on synthetic point key
-	}
-	return i.iterValid, i.iterErr
+
+	return valid, i.iterErr
 }
 
 // Key implements MVCCIterator.
 func (i *pointSynthesizingIter) Key() MVCCKey {
-	return i.iterKey.Clone()
+	return i.UnsafeKey().Clone()
 }
 
 // UnsafeKey implements MVCCIterator.
@@ -611,7 +613,7 @@ func (i *pointSynthesizingIter) UnsafeRawKey() []byte {
 	if i.atPoint {
 		return i.iter.UnsafeRawKey()
 	}
-	return EncodeMVCCKeyPrefix(i.rangeKeysPos)
+	return EncodeMVCCKey(i.UnsafeKey())
 }
 
 // UnsafeRawMVCCKey implements MVCCIterator.
@@ -683,13 +685,13 @@ func (i *pointSynthesizingIter) IsPrefix() bool {
 	return i.prefix
 }
 
-// SupportsPrev implements MVCCIterator.
-func (i *pointSynthesizingIter) SupportsPrev() bool {
-	return i.iter.SupportsPrev()
-}
-
-// assertInvariants asserts iterator invariants.
+// assertInvariants asserts iterator invariants. The iterator must be valid.
 func (i *pointSynthesizingIter) assertInvariants() error {
+	// Check general MVCCIterator API invariants.
+	if err := assertMVCCIteratorInvariants(i); err != nil {
+		return err
+	}
+
 	// If the underlying iterator has errored, make sure we're not positioned on a
 	// synthetic point such that Valid() will surface the error.
 	if _, err := i.iter.Valid(); err != nil {

@@ -548,7 +548,7 @@ func (dn *dockerNode) execSQLQuery(
 	return res, nil
 }
 
-//rmContainer performs a forced deletion of the current container.
+// rmContainer performs a forced deletion of the current container.
 func (dn *dockerNode) rmContainer(ctx context.Context) error {
 	if err := dn.cl.ContainerRemove(ctx, dn.contID, types.ContainerRemoveOptions{
 		Force: true,

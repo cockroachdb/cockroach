@@ -19,9 +19,9 @@ import (
 //
 // Immediately after parsing, the following types can occur:
 //
-// - UnqualifiedStar: a naked star as argument to a function, e.g. count(*),
-//   or at the top level of a SELECT clause.
-//   See also uses of StarExpr() and StarSelectExpr() in the grammar.
+//   - UnqualifiedStar: a naked star as argument to a function, e.g. count(*),
+//     or at the top level of a SELECT clause.
+//     See also uses of StarExpr() and StarSelectExpr() in the grammar.
 //
 // - UnresolvedName: other names of the form `a.b....e` or `a.b...e.*`.
 //

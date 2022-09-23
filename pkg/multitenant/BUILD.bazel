@@ -6,7 +6,6 @@ go_library(
     srcs = [
         "constants.go",
         "cost_controller.go",
-        "cost_controlling_io.go",
         "doc.go",
         "tenant_usage.go",
     ],
@@ -14,13 +13,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/cloud",
         "//pkg/kv",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
-        "//pkg/settings",
         "//pkg/sql/sqlliveness",
-        "//pkg/util/ioctx",
         "//pkg/util/metric",
         "//pkg/util/stop",
     ],

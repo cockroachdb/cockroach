@@ -27,11 +27,11 @@ graph when it is created to specify its State graph. Since the Transition graph
 is itself state-less, multiple Machines can be powered by the same graph
 simultaneously. The Machine has an Apply(Event) method, which applies the
 provided event to its current state. This does two things:
-1. It may move the current State to a new State, according to the Transitions
-   graph.
-2. It may apply an Action function on the Machine's ExtendedState, which is
-   extra state in a Machine that does not contribute to state transition
-   decisions, but that can be affected by a state transition.
+ 1. It may move the current State to a new State, according to the Transitions
+    graph.
+ 2. It may apply an Action function on the Machine's ExtendedState, which is
+    extra state in a Machine that does not contribute to state transition
+    decisions, but that can be affected by a state transition.
 
 See example_test.go for a full working example of a state machine with an
 associated set of states and events.
@@ -41,19 +41,19 @@ declaring this literal, be careful to not declare two equal keys: they'll result
 in the second overwriting the first with no warning because of how Go deals with
 map literals. Note that keys that are not technically equal, but where one is a
 superset of the other, will work as intended. E.g. the following is permitted:
- Compile(Pattern{
-   stateOpen{retryIntent: Any} {
-     eventTxnFinish{}: {...}
-   }
-   stateOpen{retryIntent: True} {
-     eventRetriableErr{}: {...}
-   }
+
+	Compile(Pattern{
+	  stateOpen{retryIntent: Any} {
+	    eventTxnFinish{}: {...}
+	  }
+	  stateOpen{retryIntent: True} {
+	    eventRetriableErr{}: {...}
+	  }
 
 Members of this package are accessed frequently when implementing a state
 machine. For that reason, it is encouraged to dot-import this package in the
 file with the transitions Pattern. The respective file should be kept small and
 named <name>_fsm.go; our linter doesn't complain about dot-imports in such
 files.
-
 */
 package fsm

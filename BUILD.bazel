@@ -98,6 +98,9 @@ exports_files([
 # gazelle:exclude pkg/ui/node_modules
 # gazelle:exclude pkg/ui/workspaces/cluster-ui/node_modules
 # gazelle:exclude pkg/ui/workspaces/db-console/node_modules
+# gazelle:exclude pkg/ui/workspaces/db-console/src/js/node_modules
+# gazelle:exclude pkg/ui/workspaces/e2e-tests/node_modules
+# gazelle:exclude pkg/ui/workspaces/eslint-plugin-crdb/node_modules
 # gazelle:exclude vendor
 # gazelle:exclude .vendor.tmp.*
 # gazelle:exclude **/zcgo_flags.go

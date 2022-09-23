@@ -16,6 +16,7 @@ go_test(
     name = "cache_test",
     size = "small",
     srcs = ["cache_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":cache"],
     deps = [
         "//pkg/util/log",

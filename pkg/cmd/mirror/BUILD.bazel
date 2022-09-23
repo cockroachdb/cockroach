@@ -32,6 +32,7 @@ go_binary(
 go_test(
     name = "mirror_test",
     srcs = ["mirror_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":mirror_lib"],
     deps = ["@com_github_stretchr_testify//require"],
 )

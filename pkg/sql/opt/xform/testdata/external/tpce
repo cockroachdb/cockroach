@@ -80,17 +80,15 @@ sort
       │    │    │    │    │    │    ├── key columns: [41] = [21]
       │    │    │    │    │    │    ├── lookup columns are key
       │    │    │    │    │    │    ├── fd: (21)-->(26), (47)-->(49), (44)==(47), (47)==(44), (21)==(41), (41)==(21)
-      │    │    │    │    │    │    ├── inner-join (lookup broker@broker_b_name_idx)
+      │    │    │    │    │    │    ├── inner-join (lookup broker)
       │    │    │    │    │    │    │    ├── columns: tr_s_symb:41!null tr_qty:42!null tr_bid_price:43!null tr_b_id:44!null b_id:47!null b_name:49!null
-      │    │    │    │    │    │    │    ├── lookup expression
-      │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │         ├── b_name:49 IN ('Broker1', 'Broker10', 'Broker11', 'Broker12', 'Broker13', 'Broker14', 'Broker15', 'Broker16', 'Broker17', 'Broker18', 'Broker19', 'Broker2', 'Broker20', 'Broker21', 'Broker22', 'Broker23', 'Broker24', 'Broker25', 'Broker26', 'Broker27', 'Broker28', 'Broker29', 'Broker3', 'Broker30', 'Broker4', 'Broker5', 'Broker6', 'Broker7', 'Broker8', 'Broker9') [outer=(49), constraints=(/49: [/'Broker1' - /'Broker1'] [/'Broker10' - /'Broker10'] [/'Broker11' - /'Broker11'] [/'Broker12' - /'Broker12'] [/'Broker13' - /'Broker13'] [/'Broker14' - /'Broker14'] [/'Broker15' - /'Broker15'] [/'Broker16' - /'Broker16'] [/'Broker17' - /'Broker17'] [/'Broker18' - /'Broker18'] [/'Broker19' - /'Broker19'] [/'Broker2' - /'Broker2'] [/'Broker20' - /'Broker20'] [/'Broker21' - /'Broker21'] [/'Broker22' - /'Broker22'] [/'Broker23' - /'Broker23'] [/'Broker24' - /'Broker24'] [/'Broker25' - /'Broker25'] [/'Broker26' - /'Broker26'] [/'Broker27' - /'Broker27'] [/'Broker28' - /'Broker28'] [/'Broker29' - /'Broker29'] [/'Broker3' - /'Broker3'] [/'Broker30' - /'Broker30'] [/'Broker4' - /'Broker4'] [/'Broker5' - /'Broker5'] [/'Broker6' - /'Broker6'] [/'Broker7' - /'Broker7'] [/'Broker8' - /'Broker8'] [/'Broker9' - /'Broker9']; tight)]
-      │    │    │    │    │    │    │    │         └── tr_b_id:44 = b_id:47 [outer=(44,47), constraints=(/44: (/NULL - ]; /47: (/NULL - ]), fd=(44)==(47), (47)==(44)]
+      │    │    │    │    │    │    │    ├── key columns: [44] = [47]
       │    │    │    │    │    │    │    ├── lookup columns are key
       │    │    │    │    │    │    │    ├── fd: (47)-->(49), (44)==(47), (47)==(44)
       │    │    │    │    │    │    │    ├── scan trade_request@trade_request_tr_b_id_tr_s_symb_idx
       │    │    │    │    │    │    │    │    └── columns: tr_s_symb:41!null tr_qty:42!null tr_bid_price:43!null tr_b_id:44!null
-      │    │    │    │    │    │    │    └── filters (true)
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── b_name:49 IN ('Broker1', 'Broker10', 'Broker11', 'Broker12', 'Broker13', 'Broker14', 'Broker15', 'Broker16', 'Broker17', 'Broker18', 'Broker19', 'Broker2', 'Broker20', 'Broker21', 'Broker22', 'Broker23', 'Broker24', 'Broker25', 'Broker26', 'Broker27', 'Broker28', 'Broker29', 'Broker3', 'Broker30', 'Broker4', 'Broker5', 'Broker6', 'Broker7', 'Broker8', 'Broker9') [outer=(49), constraints=(/49: [/'Broker1' - /'Broker1'] [/'Broker10' - /'Broker10'] [/'Broker11' - /'Broker11'] [/'Broker12' - /'Broker12'] [/'Broker13' - /'Broker13'] [/'Broker14' - /'Broker14'] [/'Broker15' - /'Broker15'] [/'Broker16' - /'Broker16'] [/'Broker17' - /'Broker17'] [/'Broker18' - /'Broker18'] [/'Broker19' - /'Broker19'] [/'Broker2' - /'Broker2'] [/'Broker20' - /'Broker20'] [/'Broker21' - /'Broker21'] [/'Broker22' - /'Broker22'] [/'Broker23' - /'Broker23'] [/'Broker24' - /'Broker24'] [/'Broker25' - /'Broker25'] [/'Broker26' - /'Broker26'] [/'Broker27' - /'Broker27'] [/'Broker28' - /'Broker28'] [/'Broker29' - /'Broker29'] [/'Broker3' - /'Broker3'] [/'Broker30' - /'Broker30'] [/'Broker4' - /'Broker4'] [/'Broker5' - /'Broker5'] [/'Broker6' - /'Broker6'] [/'Broker7' - /'Broker7'] [/'Broker8' - /'Broker8'] [/'Broker9' - /'Broker9']; tight)]
       │    │    │    │    │    │    └── filters (true)
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters (true)

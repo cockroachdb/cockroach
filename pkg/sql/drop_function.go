@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -126,8 +127,8 @@ func (p *planner) matchUDF(
 	}
 	if !ol.IsUDF {
 		return nil, errors.Errorf(
-			"cannot drop function %s because it is required by the database system",
-			ol.Signature(true /*Simplify*/),
+			"cannot drop function %s%s because it is required by the database system",
+			fnDef.Name, ol.Signature(true /*Simplify*/),
 		)
 	}
 	return &ol, nil
@@ -229,7 +230,12 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 
 	// Mark the UDF as dropped.
 	fnMutable.SetDropped()
-	return p.writeFuncSchemaChange(ctx, fnMutable)
+	if err := p.writeFuncSchemaChange(ctx, fnMutable); err != nil {
+		return err
+	}
+	fnName := tree.MakeQualifiedFunctionName(p.CurrentDatabase(), scDesc.GetName(), fnMutable.GetName())
+	event := eventpb.DropFunction{FunctionName: fnName.FQString()}
+	return p.logEvent(ctx, fnMutable.GetID(), &event)
 }
 
 func (p *planner) writeFuncDesc(ctx context.Context, funcDesc *funcdesc.Mutable) error {

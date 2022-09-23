@@ -57,7 +57,9 @@ func (b *Builder) analyzeOrderBy(
 // Since the ordering property can only refer to output columns, we may need
 // to add a projection for the ordering columns. For example, consider the
 // following query:
-//     SELECT a FROM t ORDER BY c
+//
+//	SELECT a FROM t ORDER BY c
+//
 // The `c` column must be retained in the projection (and the presentation
 // property then omits it).
 //

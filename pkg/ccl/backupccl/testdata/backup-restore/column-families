@@ -50,12 +50,3 @@ query-sql
 SELECT max(length(start_key)) FROM [SHOW RANGES FROM TABLE orig.cfs];
 ----
 2
-
-# Regression test for #67488.
-# This can return up to 6 if RESTORE improperly splits the ranges in the middle
-# of a SQL row since column family keys are longer. E.g. Keys are expected to be
-# of the form '/1' (row with PK 1), and not '/3/1/1' (row with PK 3, and CF 1).
-query-sql
-SELECT max(length(start_key)) FROM [SHOW RANGES FROM TABLE r1.cfs];
-----
-2

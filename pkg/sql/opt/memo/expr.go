@@ -38,12 +38,12 @@ import (
 // in the same memo group are linked together in a list that can be traversed
 // via calls to FirstExpr and NextExpr:
 //
-//      +--------------------------------------+
-//      |  +---------------+                   |
-//      |  |               |FirstExpr          |FirstExpr
-//      v  v               |                   |
-//    member #1 -------> member #2 --------> member #3 -------> nil
-//              NextExpr           NextExpr            NextExpr
+//	  +--------------------------------------+
+//	  |  +---------------+                   |
+//	  |  |               |FirstExpr          |FirstExpr
+//	  v  v               |                   |
+//	member #1 -------> member #2 --------> member #3 -------> nil
+//	          NextExpr           NextExpr            NextExpr
 //
 // A relational expression's physical properties and cost are defined once it
 // has been optimized.
@@ -155,8 +155,7 @@ var CountRowsSingleton = &CountRowsExpr{}
 // TrueFilter is a global instance of the empty FiltersExpr, used in situations
 // where the filter should always evaluate to true:
 //
-//   SELECT * FROM a INNER JOIN b ON True
-//
+//	SELECT * FROM a INNER JOIN b ON True
 var TrueFilter = FiltersExpr{}
 
 // EmptyTuple is a global instance of a TupleExpr that contains no elements.
@@ -167,8 +166,7 @@ var EmptyTuple = &TupleExpr{Typ: types.EmptyTuple}
 // a TupleExpr that contains no elements. It's used when constructing an empty
 // ValuesExpr:
 //
-//   SELECT 1
-//
+//	SELECT 1
 var ScalarListWithEmptyTuple = ScalarListExpr{EmptyTuple}
 
 // EmptyGroupingPrivate is a global instance of a GroupingPrivate that has no

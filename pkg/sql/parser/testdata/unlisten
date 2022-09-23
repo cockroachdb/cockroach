@@ -1,0 +1,15 @@
+parse
+UNLISTEN temp
+----
+UNLISTEN temp
+UNLISTEN temp -- fully parenthesized
+UNLISTEN temp -- literals removed
+UNLISTEN _ -- identifiers removed
+
+parse
+UNLISTEN *
+----
+UNLISTEN *  -- normalized!
+UNLISTEN *  -- fully parenthesized
+UNLISTEN *  -- literals removed
+UNLISTEN *  -- identifiers removed

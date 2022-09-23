@@ -15,7 +15,6 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -47,70 +46,78 @@ import (
 
 // How long to keep consistency checker checksums in-memory for collection.
 // Typically a long-poll waits for the result of the computation, so it's almost
-// immediately collected. However, the consistency checker synchronously
-// collects the first replica's checksum before all others, so if the first one
-// is slow the checksum may not be collected right away, and that first
-// consistency check can take a long time due to rate limiting and range size.
+// immediately collected.
+//
+// Up to 22.1, the consistency check initiator used to synchronously collect the
+// first replica's checksum before all others, so checksum collection requests
+// could arrive late if the first one was slow. Since 22.2, all requests are
+// parallel and likely arrive quickly.
+//
+// TODO(pavelkalinnikov): Consider removing GC behaviour in 23.1+, when all the
+// incoming requests are from 22.2+ nodes (hence arrive timely).
 const replicaChecksumGCInterval = time.Hour
 
 // fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
 // stats mismatch is the event in which
-// - the consistency checker finds that all replicas are consistent
-//   (i.e. byte-by-byte identical)
-// - the (identical) stats tracked in them do not correspond to a recomputation
-//   via the data, i.e. the stats were incorrect
-// - ContainsEstimates==false, i.e. the stats claimed they were correct.
+//   - the consistency checker finds that all replicas are consistent
+//     (i.e. byte-by-byte identical)
+//   - the (identical) stats tracked in them do not correspond to a recomputation
+//     via the data, i.e. the stats were incorrect
+//   - ContainsEstimates==false, i.e. the stats claimed they were correct.
 //
 // Before issuing the fatal error, the cluster bootstrap version is verified.
-// We know that old versions of CockroachDB sometimes violated this invariant,
-// but we want to exclude these violations, focusing only on cases in which we
-// know old CRDB versions (<19.1 at time of writing) were not involved.
+// Note that on clusters that originally got bootstrapped on older releases
+// (definitely 19.1, and likely also more recent ones) we know of the existence
+// of stats bugs, so it has to be expected to see the assertion fire there.
+//
+// This env var is intended solely for use in Cockroach Labs testing.
 var fatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_CONSISTENT_STATS", false)
 
 // replicaChecksum contains progress on a replica checksum computation.
 type replicaChecksum struct {
-	CollectChecksumResponse
-	// started is true if the checksum computation has started.
-	started bool
-	// If gcTimestamp is nonzero, GC this checksum after gcTimestamp. gcTimestamp
-	// is zero if and only if the checksum computation is in progress.
+	// started is closed when the checksum computation has started. If the start
+	// was successful, passes a function that can be used by the receiver to stop
+	// the computation, otherwise is closed immediately.
+	started chan context.CancelFunc
+	// result passes a single checksum computation result from the task.
+	// INVARIANT: result is written to or closed only if started is closed.
+	result chan CollectChecksumResponse
+	// A non-zero gcTimestamp means this tracker is "inactive", i.e. either the
+	// computation task completed/failed, or the checksum collection request
+	// returned. A tracker is deleted from the state when both participants have
+	// learnt about it, or gcTimestamp passes, whichever happens first.
 	gcTimestamp time.Time
-	// This channel is closed after the checksum is computed, and is used
-	// as a notification.
-	notify chan struct{}
 }
 
 // CheckConsistency runs a consistency check on the range. It first applies a
 // ComputeChecksum through Raft and then issues CollectChecksum commands to the
 // other replicas. These are inspected and a CheckConsistencyResponse is assembled.
 //
-// When args.Mode is CHECK_VIA_QUEUE and an inconsistency is detected and no
-// diff was requested, the consistency check will be re-run to collect a diff,
-// which is then printed before calling `log.Fatal`. This behavior should be
-// lifted to the consistency checker queue in the future.
+// When req.Mode is CHECK_VIA_QUEUE and an inconsistency is detected, the
+// consistency check will be re-run to collect a diff, which is then printed
+// before calling `log.Fatal`. This behavior should be lifted to the consistency
+// checker queue in the future.
 func (r *Replica) CheckConsistency(
-	ctx context.Context, args roachpb.CheckConsistencyRequest,
+	ctx context.Context, req roachpb.CheckConsistencyRequest,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	startKey := r.Desc().StartKey.AsRawKey()
-
-	checkArgs := roachpb.ComputeChecksumRequest{
-		RequestHeader: roachpb.RequestHeader{Key: startKey},
+	return r.checkConsistencyImpl(ctx, roachpb.ComputeChecksumRequest{
+		RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
 		Version:       batcheval.ReplicaChecksumVersion,
-		Snapshot:      args.WithDiff,
-		Mode:          args.Mode,
-		Checkpoint:    args.Checkpoint,
-		Terminate:     args.Terminate,
-	}
+		Mode:          req.Mode,
+	})
+}
 
+func (r *Replica) checkConsistencyImpl(
+	ctx context.Context, args roachpb.ComputeChecksumRequest,
+) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
 	isQueue := args.Mode == roachpb.ChecksumMode_CHECK_VIA_QUEUE
 
-	results, err := r.RunConsistencyCheck(ctx, checkArgs)
+	results, err := r.runConsistencyCheck(ctx, args)
 	if err != nil {
 		return roachpb.CheckConsistencyResponse{}, roachpb.NewError(err)
 	}
 
-	res := roachpb.CheckConsistencyResponse_Result{}
-	res.RangeID = r.RangeID
+	res := roachpb.CheckConsistencyResponse_Result{RangeID: r.RangeID}
 
 	shaToIdxs := map[string][]int{}
 	var missing []ConsistencyCheckResult
@@ -173,12 +180,23 @@ func (r *Replica) CheckConsistency(
 		}
 		res.Detail += buf.String()
 	} else {
+		// The Persisted stats are covered by the SHA computation, so if all the
+		// hashes match, we can take an arbitrary one that succeeded.
 		res.Detail += fmt.Sprintf("stats: %+v\n", results[0].Response.Persisted)
 	}
 	for _, result := range missing {
 		res.Detail += fmt.Sprintf("%s: error: %v\n", result.Replica, result.Err)
 	}
 
+	// NB: delta is examined only when minoritySHA == "", i.e. all the checksums
+	// match. It helps to further check that the recomputed MVCC stats match the
+	// stored stats.
+	//
+	// Both Persisted and Delta stats were computed deterministically from the
+	// data fed into the checksum, so if all checksums match, we can take the
+	// stats from an arbitrary replica that succeeded.
+	//
+	// TODO(pavelkalinnikov): Compare deltas to assert this assumption anyway.
 	delta := enginepb.MVCCStats(results[0].Response.Delta)
 	var haveDelta bool
 	{
@@ -187,7 +205,7 @@ func (r *Replica) CheckConsistency(
 		haveDelta = d2 != enginepb.MVCCStats{}
 	}
 
-	res.StartKey = []byte(startKey)
+	res.StartKey = []byte(args.Key)
 	res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT
 	if minoritySHA != "" {
 		res.Status = roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT
@@ -228,35 +246,10 @@ func (r *Replica) CheckConsistency(
 		if !haveDelta {
 			return resp, nil
 		}
-
 		if delta.ContainsEstimates <= 0 && fatalOnStatsMismatch {
 			// We just found out that the recomputation doesn't match the persisted stats,
 			// so ContainsEstimates should have been strictly positive.
-
-			var v roachpb.Version
-			if err := r.store.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return txn.GetProto(ctx, keys.BootstrapVersionKey, &v)
-			}); err != nil {
-				log.Infof(ctx, "while retrieving cluster bootstrap version: %s", err)
-				// Intentionally continue with the assumption that it's the current version.
-				v = r.store.cfg.Settings.Version.ActiveVersion(ctx).Version
-			}
-			// For clusters that ever ran <19.1, we're not so sure that the stats
-			// are consistent. Verify this only for clusters that started out on 19.1 or
-			// higher.
-			if !v.Less(roachpb.Version{Major: 19, Minor: 1}) {
-				// If version >= 19.1 but < 20.1-14 (AbortSpanBytes before its removal),
-				// we want to ignore any delta in AbortSpanBytes when comparing stats
-				// since older versions will not be tracking abort span bytes.
-				if v.Less(roachpb.Version{Major: 20, Minor: 1, Internal: 14}) {
-					delta.AbortSpanBytes = 0
-					haveDelta = delta != enginepb.MVCCStats{}
-				}
-				if !haveDelta {
-					return resp, nil
-				}
-				log.Fatalf(ctx, "found a delta of %+v", redact.Safe(delta))
-			}
+			log.Fatalf(ctx, "found a delta of %+v", redact.Safe(delta))
 		}
 
 		// We've found that there's something to correct; send an RecomputeStatsRequest. Note that this
@@ -266,18 +259,15 @@ func (r *Replica) CheckConsistency(
 		// essentially paced by the consistency checker so we won't call this too often.
 		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
-		req := roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: startKey},
-		}
-
 		var b kv.Batch
-		b.AddRawRequest(&req)
-
+		b.AddRawRequest(&roachpb.RecomputeStatsRequest{
+			RequestHeader: roachpb.RequestHeader{Key: args.Key},
+		})
 		err := r.store.db.Run(ctx, &b)
 		return resp, roachpb.NewError(err)
 	}
 
-	if args.WithDiff {
+	if args.Snapshot {
 		// A diff was already printed. Return because all the code below will do
 		// is request another consistency check, with a diff and with
 		// instructions to terminate the minority nodes.
@@ -285,10 +275,10 @@ func (r *Replica) CheckConsistency(
 		return resp, nil
 	}
 
-	// No diff was printed, so we want to re-run with diff.
-	// Note that this recursive call will be terminated in the `args.WithDiff`
-	// branch above.
-	args.WithDiff = true
+	// No diff was printed, so we want to re-run the check with snapshots
+	// requested, to build the diff. Note that this recursive call will be
+	// terminated in the `args.Snapshot` branch above.
+	args.Snapshot = true
 	args.Checkpoint = true
 	for _, idxs := range shaToIdxs[minoritySHA] {
 		args.Terminate = append(args.Terminate, results[idxs].Replica)
@@ -312,7 +302,7 @@ func (r *Replica) CheckConsistency(
 	// https://github.com/cockroachdb/cockroach/issues/36861
 	defer log.TemporarilyDisableFileGCForMainLogger()()
 
-	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
+	if _, pErr := r.checkConsistencyImpl(ctx, args); pErr != nil {
 		log.Errorf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
 	}
 
@@ -327,7 +317,7 @@ type ConsistencyCheckResult struct {
 }
 
 func (r *Replica) collectChecksumFromReplica(
-	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, checksum []byte,
+	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, withSnap bool,
 ) (CollectChecksumResponse, error) {
 	conn, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID, rpc.DefaultClass)
 	if err != nil {
@@ -339,7 +329,7 @@ func (r *Replica) collectChecksumFromReplica(
 		StoreRequestHeader: StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
 		RangeID:            r.RangeID,
 		ChecksumID:         id,
-		Checksum:           checksum,
+		WithSnapshot:       withSnap,
 	}
 	resp, err := client.CollectChecksum(ctx, req)
 	if err != nil {
@@ -348,11 +338,11 @@ func (r *Replica) collectChecksumFromReplica(
 	return *resp, nil
 }
 
-// RunConsistencyCheck carries out a round of CheckConsistency/CollectChecksum
+// runConsistencyCheck carries out a round of ComputeChecksum/CollectChecksum
 // for the members of this range, returning the results (which it does not act
-// upon). The first result will belong to the local replica, and in particular
-// there is a first result when no error is returned.
-func (r *Replica) RunConsistencyCheck(
+// upon). Requires that the computation succeeds on at least one replica, and
+// puts an arbitrary successful result first in the returned slice.
+func (r *Replica) runConsistencyCheck(
 	ctx context.Context, req roachpb.ComputeChecksumRequest,
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
@@ -363,73 +353,55 @@ func (r *Replica) RunConsistencyCheck(
 	}
 	ccRes := res.(*roachpb.ComputeChecksumResponse)
 
-	var orderedReplicas []roachpb.ReplicaDescriptor
-	{
-		desc := r.Desc()
-		localReplica, err := r.GetReplicaDescriptor()
-		if err != nil {
-			return nil, errors.Wrap(err, "could not get replica descriptor")
-		}
+	replicas := r.Desc().Replicas().Descriptors()
+	resultCh := make(chan ConsistencyCheckResult, len(replicas))
+	results := make([]ConsistencyCheckResult, 0, len(replicas))
 
-		// Move the local replica to the front (which makes it the "master"
-		// we're comparing against).
-		orderedReplicas = append(orderedReplicas, desc.Replicas().Descriptors()...)
-
-		sort.Slice(orderedReplicas, func(i, j int) bool {
-			return orderedReplicas[i] == localReplica
-		})
-	}
-
-	resultCh := make(chan ConsistencyCheckResult, len(orderedReplicas))
-	var results []ConsistencyCheckResult
 	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
 
-	for _, replica := range orderedReplicas {
+	defer close(resultCh) // close the channel when
+	defer wg.Wait()       // writers have terminated
+	defer cancel()        // but cancel them first
+	// P.S. Have you noticed the Haiku?
+
+	for _, replica := range replicas {
 		wg.Add(1)
 		replica := replica // per-iteration copy for the goroutine
 		if err := r.store.Stopper().RunAsyncTask(ctx, "storage.Replica: checking consistency",
 			func(ctx context.Context) {
 				defer wg.Done()
-
-				var masterChecksum []byte
-				if len(results) > 0 {
-					masterChecksum = results[0].Response.Checksum
-				}
-				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, req.Snapshot)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
 					Err:      err,
 				}
-			}); err != nil {
+			},
+		); err != nil {
+			// If we can't start tasks, the node is likely draining. Return the error
+			// verbatim, after all the started tasks are stopped.
 			wg.Done()
-			// If we can't start tasks, the node is likely draining. Just return the error verbatim.
 			return nil, err
 		}
-
-		// Collect the master result eagerly so that we can send a SHA in the
-		// remaining requests (this is used for logging inconsistencies on the
-		// remote nodes only).
-		if len(results) == 0 {
-			wg.Wait()
-			result := <-resultCh
-			if err := result.Err; err != nil {
-				// If we can't compute the local checksum, give up.
-				return nil, errors.Wrap(err, "computing own checksum")
-			}
-			results = append(results, result)
-		}
 	}
 
-	wg.Wait()
-	close(resultCh)
-
-	// Collect the remaining results.
+	// Collect the results from all replicas, while the tasks are running.
 	for result := range resultCh {
 		results = append(results, result)
+		// If it was the last request, don't wait on the channel anymore.
+		if len(results) == len(replicas) {
+			break
+		}
 	}
-
-	return results, nil
+	// Find any successful result, and put it first.
+	for i, res := range results {
+		if res.Err == nil {
+			results[0], results[i] = res, results[0]
+			return results, nil
+		}
+	}
+	return nil, errors.New("could not collect checksum from any replica")
 }
 
 func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
@@ -441,137 +413,122 @@ func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 	}
 }
 
-// getChecksum waits for the result of ComputeChecksum and returns it.
-// It returns false if there is no checksum being computed for the id,
-// or it has already been GCed.
-func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (replicaChecksum, error) {
-	now := timeutil.Now()
-	r.mu.Lock()
-	r.gcOldChecksumEntriesLocked(now)
-	c, ok := r.mu.checksums[id]
-	if !ok {
-		// TODO(tbg): we need to unconditionally set a gcTimestamp or this
-		// request can simply get stuck forever or cancel anyway and leak an
-		// entry in r.mu.checksums.
-		if d, dOk := ctx.Deadline(); dOk {
-			c.gcTimestamp = d
-		}
-		c.notify = make(chan struct{})
-		r.mu.checksums[id] = c
-	}
-	r.mu.Unlock()
-
-	// Wait for the checksum to compute or at least to start.
-	computed, err := r.checksumInitialWait(ctx, id, c.notify)
-	if err != nil {
-		return replicaChecksum{}, err
-	}
-	// If the checksum started, but has not completed commit
-	// to waiting the full deadline.
-	if !computed {
-		_, err = r.checksumWait(ctx, id, c.notify, nil)
-		if err != nil {
-			return replicaChecksum{}, err
-		}
-	}
-
-	if log.V(1) {
-		log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
-	}
-	r.mu.RLock()
-	c, ok = r.mu.checksums[id]
-	r.mu.RUnlock()
-	// If the checksum wasn't found or the checksum could not be computed, error out.
-	// The latter case can occur when there's a version mismatch or, more generally,
-	// when the (async) checksum computation fails.
-	if !ok || c.Checksum == nil {
-		return replicaChecksum{}, errors.Errorf("no checksum found (ID = %s)", id)
-	}
-	return c, nil
-}
-
-// Waits for the checksum to be available or for the checksum to start computing.
-// If we waited for 10% of the deadline and it has not started, then it's
-// unlikely to start because this replica is most likely being restored from
-// snapshots.
-func (r *Replica) checksumInitialWait(
-	ctx context.Context, id uuid.UUID, notify chan struct{},
-) (bool, error) {
-	d, dOk := ctx.Deadline()
-	// The max wait time should be 5 seconds, so we dont end up waiting for
-	// minutes for a huge range.
-	maxInitialWait := 5 * time.Second
-	var initialWait <-chan time.Time
-	if dOk {
-		duration := time.Duration(timeutil.Until(d).Nanoseconds() / 10)
-		if duration > maxInitialWait {
-			duration = maxInitialWait
-		}
-		initialWait = time.After(duration)
-	} else {
-		initialWait = time.After(maxInitialWait)
-	}
-	return r.checksumWait(ctx, id, notify, initialWait)
-}
-
-// checksumWait waits for the checksum to be available or for the computation
-// to start  within the initialWait time. The bool return flag is used to
-// indicate if a checksum is available (true) or if the initial wait has expired
-// and the caller should wait more, since the checksum computation started.
-func (r *Replica) checksumWait(
-	ctx context.Context, id uuid.UUID, notify chan struct{}, initialWait <-chan time.Time,
-) (bool, error) {
-	// Wait
-	select {
-	case <-r.store.Stopper().ShouldQuiesce():
-		return false,
-			errors.Errorf("store quiescing while waiting for compute checksum (ID = %s)", id)
-	case <-ctx.Done():
-		return false,
-			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
-	case <-initialWait:
-		{
-			r.mu.Lock()
-			started := r.mu.checksums[id].started
-			r.mu.Unlock()
-			if !started {
-				return false,
-					errors.Errorf("checksum computation did not start in time for (ID = %s)", id)
-			}
-			return false, nil
-		}
-	case <-notify:
-		return true, nil
-	}
-}
-
-// computeChecksumDone adds the computed checksum, sets a deadline for GCing the
-// checksum, and sends out a notification.
-func (r *Replica) computeChecksumDone(
-	ctx context.Context, id uuid.UUID, result *replicaHash, snapshot *roachpb.RaftSnapshotData,
-) {
+// getReplicaChecksum returns replicaChecksum tracker for the given ID, and
+// whether it is still active (i.e. has a zero GC timestamp).
+func (r *Replica) getReplicaChecksum(id uuid.UUID, now time.Time) (*replicaChecksum, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if c, ok := r.mu.checksums[id]; ok {
-		if result != nil {
-			c.Checksum = result.SHA512[:]
-
-			delta := result.PersistedMS
-			delta.Subtract(result.RecomputedMS)
-			c.Delta = enginepb.MVCCStatsDelta(delta)
-			c.Persisted = result.PersistedMS
+	r.gcOldChecksumEntriesLocked(now)
+	c := r.mu.checksums[id]
+	if c == nil {
+		c = &replicaChecksum{
+			started: make(chan context.CancelFunc, 1),      // allow an async send
+			result:  make(chan CollectChecksumResponse, 1), // allow an async send
 		}
-		c.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
-		c.Snapshot = snapshot
 		r.mu.checksums[id] = c
-		// Notify
-		close(c.notify)
-	} else {
-		// ComputeChecksum adds an entry into the map, and the entry can
-		// only be GCed once the gcTimestamp is set above. Something
-		// really bad happened.
-		log.Errorf(ctx, "no map entry for checksum (ID = %s)", id)
 	}
+	return c, c.gcTimestamp.IsZero()
+}
+
+// gcReplicaChecksum schedules GC to remove the given replicaChecksum from the
+// state after replicaChecksumGCInterval passes from now, or removes immediately
+// if it is no longer active.
+//
+// Each user of replicaChecksum (at most two during its lifetime: sender and
+// receiver; in any order) must call this method exactly once when they finish
+// working on this tracker.
+//
+// The guarantee: both parties see the same tracker iff neither of them arrives
+// at it (by calling getReplicaChecksum) later than GC timeout past the moment
+// when the other left it (by calling gcReplicaChecksum).
+func (r *Replica) gcReplicaChecksum(id uuid.UUID, rc *replicaChecksum) {
+	// TODO(pavelkalinnikov): Avoid locking, use atomics.
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// If the tracker is inactive (GC is already scheduled) then the counterparty
+	// has abandoned this tracker, and will not come back to it. Remove it then.
+	if !rc.gcTimestamp.IsZero() {
+		delete(r.mu.checksums, id)
+	} else { // otherwise give the counterparty some time to see this tracker
+		rc.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
+	}
+}
+
+// getChecksum waits for the result of ComputeChecksum and returns it. Returns
+// an error if there is no checksum being computed for the ID, it has already
+// been GC-ed, or an error happened during the computation.
+func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksumResponse, error) {
+	now := timeutil.Now()
+	c, _ := r.getReplicaChecksum(id, now)
+	defer r.gcReplicaChecksum(id, c)
+
+	// Wait for the checksum computation to start.
+	var taskCancel context.CancelFunc
+	select {
+	case <-ctx.Done():
+		return CollectChecksumResponse{},
+			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
+	case <-time.After(r.checksumInitialWait(ctx)):
+		return CollectChecksumResponse{},
+			errors.Errorf("checksum computation did not start in time for (ID = %s)", id)
+	case taskCancel = <-c.started:
+		// Happy case, the computation has started.
+	}
+	if taskCancel == nil { // but it may have started with an error
+		return CollectChecksumResponse{}, errors.Errorf("checksum task failed to start (ID = %s)", id)
+	}
+
+	// Wait for the computation result.
+	select {
+	case <-ctx.Done():
+		taskCancel()
+		return CollectChecksumResponse{},
+			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
+	case c, ok := <-c.result:
+		if log.V(1) {
+			log.Infof(ctx, "waited for compute checksum for %s", timeutil.Since(now))
+		}
+		if !ok || c.Checksum == nil {
+			return CollectChecksumResponse{}, errors.Errorf("no checksum found (ID = %s)", id)
+		}
+		return c, nil
+	}
+}
+
+// checksumInitialWait returns the amount of time to wait until the checksum
+// computation has started. It is set to min of 5s and 10% of the remaining time
+// in the passed-in context (if it has a deadline).
+//
+// If it takes longer, chances are that the replica is being restored from
+// snapshots, or otherwise too busy to handle this request soon.
+func (*Replica) checksumInitialWait(ctx context.Context) time.Duration {
+	wait := 5 * time.Second
+	if d, ok := ctx.Deadline(); ok {
+		if dur := time.Duration(timeutil.Until(d).Nanoseconds() / 10); dur < wait {
+			wait = dur
+		}
+	}
+	return wait
+}
+
+// computeChecksumDone sends the checksum computation result to the receiver.
+func (*Replica) computeChecksumDone(
+	rc *replicaChecksum, result *replicaHash, snapshot *roachpb.RaftSnapshotData,
+) {
+	c := CollectChecksumResponse{Snapshot: snapshot}
+	if result != nil {
+		c.Checksum = result.SHA512[:]
+		delta := result.PersistedMS
+		delta.Subtract(result.RecomputedMS)
+		c.Delta = enginepb.MVCCStatsDelta(delta)
+		c.Persisted = result.PersistedMS
+	}
+
+	// Sending succeeds because the channel is buffered, and there is at most one
+	// computeChecksumDone per replicaChecksum. In case of a bug, another writer
+	// closes the channel, so this send panics instead of deadlocking. By design.
+	rc.result <- c
+	close(rc.result)
 }
 
 type replicaHash struct {
@@ -749,35 +706,27 @@ func (*Replica) sha512(
 	return &result, nil
 }
 
-func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.ComputeChecksum) {
-	stopper := r.store.Stopper()
-	now := timeutil.Now()
-	r.mu.Lock()
-	var notify chan struct{}
-	if c, ok := r.mu.checksums[cc.ChecksumID]; !ok {
-		// There is no record of this ID. Make a new notification.
-		notify = make(chan struct{})
-	} else if !c.started {
-		// A CollectChecksumRequest is waiting on the existing notification.
-		notify = c.notify
-	} else {
-		log.Fatalf(ctx, "attempted to apply ComputeChecksum command with duplicated checksum ID %s",
-			cc.ChecksumID)
+func (r *Replica) computeChecksumPostApply(
+	ctx context.Context, cc kvserverpb.ComputeChecksum,
+) (err error) {
+	// Note: all exit paths must call gcReplicaChecksum.
+	c, active := r.getReplicaChecksum(cc.ChecksumID, timeutil.Now())
+	defer func() {
+		if err != nil {
+			close(c.started) // send nothing to signal that the task failed to start
+			r.gcReplicaChecksum(cc.ChecksumID, c)
+		}
+	}()
+	if !active {
+		return errors.New("checksum collection request gave up")
+	}
+	if req, have := cc.Version, uint32(batcheval.ReplicaChecksumVersion); req != have {
+		return errors.Errorf("incompatible versions (requested: %d, have: %d)", req, have)
 	}
 
-	r.gcOldChecksumEntriesLocked(now)
-
-	// Create an entry with checksum == nil and gcTimestamp unset.
-	r.mu.checksums[cc.ChecksumID] = replicaChecksum{started: true, notify: notify}
-	desc := *r.mu.state.Desc
-	r.mu.Unlock()
-
-	if cc.Version != batcheval.ReplicaChecksumVersion {
-		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
-		log.Infof(ctx, "incompatible ComputeChecksum versions (requested: %d, have: %d)",
-			cc.Version, batcheval.ReplicaChecksumVersion)
-		return
-	}
+	// Capture the current range descriptor, as it may change by the time the
+	// async task below runs.
+	desc := *r.Desc()
 
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
@@ -803,7 +752,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 	//
 	// Don't use the proposal's context for this, as it likely to be canceled very
 	// soon.
-	const taskName = "storage.Replica: computing checksum"
+	const taskName = "kvserver.Replica: computing checksum"
 	sem := r.store.consistencySem
 	if cc.Mode == roachpb.ChecksumMode_CHECK_STATS {
 		// Stats-only checks are cheap, and the DistSender parallelizes these across
@@ -811,11 +760,20 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 		// they don't count towards the semaphore limit.
 		sem = nil
 	}
-	if err := stopper.RunAsyncTaskEx(r.AnnotateCtx(context.Background()), stop.TaskOpts{
+	stopper := r.store.Stopper()
+	taskCtx, taskCancel := stopper.WithCancelOnQuiesce(r.AnnotateCtx(context.Background()))
+	if err := stopper.RunAsyncTaskEx(taskCtx, stop.TaskOpts{
 		TaskName:   taskName,
 		Sem:        sem,
 		WaitForSem: false,
 	}, func(ctx context.Context) {
+		defer taskCancel()
+		// There is only one writer to c.started (this task), so this doesn't block.
+		// But if by mistake there is another writer, one of us closes the channel
+		// eventually, and other send/close ops will crash. This is by design.
+		c.started <- taskCancel
+		close(c.started)
+
 		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
 			func(ctx context.Context) error {
 				defer snap.Close()
@@ -828,7 +786,8 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 				if err != nil {
 					result = nil
 				}
-				r.computeChecksumDone(ctx, cc.ChecksumID, result, snapshot)
+				r.computeChecksumDone(c, result, snapshot)
+				r.gcReplicaChecksum(cc.ChecksumID, c)
 				return err
 			},
 		); err != nil {
@@ -880,9 +839,9 @@ A file preventing this node from restarting was placed at:
 		}
 
 	}); err != nil {
-		defer snap.Close()
-		log.Errorf(ctx, "could not run async checksum computation (ID = %s): %v", cc.ChecksumID, err)
-		// Set checksum to nil.
-		r.computeChecksumDone(ctx, cc.ChecksumID, nil, nil)
+		taskCancel()
+		snap.Close()
+		return err
 	}
+	return nil
 }

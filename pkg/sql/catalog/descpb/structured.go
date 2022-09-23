@@ -48,6 +48,7 @@ func (ids IDs) Contains(targetID ID) bool {
 
 // FormatVersion is a custom type for TableDescriptor versions of the sql to
 // key:value mapping.
+//
 //go:generate stringer -type=FormatVersion
 type FormatVersion uint32
 

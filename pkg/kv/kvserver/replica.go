@@ -19,8 +19,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -35,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -555,7 +552,7 @@ type Replica struct {
 		lastUpdateTimes lastUpdateTimesMap
 
 		// Computed checksum at a snapshot UUID.
-		checksums map[uuid.UUID]replicaChecksum
+		checksums map[uuid.UUID]*replicaChecksum
 
 		// proposalQuota is the quota pool maintained by the lease holder where
 		// incoming writes acquire quota from a fixed quota pool before going
@@ -637,6 +634,8 @@ type Replica struct {
 		// Never mutated in place (always replaced wholesale), so can be leaked
 		// outside the surrounding mutex.
 		pausedFollowers map[roachpb.ReplicaID]struct{}
+
+		slowProposalCount int64 // updated in refreshProposalsLocked
 	}
 
 	// The raft log truncations that are pending. Access is protected by its own
@@ -1715,31 +1714,35 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 
 // isNewerThanSplit is a helper used in split(Pre|Post)Apply to
 // determine whether the Replica on the right hand side of the split must
-// have been removed from this store after the split. There is one
-// false negative where false will be returned but the hard state may
-// be due to a newer replica which is outlined below. It should be safe.
+// have been removed from this store after the split.
 //
-// TODO(ajwerner): Ideally if this store had ever learned that the replica
-// created by the split were removed it would not forget that fact.
-// There exists one edge case where the store may learn that it should house
-// a replica of the same range with a higher replica ID and then forget.
-// If the first raft message this store ever receives for the this range
-// contains a replica ID higher than the replica ID in the split trigger
-// then an in-memory replica at that higher replica ID will be created and
-// no tombstone at a lower replica ID will be written. If the server then
-// crashes it will forget that it had ever been the higher replica ID. The
-// server may then proceed to process the split and initialize a replica at
-// the replica ID implied by the split. This is potentially problematic as
+// TODO(tbg): the below is true as of 22.2: we persist any Replica's ReplicaID
+// under RaftReplicaIDKey, so the below caveats should be addressed now and we
+// should be able to simplify isNewerThanSplit to just compare replicaIDs.
+//
+// TODO(ajwerner):  There is one false negative where false will be returned but
+// the hard state may be due to a newer replica which is outlined below. It
+// should be safe.
+// Ideally if this store had ever learned that the replica created by the split
+// were removed it would not forget that fact. There exists one edge case where
+// the store may learn that it should house a replica of the same range with a
+// higher replica ID and then forget. If the first raft message this store ever
+// receives for the this range contains a replica ID higher than the replica ID
+// in the split trigger then an in-memory replica at that higher replica ID will
+// be created and no tombstone at a lower replica ID will be written. If the
+// server then crashes it will forget that it had ever been the higher replica
+// ID. The server may then proceed to process the split and initialize a replica
+// at the replica ID implied by the split. This is potentially problematic as
 // the replica may have voted as this higher replica ID and when it rediscovers
 // the higher replica ID it will delete all of the state corresponding to the
 // older replica ID including its hard state which may have been synthesized
-// with votes as the newer replica ID. This case tends to be handled safely
-// in practice because the replica should only be receiving messages as the
-// newer replica ID after it has been added to the range as a learner.
+// with votes as the newer replica ID. This case tends to be handled safely in
+// practice because the replica should only be receiving messages as the newer
+// replica ID after it has been added to the range as a learner.
 //
-// Despite the safety due to the change replicas protocol explained above
-// it'd be good to know for sure that a replica ID for a range on a store
-// is always monotonically increasing, even across restarts.
+// Despite the safety due to the change replicas protocol explained above it'd
+// be good to know for sure that a replica ID for a range on a store is always
+// monotonically increasing, even across restarts.
 //
 // See TestProcessSplitAfterRightHandSideHasBeenRemoved.
 func (r *Replica) isNewerThanSplit(split *roachpb.SplitTrigger) bool {
@@ -2047,21 +2050,6 @@ func EnableLeaseHistory(maxEntries int) func() {
 	return func() {
 		leaseHistoryMaxEntries = originalValue
 	}
-}
-
-// GetExternalStorage returns an ExternalStorage object, based on
-// information parsed from a URI, stored in `dest`.
-func (r *Replica) GetExternalStorage(
-	ctx context.Context, dest cloudpb.ExternalStorage,
-) (cloud.ExternalStorage, error) {
-	return r.store.cfg.ExternalStorage(ctx, dest)
-}
-
-// GetExternalStorageFromURI returns an ExternalStorage object, based on the given URI.
-func (r *Replica) GetExternalStorageFromURI(
-	ctx context.Context, uri string, user username.SQLUsername,
-) (cloud.ExternalStorage, error) {
-	return r.store.cfg.ExternalStorageFromURI(ctx, uri, user)
 }
 
 // GetResponseMemoryAccount implements the batcheval.EvalContext interface.

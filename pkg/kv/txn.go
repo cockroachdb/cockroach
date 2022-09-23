@@ -105,13 +105,14 @@ type Txn struct {
 // transaction (including stopping the heartbeat loop).
 //
 // gatewayNodeID: If != 0, this is the ID of the node on whose behalf this
-//   transaction is running. Normally this is the current node, but in the case
-//   of Txns created on remote nodes by DistSQL this will be the gateway.
-//   If 0 is passed, then no value is going to be filled in the batches sent
-//   through this txn. This will have the effect that the DistSender will fill
-//   in the batch with the current node's ID.
-//   If the gatewayNodeID is set and this is a root transaction, we optimize
-//   away any clock uncertainty for our own node, as our clock is accessible.
+//
+//	transaction is running. Normally this is the current node, but in the case
+//	of Txns created on remote nodes by DistSQL this will be the gateway.
+//	If 0 is passed, then no value is going to be filled in the batches sent
+//	through this txn. This will have the effect that the DistSender will fill
+//	in the batch with the current node's ID.
+//	If the gatewayNodeID is set and this is a root transaction, we optimize
+//	away any clock uncertainty for our own node, as our clock is accessible.
 //
 // See also db.NewTxn().
 func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
@@ -422,8 +423,8 @@ func (txn *Txn) NewBatch() *Batch {
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error. It is not considered an error for the key to not exist.
 //
-//   r, err := txn.Get("a")
-//   // string(r.Key) == "a"
+//	r, err := txn.Get("a")
+//	// string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) Get(ctx context.Context, key interface{}) (KeyValue, error) {
@@ -436,8 +437,8 @@ func (txn *Txn) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 // or an error. An unreplicated, exclusive lock is acquired on the key, if it
 // exists. It is not considered an error for the key to not exist.
 //
-//   r, err := txn.GetForUpdate("a")
-//   // string(r.Key) == "a"
+//	r, err := txn.GetForUpdate("a")
+//	// string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (txn *Txn) GetForUpdate(ctx context.Context, key interface{}) (KeyValue, error) {

@@ -109,9 +109,8 @@ type ReplicaConstraints interface {
 // A prohibited constraint's key/value pair must *not* match any of the tiers of
 // a node's locality for the range to locate there. For example:
 //
-//   +region=east     Range can only be placed on nodes in region=east locality.
-//   -region=west     Range cannot be placed on nodes in region=west locality.
-//
+//	+region=east     Range can only be placed on nodes in region=east locality.
+//	-region=west     Range cannot be placed on nodes in region=west locality.
 type Constraint interface {
 	// IsRequired is true if this is a required constraint, or false if this is
 	// a prohibited constraint (signified by initial + or - character).

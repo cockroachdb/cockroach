@@ -178,9 +178,9 @@ const (
 // we use random number generation to refresh stats with probability
 // 10/(1M * 0.2) = 0.00005. The general formula is:
 //
-//                            # rows updated/inserted/deleted
-//    p =  --------------------------------------------------------------------
-//         (# rows in table) * (target fraction of rows updated before refresh)
+//	                        # rows updated/inserted/deleted
+//	p =  --------------------------------------------------------------------
+//	     (# rows in table) * (target fraction of rows updated before refresh)
 //
 // The existing statistics in the stats cache are used to get the number of
 // rows in the table.
@@ -208,7 +208,6 @@ const (
 // metadata to the Refresher thread over a non-blocking buffered channel. The
 // signaling is best-effort; if the channel is full, the metadata will not be
 // sent.
-//
 type Refresher struct {
 	log.AmbientContext
 	st      *cluster.Settings

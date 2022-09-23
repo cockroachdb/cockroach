@@ -90,10 +90,10 @@ func (b *budget) consume(ctx context.Context, bytes int64, allowDebt bool) error
 func (b *budget) consumeLocked(ctx context.Context, bytes int64, allowDebt bool) error {
 	b.mu.AssertHeld()
 	// If we're asked to not exceed the limit (and the limit is greater than
-	// eight bytes - limits of eight bytes or less are treated as a special case
-	// for "forced disk spilling" scenarios like in logic tests), we have to
-	// check whether we'll stay within the budget.
-	if !allowDebt && b.limitBytes > 8 {
+	// twenty bytes - limits of twenty bytes or less are treated as a special
+	// case for "forced disk spilling" scenarios like in logic tests), we have
+	// to check whether we'll stay within the budget.
+	if !allowDebt && b.limitBytes > 20 {
 		if b.mu.acc.Used()+bytes > b.limitBytes {
 			return errors.Wrap(
 				mon.MemoryResource.NewBudgetExceededError(bytes, b.mu.acc.Used(), b.limitBytes),

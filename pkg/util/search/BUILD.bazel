@@ -13,6 +13,7 @@ go_test(
     name = "search_test",
     size = "small",
     srcs = ["search_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":search"],
     deps = [
         "//pkg/util/timeutil",

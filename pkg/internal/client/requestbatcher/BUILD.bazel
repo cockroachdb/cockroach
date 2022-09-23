@@ -20,6 +20,7 @@ go_test(
     name = "requestbatcher_test",
     size = "small",
     srcs = ["batcher_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":requestbatcher"],
     deps = [
         "//pkg/roachpb",

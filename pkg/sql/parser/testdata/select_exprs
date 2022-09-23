@@ -157,7 +157,7 @@ SELECT (ARRAY (VALUES (1), (2)))[1]
 ----
 SELECT (ARRAY (VALUES (1), (2)))[1]
 SELECT ((((ARRAY ((VALUES ((1)), ((2)))))))[(1)]) -- fully parenthesized
-SELECT (ARRAY (VALUES (_), (__more1__)))[_] -- literals removed
+SELECT (ARRAY (VALUES (_), (__more1_10__)))[_] -- literals removed
 SELECT (ARRAY (VALUES (1), (2)))[1] -- identifiers removed
 
 parse
@@ -301,7 +301,7 @@ SELECT (1, 2, 3)
 ----
 SELECT (1, 2, 3)
 SELECT (((1), (2), (3))) -- fully parenthesized
-SELECT (_, _, __more1__) -- literals removed
+SELECT (_, _, __more1_10__) -- literals removed
 SELECT (1, 2, 3) -- identifiers removed
 
 parse
@@ -309,7 +309,7 @@ SELECT ((1, 2, 3) AS a, b, c)
 ----
 SELECT ((1, 2, 3) AS a, b, c)
 SELECT ((((1), (2), (3)) AS a, b, c)) -- fully parenthesized
-SELECT ((_, _, __more1__) AS a, b) -- literals removed
+SELECT ((_, _, __more1_10__) AS a, b) -- literals removed
 SELECT ((1, 2, 3) AS _, _, _) -- identifiers removed
 
 parse
@@ -317,7 +317,7 @@ SELECT ((1, 2, 3))
 ----
 SELECT ((1, 2, 3))
 SELECT (((((1), (2), (3))))) -- fully parenthesized
-SELECT ((_, _, __more1__)) -- literals removed
+SELECT ((_, _, __more1_10__)) -- literals removed
 SELECT ((1, 2, 3)) -- identifiers removed
 
 parse
@@ -325,7 +325,7 @@ SELECT ((1, 2, 3) AS a, b, c)
 ----
 SELECT ((1, 2, 3) AS a, b, c)
 SELECT ((((1), (2), (3)) AS a, b, c)) -- fully parenthesized
-SELECT ((_, _, __more1__) AS a, b) -- literals removed
+SELECT ((_, _, __more1_10__) AS a, b) -- literals removed
 SELECT ((1, 2, 3) AS _, _, _) -- identifiers removed
 
 parse
@@ -333,7 +333,7 @@ SELECT (((1, 2, 3) AS a, b, c)).a
 ----
 SELECT (((1, 2, 3) AS a, b, c)).a
 SELECT ((((((1), (2), (3)) AS a, b, c))).a) -- fully parenthesized
-SELECT (((_, _, __more1__) AS a, b)).a -- literals removed
+SELECT (((_, _, __more1_10__) AS a, b)).a -- literals removed
 SELECT (((1, 2, 3) AS _, _, _))._ -- identifiers removed
 
 parse
@@ -341,7 +341,7 @@ SELECT (((1, 2, 3) AS a, b, c)).*
 ----
 SELECT (((1, 2, 3) AS a, b, c)).*
 SELECT ((((((1), (2), (3)) AS a, b, c))).*) -- fully parenthesized
-SELECT (((_, _, __more1__) AS a, b)).* -- literals removed
+SELECT (((_, _, __more1_10__) AS a, b)).* -- literals removed
 SELECT (((1, 2, 3) AS _, _, _)).* -- identifiers removed
 
 parse
@@ -1426,7 +1426,7 @@ SELECT (ARRAY['a', 'b', 'c']).name
 ----
 SELECT (ARRAY['a', 'b', 'c']).name
 SELECT (((ARRAY[('a'), ('b'), ('c')])).name) -- fully parenthesized
-SELECT (ARRAY['_', '_', __more1__]).name -- literals removed
+SELECT (ARRAY['_', '_', __more1_10__]).name -- literals removed
 SELECT (ARRAY['a', 'b', 'c'])._ -- identifiers removed
 
 parse

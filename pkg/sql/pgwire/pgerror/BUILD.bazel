@@ -41,6 +41,7 @@ go_test(
         "severity_test.go",
         "wrap_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":pgerror"],
     deps = [
         "//pkg/roachpb",

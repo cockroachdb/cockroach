@@ -291,7 +291,7 @@ func (e *exprEval) evalProjection(
 		if err != nil {
 			return cdcevent.Row{}, err
 		}
-		if err := e.projection.SetValueDatumAt(i, d); err != nil {
+		if err := e.projection.SetValueDatumAt(e.evalCtx, i, d); err != nil {
 			return cdcevent.Row{}, err
 		}
 	}

@@ -25,7 +25,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -43,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
@@ -60,9 +60,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -98,9 +99,11 @@ const (
 	// store's Raft log entry cache.
 	defaultRaftEntryCacheSize = 1 << 24 // 16M
 
-	// replicaRequestQueueSize specifies the maximum number of requests to queue
-	// for a replica.
-	replicaRequestQueueSize = 100
+	// replicaQueueExtraSize is the number of requests that a replica's incoming
+	// message queue can keep over RaftConfig.RaftMaxInflightMsgs. When the leader
+	// maxes out RaftMaxInflightMsgs, we want the receiving replica to still have
+	// some buffer for other messages, primarily heartbeats.
+	replicaQueueExtraSize = 10
 
 	defaultGossipWhenCapacityDeltaExceedsFraction = 0.01
 
@@ -124,6 +127,13 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
+
+// By default, telemetry events are emitted once per hour, per store:
+// (10s tick interval) * 6 * 60 = 3600s = 1h.
+var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
+	"COCKROACH_LOG_STORE_TELEMETRY_TICKS_INTERVAL",
+	6*60,
+)
 
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
@@ -254,6 +264,8 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		ScanInterval:                10 * time.Minute,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		ProtectedTimestampReader:    spanconfig.EmptyProtectedTSReader(clock),
+		SnapshotSendLimit:           DefaultSnapshotSendLimit,
+		SnapshotApplyLimit:          DefaultSnapshotApplyLimit,
 
 		// Use a constant empty system config, which mirrors the previously
 		// existing logic to install an empty system config in gossip.
@@ -444,7 +456,7 @@ INVARIANT: the set of all Ranges (as determined by, e.g. a transactionally
 consistent scan of the meta index ranges) always exactly covers the addressable
 keyspace roachpb.KeyMin (inclusive) to roachpb.KeyMax (exclusive).
 
-Ranges
+# Ranges
 
 Each Replica is part of a Range, i.e. corresponds to what other systems would
 call a shard. A Range is a consensus group backed by Raft, i.e. each Replica is
@@ -461,7 +473,7 @@ these interact heavily with the Range as a consensus group (of which each
 Replica is a member). All of these intricacies are described at a high level in
 this comment.
 
-RangeDescriptor
+# RangeDescriptor
 
 A roachpb.RangeDescriptor is the configuration of a Range. It is an
 MVCC-backed key-value pair (where the key is derived from the StartKey via
@@ -479,8 +491,8 @@ these operations at some point will
 - update the RangeDescriptor (for example, to reflect a split, or a change
 to the Replicas comprising the members of the Range)
 
-- update the meta ranges (which form a search index used for request routing, see
-  kv.RangeLookup and updateRangeAddressing for details)
+  - update the meta ranges (which form a search index used for request routing, see
+    kv.RangeLookup and updateRangeAddressing for details)
 
 - commit with a roachpb.InternalCommitTrigger.
 
@@ -519,7 +531,7 @@ Replica for any given key, and ensure that no two Replicas on a Store operate on
 shared keyspace (as seen by the storage.Engine). Refer to the Replica Lifecycle
 diagram below for details on how this invariant is upheld.
 
-Replica Lifecycle
+# Replica Lifecycle
 
 A Replica should be thought of primarily as a State Machine applying commands
 from a replicated log (the log being replicated across the members of the
@@ -579,41 +591,41 @@ request a snapshot. See maybeDelaySplitToAvoidSnapshot.
 The diagram is a lot to take in. The various transitions are discussed in
 prose below, and the source .dot file is in store_doc_replica_lifecycle.dot.
 
-                                +---------------------+
-            +------------------ |       Absent        | ---------------------------------------------------------------------------------------------------+
-            |                   +---------------------+                                                                                                    |
-            |                     |                        Subsume              Crash          applySnapshot                                               |
-            |                     | Store.Start          +---------------+    +---------+    +---------------+                                             |
-            |                     v                      v               |    v         |    v               |                                             |
-            |                   +-----------------------------------------------------------------------------------------------------------------------+  |
-  +---------+------------------ |                                                                                                                       |  |
-  |         |                   |                                                      Initialized                                                      |  |
-  |         |                   |                                                                                                                       |  |
-  |    +----+------------------ |                                                                                                                       | -+----+
-  |    |    |                   +-----------------------------------------------------------------------------------------------------------------------+  |    |
-  |    |    |                     |                      ^                    ^                                   |              |                    |    |    |
-  |    |    | Raft msg            | Crash                | applySnapshot      | post-split                        |              |                    |    |    |
-  |    |    |                     v                      |                    |                                   |              |                    |    |    |
-  |    |    |                   +---------------------------------------------------------+  pre-split            |              |                    |    |    |
-  |    |    +-----------------> |                                                         | <---------------------+--------------+--------------------+----+    |
-  |    |                        |                                                         |                       |              |                    |         |
-  |    |                        |                      Uninitialized                      |   Raft msg            |              |                    |         |
-  |    |                        |                                                         | -----------------+    |              |                    |         |
-  |    |                        |                                                         |                  |    |              |                    |         |
-  |    |                        |                                                         | <----------------+    |              |                    |         |
-  |    |                        +---------------------------------------------------------+                       |              | apply removal      |         |
-  |    |                          |                      |                                                        |              |                    |         |
-  |    |                          | ReplicaTooOldError   | higher ReplicaID                                       | Replica GC   |                    |         |
-  |    |                          v                      v                                                        v              |                    |         |
-  |    |   Merged (snapshot)    +---------------------------------------------------------------------------------------------+  |                    |         |
-  |    +----------------------> |                                                                                             | <+                    |         |
-  |                             |                                                                                             |                       |         |
-  |        apply Merge          |                                                                                             |  ReplicaTooOld        |         |
-  +---------------------------> |                                           Removed                                           | <---------------------+         |
-                                |                                                                                             |                                 |
-                                |                                                                                             |  higher ReplicaID               |
-                                |                                                                                             | <-------------------------------+
-                                +---------------------------------------------------------------------------------------------+
+	                              +---------------------+
+	          +------------------ |       Absent        | ---------------------------------------------------------------------------------------------------+
+	          |                   +---------------------+                                                                                                    |
+	          |                     |                        Subsume              Crash          applySnapshot                                               |
+	          |                     | Store.Start          +---------------+    +---------+    +---------------+                                             |
+	          |                     v                      v               |    v         |    v               |                                             |
+	          |                   +-----------------------------------------------------------------------------------------------------------------------+  |
+	+---------+------------------ |                                                                                                                       |  |
+	|         |                   |                                                      Initialized                                                      |  |
+	|         |                   |                                                                                                                       |  |
+	|    +----+------------------ |                                                                                                                       | -+----+
+	|    |    |                   +-----------------------------------------------------------------------------------------------------------------------+  |    |
+	|    |    |                     |                      ^                    ^                                   |              |                    |    |    |
+	|    |    | Raft msg            | Crash                | applySnapshot      | post-split                        |              |                    |    |    |
+	|    |    |                     v                      |                    |                                   |              |                    |    |    |
+	|    |    |                   +---------------------------------------------------------+  pre-split            |              |                    |    |    |
+	|    |    +-----------------> |                                                         | <---------------------+--------------+--------------------+----+    |
+	|    |                        |                                                         |                       |              |                    |         |
+	|    |                        |                      Uninitialized                      |   Raft msg            |              |                    |         |
+	|    |                        |                                                         | -----------------+    |              |                    |         |
+	|    |                        |                                                         |                  |    |              |                    |         |
+	|    |                        |                                                         | <----------------+    |              |                    |         |
+	|    |                        +---------------------------------------------------------+                       |              | apply removal      |         |
+	|    |                          |                      |                                                        |              |                    |         |
+	|    |                          | ReplicaTooOldError   | higher ReplicaID                                       | Replica GC   |                    |         |
+	|    |                          v                      v                                                        v              |                    |         |
+	|    |   Merged (snapshot)    +---------------------------------------------------------------------------------------------+  |                    |         |
+	|    +----------------------> |                                                                                             | <+                    |         |
+	|                             |                                                                                             |                       |         |
+	|        apply Merge          |                                                                                             |  ReplicaTooOld        |         |
+	+---------------------------> |                                           Removed                                           | <---------------------+         |
+	                              |                                                                                             |                                 |
+	                              |                                                                                             |  higher ReplicaID               |
+	                              |                                                                                             | <-------------------------------+
+	                              +---------------------------------------------------------------------------------------------+
 
 When a Store starts, it iterates through all RangeDescriptors it can find on its
 Engine. Finding a RangeDescriptor by definition implies that the Replica is
@@ -715,7 +727,7 @@ type Store struct {
 	engine          storage.Engine          // The underlying key-value store
 	tsCache         tscache.Cache           // Most recent timestamps for keys / key ranges
 	allocator       allocatorimpl.Allocator // Makes allocation decisions
-	replRankings    *replicaRankings
+	replRankings    *ReplicaRankings
 	storeRebalancer *StoreRebalancer
 	rangeIDAlloc    *idalloc.Allocator // Range ID allocator
 	mvccGCQueue     *mvccGCQueue       // MVCC GC queue
@@ -770,12 +782,11 @@ type Store struct {
 	nodeDesc     *roachpb.NodeDescriptor
 	initComplete sync.WaitGroup // Signaled by async init tasks
 
-	// Semaphore to limit concurrent non-empty snapshot application.
-	snapshotApplySem chan struct{}
-	// Semaphore to limit concurrent non-empty snapshot sending.
-	initialSnapshotSendSem chan struct{}
-	// Semaphore to limit concurrent non-empty snapshot sending.
-	raftSnapshotSendSem chan struct{}
+	// Queue to limit concurrent non-empty snapshot application.
+	snapshotApplyQueue *multiqueue.MultiQueue
+
+	// Queue to limit concurrent non-empty snapshot sending.
+	snapshotSendQueue *multiqueue.MultiQueue
 
 	// Track newly-acquired expiration-based leases that we want to proactively
 	// renew. An object is sent on the signal whenever a new entry is added to
@@ -1054,21 +1065,17 @@ type StoreConfig struct {
 
 	TestingKnobs StoreTestingKnobs
 
-	// concurrentSnapshotApplyLimit specifies the maximum number of empty
+	// SnapshotApplyLimit specifies the maximum number of empty
 	// snapshots and the maximum number of non-empty snapshots that are permitted
 	// to be applied concurrently.
-	concurrentSnapshotApplyLimit int
+	SnapshotApplyLimit int64
 
-	// concurrentSnapshotSendLimit specifies the maximum number of each type of
+	// SnapshotSendLimit specifies the maximum number of each type of
 	// snapshot that are permitted to be sent concurrently.
-	concurrentSnapshotSendLimit int
+	SnapshotSendLimit int64
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval
 	HistogramWindowInterval time.Duration
-
-	// ExternalStorage creates ExternalStorage objects which allows access to external files
-	ExternalStorage        cloud.ExternalStorageFactory
-	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
 
 	// ProtectedTimestampReader provides a read-only view into the protected
 	// timestamp subsystem. It is queried during the GC process.
@@ -1090,6 +1097,11 @@ type StoreConfig struct {
 
 	// KVAdmissionController is an optional field used for admission control.
 	KVAdmissionController KVAdmissionController
+
+	// SchedulerLatencyListener listens in on scheduling latencies, information
+	// that's then used to adjust various admission control components (like how
+	// many CPU tokens are granted to elastic work like backups).
+	SchedulerLatencyListener admission.SchedulerLatencyListener
 
 	// SystemConfigProvider is used to drive replication decision-making in the
 	// mixed-version state, before the span configuration infrastructure has been
@@ -1150,16 +1162,6 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
-	if sc.concurrentSnapshotApplyLimit == 0 {
-		// NB: setting this value higher than 1 is likely to degrade client
-		// throughput.
-		sc.concurrentSnapshotApplyLimit =
-			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_APPLY_LIMIT", 1)
-	}
-	if sc.concurrentSnapshotSendLimit == 0 {
-		sc.concurrentSnapshotSendLimit =
-			envutil.EnvOrDefaultInt("COCKROACH_CONCURRENT_SNAPSHOT_SEND_LIMIT", 1)
-	}
 
 	if sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction == 0 {
 		sc.TestingKnobs.GossipWhenCapacityDeltaExceedsFraction = defaultGossipWhenCapacityDeltaExceedsFraction
@@ -1219,7 +1221,7 @@ func NewStore(
 		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedLeaseTransferMetrics)
 		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedReplicaRebalanceMetrics)
 	}
-	s.replRankings = newReplicaRankings()
+	s.replRankings = NewReplicaRankings()
 
 	s.raftRecvQueues.mon = mon.NewUnlimitedMonitor(
 		ctx,
@@ -1261,9 +1263,8 @@ func NewStore(
 
 	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
 	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
-	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
-	s.initialSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
-	s.raftSnapshotSendSem = make(chan struct{}, cfg.concurrentSnapshotSendLimit)
+	s.snapshotApplyQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotApplyLimit))
+	s.snapshotSendQueue = multiqueue.NewMultiQueue(int(cfg.SnapshotSendLimit))
 	if ch := s.cfg.TestingKnobs.LeaseRenewalSignalChan; ch != nil {
 		s.renewableLeasesSignal = ch
 	} else {
@@ -1554,10 +1555,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					// manually to a non-draining replica.
 
 					if !needsLeaseTransfer {
-						if verbose || log.V(1) {
-							// This logging is useful to troubleshoot incomplete drains.
-							log.Info(ctx, "not moving out")
-						}
+						// Skip this replica.
 						atomic.AddInt32(&numTransfersAttempted, -1)
 						return
 					}
@@ -2793,7 +2791,10 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	//
 	// We use an EngineIterator to ensure that there are no keys that cannot be
 	// parsed as MVCCKeys (e.g. lock table keys) in the engine.
-	iter := eng.NewEngineIterator(storage.IterOptions{UpperBound: roachpb.KeyMax})
+	iter := eng.NewEngineIterator(storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		UpperBound: roachpb.KeyMax,
+	})
 	defer iter.Close()
 	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
 	if !valid {
@@ -2803,6 +2804,13 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		return err
 	}
 	getMVCCKey := func() (storage.MVCCKey, error) {
+		if _, hasRange := iter.HasPointAndRange(); hasRange {
+			bounds, err := iter.EngineRangeBounds()
+			if err != nil {
+				return storage.MVCCKey{}, err
+			}
+			return storage.MVCCKey{}, errors.Errorf("found mvcc range key: %s", bounds)
+		}
 		var k storage.EngineKey
 		k, err = iter.EngineKey()
 		if err != nil {
@@ -2982,7 +2990,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	replicaCount := s.metrics.ReplicaCount.Value()
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
-	rankingsAccumulator := s.replRankings.newAccumulator()
+	rankingsAccumulator := s.replRankings.NewAccumulator()
 
 	// Query the current L0 sublevels and record the updated maximum to metrics.
 	l0SublevelsMax = int64(syncutil.LoadFloat64(&s.metrics.l0SublevelsWindowedMax))
@@ -3008,9 +3016,9 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 			totalWritesPerSecond += wps
 			writesPerReplica = append(writesPerReplica, wps)
 		}
-		rankingsAccumulator.addReplica(replicaWithStats{
-			repl: r,
-			qps:  qps,
+		rankingsAccumulator.AddReplica(candidateReplica{
+			Replica: r,
+			qps:     qps,
 		})
 		return true
 	})
@@ -3028,7 +3036,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.BytesPerReplica = roachpb.PercentilesFromData(bytesPerReplica)
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
-	s.replRankings.update(rankingsAccumulator)
+	s.replRankings.Update(rankingsAccumulator)
 
 	s.cachedCapacity.Lock()
 	s.cachedCapacity.StoreCapacity = capacity
@@ -3141,6 +3149,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		overreplicatedRangeCount  int64
 		behindCount               int64
 		pausedFollowerCount       int64
+		ioOverload                float64
+		slowRaftProposalCount     int64
 
 		locks                          int64
 		totalLockHoldDurationNanos     int64
@@ -3164,6 +3174,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.mu.RLock()
 	uninitializedCount = int64(len(s.mu.uninitReplicas))
 	s.mu.RUnlock()
+
+	// TODO(kaisun314,kvoli): move this to a per-store admission control metrics
+	// struct when available. See pkg/util/admission/granter.go.
+	s.ioThreshold.Lock()
+	ioOverload, _ = s.ioThreshold.t.Score()
+	s.ioThreshold.Unlock()
 
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
@@ -3200,6 +3216,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		pausedFollowerCount += metrics.PausedFollowerCount
+		slowRaftProposalCount += metrics.SlowRaftProposalCount
 		behindCount += metrics.BehindCount
 		if qps, dur := rep.loadStats.batchRequests.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageQueriesPerSecond += qps
@@ -3261,6 +3278,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 	s.metrics.RaftPausedFollowerCount.Update(pausedFollowerCount)
+	s.metrics.IOOverload.Update(ioOverload)
+	s.metrics.SlowRaftRequests.Update(slowRaftProposalCount)
 
 	var averageLockHoldDurationNanos int64
 	var averageLockWaitDurationNanos int64
@@ -3338,6 +3357,18 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		// will not contain the log prefix.
 		log.Infof(ctx, "\n%s", m.Metrics)
 	}
+	// Periodically emit a store stats structured event to the TELEMETRY channel,
+	// if reporting is enabled. These events are intended to be emitted at low
+	// frequency. Trigger on every (N-1)-th tick to avoid spamming the telemetry
+	// channel if crash-looping.
+	if logcrash.DiagnosticsReportingEnabled.Get(&s.ClusterSettings().SV) &&
+		tick%logStoreTelemetryTicks == logStoreTelemetryTicks-1 {
+		// The stats event is populated from a subset of the Metrics.
+		e := m.AsStoreStatsEvent()
+		e.NodeId = int32(s.NodeID())
+		e.StoreId = int32(s.StoreID())
+		log.StructuredEvent(ctx, &e)
+	}
 	return nil
 }
 
@@ -3368,16 +3399,16 @@ type HotReplicaInfo struct {
 // Note that this uses cached information, so it's cheap but may be slightly
 // out of date.
 func (s *Store) HottestReplicas() []HotReplicaInfo {
-	topQPS := s.replRankings.topQPS()
+	topQPS := s.replRankings.TopQPS()
 	hotRepls := make([]HotReplicaInfo, len(topQPS))
 	for i := range topQPS {
-		hotRepls[i].Desc = topQPS[i].repl.Desc()
-		hotRepls[i].QPS = topQPS[i].qps
-		hotRepls[i].RequestsPerSecond = topQPS[i].repl.RequestsPerSecond()
-		hotRepls[i].WriteKeysPerSecond = topQPS[i].repl.WritesPerSecond()
-		hotRepls[i].ReadKeysPerSecond = topQPS[i].repl.ReadsPerSecond()
-		hotRepls[i].WriteBytesPerSecond = topQPS[i].repl.WriteBytesPerSecond()
-		hotRepls[i].ReadBytesPerSecond = topQPS[i].repl.ReadBytesPerSecond()
+		hotRepls[i].Desc = topQPS[i].Desc()
+		hotRepls[i].QPS = topQPS[i].QPS()
+		hotRepls[i].RequestsPerSecond = topQPS[i].Repl().RequestsPerSecond()
+		hotRepls[i].WriteKeysPerSecond = topQPS[i].Repl().WritesPerSecond()
+		hotRepls[i].ReadKeysPerSecond = topQPS[i].Repl().ReadsPerSecond()
+		hotRepls[i].WriteBytesPerSecond = topQPS[i].Repl().WriteBytesPerSecond()
+		hotRepls[i].ReadBytesPerSecond = topQPS[i].Repl().ReadBytesPerSecond()
 	}
 	return hotRepls
 }
@@ -3715,6 +3746,26 @@ func min(a, b int) int {
 	return b
 }
 
+// elasticCPUDurationPerExportRequest controls how many CPU tokens are allotted
+// for each export request.
+var elasticCPUDurationPerExportRequest = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.elastic_cpu.duration_per_export_request",
+	"controls how many CPU tokens are allotted for each export request",
+	admission.MaxElasticCPUDuration,
+	func(duration time.Duration) error {
+		if duration < admission.MinElasticCPUDuration {
+			return fmt.Errorf("minimum CPU duration allowed per export request is %s, got %s",
+				admission.MinElasticCPUDuration, duration)
+		}
+		if duration > admission.MaxElasticCPUDuration {
+			return fmt.Errorf("maximum CPU duration allowed per export request is %s, got %s",
+				admission.MaxElasticCPUDuration, duration)
+		}
+		return nil
+	},
+)
+
 // KVAdmissionController provides admission control for the KV layer.
 type KVAdmissionController interface {
 	// AdmitKVWork must be called before performing KV work.
@@ -3724,10 +3775,10 @@ type KVAdmissionController interface {
 	// called after the KV work is done executing.
 	AdmitKVWork(
 		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-	) (handle interface{}, err error)
+	) (AdmissionHandle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
-	AdmittedKVWorkDone(handle interface{}, writeBytes *StoreWriteBytes)
+	AdmittedKVWorkDone(AdmissionHandle, *StoreWriteBytes)
 	// SetTenantWeightProvider is used to set the provider that will be
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
@@ -3764,100 +3815,146 @@ type TenantWeightsForStore struct {
 
 // KVAdmissionControllerImpl implements KVAdmissionController interface.
 type KVAdmissionControllerImpl struct {
-	// Admission control queues and coordinators. Both should be nil or non-nil.
-	kvAdmissionQ     *admission.WorkQueue
-	storeGrantCoords *admission.StoreGrantCoordinators
-	settings         *cluster.Settings
-	every            log.EveryN
+	// Admission control queues and coordinators. All three should be nil or
+	// non-nil.
+	kvAdmissionQ        *admission.WorkQueue
+	storeGrantCoords    *admission.StoreGrantCoordinators
+	elasticCPUWorkQueue *admission.ElasticCPUWorkQueue
+	settings            *cluster.Settings
+	every               log.EveryN
 }
 
 var _ KVAdmissionController = &KVAdmissionControllerImpl{}
 
-type admissionHandle struct {
-	tenantID                           roachpb.TenantID
+// AdmissionHandle groups data around some piece admitted work. Depending on the
+// type of work, it holds (a) references to specific work queues, (b) state
+// needed to inform said work queues of what work was done after the fact, and
+// (c) information around how much work a request is allowed to do (used for
+// cooperative scheduling with elastic CPU granters).
+//
+// TODO(irfansharif): Consider moving KVAdmissionController and adjacent types
+// into a kvserver/kvadmission package.
+type AdmissionHandle struct {
+	tenantID             roachpb.TenantID
+	storeAdmissionQ      *admission.StoreWorkQueue
+	storeWorkHandle      admission.StoreWorkHandle
+	ElasticCPUWorkHandle *admission.ElasticCPUWorkHandle
+
 	callAdmittedWorkDoneOnKVAdmissionQ bool
-	storeAdmissionQ                    *admission.StoreWorkQueue
-	storeWorkHandle                    admission.StoreWorkHandle
 }
 
-// MakeKVAdmissionController returns a KVAdmissionController. Both parameters
-// must together either be nil or non-nil.
+// MakeKVAdmissionController returns a KVAdmissionController. All three
+// parameters must together be nil or non-nil.
 func MakeKVAdmissionController(
 	kvAdmissionQ *admission.WorkQueue,
+	elasticCPUWorkQueue *admission.ElasticCPUWorkQueue,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	settings *cluster.Settings,
 ) KVAdmissionController {
 	return &KVAdmissionControllerImpl{
-		kvAdmissionQ:     kvAdmissionQ,
-		storeGrantCoords: storeGrantCoords,
-		settings:         settings,
-		every:            log.Every(10 * time.Second),
+		kvAdmissionQ:        kvAdmissionQ,
+		storeGrantCoords:    storeGrantCoords,
+		elasticCPUWorkQueue: elasticCPUWorkQueue,
+		settings:            settings,
+		every:               log.Every(10 * time.Second),
 	}
 }
 
 // AdmitKVWork implements the KVAdmissionController interface.
+//
+// TODO(irfansharif): There's a fair bit happening here and there's no test
+// coverage. Fix that.
 func (n *KVAdmissionControllerImpl) AdmitKVWork(
 	ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-) (handle interface{}, err error) {
-	ah := admissionHandle{tenantID: tenantID}
-	if n.kvAdmissionQ != nil {
-		bypassAdmission := ba.IsAdmin()
-		source := ba.AdmissionHeader.Source
-		if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-			// Request is from a SQL node.
-			bypassAdmission = false
-			source = roachpb.AdmissionHeader_FROM_SQL
-		}
-		if source == roachpb.AdmissionHeader_OTHER {
-			bypassAdmission = true
-		}
-		createTime := ba.AdmissionHeader.CreateTime
-		if !bypassAdmission && createTime == 0 {
-			// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
-			// of zero CreateTime needs to be revisited. It should use high priority.
-			createTime = timeutil.Now().UnixNano()
-		}
-		admissionInfo := admission.WorkInfo{
-			TenantID:        tenantID,
-			Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
-			CreateTime:      createTime,
-			BypassAdmission: bypassAdmission,
-		}
-		var err error
-		// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
-		// it would bypass admission, it would consume a slot. When writes are
-		// throttled, we start generating more txn heartbeats, which then consume
-		// all the slots, causing no useful work to happen. We do want useful work
-		// to continue even when throttling since there are often significant
-		// number of tokens available.
-		if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
-			ah.storeAdmissionQ = n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
-		}
-		admissionEnabled := true
-		if ah.storeAdmissionQ != nil {
-			ah.storeWorkHandle, err = ah.storeAdmissionQ.Admit(
+) (handle AdmissionHandle, retErr error) {
+	ah := AdmissionHandle{tenantID: tenantID}
+	if n.kvAdmissionQ == nil {
+		return ah, nil
+	}
+
+	bypassAdmission := ba.IsAdmin()
+	source := ba.AdmissionHeader.Source
+	if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+		// Request is from a SQL node.
+		bypassAdmission = false
+		source = roachpb.AdmissionHeader_FROM_SQL
+	}
+	if source == roachpb.AdmissionHeader_OTHER {
+		bypassAdmission = true
+	}
+	createTime := ba.AdmissionHeader.CreateTime
+	if !bypassAdmission && createTime == 0 {
+		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
+		// of zero CreateTime needs to be revisited. It should use high priority.
+		createTime = timeutil.Now().UnixNano()
+	}
+	admissionInfo := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
+		CreateTime:      createTime,
+		BypassAdmission: bypassAdmission,
+	}
+
+	admissionEnabled := true
+	// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
+	// it would bypass admission, it would consume a slot. When writes are
+	// throttled, we start generating more txn heartbeats, which then consume
+	// all the slots, causing no useful work to happen. We do want useful work
+	// to continue even when throttling since there are often significant
+	// number of tokens available.
+	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
+		storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(ba.Replica.StoreID))
+		if storeAdmissionQ != nil {
+			storeWorkHandle, err := storeAdmissionQ.Admit(
 				ctx, admission.StoreWriteWorkInfo{WorkInfo: admissionInfo})
 			if err != nil {
-				return admissionHandle{}, err
+				return AdmissionHandle{}, err
 			}
-			if !ah.storeWorkHandle.AdmissionEnabled() {
-				// Set storeAdmissionQ to nil so that we don't call AdmittedWorkDone
-				// on it. Additionally, the code below will not call
-				// kvAdmissionQ.Admit, and so callAdmittedWorkDoneOnKVAdmissionQ will
-				// stay false.
-				ah.storeAdmissionQ = nil
-				admissionEnabled = false
+			admissionEnabled = storeWorkHandle.AdmissionEnabled()
+			if admissionEnabled {
+				defer func() {
+					if retErr != nil {
+						// No bytes were written.
+						_ = storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
+					}
+				}()
+				ah.storeAdmissionQ, ah.storeWorkHandle = storeAdmissionQ, storeWorkHandle
 			}
 		}
-		if admissionEnabled {
-			ah.callAdmittedWorkDoneOnKVAdmissionQ, err = n.kvAdmissionQ.Admit(ctx, admissionInfo)
+	}
+	if admissionEnabled {
+		if ba.IsSingleExportRequest() {
+			// Backups generate batches with single export requests, which we
+			// admit through the elastic CPU work queue. We grant this
+			// CPU-intensive work a set amount of CPU time and expect it to
+			// terminate (cooperatively) once it exceeds its grant. The amount
+			// disbursed is 100ms, which we've experimentally found to be long
+			// enough to do enough useful work per-request while not causing too
+			// much in the way of scheduling delays on individual cores. Within
+			// admission control we have machinery that observes scheduling
+			// latencies periodically and reduces the total amount of CPU time
+			// handed out through this mechanism, as a way to provide latency
+			// isolation to non-elastic ("latency sensitive") work running on
+			// the same machine.
+			elasticWorkHandle, err := n.elasticCPUWorkQueue.Admit(
+				ctx, elasticCPUDurationPerExportRequest.Get(&n.settings.SV), admissionInfo,
+			)
 			if err != nil {
-				if ah.storeAdmissionQ != nil {
-					// No bytes were written.
-					_ = ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, admission.StoreWorkDoneInfo{})
-				}
-				return admissionHandle{}, err
+				return AdmissionHandle{}, err
 			}
+			ah.ElasticCPUWorkHandle = elasticWorkHandle
+			defer func() {
+				if retErr != nil {
+					// No elastic work was done.
+					n.elasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
+				}
+			}()
+		} else {
+			callAdmittedWorkDoneOnKVAdmissionQ, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			if err != nil {
+				return AdmissionHandle{}, err
+			}
+			ah.callAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
 		}
 	}
 	return ah, nil
@@ -3865,9 +3962,9 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 
 // AdmittedKVWorkDone implements the KVAdmissionController interface.
 func (n *KVAdmissionControllerImpl) AdmittedKVWorkDone(
-	handle interface{}, writeBytes *StoreWriteBytes,
+	ah AdmissionHandle, writeBytes *StoreWriteBytes,
 ) {
-	ah := handle.(admissionHandle)
+	n.elasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
 		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
@@ -3879,7 +3976,7 @@ func (n *KVAdmissionControllerImpl) AdmittedKVWorkDone(
 		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, doneInfo)
 		if err != nil {
 			// This shouldn't be happening.
-			if util.RaceEnabled {
+			if buildutil.CrdbTestBuild {
 				log.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
 			}
 			if n.every.ShouldLog() {
@@ -3893,6 +3990,7 @@ func (n *KVAdmissionControllerImpl) AdmittedKVWorkDone(
 func (n *KVAdmissionControllerImpl) SetTenantWeightProvider(
 	provider TenantWeightProvider, stopper *stop.Stopper,
 ) {
+	// TODO(irfansharif): Use a stopper here instead.
 	go func() {
 		const weightCalculationPeriod = 10 * time.Minute
 		ticker := time.NewTicker(weightCalculationPeriod)
@@ -3913,6 +4011,8 @@ func (n *KVAdmissionControllerImpl) SetTenantWeightProvider(
 					weights.Node = nil
 				}
 				n.kvAdmissionQ.SetTenantWeights(weights.Node)
+				n.elasticCPUWorkQueue.SetTenantWeights(weights.Node)
+
 				for _, storeWeights := range weights.Stores {
 					q := n.storeGrantCoords.TryGetQueueForStore(int32(storeWeights.StoreID))
 					if q != nil {

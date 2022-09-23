@@ -69,48 +69,48 @@ var (
 // A successful configuration and login flow looks like the following (logout logic is unchanged
 // with OIDC):
 //
-// 0. The cluster operator configures the cluster to use OIDC. Once the cluster setting
-//    `server.oidc_authentication.enabled` is set to true, the OIDC client will make a request to
-//    retrieve the discovery document using the `server.oidc_authentication.provider_url` setting.
-//    This attempt will be retried automatically with every call to the `login` or `callback` or
-//    any change to any OIDC settings as long as `enabled` is still true. That behavior is meant to
-//    support easy recovery from any downtime or HTTP errors on the provider side.
+//  0. The cluster operator configures the cluster to use OIDC. Once the cluster setting
+//     `server.oidc_authentication.enabled` is set to true, the OIDC client will make a request to
+//     retrieve the discovery document using the `server.oidc_authentication.provider_url` setting.
+//     This attempt will be retried automatically with every call to the `login` or `callback` or
+//     any change to any OIDC settings as long as `enabled` is still true. That behavior is meant to
+//     support easy recovery from any downtime or HTTP errors on the provider side.
 //
-// 1. A CRDB user opens the Admin UI and clicks on the `Login with OIDC` button (text is
-//    configurable using the `server.oidc_authentication.button_text` setting.
+//  1. A CRDB user opens the Admin UI and clicks on the `Login with OIDC` button (text is
+//     configurable using the `server.oidc_authentication.button_text` setting.
 //
-// 2. The browser loads `/oidc/v1/login` from the cluster, which triggers a redirect to the auth
-//    provider. A number of parameters are sent along with this request: (these are all defined in
-//    the OIDC spec available at: https://openid.net/specs/openid-connect-core-1_0.html)
-//    - client_id and client_secret: these are set using their correspondingly named cluster
-//                                   settings and are values that the auth provider will create.
-//    - redirect_uri: set using the `server.oidc_authentication.redirect_url` cluster setting. This
-//                    will point to `/oidc/v1/callback` at the appropriate host or load balancer
-//                    that the cluster is deployed to.
-//    - scopes: set using the `server.oidc_authentication.scopes` cluster setting. This defines what
-//              information about the user we expect to receive in the callback.
-//    - state: this is a base64 encoded protobuf value that contains the NodeID of the node that
-//             originated the login request and the state variable that was recorded as being in the
-//             caller's cookie at the time. This value wil be returned back as a parameter to the
-//             callback URL by the authentication provider. We check to make sure it matches the
-//             cookie and our stored state to ensure we're processing a response to the request
-//             that we triggered.
+//  2. The browser loads `/oidc/v1/login` from the cluster, which triggers a redirect to the auth
+//     provider. A number of parameters are sent along with this request: (these are all defined in
+//     the OIDC spec available at: https://openid.net/specs/openid-connect-core-1_0.html)
+//     - client_id and client_secret: these are set using their correspondingly named cluster
+//     settings and are values that the auth provider will create.
+//     - redirect_uri: set using the `server.oidc_authentication.redirect_url` cluster setting. This
+//     will point to `/oidc/v1/callback` at the appropriate host or load balancer
+//     that the cluster is deployed to.
+//     - scopes: set using the `server.oidc_authentication.scopes` cluster setting. This defines what
+//     information about the user we expect to receive in the callback.
+//     - state: this is a base64 encoded protobuf value that contains the NodeID of the node that
+//     originated the login request and the state variable that was recorded as being in the
+//     caller's cookie at the time. This value wil be returned back as a parameter to the
+//     callback URL by the authentication provider. We check to make sure it matches the
+//     cookie and our stored state to ensure we're processing a response to the request
+//     that we triggered.
 //
 // 3. The user authenticates at the auth provider
 //
-// 4. The auth provider redirects to the `redirect_uri` we provided, which is handled at
-//    `/oidc/v1/callback`. We validate that the `state` parameter matches the user's browser cookie,
-//    then we exchange the `authentication_code` that was provided for an OAuth token from the
-//    auth provider via an HTTP request. This handled by the `go-oidc` library. Once we have the
-//    id token, we validate and decode it, extract a field from the JSON set via the
-//    `server.oidc_authentication.claim_json_key`. The key is then passed through a regular
-//    expression to transform its value to a DB principal (this is to support the typical workflow
-//    of stripping a realm or domain name from an email address principal). The regular expression
-//    is set using the `server.oidc_authentication.principal_regex` cluster setting.
+//  4. The auth provider redirects to the `redirect_uri` we provided, which is handled at
+//     `/oidc/v1/callback`. We validate that the `state` parameter matches the user's browser cookie,
+//     then we exchange the `authentication_code` that was provided for an OAuth token from the
+//     auth provider via an HTTP request. This handled by the `go-oidc` library. Once we have the
+//     id token, we validate and decode it, extract a field from the JSON set via the
+//     `server.oidc_authentication.claim_json_key`. The key is then passed through a regular
+//     expression to transform its value to a DB principal (this is to support the typical workflow
+//     of stripping a realm or domain name from an email address principal). The regular expression
+//     is set using the `server.oidc_authentication.principal_regex` cluster setting.
 //
-//    If the username we compute exists in the DB, we create a web session for them in the usual
-//    manner, bypassing any password validation requirements, and redirect them to `/` so they can
-//    enjoy a logged-in experience in the Admin UI.
+//     If the username we compute exists in the DB, we create a web session for them in the usual
+//     manner, bypassing any password validation requirements, and redirect them to `/` so they can
+//     enjoy a logged-in experience in the Admin UI.
 type oidcAuthenticationServer struct {
 	mutex        syncutil.RWMutex
 	conf         oidcAuthenticationConf

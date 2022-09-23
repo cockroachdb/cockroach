@@ -48,6 +48,7 @@ go_test(
         "span_resolver_internal_test.go",
         "span_resolver_test.go",
     ],
+    args = ["-test.timeout=895s"],
     embed = [":physicalplan"],
     shard_count = 16,
     deps = [

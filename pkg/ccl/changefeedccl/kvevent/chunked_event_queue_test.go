@@ -11,6 +11,7 @@ package kvevent
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,13 +31,13 @@ func TestBufferEntryQueue(t *testing.T) {
 
 	// Add events to fill 5 chunks and assert they are consumed in fifo order.
 	eventCount := bufferEventChunkArrSize * 5
-	lastPop := -1
-	lastPush := -1
+	var lastPop int64 = -1
+	var lastPush int64 = -1
 
 	for eventCount > 0 {
 		op := rand.Intn(2)
 		if op == 0 {
-			q.enqueue(Event{approxSize: lastPush + 1})
+			q.enqueue(Event{backfillTimestamp: hlc.Timestamp{WallTime: lastPush + 1}})
 			lastPush++
 		} else {
 			e, ok := q.dequeue()
@@ -44,7 +45,7 @@ func TestBufferEntryQueue(t *testing.T) {
 				assert.Equal(t, lastPop, lastPush)
 				assert.True(t, q.empty())
 			} else {
-				assert.Equal(t, e.approxSize, lastPop+1)
+				assert.Equal(t, lastPop+1, e.backfillTimestamp.WallTime)
 				lastPop++
 				eventCount--
 			}
@@ -54,7 +55,7 @@ func TestBufferEntryQueue(t *testing.T) {
 	// Verify that purging works.
 	eventCount = bufferEventChunkArrSize * 2.5
 	for eventCount > 0 {
-		q.enqueue(Event{approxSize: lastPush + 1})
+		q.enqueue(Event{})
 		eventCount--
 	}
 	q.purge()

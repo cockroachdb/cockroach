@@ -326,19 +326,31 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	applicationStats sqlstats.ApplicationStats,
-) (ex *connExecutor, err error) {
+) (ex *connExecutor, _ error) {
+
+	// If the internal executor has injected synthetic descriptors, we will
+	// inject them into the descs.Collection below, and we'll note that
+	// fact so that the synthetic descriptors are reset when the statement
+	// finishes. This logic is in support of the legacy schema changer's
+	// execution of schema changes in a transaction. If the declarative
+	// schema changer is in use, the descs.Collection in the extraTxnState
+	// may have synthetic descriptors, but their lifecycle is controlled
+	// externally, and they should not be reset after executing a statement
+	// here.
+	shouldResetSyntheticDescriptors := len(ie.syntheticDescriptors) > 0
+
 	// If an internal executor is run with a not-nil txn, we may want to
 	// let it inherit the descriptor collection, schema change job records
 	// and job collections from the caller.
 	postSetupFn := func(ex *connExecutor) {
 		if ie.extraTxnState != nil {
-			if ie.extraTxnState.descCollection != nil {
-				ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
-				ex.extraTxnState.fromOuterTxn = true
-				ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
-				ex.extraTxnState.jobs = ie.extraTxnState.jobs
-				ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
-			}
+			ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
+			ex.extraTxnState.fromOuterTxn = true
+			ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
+			ex.extraTxnState.jobs = ie.extraTxnState.jobs
+			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
+			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
+			ex.initPlanner(ctx, &ex.planner)
 		}
 	}
 
@@ -393,8 +405,10 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	// Modify the Collection to match the parent executor's Collection.
 	// This allows the InternalExecutor to see schema changes made by the
 	// parent executor.
-	ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
-	return ex, err
+	if shouldResetSyntheticDescriptors {
+		ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
+	}
+	return ex, nil
 }
 
 type ieIteratorResult struct {
@@ -817,6 +831,10 @@ func (ie *InternalExecutor) execInternal(
 	stmt string,
 	qargs ...interface{},
 ) (r *rowsIterator, retErr error) {
+	if err := ie.checkIfTxnIsConsistent(txn); err != nil {
+		return nil, err
+	}
+
 	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	var sd *sessiondata.SessionData
@@ -882,6 +900,9 @@ func (ie *InternalExecutor) execInternal(
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
 	parsed, err := parser.ParseOne(stmt)
+	if err := ie.checkIfStmtIsAllowed(parsed.AST, txn); err != nil {
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -929,7 +950,12 @@ func (ie *InternalExecutor) execInternal(
 		return nil, err
 	}
 
-	typeHints := make(tree.PlaceholderTypes, len(datums))
+	// We take max(len(s.Types), stmt.NumPlaceHolders) as the length of types.
+	numParams := len(datums)
+	if parsed.NumPlaceholders > numParams {
+		numParams = parsed.NumPlaceholders
+	}
+	typeHints := make(tree.PlaceholderTypes, numParams)
 	for i, d := range datums {
 		// Arg numbers start from 1.
 		typeHints[tree.PlaceholderIdx(i)] = d.ResolvedType()
@@ -1054,6 +1080,29 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	}
 	defer ex.close(ctx, externalTxnClose)
 	return ex.commitSQLTransactionInternal(ctx)
+}
+
+// checkIfStmtIsAllowed returns an error if the internal executor is not bound
+// with the outer-txn-related info but is used to run DDL statements within an
+// outer txn.
+// TODO (janexing): this will be deprecate soon since it's not a good idea
+// to have `extraTxnState` to store the info from a outer txn.
+func (ie *InternalExecutor) checkIfStmtIsAllowed(stmt tree.Statement, txn *kv.Txn) error {
+	if tree.CanModifySchema(stmt) && txn != nil && ie.extraTxnState == nil {
+		return errors.New("DDL statement is disallowed if internal " +
+			"executor is not bound with txn metadata")
+	}
+	return nil
+}
+
+// checkIfTxnIsConsistent returns true if the given txn is not nil and is not
+// the same txn that is used to construct the internal executor.
+func (ie *InternalExecutor) checkIfTxnIsConsistent(txn *kv.Txn) error {
+	if txn != nil && ie.extraTxnState != nil && ie.extraTxnState.txn != txn {
+		return errors.New("txn is inconsistent with the one when " +
+			"constructing the internal executor")
+	}
+	return nil
 }
 
 // internalClientComm is an implementation of ClientComm used by the

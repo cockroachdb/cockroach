@@ -1,0 +1,151 @@
+# tenant-cluster-setting-override-opt: allow-multi-region-abstractions-for-secondary-tenants
+# LogicTest: multiregion-9node-3region-3azs
+# TODO(#75864): enable multiregion-9node-3region-3azs-tenant.
+
+# Set the closed timestamp interval to be short to shorten the amount of time
+# we need to wait for the system config to propagate.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
+
+############################################
+# Regression tests for support issue #1780 #
+############################################
+statement ok
+CREATE DATABASE test_db
+
+statement ok
+USE test_db
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE users (
+        account_id UUID NOT NULL,
+        home_region STRING NOT NULL,
+        address STRING NOT NULL,
+        CONSTRAINT users_pkey PRIMARY KEY (home_region ASC, account_id ASC),
+        UNIQUE INDEX home_region_and_address (home_region ASC, address ASC) PARTITION BY LIST (home_region) (
+                PARTITION ca VALUES IN (('ca')),
+                PARTITION us VALUES IN (('us')),
+                PARTITION ap VALUES IN (('ap'))
+        ),
+        CONSTRAINT check_home_region CHECK (home_region IN ('ap':::STRING, 'us':::STRING, 'ca':::STRING))
+) PARTITION BY LIST (home_region) (
+        PARTITION ca VALUES IN (('ca')),
+        PARTITION us VALUES IN (('us')),
+        PARTITION ap VALUES IN (('ap'))
+);
+
+statement ok
+ALTER PARTITION "ca" OF INDEX users@* CONFIGURE ZONE USING
+  constraints = '[+region=ca-central-1]';
+
+statement ok
+ALTER PARTITION "us" OF INDEX users@* CONFIGURE ZONE USING
+  constraints = '[+region=us-east-1]';
+
+statement ok
+ALTER PARTITION "ap" OF INDEX users@* CONFIGURE ZONE USING
+  constraints = '[+region=ap-southeast-2]';
+
+# Locality-optimized scan should not be used when rows from other regions
+# might exist and need to be returned.
+query T retry
+EXPLAIN SELECT 1 FROM users@home_region_and_address
+WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
+  AND address = '221B Baker Street';
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • scan
+      missing stats
+      table: users@home_region_and_address
+      spans: [/'ap'/'221B Baker Street' - /'ap'/'221B Baker Street'] [/'ca'/'221B Baker Street' - /'ca'/'221B Baker Street'] [/'us'/'221B Baker Street' - /'us'/'221B Baker Street']
+
+# With a hard limit <= the max cardinality of the local scan, we should choose
+# locality-optimized scan.
+query T retry
+EXPLAIN SELECT 1 FROM users@home_region_and_address
+WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
+  AND address = '221B Baker Street' LIMIT 1;
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • union all
+    │ limit: 1
+    │
+    ├── • scan
+    │     missing stats
+    │     table: users@home_region_and_address
+    │     spans: [/'ap'/'221B Baker Street' - /'ap'/'221B Baker Street']
+    │     limit: 1
+    │
+    └── • scan
+          missing stats
+          table: users@home_region_and_address
+          spans: [/'ca'/'221B Baker Street' - /'ca'/'221B Baker Street'] [/'us'/'221B Baker Street' - /'us'/'221B Baker Street']
+          limit: 1
+
+# With a hard limit > the max cardinality of the local scan, we should not
+# choose locality-optimized scan.
+query T retry
+EXPLAIN SELECT 1 FROM users@home_region_and_address
+WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
+  AND address = '221B Baker Street' LIMIT 2;
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • scan
+      missing stats
+      table: users@home_region_and_address
+      spans: [/'ap'/'221B Baker Street' - /'ap'/'221B Baker Street'] [/'ca'/'221B Baker Street' - /'ca'/'221B Baker Street'] [/'us'/'221B Baker Street' - /'us'/'221B Baker Street']
+      limit: 2
+
+statement ok
+ALTER TABLE users ADD UNIQUE WITHOUT INDEX (address)
+
+# With a unique constraint on the non-partitioning index key columns, a
+# non-limited scan can avoid reading remote regions by picking
+# locality-optimized scan.
+query T retry
+EXPLAIN SELECT 1 FROM users@home_region_and_address
+WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
+  AND address = '221B Baker Street';
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • union all
+    │ limit: 1
+    │
+    ├── • scan
+    │     missing stats
+    │     table: users@home_region_and_address
+    │     spans: [/'ap'/'221B Baker Street' - /'ap'/'221B Baker Street']
+    │
+    └── • scan
+          missing stats
+          table: users@home_region_and_address
+          spans: [/'ca'/'221B Baker Street' - /'ca'/'221B Baker Street'] [/'us'/'221B Baker Street' - /'us'/'221B Baker Street']
+
+statement ok
+RESET experimental_enable_unique_without_index_constraints
+
+################################################
+# End regression tests for support issue #1780 #
+################################################

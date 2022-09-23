@@ -86,7 +86,9 @@ func validateCheckExpr(
 //
 // SELECT s.a_id, s.b_id, s.pk1, s.pk2 FROM child@c_idx
 // WHERE
-//   (a_id IS NULL OR b_id IS NULL) AND (a_id IS NOT NULL OR b_id IS NOT NULL)
+//
+//	(a_id IS NULL OR b_id IS NULL) AND (a_id IS NOT NULL OR b_id IS NOT NULL)
+//
 // LIMIT 1;
 func matchFullUnacceptableKeyQuery(
 	srcTbl catalog.TableDescriptor, fk *descpb.ForeignKeyConstraint, limitResults bool,
@@ -150,12 +152,14 @@ func matchFullUnacceptableKeyQuery(
 // query:
 //
 // SELECT s.a_id, s.b_id, s.rowid
-//  FROM (
-//        SELECT a_id, b_id, rowid
-//          FROM [<ID of child> AS src]@{IGNORE_FOREIGN_KEYS}
-//         WHERE a_id IS NOT NULL AND b_id IS NOT NULL
-//       ) AS s
-//       LEFT JOIN [<id of parent> AS target] AS t ON s.a_id = t.a AND s.b_id = t.b
+//
+//	FROM (
+//	      SELECT a_id, b_id, rowid
+//	        FROM [<ID of child> AS src]@{IGNORE_FOREIGN_KEYS}
+//	       WHERE a_id IS NOT NULL AND b_id IS NOT NULL
+//	     ) AS s
+//	     LEFT JOIN [<id of parent> AS target] AS t ON s.a_id = t.a AND s.b_id = t.b
+//
 // WHERE t.a IS NULL
 // LIMIT 1  -- if limitResults is set
 //
@@ -383,7 +387,7 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 	if err != nil {
 		return err
 	}
-	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db.GetID())
+	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db)
 	if err != nil {
 		return err
 	}
@@ -670,7 +674,7 @@ func (p *planner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error
 	if err != nil {
 		return err
 	}
-	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db.GetID())
+	tableDescs, err := p.Descriptors().GetAllTableDescriptorsInDatabase(ctx, p.Txn(), db)
 	if err != nil {
 		return err
 	}

@@ -8,7 +8,7 @@ spawn /bin/bash
 send "PS1='\\h:''/# '\r"
 eexpect ":/# "
 
-send "$argv sql --host=localhost\r"
+send "$argv sql --no-line-editor --host=localhost\r"
 eexpect root@
 
 ###START tests prompt customization

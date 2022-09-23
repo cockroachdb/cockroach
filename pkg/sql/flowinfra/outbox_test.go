@@ -76,7 +76,6 @@ func TestOutbox(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:      st,
 			Stopper:       stopper,
-			NodeDialer:    dialer,
 			PodNodeDialer: dialer,
 		},
 		NodeID: base.TestingIDContainer,
@@ -242,7 +241,6 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:      st,
 			Stopper:       stopper,
-			NodeDialer:    dialer,
 			PodNodeDialer: dialer,
 		},
 		NodeID: base.TestingIDContainer,
@@ -315,7 +313,6 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				Cfg: &execinfra.ServerConfig{
 					Settings:      st,
 					Stopper:       stopper,
-					NodeDialer:    dialer,
 					PodNodeDialer: dialer,
 				},
 				NodeID: base.TestingIDContainer,
@@ -393,7 +390,6 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:      st,
 			Stopper:       stopper,
-			NodeDialer:    dialer,
 			PodNodeDialer: dialer,
 		},
 		NodeID: base.TestingIDContainer,
@@ -449,8 +445,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 			Stopper:  stopper,
-			// a nil nodeDialer will always fail to connect.
-			NodeDialer:    nil,
+			// a nil PodNodeDialer will always fail to connect.
 			PodNodeDialer: nil,
 		},
 		NodeID: base.TestingIDContainer,
@@ -525,7 +520,6 @@ func BenchmarkOutbox(b *testing.B) {
 				Cfg: &execinfra.ServerConfig{
 					Settings:      st,
 					Stopper:       stopper,
-					NodeDialer:    dialer,
 					PodNodeDialer: dialer,
 				},
 				NodeID: base.TestingIDContainer,

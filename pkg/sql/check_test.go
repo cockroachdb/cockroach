@@ -53,8 +53,15 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 		{
 			desc: "not pointing at a valid scheduled job",
 			setup: func(t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, s serverutils.TestServerInterface, tableDesc *tabledesc.Mutable, scheduleID int64) {
-				tableDesc.RowLevelTTL.ScheduleID = 0
-				require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+				require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+					// We need the collection to read the descriptor from storage for
+					// the subsequent write to succeed.
+					tableDesc, err = col.GetMutableTableByID(ctx, txn, tableDesc.GetID(), tree.ObjectLookupFlagsWithRequired())
+					tableDesc.RowLevelTTL.ScheduleID = 0
+					tableDesc.Version++
+					if err != nil {
+						return err
+					}
 					return col.WriteDesc(ctx, false /* kvBatch */, tableDesc, txn)
 				}))
 			},

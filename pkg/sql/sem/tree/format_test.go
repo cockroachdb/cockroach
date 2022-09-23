@@ -456,11 +456,11 @@ func TestFormatNodeSummary(t *testing.T) {
 			expected: `SELECT id FROM system.jobs, (SELECT) AS args`,
 		},
 		{
-			stmt:     `INSERT INTO system.public.lease("descID", version, "nodeID", expiration) VALUES ('1232', '111', __more2__)`,
+			stmt:     `INSERT INTO system.public.lease("descID", version, "nodeID", expiration) VALUES ('1232', '111', __more1_10__)`,
 			expected: `INSERT INTO system.public.lease("descID", versi...)`,
 		},
 		{
-			stmt:     `INSERT INTO vehicles VALUES ($1, $2, __more6__)`,
+			stmt:     `INSERT INTO vehicles VALUES ($1, $2, __more1_10__)`,
 			expected: `INSERT INTO vehicles`,
 		},
 		{
@@ -481,7 +481,7 @@ func TestFormatNodeSummary(t *testing.T) {
 		},
 		{
 			stmt:     `UPDATE system.jobs SET status = $2, payload = $3, last_run = $4, num_runs = $5 WHERE internal_table_id = $1`,
-			expected: `UPDATE system.jobs SET status = $2, pa... WHERE internal_table_...`,
+			expected: `UPDATE system.jobs SET status = $1, pa... WHERE internal_table_...`,
 		},
 		{
 			stmt:     `UPDATE system.extra_extra_long_table_name SET (schedule_state, next_run) = ($1, $2) WHERE schedule_id = 'name'`,

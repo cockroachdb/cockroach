@@ -56,9 +56,6 @@ func runQueryComparison(
 	}
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
-	if err := c.PutLibraries(ctx, "./lib"); err != nil {
-		t.Fatalf("could not initialize libraries: %v", err)
-	}
 
 	for i := 0; ; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
@@ -182,6 +179,7 @@ func runOneRoundQueryComparison(
 		sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(),
 		sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
+		sqlsmith.DisableDivision(),
 		sqlsmith.SetComplexity(.3),
 		sqlsmith.SetScalarComplexity(.1),
 	)

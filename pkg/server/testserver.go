@@ -235,6 +235,12 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.DisableSpanConfigs {
 		cfg.SpanConfigsDisabled = true
 	}
+	if params.SnapshotApplyLimit != 0 {
+		cfg.SnapshotApplyLimit = params.SnapshotApplyLimit
+	}
+	if params.SnapshotSendLimit != 0 {
+		cfg.SnapshotSendLimit = params.SnapshotSendLimit
+	}
 
 	// Ensure we have the correct number of engines. Add in-memory ones where
 	// needed. There must be at least one store/engine.
@@ -297,12 +303,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 //
 // Example usage of a TestServer:
 //
-//   s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-//   defer s.Stopper().Stop()
-//   // If really needed, in tests that can depend on server, downcast to
-//   // server.TestServer:
-//   ts := s.(*server.TestServer)
-//
+//	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+//	defer s.Stopper().Stop()
+//	// If really needed, in tests that can depend on server, downcast to
+//	// server.TestServer:
+//	ts := s.(*server.TestServer)
 type TestServer struct {
 	Cfg    *Config
 	params base.TestServerArgs
@@ -496,6 +501,11 @@ func (ts *TestServer) TenantStatusServer() interface{} {
 	return ts.status
 }
 
+// TestTenants provides information to tenant(s) that _may_ have been created
+func (ts *TestServer) TestTenants() []serverutils.TestTenantInterface {
+	return ts.testTenants
+}
+
 // maybeStartDefaultTestTenant might start a test tenant. This can then be used
 // for multi-tenant testing, where the default SQL connection will be made to
 // this tenant instead of to the system tenant. Note that we will
@@ -547,6 +557,7 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 			SQLStatsKnobs: &sqlstats.TestingKnobs{
 				AOSTClause: "AS OF SYSTEM TIME '-1us'",
 			},
+			RangeFeed: ts.TestingKnobs().RangeFeed,
 		},
 	}
 

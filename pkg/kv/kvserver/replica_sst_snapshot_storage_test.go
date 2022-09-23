@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -297,7 +298,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	var actualSSTs [][]byte
 	fileNames := msstw.scratch.SSTs()
 	for _, file := range fileNames {
-		sst, err := eng.ReadFile(file)
+		sst, err := fs.ReadFile(eng, file)
 		require.NoError(t, err)
 		actualSSTs = append(actualSSTs, sst)
 	}

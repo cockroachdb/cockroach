@@ -58,6 +58,7 @@ go_test(
         "topk_test.go",
         "unresolved_addr_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":util"],
     deps = [
         "//pkg/util/randutil",

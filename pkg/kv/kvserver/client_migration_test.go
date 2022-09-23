@@ -240,8 +240,8 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 	blockApplicationCh := make(chan struct{})
 
 	// We're going to be migrating from startV to endV.
-	startV := roachpb.Version{Major: 41}
-	endV := roachpb.Version{Major: 42}
+	startV := roachpb.Version{Major: 1000041}
+	endV := roachpb.Version{Major: 1000042}
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{

@@ -34,17 +34,16 @@ import (
 // TestDataDriven is a data-driven test for spanconfig.Splitter. It offers
 // the following commands:
 //
-// - "exec-sql"
-//   Executes the input SQL query.
+//   - "exec-sql"
+//     Executes the input SQL query.
 //
-// - "query-sql"
-//   Executes the input SQL query and prints the results.
+//   - "query-sql"
+//     Executes the input SQL query and prints the results.
 //
-// - "splits" [database=<str> table=<str>] [id=<int>]
-//   Prints the number splits generated the referenced object (named database +
-//   table, or descriptor id). Also logs the set of internal steps the Splitter
-//   takes to arrive at the number.
-//
+//   - "splits" [database=<str> table=<str>] [id=<int>]
+//     Prints the number splits generated the referenced object (named database +
+//     table, or descriptor id). Also logs the set of internal steps the Splitter
+//     takes to arrive at the number.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

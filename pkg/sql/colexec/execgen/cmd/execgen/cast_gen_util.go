@@ -26,16 +26,16 @@ import (
 // 1.  from the same type family are contiguous
 // 2.  for a fixed "from" type family, all the same "from" widths are contiguous
 // 2'. for a fixed "from" type family, anyWidth "from" width is the last one
-// 3.  for a fixed "from" type, all the same "to" type families are contiguous
-// 4.  for a fixed "from" type and a fixed "to" type family, anyWidth "to" width
+//  3. for a fixed "from" type, all the same "to" type families are contiguous
+//  4. for a fixed "from" type and a fixed "to" type family, anyWidth "to" width
 //     is the last one.
 //
 // If this structure is broken, then the generated code will not compile because
 // either
-// 1. there will be duplicate entries in the switch statements (when
-//    "continuity" requirement is broken)
-// 2. the 'default' case appears before other in the switch statements (when
-//    anyWidth is not the last one).
+//  1. there will be duplicate entries in the switch statements (when
+//     "continuity" requirement is broken)
+//  2. the 'default' case appears before other in the switch statements (when
+//     anyWidth is not the last one).
 var nativeCastInfos = []supportedNativeCastInfo{
 	{types.Bool, types.Float, boolToIntOrFloat},
 	{types.Bool, types.Int2, boolToIntOrFloat},

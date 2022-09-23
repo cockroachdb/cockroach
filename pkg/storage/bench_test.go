@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -63,6 +64,8 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 		{2, []int{1}},
 		{1024, []int{1, 16, 32, 512, 1015, 1023}},
 	}
+	numRangeTombstones := []int{0, 1}
+	updateStats := []bool{false, true}
 	engineMakers := []struct {
 		name   string
 		create engineMaker
@@ -83,16 +86,26 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 										b.Run(fmt.Sprintf("numVersions=%d", versions.total), func(b *testing.B) {
 											for _, toDelete := range versions.toDelete {
 												b.Run(fmt.Sprintf("deleteVersions=%d", toDelete), func(b *testing.B) {
-													runMVCCGarbageCollect(ctx, b, engineImpl.create,
-														benchGarbageCollectOptions{
-															benchDataOptions: benchDataOptions{
-																numKeys:     numKeys,
-																numVersions: versions.total,
-																valueBytes:  valSize,
-															},
-															keyBytes:       keySize,
-															deleteVersions: toDelete,
+													for _, rangeTombstones := range numRangeTombstones {
+														b.Run(fmt.Sprintf("numRangeTs=%d", rangeTombstones), func(b *testing.B) {
+															for _, stats := range updateStats {
+																b.Run(fmt.Sprintf("updateStats=%t", stats), func(b *testing.B) {
+																	runMVCCGarbageCollect(ctx, b, engineImpl.create,
+																		benchGarbageCollectOptions{
+																			benchDataOptions: benchDataOptions{
+																				numKeys:      numKeys,
+																				numVersions:  versions.total,
+																				valueBytes:   valSize,
+																				numRangeKeys: rangeTombstones,
+																			},
+																			keyBytes:       keySize,
+																			deleteVersions: toDelete,
+																			updateStats:    stats,
+																		})
+																})
+															}
 														})
+													}
 												})
 											}
 										})
@@ -120,29 +133,75 @@ func BenchmarkMVCCExportToSST(b *testing.B) {
 
 	numKeys := []int{64, 512, 1024, 8192, 65536}
 	numRevisions := []int{1, 10, 100}
+	numRangeKeys := []int{0, 1, 100}
 	exportAllRevisions := []bool{false, true}
-
 	for _, numKey := range numKeys {
 		b.Run(fmt.Sprintf("numKeys=%d", numKey), func(b *testing.B) {
 			for _, numRevision := range numRevisions {
 				b.Run(fmt.Sprintf("numRevisions=%d", numRevision), func(b *testing.B) {
-					for _, exportAllRevisionsVal := range exportAllRevisions {
-						b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
-							for _, numRangeKeys := range []int{0, 1, 100} {
-								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
-									opts := mvccExportToSSTOpts{
-										numKeys:            numKey,
-										numRevisions:       numRevision,
-										exportAllRevisions: exportAllRevisionsVal,
-										numRangeKeys:       numRangeKeys,
+					for _, numRangeKey := range numRangeKeys {
+						b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+							for _, perc := range []int{100, 50, 10} {
+								if numRevision == 1 && perc != 100 {
+									continue // no point in incremental exports with 1 revision
+								}
+								b.Run(fmt.Sprintf("perc=%d%%", perc), func(b *testing.B) {
+									for _, exportAllRevisionsVal := range exportAllRevisions {
+										b.Run(fmt.Sprintf("exportAllRevisions=%t", exportAllRevisionsVal), func(b *testing.B) {
+											opts := mvccExportToSSTOpts{
+												numKeys:            numKey,
+												numRevisions:       numRevision,
+												numRangeKeys:       numRangeKey,
+												exportAllRevisions: exportAllRevisionsVal,
+												percentage:         perc,
+											}
+											runMVCCExportToSST(b, opts)
+										})
 									}
-									runMVCCExportToSST(b, opts)
 								})
 							}
 						})
 					}
 				})
 			}
+		})
+	}
+
+	// Doubling the test variants because of this one parameter feels pretty
+	// excessive (this benchmark is already very long), so handle it specially
+	// and hard code the other parameters. To run and compare:
+	//
+	//     dev bench pkg/storage --filter BenchmarkMVCCExportToSST/useElasticCPUHandle --count 10 --timeout 20m -v --stream-output --ignore-cache 2>&1 | tee bench.txt
+	//     for flavor in useElasticCPUHandle=true useElasticCPUHandle=false; do grep -E "${flavor}[^0-9]+" bench.txt | sed -E "s/${flavor}+/X/" > $flavor.txt; done
+	//     benchstat useElasticCPUHandle\={false,true}.txt
+	//
+	// Results (08/29/2022):
+	//
+	//     goos: linux
+	//     goarch: amd64
+	//     cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
+	//     ...
+	//     $ benchstat useElasticCPUHandle\={false,true}.txt
+	//     name                                                                         old time/op  new time/op  delta
+	//     MVCCExportToSST/X/numKeys=65536/numRevisions=100/exportAllRevisions=true-24   2.54s ± 2%   2.53s ± 2%   ~     (p=0.549 n=10+9)
+	//
+	withElasticCPUHandle := []bool{false, true}
+	for _, useElasticCPUHandle := range withElasticCPUHandle {
+		numKey := numKeys[len(numKeys)-1]
+		numRevision := numRevisions[len(numRevisions)-1]
+		numRangeKey := numRangeKeys[len(numRangeKeys)-1]
+		exportAllRevisionVal := exportAllRevisions[len(exportAllRevisions)-1]
+		b.Run(fmt.Sprintf("useElasticCPUHandle=%t/numKeys=%d/numRevisions=%d/exportAllRevisions=%t",
+			useElasticCPUHandle, numKey, numRevision, exportAllRevisionVal,
+		), func(b *testing.B) {
+			opts := mvccExportToSSTOpts{
+				numKeys:             numKey,
+				numRevisions:        numRevision,
+				numRangeKeys:        numRangeKey,
+				exportAllRevisions:  exportAllRevisionVal,
+				useElasticCPUHandle: useElasticCPUHandle,
+			}
+			runMVCCExportToSST(b, opts)
 		})
 	}
 }
@@ -1506,6 +1565,7 @@ type benchGarbageCollectOptions struct {
 	benchDataOptions
 	keyBytes       int
 	deleteVersions int
+	updateStats    bool
 }
 
 func runMVCCGarbageCollect(
@@ -1518,31 +1578,41 @@ func runMVCCGarbageCollect(
 	ts := hlc.Timestamp{}.Add(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(), 0)
 	val := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
 
-	// We write values at ts+(0,i), set now=ts+(1,0) so that we're ahead of all
+	// We write values at ts+(1,i), set now=ts+(2,0) so that we're ahead of all
 	// the writes. This value doesn't matter in practice, as it's used only for
 	// stats updates.
-	now := ts.Add(1, 0)
+	now := ts.Add(2, 0)
 
 	// Write 'numKeys' of the given 'keySize' and 'valSize' to the given engine.
 	// For each key, write 'numVersions' versions, and add a GCRequest_GCKey to
 	// the returned slice that affects the oldest 'deleteVersions' versions. The
-	// first write for each key will be at `ts`, the second one at `ts+(0,1)`,
-	// etc.
+	// first write for each key will be at `ts+(1,0)`, the second one
+	// at `ts+(1,1)`, etc.
+	// If numRangeKeys is set to 1 then range tombstone will be written at ts.
 	//
 	// NB: a real invocation of MVCCGarbageCollect typically has most of the keys
 	// in sorted order. Here they will be ordered randomly.
 	setup := func() (gcKeys []roachpb.GCRequest_GCKey) {
 		batch := eng.NewBatch()
+		if opts.numRangeKeys > 1 {
+			b.Fatal("Invalid bench data config. Number of range keys can be 0 or 1")
+		}
+		if opts.numRangeKeys == 1 {
+			if err := MVCCDeleteRangeUsingTombstone(ctx, batch, nil, keys.LocalMax, keys.MaxKey,
+				ts, hlc.ClockTimestamp{}, nil, nil, true, 0, nil); err != nil {
+				b.Fatal(err)
+			}
+		}
 		for i := 0; i < opts.numKeys; i++ {
 			key := randutil.RandBytes(rng, opts.keyBytes)
 			if opts.deleteVersions > 0 {
 				gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{
-					Timestamp: ts.Add(0, int32(opts.deleteVersions-1)),
+					Timestamp: ts.Add(1, int32(opts.deleteVersions-1)),
 					Key:       key,
 				})
 			}
 			for j := 0; j < opts.numVersions; j++ {
-				if err := MVCCPut(ctx, batch, nil, key, ts.Add(0, int32(j)), hlc.ClockTimestamp{}, val, nil); err != nil {
+				if err := MVCCPut(ctx, batch, nil, key, ts.Add(1, int32(j)), hlc.ClockTimestamp{}, val, nil); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -1556,10 +1626,14 @@ func runMVCCGarbageCollect(
 
 	gcKeys := setup()
 
+	var ms *enginepb.MVCCStats
+	if opts.updateStats {
+		ms = &enginepb.MVCCStats{}
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		batch := eng.NewBatch()
-		if err := MVCCGarbageCollect(ctx, batch, nil /* ms */, gcKeys, now); err != nil {
+		if err := MVCCGarbageCollect(ctx, batch, ms, gcKeys, now); err != nil {
 			b.Fatal(err)
 		}
 		batch.Close()
@@ -1625,8 +1699,13 @@ func runBatchApplyBatchRepr(
 }
 
 type mvccExportToSSTOpts struct {
-	numKeys, numRevisions, numRangeKeys int
-	exportAllRevisions                  bool
+	numKeys, numRevisions, numRangeKeys     int
+	exportAllRevisions, useElasticCPUHandle bool
+
+	// percentage specifies the share of the dataset to export. 100 will be a full
+	// export, disabling the TBI optimization. <100 will be an incremental export
+	// with a non-zero StartTS, using a TBI. 0 defaults to 100.
+	percentage int
 }
 
 func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
@@ -1647,7 +1726,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	}
 
 	mkWall := func(j int) int64 {
-		wt := int64(j + 2)
+		wt := int64(j + 1)
 		return wt
 	}
 
@@ -1657,9 +1736,9 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		batch := engine.NewBatch()
 		defer batch.Close()
 		for i := 0; i < opts.numRangeKeys; i++ {
-			// NB: regular keys are written at ts 2+, so this is below any of the
+			// NB: regular keys are written at ts 1+, so this is below any of the
 			// regular writes and thus won't delete anything.
-			ts := hlc.Timestamp{WallTime: 1, Logical: int32(i + 1)}
+			ts := hlc.Timestamp{WallTime: 0, Logical: int32(i + 1)}
 			start := rng.Intn(opts.numKeys)
 			end := start + rng.Intn(opts.numKeys-start) + 1
 			// As a special case, if we're only writing one range key, write it across
@@ -1697,8 +1776,11 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		b.Fatal(err)
 	}
 
-	startWall := mkWall(opts.numRevisions/2 - 1) // exclusive, at least 1, so never see rangedels
-	endWall := mkWall(opts.numRevisions + 1)     // see latest revision for every key
+	var startWall int64
+	if opts.percentage > 0 && opts.percentage < 100 {
+		startWall = mkWall(opts.numRevisions*(100-opts.percentage)/100 - 1) // exclusive
+	}
+	endWall := mkWall(opts.numRevisions + 1) // see latest revision for every key
 	var expKVsInSST int
 	if opts.exportAllRevisions {
 		// First, compute how many revisions are visible for each key.
@@ -1716,6 +1798,10 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		expKVsInSST = opts.numKeys
 	}
 
+	if opts.useElasticCPUHandle {
+		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, admission.TestingNewElasticCPUHandle())
+	}
+
 	var buf bytes.Buffer
 	buf.Grow(1 << 20)
 	b.ResetTimer()
@@ -1724,7 +1810,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
 		b.StartTimer()
-		startTS := hlc.Timestamp{WallTime: startWall, Logical: math.MaxInt32} // use 1.infinity to avoid rangedels at 1.<n>
+		startTS := hlc.Timestamp{WallTime: startWall}
 		endTS := hlc.Timestamp{WallTime: endWall}
 		_, _, err := MVCCExportToSST(ctx, st, engine, MVCCExportOptions{
 			StartKey:           MVCCKey{Key: keys.LocalMax},
@@ -1750,7 +1836,7 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 	}
 
 	// Run sanity checks on last produced SST.
-	it, err := NewPebbleMemSSTIterator(
+	it, err := NewMemSSTIterator(
 		buf.Bytes(), true /* verify */, IterOptions{
 			LowerBound: keys.LocalMax,
 			UpperBound: roachpb.KeyMax,
@@ -1777,8 +1863,13 @@ func runMVCCExportToSST(b *testing.B, opts mvccExportToSSTOpts) {
 		it.Next()
 	}
 	require.Equal(b, expKVsInSST, n)
-	// Should not see any rangedel stacks.
-	require.Zero(b, r)
+	// Should not see any rangedel stacks if startTS is set.
+	if opts.numRangeKeys > 0 && startWall == 0 && opts.exportAllRevisions {
+		require.NotZero(b, r)
+		require.LessOrEqual(b, r, opts.numRangeKeys)
+	} else {
+		require.Zero(b, r)
+	}
 }
 
 func runCheckSSTConflicts(
@@ -1865,11 +1956,11 @@ func runSSTIterator(b *testing.B, variant string, numKeys int, verify bool) {
 	switch variant {
 	case "legacy":
 		makeSSTIterator = func(data []byte, verify bool) (SimpleMVCCIterator, error) {
-			return NewMemSSTIterator(data, verify)
+			return NewLegacyMemSSTIterator(data, verify)
 		}
 	case "pebble":
 		makeSSTIterator = func(data []byte, verify bool) (SimpleMVCCIterator, error) {
-			return NewPebbleMemSSTIterator(data, verify, IterOptions{
+			return NewMemSSTIterator(data, verify, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: keys.MinKey,
 				UpperBound: keys.MaxKey,

@@ -82,3 +82,13 @@ func WriteFile(fs FS, filename string, data []byte) error {
 	}
 	return err
 }
+
+// ReadFile reads data from a file named by filename.
+func ReadFile(fs FS, filename string) ([]byte, error) {
+	file, err := fs.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return io.ReadAll(file)
+}

@@ -24,6 +24,7 @@ upsert descriptor #106
   +  mutations:
   +  - direction: ADD
   +    index:
+  +      createdAtNanos: "1640998800000000000"
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -104,14 +105,6 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - direction: ADD
-  ...
 create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]
 # end PreCommitPhase
@@ -135,7 +128,7 @@ upsert descriptor #106
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: t
      nextColumnId: 3
   ...
@@ -218,7 +211,7 @@ upsert descriptor #106
          version: 4
        mutationId: 1
   -    state: MERGING
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
@@ -247,7 +240,8 @@ upsert descriptor #106
   -  modificationTime:
   -    wallTime: "1640995200000000008"
   +  indexes:
-  +  - createdExplicitly: true
+  +  - createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
   +    foreignKey: {}
   +    geoConfig: {}
   +    id: 2
@@ -270,6 +264,7 @@ upsert descriptor #106
   -  - direction: ADD
   +  - direction: DROP
        index:
+  -      createdAtNanos: "1640998800000000000"
          createdExplicitly: true
          foreignKey: {}
          geoConfig: {}
@@ -289,7 +284,7 @@ upsert descriptor #106
   -      storeColumnNames: []
   -      version: 4
   -    mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   -    index:
   -      createdExplicitly: true
@@ -300,7 +295,7 @@ upsert descriptor #106
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 3

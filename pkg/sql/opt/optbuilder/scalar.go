@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -516,8 +518,9 @@ func (b *Builder) buildAnyScalar(
 // f        The given function expression.
 // outCol   The output column of the function being built.
 // colRefs  The set of columns referenced so far by the scalar expression
-//          being built. If not nil, it is updated with any columns seen in
-//          finishBuildScalarRef.
+//
+//	being built. If not nil, it is updated with any columns seen in
+//	finishBuildScalarRef.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
@@ -582,8 +585,11 @@ func (b *Builder) buildFunction(
 					panic(err)
 				}
 			} else {
-				tn := tree.MakeUnqualifiedTableName(tree.Name(seqIdentifier.SeqName))
-				ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
+				tn, err := parser.ParseQualifiedTableName(seqIdentifier.SeqName)
+				if err != nil {
+					panic(err)
+				}
+				ds, _, _ = b.resolveDataSource(tn, privilege.SELECT)
 			}
 			b.schemaDeps = append(b.schemaDeps, opt.SchemaDep{
 				DataSource: ds,
@@ -657,9 +663,57 @@ func (b *Builder) buildUDF(
 	rels := make(memo.RelListExpr, len(stmts))
 	for i := range stmts {
 		stmtScope := b.buildStmt(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+		expr := stmtScope.expr
+		physProps := stmtScope.makePhysicalProps()
+
+		// Add a LIMIT 1 to the last statement. This is valid because any other
+		// rows after the first can simply be ignored. The limit could be
+		// beneficial because it could allow additional optimization.
+		if i == len(stmts)-1 {
+			b.buildLimit(&tree.Limit{Count: tree.NewDInt(1)}, b.allocScope(), stmtScope)
+			expr = stmtScope.expr
+			// The limit expression will maintain the desired ordering, if any,
+			// so the physical props ordering can be cleared. The presentation
+			// must remain.
+			physProps.Ordering = props.OrderingChoice{}
+
+			// If there are multiple output columns, we must combine them into a
+			// tuple - only a single column can be returned from a UDF.
+			if cols := physProps.Presentation; len(cols) > 1 {
+				elems := make(memo.ScalarListExpr, len(cols))
+				for i := range cols {
+					elems[i] = b.factory.ConstructVariable(cols[i].ID)
+				}
+				tup := b.factory.ConstructTuple(elems, f.ResolvedType())
+				stmtScope = bodyScope.push()
+				col := b.synthesizeColumn(stmtScope, scopeColName(""), f.ResolvedType(), nil /* expr */, tup)
+				expr = b.constructProject(expr, []scopeColumn{*col})
+				physProps = stmtScope.makePhysicalProps()
+			}
+
+			// If necessary, add an assignment cast to the result column so that
+			// its type matches the function return type.
+			returnCol := physProps.Presentation[0].ID
+			returnColMeta := b.factory.Metadata().ColumnMeta(returnCol)
+			if returnColMeta.Type != f.ResolvedType() {
+				if !cast.ValidCast(returnColMeta.Type, f.ResolvedType(), cast.ContextAssignment) {
+					panic(sqlerrors.NewInvalidAssignmentCastError(
+						returnColMeta.Type, f.ResolvedType(), returnColMeta.Alias))
+				}
+				cast := b.factory.ConstructAssignmentCast(
+					b.factory.ConstructVariable(physProps.Presentation[0].ID),
+					f.ResolvedType(),
+				)
+				stmtScope = bodyScope.push()
+				col := b.synthesizeColumn(stmtScope, scopeColName(""), f.ResolvedType(), nil /* expr */, cast)
+				expr = b.constructProject(expr, []scopeColumn{*col})
+				physProps = stmtScope.makePhysicalProps()
+			}
+		}
+
 		rels[i] = memo.RelRequiredPropsExpr{
-			RelExpr:   stmtScope.expr,
-			PhysProps: stmtScope.makePhysicalProps(),
+			RelExpr:   expr,
+			PhysProps: physProps,
 		}
 	}
 
@@ -718,12 +772,12 @@ func (b *Builder) buildRangeCond(
 // checkSubqueryOuterCols uses the subquery outer columns to update the given
 // set of column references and the set of outer columns for any enclosing
 // subuqery. It also performs the following checks:
-//   1. If aggregates are not allowed in the current context (e.g., if we
-//      are building the WHERE clause), it checks that the subquery does not
-//      reference any aggregates from this scope.
-//   2. If this is a grouping context, it checks that any outer columns from
-//      the given subquery that reference inScope are either aggregate or
-//      grouping columns in inScope.
+//  1. If aggregates are not allowed in the current context (e.g., if we
+//     are building the WHERE clause), it checks that the subquery does not
+//     reference any aggregates from this scope.
+//  2. If this is a grouping context, it checks that any outer columns from
+//     the given subquery that reference inScope are either aggregate or
+//     grouping columns in inScope.
 func (b *Builder) checkSubqueryOuterCols(
 	subqueryOuterCols opt.ColSet, inGroupingContext bool, inScope *scope, colRefs *opt.ColSet,
 ) {

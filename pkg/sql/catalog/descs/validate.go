@@ -14,13 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 )
 
 // Validate returns any descriptor validation errors after validating using the
@@ -54,28 +51,33 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
 		return nil
 	}
-	descs := tc.stored.getUncommittedDescriptorsForValidation()
+	var descs []catalog.Descriptor
+	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		descs = append(descs, desc)
+		return nil
+	})
 	if len(descs) == 0 {
 		return nil
 	}
-	return tc.Validate(ctx, txn, catalog.ValidationWriteTelemetry, catalog.ValidationLevelAllPreTxnCommit, descs...)
+	return tc.Validate(ctx, txn, catalog.ValidationWriteTelemetry, validate.Write, descs...)
 }
 
 func (tc *Collection) newValidationDereferencer(txn *kv.Txn) validate.ValidationDereferencer {
-	return &collectionBackedDereferencer{tc: tc, txn: txn}
+	return &collectionBackedDereferencer{tc: tc, sd: tc.stored.NewValidationDereferencer(txn)}
 }
 
 // collectionBackedDereferencer wraps a Collection to implement the
 // validate.ValidationDereferencer interface for validation.
 type collectionBackedDereferencer struct {
-	tc  *Collection
-	txn *kv.Txn
+	tc *Collection
+	sd validate.ValidationDereferencer
 }
 
 var _ validate.ValidationDereferencer = &collectionBackedDereferencer{}
 
 // DereferenceDescriptors implements the validate.ValidationDereferencer
-// interface by leveraging the collection's uncommitted descriptors.
+// interface by leveraging the collection's uncommitted descriptors as well
+// as its storage cache.
 func (c collectionBackedDereferencer) DereferenceDescriptors(
 	ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID,
 ) (ret []catalog.Descriptor, _ error) {
@@ -83,103 +85,33 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 	fallbackReqs := make([]descpb.ID, 0, len(reqs))
 	fallbackRetIndexes := make([]int, 0, len(reqs))
 	for i, id := range reqs {
-		desc, err := c.fastDescLookup(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if desc == nil {
+		if uc := c.tc.uncommitted.getUncommittedByID(id); uc == nil {
 			fallbackReqs = append(fallbackReqs, id)
 			fallbackRetIndexes = append(fallbackRetIndexes, i)
 		} else {
-			ret[i] = desc
+			ret[i] = uc
 		}
 	}
-	if len(fallbackReqs) > 0 {
-		fallbackRet, err := catkv.GetCrossReferencedDescriptorsForValidation(
-			ctx,
-			version,
-			c.tc.codec(),
-			c.txn,
-			fallbackReqs,
-		)
-		if err != nil {
-			return nil, err
-		}
-		for j, desc := range fallbackRet {
-			if desc == nil {
-				continue
-			}
-			if uc, _ := c.tc.stored.getCachedByID(desc.GetID()); uc == nil {
-				desc, err = c.tc.stored.add(ctx, desc.NewBuilder().BuildExistingMutable(), notValidatedYet)
-				if err != nil {
-					return nil, err
-				}
-			}
+	if len(fallbackReqs) == 0 {
+		return ret, nil
+	}
+	fallbackRet, err := c.sd.DereferenceDescriptors(ctx, version, fallbackReqs)
+	if err != nil {
+		return nil, err
+	}
+	for j, desc := range fallbackRet {
+		if desc != nil {
 			ret[fallbackRetIndexes[j]] = desc
 		}
 	}
 	return ret, nil
 }
 
-func (c collectionBackedDereferencer) fastDescLookup(
-	ctx context.Context, id descpb.ID,
-) (catalog.Descriptor, error) {
-	if uc, _ := c.tc.stored.getCachedByID(id); uc != nil {
-		return uc, nil
-	}
-	return nil, nil
-}
-
 // DereferenceDescriptorIDs implements the validate.ValidationDereferencer
-// interface.
+// interface by delegating to the storage cache.
 func (c collectionBackedDereferencer) DereferenceDescriptorIDs(
 	ctx context.Context, reqs []descpb.NameInfo,
 ) (ret []descpb.ID, _ error) {
-	ret = make([]descpb.ID, len(reqs))
-	fallbackReqs := make([]descpb.NameInfo, 0, len(reqs))
-	fallbackRetIndexes := make([]int, 0, len(reqs))
-	for i, req := range reqs {
-		found, id, err := c.fastNamespaceLookup(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		if found {
-			ret[i] = id
-		} else {
-			fallbackReqs = append(fallbackReqs, req)
-			fallbackRetIndexes = append(fallbackRetIndexes, i)
-		}
-	}
-	if len(fallbackReqs) > 0 {
-		// TODO(postamar): actually use the Collection here instead,
-		// either by calling the Collection's methods or by caching the results
-		// of this call in the Collection.
-		fallbackRet, err := catkv.LookupIDs(ctx, c.txn, c.tc.codec(), fallbackReqs)
-		if err != nil {
-			return nil, err
-		}
-		for j, id := range fallbackRet {
-			ret[fallbackRetIndexes[j]] = id
-		}
-	}
-	return ret, nil
-}
-
-func (c collectionBackedDereferencer) fastNamespaceLookup(
-	ctx context.Context, req descpb.NameInfo,
-) (found bool, id descpb.ID, err error) {
-	// Handle special cases.
-	// TODO(postamar): namespace lookups should go through Collection
-	switch req.ParentID {
-	case descpb.InvalidID:
-		if req.ParentSchemaID == descpb.InvalidID && req.Name == catconstants.SystemDatabaseName {
-			// Looking up system database ID, which is hard-coded.
-			return true, keys.SystemDatabaseID, nil
-		}
-	case keys.SystemDatabaseID:
-		// Looking up system database objects, which are cached.
-		id = c.tc.stored.systemNamespace.lookup(req.ParentSchemaID, req.Name)
-		return id != descpb.InvalidID, id, nil
-	}
-	return false, descpb.InvalidID, nil
+	// TODO(postamar): namespace operations in general should go through Collection
+	return c.sd.DereferenceDescriptorIDs(ctx, reqs)
 }

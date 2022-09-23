@@ -82,6 +82,7 @@ type Smither struct {
 	disableNondeterministicFns bool
 	disableLimits              bool
 	disableWindowFuncs         bool
+	disableAggregateFuncs      bool
 	simpleDatums               bool
 	avoidConsts                bool
 	outputSort                 bool
@@ -96,6 +97,7 @@ type Smither struct {
 	disableIndexHints          bool
 	lowProbWhereWithJoinTables bool
 	disableInsertSelect        bool
+	disableDivision            bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -378,6 +380,11 @@ var DisableWindowFuncs = simpleOption("disable window funcs", func(s *Smither) {
 	s.disableWindowFuncs = true
 })
 
+// DisableAggregateFuncs disables window functions.
+var DisableAggregateFuncs = simpleOption("disable aggregate funcs", func(s *Smither) {
+	s.disableAggregateFuncs = true
+})
+
 // OutputSort adds a top-level ORDER BY on all columns.
 var OutputSort = simpleOption("output sort", func(s *Smither) {
 	s.outputSort = true
@@ -428,6 +435,13 @@ var LowProbabilityWhereClauseWithJoinTables = simpleOption("low probability wher
 // source expression is nullable and the target column is not.
 var DisableInsertSelect = simpleOption("disable insert select", func(s *Smither) {
 	s.disableInsertSelect = true
+})
+
+// DisableDivision disables generation of the division operator (/) and the
+// floor division operator (//).
+// TODO(mgartner): Remove this once #86790 is addressed.
+var DisableDivision = simpleOption("disable division", func(s *Smither) {
+	s.disableDivision = true
 })
 
 // CompareMode causes the Smither to generate statements that have

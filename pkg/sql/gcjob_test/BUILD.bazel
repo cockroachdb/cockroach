@@ -8,6 +8,7 @@ go_test(
         "gc_job_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
@@ -32,6 +33,9 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/gcjob",
         "//pkg/sql/gcjob/gcjobnotifier",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sqlutil",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",

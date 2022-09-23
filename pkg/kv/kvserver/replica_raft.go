@@ -91,14 +91,14 @@ func makeIDKey() kvserverbase.CmdIDKey {
 // would violate the locking order specified for Store.mu.
 //
 // Return values:
-// - a channel which receives a response or error upon application
-// - a closure used to attempt to abandon the command. When called, it unbinds
-//   the command's context from its Raft proposal. The client is then free to
-//   terminate execution, although it is given no guarantee that the proposal
-//   won't still go on to commit and apply at some later time.
-// - the proposal's ID.
-// - any error obtained during the creation or proposal of the command, in
-//   which case the other returned values are zero.
+//   - a channel which receives a response or error upon application
+//   - a closure used to attempt to abandon the command. When called, it unbinds
+//     the command's context from its Raft proposal. The client is then free to
+//     terminate execution, although it is given no guarantee that the proposal
+//     won't still go on to commit and apply at some later time.
+//   - the proposal's ID.
+//   - any error obtained during the creation or proposal of the command, in
+//     which case the other returned values are zero.
 func (r *Replica) evalAndPropose(
 	ctx context.Context,
 	ba *roachpb.BatchRequest,
@@ -343,7 +343,7 @@ func (r *Replica) propose(
 		// ProposeConfChange. For that reason, we also don't need a Raft command
 		// prefix because the command ID is stored in a field in
 		// raft.ConfChange.
-		log.Infof(p.ctx, "proposing %s", crt)
+		log.KvDistribution.Infof(p.ctx, "proposing %s", crt)
 		prefix = false
 
 		// The following deals with removing a leaseholder. A voter can be removed
@@ -492,7 +492,14 @@ func (r *Replica) numPendingProposalsRLocked() int {
 // the range, and then on every follower to confirm that the range can indeed be
 // quiesced.
 func (r *Replica) hasPendingProposalsRLocked() bool {
-	return r.numPendingProposalsRLocked() > 0
+	return r.numPendingProposalsRLocked() > 0 ||
+		// If slow proposals just finished, it's possible that
+		// refreshProposalsLocked hasn't been invoked yet. We don't want to quiesce
+		// until it has been, since otherwise we're never fully resetting this
+		// Replica's contribution to `requests.slow.raft`. So we only claim to
+		// have no pending proposals when we've done one last refresh that resets
+		// the counter, i.e. in a few ticks at most.
+		r.mu.slowProposalCount > 0
 }
 
 // hasPendingProposalQuotaRLocked is part of the quiescer interface. It returns
@@ -1306,11 +1313,16 @@ func (r *Replica) refreshProposalsLocked(
 		// so delays shouldn't dramatically change the detection latency.
 		inflightDuration := r.store.cfg.RaftTickInterval * time.Duration(r.mu.ticks-p.createdAtTicks)
 		if ok && inflightDuration > slowReplicationThreshold {
+			slowProposalCount++
 			if maxSlowProposalDuration < inflightDuration {
 				maxSlowProposalDuration = inflightDuration
 				maxSlowProposalDurationRequest = p.Request
-				slowProposalCount++
 			}
+		} else if inflightDuration > defaultReplicaCircuitBreakerSlowReplicationThreshold {
+			// If replica circuit breakers are disabled, we still want to
+			// track the number of "slow" proposals for metrics, so fall
+			// back to one minute.
+			slowProposalCount++
 		}
 		switch reason {
 		case reasonSnapshotApplied:
@@ -1349,7 +1361,7 @@ func (r *Replica) refreshProposalsLocked(
 		}
 	}
 
-	r.store.metrics.SlowRaftRequests.Update(slowProposalCount)
+	r.mu.slowProposalCount = slowProposalCount
 
 	// If the breaker isn't tripped yet but we've detected commands that have
 	// taken too long to replicate, trip the breaker now.
@@ -1637,6 +1649,18 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 		snapStatus = raft.SnapshotFailure
 	}
 
+	// NB: we are technically violating raft's contract around which index the
+	// snapshot is supposed to be at. Raft asked for a particular applied index,
+	// but the snapshot we sent might have been at a higher (most of the time) or
+	// lower (corner cases) index too. Luckily this is not an issue as the call
+	// below will only inform at which index the follower is next probed (after
+	// ReportSnapshot with a success). Raft does not a priori assume that the
+	// index it requested is now actually durable on the follower. Note also that
+	// the follower will generate an MsgAppResp reflecting the applied snapshot
+	// which typically moves the follower to StateReplicate when (if) received
+	// by the leader.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/87581
 	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.ReportSnapshot(uint64(to), snapStatus)
 		return true, nil

@@ -34,6 +34,7 @@ go_test(
         "notify_queue_test.go",
         "token_bucket_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":quotapool"],
     deps = [
         "//pkg/testutils",

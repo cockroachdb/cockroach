@@ -210,3 +210,27 @@ func TestingSetRedactable(redactableLogs bool) (cleanup func()) {
 func SafeOperational(s interface{}) redact.SafeValue {
 	return redact.Safe(s)
 }
+
+// SafeManaged marks the provided argument as safe from a redaction
+// perspective in cases where the node is being run as part of a managed
+// service. This is indicated via the `COCKROACH_REDACTION_POLICY_MANAGED`
+// environment variable.
+//
+// Certain types of data is normally considered "sensitive" from a
+// redaction perspective when logged from on-premises deployments, such
+// as CLI arguments and HTTP addresses. However, when running in a
+// managed service, such as CockroachCloud, this information is already
+// known to the operators and does not need to be treated as sensitive.
+//
+// NB: If the argument itself implements the redact.SafeFormatter interface,
+// then we delegate to its implementation in either case.
+//
+// NB: This approach is lightweight, but is not sustainable to build on top of.
+// We should be looking for more holistic approaches to conditional redaction.
+// See https://github.com/cockroachdb/cockroach/issues/87038 for details.
+func SafeManaged(a interface{}) interface{} {
+	if !logging.hasManagedRedactionPolicy() {
+		return a
+	}
+	return redact.Safe(a)
+}

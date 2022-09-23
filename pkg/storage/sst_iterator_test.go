@@ -26,7 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func runTestSSTIterator(t *testing.T, iter SimpleMVCCIterator, allKVs []MVCCKeyValue) {
+func runTestLegacySSTIterator(t *testing.T, iter SimpleMVCCIterator, allKVs []MVCCKeyValue) {
 	// Drop the first kv so we can test Seek.
 	expected := allKVs[1:]
 
@@ -74,7 +74,7 @@ func runTestSSTIterator(t *testing.T, iter SimpleMVCCIterator, allKVs []MVCCKeyV
 	}
 }
 
-func TestSSTIterator(t *testing.T) {
+func TestLegacySSTIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -121,23 +121,23 @@ func TestSSTIterator(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		iter, err := NewSSTIterator(file)
+		iter, err := NewLegacySSTIterator(file)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
 		defer iter.Close()
-		runTestSSTIterator(t, iter, allKVs)
+		runTestLegacySSTIterator(t, iter, allKVs)
 	})
 	t.Run("Mem", func(t *testing.T) {
-		iter, err := NewMemSSTIterator(sstFile.Data(), false)
+		iter, err := NewLegacyMemSSTIterator(sstFile.Data(), false)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
 		defer iter.Close()
-		runTestSSTIterator(t, iter, allKVs)
+		runTestLegacySSTIterator(t, iter, allKVs)
 	})
 	t.Run("AsOf", func(t *testing.T) {
-		iter, err := NewMemSSTIterator(sstFile.Data(), false)
+		iter, err := NewLegacyMemSSTIterator(sstFile.Data(), false)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -155,7 +155,7 @@ func TestSSTIterator(t *testing.T) {
 				asOfKVs = append(asOfKVs, kv)
 			}
 			asOfIter := NewReadAsOfIterator(iter, asOf)
-			runTestSSTIterator(t, asOfIter, asOfKVs)
+			runTestLegacySSTIterator(t, asOfIter, asOfKVs)
 		}
 	})
 }

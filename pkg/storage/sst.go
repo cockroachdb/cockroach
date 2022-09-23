@@ -75,7 +75,7 @@ func CheckSSTConflicts(
 	//
 	// TODO(bilal): Expose reader.Properties.NumRangeKeys() here, so we don't
 	// need to read the SST to figure out if it has range keys.
-	rkIter, err := NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
+	rkIter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypeRangesOnly,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
@@ -138,7 +138,7 @@ func CheckSSTConflicts(
 	})
 	defer extIter.Close()
 
-	sstIter, err := NewPebbleMemSSTIterator(sst, false, IterOptions{
+	sstIter, err := NewMemSSTIterator(sst, false, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: end.Key,
 	})
@@ -208,6 +208,9 @@ func CheckSSTConflicts(
 			metaValSize := int64(0)
 			totalBytes := metaKeySize + metaValSize
 
+			// Cancel the GCBytesAge contribution of the point tombstone (if any)
+			// that exists in the SST stats.
+			statsDiff.AgeTo(extKey.Timestamp.WallTime)
 			// Update the skipped stats to account for the skipped meta key.
 			if !sstValue.IsTombstone() {
 				statsDiff.LiveBytes -= totalBytes
@@ -255,6 +258,11 @@ func CheckSSTConflicts(
 
 		// If we are shadowing an existing key, we must update the stats accordingly
 		// to take into account the existing KV pair.
+		if extValue.IsTombstone() {
+			statsDiff.AgeTo(extKey.Timestamp.WallTime)
+		} else {
+			statsDiff.AgeTo(sstKey.Timestamp.WallTime)
+		}
 		statsDiff.KeyCount--
 		statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
 		if !extValue.IsTombstone() {
@@ -855,17 +863,46 @@ func CheckSSTConflicts(
 // UpdateSSTTimestamps replaces all MVCC timestamp in the provided SST to the
 // given timestamp. All keys must already have the given "from" timestamp.
 func UpdateSSTTimestamps(
-	ctx context.Context, st *cluster.Settings, sst []byte, from, to hlc.Timestamp, concurrency int,
-) ([]byte, error) {
+	ctx context.Context,
+	st *cluster.Settings,
+	sst []byte,
+	from, to hlc.Timestamp,
+	concurrency int,
+	stats *enginepb.MVCCStats,
+) ([]byte, enginepb.MVCCStats, error) {
 	if from.IsEmpty() {
-		return nil, errors.Errorf("from timestamp not given")
+		return nil, enginepb.MVCCStats{}, errors.Errorf("from timestamp not given")
 	}
 	if to.IsEmpty() {
-		return nil, errors.Errorf("to timestamp not given")
+		return nil, enginepb.MVCCStats{}, errors.Errorf("to timestamp not given")
 	}
 
 	sstOut := &MemFile{}
 	sstOut.Buffer.Grow(len(sst))
+
+	var statsDelta enginepb.MVCCStats
+	if stats != nil {
+		// There could be a GCBytesAge delta between the old and new timestamps.
+		// Calculate this delta by subtracting all the relevant stats at the
+		// old timestamp, and then aging the stats to the new timestamp before
+		// zeroing the stats again.
+		statsDelta.AgeTo(from.WallTime)
+		statsDelta.KeyBytes -= stats.KeyBytes
+		statsDelta.ValBytes -= stats.ValBytes
+		statsDelta.RangeKeyBytes -= stats.RangeKeyBytes
+		statsDelta.RangeValBytes -= stats.RangeValBytes
+		statsDelta.LiveBytes -= stats.LiveBytes
+		statsDelta.IntentBytes -= stats.IntentBytes
+		statsDelta.IntentCount -= stats.IntentCount
+		statsDelta.AgeTo(to.WallTime)
+		statsDelta.KeyBytes += stats.KeyBytes
+		statsDelta.ValBytes += stats.ValBytes
+		statsDelta.RangeKeyBytes += stats.RangeKeyBytes
+		statsDelta.RangeValBytes += stats.RangeValBytes
+		statsDelta.LiveBytes += stats.LiveBytes
+		statsDelta.IntentBytes += stats.IntentBytes
+		statsDelta.IntentCount += stats.IntentCount
+	}
 
 	// Fancy optimized Pebble SST rewriter.
 	if concurrency > 0 {
@@ -882,9 +919,9 @@ func UpdateSSTTimestamps(
 			EncodeMVCCTimestampSuffix(to),
 			concurrency,
 		); err != nil {
-			return nil, err
+			return nil, enginepb.MVCCStats{}, err
 		}
-		return sstOut.Bytes(), nil
+		return sstOut.Bytes(), statsDelta, nil
 	}
 
 	// Naïve read/write loop.
@@ -892,66 +929,66 @@ func UpdateSSTTimestamps(
 	defer writer.Close()
 
 	// Rewrite point keys.
-	iter, err := NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
+	iter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypePointsOnly,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
 	})
 	if err != nil {
-		return nil, err
+		return nil, enginepb.MVCCStats{}, err
 	}
 	defer iter.Close()
 
 	for iter.SeekGE(MVCCKey{Key: keys.MinKey}); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
-			return nil, err
+			return nil, enginepb.MVCCStats{}, err
 		} else if !ok {
 			break
 		}
 		key := iter.UnsafeKey()
 		if key.Timestamp != from {
-			return nil, errors.Errorf("unexpected timestamp %s (expected %s) for key %s",
+			return nil, enginepb.MVCCStats{}, errors.Errorf("unexpected timestamp %s (expected %s) for key %s",
 				key.Timestamp, from, key.Key)
 		}
 		err = writer.PutRawMVCC(MVCCKey{Key: key.Key, Timestamp: to}, iter.UnsafeValue())
 		if err != nil {
-			return nil, err
+			return nil, enginepb.MVCCStats{}, err
 		}
 	}
 
 	// Rewrite range keys.
-	iter, err = NewPebbleMemSSTIterator(sst, false /* verify */, IterOptions{
+	iter, err = NewMemSSTIterator(sst, false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypeRangesOnly,
 		LowerBound: keys.MinKey,
 		UpperBound: keys.MaxKey,
 	})
 	if err != nil {
-		return nil, err
+		return nil, enginepb.MVCCStats{}, err
 	}
 	defer iter.Close()
 
 	for iter.SeekGE(MVCCKey{Key: keys.MinKey}); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
-			return nil, err
+			return nil, enginepb.MVCCStats{}, err
 		} else if !ok {
 			break
 		}
 		rangeKeys := iter.RangeKeys()
 		for _, v := range rangeKeys.Versions {
 			if v.Timestamp != from {
-				return nil, errors.Errorf("unexpected timestamp %s (expected %s) for range key %s",
+				return nil, enginepb.MVCCStats{}, errors.Errorf("unexpected timestamp %s (expected %s) for range key %s",
 					v.Timestamp, from, rangeKeys.Bounds)
 			}
 			v.Timestamp = to
 			if err = writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), v.Value); err != nil {
-				return nil, err
+				return nil, enginepb.MVCCStats{}, err
 			}
 		}
 	}
 
 	if err = writer.Finish(); err != nil {
-		return nil, err
+		return nil, enginepb.MVCCStats{}, err
 	}
 
-	return sstOut.Bytes(), nil
+	return sstOut.Bytes(), statsDelta, nil
 }

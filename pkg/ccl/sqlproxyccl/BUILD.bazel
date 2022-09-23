@@ -72,6 +72,7 @@ go_test(
         "proxy_handler_test.go",
         "server_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":sqlproxyccl"],
     deps = [

@@ -21,8 +21,8 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_DELETE_ONLY,
-				emit(func(this *scpb.Column) *scop.MakeAddedColumnDeleteOnly {
-					return &scop.MakeAddedColumnDeleteOnly{
+				emit(func(this *scpb.Column) *scop.MakeAbsentColumnDeleteOnly {
+					return &scop.MakeAbsentColumnDeleteOnly{
 						Column: *protoutil.Clone(this).(*scpb.Column),
 					}
 				}),
@@ -31,16 +31,16 @@ func init() {
 				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.Column) *scop.MakeAddedColumnDeleteAndWriteOnly {
-					return &scop.MakeAddedColumnDeleteAndWriteOnly{
+				emit(func(this *scpb.Column) *scop.MakeDeleteOnlyColumnWriteOnly {
+					return &scop.MakeDeleteOnlyColumnWriteOnly{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
 					}
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Column, md *targetsWithElementMap) *scop.MakeColumnPublic {
-					return &scop.MakeColumnPublic{
+				emit(func(this *scpb.Column, md *targetsWithElementMap) *scop.MakeWriteOnlyColumnPublic {
+					return &scop.MakeWriteOnlyColumnPublic{
 						EventBase: newLogEventBase(this, md),
 						TableID:   this.TableID,
 						ColumnID:  this.ColumnID,
@@ -56,8 +56,8 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.Column) *scop.MakeDroppedColumnDeleteAndWriteOnly {
-					return &scop.MakeDroppedColumnDeleteAndWriteOnly{
+				emit(func(this *scpb.Column) *scop.MakePublicColumnWriteOnly {
+					return &scop.MakePublicColumnWriteOnly{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
 					}
@@ -68,16 +68,16 @@ func init() {
 			),
 			to(scpb.Status_DELETE_ONLY,
 				revertible(false),
-				emit(func(this *scpb.Column) *scop.MakeDroppedColumnDeleteOnly {
-					return &scop.MakeDroppedColumnDeleteOnly{
+				emit(func(this *scpb.Column) *scop.MakeWriteOnlyColumnDeleteOnly {
+					return &scop.MakeWriteOnlyColumnDeleteOnly{
 						TableID:  this.TableID,
 						ColumnID: this.ColumnID,
 					}
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Column, md *targetsWithElementMap) *scop.MakeColumnAbsent {
-					return &scop.MakeColumnAbsent{
+				emit(func(this *scpb.Column, md *targetsWithElementMap) *scop.MakeDeleteOnlyColumnAbsent {
+					return &scop.MakeDeleteOnlyColumnAbsent{
 						EventBase: newLogEventBase(this, md),
 						TableID:   this.TableID,
 						ColumnID:  this.ColumnID,

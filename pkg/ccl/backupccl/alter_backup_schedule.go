@@ -53,7 +53,6 @@ func loadSchedules(
 	if err != nil {
 		return s, err
 	}
-
 	args := &backuppb.ScheduledBackupExecutionArgs{}
 	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, args); err != nil {
 		return s, errors.Wrap(err, "un-marshaling args")
@@ -109,20 +108,32 @@ func doAlterBackupSchedules(
 	eval *alterBackupScheduleEval,
 	resultsCh chan<- tree.Datums,
 ) error {
-	s, err := loadSchedules(
-		ctx, p, eval)
+	s, err := loadSchedules(ctx, p, eval)
 	if err != nil {
 		return err
 	}
 
-	// Note that even ADMIN is subject to these restrictions. We expect to
-	// add a finer-grained permissions model soon.
-	if s.fullJob.Owner() != p.User() {
-		return pgerror.Newf(pgcode.InsufficientPrivilege, "only the OWNER of a schedule may alter it")
+	if s.fullJob == nil {
+		// This can happen if a user calls DROP SCHEDULE on the full schedule.
+		// TODO(benbardin): Resolve https://github.com/cockroachdb/cockroach/issues/87435.
+		// Note that this will only prevent this state going forward. It will not
+		// repair this state where it already exists.
+		return errors.Newf(
+			"incremental backup schedule %d has no corresponding full backup schedule; drop schedule %d and recreate",
+			s.incJob.ScheduleID(),
+			s.incJob.ScheduleID())
 	}
 
-	if s.incJob != nil && s.incJob.Owner() != p.User() {
-		return pgerror.Newf(pgcode.InsufficientPrivilege, "only the OWNER of a schedule may alter it")
+	// Check that the user is admin or the owner of the schedules being altered.
+	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
+	if err != nil {
+		return err
+	}
+	isOwnerOfFullJob := s.fullJob == nil || s.fullJob.Owner() == p.User()
+	isOwnerOfIncJob := s.incJob == nil || s.incJob.Owner() == p.User()
+	if !isAdmin && !(isOwnerOfFullJob && isOwnerOfIncJob) {
+		return pgerror.New(pgcode.InsufficientPrivilege, "must be admin or owner of the "+
+			"schedules being altered.")
 	}
 
 	if s, err = processFullBackupRecurrence(

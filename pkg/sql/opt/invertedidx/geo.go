@@ -277,10 +277,10 @@ func (g *geoJoinPlanner) extractInvertedJoinConditionFromLeaf(
 // of the comparison operation. If commuteArgs is true, returns a new function
 // representing the same relationship but with commuted arguments. For example:
 //
-//   ST_Intersects(g1, g2) <-> ST_Intersects(g2, g1)
-//   ST_Covers(g1, g2) <-> ST_CoveredBy(g2, g1)
-//   g1 && g2 -> ST_Intersects(g2, g1)
-//   g1 ~ g2 -> ST_CoveredBy(g2, g1)
+//	ST_Intersects(g1, g2) <-> ST_Intersects(g2, g1)
+//	ST_Covers(g1, g2) <-> ST_CoveredBy(g2, g1)
+//	g1 && g2 -> ST_Intersects(g2, g1)
+//	g1 ~ g2 -> ST_CoveredBy(g2, g1)
 //
 // See geoindex.CommuteRelationshipMap for the full list of mappings.
 //

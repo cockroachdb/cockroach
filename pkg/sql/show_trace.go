@@ -60,8 +60,9 @@ func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTraceForSession) (p
 //
 // Args:
 // kvTracingEnabled: If set, the trace will also include "KV trace" messages -
-//   verbose messages around the interaction of SQL with KV. Some of the
-//   messages are per-row.
+//
+//	verbose messages around the interaction of SQL with KV. Some of the
+//	messages are per-row.
 func (p *planner) makeShowTraceNode(compact bool, kvTracingEnabled bool) *showTraceNode {
 	n := &showTraceNode{
 		kvTracingEnabled: kvTracingEnabled,

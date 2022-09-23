@@ -48,9 +48,6 @@ func newServerTLSConfig(
 		cfg.ClientCAs = certPool
 	}
 
-	// Use the default cipher suite from golang (RC4 is going away in 1.5).
-	// Prefer the server-specified suite.
-	cfg.PreferServerCipherSuites = true
 	// Should we disable session resumption? This may break forward secrecy.
 	// cfg.SessionTicketsDisabled = true
 	return cfg, nil
@@ -67,9 +64,6 @@ func newUIServerTLSConfig(settings TLSSettings, certPEM, keyPEM []byte) (*tls.Co
 		return nil, err
 	}
 
-	// Use the default cipher suite from golang (RC4 is going away in 1.5).
-	// Prefer the server-specified suite.
-	cfg.PreferServerCipherSuites = true
 	// Should we disable session resumption? This may break forward secrecy.
 	// cfg.SessionTicketsDisabled = true
 	return cfg, nil

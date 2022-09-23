@@ -196,7 +196,7 @@ func MakePubsubSink(
 	}
 
 	switch encodingOpts.Envelope {
-	case changefeedbase.OptEnvelopeWrapped:
+	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
@@ -350,6 +350,10 @@ func (p *pubsubSink) Topics() []string {
 }
 
 func (p *gcpPubsubClient) getTopicClient(name string) (*pubsub.Topic, error) {
+	//TODO (zinger): Investigate whether changing topics to a sync.Map would be
+	//faster here, I think it would.
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if topic, ok := p.topics[name]; ok {
 		return topic, nil
 	}

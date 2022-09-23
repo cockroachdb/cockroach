@@ -50,6 +50,7 @@ go_test(
         "numbered_row_container_test.go",
         "row_container_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":rowcontainer"],
     deps = [
         "//pkg/base",

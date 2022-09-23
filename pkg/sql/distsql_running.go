@@ -86,7 +86,7 @@ var distSQLNumRunnersMax = 256 * int64(runtime.GOMAXPROCS(0))
 // runnerRequest is the request that is sent (via a channel) to a worker.
 type runnerRequest struct {
 	ctx           context.Context
-	nodeDialer    *nodedialer.Dialer
+	podNodeDialer *nodedialer.Dialer
 	flowReq       *execinfrapb.SetupFlowRequest
 	sqlInstanceID base.SQLInstanceID
 	resultChan    chan<- runnerResult
@@ -102,7 +102,7 @@ type runnerResult struct {
 func (req runnerRequest) run() {
 	res := runnerResult{nodeID: req.sqlInstanceID}
 
-	conn, err := req.nodeDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
+	conn, err := req.podNodeDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
 	if err != nil {
 		res.err = err
 	} else {
@@ -423,7 +423,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			req.Flow = *flowSpec
 			runReq := runnerRequest{
 				ctx:           ctx,
-				nodeDialer:    dsp.podNodeDialer,
+				podNodeDialer: dsp.podNodeDialer,
 				flowReq:       &req,
 				sqlInstanceID: nodeID,
 				resultChan:    resultChan,
@@ -1353,10 +1353,10 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 // function will have closed all the subquery plans because it assumes that the
 // caller will not try to run the main plan given that the subqueries'
 // evaluation failed.
-// - subqueryResultMemAcc must be a non-nil memory account that the result of
-//   subqueries' evaluation will be registered with. It is the caller's
-//   responsibility to shrink (or close) the account accordingly, once the
-//   references to those results are lost.
+//   - subqueryResultMemAcc must be a non-nil memory account that the result of
+//     subqueries' evaluation will be registered with. It is the caller's
+//     responsibility to shrink (or close) the account accordingly, once the
+//     references to those results are lost.
 func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	ctx context.Context,
 	planner *planner,

@@ -59,6 +59,7 @@ go_test(
         "decode_test.go",
         "mvcc_test.go",
     ],
+    args = ["-test.timeout=55s"],
     deps = [
         ":enginepb",
         "//pkg/roachpb",

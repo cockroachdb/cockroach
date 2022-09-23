@@ -69,8 +69,17 @@ REFRESH MATERIALIZED VIEW t.v;
 		t.Fatal(err)
 	}
 
+	// Verify that refreshing with a prepared statement works.
+	preparedStmt, err := sqlDB.Prepare(`REFRESH MATERIALIZED VIEW t.v;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := preparedStmt.Exec(); err != nil {
+		t.Fatal(err)
+	}
+
 	// Add a zone config to delete all table data.
-	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descBeforeRefresh.GetID())
+	_, err = sqltestutils.AddImmediateGCZoneConfig(sqlDB, descBeforeRefresh.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}

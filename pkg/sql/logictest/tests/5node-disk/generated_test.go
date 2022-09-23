@@ -93,6 +93,13 @@ func TestLogic_distsql_agg(
 	runLogicTest(t, "distsql_agg")
 }
 
+func TestLogic_distsql_builtin(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "distsql_builtin")
+}
+
 func TestLogic_distsql_crdb_internal(
 	t *testing.T,
 ) {

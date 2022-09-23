@@ -29,7 +29,7 @@ import (
 // deletes are allowed. Finally, in the delete-only state, only deletes are
 // allowed. Further details about "online schema change" can be found in:
 //
-//   docs/RFCS/20151014_online_schema_change.md
+//	docs/RFCS/20151014_online_schema_change.md
 //
 // Calling code must take care to use the right collection of columns or
 // indexes. Usually this should be the public collections, since most usages are
@@ -179,8 +179,7 @@ type Table interface {
 // on the content of each row in a table. For example, this check constraint
 // ensures that only values greater than zero can be inserted into the table:
 //
-//   CREATE TABLE a (a INT CHECK (a > 0))
-//
+//	CREATE TABLE a (a INT CHECK (a > 0))
 type CheckConstraint struct {
 	Constraint string
 	Validated  bool
@@ -253,7 +252,9 @@ type HistogramBucket struct {
 // ForeignKeyConstraint represents a foreign key constraint. A foreign key
 // constraint has an origin (or referencing) side and a referenced side. For
 // example:
-//   ALTER TABLE o ADD CONSTRAINT fk FOREIGN KEY (a,b) REFERENCES r(a,b)
+//
+//	ALTER TABLE o ADD CONSTRAINT fk FOREIGN KEY (a,b) REFERENCES r(a,b)
+//
 // Here o is the origin table, r is the referenced table, and we have two pairs
 // of columns: (o.a,r.a) and (o.b,r.b).
 type ForeignKeyConstraint interface {
@@ -301,7 +302,9 @@ type ForeignKeyConstraint interface {
 // UniqueConstraint represents a uniqueness constraint. UniqueConstraints may
 // or may not be enforced with a unique index. For example, the following
 // statement creates a unique constraint on column a without a unique index:
-//   ALTER TABLE t ADD CONSTRAINT u UNIQUE WITHOUT INDEX (a);
+//
+//	ALTER TABLE t ADD CONSTRAINT u UNIQUE WITHOUT INDEX (a);
+//
 // In order to enforce this uniqueness constraint, the optimizer must add
 // a uniqueness check as a postquery to any query that inserts into or updates
 // column a.

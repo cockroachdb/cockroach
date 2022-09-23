@@ -1,3 +1,5 @@
 discard_stmt ::=
 	'DISCARD' 'ALL'
 	| 'DISCARD' 'SEQUENCES'
+	| 'DISCARD' 'TEMP'
+	| 'DISCARD' 'TEMPORARY'

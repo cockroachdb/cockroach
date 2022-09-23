@@ -125,7 +125,8 @@ const defaultTickInterval = time.Second
 // (with one sample per tickInterval).
 //
 // If we want a factor of 0.5 per second, this should be:
-//   0.5^(1 second / tickInterval)
+//
+//	0.5^(1 second / tickInterval)
 const movingAvgRUPerSecFactor = 0.5
 
 // We request more tokens when the available RUs go below a threshold. The

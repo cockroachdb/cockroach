@@ -30,9 +30,9 @@ func SpanFromContext(ctx context.Context) *Span {
 }
 
 // maybeWrapCtx returns a Context wrapping the Span, with two exceptions:
-// 1. if ctx==noCtx, it's a noop
-// 2. if ctx contains the noop Span, and sp is also the noop Span, elide
-//    allocating a new Context.
+//  1. if ctx==noCtx, it's a noop
+//  2. if ctx contains the noop Span, and sp is also the noop Span, elide
+//     allocating a new Context.
 //
 // NOTE(andrei): Our detection of Span use-after-Finish() is not reliable
 // because spans are reused through a sync.Pool; we fail to detect someone

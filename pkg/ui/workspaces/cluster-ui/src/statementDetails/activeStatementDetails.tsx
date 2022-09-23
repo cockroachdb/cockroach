@@ -108,7 +108,9 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
                     />
                     <SummaryCardItem
                       label="Elapsed Time"
-                      value={Duration(statement.elapsedTimeMillis * 1e6)}
+                      value={Duration(
+                        statement.elapsedTime.asMilliseconds() * 1e6,
+                      )}
                     />
                     <SummaryCardItem
                       label="Status"

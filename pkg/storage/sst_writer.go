@@ -77,7 +77,7 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// By default, take a conservative approach and assume we don't have newer
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
-	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatRocksDBv2)
+	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatPebblev1)
 	if cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionRangeKeys) {
 		opts.TableFormat = sstable.TableFormatPebblev2 // Range keys.
 	}

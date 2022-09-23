@@ -466,9 +466,8 @@ func TestInitializeEngineErrors(t *testing.T) {
 	stopper.AddCloser(eng)
 
 	// Bootstrap should fail if engine has no cluster version yet.
-	if err := InitEngine(ctx, eng, testIdent); !testutils.IsError(err, `no cluster version`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err := InitEngine(ctx, eng, testIdent)
+	require.ErrorContains(t, err, "no cluster version")
 
 	require.NoError(t, WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
 
@@ -480,14 +479,22 @@ func TestInitializeEngineErrors(t *testing.T) {
 	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
-	if err := store.Start(ctx, stopper); !errors.HasType(err, (*NotBootstrappedError)(nil)) {
-		t.Errorf("unexpected error initializing un-bootstrapped store: %+v", err)
-	}
+	err = store.Start(ctx, stopper)
+	require.ErrorIs(t, err, &NotBootstrappedError{})
 
 	// Bootstrap should fail on non-empty engine.
-	if err := InitEngine(ctx, eng, testIdent); !testutils.IsError(err, `cannot be bootstrapped`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err = InitEngine(ctx, eng, testIdent)
+	require.ErrorContains(t, err, "cannot be bootstrapped")
+
+	// Bootstrap should fail on MVCC range key in engine.
+	require.NoError(t, eng.PutMVCCRangeKey(storage.MVCCRangeKey{
+		StartKey:  roachpb.Key("a"),
+		EndKey:    roachpb.Key("b"),
+		Timestamp: hlc.MinTimestamp,
+	}, storage.MVCCValue{}))
+
+	err = InitEngine(ctx, eng, testIdent)
+	require.ErrorContains(t, err, "found mvcc range key")
 }
 
 // create a Replica and add it to the store. Note that replicas
@@ -2292,7 +2299,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manualClock.Advance(txnwait.TxnLivenessThreshold + 1)
+	manualClock.Advance(time.Duration(txnwait.TxnLivenessThreshold.Load()) + 1)
 
 	// Scan the range and verify empty result (expired txn is aborted,
 	// cleaning up intents).
@@ -2345,7 +2352,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manual.Advance(txnwait.TxnLivenessThreshold + 1)
+	manual.Advance(time.Duration(txnwait.TxnLivenessThreshold.Load()) + 1)
 
 	// Query the range with a single scan, which should cause all intents
 	// to be resolved.
@@ -2926,6 +2933,78 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	}
 }
 
+// TestSendSnapshotConcurrency tests the sending of concurrent snapshots and
+// verifies they are only sent "2 at a time". This is not intended to test the
+// prioritization of the snapshots as that is covered by the multi-queue
+// testing.
+func TestSendSnapshotConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc := testContext{}
+	tc.Start(ctx, t, stopper)
+	s := tc.store
+
+	// Checking this now makes sure that if the defaults change this test will also.
+	require.Equal(t, 2, s.snapshotSendQueue.Len())
+	cleanup1, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		SenderQueuePriority: 1,
+	}, 1)
+	require.Nil(t, err)
+	require.Equal(t, 1, s.snapshotSendQueue.Len())
+	cleanup2, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		SenderQueuePriority: 1,
+	}, 1)
+	require.Nil(t, err)
+	require.Equal(t, 0, s.snapshotSendQueue.Len())
+	// At this point both the first two tasks will be holding reservations and
+	// waiting for cleanup, a third task will block.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		before := timeutil.Now()
+		cleanup3, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+			SenderQueuePriority: 1,
+		}, 1)
+		after := timeutil.Now()
+		cleanup3()
+		wg.Done()
+		require.Nil(t, err)
+		require.GreaterOrEqual(t, after.Sub(before), 10*time.Millisecond)
+	}()
+
+	// This task will not block for more than a few MS, but we want to wait for
+	// it to complete to make sure it frees the permit.
+	go func() {
+		deadlineCtx, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
+		defer cancel()
+
+		// This will time out since the deadline is set artificially low. Make sure
+		// the permit is released.
+		_, err := s.reserveSendSnapshot(deadlineCtx, &kvserverpb.DelegateSnapshotRequest{
+			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+			SenderQueuePriority: 1,
+		}, 1)
+		wg.Done()
+		require.NotNil(t, err)
+	}()
+
+	// Wait a little time before calling signaling the first two as complete.
+	time.Sleep(100 * time.Millisecond)
+	cleanup1()
+	cleanup2()
+
+	// Wait until all cleanup run before checking the number of permits.
+	wg.Wait()
+	require.Equal(t, 2, s.snapshotSendQueue.Len())
+}
+
 func TestReserveSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3108,7 +3187,7 @@ func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tsc := TestStoreConfig(nil)
 	// Set the concurrency to 1 explicitly, in case the default ever changes.
-	tsc.concurrentSnapshotApplyLimit = 1
+	tsc.SnapshotApplyLimit = 1
 	tc := testContext{}
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	s := tc.store

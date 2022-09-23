@@ -12,7 +12,7 @@
 Package simulation provides tools meant to visualize or test aspects
 of a Cockroach cluster on a single host.
 
-Gossip
+# Gossip
 
 Gossip creates a gossip network of up to 250 nodes and outputs
 successive visualization of the gossip network graph via dot.
@@ -23,8 +23,8 @@ simulation.
 
 To run:
 
-    go install github.com/cockroachdb/cockroach/cmd/gossipsim
-    gossipsim -size=(small|medium|large|huge|ginormous)
+	go install github.com/cockroachdb/cockroach/cmd/gossipsim
+	gossipsim -size=(small|medium|large|huge|ginormous)
 
 Log output includes instructions for displaying the graph output as a
 series of images to visualize the evolution of the network.
@@ -33,23 +33,23 @@ Running the large through ginormous simulations will require the open
 files limit be increased either for the shell running the simulation,
 or system wide. For Linux:
 
-    # For the current shell:
-    ulimit -n 65536
+	# For the current shell:
+	ulimit -n 65536
 
-    # System-wide:
-    sysctl fs.file-max
-    fs.file-max = 50384
+	# System-wide:
+	sysctl fs.file-max
+	fs.file-max = 50384
 
 For MacOS:
 
-    # To view current limits (soft / hard):
-    launchctl limit maxfiles
+	# To view current limits (soft / hard):
+	launchctl limit maxfiles
 
-    # To edit, add/edit the following line in /etc/launchd.conf and
-    # restart for the new file limit to take effect.
-    #
-    # limit maxfiles 16384 32768
-    sudo vi /etc/launchd.conf
+	# To edit, add/edit the following line in /etc/launchd.conf and
+	# restart for the new file limit to take effect.
+	#
+	# limit maxfiles 16384 32768
+	sudo vi /etc/launchd.conf
 */
 package main
 
@@ -117,23 +117,23 @@ func (em edgeMap) addEdge(nodeID roachpb.NodeID, e edge) {
 //
 // The format of the output looks like this:
 //
-//   digraph G {
-//   node [shape=record];
-//        node1 [fontsize=12,label="{Node 1|MH=3}"]
-//        node1 -> node3 [color=green]
-//        node1 -> node4
-//        node1 -> node5 [color=red,style=dotted]
-//        node2 [fontsize=24,label="{Node 2|MH=2}"]
-//        node2 -> node5
-//        node3 [fontsize=18,label="{Node 3|MH=5}"]
-//        node3 -> node5
-//        node3 -> node4
-//        node4 [fontsize=24,label="{Node 4|MH=4}"]
-//        node4 -> node2
-//        node5 [fontsize=24,label="{Node 5|MH=1}"]
-//        node5 -> node2
-//        node5 -> node3
-//   }
+//	digraph G {
+//	node [shape=record];
+//	     node1 [fontsize=12,label="{Node 1|MH=3}"]
+//	     node1 -> node3 [color=green]
+//	     node1 -> node4
+//	     node1 -> node5 [color=red,style=dotted]
+//	     node2 [fontsize=24,label="{Node 2|MH=2}"]
+//	     node2 -> node5
+//	     node3 [fontsize=18,label="{Node 3|MH=5}"]
+//	     node3 -> node5
+//	     node3 -> node4
+//	     node4 [fontsize=24,label="{Node 4|MH=4}"]
+//	     node4 -> node2
+//	     node5 [fontsize=24,label="{Node 5|MH=1}"]
+//	     node5 -> node2
+//	     node5 -> node3
+//	}
 //
 // Returns the name of the output file and a boolean for whether or not
 // the network has quiesced (that is, no new edges, and all nodes are

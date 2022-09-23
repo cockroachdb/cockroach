@@ -12,7 +12,9 @@ package storage
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // ReadAsOfIterator wraps a SimpleMVCCIterator and only surfaces the latest
@@ -69,6 +71,11 @@ func (f *ReadAsOfIterator) SeekGE(originalKey MVCCKey) {
 
 // Valid implements the simpleMVCCIterator.
 func (f *ReadAsOfIterator) Valid() (bool, error) {
+	if util.RaceEnabled && f.valid {
+		if err := f.assertInvariants(); err != nil {
+			return false, err
+		}
+	}
 	return f.valid, f.err
 }
 
@@ -184,4 +191,42 @@ func NewReadAsOfIterator(iter SimpleMVCCIterator, asOf hlc.Timestamp) *ReadAsOfI
 		asOf = hlc.MaxTimestamp
 	}
 	return &ReadAsOfIterator{iter: iter, asOf: asOf}
+}
+
+// assertInvariants asserts iterator invariants. The iterator must be valid.
+func (f *ReadAsOfIterator) assertInvariants() error {
+	// Check general SimpleMVCCIterator API invariants.
+	if err := assertSimpleMVCCIteratorInvariants(f); err != nil {
+		return err
+	}
+
+	// asOf must be set.
+	if f.asOf.IsEmpty() {
+		return errors.AssertionFailedf("f.asOf is empty")
+	}
+
+	// The underlying iterator must be valid.
+	if ok, err := f.iter.Valid(); !ok || err != nil {
+		errMsg := err.Error()
+		return errors.AssertionFailedf("invalid underlying iter with err=%s", errMsg)
+	}
+
+	// Keys can't be intents or inline values, and must have timestamps at or
+	// below the readAsOf timestamp.
+	key := f.UnsafeKey()
+	if key.Timestamp.IsEmpty() {
+		return errors.AssertionFailedf("emitted key %s has no timestamp", key)
+	}
+	if f.asOf.Less(key.Timestamp) {
+		return errors.AssertionFailedf("emitted key %s above asOf timestamp %s", key, f.asOf)
+	}
+
+	// Tombstones should not be emitted.
+	if value, err := DecodeMVCCValue(f.UnsafeValue()); err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid value")
+	} else if value.IsTombstone() {
+		return errors.AssertionFailedf("emitted tombstone for key %s", key)
+	}
+
+	return nil
 }

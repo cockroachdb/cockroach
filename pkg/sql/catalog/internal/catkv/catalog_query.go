@@ -26,132 +26,75 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
-// lookupDescriptorsUnvalidated is a wrapper around the query method of
-// catalogQuerier for descriptor table lookups.
-func lookupDescriptorsUnvalidated(
-	ctx context.Context, txn *kv.Txn, cq catalogQuerier, ids []descpb.ID,
-) ([]catalog.Descriptor, error) {
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	cb, err := cq.query(ctx, txn, func(codec keys.SQLCodec, b *kv.Batch) {
-		for _, id := range ids {
-			key := catalogkeys.MakeDescMetadataKey(codec, id)
-			b.Get(key)
-		}
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "looking up unvalidated descriptors by id: %v", ids)
-		}
-	})
-	if err != nil {
-		return nil, err
-	}
-	ret := make([]catalog.Descriptor, len(ids))
-	for i, id := range ids {
-		desc := cb.LookupDescriptorEntry(id)
-		if desc == nil {
-			if cq.isRequired {
-				return nil, wrapError(cq.expectedType, id, requiredError(cq.expectedType, id))
-			}
-			continue
-		}
-		ret[i] = desc
-	}
-	return ret, nil
-}
-
-// lookupIDs is a wrapper around the query method of catalogQuerier for
-// namespace table lookups
-func lookupIDs(
-	ctx context.Context, txn *kv.Txn, cq catalogQuerier, nameInfos []descpb.NameInfo,
-) ([]descpb.ID, error) {
-	if len(nameInfos) == 0 {
-		return nil, nil
-	}
-	cb, err := cq.query(ctx, txn, func(codec keys.SQLCodec, b *kv.Batch) {
-		for _, nameInfo := range nameInfos {
-			if nameInfo.Name == "" {
-				continue
-			}
-			b.Get(catalogkeys.EncodeNameKey(codec, nameInfo))
-		}
-	})
-	if err != nil {
-		return nil, err
-	}
-	ret := make([]descpb.ID, len(nameInfos))
-	for i, nameInfo := range nameInfos {
-		ne := cb.LookupNamespaceEntry(nameInfo)
-		if ne == nil {
-			if cq.isRequired {
-				return nil, errors.AssertionFailedf("expected namespace entry for %s, none found", nameInfo.String())
-			}
-			continue
-		}
-		ret[i] = ne.GetID()
-	}
-	return ret, nil
-}
-
-type catalogQuerier struct {
+// catalogQuery holds the state necessary to perform a catalog query.
+//
+// Objects of this type should be exclusively created and used by catalogReader
+// methods.
+type catalogQuery struct {
+	catalogReader
 	isRequired   bool
 	expectedType catalog.DescriptorType
-	codec        keys.SQLCodec
 }
 
 // query the catalog to retrieve data from the descriptor and namespace tables.
-func (cq catalogQuerier) query(
-	ctx context.Context, txn *kv.Txn, in func(codec keys.SQLCodec, b *kv.Batch),
-) (nstree.Catalog, error) {
+//
+// Any results pertaining to the system database are passed to the system
+// database cache to potentially update it with them.
+func (cq catalogQuery) query(
+	ctx context.Context,
+	txn *kv.Txn,
+	out *nstree.MutableCatalog,
+	in func(codec keys.SQLCodec, b *kv.Batch),
+) error {
+	if txn == nil {
+		return errors.AssertionFailedf("nil txn for catalog query")
+	}
 	b := txn.NewBatch()
 	in(cq.codec, b)
 	if err := txn.Run(ctx, b); err != nil {
-		return nstree.Catalog{}, err
+		return err
 	}
-	cb := &nstree.MutableCatalog{}
 	for _, result := range b.Results {
 		if result.Err != nil {
-			return nstree.Catalog{}, result.Err
+			return result.Err
 		}
 		for _, row := range result.Rows {
 			_, catTableID, err := cq.codec.DecodeTablePrefix(row.Key)
 			if err != nil {
-				return nstree.Catalog{}, err
+				return err
 			}
 			switch catTableID {
 			case keys.NamespaceTableID:
-				err = cq.processNamespaceResultRow(row, cb)
+				err = cq.processNamespaceResultRow(row, out)
 			case keys.DescriptorTableID:
-				err = cq.processDescriptorResultRow(row, cb)
+				err = cq.processDescriptorResultRow(row, out)
 			default:
 				err = errors.AssertionFailedf("unexpected catalog key %s", row.Key.String())
 			}
 			if err != nil {
-				return nstree.Catalog{}, err
+				return err
 			}
 		}
 	}
-	return cb.Catalog, nil
+	cq.systemDatabaseCache.update(cq.version, out.Catalog)
+	return nil
 }
 
-func (cq catalogQuerier) processNamespaceResultRow(
-	row kv.KeyValue, cb *nstree.MutableCatalog,
-) error {
+func (cq catalogQuery) processNamespaceResultRow(row kv.KeyValue, cb *nstree.MutableCatalog) error {
 	nameInfo, err := catalogkeys.DecodeNameMetadataKey(cq.codec, row.Key)
 	if err != nil {
 		return err
 	}
 	if row.Exists() {
-		cb.UpsertNamespaceEntry(nameInfo, descpb.ID(row.ValueInt()))
+		cb.UpsertNamespaceEntry(nameInfo, descpb.ID(row.ValueInt()), row.Value.Timestamp)
 	}
 	return nil
 }
 
-func (cq catalogQuerier) processDescriptorResultRow(
+func (cq catalogQuery) processDescriptorResultRow(
 	row kv.KeyValue, cb *nstree.MutableCatalog,
 ) error {
 	u32ID, err := cq.codec.DecodeDescMetadataID(row.Key)
@@ -159,9 +102,13 @@ func (cq catalogQuerier) processDescriptorResultRow(
 		return err
 	}
 	id := descpb.ID(u32ID)
-	desc, err := build(cq.expectedType, id, row.Value, cq.isRequired)
+	expectedType := cq.expectedType
+	if expectedType == "" {
+		expectedType = catalog.Any
+	}
+	desc, err := build(expectedType, id, row.Value, cq.isRequired)
 	if err != nil {
-		return wrapError(cq.expectedType, id, err)
+		return wrapError(expectedType, id, err)
 	}
 	cb.UpsertDescriptorEntry(desc)
 	return nil

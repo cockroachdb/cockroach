@@ -85,3 +85,6 @@ type PGAttributeNum uint32
 
 // SafeValue implements the redact.SafeValue interface.
 func (PGAttributeNum) SafeValue() {}
+
+// RoleID is a custom type for a role id.
+type RoleID uint32

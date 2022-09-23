@@ -8,6 +8,7 @@ go_test(
         "file_table_read_writer_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/cloud/userfile/filetable",
         "//pkg/kv",
@@ -16,6 +17,7 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

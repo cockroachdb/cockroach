@@ -34,11 +34,11 @@ const (
 
 // extractFailureFromJUnitXML parses an XML report to find all failed tests. The
 // return values are:
-// - slice of all test names.
-// - slice of status for each test.
-// - map from name of a failed test to a github issue that explains the failure,
-//   if the error message contained a reference to an issue.
-// - error if there was a problem parsing the XML.
+//   - slice of all test names.
+//   - slice of status for each test.
+//   - map from name of a failed test to a github issue that explains the failure,
+//     if the error message contained a reference to an issue.
+//   - error if there was a problem parsing the XML.
 func extractFailureFromJUnitXML(contents []byte) ([]string, []status, map[string]string, error) {
 	type Failure struct {
 		Message string `xml:"message,attr"`

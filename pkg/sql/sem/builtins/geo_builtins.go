@@ -7223,7 +7223,7 @@ func toUseSphereOrSpheroid(useSpheroid tree.DBool) geogfn.UseSphereOrSpheroid {
 	return geogfn.UseSphere
 }
 
-func initGeoBuiltins() {
+func init() {
 	// Some functions have exactly the same definition - in which case,
 	// we can just copy them.
 	for _, alias := range []struct {

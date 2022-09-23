@@ -5,6 +5,7 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "scgraph",
     srcs = [
+        "dep_edge_alloc.go",
         "dep_edge_tree.go",
         "edge.go",
         "graph.go",
@@ -32,6 +33,7 @@ go_test(
         "dep_edge_tree_test.go",
         "graph_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":scgraph"],
     deps = [
         "//pkg/sql/catalog/descpb",

@@ -30,13 +30,14 @@ import (
 // TestConcurrentAddDropRegions tests all combinations of add/drop as if they
 // were executed by two concurrent sessions. The general sketch of the test is
 // as follows:
-// - First operation is executed and blocks before the enum members are promoted.
-// - The second operation starts once the first operation has reached the type
-//   schema changer. It continues to completion. It may succeed/fail depending
-//   on the specific test setup.
-// - The first operation is resumed and allowed to complete. We expect it to
-//   succeed.
-// - Verify database regions are as expected.
+//   - First operation is executed and blocks before the enum members are promoted.
+//   - The second operation starts once the first operation has reached the type
+//     schema changer. It continues to completion. It may succeed/fail depending
+//     on the specific test setup.
+//   - The first operation is resumed and allowed to complete. We expect it to
+//     succeed.
+//   - Verify database regions are as expected.
+//
 // Operations act on a multi-region database that contains a REGIONAL BY ROW
 // table, so as to exercise the repartitioning semantics.
 func TestConcurrentAddDropRegions(t *testing.T) {

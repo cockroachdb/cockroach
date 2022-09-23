@@ -410,17 +410,17 @@ func newFilteringDistinctHashAggregatorHelper(
 // paying attention to distinct tuples if the corresponding function performs
 // DISTINCT aggregation (as well as to any present FILTER clauses).
 // For such functions the approach is as follows:
-// 1. Store the input state because we will be modifying some of it.
-// 2. Convert all aggregate columns of functions that perform DISTINCT
-//    aggregation.
-// 3. For every function:
-//    1) Apply the filter to the selection vector of the input.
-//    2) Update the (possibly updated) selection vector to include only tuples
-//       we haven't yet seen making sure to remember that new tuples we have
-//       just seen.
-//    3) Execute Compute on the updated state.
-//    4) Restore the state to the original state (if it might have been
-//       modified).
+//  1. Store the input state because we will be modifying some of it.
+//  2. Convert all aggregate columns of functions that perform DISTINCT
+//     aggregation.
+//  3. For every function:
+//  1. Apply the filter to the selection vector of the input.
+//  2. Update the (possibly updated) selection vector to include only tuples
+//     we haven't yet seen making sure to remember that new tuples we have
+//     just seen.
+//  3. Execute Compute on the updated state.
+//  4. Restore the state to the original state (if it might have been
+//     modified).
 func (h *filteringDistinctHashAggregatorHelper) performAggregation(
 	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
 ) {

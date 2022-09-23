@@ -335,6 +335,10 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			op.RightType = transform.rightType
 		}
 	}
+	if s.disableDivision &&
+		(op.Operator.Symbol == treebin.Div || op.Operator.Symbol == treebin.FloorDiv) {
+		return nil, false
+	}
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
 	return castType(
@@ -410,10 +414,6 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		}
 	}
 
-	// Some aggregation functions benefit from an order by clause.
-	var orderExpr tree.Expr
-	var orderType *types.T
-
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
 		// Postgres is picky about having Int4 arguments instead of Int8.
@@ -425,10 +425,6 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		if class == tree.AggregateClass || class == tree.WindowClass {
 			var ok bool
 			arg, ok = makeColRef(s, argTyp, refs)
-			if ok && len(args) == 0 {
-				orderExpr = arg
-				orderType = argTyp
-			}
 			if !ok {
 				// If we can't find a col ref for our aggregate function, just use a
 				// constant.
@@ -445,6 +441,10 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		return nil, false
 	}
 
+	if fn.def.Class == tree.AggregateClass && s.disableAggregateFuncs {
+		return nil, false
+	}
+
 	var window *tree.WindowDef
 	// Use a window function if:
 	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
@@ -458,20 +458,27 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			order      tree.OrderBy
 			orderTypes []*types.T
 		)
+		addOrdCol := func(expr tree.Expr, typ *types.T) {
+			order = append(order, &tree.Order{Expr: expr, Direction: s.randDirection()})
+			orderTypes = append(orderTypes, typ)
+		}
 		s.sample(len(refs)-len(parts), 2, func(i int) {
 			ref := refs[i+len(parts)]
-			order = append(order, &tree.Order{
-				Expr:      ref.item,
-				Direction: s.randDirection(),
-			})
-			orderTypes = append(orderTypes, ref.typ)
+			addOrdCol(ref.item, ref.typ)
 		})
-		if s.disableNondeterministicFns && orderExpr != nil {
-			order = append(order, &tree.Order{
-				Expr:      orderExpr,
-				Direction: s.randDirection(),
-			})
-			orderTypes = append(orderTypes, orderType)
+		if s.disableNondeterministicFns {
+			switch fn.def.Name {
+			case "rank", "dense_rank", "percent_rank":
+				// The rank functions don't need to add ordering columns because they
+				// return the same result for all rows in a given peer group.
+			default:
+				// Other window functions care about the relative order of rows within
+				// each peer group, so we ensure that the ordering is deterministic by
+				// limiting each peer group to one row (by ordering on all columns).
+				for _, i := range s.rnd.Perm(len(refs)) {
+					addOrdCol(refs[i].typedExpr(), refs[i].typ)
+				}
+			}
 		}
 		var frame *tree.WindowFrame
 		if s.coin() {
@@ -496,7 +503,7 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 	)
 
 	// Some aggregation functions need an order by clause to be deterministic.
-	if s.disableNondeterministicFns && orderExpr != nil {
+	if s.disableNondeterministicFns && len(args) > 0 {
 		switch fn.def.Name {
 		case "array_agg",
 			"concat_agg",
@@ -508,10 +515,10 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			"string_agg",
 			"xmlagg":
 			funcExpr.AggType = tree.GeneralAgg
-			funcExpr.OrderBy = tree.OrderBy{{
-				Expr:      orderExpr,
-				Direction: s.randDirection(),
-			}}
+			funcExpr.OrderBy = make(tree.OrderBy, len(args))
+			for i := range funcExpr.OrderBy {
+				funcExpr.OrderBy[i] = &tree.Order{Expr: args[i], Direction: s.randDirection()}
+			}
 		}
 	}
 

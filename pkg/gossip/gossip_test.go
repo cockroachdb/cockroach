@@ -877,7 +877,9 @@ func TestGossipPropagation(t *testing.T) {
 // n1: decommissioned
 // n2: gossip node-liveness:1
 // n3: node-liveness range lease acquired (does not gossip node-liveness:1
-//     record because it is unchanged)
+//
+//	record because it is unchanged)
+//
 // n2: restarted
 //   - connects as gossip client to n3
 //   - sends a batch of gossip records to n3

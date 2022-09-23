@@ -28,11 +28,11 @@ import (
 // Constraint is used to constrain a lookup join. There are two types of
 // constraints:
 //
-//   1. Constraints with KeyCols use columns from the input to directly
-//      constrain lookups into a target index.
-//   2. Constraints with a LookupExpr build multiple spans from an expression
-//      that is evaluated for each input row. These spans are used to perform
-//      lookups into a target index.
+//  1. Constraints with KeyCols use columns from the input to directly
+//     constrain lookups into a target index.
+//  2. Constraints with a LookupExpr build multiple spans from an expression
+//     that is evaluated for each input row. These spans are used to perform
+//     lookups into a target index.
 //
 // A constraint is not constraining if both KeyCols and LookupExpr are empty.
 // See IsUnconstrained.
@@ -41,6 +41,14 @@ type Constraint struct {
 	// be used as lookup join key columns. This list corresponds to the columns
 	// in RightSideCols. It will be nil if LookupExpr is non-nil.
 	KeyCols opt.ColList
+
+	// DerivedEquivCols is the set of lookup join equijoin columns which are part
+	// of synthesized equality constraints based on another equality join
+	// condition and a computed index key column in the lookup table. Since these
+	// columns are not reducing the selectivity of the join, but are just added to
+	// facilitate index lookups, they should not be used in determining join
+	// selectivity.
+	DerivedEquivCols opt.ColSet
 
 	// RightSideCols is an ordered list of prefix index columns that are
 	// constrained by this constraint. It corresponds 1:1 with the columns in
@@ -141,13 +149,12 @@ func (b *ConstraintBuilder) Build(
 	// eqFilterOrds calculated during Init would no longer be valid because the
 	// ordinals of the filters will have changed.
 	leftEq, rightEq, eqFilterOrds :=
-		memo.ExtractJoinEqualityColumns(b.leftCols, b.rightCols, onFilters)
+		memo.ExtractJoinEqualityColumnsWithFilterOrds(b.leftCols, b.rightCols, onFilters)
 	rightEqSet := rightEq.ToSet()
 
 	// Retrieve the inequality columns from onFilters.
-	_, rightCmp, inequalityFilterOrds := memo.ExtractJoinConditionColumns(
-		b.leftCols, b.rightCols, onFilters, true, /* inequality */
-	)
+	rightCmp, inequalityFilterOrds :=
+		memo.ExtractJoinInequalityRightColumnsWithFilterOrds(b.leftCols, b.rightCols, onFilters)
 
 	allFilters := append(onFilters, optionalFilters...)
 
@@ -177,6 +184,7 @@ func (b *ConstraintBuilder) Build(
 	numIndexKeyCols := index.LaxKeyColumnCount()
 
 	keyCols := make(opt.ColList, 0, numIndexKeyCols)
+	var derivedEquivCols opt.ColSet
 	rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
 	var inputProjections memo.ProjectionsExpr
 	var lookupExpr memo.FiltersExpr
@@ -253,6 +261,8 @@ func (b *ConstraintBuilder) Build(
 			projection := b.f.ConstructProjectionsItem(b.f.RemapCols(expr, b.eqColMap), compEqCol)
 			inputProjections = append(inputProjections, projection)
 			addEqualityColumns(compEqCol, idxCol)
+			derivedEquivCols.Add(compEqCol)
+			derivedEquivCols.Add(idxCol)
 			foundEqualityCols = true
 			foundLookupCols = true
 			continue
@@ -364,6 +374,7 @@ func (b *ConstraintBuilder) Build(
 
 	c := Constraint{
 		KeyCols:          keyCols,
+		DerivedEquivCols: derivedEquivCols,
 		RightSideCols:    rightSideCols,
 		LookupExpr:       lookupExpr,
 		InputProjections: inputProjections,
@@ -385,49 +396,49 @@ func (b *ConstraintBuilder) Build(
 // ok=true when a join equality constraint can be generated for the column. This
 // is possible when:
 //
-//   1. col is non-nullable.
-//   2. col is a computed column.
-//   3. Columns referenced in the computed expression are a subset of columns
-//      that already have equality constraints.
+//  1. col is non-nullable.
+//  2. col is a computed column.
+//  3. Columns referenced in the computed expression are a subset of columns
+//     that already have equality constraints.
 //
 // For example, consider the table and query:
 //
-//   CREATE TABLE a (
-//     a INT
-//   )
+//	CREATE TABLE a (
+//	  a INT
+//	)
 //
-//   CREATE TABLE bc (
-//     b INT,
-//     c INT NOT NULL AS (b + 1) STORED
-//   )
+//	CREATE TABLE bc (
+//	  b INT,
+//	  c INT NOT NULL AS (b + 1) STORED
+//	)
 //
-//   SELECT * FROM a JOIN b ON a = b
+//	SELECT * FROM a JOIN b ON a = b
 //
 // We can add an equality constraint for c because c is a function of b and b
 // has an equality constraint in the join predicate:
 //
-//   SELECT * FROM a JOIN b ON a = b AND a + 1 = c
+//	SELECT * FROM a JOIN b ON a = b AND a + 1 = c
 //
 // Condition (1) is required to prevent generating invalid equality constraints
 // for computed column expressions that can evaluate to NULL even when the
 // columns referenced in the expression are non-NULL. For example, consider the
 // table and query:
 //
-//   CREATE TABLE a (
-//     a INT
-//   )
+//	CREATE TABLE a (
+//	  a INT
+//	)
 //
-//   CREATE TABLE bc (
-//     b INT,
-//     c INT AS (CASE WHEN b > 0 THEN NULL ELSE -1 END) STORED
-//   )
+//	CREATE TABLE bc (
+//	  b INT,
+//	  c INT AS (CASE WHEN b > 0 THEN NULL ELSE -1 END) STORED
+//	)
 //
-//   SELECT a, b FROM a JOIN b ON a = b
+//	SELECT a, b FROM a JOIN b ON a = b
 //
 // The following is an invalid transformation: a row such as (a=1, b=1) would no
 // longer be returned because NULL=NULL is false.
 //
-//   SELECT a, b FROM a JOIN b ON a = b AND (CASE WHEN a > 0 THEN NULL ELSE -1 END) = c
+//	SELECT a, b FROM a JOIN b ON a = b AND (CASE WHEN a > 0 THEN NULL ELSE -1 END) = c
 //
 // TODO(mgartner): We can relax condition (1) to allow nullable columns if it
 // can be proven that the expression will never evaluate to NULL. We can use
@@ -627,7 +638,9 @@ func (b *ConstraintBuilder) constructColEquality(leftCol, rightCol opt.ColumnID)
 }
 
 // isCanonicalFilter returns true for the limited set of expr's that are
-// supported by the lookup joiner at execution time.
+// supported by the lookup joiner at execution time. Note that
+// indexLookupJoinPerLookupCost in coster.go depends on the validation performed
+// by this function, so changes made here should be reflected there.
 func isCanonicalFilter(filter memo.FiltersItem) bool {
 	isVar := func(expr opt.Expr) bool {
 		_, ok := expr.(*memo.VariableExpr)

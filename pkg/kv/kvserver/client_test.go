@@ -8,7 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-/* Package storage_test provides a means of testing store
+/*
+	Package storage_test provides a means of testing store
+
 functionality which depends on a fully-functional KV client. This
 cannot be done within the storage package because of circular
 dependencies.

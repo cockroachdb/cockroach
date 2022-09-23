@@ -560,3 +560,39 @@ message AlterDatabaseSetZoneConfigExtension {
   CommonZoneConfigDetails config = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
+// CreateFunction is recorded when a user-defined function is created.
+message CreateFunction {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Name of the created function.
+  string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  // If the new function is a replace of an existing function.
+  bool is_replace = 4 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// DropFunction is recorded when a user-defined function is dropped.
+message DropFunction {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Name of the created function.
+  string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// RenameFunction is recorded when a user-defined function is renamed.
+message RenameFunction {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The old name of the affected function.
+  string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+  // The new name of the affected function.
+  string new_function_name = 4  [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// AlterFunctionOptions is recorded when a user-defined function's options are
+// altered.
+message AlterFunctionOptions {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // Name of the affected function.
+  string function_name = 3  [(gogoproto.jsontag) = ",omitempty"];
+}

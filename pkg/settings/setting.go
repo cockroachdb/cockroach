@@ -84,19 +84,20 @@ type NonMaskedSetting interface {
 // SystemOnly.RegisterIntSetting().
 //
 // Guidelines for choosing a class:
-//  - Make sure to read the descriptions below carefully to understand the
-//    differences in semantics.
 //
-//  - If the setting controls a user-visible aspect of SQL, it should be a
-//    TenantWritable setting.
+//   - Make sure to read the descriptions below carefully to understand the
+//     differences in semantics.
 //
-//  - Control settings relevant to tenant-specific internal implementation
-//    should be TenantReadOnly.
+//   - If the setting controls a user-visible aspect of SQL, it should be a
+//     TenantWritable setting.
 //
-//  - When in doubt, the first choice to consider should be TenantReadOnly.
+//   - Control settings relevant to tenant-specific internal implementation
+//     should be TenantReadOnly.
 //
-//  - SystemOnly should be used with caution: even internal tenant code is
-//    disallowed from using these settings at all.
+//   - When in doubt, the first choice to consider should be TenantReadOnly.
+//
+//   - SystemOnly should be used with caution: even internal tenant code is
+//     disallowed from using these settings at all.
 type Class int8
 
 const (

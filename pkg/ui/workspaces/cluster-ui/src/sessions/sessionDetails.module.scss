@@ -82,7 +82,8 @@
   max-height: 300px;
   overflow-y: scroll;
 
-  div {
+  .link-txn-fingerprint-id {
+    display: block;
     margin-bottom: 8px;
   }
 }

@@ -32,9 +32,10 @@ import (
 // timestamp.
 //
 // If both these conditions hold:
-//   * A transaction already has an observed timestamp value for a node
-//   * That node was not the leaseholder for some or all of the range as of the
+//   - A transaction already has an observed timestamp value for a node
+//   - That node was not the leaseholder for some or all of the range as of the
 //     time of the observed timestamp, but it is now.
+//
 // Then the transaction's observed timestamp is not (entirely) respected when
 // computing a local uncertainty limit.
 //
@@ -59,17 +60,16 @@ import (
 //
 // A similar hazard applies to range merges.
 //
-// 1. put(k2 on n2, r2); gateway chooses t=1.0
-// 2. begin; read(k on n1, r1); gateway chooses t=0.98
-// 3. pick up observed timestamp for n1 of t=0.99
-// 4. r1 merged right-hand neighbor r2 @ t=1.1
-// 5. read(k2) on joint range at ReadTimestamp=0.98 should get
-//    ReadWithinUncertaintyInterval because of the write in step 1, so
-//    even though we observed n1's timestamp in step 3 we must expand
-//    the uncertainty interval to the range merge freeze time, which
-//    is guaranteed to be greater than any write which occurred on the
-//    right-hand side.
-//
+//  1. put(k2 on n2, r2); gateway chooses t=1.0
+//  2. begin; read(k on n1, r1); gateway chooses t=0.98
+//  3. pick up observed timestamp for n1 of t=0.99
+//  4. r1 merged right-hand neighbor r2 @ t=1.1
+//  5. read(k2) on joint range at ReadTimestamp=0.98 should get
+//     ReadWithinUncertaintyInterval because of the write in step 1, so
+//     even though we observed n1's timestamp in step 3 we must expand
+//     the uncertainty interval to the range merge freeze time, which
+//     is guaranteed to be greater than any write which occurred on the
+//     right-hand side.
 func ComputeInterval(
 	h *roachpb.Header, status kvserverpb.LeaseStatus, maxOffset time.Duration,
 ) Interval {

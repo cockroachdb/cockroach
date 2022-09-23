@@ -25,7 +25,7 @@ eexpect ":/# "
 end_test
 
 start_test "Check that the client also can generate goroutine dumps."
-send "$argv demo --no-example-database\r"
+send "$argv demo --no-line-editor --no-example-database\r"
 eexpect root@
 # Dump goroutines in server.
 system "killall -QUIT `basename \$(realpath $argv)`"

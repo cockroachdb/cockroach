@@ -50,7 +50,7 @@ func (tc *Collection) getTableByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
 ) (found bool, _ catalog.TableDescriptor, err error) {
 	flags.DesiredObjectKind = tree.TableObject
-	_, desc, err := tc.getObjectByName(
+	_, desc, err := tc.GetObjectByName(
 		ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
 	if err != nil || desc == nil {
 		return false, nil, err
@@ -67,32 +67,34 @@ func (tc *Collection) GetLeasedImmutableTableByID(
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	table, err := catalog.AsTableDescriptor(desc)
+	descs := []catalog.Descriptor{desc}
+	err = tc.hydrateDescriptors(ctx, txn, tree.CommonLookupFlags{}, descs)
 	if err != nil {
 		return nil, err
 	}
-	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
-	if err != nil {
-		return nil, err
-	}
-	return hydrated, nil
+	return catalog.AsTableDescriptor(descs[0])
 }
 
 // GetUncommittedMutableTableByID returns an uncommitted mutable table by its
 // ID.
-func (tc *Collection) GetUncommittedMutableTableByID(id descpb.ID) (*tabledesc.Mutable, error) {
-	if imm, status := tc.stored.getCachedByID(id); imm == nil || status == notValidatedYet {
-		return nil, nil
+func (tc *Collection) GetUncommittedMutableTableByID(
+	id descpb.ID,
+) (catalog.TableDescriptor, *tabledesc.Mutable, error) {
+	original := tc.uncommitted.getOriginalByID(id)
+	mut := tc.uncommitted.getUncommittedMutableByID(id)
+	if mut == nil {
+		return nil, nil, nil
 	}
-	mut, err := tc.stored.checkOut(id)
-	if err != nil {
-		return nil, err
+	if _, err := catalog.AsTableDescriptor(mut); err != nil {
+		return nil, nil, err
 	}
-	if table, ok := mut.(*tabledesc.Mutable); ok {
-		return table, nil
+	if original == nil {
+		return nil, mut.(*tabledesc.Mutable), nil
 	}
-	// Check non-table descriptors back in.
-	return nil, tc.stored.checkIn(mut)
+	if _, err := catalog.AsTableDescriptor(original); err != nil {
+		return nil, nil, err
+	}
+	return original.(catalog.TableDescriptor), mut.(*tabledesc.Mutable), nil
 }
 
 // GetMutableTableByID returns a mutable table descriptor with
@@ -157,9 +159,5 @@ func (tc *Collection) getTableByID(
 		return nil, sqlerrors.NewUndefinedRelationError(
 			&tree.TableRef{TableID: int64(tableID)})
 	}
-	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
-	if err != nil {
-		return nil, err
-	}
-	return hydrated, nil
+	return table, nil
 }

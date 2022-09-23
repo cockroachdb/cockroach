@@ -1499,10 +1499,6 @@ type ExecutorTestingKnobs struct {
 	// to use a transaction, and, in doing so, more deterministically allocate
 	// descriptor IDs at the cost of decreased parallelism.
 	UseTransactionalDescIDGenerator bool
-
-	// NoStatsCollectionWithVerboseTracing is used to disable the execution
-	// statistics collection in presence of the verbose tracing.
-	NoStatsCollectionWithVerboseTracing bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -1602,9 +1598,6 @@ type BackupRestoreTestingKnobs struct {
 	// testing. This is typically the bulk mem monitor if not
 	// specified here.
 	BackupMemMonitor *mon.BytesMonitor
-
-	// RecoverFromIterClosePanic prevents the node from panicing during ReadAsOfIterator.Close
-	RecoverFromIterPanic bool
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
@@ -1621,6 +1614,10 @@ type StreamingTestingKnobs struct {
 	// BeforeClientSubscribe allows observation of parameters about to be passed
 	// to a streaming client
 	BeforeClientSubscribe func(addr string, token string, startTime hlc.Timestamp)
+
+	// BeforeIngestionStart allows blocking the stream ingestion job
+	// before a stream ingestion happens.
+	BeforeIngestionStart func(ctx context.Context) error
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
@@ -2293,8 +2290,10 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 //
 // Args:
 // kvTracingEnabled: If set, the traces will also include "KV trace" messages -
-//   verbose messages around the interaction of SQL with KV. Some of the messages
-//   are per-row.
+//
+//	verbose messages around the interaction of SQL with KV. Some of the messages
+//	are per-row.
+//
 // showResults: If set, result rows are reported in the trace.
 func (st *SessionTracing) StartTracing(
 	recType tracingpb.RecordingType, kvTracingEnabled, showResults bool,
@@ -2514,11 +2513,11 @@ type traceRow [traceNumCols]tree.Datum
 
 // A regular expression to split log messages.
 // It has three parts:
-// - the (optional) code location, with at least one forward slash and a period
-//   in the file name:
-//   ((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?)
-// - the (optional) tag: ((?:\[(?:[^][]|\[[^]]*\])*\])?)
-// - the message itself: the rest.
+//   - the (optional) code location, with at least one forward slash and a period
+//     in the file name:
+//     ((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?)
+//   - the (optional) tag: ((?:\[(?:[^][]|\[[^]]*\])*\])?)
+//   - the message itself: the rest.
 var logMessageRE = regexp.MustCompile(
 	`(?s:^((?:[^][ :]+/[^][ :]+\.[^][ :]+:[0-9]+)?) *((?:\[(?:[^][]|\[[^]]*\])*\])?) *(.*))`)
 
@@ -2692,35 +2691,14 @@ func getMessagesForSubtrace(
 		return nil, errors.Errorf("duplicate span %d", span.SpanID)
 	}
 	var allLogs []logRecordRow
-	const spanStartMsgTemplate = "=== SPAN START: %s ==="
 
-	// spanStartMsgs are metadata about the span, e.g. the operation name and tags
-	// contained in the span. They are added as one log message.
-	spanStartMsgs := make([]string, 0)
-
-	spanStartMsgs = append(spanStartMsgs, fmt.Sprintf(spanStartMsgTemplate, span.Operation))
-
-	for _, tg := range span.TagGroups {
-		var prefix string
-		if tg.Name != tracingpb.AnonymousTagGroupName {
-			prefix = fmt.Sprintf("%s-", tg.Name)
-		}
-		for _, tag := range tg.Tags {
-			if !strings.HasPrefix(tag.Key, tracing.TagPrefix) {
-				// Not a tag to be output.
-				continue
-			}
-			spanStartMsgs = append(spanStartMsgs, fmt.Sprintf("%s%s: %s", prefix, tag.Key, tag.Value))
-		}
-	}
-
-	// This message holds all the spanStartMsgs and marks the beginning of the
-	// span, to indicate the start time and duration of the span.
+	// This message marks the beginning of the span, to indicate the start time
+	// and duration of the span.
 	allLogs = append(
 		allLogs,
 		logRecordRow{
 			timestamp: span.StartTime,
-			msg:       strings.Join(spanStartMsgs, "\n"),
+			msg:       fmt.Sprintf("=== SPAN START: %s ===", span.Operation),
 			span:      span,
 			index:     0,
 		},
@@ -3277,6 +3255,18 @@ func (m *sessionDataMutator) SetInjectRetryErrorsEnabled(val bool) {
 
 func (m *sessionDataMutator) SetJoinReaderOrderingStrategyBatchSize(val int64) {
 	m.data.JoinReaderOrderingStrategyBatchSize = val
+}
+
+func (m *sessionDataMutator) SetJoinReaderNoOrderingStrategyBatchSize(val int64) {
+	m.data.JoinReaderNoOrderingStrategyBatchSize = val
+}
+
+func (m *sessionDataMutator) SetJoinReaderIndexJoinStrategyBatchSize(val int64) {
+	m.data.JoinReaderIndexJoinStrategyBatchSize = val
+}
+
+func (m *sessionDataMutator) SetIndexJoinStreamerBatchSize(val int64) {
+	m.data.IndexJoinStreamerBatchSize = val
 }
 
 func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsEnabled(val bool) {

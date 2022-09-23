@@ -36,7 +36,7 @@ func TestNewActiveQueryProfiler(t *testing.T) {
 		{
 			name:     "returns error when no access to cgroups",
 			wantErr:  true,
-			errMsg:   "cgroups not available",
+			errMsg:   "failed to detect cgroup memory limit: cgroups not available",
 			storeDir: heapProfilerDirName,
 			limitFn:  cgroupFnWithReturn(0, "", errors.New("cgroups not available")),
 		},

@@ -20,6 +20,7 @@ go_test(
         "lint_test.go",
         "nightly_lint_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":lint"],
     gotags = ["lint"],

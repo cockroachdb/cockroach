@@ -21,41 +21,40 @@
 //
 // This is the ten-thousand foot view of the keyspace:
 //
-//    +------------------+
-//    | (empty)          | /Min
-//    | \x01...          | /Local            ---------------------+
-//    |                  |                                        |
-//    | ...              |                                        | local keys
-//    |                  |                                        |
-//    |                  |                   ---------------------+
-//    |                  |                   ---------------------+
-//    | \x02...          | /Meta1            ----+                |
-//    | \x03...          | /Meta2                |                |
-//    | \x04...          | /System               |                |
-//    |                  |                       | system keys    |
-//    | ...              |                       |                |
-//    |                  |                   ----+                |
-//    | \x89...          | /Table/1          ----+                |
-//    | \x8a...          | /Table/2              |                |
-//    |                  |                       | system tenant  |
-//    | ...              |                       |                | global keys
-//    |                  |                   ----+                |
-//    | \xfe\x8a\x89...  | /Tenant/2/Table/1 ----+                |
-//    | \xfe\x8a\x8a...  | /Tenant/2/Table/2     |                |
-//    |                  |                       | tenant 2       |
-//    | ...              |                       |                |
-//    |                  |                   ----+                |
-//    | \xfe...          | /Tenant/...       ----+                |
-//    | \xfe...          |                       |                |
-//    |                  |                       | tenant ...     |
-//    | ...              |                       |                |
-//    |                  |                   ----+                |
-//    | \xff\xff         | /Max              ---------------------+
-//    +------------------+
+//	+------------------+
+//	| (empty)          | /Min
+//	| \x01...          | /Local            ---------------------+
+//	|                  |                                        |
+//	| ...              |                                        | local keys
+//	|                  |                                        |
+//	|                  |                   ---------------------+
+//	|                  |                   ---------------------+
+//	| \x02...          | /Meta1            ----+                |
+//	| \x03...          | /Meta2                |                |
+//	| \x04...          | /System               |                |
+//	|                  |                       | system keys    |
+//	| ...              |                       |                |
+//	|                  |                   ----+                |
+//	| \x89...          | /Table/1          ----+                |
+//	| \x8a...          | /Table/2              |                |
+//	|                  |                       | system tenant  |
+//	| ...              |                       |                | global keys
+//	|                  |                   ----+                |
+//	| \xfe\x8a\x89...  | /Tenant/2/Table/1 ----+                |
+//	| \xfe\x8a\x8a...  | /Tenant/2/Table/2     |                |
+//	|                  |                       | tenant 2       |
+//	| ...              |                       |                |
+//	|                  |                   ----+                |
+//	| \xfe...          | /Tenant/...       ----+                |
+//	| \xfe...          |                       |                |
+//	|                  |                       | tenant ...     |
+//	| ...              |                       |                |
+//	|                  |                   ----+                |
+//	| \xff\xff         | /Max              ---------------------+
+//	+------------------+
 //
 // When keys are pretty printed, the logical name to the right of the table is
 // shown instead of the raw byte sequence.
-//
 //
 // 1. Key Ranges
 //
@@ -67,20 +66,19 @@
 // exist over the "resolved" keyspace, refer to the "Key Addressing" section
 // below for more details.
 //
-//
 // 2. Local vs. Global Keys
 //
 // There are broadly two types of keys, "local" and "global":
 //
-//  (i) Local keys, such as store- and range-specific metadata, are keys that
-//  must be physically collocated with the store and/or ranges they refer to but
-//  also logically separated so that they do not pollute the user key space.
-//  This is further elaborated on in the "Key Addressing" section below. Local
-//  data also includes data "local" to a node, such as the store metadata and
-//  the raft log, which is where the name originated.
+//	(i) Local keys, such as store- and range-specific metadata, are keys that
+//	must be physically collocated with the store and/or ranges they refer to but
+//	also logically separated so that they do not pollute the user key space.
+//	This is further elaborated on in the "Key Addressing" section below. Local
+//	data also includes data "local" to a node, such as the store metadata and
+//	the raft log, which is where the name originated.
 //
-//  (ii) Non-local keys (for e.g. meta1, meta2, system, and SQL keys) are
-//  collectively referred to as "global" keys.
+//	(ii) Non-local keys (for e.g. meta1, meta2, system, and SQL keys) are
+//	collectively referred to as "global" keys.
 //
 // NB: The empty key (/Min) is a special case. No data is stored there, but it
 // is used as the start key of the first range descriptor and as the starting
@@ -88,7 +86,6 @@
 //
 // (Check `keymap` below for a more precise breakdown of the local and global
 // keyspace.)
-//
 //
 // 2. Key Addressing
 //
@@ -113,7 +110,6 @@
 // would place the data on an arbitrary set of stores, with no guarantee of
 // collocation. By being able to logically sort the range descriptor key next to
 // the range itself, we're able to collocate the two.
-//
 //
 // 3. (replicated) Range-ID local keys vs. Range local keys
 //

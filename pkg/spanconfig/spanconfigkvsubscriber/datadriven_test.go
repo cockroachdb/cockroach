@@ -41,60 +41,60 @@ import (
 // TestDataDriven runs datadriven tests against the KVSubscriber interface.
 // The syntax is as follows:
 //
-//      update
-//      delete [c,e)
-//      upsert [c,d):C
-//      upsert [d,e):D
-//      upsert {entire-keyspace}:X
-//      delete {source=1,target=20}
-//      ----
+//		update
+//		delete [c,e)
+//		upsert [c,d):C
+//		upsert [d,e):D
+//		upsert {entire-keyspace}:X
+//		delete {source=1,target=20}
+//		----
 //
-//      get
-//      span [a,b)
-//      span [b,c)
-//      ----
-//      [a,b):A
-//      [b,d):B
+//		get
+//		span [a,b)
+//		span [b,c)
+//		----
+//		[a,b):A
+//		[b,d):B
 //
-//      start
-//      ----
+//		start
+//		----
 //
-//      updates
-//      ----
-//      [a,b)
-//      [b,d)
-//      [e,f)
+//		updates
+//		----
+//		[a,b)
+//		[b,d)
+//		[e,f)
 //
-//      store-reader key=b
-//      ----
-//      [b,d):B
+//		store-reader key=b
+//		----
+//		[b,d):B
 //
-//      store-reader compute-split=[a,c)
-//      ----
-//      b
+//		store-reader compute-split=[a,c)
+//		----
+//		b
 //
-//      store-reader needs-split=[b,h)
-//      ----
-//      true
+//		store-reader needs-split=[b,h)
+//		----
+//		true
 //
-//      inject-buffer-overflow
-//      ----
-//      ok
+//		inject-buffer-overflow
+//		----
+//		ok
 //
-// - update and get tie into GetSpanConfigRecords and UpdateSpanConfigRecords
-//   respectively on the KVAccessor interface, and are a convenient shorthand to
-//   populate the system table that the KVSubscriber subscribes to. The input is
-//   processed in a single batch.
-// - start starts the subscription process. It can also be used to verify
-//   behavior when re-establishing subscriptions after hard errors.
-// - updates lists the span updates the KVSubscriber receives, in the listed
-//   order. Updates in a batch are de-duped.
-// - store-reader {key,compute-split,needs-split} relate to GetSpanConfigForKey,
-//   ComputeSplitKey and NeedsSplit respectively on the StoreReader subset of the
-//   KVSubscriber interface.
-// - inject-buffer-overflow can be used to inject rangefeed buffer overflow
-//   errors within the kvsubscriber. It pokes into the internals of the
-//   kvsubscriber and is useful to test teardown and recovery behavior.
+//	  - update and get tie into GetSpanConfigRecords and UpdateSpanConfigRecords
+//	    respectively on the KVAccessor interface, and are a convenient shorthand to
+//	    populate the system table that the KVSubscriber subscribes to. The input is
+//	    processed in a single batch.
+//	  - start starts the subscription process. It can also be used to verify
+//	    behavior when re-establishing subscriptions after hard errors.
+//	  - updates lists the span updates the KVSubscriber receives, in the listed
+//	    order. Updates in a batch are de-duped.
+//	  - store-reader {key,compute-split,needs-split} relate to GetSpanConfigForKey,
+//	    ComputeSplitKey and NeedsSplit respectively on the StoreReader subset of the
+//	    KVSubscriber interface.
+//	  - inject-buffer-overflow can be used to inject rangefeed buffer overflow
+//	    errors within the kvsubscriber. It pokes into the internals of the
+//	    kvsubscriber and is useful to test teardown and recovery behavior.
 //
 // Text of the form [a,b) and [a,b):C correspond to spans and span config
 // records; see spanconfigtestutils.Parse{Span,Config,SpanConfigRecord} for more

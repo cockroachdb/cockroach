@@ -33,14 +33,12 @@ func loadTPCHDataset(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
+	db *gosql.DB,
 	sf int,
 	m cluster.Monitor,
 	roachNodes option.NodeListOption,
 	disableMergeQueue bool,
 ) error {
-	db := c.Conn(ctx, t.L(), roachNodes[0])
-	defer db.Close()
-
 	if disableMergeQueue {
 		if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
 			t.Fatal(err)

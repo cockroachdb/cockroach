@@ -242,11 +242,11 @@ func (mb *mutationBuilder) setFetchColIDs(cols []scopeColumn) {
 // buildInputForUpdate constructs a Select expression from the fields in
 // the Update operator, similar to this:
 //
-//   SELECT <cols>
-//   FROM <table>
-//   WHERE <where>
-//   ORDER BY <order-by>
-//   LIMIT <limit>
+//	SELECT <cols>
+//	FROM <table>
+//	WHERE <where>
+//	ORDER BY <order-by>
+//	LIMIT <limit>
 //
 // All columns from the table to update are added to fetchColList.
 // If a FROM clause is defined, we build out each of the table
@@ -375,11 +375,11 @@ func (mb *mutationBuilder) buildInputForUpdate(
 // buildInputForDelete constructs a Select expression from the fields in
 // the Delete operator, similar to this:
 //
-//   SELECT <cols>
-//   FROM <table>
-//   WHERE <where>
-//   ORDER BY <order-by>
-//   LIMIT <limit>
+//	SELECT <cols>
+//	FROM <table>
+//	WHERE <where>
+//	ORDER BY <order-by>
+//	LIMIT <limit>
 //
 // All columns from the table to update are added to fetchColList.
 // TODO(andyk): Do needed column analysis to project fewer columns if possible.
@@ -511,7 +511,7 @@ func (mb *mutationBuilder) extractValuesInput(inputRows *tree.Select) *tree.Valu
 // corresponding column. This is only possible when the input is a VALUES
 // clause. For example:
 //
-//   INSERT INTO t (a, b) (VALUES (1, DEFAULT), (DEFAULT, 2))
+//	INSERT INTO t (a, b) (VALUES (1, DEFAULT), (DEFAULT, 2))
 //
 // Here, the two DEFAULT specifiers are replaced by the default value expression
 // for the a and b columns, respectively.
@@ -579,12 +579,12 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 // missing columns.
 //
 // Values are synthesized for columns based on checking these rules, in order:
-//   1. If column has a default value specified for it, use that as its value.
-//   2. If column is nullable, use NULL as its value.
-//   3. If column is currently being added or dropped (i.e. a mutation column),
-//      use a default value (0 for INT column, "" for STRING column, etc). Note
-//      that the existing "fetched" value returned by the scan cannot be used,
-//      since it may not have been initialized yet by the backfiller.
+//  1. If column has a default value specified for it, use that as its value.
+//  2. If column is nullable, use NULL as its value.
+//  3. If column is currently being added or dropped (i.e. a mutation column),
+//     use a default value (0 for INT column, "" for STRING column, etc). Note
+//     that the existing "fetched" value returned by the scan cannot be used,
+//     since it may not have been initialized yet by the backfiller.
 //
 // If includeOrdinary is false, then only WriteOnly columns are considered.
 //
@@ -944,7 +944,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 // might mutate the column, or it might be returned by the mutation statement,
 // or it might not be used at all. Columns take priority in this order:
 //
-//   upsert, update, fetch, insert
+//	upsert, update, fetch, insert
 //
 // If an upsert column is available, then it already combines an update/fetch
 // value with an insert value, so it takes priority. If an update column is

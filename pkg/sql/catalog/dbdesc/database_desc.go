@@ -255,6 +255,10 @@ func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 		vea.Report(errors.AssertionFailedf(
 			"primary region unset on a multi-region db %d", desc.GetID()))
 	}
+	if desc.RegionConfig.PrimaryRegion == desc.RegionConfig.SecondaryRegion {
+		vea.Report(errors.AssertionFailedf(
+			"primary region is same as secondary region on multi-region db %d", desc.GetID()))
+	}
 }
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
@@ -274,8 +278,8 @@ func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return ids, nil
 }
 
-// ValidateCrossReferences implements the catalog.Descriptor interface.
-func (desc *immutable) ValidateCrossReferences(
+// ValidateForwardReferences implements the catalog.Descriptor interface.
+func (desc *immutable) ValidateForwardReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Check multi-region enum type.
@@ -298,13 +302,11 @@ func (desc *immutable) ValidateCrossReferences(
 	}
 }
 
-// ValidateTxnCommit implements the catalog.Descriptor interface.
-func (desc *immutable) ValidateTxnCommit(
+// ValidateBackReferences implements the catalog.Descriptor interface.
+func (desc *immutable) ValidateBackReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Check schema references.
-	// This could be done in ValidateCrossReferences but it can be quite expensive
-	// so we do it here instead.
 	for schemaName, schemaInfo := range desc.Schemas {
 		report := func(err error) {
 			vea.Report(errors.Wrapf(err, "schema mapping entry %q (%d)",
@@ -326,6 +328,13 @@ func (desc *immutable) ValidateTxnCommit(
 				schemaDesc.GetName(), schemaDesc.GetID()))
 		}
 	}
+}
+
+// ValidateTxnCommit implements the catalog.Descriptor interface.
+func (desc *immutable) ValidateTxnCommit(
+	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+) {
+	// No-op.
 }
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.

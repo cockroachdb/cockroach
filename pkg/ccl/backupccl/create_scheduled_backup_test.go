@@ -1311,6 +1311,7 @@ WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups, f
 	beforeBackup := th.env.Now()
 	firstRun := th.env.Now().Add(time.Minute).Round(time.Microsecond)
 
+	th.sqlDB.Exec(t, `SET application_name = 'backup_test'`)
 	schedules, err := th.createBackupSchedule(t, query, loc, firstRun)
 	if err != nil {
 		t.Fatal(err)
@@ -1335,6 +1336,7 @@ WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups, f
 		OnPreviousRunning:       "WAIT",
 		IgnoreExistingBackup:    true,
 		CustomFirstRunTime:      firstRun.UnixNano(),
+		ApplicationName:         "backup_test",
 	}
 
 	requireRecoveryEvent(t, beforeBackup.UnixNano(), createdScheduleEventType, expectedCreateSchedule)

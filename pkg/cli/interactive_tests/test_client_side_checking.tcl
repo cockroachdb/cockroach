@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-spawn $argv sql
+spawn $argv sql --no-line-editor
 eexpect root@
 
 start_test "Check that syntax errors are handled client-side when running interactive."
@@ -78,7 +78,7 @@ eexpect "0\r\n:/# "
 end_test
 
 start_test "Check that --debug-sql-cli sets suitable simplified client-side options."
-send "$argv sql --debug-sql-cli\r"
+send "$argv sql --debug-sql-cli --no-line-editor\r"
 eexpect "Welcome"
 
 # Check empty db name for build info query.

@@ -79,6 +79,7 @@ go_test(
         "simple_linear_regression_test.go",
         "stats_cache_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":stats"],
     deps = [
         "//pkg/base",

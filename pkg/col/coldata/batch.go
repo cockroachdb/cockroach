@@ -82,6 +82,9 @@ type Batch interface {
 
 var _ Batch = &MemBatch{}
 
+// DefaultColdataBatchSize is the default value of coldata-batch-size.
+const DefaultColdataBatchSize = 1024
+
 // defaultBatchSize is the size of batches that is used in the non-test setting.
 // Initially, 1024 was picked based on MonetDB/X100 paper and was later
 // confirmed to be very good using tpchvec/bench benchmark on TPC-H queries
@@ -89,7 +92,7 @@ var _ Batch = &MemBatch{}
 // better, so we decided to keep 1024 as it is a power of 2).
 var defaultBatchSize = int64(util.ConstantWithMetamorphicTestRange(
 	"coldata-batch-size",
-	1024, /* defaultValue */
+	DefaultColdataBatchSize, /* defaultValue */
 	// min is set to 3 to match colexec's minBatchSize setting.
 	3, /* min */
 	MaxBatchSize,

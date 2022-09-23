@@ -29,17 +29,17 @@
 //
 // The following resources are created for each cluster:
 //
-//  Roachprod "commons"
-//  | Resource Group (one per Location / Region)
-//  |   VNet          (10.<offset>/16)
-//  |     Subnet      (10.<offset>/18 range)
+//	Roachprod "commons"
+//	| Resource Group (one per Location / Region)
+//	|   VNet          (10.<offset>/16)
+//	|     Subnet      (10.<offset>/18 range)
 //
-//  Per cluster
-//  | Resource Group (one per Location / Region)
-//  |   []IPAddress   (public IP address for each VM)
-//  |   []NIC         (bound to IPAddress and to a common Subnet)
-//  |   []VM          (bound to a NIC)
-//  |     OSDisk      (100GB, standard SSD storage)
+//	Per cluster
+//	| Resource Group (one per Location / Region)
+//	|   []IPAddress   (public IP address for each VM)
+//	|   []NIC         (bound to IPAddress and to a common Subnet)
+//	|   []VM          (bound to a NIC)
+//	|     OSDisk      (100GB, standard SSD storage)
 //
 // Roachprod creates a "common" resource group, VNet, and Subnet for
 // each location that clusters may be deployed into. Each NIC that is

@@ -62,7 +62,7 @@ upsert descriptor #104
   +      sharded: {}
   +      version: 3
   +    mutationId: 2
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: t
      nextColumnId: 3
   ...
@@ -92,14 +92,6 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
-     indexes: []
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - direction: DROP
-  ...
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -122,7 +114,7 @@ upsert descriptor #104
   ...
          version: 3
        mutationId: 2
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 3

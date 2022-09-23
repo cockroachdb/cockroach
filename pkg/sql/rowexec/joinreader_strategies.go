@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -37,16 +38,16 @@ import (
 // rows from pairs of joined rows.
 //
 // There are three implementations of joinReaderStrategy:
-// - joinReaderNoOrderingStrategy: used when the joined rows do not need to be
-//   produced in input-row order.
-// - joinReaderOrderingStrategy: used when the joined rows need to be produced
-//   in input-row order. As opposed to the prior strategy, this one needs to do
-//   more buffering to deal with out-of-order looked-up rows.
-// - joinReaderIndexJoinStrategy: used when we're performing a join between an
-//   index and the table's PK. This one is the simplest and the most efficient
-//   because it doesn't actually join anything - it directly emits the PK rows.
-//   The joinReaderIndexJoinStrategy is used by both ordered and unordered index
-//   joins; see comments on joinReaderIndexJoinStrategy for details.
+//   - joinReaderNoOrderingStrategy: used when the joined rows do not need to be
+//     produced in input-row order.
+//   - joinReaderOrderingStrategy: used when the joined rows need to be produced
+//     in input-row order. As opposed to the prior strategy, this one needs to do
+//     more buffering to deal with out-of-order looked-up rows.
+//   - joinReaderIndexJoinStrategy: used when we're performing a join between an
+//     index and the table's PK. This one is the simplest and the most efficient
+//     because it doesn't actually join anything - it directly emits the PK rows.
+//     The joinReaderIndexJoinStrategy is used by both ordered and unordered index
+//     joins; see comments on joinReaderIndexJoinStrategy for details.
 type joinReaderStrategy interface {
 	// getLookupRowsBatchSizeHint returns the size in bytes of the batch of lookup
 	// rows.
@@ -99,10 +100,10 @@ type joinReaderStrategy interface {
 // more performant than joinReaderOrderingStrategy.
 //
 // Consider the following example:
-// - the input side has rows (1, red), (2, blue), (3, blue), (4, red).
-// - the lookup side has rows (red, x), (blue, y).
-// - the join needs to produce the pairs (1, x), (2, y), (3, y), (4, x), in any
-//   order.
+//   - the input side has rows (1, red), (2, blue), (3, blue), (4, red).
+//   - the lookup side has rows (red, x), (blue, y).
+//   - the join needs to produce the pairs (1, x), (2, y), (3, y), (4, x), in any
+//     order.
 //
 // Say the joinReader looks up rows in order: (red, x), then (blue, y). Once
 // (red, x) is fetched, it is handed to
@@ -153,13 +154,31 @@ type joinReaderNoOrderingStrategy struct {
 	strategyMemAcc *mon.BoundAccount
 }
 
-// getLookupRowsBatchSizeHint returns the batch size for the join reader no
-// ordering strategy. This number was chosen by running TPCH queries 7, 9, 10,
-// and 11 with varying batch sizes and choosing the smallest batch size that
-// offered a significant performance improvement. Larger batch sizes offered
-// small to no marginal improvements.
-func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint(*sessiondata.SessionData) int64 {
-	return 2 << 20 /* 2 MiB */
+// This number was chosen by running TPCH queries 7, 9, 10, and 11 with varying
+// batch sizes and choosing the smallest batch size that offered a significant
+// performance improvement. Larger batch sizes offered small to no marginal
+// improvements.
+const joinReaderNoOrderingStrategyBatchSizeDefault = 2 << 20 /* 2 MiB */
+
+// JoinReaderNoOrderingStrategyBatchSize determines the size of input batches
+// used to construct a single lookup KV batch by joinReaderNoOrderingStrategy.
+var JoinReaderNoOrderingStrategyBatchSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"sql.distsql.join_reader_no_ordering_strategy.batch_size",
+	"size limit on the input rows to construct a single lookup KV batch",
+	joinReaderNoOrderingStrategyBatchSizeDefault,
+	settings.PositiveInt,
+)
+
+func (s *joinReaderNoOrderingStrategy) getLookupRowsBatchSizeHint(
+	sd *sessiondata.SessionData,
+) int64 {
+	if sd.JoinReaderNoOrderingStrategyBatchSize == 0 {
+		// In some tests the session data might not be set - use the default
+		// value then.
+		return joinReaderNoOrderingStrategyBatchSizeDefault
+	}
+	return sd.JoinReaderNoOrderingStrategyBatchSize
 }
 
 func (s *joinReaderNoOrderingStrategy) generateRemoteSpans() (roachpb.Spans, []int, error) {
@@ -368,13 +387,10 @@ type joinReaderIndexJoinStrategy struct {
 	strategyMemAcc *mon.BoundAccount
 }
 
-// getLookupRowsBatchSizeHint returns the batch size for the join reader index
-// join strategy. This number was chosen by running TPCH queries 3, 4, 5, 9,
-// and 19 with varying batch sizes and choosing the smallest batch size that
-// offered a significant performance improvement. Larger batch sizes offered
-// small to no marginal improvements.
-func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint(*sessiondata.SessionData) int64 {
-	return 4 << 20 /* 4 MB */
+func (s *joinReaderIndexJoinStrategy) getLookupRowsBatchSizeHint(
+	sd *sessiondata.SessionData,
+) int64 {
+	return execinfra.GetIndexJoinBatchSize(sd)
 }
 
 func (s *joinReaderIndexJoinStrategy) generateRemoteSpans() (roachpb.Spans, []int, error) {
@@ -444,10 +460,10 @@ var partialJoinSentinel = []int{-1}
 // of the rows passed to processLookupRows().
 //
 // Consider the following example:
-// - the input side has rows (1, red), (2, blue), (3, blue), (4, red).
-// - the lookup side has rows (red, x), (blue, y).
-// - the join needs to produce the pairs (1, x), (2, y), (3, y), (4, x), in this
-//   order.
+//   - the input side has rows (1, red), (2, blue), (3, blue), (4, red).
+//   - the lookup side has rows (red, x), (blue, y).
+//   - the join needs to produce the pairs (1, x), (2, y), (3, y), (4, x), in this
+//     order.
 //
 // Say the joinReader looks up rows in order: (red, x), then (blue, y). Once
 // (red, x) is fetched, it is handed to

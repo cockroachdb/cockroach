@@ -66,7 +66,8 @@ const (
 //
 // For each tuple with the ordinal 'i' (the ordinal among all tuples in the
 // hash table or within a single probing batch), keyID is calculated as:
-//   keyID = i + 1.
+//
+//	keyID = i + 1.
 //
 // keyID of 0 is reserved to indicate the end of the hash chain.
 type keyID = uint64
@@ -508,114 +509,118 @@ func (ht *HashTable) FullBuild(input colexecop.Operator) {
 //
 // Let's go through an example of how this function works: our input stream
 // contains the following tuples:
-//   {-6}, {-6}, {-7}, {-5}, {-8}, {-5}, {-5}, {-8}.
+//
+//	{-6}, {-6}, {-7}, {-5}, {-8}, {-5}, {-5}, {-8}.
+//
 // (Note that negative values are chosen in order to visually distinguish them
 // from the IDs that we'll be working with below.)
 // We will use coldata.BatchSize() == 4 and let's assume that we will use a
 // hash function
-//   h(-5) = 1, h(-6) = 1, h(-7) = 0, h(-8) = 0
+//
+//	h(-5) = 1, h(-6) = 1, h(-7) = 0, h(-8) = 0
+//
 // with two buckets in the hash table.
 //
 // I. we get a batch [-6, -6, -7, -5].
-//   1. ComputeHashAndBuildChains:
-//      a) compute hash buckets:
-//           HashBuffer = [1, 1, 0, 1]
-//           ProbeScratch.Next = [reserved, 1, 1, 0, 1]
-//      b) build 'Next' chains between hash buckets:
-//           ProbeScratch.First = [3, 1] (length of First == # of hash buckets)
-//           ProbeScratch.Next  = [reserved, 2, 4, 0, 0]
-//         (Note that we have a hash collision in the bucket with hash 1.)
-//   2. RemoveDuplicates within the batch:
-//      1) first iteration in FindBuckets:
-//         a) all 4 tuples included to be checked against heads of their hash
-//            chains:
-//              ToCheck = [0, 1, 2, 3]
-//              ToCheckID = [1, 1, 3, 1]
-//         b) after performing the equality check using CheckProbeForDistinct,
-//            tuples 0, 1, 2 are found to be equal to the heads of their hash
-//            chains while tuple 3 (-5) has a hash collision with tuple 0 (-6),
-//            so it is kept for another iteration:
-//              ToCheck = [3]
-//              ToCheckID = [x, x, x, 2]
-//              HeadID  = [1, 1, 3, x]
-//      2) second iteration in FindBuckets finds that tuple 3 (-5) again has a
-//         hash collision with tuple 1 (-6), so it is kept for another
-//         iteration:
-//              ToCheck = [3]
-//              ToCheckID = [x, x, x, 4]
-//              HeadID  = [1, 1, 3, x]
-//      3) third iteration finds a match for tuple (the tuple itself), no more
-//         tuples to check, so the iterations stop:
-//              ToCheck = []
-//              HeadID  = [1, 1, 3, 4]
-//      4) the duplicates are represented by having the same HeadID values, and
-//         all duplicates are removed in updateSel:
-//           batch = [-6, -6, -7, -5]
-//           length = 3, sel = [0, 2, 3]
-//         Notably, HashBuffer is compacted accordingly:
-//           HashBuffer = [1, 0, 1]
-//   3. The hash table is empty, so RemoveDuplicates against the hash table is
-//      skipped.
-//   4. All 3 tuples still present in the batch are distinct, they are appended
-//      to the hash table and will be emitted to the output:
-//        Vals = [-6, -7, -5]
-//        BuildScratch.First = [2, 1]
-//        BuildScratch.Next  = [reserved, 3, 0, 0]
-//   We have fully processed the first batch.
+//  1. ComputeHashAndBuildChains:
+//     a) compute hash buckets:
+//     HashBuffer = [1, 1, 0, 1]
+//     ProbeScratch.Next = [reserved, 1, 1, 0, 1]
+//     b) build 'Next' chains between hash buckets:
+//     ProbeScratch.First = [3, 1] (length of First == # of hash buckets)
+//     ProbeScratch.Next  = [reserved, 2, 4, 0, 0]
+//     (Note that we have a hash collision in the bucket with hash 1.)
+//  2. RemoveDuplicates within the batch:
+//  1. first iteration in FindBuckets:
+//     a) all 4 tuples included to be checked against heads of their hash
+//     chains:
+//     ToCheck = [0, 1, 2, 3]
+//     ToCheckID = [1, 1, 3, 1]
+//     b) after performing the equality check using CheckProbeForDistinct,
+//     tuples 0, 1, 2 are found to be equal to the heads of their hash
+//     chains while tuple 3 (-5) has a hash collision with tuple 0 (-6),
+//     so it is kept for another iteration:
+//     ToCheck = [3]
+//     ToCheckID = [x, x, x, 2]
+//     HeadID  = [1, 1, 3, x]
+//  2. second iteration in FindBuckets finds that tuple 3 (-5) again has a
+//     hash collision with tuple 1 (-6), so it is kept for another
+//     iteration:
+//     ToCheck = [3]
+//     ToCheckID = [x, x, x, 4]
+//     HeadID  = [1, 1, 3, x]
+//  3. third iteration finds a match for tuple (the tuple itself), no more
+//     tuples to check, so the iterations stop:
+//     ToCheck = []
+//     HeadID  = [1, 1, 3, 4]
+//  4. the duplicates are represented by having the same HeadID values, and
+//     all duplicates are removed in updateSel:
+//     batch = [-6, -6, -7, -5]
+//     length = 3, sel = [0, 2, 3]
+//     Notably, HashBuffer is compacted accordingly:
+//     HashBuffer = [1, 0, 1]
+//  3. The hash table is empty, so RemoveDuplicates against the hash table is
+//     skipped.
+//  4. All 3 tuples still present in the batch are distinct, they are appended
+//     to the hash table and will be emitted to the output:
+//     Vals = [-6, -7, -5]
+//     BuildScratch.First = [2, 1]
+//     BuildScratch.Next  = [reserved, 3, 0, 0]
+//     We have fully processed the first batch.
 //
 // II. we get a batch [-8, -5, -5, -8].
-//   1. ComputeHashAndBuildChains:
-//      a) compute hash buckets:
-//           HashBuffer = [0, 1, 1, 0]
-//           ProbeScratch.Next = [reserved, 0, 1, 1, 0]
-//      b) build 'Next' chains between hash buckets:
-//           ProbeScratch.First = [1, 2]
-//           ProbeScratch.Next  = [reserved, 4, 3, 0, 0]
-//   2. RemoveDuplicates within the batch:
-//      1) first iteration in FindBuckets:
-//         a) all 4 tuples included to be checked against heads of their hash
-//            chains:
-//              ToCheck = [0, 1, 2, 3]
-//              ToCheckID = [1, 2, 2, 1]
-//         b) after performing the equality check using CheckProbeForDistinct,
-//            all tuples are found to be equal to the heads of their hash
-//            chains, no more tuples to check, so the iterations stop:
-//              ToCheck = []
-//              HeadID  = [1, 2, 2, 1]
-//      2) the duplicates are represented by having the same HeadID values, and
-//         all duplicates are removed in updateSel:
-//           batch = [-8, -5, -5, -8]
-//           length = 2, sel = [0, 1]
-//         Notably, HashBuffer is compacted accordingly:
-//           HashBuffer = [0, 1]
-//   3. RemoveDuplicates against the hash table:
-//      1) first iteration in FindBuckets:
-//         a) both tuples included to be checked against heads of their hash
-//            chains of the hash table (meaning BuildScratch.First and
-//            BuildScratch.Next are used to populate ToCheckID values):
-//              ToCheck = [0, 1]
-//              ToCheckID = [2, 1]
-//         b) after performing the equality check using CheckBuildForDistinct,
-//            both tuples are found to have hash collisions (-8 with -7 and -5
-//            with -6), so both are kept for another iteration:
-//              ToCheck = [0, 1]
-//              ToCheckID = [0, 2]
-//      2) second iteration in FindBuckets finds that tuple 1 (-5) has a match
-//         whereas tuple 0 (-8) is distinct (because its ToCheckID is 0), no
-//         more tuples to check:
-//              ToCheck = []
-//              HeadID  = [1, 0]
-//      3) duplicates are represented by having HeadID value of 0, so the batch
-//         is updated to only include tuple -8:
-//           batch = [-8, -5, -5, -8]
-//           length = 1, sel = [0]
-//           HashBuffer = [0]
-//   4. The single tuple still present in the batch is distinct, it is appended
-//      to the hash table and will be emitted to the output:
-//        Vals = [-6, -7, -5, -8]
-//        BuildScratch.First = [2, 1]
-//        BuildScratch.Next  = [reserved, 3, 4, 0, 0]
-//   We have fully processed the second batch and the input as a whole.
+//  1. ComputeHashAndBuildChains:
+//     a) compute hash buckets:
+//     HashBuffer = [0, 1, 1, 0]
+//     ProbeScratch.Next = [reserved, 0, 1, 1, 0]
+//     b) build 'Next' chains between hash buckets:
+//     ProbeScratch.First = [1, 2]
+//     ProbeScratch.Next  = [reserved, 4, 3, 0, 0]
+//  2. RemoveDuplicates within the batch:
+//  1. first iteration in FindBuckets:
+//     a) all 4 tuples included to be checked against heads of their hash
+//     chains:
+//     ToCheck = [0, 1, 2, 3]
+//     ToCheckID = [1, 2, 2, 1]
+//     b) after performing the equality check using CheckProbeForDistinct,
+//     all tuples are found to be equal to the heads of their hash
+//     chains, no more tuples to check, so the iterations stop:
+//     ToCheck = []
+//     HeadID  = [1, 2, 2, 1]
+//  2. the duplicates are represented by having the same HeadID values, and
+//     all duplicates are removed in updateSel:
+//     batch = [-8, -5, -5, -8]
+//     length = 2, sel = [0, 1]
+//     Notably, HashBuffer is compacted accordingly:
+//     HashBuffer = [0, 1]
+//  3. RemoveDuplicates against the hash table:
+//  1. first iteration in FindBuckets:
+//     a) both tuples included to be checked against heads of their hash
+//     chains of the hash table (meaning BuildScratch.First and
+//     BuildScratch.Next are used to populate ToCheckID values):
+//     ToCheck = [0, 1]
+//     ToCheckID = [2, 1]
+//     b) after performing the equality check using CheckBuildForDistinct,
+//     both tuples are found to have hash collisions (-8 with -7 and -5
+//     with -6), so both are kept for another iteration:
+//     ToCheck = [0, 1]
+//     ToCheckID = [0, 2]
+//  2. second iteration in FindBuckets finds that tuple 1 (-5) has a match
+//     whereas tuple 0 (-8) is distinct (because its ToCheckID is 0), no
+//     more tuples to check:
+//     ToCheck = []
+//     HeadID  = [1, 0]
+//  3. duplicates are represented by having HeadID value of 0, so the batch
+//     is updated to only include tuple -8:
+//     batch = [-8, -5, -5, -8]
+//     length = 1, sel = [0]
+//     HashBuffer = [0]
+//  4. The single tuple still present in the batch is distinct, it is appended
+//     to the hash table and will be emitted to the output:
+//     Vals = [-6, -7, -5, -8]
+//     BuildScratch.First = [2, 1]
+//     BuildScratch.Next  = [reserved, 3, 4, 0, 0]
+//     We have fully processed the second batch and the input as a whole.
 //
 // NOTE: b *must* be a non-zero length batch.
 func (ht *HashTable) DistinctBuild(batch coldata.Batch) {

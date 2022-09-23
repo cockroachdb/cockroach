@@ -34,7 +34,18 @@ type transition struct {
 	canFail    bool
 	ops        opsFunc
 	opType     scop.Type
-	minPhase   scop.Phase
+}
+
+func (t transition) OpType() scop.Type {
+	return t.opType
+}
+
+func (t transition) From() scpb.Status {
+	return t.from
+}
+
+func (t transition) To() scpb.Status {
+	return t.to
 }
 
 func makeTarget(e scpb.Element, spec targetSpec) (t target, err error) {
@@ -106,7 +117,6 @@ func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err err
 			}
 		}
 		t.revertible = tbs.isRevertible
-		t.minPhase = tbs.currentMinPhase
 		if t.opType != scop.MutationType && t.opType != 0 {
 			lastTransitionWhichCanFail = i
 		}
@@ -129,9 +139,8 @@ func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err err
 }
 
 type transitionBuildState struct {
-	from            scpb.Status
-	currentMinPhase scop.Phase
-	isRevertible    bool
+	from         scpb.Status
+	isRevertible bool
 
 	isEquivMapped map[scpb.Status]bool
 	isTo          map[scpb.Status]bool
@@ -159,11 +168,7 @@ func (tbs *transitionBuildState) withTransition(s transitionSpec, isFirst bool) 
 		return errors.Errorf("%s was featured as 'from' in a previous equivalence mapping", s.to)
 	}
 
-	// Check that the minimum phase is monotonically increasing.
 	tbs.isRevertible = tbs.isRevertible && s.revertible
-	if !isFirst && tbs.currentMinPhase < scop.PostCommitPhase {
-		tbs.currentMinPhase = scop.PostCommitPhase
-	}
 	tbs.isEquivMapped[tbs.from] = true
 	tbs.isTo[s.to] = true
 	tbs.isFrom[tbs.from] = true

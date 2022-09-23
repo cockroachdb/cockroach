@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -356,17 +355,21 @@ func (Type) SafeValue() {}
 // NumJobTypes is the number of jobs types.
 const NumJobTypes = 18
 
-// MarshalJSONPB implements jsonpb.JSONPBMarshaller to  redact sensitive sink URI
+// ChangefeedDetailsMarshaler allows for dependency injection of
+// cloud.SanitizeExternalStorageURI to avoid the dependency from this
+// package on cloud. The value is injected in the changefeedccl package.
+var ChangefeedDetailsMarshaler func(*ChangefeedDetails, *jsonpb.Marshaler) ([]byte, error)
+
+// MarshalJSONPB implements jsonpb.JSONPBMarshaller to redact sensitive sink URI
 // parameters from ChangefeedDetails.
-func (m ChangefeedDetails) MarshalJSONPB(marshaller *jsonpb.Marshaler) ([]byte, error) {
-	if protoreflect.ShouldRedact(marshaller) {
-		var err error
-		m.SinkURI, err = cloud.SanitizeExternalStorageURI(m.SinkURI, nil)
-		if err != nil {
-			return nil, err
-		}
+func (m *ChangefeedDetails) MarshalJSONPB(marshaller *jsonpb.Marshaler) ([]byte, error) {
+	if ChangefeedDetailsMarshaler != nil {
+		return ChangefeedDetailsMarshaler(m, marshaller)
 	}
-	return json.Marshal(m)
+	// if we get here, there's no injected marshaller, i.e. this could be an oss
+	// binary looking at a ccl-made job, but we need to redact, so just redact
+	// the entire struct by rendering an empty one.
+	return json.Marshal(ChangefeedDetails{})
 }
 
 // DescRewriteMap maps old descriptor IDs to new descriptor and parent IDs.

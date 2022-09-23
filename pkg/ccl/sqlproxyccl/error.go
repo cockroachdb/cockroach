@@ -15,6 +15,7 @@ import (
 )
 
 // errorCode classifies errors emitted by Proxy().
+//
 //go:generate stringer -type=errorCode
 type errorCode int
 

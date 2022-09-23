@@ -70,6 +70,7 @@ func newForcingOptimizer(
 	fo.o.Factory().FoldingControl().AllowStableFolds()
 	fo.coster.Init(&fo.o, &fo.groups)
 	fo.o.SetCoster(&fo.coster)
+	fo.o.Factory().SetDisabledRules(tester.Flags.DisableRules)
 
 	fo.o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if ignoreNormRules && ruleName.IsNormalize() {

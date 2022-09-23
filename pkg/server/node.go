@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -173,7 +174,9 @@ type nodeMetrics struct {
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMetrics {
 	nm := nodeMetrics{
-		Latency:    metric.NewLatency(metaExecLatency, histogramWindow),
+		Latency: metric.NewHistogram(
+			metaExecLatency, histogramWindow, metric.IOLatencyBuckets,
+		),
 		Success:    metric.NewCounter(metaExecSuccess),
 		Err:        metric.NewCounter(metaExecError),
 		DiskStalls: metric.NewCounter(metaDiskStalls),
@@ -231,8 +234,6 @@ type Node struct {
 	additionalStoreInitCh chan struct{}
 
 	perReplicaServer kvserver.Server
-
-	admissionController kvserver.KVAdmissionController
 
 	tenantUsage multitenant.TenantUsageServer
 
@@ -364,28 +365,30 @@ func NewNode(
 	stores *kvserver.Stores,
 	clusterID *base.ClusterIDContainer,
 	kvAdmissionQ *admission.WorkQueue,
+	elasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 ) *Node {
 	n := &Node{
-		storeCfg:   cfg,
-		stopper:    stopper,
-		recorder:   recorder,
-		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:     stores,
-		txnMetrics: txnMetrics,
-		execCfg:    nil, // filled in later by InitLogger()
-		clusterID:  clusterID,
-		admissionController: kvserver.MakeKVAdmissionController(
-			kvAdmissionQ, storeGrantCoords, cfg.Settings),
+		storeCfg:              cfg,
+		stopper:               stopper,
+		recorder:              recorder,
+		metrics:               makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:                stores,
+		txnMetrics:            txnMetrics,
+		execCfg:               nil, // filled in later by InitLogger()
+		clusterID:             clusterID,
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
-	n.storeCfg.KVAdmissionController = n.admissionController
+	n.storeCfg.KVAdmissionController = kvserver.MakeKVAdmissionController(
+		kvAdmissionQ, elasticCPUGrantCoord.ElasticCPUWorkQueue, storeGrantCoords, cfg.Settings,
+	)
+	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n
 }
@@ -528,7 +531,7 @@ func (n *Node) start(
 
 	n.startComputePeriodicMetrics(n.stopper, base.DefaultMetricsSampleInterval)
 	// Stores have been created, so can start providing tenant weights.
-	n.admissionController.SetTenantWeightProvider(n, n.stopper)
+	n.storeCfg.KVAdmissionController.SetTenantWeightProvider(n, n.stopper)
 
 	// Be careful about moving this line above where we start stores; store
 	// upgrades rely on the fact that the cluster version has not been updated
@@ -1070,13 +1073,17 @@ func (n *Node) batchInternal(
 	}
 
 	tStart := timeutil.Now()
-	handle, err := n.admissionController.AdmitKVWork(ctx, tenID, args)
+	handle, err := n.storeCfg.KVAdmissionController.AdmitKVWork(ctx, tenID, args)
 	if err != nil {
 		return nil, err
 	}
+	if handle.ElasticCPUWorkHandle != nil {
+		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, handle.ElasticCPUWorkHandle)
+	}
+
 	var writeBytes *kvserver.StoreWriteBytes
 	defer func() {
-		n.admissionController.AdmittedKVWorkDone(handle, writeBytes)
+		n.storeCfg.KVAdmissionController.AdmittedKVWorkDone(handle, writeBytes)
 		writeBytes.Release()
 	}()
 	var pErr *roachpb.Error
@@ -1237,7 +1244,7 @@ func setupSpanForIncomingRPC(
 		var remoteParent tracing.SpanMeta
 		if !ba.TraceInfo.Empty() {
 			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
-				tracing.WithRemoteParentFromTraceInfo(&ba.TraceInfo),
+				tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 				tracing.WithServerSpanKind)
 		} else {
 			// For backwards compatibility with 21.2, if tracing info was passed as
@@ -1378,7 +1385,12 @@ func (n *Node) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
 		}
 
 		rfGrp.GoCtx(func(ctx context.Context) error {
-			ctx, span := tracing.ForkSpan(logtags.AddTag(ctx, "r", req.RangeID), "mux-rf")
+			ctx = n.AnnotateCtx(ctx)
+			ctx = logtags.AddTag(ctx, "r", req.RangeID)
+			ctx = logtags.AddTag(ctx, "s", req.Replica.StoreID)
+			ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+			defer restore()
+			ctx, span := tracing.ForkSpan(ctx, "mux-rf")
 			defer span.Finish()
 
 			sink := setRangeIDEventSink{

@@ -19,6 +19,7 @@ go_test(
     name = "rsg_test",
     size = "small",
     srcs = ["rsg_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":rsg"],
 )
 

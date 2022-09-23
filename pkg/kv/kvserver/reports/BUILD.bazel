@@ -50,6 +50,7 @@ go_test(
         "replication_stats_report_test.go",
         "reporter_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":reports"],
     deps = [
         "//pkg/base",

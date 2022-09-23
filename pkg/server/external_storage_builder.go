@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantio"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/errors"
 )
 
@@ -37,6 +39,7 @@ type externalStorageBuilder struct {
 	blobClientFactory blobs.BlobClientFactory
 	initCalled        bool
 	ie                *sql.InternalExecutor
+	cf                *descs.CollectionFactory
 	db                *kv.DB
 	limiters          cloud.Limiters
 	recorder          multitenant.TenantSideExternalIORecorder
@@ -50,6 +53,7 @@ func (e *externalStorageBuilder) init(
 	nodeDialer *nodedialer.Dialer,
 	testingKnobs base.TestingKnobs,
 	ie *sql.InternalExecutor,
+	cf *descs.CollectionFactory,
 	db *kv.DB,
 	recorder multitenant.TenantSideExternalIORecorder,
 ) {
@@ -65,6 +69,7 @@ func (e *externalStorageBuilder) init(
 	e.blobClientFactory = blobClientFactory
 	e.initCalled = true
 	e.ie = ie
+	e.cf = cf
 	e.db = db
 	e.limiters = cloud.MakeLimiters(ctx, &settings.SV)
 	e.recorder = recorder
@@ -77,7 +82,7 @@ func (e *externalStorageBuilder) makeExternalStorage(
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie,
-		e.db, e.limiters, append(e.defaultOptions(), opts...)...)
+		e.cf, e.db, e.limiters, append(e.defaultOptions(), opts...)...)
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
@@ -86,12 +91,13 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db, e.limiters, append(e.defaultOptions(), opts...)...)
+	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory,
+		user, e.ie, e.cf, e.db, e.limiters, append(e.defaultOptions(), opts...)...)
 }
 
 func (e *externalStorageBuilder) defaultOptions() []cloud.ExternalStorageOption {
-	bytesAllowedBeforeAccounting := multitenant.DefaultBytesAllowedBeforeAccounting.Get(&e.settings.SV)
+	bytesAllowedBeforeAccounting := multitenantio.DefaultBytesAllowedBeforeAccounting.Get(&e.settings.SV)
 	return []cloud.ExternalStorageOption{
-		cloud.WithIOAccountingInterceptor(multitenant.NewReadWriteAccounter(e.recorder, bytesAllowedBeforeAccounting)),
+		cloud.WithIOAccountingInterceptor(multitenantio.NewReadWriteAccounter(e.recorder, bytesAllowedBeforeAccounting)),
 	}
 }

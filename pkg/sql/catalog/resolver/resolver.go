@@ -16,8 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -48,7 +49,7 @@ type SchemaResolver interface {
 	// Accessor is a crufty name and interface that wraps the *descs.Collection.
 	Accessor() catalog.Accessor
 	CurrentSearchPath() sessiondata.SearchPath
-	CommonLookupFlags(required bool) tree.CommonLookupFlags
+	CommonLookupFlagsRequired() tree.CommonLookupFlags
 }
 
 // ObjectNameExistingResolver is the helper interface to resolve table
@@ -90,16 +91,17 @@ var ErrNoPrimaryKey = pgerror.Newf(pgcode.NoPrimaryKey,
 func GetObjectNamesAndIDs(
 	ctx context.Context,
 	txn *kv.Txn,
-	sc SchemaResolver,
+	sr SchemaResolver,
 	codec keys.SQLCodec,
 	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	explicitPrefix bool,
 ) (tree.TableNames, descpb.IDs, error) {
-	return sc.Accessor().GetObjectNamesAndIDs(ctx, txn, dbDesc, scName, tree.DatabaseListFlags{
-		CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
+	flags := tree.DatabaseListFlags{
+		CommonLookupFlags: sr.CommonLookupFlagsRequired(),
 		ExplicitPrefix:    explicitPrefix,
-	})
+	}
+	return sr.Accessor().GetObjectNamesAndIDs(ctx, txn, dbDesc, scName, flags)
 }
 
 // ResolveExistingTableObject looks up an existing object.
@@ -295,7 +297,8 @@ func ResolveTargetObject(
 // ResolveSchemaNameByID resolves a schema's name based on db and schema id.
 // Instead, we have to rely on a scan of the kv table.
 // TODO (SQLSchema): The remaining uses of this should be plumbed through
-//  the desc.Collection's ResolveSchemaByID.
+//
+//	the desc.Collection's ResolveSchemaByID.
 func ResolveSchemaNameByID(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -327,42 +330,31 @@ type SchemaEntryForDB struct {
 
 // GetForDatabase looks up and returns all available
 // schema ids to SchemaEntryForDB structures for a
-//given database.
+// given database.
 func GetForDatabase(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, db catalog.DatabaseDescriptor,
 ) (map[descpb.ID]SchemaEntryForDB, error) {
 	log.Eventf(ctx, "fetching all schema descriptor IDs for database %q (%d)", db.GetName(), db.GetID())
-
-	nameKey := catalogkeys.MakeSchemaNameKey(codec, db.GetID(), "" /* name */)
-	kvs, err := txn.Scan(ctx, nameKey, nameKey.PrefixEnd(), 0 /* maxRows */)
+	cr := catkv.NewUncachedCatalogReader(codec)
+	c, err := cr.ScanNamespaceForDatabaseSchemas(ctx, txn, db)
 	if err != nil {
 		return nil, err
 	}
-
-	ret := make(map[descpb.ID]SchemaEntryForDB, len(kvs)+1)
-
+	ret := make(map[descpb.ID]SchemaEntryForDB)
 	// This is needed at least for the temp system db during restores.
 	if !db.HasPublicSchemaWithDescriptor() {
-		ret[descpb.ID(keys.PublicSchemaID)] = SchemaEntryForDB{
-			Name:      tree.PublicSchema,
+		ret[keys.PublicSchemaIDForBackup] = SchemaEntryForDB{
+			Name:      catconstants.PublicSchemaName,
 			Timestamp: txn.ReadTimestamp(),
 		}
 	}
-
-	for _, kv := range kvs {
-		id := descpb.ID(kv.ValueInt())
-		if _, ok := ret[id]; ok {
-			continue
+	_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		ret[e.GetID()] = SchemaEntryForDB{
+			Name:      e.GetName(),
+			Timestamp: e.GetMVCCTimestamp(),
 		}
-		k, err := catalogkeys.DecodeNameMetadataKey(codec, kv.Key)
-		if err != nil {
-			return nil, err
-		}
-		ret[id] = SchemaEntryForDB{
-			Name:      k.GetName(),
-			Timestamp: kv.Value.Timestamp,
-		}
-	}
+		return nil
+	})
 	return ret, nil
 }
 

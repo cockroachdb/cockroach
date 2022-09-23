@@ -188,11 +188,11 @@ func TestPingPongHog(t *testing.T) {
 // BenchmarkGRunningTime measures how costly it is to read the current
 // goroutine's running time. Results:
 //
-//	  goos: linux
-//	  goarch: amd64
-//	  cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
-//	  BenchmarkGRunningTime
-//	  BenchmarkGRunningTime-24        38336452                31.59 ns/op
+//	goos: linux
+//	goarch: amd64
+//	cpu: Intel(R) Xeon(R) CPU @ 2.20GHz
+//	BenchmarkGRunningTime
+//	BenchmarkGRunningTime-24        38336452                31.59 ns/op
 func BenchmarkGRunningTime(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		_ = grunning.Time()

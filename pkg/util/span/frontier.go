@@ -125,6 +125,14 @@ func MakeFrontier(spans ...roachpb.Span) (*Frontier, error) {
 // Each span timestamp initialized at specified start time.
 func MakeFrontierAt(startAt hlc.Timestamp, spans ...roachpb.Span) (*Frontier, error) {
 	f := &Frontier{tree: interval.NewTree(interval.ExclusiveOverlapper)}
+	if err := f.AddSpansAt(startAt, spans...); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// AddSpansAt adds the provided spans to the frontier at the provided timestamp.
+func (f *Frontier) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error {
 	for _, s := range spans {
 		span := makeSpan(s.AsRange())
 		e := &frontierEntry{
@@ -135,12 +143,12 @@ func MakeFrontierAt(startAt hlc.Timestamp, spans ...roachpb.Span) (*Frontier, er
 		}
 		f.idAlloc++
 		if err := f.tree.Insert(e, true /* fast */); err != nil {
-			return nil, err
+			return err
 		}
 		heap.Push(&f.minHeap, e)
 	}
 	f.tree.AdjustRanges()
-	return f, nil
+	return nil
 }
 
 // Frontier returns the minimum timestamp being tracked.
@@ -396,11 +404,14 @@ func (f *Frontier) Entries(fn Operation) {
 // 4|      .             h__k  .
 // 3|      .      e__f         .
 // 1 ---a----------------------m---q-- Frontier
-//      |___________span___________|
+//
+//	|___________span___________|
 //
 // In the above example, frontier tracks [b, m) and the current frontier
 // timestamp is 1.  SpanEntries for span [a-q) will invoke op with:
-//   ([b-c), 5), ([c-e), 1), ([e-f), 3], ([f, h], 1) ([h, k), 4), ([k, m), 1).
+//
+//	([b-c), 5), ([c-e), 1), ([e-f), 3], ([f, h], 1) ([h, k), 4), ([k, m), 1).
+//
 // Note: neither [a-b) nor [m, q) will be emitted since they fall outside the spans
 // tracked by this frontier.
 func (f *Frontier) SpanEntries(span roachpb.Span, op Operation) {

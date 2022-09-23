@@ -42,7 +42,8 @@ type CheckpointToken []byte
 // Client provides a way for the stream ingestion job to consume a
 // specified stream.
 // TODO(57427): The stream client does not yet support the concept of
-//  generations in a stream.
+//
+//	generations in a stream.
 type Client interface {
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which

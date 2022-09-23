@@ -88,17 +88,17 @@ var (
 // no fallback if invalid certs/keys are present.
 //
 // The nomenclature for certificates is as follows, all within the certs-dir.
-// - ca.crt             main CA certificate.
-//                      Used to verify everything unless overridden by more specific CAs.
-// - ca-client.crt      CA certificate to verify client certificates. If it does not exist,
-//                      fall back on 'ca.crt'.
-// - node.crt           node certificate.
-//                      Server-side certificate (always) and client-side certificate unless
-//                      client.node.crt is found.
-//                      Verified using 'ca.crt'.
-// - client.<user>.crt  client certificate for 'user'. Verified using 'ca.crt', or 'ca-client.crt'.
-// - client.node.crt    client certificate for the 'node' user. If it does not exist,
-//                      fall back on 'node.crt'.
+//   - ca.crt             main CA certificate.
+//     Used to verify everything unless overridden by more specific CAs.
+//   - ca-client.crt      CA certificate to verify client certificates. If it does not exist,
+//     fall back on 'ca.crt'.
+//   - node.crt           node certificate.
+//     Server-side certificate (always) and client-side certificate unless
+//     client.node.crt is found.
+//     Verified using 'ca.crt'.
+//   - client.<user>.crt  client certificate for 'user'. Verified using 'ca.crt', or 'ca-client.crt'.
+//   - client.node.crt    client certificate for the 'node' user. If it does not exist,
+//     fall back on 'node.crt'.
 type CertificateManager struct {
 	tenantIdentifier uint64
 	certnames.Locator

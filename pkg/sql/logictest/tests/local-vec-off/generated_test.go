@@ -660,6 +660,13 @@ func TestLogic_drop_table(
 	runLogicTest(t, "drop_table")
 }
 
+func TestLogic_drop_temp(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_temp")
+}
+
 func TestLogic_drop_type(
 	t *testing.T,
 ) {
@@ -1675,6 +1682,20 @@ func TestLogic_show_fingerprints(
 	runLogicTest(t, "show_fingerprints")
 }
 
+func TestLogic_show_grants_on_virtual_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_grants_on_virtual_table")
+}
+
+func TestLogic_show_grants_synthetic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_grants_synthetic")
+}
+
 func TestLogic_show_indexes(
 	t *testing.T,
 ) {
@@ -1731,6 +1752,13 @@ func TestLogic_statement_source(
 	runLogicTest(t, "statement_source")
 }
 
+func TestLogic_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "stats")
+}
+
 func TestLogic_storing(
 	t *testing.T,
 ) {
@@ -1766,6 +1794,13 @@ func TestLogic_subquery_correlated(
 	runLogicTest(t, "subquery_correlated")
 }
 
+func TestLogic_synthetic_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "synthetic_privileges")
+}
+
 func TestLogic_system(
 	t *testing.T,
 ) {
@@ -1785,13 +1820,6 @@ func TestLogic_system_namespace(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "system_namespace")
-}
-
-func TestLogic_system_privileges(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "system_privileges")
 }
 
 func TestLogic_table(

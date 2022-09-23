@@ -69,8 +69,9 @@ type alterTableNode struct {
 
 // AlterTable applies a schema change on a table.
 // Privileges: CREATE on table.
-//   notes: postgres requires CREATE on the table.
-//          mysql requires ALTER, CREATE, INSERT on the table.
+//
+//	notes: postgres requires CREATE on the table.
+//	       mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,

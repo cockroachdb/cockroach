@@ -61,6 +61,14 @@ exec-sql
 GRANT DROP ON EXTERNAL CONNECTION "drop-privileged" TO testuser;
 ----
 
+# Verify that the privileges exist.
+query-sql
+SELECT * FROM system.privileges
+----
+root /externalconn/drop-privileged {ALL} {}
+root /externalconn/drop-privileged-dup {ALL} {}
+testuser /externalconn/drop-privileged {DROP} {}
+
 exec-sql user=testuser
 DROP EXTERNAL CONNECTION "drop-privileged"
 ----
@@ -77,6 +85,11 @@ drop-privileged-dup STORAGE {"provider": "nodelocal", "simpleUri": {"uri": "node
 
 exec-sql
 DROP EXTERNAL CONNECTION 'drop-privileged-dup'
+----
+
+# Verify that the privileges are dropped.
+query-sql
+SELECT * FROM system.privileges
 ----
 
 subtest end
@@ -115,6 +128,14 @@ pq: user testuser does not have USAGE privilege on external_connection foo
 exec-sql user=testuser
 CREATE EXTERNAL CONNECTION 'not-root' AS 'userfile:///bar'
 ----
+
+# Verify that the privileges exist.
+query-sql
+SELECT * FROM system.privileges
+----
+root /externalconn/root {ALL} {}
+testuser /externalconn/not-root {ALL} {}
+testuser /global/ {EXTERNALCONNECTION} {}
 
 exec-sql user=testuser
 BACKUP TABLE foo INTO 'external://not-root'

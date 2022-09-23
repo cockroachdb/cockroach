@@ -84,6 +84,7 @@ SHOW GRANTS ON s2
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       s2          admin      ALL             true
 test           public       s2          root       ALL             true
+test           public       s2          testuser   CHANGEFEED      false
 test           public       s2          testuser   CREATE          false
 test           public       s2          testuser   DELETE          false
 test           public       s2          testuser   DROP            false
@@ -91,6 +92,7 @@ test           public       s2          testuser   INSERT          false
 test           public       s2          testuser   UPDATE          false
 test           public       s2          testuser   USAGE           false
 test           public       s2          testuser   ZONECONFIG      false
+test           public       s2          testuser2  CHANGEFEED      false
 test           public       s2          testuser2  CREATE          false
 test           public       s2          testuser2  DELETE          false
 test           public       s2          testuser2  DROP            false

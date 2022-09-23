@@ -25,6 +25,7 @@ go_test(
         "main_test.go",
         "privilege_test.go",
     ],
+    args = ["-test.timeout=55s"],
     deps = [
         ":privilege",
         "//pkg/util/leaktest",

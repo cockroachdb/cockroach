@@ -41,6 +41,7 @@ go_test(
         "input_sync_test.go",
         "routers_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":rowflow"],
     tags = ["no-remote"],
     deps = [

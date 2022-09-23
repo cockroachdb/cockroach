@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -37,6 +38,7 @@ import (
 // TestDrain tests the Drain RPC.
 func TestDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRaceWithIssue(t, 86974, "flaky test")
 	defer log.Scope(t).Close(t)
 	doTestDrain(t)
 }
@@ -244,18 +246,21 @@ func (t *testDrainContext) sendShutdown() *serverpb.DrainResponse {
 }
 
 func (t *testDrainContext) assertDraining(resp *serverpb.DrainResponse, drain bool) {
+	t.Helper()
 	if resp.IsDraining != drain {
 		t.Fatalf("expected draining %v, got %v", drain, resp.IsDraining)
 	}
 }
 
 func (t *testDrainContext) assertRemaining(resp *serverpb.DrainResponse, remaining bool) {
+	t.Helper()
 	if actualRemaining := (resp.DrainRemainingIndicator > 0); remaining != actualRemaining {
 		t.Fatalf("expected remaining %v, got %v", remaining, actualRemaining)
 	}
 }
 
 func (t *testDrainContext) assertEqual(expected int, actual int) {
+	t.Helper()
 	if expected == actual {
 		return
 	}

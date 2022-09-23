@@ -543,6 +543,8 @@ ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expres
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'expire_at')
 
+# Tested below anyway, so we can skip this statement for legacy schema changer.
+skipif config local-legacy-schema-changer
 statement error cannot drop column "expire_at" referenced by row-level TTL expiration expression "expire_at"
 ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
 
@@ -789,25 +791,25 @@ ALTER TABLE tbl SET (ttl_expire_after = '10 minutes')
 statement ok
 CREATE TABLE ref_table (id INT PRIMARY KEY, ref INT)
 
-statement error foreign keys to/from table with TTL "ttl_table" are not permitted
+statement error foreign keys from table with TTL "ttl_table" are not permitted
 CREATE TABLE ttl_table (id INT PRIMARY KEY, ref INT REFERENCES ref_table(id)) WITH (ttl_expire_after = '10 mins')
 
 statement ok
 CREATE TABLE ttl_table (id INT PRIMARY KEY, ref INT) WITH (ttl_expire_after = '10 mins')
 
-statement error foreign keys to/from table with TTL "ttl_table" are not permitted
+statement error foreign keys to table with TTL "ttl_table" are not permitted
 CREATE TABLE new_ref_table (id INT PRIMARY KEY, ref INT REFERENCES ttl_table(id))
 
-statement error foreign keys to/from table with TTL "ttl_table" are not permitted
+statement error foreign keys to table with TTL "ttl_table" are not permitted
 ALTER TABLE ref_table ADD CONSTRAINT fk FOREIGN KEY (ref) REFERENCES ttl_table (id)
 
-statement error foreign keys to/from table with TTL "ttl_table" are not permitted
+statement error foreign keys from table with TTL "ttl_table" are not permitted
 ALTER TABLE ttl_table ADD CONSTRAINT fk FOREIGN KEY (ref) REFERENCES ttl_table (id)
 
 statement ok
 CREATE TABLE ttl_become_table (id INT PRIMARY KEY, ref INT REFERENCES ref_table (id))
 
-statement error foreign keys to/from table with TTL "ttl_become_table" are not permitted
+statement error foreign keys from table with TTL "ttl_become_table" are not permitted
 ALTER TABLE ttl_become_table SET (ttl_expire_after = '10 minutes')
 
 # Check non-ascending PKs are not permitted.

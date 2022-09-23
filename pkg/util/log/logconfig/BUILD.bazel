@@ -42,6 +42,7 @@ go_test(
         "export_test.go",
         "validate_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":logconfig"],
     deps = [

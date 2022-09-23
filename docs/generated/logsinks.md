@@ -23,10 +23,10 @@ configurable logging directory.
 The configuration key under the `sinks` key in the YAML
 configuration is `file-groups`. Example configuration:
 
-    sinks:
-       file-groups:           # file group configurations start here
-          health:             # defines one group called "health"
-             channels: HEALTH
+//	sinks:
+//	   file-groups:           # file group configurations start here
+//	      health:             # defines one group called "health"
+//	         channels: HEALTH
 
 Each generated log file is prefixed by the name of the process,
 followed by the name of the group, separated by a hyphen. For example,
@@ -44,24 +44,23 @@ the configurations set in the `file-defaults` section.
 
 For example:
 
-     file-defaults:
-         redactable: false # default: disable redaction markers
-         dir: logs
-     sinks:
-       file-groups:
-         health:
-            channels: HEALTH
-            # This sink has redactable set to false,
-            # as the setting is inherited from file-defaults
-            # unless overridden here.
-            #
-            # Example override:
-            dir: health-logs # override the default 'logs'
+//	file-defaults:
+//	    redactable: false # default: disable redaction markers
+//	    dir: logs
+//	sinks:
+//	  file-groups:
+//	    health:
+//	       channels: HEALTH
+//	       # This sink has redactable set to false,
+//	       # as the setting is inherited from file-defaults
+//	       # unless overridden here.
+//	       #
+//	       # Example override:
+//	       dir: health-logs # override the default 'logs'
 
 {{site.data.alerts.callout_success}}
 Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
 {{site.data.alerts.end}}
-
 
 
 Type-specific configuration options:
@@ -119,25 +118,25 @@ the logging event is dropped.
 The configuration key under the `sinks` key in the YAML
 configuration is `fluent-servers`. Example configuration:
 
-    sinks:
-       fluent-servers:        # fluent configurations start here
-          health:             # defines one sink called "health"
-             channels: HEALTH
-             address: 127.0.0.1:5170
+//	sinks:
+//	   fluent-servers:        # fluent configurations start here
+//	      health:             # defines one sink called "health"
+//	         channels: HEALTH
+//	         address: 127.0.0.1:5170
 
 Every new server sink configured automatically inherits the configurations set in the `fluent-defaults` section.
 
 For example:
 
-     fluent-defaults:
-         redactable: false # default: disable redaction markers
-     sinks:
-       fluent-servers:
-         health:
-            channels: HEALTH
-            # This sink has redactable set to false,
-            # as the setting is inherited from fluent-defaults
-            # unless overridden here.
+//	fluent-defaults:
+//	    redactable: false # default: disable redaction markers
+//	sinks:
+//	  fluent-servers:
+//	    health:
+//	       channels: HEALTH
+//	       # This sink has redactable set to false,
+//	       # as the setting is inherited from fluent-defaults
+//	       # unless overridden here.
 
 The default output format for Fluent sinks is
 `json-fluent-compact`. The `fluent` variants of the JSON formats
@@ -147,7 +146,6 @@ the non-`fluent` JSON [format variants](log-formats.html) do not include.
 {{site.data.alerts.callout_info}}
 Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
 {{site.data.alerts.end}}
-
 
 
 Type-specific configuration options:
@@ -184,25 +182,25 @@ as requests to an HTTP server.
 The configuration key under the `sinks` key in the YAML
 configuration is `http-servers`. Example configuration:
 
-     sinks:
-        http-servers:
-           health:
-              channels: HEALTH
-              address: http://127.0.0.1
+//	sinks:
+//	   http-servers:
+//	      health:
+//	         channels: HEALTH
+//	         address: http://127.0.0.1
 
 Every new server sink configured automatically inherits the configuration set in the `http-defaults` section.
 
 For example:
 
-     http-defaults:
-         redactable: false # default: disable redaction markers
-     sinks:
-       http-servers:
-         health:
-            channels: HEALTH
-            # This sink has redactable set to false,
-            # as the setting is inherited from fluent-defaults
-            # unless overridden here.
+//	http-defaults:
+//	    redactable: false # default: disable redaction markers
+//	sinks:
+//	  http-servers:
+//	    health:
+//	       channels: HEALTH
+//	       # This sink has redactable set to false,
+//	       # as the setting is inherited from fluent-defaults
+//	       # unless overridden here.
 
 The default output format for HTTP sinks is
 `json-compact`. [Other supported formats.](log-formats.html)
@@ -210,7 +208,6 @@ The default output format for HTTP sinks is
 {{site.data.alerts.callout_info}}
 Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
 {{site.data.alerts.end}}
-
 
 
 Type-specific configuration options:
@@ -250,9 +247,9 @@ process.
 The configuration key under the `sinks` key in the YAML configuration
 is `stderr`. Example configuration:
 
-    sinks:
-       stderr:           # standard error sink configuration starts here
-          channels: DEV
+//	sinks:
+//	   stderr:           # standard error sink configuration starts here
+//	      channels: DEV
 
 {{site.data.alerts.callout_info}}
 The server start-up messages are still emitted at the start of the standard error
@@ -273,7 +270,6 @@ contain sensitive information.
 For a similar reason, no guarantee of parsability of the output format is available
 when `capture-stray-errors` is disabled, since the standard error stream can then
 contain an arbitrary interleaving of non-formatted error data.
-
 
 
 Type-specific configuration options:
@@ -384,21 +380,21 @@ etc.
 Buffering may be configured with the following fields. It may also be explicitly
 set to "NONE" to disable buffering. Example configuration:
 
-    file-defaults:
-       dir: logs
-       buffering:
-          max-staleness: 20s
-          flush-trigger-size: 25KB
-          max-buffer-size: 10MB
-    sinks:
-       file-groups:
-          health:
-             channels: HEALTH
-             buffering:
-                max-staleness: 5s  # Override max-staleness for this sink.
-          ops:
-             channels: OPS
-             buffering: NONE  # Disable buffering for this sink.
+//	file-defaults:
+//	   dir: logs
+//	   buffering:
+//	      max-staleness: 20s
+//	      flush-trigger-size: 25KB
+//	      max-buffer-size: 10MB
+//	sinks:
+//	   file-groups:
+//	      health:
+//	         channels: HEALTH
+//	         buffering:
+//	            max-staleness: 5s  # Override max-staleness for this sink.
+//	      ops:
+//	         channels: OPS
+//	         buffering: NONE  # Disable buffering for this sink.
 
 
 | Field | Description |

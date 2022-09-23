@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -39,7 +40,7 @@ func TestWaitForDelRangeInGCJob(t *testing.T) {
 	ctx := context.Background()
 	settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
 	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
-
+	storage.MVCCRangeTombstonesEnabled.Override(ctx, &settings.SV, true)
 	testServer, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: settings,
 		Knobs: base.TestingKnobs{

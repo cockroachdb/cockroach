@@ -18,11 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -396,4 +399,62 @@ func slurpDatums(t *testing.T, it Iterator) (res []string) {
 			return nil
 		}))
 	return res
+}
+
+func TestMakeRowFromTuple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	i := tree.NewDInt(1234)
+	f := tree.NewDFloat(12.34)
+	s := tree.NewDString("testing")
+	typ := types.MakeTuple([]*types.T{types.Int, types.Float, types.String})
+	unlabeledTuple := tree.NewDTuple(typ, i, f, s)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+
+	rowFromUnlabeledTuple := MakeRowFromTuple(&evalCtx, unlabeledTuple)
+	expectedCols := []struct {
+		name        string
+		typ         *types.T
+		valAsString string
+	}{
+		{name: "col1", typ: types.Int, valAsString: "1234"},
+		{name: "col2", typ: types.Float, valAsString: "12.34"},
+		{name: "col3", typ: types.String, valAsString: "testing"},
+	}
+
+	remainingCols := expectedCols
+
+	require.NoError(t, rowFromUnlabeledTuple.ForEachColumn().Datum(func(d tree.Datum, col ResultColumn) error {
+		current := remainingCols[0]
+		remainingCols = remainingCols[1:]
+		require.Equal(t, current.name, col.Name)
+		require.Equal(t, current.typ, col.Typ)
+		require.Equal(t, current.valAsString, tree.AsStringWithFlags(d, tree.FmtExport))
+		return nil
+	}))
+
+	require.Empty(t, remainingCols)
+
+	typ.InternalType.TupleLabels = []string{"a", "b", "c"}
+	labeledTuple := tree.NewDTuple(typ, i, f, s)
+
+	expectedCols[0].name = "a"
+	expectedCols[1].name = "b"
+	expectedCols[2].name = "c"
+
+	remainingCols = expectedCols
+
+	rowFromLabeledTuple := MakeRowFromTuple(&evalCtx, labeledTuple)
+
+	require.NoError(t, rowFromLabeledTuple.ForEachColumn().Datum(func(d tree.Datum, col ResultColumn) error {
+		current := remainingCols[0]
+		remainingCols = remainingCols[1:]
+		require.Equal(t, current.name, col.Name)
+		require.Equal(t, current.typ, col.Typ)
+		require.Equal(t, current.valAsString, tree.AsStringWithFlags(d, tree.FmtExport))
+		return nil
+	}))
+
 }

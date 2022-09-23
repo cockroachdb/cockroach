@@ -232,7 +232,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 		test.dbDesc.Privileges = privilege
 		cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&test.dbDesc).BuildImmutable())
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
+		const validateCrossReferencesOnly = catalog.ValidationLevelBackReferences &^ catalog.ValidationLevelSelfOnly
 		results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
 		if err := results.CombinedError(); err == nil {
 			if test.err != "" {

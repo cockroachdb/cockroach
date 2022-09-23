@@ -34,6 +34,7 @@ go_test(
         "file_table_storage_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":userfile"],
     deps = [
         "//pkg/base",
@@ -45,6 +46,7 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
         "//pkg/sql/tests",

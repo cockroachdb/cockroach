@@ -9,11 +9,20 @@
 // licenses/APL.txt.
 
 import React, { useCallback, useState } from "react";
+import copy from "copy-to-clipboard";
+import { message, Icon } from "antd";
+import "antd/lib/message/style";
+import "antd/lib/icon/style";
 import { Modal } from "../modal";
 import { Text, TextTypes } from "../text";
 import { Button } from "../button";
 import { executeIndexRecAction, IndexActionResponse } from "../api";
-import { createIndex, dropIndex, onlineSchemaChanges } from "../util";
+import {
+  alterIndex,
+  createIndex,
+  dropIndex,
+  onlineSchemaChanges,
+} from "../util";
 import { Anchor } from "../anchor";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
@@ -52,6 +61,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
         }
         if (!foundError) {
           setVisible(false);
+          message.success("Recommendation applied");
         }
       },
     );
@@ -63,6 +73,11 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
   };
 
   const onCancelHandler = useCallback(() => setVisible(false), []);
+  const onCopyClick = () => {
+    copy(query);
+    message.success("Copied to clipboard");
+  };
+
   let title = "Update index";
   let btnLAbel = "Update Index";
   let descriptionDocs = <></>;
@@ -110,6 +125,19 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
         </>
       );
       break;
+    case "AlterIndex":
+      title = "alter the index";
+      btnLAbel = "Alter Index";
+      descriptionDocs = (
+        <>
+          {"an "}
+          <Anchor href={alterIndex} target="_blank">
+            ALTER INDEX
+          </Anchor>
+          {" statement"}
+        </>
+      );
+      break;
   }
 
   return (
@@ -128,16 +156,31 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
       >
         <Text>
           This action will apply the single-statement index recommendation by
-          executing {descriptionDocs}. Schema changes consume additional
-          resources and can potentially negatively impact workload
-          responsiveness.{" "}
+          executing {descriptionDocs}.{" "}
           <Anchor href={onlineSchemaChanges} target="_blank">
             Learn more
           </Anchor>
         </Text>
         <Text textType={TextTypes.Code} className={"code-area"}>
           {query}
+          <br />
+          <Button
+            type={"unstyled-link"}
+            size={"small"}
+            className={cx("bottom-corner")}
+            icon={<Icon type="copy" className={cx("copy-icon")} />}
+            onClick={onCopyClick}
+          >
+            Copy
+          </Button>
         </Text>
+        <InlineAlert
+          intent="warning"
+          className={cx("alert-area")}
+          title={`Schema changes consume additional
+          resources and can potentially negatively impact workload
+          responsiveness.`}
+        />
         {error.length > 0 && (
           <InlineAlert
             intent="danger"

@@ -11,6 +11,7 @@
 package internal
 
 // T is a Template type. The methods in the interface make up its contract.
+//
 //lint:ignore U1001 unused
 type T interface {
 	ID() uint64

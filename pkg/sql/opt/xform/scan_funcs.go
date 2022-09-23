@@ -11,6 +11,7 @@
 package xform
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -31,13 +32,14 @@ import (
 // in that it behaves the exactly the same as a non-partial secondary index.
 //
 // NOTE: This does not generate index joins for non-covering indexes (except in
-//       case of ForceIndex). Index joins are usually only introduced "one level
-//       up", when the Scan operator is wrapped by an operator that constrains
-//       or limits scan output in some way (e.g. Select, Limit, InnerJoin).
-//       Index joins are only lower cost when their input does not include all
-//       rows from the table. See GenerateConstrainedScans,
-//       GenerateLimitedScans, and GenerateLimitedGroupByScans for cases where
-//       index joins are introduced into the memo.
+//
+//	case of ForceIndex). Index joins are usually only introduced "one level
+//	up", when the Scan operator is wrapped by an operator that constrains
+//	or limits scan output in some way (e.g. Select, Limit, InnerJoin).
+//	Index joins are only lower cost when their input does not include all
+//	rows from the table. See GenerateConstrainedScans,
+//	GenerateLimitedScans, and GenerateLimitedGroupByScans for cases where
+//	index joins are introduced into the memo.
 func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
@@ -210,7 +212,31 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	localConstraint.Columns = localConstraint.Columns.RemapColumns(scanPrivate.Table, localScanPrivate.Table)
 	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
 	localScanPrivate.HardLimit = scanPrivate.HardLimit
+	if scanPrivate.InvertedConstraint != nil {
+		localScanPrivate.InvertedConstraint = make(inverted.Spans, len(scanPrivate.InvertedConstraint))
+		copy(localScanPrivate.InvertedConstraint, scanPrivate.InvertedConstraint)
+	}
 	localScan := c.e.f.ConstructScan(localScanPrivate)
+	if scanPrivate.HardLimit != 0 {
+		// If the local scan could never reach the hard limit, we will always have
+		// to read into remote regions, so there is no point in using
+		// locality-optimized scan.
+		if scanPrivate.HardLimit > memo.ScanLimit(localScan.Relational().Cardinality.Max) {
+			return
+		}
+	} else {
+		// When the max cardinality of the original scan is greater than the max
+		// cardinality of the local scan, a remote scan will always be required.
+		// IgnoreUniqueWithoutIndexKeys is true when we're performing a scan
+		// during an insert to verify there are no duplicates violating the
+		// uniqueness constraint. This could cause the check below to return, but
+		// by design we want to use locality-optimized search for these duplicate
+		// checks. So avoid returning if that flag is set.
+		if localScan.Relational().Cardinality.Max <
+			grp.Relational().Cardinality.Max && !tabMeta.IgnoreUniqueWithoutIndexKeys {
+			return
+		}
+	}
 
 	// Create the remote scan.
 	remoteScanPrivate := c.DuplicateScanPrivate(scanPrivate)
@@ -218,6 +244,10 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	remoteConstraint.Columns = remoteConstraint.Columns.RemapColumns(scanPrivate.Table, remoteScanPrivate.Table)
 	remoteScanPrivate.SetConstraint(c.e.evalCtx, &remoteConstraint)
 	remoteScanPrivate.HardLimit = scanPrivate.HardLimit
+	if scanPrivate.InvertedConstraint != nil {
+		remoteScanPrivate.InvertedConstraint = make(inverted.Spans, len(scanPrivate.InvertedConstraint))
+		copy(remoteScanPrivate.InvertedConstraint, scanPrivate.InvertedConstraint)
+	}
 	remoteScan := c.e.f.ConstructScan(remoteScanPrivate)
 
 	// Add the LocalityOptimizedSearchExpr to the same group as the original scan.
@@ -244,53 +274,54 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 // spans may be produced which don't maximize the number of rows accessed as a
 // 100% local operation.
 // For example:
-//    CREATE TABLE abc_part (
-//       r STRING NOT NULL ,
-//       t INT NOT NULL,
-//       a INT PRIMARY KEY,
-//       b INT,
-//       c INT,
-//       d INT,
-//       UNIQUE INDEX c_idx (r, t, c) PARTITION BY LIST (r, t) (
-//         PARTITION west VALUES IN (('west', 1), ('east', 4)),
-//         PARTITION east VALUES IN (('east', DEFAULT), ('east', 2)),
-//         PARTITION default VALUES IN (DEFAULT)
-//       )
-//    );
-//    ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
-//     num_voters = 5,
-//     voter_constraints = '{+region=east: 2}',
-//     lease_preferences = '[[+region=east]]'
 //
-//    ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
-//     num_voters = 5,
-//     voter_constraints = '{+region=west: 2}',
-//     lease_preferences = '[[+region=west]]'
+//	CREATE TABLE abc_part (
+//	   r STRING NOT NULL ,
+//	   t INT NOT NULL,
+//	   a INT PRIMARY KEY,
+//	   b INT,
+//	   c INT,
+//	   d INT,
+//	   UNIQUE INDEX c_idx (r, t, c) PARTITION BY LIST (r, t) (
+//	     PARTITION west VALUES IN (('west', 1), ('east', 4)),
+//	     PARTITION east VALUES IN (('east', DEFAULT), ('east', 2)),
+//	     PARTITION default VALUES IN (DEFAULT)
+//	   )
+//	);
+//	ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+//	 num_voters = 5,
+//	 voter_constraints = '{+region=east: 2}',
+//	 lease_preferences = '[[+region=east]]'
 //
-//    ALTER PARTITION "default" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
-//     num_voters = 5,
-//     lease_preferences = '[[+region=central]]';
+//	ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+//	 num_voters = 5,
+//	 voter_constraints = '{+region=west: 2}',
+//	 lease_preferences = '[[+region=west]]'
 //
-//    EXPLAIN SELECT c FROM abc_part@c_idx LIMIT 3;
-//                         info
-//    ----------------------------------------------
-//      distribution: local
-//      vectorized: true
+//	ALTER PARTITION "default" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+//	 num_voters = 5,
+//	 lease_preferences = '[[+region=central]]';
 //
-//      • union all
-//      │ limit: 3
-//      │
-//      ├── • scan
-//      │     missing stats
-//      │     table: abc_part@c_idx
-//      │     spans: [/'east'/2 - /'east'/3]
-//      │     limit: 3
-//      │
-//      └── • scan
-//            missing stats
-//            table: abc_part@c_idx
-//            spans: [ - /'east'/1] [/'east'/4 - ]
-//            limit: 3
+//	EXPLAIN SELECT c FROM abc_part@c_idx LIMIT 3;
+//	                     info
+//	----------------------------------------------
+//	  distribution: local
+//	  vectorized: true
+//
+//	  • union all
+//	  │ limit: 3
+//	  │
+//	  ├── • scan
+//	  │     missing stats
+//	  │     table: abc_part@c_idx
+//	  │     spans: [/'east'/2 - /'east'/3]
+//	  │     limit: 3
+//	  │
+//	  └── • scan
+//	        missing stats
+//	        table: abc_part@c_idx
+//	        spans: [ - /'east'/1] [/'east'/4 - ]
+//	        limit: 3
 //
 // Because of the partial-default east partition, ('east', DEFAULT), the spans
 // in the local (left) branch of the union all should be

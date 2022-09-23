@@ -13,17 +13,14 @@ package metric
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"math"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/kr/pretty"
-	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
@@ -103,7 +100,7 @@ func setNow(d time.Duration) {
 	}
 }
 
-func TestHistogramPrometheus(t *testing.T) {
+func TestHistogram(t *testing.T) {
 	u := func(v int) *uint64 {
 		n := uint64(v)
 		return &n
@@ -114,58 +111,15 @@ func TestHistogramPrometheus(t *testing.T) {
 		return &n
 	}
 
-	h := NewHistogram(Metadata{}, time.Hour, 10, 1)
-	h.RecordValue(1)
-	h.RecordValue(5)
-	h.RecordValue(5)
-	h.RecordValue(10)
-	h.RecordValue(15000) // counts as 10
-	act := *h.ToPrometheusMetric().Histogram
-
-	expSum := float64(1*1 + 2*5 + 2*10)
-
-	exp := prometheusgo.Histogram{
-		SampleCount: u(5),
-		SampleSum:   &expSum,
-		Bucket: []*prometheusgo.Bucket{
-			{CumulativeCount: u(1), UpperBound: f(1)},
-			{CumulativeCount: u(3), UpperBound: f(5)},
-			{CumulativeCount: u(5), UpperBound: f(10)},
-		},
-	}
-
-	if !reflect.DeepEqual(act, exp) {
-		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
-	}
-}
-
-func TestHistogramV2(t *testing.T) {
-	u := func(v int) *uint64 {
-		n := uint64(v)
-		return &n
-	}
-
-	f := func(v int) *float64 {
-		n := float64(v)
-		return &n
-	}
-
-	h := NewHistogramV2(
+	h := NewHistogram(
 		Metadata{},
 		time.Hour,
-		prometheus.HistogramOpts{
-			Namespace:   "",
-			Subsystem:   "",
-			Name:        "",
-			Help:        "",
-			ConstLabels: nil,
-			Buckets: []float64{
-				1.0,
-				5.0,
-				10.0,
-				25.0,
-				100.0,
-			},
+		[]float64{
+			1.0,
+			5.0,
+			10.0,
+			25.0,
+			100.0,
 		},
 	)
 
@@ -211,38 +165,11 @@ func TestHistogramV2(t *testing.T) {
 	require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99.99))
 }
 
-// TestHistogramBuckets is used to generate additional prometheus buckets to be
-// used with HistogramV2. Please include obs-inf in the review process of new
-// buckets.
-func TestHistogramBuckets(t *testing.T) {
-	verifyAndPrint := func(t *testing.T, exp, act []float64) {
-		t.Helper()
-		var buf strings.Builder
-		for idx, f := range exp {
-			if idx == 0 {
-				fmt.Fprintf(&buf, "// Generated via %s.", t.Name())
-			}
-			fmt.Fprintf(&buf, "\n%f, // %s", f, time.Duration(f))
-		}
-		t.Logf("%s", &buf)
-		require.InDeltaSlice(t, exp, act, 1 /* delta */, "Please update the bucket boundaries for %s", t.Name())
-	}
-	t.Run("IOLatencyBuckets", func(t *testing.T) {
-		exp := prometheus.ExponentialBucketsRange(10e3, 10e9, 15)
-		verifyAndPrint(t, exp, IOLatencyBuckets)
-	})
-
-	t.Run("NetworkLatencyBuckets", func(t *testing.T) {
-		exp := prometheus.ExponentialBucketsRange(500e3, 1e9, 15)
-		verifyAndPrint(t, exp, NetworkLatencyBuckets)
-	})
-}
-
-func TestNewHistogramV2Rotate(t *testing.T) {
+func TestNewHistogramRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
 
-	h := NewHistogramV2(emptyMetadata, 10*time.Second, prometheus.HistogramOpts{Buckets: nil})
+	h := NewHistogram(emptyMetadata, 10*time.Second, nil)
 	for i := 0; i < 4; i++ {
 		// Windowed histogram is initially empty.
 		h.Inspect(func(interface{}) {}) // triggers ticking
@@ -263,38 +190,5 @@ func TestNewHistogramV2Rotate(t *testing.T) {
 		// Tick. This rotates the histogram.
 		setNow(time.Duration(i+1) * 10 * time.Second)
 		// Go to beginning.
-	}
-}
-
-func TestHistogramRotate(t *testing.T) {
-	defer TestingSetNow(nil)()
-	setNow(0)
-	duration := histWrapNum * time.Second
-	h := NewHistogram(emptyMetadata, duration, 1000+10*histWrapNum, 3)
-	var cur time.Duration
-	for i := 0; i < 3*histWrapNum; i++ {
-		v := int64(10 * i)
-		h.RecordValue(v)
-		cur += time.Second
-		setNow(cur)
-		cur, windowDuration := h.Windowed()
-		if windowDuration != duration {
-			t.Fatalf("window changed: is %s, should be %s", windowDuration, duration)
-		}
-
-		// When i == histWrapNum-1, we expect the entry from i==0 to move out
-		// of the window (since we rotated for the histWrapNum'th time).
-		expMin := int64((1 + i - (histWrapNum - 1)) * 10)
-		if expMin < 0 {
-			expMin = 0
-		}
-
-		if min := cur.Min(); min != expMin {
-			t.Fatalf("%d: unexpected minimum %d, expected %d", i, min, expMin)
-		}
-
-		if max, expMax := cur.Max(), v; max != expMax {
-			t.Fatalf("%d: unexpected maximum %d, expected %d", i, max, expMax)
-		}
 	}
 }

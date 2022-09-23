@@ -53,7 +53,7 @@ send "tail -F logs/db/logs/cockroach-stderr.log\r"
 eexpect "stderr capture started"
 
 # Spawn a client.
-spawn $argv sql
+spawn $argv sql --no-line-editor
 set client_spawn_id $spawn_id
 eexpect root@
 

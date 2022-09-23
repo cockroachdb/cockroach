@@ -58,7 +58,7 @@ eexpect $prompt
 end_test
 
 start_test "Passwords are not requested when a certificate for the user exists"
-send "$argv sql --user=testuser --certs-dir=$certs_dir\r"
+send "$argv sql --no-line-editor --user=testuser --certs-dir=$certs_dir\r"
 eexpect "testuser@"
 send "\\q\r"
 eexpect $prompt
@@ -66,7 +66,7 @@ end_test
 
 start_test "Check that CREATE USER WITH PASSWORD can be used from transactions."
 # Create a user from a transaction.
-send "$argv sql --certs-dir=$certs_dir\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir\r"
 eexpect "root@"
 send "BEGIN TRANSACTION;\r"
 eexpect "root@"
@@ -77,20 +77,20 @@ eexpect "root@"
 send "\\q\r"
 # Log in with the correct password.
 eexpect $prompt
-send "$argv sql --certs-dir=$certs_dir --user=eisen\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir --user=eisen\r"
 eexpect "Enter password:"
 send "hunter2\r"
 eexpect "eisen@"
 send "\\q\r"
 # Try to log in with an incorrect password.
 eexpect $prompt
-send "$argv sql --certs-dir=$certs_dir --user=eisen\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir --user=eisen\r"
 eexpect "Enter password:"
 send "*****\r"
 eexpect "ERROR: password authentication failed for user eisen"
 eexpect "Failed running \"sql\""
 # Check that history is scrubbed.
-send "$argv sql --certs-dir=$certs_dir\r"
+send "$argv sql --no-line-editor --certs-dir=$certs_dir\r"
 eexpect "root@"
 end_test
 
@@ -108,14 +108,14 @@ set mywd [pwd]
 
 start_test "Check that socket-based login works."
 
-send "$argv sql --url 'postgres://eisen@?host=$mywd&port=26257'\r"
+send "$argv sql --no-line-editor --url 'postgres://eisen@?host=$mywd&port=26257'\r"
 eexpect "Enter password:"
 send "hunter2\r"
 eexpect "eisen@"
 send_eof
 eexpect $prompt
 
-send "$argv sql --url 'postgres://eisen:hunter2@?host=$mywd&port=26257'\r"
+send "$argv sql --no-line-editor --url 'postgres://eisen:hunter2@?host=$mywd&port=26257'\r"
 eexpect "eisen@"
 send_eof
 eexpect $prompt

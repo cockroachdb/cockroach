@@ -82,14 +82,24 @@ func ruleInvocationStr(name string, args []Var) string {
 // MarshalYAML marshals a rule to YAML.
 func (r RuleDef) MarshalYAML() (interface{}, error) {
 	var cl yaml.Node
-	if err := cl.Encode(r.Clauses); err != nil {
+	if err := cl.Encode(r.Clauses()); err != nil {
 		return nil, err
+	}
+	content := &cl
+	if r.isNotJoin {
+		content = &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "not-join"},
+				&cl,
+			},
+		}
 	}
 	return &yaml.Node{
 		Kind: yaml.MappingNode,
 		Content: []*yaml.Node{
-			{Kind: yaml.ScalarNode, Value: ruleInvocationStr(r.Name, r.Params)},
-			&cl,
+			{Kind: yaml.ScalarNode, Value: ruleInvocationStr(r.Name, r.Params())},
+			content,
 		},
 	}, nil
 }

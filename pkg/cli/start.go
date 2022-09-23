@@ -953,7 +953,7 @@ func reportServerInfo(
 	buf.Printf("CockroachDB %s starting at %s (took %0.1fs)\n", srvS, timeutil.Now(), timeutil.Since(startTime).Seconds())
 	buf.Printf("build:\t%s %s @ %s (%s)\n",
 		redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
-	buf.Printf("webui:\t%s\n", serverCfg.AdminURL())
+	buf.Printf("webui:\t%s\n", log.SafeManaged(serverCfg.AdminURL()))
 
 	// (Re-)compute the client connection URL. We cannot do this
 	// earlier (e.g. above, in the runStart function) because
@@ -964,53 +964,53 @@ func reportServerInfo(
 		log.Ops.Errorf(ctx, "failed computing the URL: %v", err)
 		return err
 	}
-	buf.Printf("sql:\t%s\n", pgURL.ToPQ())
-	buf.Printf("sql (JDBC):\t%s\n", pgURL.ToJDBC())
+	buf.Printf("sql:\t%s\n", log.SafeManaged(pgURL.ToPQ()))
+	buf.Printf("sql (JDBC):\t%s\n", log.SafeManaged(pgURL.ToJDBC()))
 
-	buf.Printf("RPC client flags:\t%s\n", clientFlagsRPC())
+	buf.Printf("RPC client flags:\t%s\n", log.SafeManaged(clientFlagsRPC()))
 	if len(serverCfg.SocketFile) != 0 {
-		buf.Printf("socket:\t%s\n", serverCfg.SocketFile)
+		buf.Printf("socket:\t%s\n", log.SafeManaged(serverCfg.SocketFile))
 	}
 	logNum := 1
 	_ = cliCtx.logConfig.IterateDirectories(func(d string) error {
 		if logNum == 1 {
 			// Backward-compatibility.
-			buf.Printf("logs:\t%s\n", d)
+			buf.Printf("logs:\t%s\n", log.SafeManaged(d))
 		} else {
-			buf.Printf("logs[%d]:\t%s\n", logNum, d)
+			buf.Printf("logs[%d]:\t%s\n", log.SafeManaged(logNum), log.SafeManaged(d))
 		}
 		logNum++
 		return nil
 	})
 	if serverCfg.Attrs != "" {
-		buf.Printf("attrs:\t%s\n", serverCfg.Attrs)
+		buf.Printf("attrs:\t%s\n", log.SafeManaged(serverCfg.Attrs))
 	}
 	if len(serverCfg.Locality.Tiers) > 0 {
-		buf.Printf("locality:\t%s\n", serverCfg.Locality)
+		buf.Printf("locality:\t%s\n", log.SafeManaged(serverCfg.Locality))
 	}
 	if tmpDir := serverCfg.SQLConfig.TempStorageConfig.Path; tmpDir != "" {
-		buf.Printf("temp dir:\t%s\n", tmpDir)
+		buf.Printf("temp dir:\t%s\n", log.SafeManaged(tmpDir))
 	}
 	if ext := st.ExternalIODir; ext != "" {
-		buf.Printf("external I/O path: \t%s\n", ext)
+		buf.Printf("external I/O path: \t%s\n", log.SafeManaged(ext))
 	} else {
 		buf.Printf("external I/O path: \t<disabled>\n")
 	}
 	for i, spec := range serverCfg.Stores.Specs {
-		buf.Printf("store[%d]:\t%s\n", i, spec)
+		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(spec))
 	}
 	buf.Printf("storage engine: \t%s\n", &serverCfg.StorageEngine)
 
 	// Print the commong server identifiers.
 	if baseCfg.ClusterName != "" {
-		buf.Printf("cluster name:\t%s\n", baseCfg.ClusterName)
+		buf.Printf("cluster name:\t%s\n", log.SafeManaged(baseCfg.ClusterName))
 	}
 	clusterID := serverCfg.BaseConfig.ClusterIDContainer.Get()
 	if tenantClusterID.Equal(uuid.Nil) {
-		buf.Printf("clusterID:\t%s\n", clusterID)
+		buf.Printf("clusterID:\t%s\n", log.SafeManaged(clusterID))
 	} else {
-		buf.Printf("storage clusterID:\t%s\n", clusterID)
-		buf.Printf("tenant clusterID:\t%s\n", tenantClusterID)
+		buf.Printf("storage clusterID:\t%s\n", log.SafeManaged(clusterID))
+		buf.Printf("tenant clusterID:\t%s\n", log.SafeManaged(tenantClusterID))
 	}
 	nodeID := serverCfg.BaseConfig.IDContainer.Get()
 	if isHostNode {
@@ -1035,7 +1035,7 @@ func reportServerInfo(
 			buf.Printf("KV addresses:\t")
 			comma := redact.SafeString("")
 			for _, addr := range serverCfg.SQLConfig.TenantKVAddrs {
-				buf.Printf("%s%s", comma, addr)
+				buf.Printf("%s%s", comma, log.SafeManaged(addr))
 				comma = ", "
 			}
 			buf.Printf("\n")
@@ -1118,7 +1118,7 @@ func reportConfiguration(ctx context.Context) {
 	// running as root in a multi-user environment, or using different
 	// uid/gid across runs in the same data directory. To determine
 	// this, it's easier if the information appears in the log file.
-	log.Ops.Infof(ctx, "process identity: %s", sysutil.ProcessIdentity())
+	log.Ops.Infof(ctx, "process identity: %s", log.SafeManaged(sysutil.ProcessIdentity()))
 }
 
 func maybeWarnMemorySizes(ctx context.Context) {
@@ -1133,7 +1133,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		} else {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
 		}
-		log.Ops.Warningf(ctx, "%s", buf.String())
+		log.Ops.Warningf(ctx, "%s", redact.Safe(buf.String()))
 	}
 
 	// Check that the total suggested "max" memory is well below the available memory.
@@ -1216,13 +1216,13 @@ func setupAndInitializeLoggingAndProfiling(
 				"- Intruders with access to your machine or network can observe client-server traffic.\n"+
 				"- Intruders can log in without password and read or write any data in the cluster.\n"+
 				"- Intruders can consume all your server's resources and cause unavailability.",
-			addr)
+			log.SafeManaged(addr))
 		log.Ops.Shoutf(ctx, severity.INFO,
 			"To start a secure server without mandating TLS for clients,\n"+
 				"consider --accept-sql-without-tls instead. For other options, see:\n\n"+
 				"- %s\n"+
 				"- %s",
-			build.MakeIssueURL(53404),
+			redact.Safe(build.MakeIssueURL(53404)),
 			redact.Safe(docs.URL("secure-a-cluster.html")),
 		)
 	}
@@ -1246,7 +1246,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Ops.Infof(ctx, "%s", info.Short())
+	log.Ops.Infof(ctx, "%s", log.SafeManaged(info.Short()))
 
 	initTraceDir(ctx, serverCfg.InflightTraceDirName)
 	initCPUProfile(ctx, serverCfg.CPUProfileDirName, serverCfg.Settings)
@@ -1267,8 +1267,10 @@ func setupAndInitializeLoggingAndProfiling(
 func initGEOS(ctx context.Context) {
 	loc, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir)
 	if err != nil {
-		log.Ops.Warningf(ctx, "could not initialize GEOS - spatial functions may not be available: %v", err)
+		log.Ops.Warningf(ctx,
+			"could not initialize GEOS - spatial functions may not be available: %v",
+			log.SafeManaged(err))
 	} else {
-		log.Ops.Infof(ctx, "GEOS loaded from directory %s", loc)
+		log.Ops.Infof(ctx, "GEOS loaded from directory %s", log.SafeManaged(loc))
 	}
 }

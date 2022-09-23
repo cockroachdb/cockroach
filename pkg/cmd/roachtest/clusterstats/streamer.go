@@ -95,8 +95,9 @@ type StatEvent struct {
 // the query time is increased bt the collecter interval. The results are
 // passed the provided processTickFn. This function will run indefinitely,
 // until either:
-//   (1) the context cancellation
-//   (2) processTickFn returns true, indicating that it has finished.
+//
+//	(1) the context cancellation
+//	(2) processTickFn returns true, indicating that it has finished.
 func (css *clusterStatStreamer) Run(
 	ctx context.Context, l *logger.Logger, startTime time.Time,
 ) error {

@@ -413,8 +413,8 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	extra += splitSnapshotWarningStr(r.RangeID, r.RaftStatus())
 
-	log.Infof(ctx, "initiating a split of this range at key %s [r%d] (%s)%s",
-		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightRangeID, reason, extra)
+	log.Infof(ctx, "initiating a split of this range at key %v [r%d] (%s)%s",
+		splitKey, rightRangeID, reason, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc, reason)
@@ -525,6 +525,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 	// that suggested this.
 	retryOpts.RandomizationFactor = 0.5
 	var lastErr error
+	splitRetryLogLimiter := log.Every(10 * time.Second)
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
 		// The replica may have been destroyed since the start of the retry loop.
 		// We need to explicitly check this condition. Having a valid lease, as we
@@ -546,11 +547,14 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		}
 
 		lastErr = updateDesc(r.Desc())
-		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
-		// command with the updated descriptor.
-		if !errors.HasType(lastErr, (*roachpb.ConditionFailedError)(nil)) &&
+		// On seeing a retryable replication change or an AmbiguousResultError,
+		// retry the command with the updated descriptor.
+		if !IsRetriableReplicationChangeError(lastErr) &&
 			!errors.HasType(lastErr, (*roachpb.AmbiguousResultError)(nil)) {
 			break
+		}
+		if splitRetryLogLimiter.ShouldLog() {
+			log.Warningf(ctx, "retrying split after err: %v", lastErr)
 		}
 	}
 	return roachpb.NewError(lastErr)
@@ -890,52 +894,52 @@ func waitForReplicasInit(
 //
 // In general, ChangeReplicas will carry out the following steps.
 //
-// 1. Run a distributed transaction that adds all new replicas as learner replicas.
-//    Learner replicas receive the log, but do not have voting rights. They are
-//    used to catch up these new replicas before turning them into voters, which
-//    is important for the continued availability of the range throughout the
-//    replication change. Learners are added (and removed) one by one due to a
-//    technicality (see https://github.com/cockroachdb/cockroach/pull/40268).
+//  1. Run a distributed transaction that adds all new replicas as learner replicas.
+//     Learner replicas receive the log, but do not have voting rights. They are
+//     used to catch up these new replicas before turning them into voters, which
+//     is important for the continued availability of the range throughout the
+//     replication change. Learners are added (and removed) one by one due to a
+//     technicality (see https://github.com/cockroachdb/cockroach/pull/40268).
 //
-//    The distributed transaction updates both copies of the range descriptor
-//    (the one on the range and that in the meta ranges) to that effect, and
-//    commits with a special trigger instructing Raft (via ProposeConfChange) to
-//    tie a corresponding replication configuration change which goes into
-//    effect (on each replica) when the transaction commit is applied to the
-//    state. Applying the command also updates each replica's local view of
-//    the state to reflect the new descriptor.
+//     The distributed transaction updates both copies of the range descriptor
+//     (the one on the range and that in the meta ranges) to that effect, and
+//     commits with a special trigger instructing Raft (via ProposeConfChange) to
+//     tie a corresponding replication configuration change which goes into
+//     effect (on each replica) when the transaction commit is applied to the
+//     state. Applying the command also updates each replica's local view of
+//     the state to reflect the new descriptor.
 //
-//    If no replicas are being added, this first step is elided. If non-voting
-//    replicas (which are also learners in etcd/raft) are being added, then this
-//    step is all we need. The rest of the steps only apply if voter replicas
-//    are being added.
+//     If no replicas are being added, this first step is elided. If non-voting
+//     replicas (which are also learners in etcd/raft) are being added, then this
+//     step is all we need. The rest of the steps only apply if voter replicas
+//     are being added.
 //
-// 2. Send Raft snapshots to all learner replicas. This would happen
-//    automatically by the existing recovery mechanisms (raft snapshot queue), but
-//    it is done explicitly as a convenient way to ensure learners are caught up
-//    before the next step is entered. (We ensure that work is not duplicated
-//    between the snapshot queue and the explicit snapshot via the
-//    snapshotLogTruncationConstraints map). Snapshots are subject to both
-//    bandwidth rate limiting and throttling.
+//  2. Send Raft snapshots to all learner replicas. This would happen
+//     automatically by the existing recovery mechanisms (raft snapshot queue), but
+//     it is done explicitly as a convenient way to ensure learners are caught up
+//     before the next step is entered. (We ensure that work is not duplicated
+//     between the snapshot queue and the explicit snapshot via the
+//     snapshotLogTruncationConstraints map). Snapshots are subject to both
+//     bandwidth rate limiting and throttling.
 //
-//    If no replicas are being added, this step is similarly elided.
+//     If no replicas are being added, this step is similarly elided.
 //
-// 3. Carry out a distributed transaction similar to that which added the
-//    learner replicas, except this time it (atomically) changes all learners to
-//    voters and removes any replicas for which this was requested; voters are
-//    demoted before actually being removed to avoid bug in etcd/raft:
-//    See https://github.com/cockroachdb/cockroach/pull/40268.
+//  3. Carry out a distributed transaction similar to that which added the
+//     learner replicas, except this time it (atomically) changes all learners to
+//     voters and removes any replicas for which this was requested; voters are
+//     demoted before actually being removed to avoid bug in etcd/raft:
+//     See https://github.com/cockroachdb/cockroach/pull/40268.
 //
-//    If only one replica is being added, raft can chose the simple
-//    configuration change protocol; otherwise it has to use joint consensus. In
-//    this latter mechanism, a first configuration change is made which results
-//    in a configuration ("joint configuration") in which a quorum of both the
-//    old replicas and the new replica sets is required for decision making.
-//    Transitioning into this joint configuration, the RangeDescriptor (which is
-//    the source of truth of the replication configuration) is updated with
-//    corresponding replicas of type VOTER_INCOMING and VOTER_DEMOTING.
-//    Immediately after committing this change, a second transition updates the
-//    descriptor with and activates the final configuration.
+//     If only one replica is being added, raft can chose the simple
+//     configuration change protocol; otherwise it has to use joint consensus. In
+//     this latter mechanism, a first configuration change is made which results
+//     in a configuration ("joint configuration") in which a quorum of both the
+//     old replicas and the new replica sets is required for decision making.
+//     Transitioning into this joint configuration, the RangeDescriptor (which is
+//     the source of truth of the replication configuration) is updated with
+//     corresponding replicas of type VOTER_INCOMING and VOTER_DEMOTING.
+//     Immediately after committing this change, a second transition updates the
+//     descriptor with and activates the final configuration.
 //
 // Concretely, if the initial members of the range are s1/1, s2/2, and s3/3, and
 // an atomic membership change were to add s4/4 and s5/5 while removing s1/1 and
@@ -1860,9 +1864,9 @@ func (r *Replica) lockLearnerSnapshot(
 // The atomic membership change is carried out chiefly via the construction of a
 // suitable ChangeReplicasTrigger, see prepareChangeReplicasTrigger for details.
 //
-//  When adding/removing only a single voter, joint consensus is not used.
-//  Notably, demotions must always use joint consensus, even if only a single
-//  voter is being demoted, due to a (liftable) limitation in etcd/raft.
+//	When adding/removing only a single voter, joint consensus is not used.
+//	Notably, demotions must always use joint consensus, even if only a single
+//	voter is being demoted, due to a (liftable) limitation in etcd/raft.
 //
 // [raft-bug]: https://github.com/etcd-io/etcd/issues/11284
 func (r *Replica) execReplicationChangesForVoters(
@@ -2316,7 +2320,8 @@ func execChangeReplicasTxn(
 			sp.Finish()
 		}
 
-		log.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s", crt.Added(), crt.Removed(), desc)
+		log.KvDistribution.Infof(ctx, "change replicas (add %v remove %v): existing descriptor %s",
+			crt.Added(), crt.Removed(), desc)
 
 		{
 			ctx, sp := tracer.StartSpanCtx(ctx, replicaChangeTxnUpdateDescOpName, tracing.WithParent(parentSp))
@@ -2662,6 +2667,16 @@ func (r *Replica) sendSnapshot(
 		if err != nil {
 			return err
 		}
+	}
+
+	//  Don't send a queue name or priority if the receiver may not understand
+	//  them or the setting is disabled. TODO(baptist): Remove the version flag in
+	//  v23.1. Consider removing the cluster setting once we have verified this
+	//  works as expected in all cases.
+	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.PrioritizeSnapshots) ||
+		!snapshotPrioritizationEnabled.Get(&r.store.ClusterSettings().SV) {
+		senderQueueName = 0
+		senderQueuePriority = 0
 	}
 
 	log.VEventf(
@@ -3073,12 +3088,12 @@ func (r *Replica) AdminRelocateRange(
 // the desired state. In an "atomic replication changes" world, this is
 // conceptually easy: change from the old set of replicas to the new one. But
 // there are two reasons that complicate this:
-// 1. we can't remove the leaseholder, so if we ultimately want to do that
-//    the lease has to be moved first. If we start out with *only* the
-//    leaseholder, we will have to add a replica first.
-// 2. this code is rewritten late in the cycle and it is both safer and
-//    closer to its previous incarnation to never issue atomic changes
-//    other than simple swaps.
+//  1. we can't remove the leaseholder, so if we ultimately want to do that
+//     the lease has to be moved first. If we start out with *only* the
+//     leaseholder, we will have to add a replica first.
+//  2. this code is rewritten late in the cycle and it is both safer and
+//     closer to its previous incarnation to never issue atomic changes
+//     other than simple swaps.
 //
 // The loop below repeatedly calls relocateOne, which gives us either
 // one or two ops that move the range towards the desired replication state. If
@@ -3121,8 +3136,13 @@ func (r *Replica) relocateReplicas(
 				return rangeDesc, err
 			}
 
-			ops, leaseTarget, err := r.relocateOne(
-				ctx, &rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
+			ops, leaseTarget, err := RelocateOne(
+				ctx,
+				&rangeDesc,
+				voterTargets,
+				nonVoterTargets,
+				transferLeaseToFirstVoter,
+				&replicaRelocateOneOptions{Replica: r},
 			)
 			if err != nil {
 				return rangeDesc, err
@@ -3205,11 +3225,68 @@ func (r *relocationArgs) finalRelocationTargets() []roachpb.ReplicationTarget {
 	}
 }
 
-func (r *Replica) relocateOne(
+// RelocateOneOptions contains methods that return the information necssary to
+// generate the next suggested replication change for a relocate range command.
+type RelocateOneOptions interface {
+	// Allocator returns the allocator for the store this replica is on.
+	Allocator() allocatorimpl.Allocator
+	// SpanConfig returns the span configuration for the range with start key.
+	SpanConfig(ctx context.Context, startKey roachpb.RKey) (roachpb.SpanConfig, error)
+	// LeaseHolder returns the descriptor of the replica which holds the lease
+	// on the range with start key.
+	Leaseholder(ctx context.Context, startKey roachpb.RKey) (roachpb.ReplicaDescriptor, error)
+}
+
+type replicaRelocateOneOptions struct {
+	*Replica
+}
+
+// Allocator returns the allocator for the store this replica is on.
+func (roo *replicaRelocateOneOptions) Allocator() allocatorimpl.Allocator {
+	return roo.store.allocator
+}
+
+// SpanConfig returns the span configuration for the range with start key.
+func (roo *replicaRelocateOneOptions) SpanConfig(
+	ctx context.Context, startKey roachpb.RKey,
+) (roachpb.SpanConfig, error) {
+	confReader, err := roo.store.GetConfReader(ctx)
+	if err != nil {
+		return roachpb.SpanConfig{}, errors.Wrap(err, "can't relocate range")
+	}
+	conf, err := confReader.GetSpanConfigForKey(ctx, startKey)
+	if err != nil {
+		return roachpb.SpanConfig{}, err
+	}
+	return conf, nil
+}
+
+// Leaseholder returns the descriptor of the replica which holds the lease on
+// the range with start key.
+func (roo *replicaRelocateOneOptions) Leaseholder(
+	ctx context.Context, startKey roachpb.RKey,
+) (roachpb.ReplicaDescriptor, error) {
+	var b kv.Batch
+	liReq := &roachpb.LeaseInfoRequest{}
+	liReq.Key = startKey.AsRawKey()
+	b.AddRawRequest(liReq)
+	if err := roo.store.DB().Run(ctx, &b); err != nil {
+		return roachpb.ReplicaDescriptor{}, errors.Wrap(err, "looking up lease")
+	}
+	// Determines whether we can remove the leaseholder without first
+	// transferring the lease away.
+	return b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica, nil
+}
+
+// RelocateOne returns a suggested replication change and lease transfer that
+// should occur next, to relocate the range onto the given voter and non-voter
+// targets.
+func RelocateOne(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 	transferLeaseToFirstVoter bool,
+	options RelocateOneOptions,
 ) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
 	if repls := desc.Replicas(); len(repls.VoterFullAndNonVoterDescriptors()) != len(repls.Descriptors()) {
 		// The caller removed all the learners and left the joint config, so there
@@ -3218,16 +3295,15 @@ func (r *Replica) relocateOne(
 			`range %s was either in a joint configuration or had learner replicas: %v`, desc, desc.Replicas())
 	}
 
-	confReader, err := r.store.GetConfReader(ctx)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "can't relocate range")
-	}
-	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+	allocator := options.Allocator()
+	storePool := allocator.StorePool
+
+	conf, err := options.SpanConfig(ctx, desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	storeList, _, _ := r.store.cfg.StorePool.GetStoreList(storepool.StoreFilterNone)
+	storeList, _, _ := storePool.GetStoreList(storepool.StoreFilterNone)
 	storeMap := storeList.ToMap()
 
 	// Compute which replica to add and/or remove, respectively. We then ask the
@@ -3268,14 +3344,14 @@ func (r *Replica) relocateOne(
 		}
 		candidateStoreList := storepool.MakeStoreList(candidateDescs)
 
-		additionTarget, _ = r.store.allocator.AllocateTargetFromList(
+		additionTarget, _ = allocator.AllocateTargetFromList(
 			ctx,
 			candidateStoreList,
 			conf,
 			existingVoters,
 			existingNonVoters,
-			r.store.allocator.ScorerOptions(ctx),
-			r.store.allocator.NewBestCandidateSelector(),
+			allocator.ScorerOptions(ctx),
+			allocator.NewBestCandidateSelector(),
 			// NB: Allow the allocator to return target stores that might be on the
 			// same node as an existing replica. This is to ensure that relocations
 			// that require "lateral" movement of replicas within a node can succeed.
@@ -3338,14 +3414,14 @@ func (r *Replica) relocateOne(
 		// (s1,s2,s3,s4) which is a reasonable request; that replica set is
 		// overreplicated. If we asked it instead to remove s3 from (s1,s2,s3) it
 		// may not want to do that due to constraints.
-		targetStore, _, err := r.store.allocator.RemoveTarget(
+		targetStore, _, err := allocator.RemoveTarget(
 			ctx,
 			conf,
-			r.store.allocator.StoreListForTargets(args.targetsToRemove()),
+			allocator.StoreListForTargets(args.targetsToRemove()),
 			existingVoters,
 			existingNonVoters,
 			args.targetType,
-			r.store.allocator.ScorerOptions(ctx),
+			allocator.ScorerOptions(ctx),
 		)
 		if err != nil {
 			return nil, nil, errors.Wrapf(
@@ -3362,17 +3438,12 @@ func (r *Replica) relocateOne(
 		// This is not possible if there is no other replica available at that
 		// point, i.e. if the existing descriptor is a single replica that's
 		// being replaced.
-		var b kv.Batch
-		liReq := &roachpb.LeaseInfoRequest{}
-		liReq.Key = desc.StartKey.AsRawKey()
-		b.AddRawRequest(liReq)
-		if err := r.store.DB().Run(ctx, &b); err != nil {
+		curLeaseholder, err := options.Leaseholder(ctx, desc.StartKey)
+		if err != nil {
 			return nil, nil, errors.Wrap(err, "looking up lease")
 		}
-		// Determines whether we can remove the leaseholder without first
-		// transferring the lease away.
+
 		lhRemovalAllowed = len(args.votersToAdd) > 0
-		curLeaseholder := b.RawResponse().Responses[0].GetLeaseInfo().Lease.Replica
 		shouldRemove = (curLeaseholder.StoreID != removalTarget.StoreID) || lhRemovalAllowed
 		if args.targetType == allocatorimpl.VoterTarget {
 			// If the voter being removed is about to be added as a non-voter, then we

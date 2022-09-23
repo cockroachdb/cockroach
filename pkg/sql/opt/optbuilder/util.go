@@ -191,9 +191,13 @@ func (b *Builder) expandStarAndResolveType(
 // a synthesized column "x_incr".
 //
 // scope  The scope is passed in so it can can be updated with the newly bound
-//        variable.
+//
+//	variable.
+//
 // name   This is the name for the new column (e.g., if specified with
-//        the AS keyword).
+//
+//	the AS keyword).
+//
 // typ    The type of the column.
 // expr   The expression this column refers to (if any).
 // scalar The scalar expression associated with this column (if any).
@@ -225,15 +229,15 @@ func (b *Builder) populateSynthesizedColumn(col *scopeColumn, scalar opt.ScalarE
 // projectColumn projects src by copying its column ID to dst. projectColumn
 // also copies src.name to dst if an alias is not already set in dst. No other
 // fields are copied, for the following reasons:
-// - We don't copy group, as dst becomes a pass-through column in the new
-//   scope. dst already has group=0, so keep it as-is.
-// - We don't copy hidden, because projecting a column makes it visible.
-//   dst already has hidden=false, so keep it as-is.
-// - We don't copy table, since the table becomes anonymous in the new scope.
-// - We don't copy descending, since we don't want to overwrite dst.descending
-//   if dst is an ORDER BY column.
-// - expr, exprStr and typ in dst already correspond to the expression and type
-//   of the src column.
+//   - We don't copy group, as dst becomes a pass-through column in the new
+//     scope. dst already has group=0, so keep it as-is.
+//   - We don't copy hidden, because projecting a column makes it visible.
+//     dst already has hidden=false, so keep it as-is.
+//   - We don't copy table, since the table becomes anonymous in the new scope.
+//   - We don't copy descending, since we don't want to overwrite dst.descending
+//     if dst is an ORDER BY column.
+//   - expr, exprStr and typ in dst already correspond to the expression and type
+//     of the src column.
 func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
 	if dst.name.IsAnonymous() {
 		dst.name = src.name
@@ -279,7 +283,9 @@ func (b *Builder) synthesizeResultColumns(scope *scope, cols colinfo.ResultColum
 // colIndex takes an expression that refers to a column using an integer,
 // verifies it refers to a valid target in the SELECT list, and returns the
 // corresponding column index. For example:
-//    SELECT a from T ORDER by 1
+//
+//	SELECT a from T ORDER by 1
+//
 // Here "1" refers to the first item in the SELECT list, "a". The returned
 // index is 0.
 func colIndex(numOriginalCols int, expr tree.Expr, context string) int {

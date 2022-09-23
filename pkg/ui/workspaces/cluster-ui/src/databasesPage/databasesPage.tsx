@@ -13,6 +13,7 @@ import { Link, RouteComponentProps } from "react-router-dom";
 import { Tooltip } from "antd";
 import "antd/lib/tooltip/style";
 import classNames from "classnames/bind";
+import classnames from "classnames/bind";
 
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
@@ -21,8 +22,8 @@ import { BooleanSetting } from "src/settings/booleanSetting";
 import {
   ColumnDescriptor,
   ISortedTablePagination,
-  SortSetting,
   SortedTable,
+  SortSetting,
 } from "src/sortedtable";
 import * as format from "src/util/format";
 
@@ -33,7 +34,6 @@ import {
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
 import { syncHistory, tableStatsClusterSetting } from "src/util";
-import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "../icon";
 
@@ -284,7 +284,7 @@ export class DatabasesPage extends React.Component<
           placement="bottom"
           title="The total number of ranges across all tables in the database."
         >
-          Range count
+          Range Count
         </Tooltip>
       ),
       cell: database => database.rangeCount,
@@ -296,9 +296,9 @@ export class DatabasesPage extends React.Component<
       title: (
         <Tooltip
           placement="bottom"
-          title="Regions/nodes on which the database tables are located."
+          title="Regions/Nodes on which the database tables are located."
         >
-          Regions/nodes
+          Regions/Nodes
         </Tooltip>
       ),
       cell: database => database.nodesByRegionString || "None",
@@ -313,7 +313,7 @@ export class DatabasesPage extends React.Component<
           placement="bottom"
           title="Index recommendations will appear if the system detects improper index usage, such as the occurrence of unused indexes. Following index recommendations may help improve query performance."
         >
-          Index recommendations
+          Index Recommendations
         </Tooltip>
       ),
       cell: this.renderIndexRecommendations,

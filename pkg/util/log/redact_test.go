@@ -18,10 +18,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const startRedactable = "‹"
@@ -87,6 +91,54 @@ func TestRedactedLogOutput(t *testing.T) {
 	}
 	if !contains("test4 "+startRedactable+"x"+escapeMark+"hello"+escapeMark+"y"+endRedactable+" end", t) {
 		t.Errorf("expected escape mark, got %q", contents())
+	}
+}
+
+func TestSafeManaged(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+	tests := []struct {
+		name                          string
+		arg                           interface{}
+		expected                      redact.RedactableString
+		redactionPolicyManagedEnabled bool
+	}{
+		{
+			name:                          "redacts when not in redaction policy managed mode",
+			arg:                           "some value",
+			expected:                      redact.Sprint("some value"),
+			redactionPolicyManagedEnabled: false,
+		},
+		{
+			name:                          "marks safe when in redaction policy managed mode",
+			arg:                           "some value",
+			expected:                      redact.Sprint(redact.Safe("some value")),
+			redactionPolicyManagedEnabled: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Cleanup(func() {
+				envutil.ClearEnvCache()
+			})
+
+			t.Setenv(redactionPolicyManagedEnvVar, fmt.Sprint(tc.redactionPolicyManagedEnabled))
+
+			TestingResetActive()
+			cfg := logconfig.DefaultConfig()
+			if err := cfg.Validate(&s.logDir); err != nil {
+				t.Fatal(err)
+			}
+			cleanupFn, err := ApplyConfig(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanupFn()
+
+			require.Equal(t, logging.hasManagedRedactionPolicy(), tc.redactionPolicyManagedEnabled)
+			require.Equal(t, tc.expected, redact.Sprint(SafeManaged(tc.arg)))
+		})
 	}
 }
 

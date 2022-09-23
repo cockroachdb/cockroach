@@ -20,7 +20,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_DROPPED),
-			to(scpb.Status_OFFLINE,
+			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.Database) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
@@ -28,18 +28,17 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Database) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
-						DescID: this.DatabaseID,
+						DescriptorID: this.DatabaseID,
 					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_OFFLINE,
-				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.MarkDescriptorAsOffline {
-					return &scop.MarkDescriptorAsOffline{
-						DescID: this.DatabaseID,
-						Reason: statementForDropJob(this, md).Statement,
+			to(scpb.Status_TXN_DROPPED,
+				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.MarkDescriptorAsSyntheticallyDropped {
+					return &scop.MarkDescriptorAsSyntheticallyDropped{
+						DescriptorID: this.DatabaseID,
 					}
 				}),
 			),
@@ -47,7 +46,7 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.Database) *scop.MarkDescriptorAsDropped {
 					return &scop.MarkDescriptorAsDropped{
-						DescID: this.DatabaseID,
+						DescriptorID: this.DatabaseID,
 					}
 				}),
 			),
@@ -55,8 +54,8 @@ func init() {
 				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.CreateGcJobForDatabase {
-					return &scop.CreateGcJobForDatabase{
+				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.CreateGCJobForDatabase {
+					return &scop.CreateGCJobForDatabase{
 						DatabaseID:          this.DatabaseID,
 						StatementForDropJob: statementForDropJob(this, md),
 					}

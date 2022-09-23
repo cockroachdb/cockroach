@@ -358,7 +358,7 @@ SELECT
   typdefaultbin
 FROM pg_type WHERE typname = 'regression_66576'
 ----
-regression_66576  4101115737  c  C  false  0  -1  0  -1  NULL
+regression_66576  105  c  C  false  0  -1  0  -1  NULL
 
 query T
 SELECT reltype FROM pg_class WHERE relname = 'regression_65576'

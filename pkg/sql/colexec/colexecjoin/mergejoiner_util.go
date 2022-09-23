@@ -82,19 +82,23 @@ func getGroupsBufferCapacity(size int) int {
 // Since we have a circular buffer, it is possible for groups to wrap when
 // capacity is reached. Consider an example when size = 3 and startIdx = 6 when
 // maximum number of groups is present:
-//   buffer = [1, 2, 3, 4, 5, x, 0]
-//  (integers denote different groups and 'x' stands for a garbage).
+//
+//	 buffer = [1, 2, 3, 4, 5, x, 0]
+//	(integers denote different groups and 'x' stands for a garbage).
+//
 // When getGroups() is called, for ease of usage we need to return the buffer
 // "flattened out", and in order to reduce allocation, we actually reserve
 // 4*size. In the example above we will copy the buffer as:
-//   buffer = [1, 2, 3, 4, 5, x, 0, 1, 2, 3, 4, 5]
+//
+//	buffer = [1, 2, 3, 4, 5, x, 0, 1, 2, 3, 4, 5]
+//
 // and will return buffer[6:12] when getGroups is called.
 // The calculations for why 4*size is sufficient:
-// - the largest position in which the first group can be placed is 2*size
-//   (capacity field enforces that)
-// - the largest number of groups to copy from the "physical" start of the
-//   buffer is 2*size-1
-// - adding those two numbers we arrive at 4*size.
+//   - the largest position in which the first group can be placed is 2*size
+//     (capacity field enforces that)
+//   - the largest number of groups to copy from the "physical" start of the
+//     buffer is 2*size-1
+//   - adding those two numbers we arrive at 4*size.
 func getGroupsSlicesLen(size int) int {
 	return 4 * size
 }

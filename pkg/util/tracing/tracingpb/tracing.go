@@ -12,5 +12,5 @@ package tracingpb
 
 // Empty returns true if t does not have any tracing info in it.
 func (t *TraceInfo) Empty() bool {
-	return t.TraceID == 0
+	return t == nil || t.TraceID == 0
 }

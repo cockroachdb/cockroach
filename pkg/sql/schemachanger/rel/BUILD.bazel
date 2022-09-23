@@ -37,6 +37,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/iterutil",
         "//pkg/util/syncutil",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_btree//:btree",
         "@in_gopkg_yaml_v2//:yaml_v2",
@@ -53,6 +54,7 @@ go_test(
         "rel_internal_test.go",
         "rel_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":rel"],
     deps = [

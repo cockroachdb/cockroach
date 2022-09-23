@@ -21,7 +21,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_DROPPED),
-			to(scpb.Status_OFFLINE,
+			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.Sequence) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
@@ -29,17 +29,16 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Sequence) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
-						DescID: this.SequenceID,
+						DescriptorID: this.SequenceID,
 					}
 				}),
 			),
 		),
 		toAbsent(scpb.Status_PUBLIC,
-			to(scpb.Status_OFFLINE,
-				emit(func(this *scpb.Sequence, md *targetsWithElementMap) *scop.MarkDescriptorAsOffline {
-					return &scop.MarkDescriptorAsOffline{
-						DescID: this.SequenceID,
-						Reason: statementForDropJob(this, md).Statement,
+			to(scpb.Status_TXN_DROPPED,
+				emit(func(this *scpb.Sequence, md *targetsWithElementMap) *scop.MarkDescriptorAsSyntheticallyDropped {
+					return &scop.MarkDescriptorAsSyntheticallyDropped{
+						DescriptorID: this.SequenceID,
 					}
 				}),
 			),
@@ -47,7 +46,7 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.Sequence) *scop.MarkDescriptorAsDropped {
 					return &scop.MarkDescriptorAsDropped{
-						DescID: this.SequenceID,
+						DescriptorID: this.SequenceID,
 					}
 				}),
 				emit(func(this *scpb.Sequence) *scop.RemoveAllTableComments {
@@ -60,8 +59,8 @@ func init() {
 				emit(func(this *scpb.Sequence, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Sequence, md *targetsWithElementMap) *scop.CreateGcJobForTable {
-					return &scop.CreateGcJobForTable{
+				emit(func(this *scpb.Sequence, md *targetsWithElementMap) *scop.CreateGCJobForTable {
+					return &scop.CreateGCJobForTable{
 						TableID:             this.SequenceID,
 						StatementForDropJob: statementForDropJob(this, md),
 					}

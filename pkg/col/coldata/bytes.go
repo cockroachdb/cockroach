@@ -29,18 +29,18 @@ import (
 //
 // If the value is inlined, then the layout of element is used as follows:
 //
-//            24-byte header | 6-byte padding
-//   element: .............................. | length | true
-//   Bytes.buffer: N/A
+//	         24-byte header | 6-byte padding
+//	element: .............................. | length | true
+//	Bytes.buffer: N/A
 //
 // where 30 dots describe the inlinable space followed by a single byte for the
 // length followed by a boolean 'true' indicating an inlined value.
 //
 // If the value is non-inlined, then the layout of element is used as follows:
 //
-//                                             padding
-//   element: .offset. | ..len... | ..cap... | xxxxxx | x | false
-//   Bytes.buffer: xxxxxxxx | offset .... | xxxxxxxx
+//	                                          padding
+//	element: .offset. | ..len... | ..cap... | xxxxxx | x | false
+//	Bytes.buffer: xxxxxxxx | offset .... | xxxxxxxx
 //
 // where first 24 bytes contain our custom "header" of a byte slice that is
 // backed by Bytes.buffer. The following 7 bytes (the padding and the
@@ -87,6 +87,7 @@ const BytesMaxInlineLength = int(unsafe.Offsetof(element{}.inlinedLength))
 
 // inlinedSlice returns 30 bytes of space within e that can be used for storing
 // a value inlined, as a slice.
+//
 //gcassert:inline
 func (e *element) inlinedSlice() []byte {
 	return (*(*[BytesMaxInlineLength]byte)(unsafe.Pointer(&e.header)))[:]
@@ -424,6 +425,7 @@ func (b *Bytes) AppendVal(v []byte) {
 }
 
 // Len returns how many []byte values the receiver contains.
+//
 //gcassert:inline
 func (b *Bytes) Len() int {
 	return len(b.elements)
@@ -455,6 +457,7 @@ func (b *Bytes) ProportionalSize(n int64) int64 {
 
 // ElemSize returns the size in bytes of the []byte elem at the given index.
 // Panics if passed an invalid element.
+//
 //gcassert:inline
 func (b *Bytes) ElemSize(idx int) int64 {
 	if b.elements[idx].inlined {
@@ -473,7 +476,6 @@ func (b *Bytes) ElemSize(idx int) int64 {
 //   - If abbr[i] == abbr[j], it is unknown if b.Get(i) is greater than, less
 //     than, or equal to b.Get(j). A full comparison of all bytes in each is
 //     required.
-//
 func (b *Bytes) Abbreviated() []uint64 {
 	r := make([]uint64, b.Len())
 	for i := range r {
@@ -487,15 +489,14 @@ func (b *Bytes) Abbreviated() []uint64 {
 // uint64. If the slice has less than 8 bytes, the value returned is the same as
 // if the slice was filled to 8 bytes with zero value bytes. For example:
 //
-//   abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
-//     => 1
+//	abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+//	  => 1
 //
-//   abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00})
-//     => 256
+//	abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00})
+//	  => 256
 //
-//   abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
-//     => 256
-//
+//	abbreviate([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+//	  => 256
 func abbreviate(bs []byte) uint64 {
 	if len(bs) >= 8 {
 		return binary.BigEndian.Uint64(bs)
@@ -517,6 +518,7 @@ var zeroElements = make([]element, MaxBatchSize)
 // Namely, this allows us to remove all "holes" (unused space) in b.buffer which
 // can occur when an old non-inlined element is overwritten by a new element
 // that is either fully-inlined or non-inlined but larger.
+//
 //gcassert:inline
 func (b *Bytes) Reset() {
 	if b.isWindow {

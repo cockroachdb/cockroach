@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -129,17 +131,29 @@ func SetAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 
 // maybeUseBuildWithEnabledAssertions stages the cockroach-short binary with
 // enabled assertions with eaProb probability if that binary is available,
-// otherwise stages the regular cockroach binary.
+// otherwise stages the regular cockroach binary, and starts the cluster.
 func maybeUseBuildWithEnabledAssertions(
 	ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand, eaProb float64,
 ) {
 	if rng.Float64() < eaProb {
 		// Check whether the cockroach-short binary is available.
 		if t.CockroachShort() != "" {
-			t.Status("using cockroach-short binary compiled with --crdb_test build tag")
+			randomSeed := rng.Int63()
+			t.Status(
+				"using cockroach-short binary compiled with --crdb_test "+
+					"build tag and COCKROACH_RANDOM_SEED=", randomSeed,
+			)
 			c.Put(ctx, t.CockroachShort(), "./cockroach")
+			// We need to ensure that all nodes in the cluster start with the
+			// same random seed (if not, some assumptions can be violated - for
+			// example that coldata.BatchSize() values are the same on all
+			// nodes).
+			settings := install.MakeClusterSettings()
+			settings.Env = append(settings.Env, fmt.Sprintf("COCKROACH_RANDOM_SEED=%d", randomSeed))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 			return
 		}
 	}
 	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 }

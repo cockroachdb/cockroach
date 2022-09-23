@@ -83,7 +83,7 @@ func TestKeyRewriter(t *testing.T) {
 	t.Run("normal", func(t *testing.T) {
 		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
 			systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
-		newKey, ok, err := kr.RewriteKey(key)
+		newKey, ok, err := kr.RewriteKey(key, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +102,7 @@ func TestKeyRewriter(t *testing.T) {
 	t.Run("prefix end", func(t *testing.T) {
 		key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
 			systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())).PrefixEnd()
-		newKey, ok, err := kr.RewriteKey(key)
+		newKey, ok, err := kr.RewriteKey(key, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -131,7 +131,7 @@ func TestKeyRewriter(t *testing.T) {
 		}
 
 		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
-		newKey, ok, err := newKr.RewriteKey(key)
+		newKey, ok, err := newKr.RewriteKey(key, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -147,6 +147,40 @@ func TestKeyRewriter(t *testing.T) {
 		}
 	})
 
+	t.Run("importing", func(t *testing.T) {
+
+		// Create a new key rewriter with a table descriptor undergoing an in-progress import.
+		desc.ID = oldID + 20
+		desc.ImportStartWallTime = 2
+		newKr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, []execinfrapb.TableRekey{
+			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, desc.TableDesc())},
+		}, nil /* tenantRekeys */, false /* restoreTenantFromStream */)
+		require.NoError(t, err)
+
+		key := rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec,
+			systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
+
+		// If the passed in walltime is at or above the ImportStartWalltime, an error should return
+		_, _, err = newKr.RewriteKey(key, 2)
+		require.Error(t, err, ErrImportingKeyError.Error())
+
+		// Else, the key should get encoded normally.
+		newKey, ok, err := newKr.RewriteKey(key, 1)
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			t.Fatal("expected rewrite")
+		}
+		_, id, err := encoding.DecodeUvarintAscending(newKey)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if descpb.ID(id) != oldID+20 {
+			t.Fatalf("got %d expected %d", id, newID)
+		}
+	})
 	systemTenant := roachpb.SystemTenantID
 	tenant3 := roachpb.MakeTenantID(3)
 	tenant4 := roachpb.MakeTenantID(4)
@@ -162,7 +196,7 @@ func TestKeyRewriter(t *testing.T) {
 		require.NoError(t, err)
 
 		key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
-		newKey, ok, err := newKr.RewriteKey(key)
+		newKey, ok, err := newKr.RewriteKey(key, 0)
 		require.NoError(t, err)
 		if !ok {
 			t.Fatalf("expected rewrite")
@@ -207,7 +241,7 @@ func TestKeyRewriter(t *testing.T) {
 		key := rowenc.MakeIndexKeyPrefix(srcCodec, systemschema.NamespaceTable.GetID(), desc.GetPrimaryIndexID())
 		oldNoTenantKey, oldTenantID, err := keys.DecodeTenantPrefix(key)
 		require.NoError(t, err)
-		newKey, ok, err := newKr.RewriteKey(key)
+		newKey, ok, err := newKr.RewriteKey(key, 0)
 		require.NoError(t, err)
 		if !ok {
 			t.Fatalf("expected rewrite")

@@ -34,6 +34,7 @@ go_test(
         "search_path_test.go",
         "session_data_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":sessiondata"],
     deps = [
         "//pkg/sql/sessiondatapb",

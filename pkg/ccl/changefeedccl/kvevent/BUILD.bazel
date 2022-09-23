@@ -41,6 +41,7 @@ go_test(
         "blocking_buffer_test.go",
         "chunked_event_queue_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":kvevent"],
     deps = [
         "//pkg/jobs/jobspb",
@@ -51,6 +52,8 @@ go_test(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

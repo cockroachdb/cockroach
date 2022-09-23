@@ -89,10 +89,16 @@ func Build(
 		Authorization: els.authorization,
 	}
 	current := make([]scpb.Status, 0, len(bs.output))
+	version := dependencies.ClusterSettings().Version.ActiveVersion(ctx)
 	for _, e := range bs.output {
 		if e.metadata.Size() == 0 {
 			// Exclude targets which weren't explicitly set.
 			// Explicitly-set targets have non-zero values in the target metadata.
+			continue
+		}
+		// Exclude targets which are not yet usable in the currently active
+		// cluster version.
+		if !version.IsActive(screl.MinVersion(e.element)) {
 			continue
 		}
 		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.target, e.element, &e.metadata))

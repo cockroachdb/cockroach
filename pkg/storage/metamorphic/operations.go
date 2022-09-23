@@ -803,10 +803,10 @@ func (r restartOp) run(ctx context.Context) string {
 // List of operation generators, where each operation is defined as one instance of opGenerator.
 //
 // TODO(itsbilal): Add more missing MVCC operations, such as:
-//  - MVCCBlindPut
-//  - MVCCMerge
-//  - MVCCIncrement
-//  - and any others that would be important to test.
+//   - MVCCBlindPut
+//   - MVCCMerge
+//   - MVCCIncrement
+//   - and any others that would be important to test.
 var opGenerators = []opGenerator{
 	{
 		name: "mvcc_inconsistent_get",

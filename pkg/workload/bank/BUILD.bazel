@@ -26,6 +26,7 @@ go_test(
         "bank_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":bank"],
     deps = [
         "//pkg/base",

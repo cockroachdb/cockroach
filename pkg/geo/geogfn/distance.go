@@ -187,9 +187,9 @@ func (c *s2GeodistEdgeCrosser) ChainCrossing(p geodist.Point) (bool, geodist.Poi
 // PostGIS evaluates the distance between spheroid regions by computing the min of
 // the pair-wise distance between the cross-product of the regions in A and the regions
 // in B, where the pair-wise distance is computed as:
-// * Find the two closest points between the pairs of regions using the sphere
-//   for distance calculations.
-// * Compute the spheroid distance between the two closest points.
+//   - Find the two closest points between the pairs of regions using the sphere
+//     for distance calculations.
+//   - Compute the spheroid distance between the two closest points.
 //
 // This is technically incorrect, since it is possible that the two closest points on
 // the spheroid are different than the two closest points on the sphere.

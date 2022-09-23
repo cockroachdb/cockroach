@@ -3,13 +3,18 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "logtestutils",
-    srcs = ["log_test_utils.go"],
+    srcs = [
+        "log_test_utils.go",
+        "telemetry_logging_test_utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logtestutils",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/execstats",
         "//pkg/util/log",
         "//pkg/util/log/channel",
         "//pkg/util/log/logconfig",
+        "//pkg/util/syncutil",
     ],
 )
 

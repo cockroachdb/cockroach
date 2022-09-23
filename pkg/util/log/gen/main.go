@@ -264,6 +264,20 @@ type ChannelLogger interface {
   // logging is currently redirected to a file. Arguments are handled in
   // the manner of fmt.Printf.
   Shoutf(ctx context.Context, sev Severity, format string, args ...interface{})
+
+  // VEvent either logs a message to the channel (which also outputs to the
+  // active trace or event log) or to the trace/event log alone, depending on
+  // whether the specified verbosity level is active.
+  VEvent(ctx context.Context, level Level, msg string)
+
+  // VEventf either logs a message to the channel (which also outputs to the
+  // active trace or event log) or to the trace/event log alone, depending on
+  // whether the specified verbosity level is active.
+  VEventf(ctx context.Context, level Level, format string, args ...interface{})
+
+  // VEventfDepth performs the same as VEventf but checks the verbosity level
+  // at the given depth in the call stack.
+  VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{})
 }
 
 {{$sevs := .Severities}}
@@ -401,6 +415,29 @@ func (logger{{.Name}}) Shout(ctx context.Context, sev Severity, msg string) {
 {{.Comment -}}
 func (logger{{.Name}}) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
   shoutfDepth(ctx, 1, sev, channel.{{.NAME}}, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+{{.Comment -}}
+func (logger{{.Name}}) VEvent(ctx context.Context, level Level, msg string) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.{{.NAME}}, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace or event log) or to the trace/event log alone, depending on
+// whether the specified verbosity level is active.
+{{.Comment -}}
+func (logger{{.Name}}) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.{{.NAME}}, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+{{.Comment -}}
+func (logger{{.Name}}) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.{{.NAME}}, format, args...)
 }
 
 {{if .NAME|eq "DEV"}}

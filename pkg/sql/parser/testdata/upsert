@@ -43,7 +43,7 @@ UPSERT INTO a VALUES (1, 2), (3, 4)
 ----
 UPSERT INTO a VALUES (1, 2), (3, 4)
 UPSERT INTO a VALUES ((1), (2)), ((3), (4)) -- fully parenthesized
-UPSERT INTO a VALUES (_, _), (__more1__) -- literals removed
+UPSERT INTO a VALUES (_, _), (__more1_10__) -- literals removed
 UPSERT INTO _ VALUES (1, 2), (3, 4) -- identifiers removed
 
 parse

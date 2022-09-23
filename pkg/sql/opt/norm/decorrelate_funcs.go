@@ -122,14 +122,13 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 // subqueries. Any found queries are hoisted into LeftJoinApply or
 // InnerJoinApply operators, depending on subquery cardinality:
 //
-//   SELECT * FROM xy WHERE (SELECT u FROM uv WHERE u=x LIMIT 1) IS NULL
-//   =>
-//   SELECT xy.*
-//   FROM xy
-//   LEFT JOIN LATERAL (SELECT u FROM uv WHERE u=x LIMIT 1)
-//   ON True
-//   WHERE u IS NULL
-//
+//	SELECT * FROM xy WHERE (SELECT u FROM uv WHERE u=x LIMIT 1) IS NULL
+//	=>
+//	SELECT xy.*
+//	FROM xy
+//	LEFT JOIN LATERAL (SELECT u FROM uv WHERE u=x LIMIT 1)
+//	ON True
+//	WHERE u IS NULL
 func (c *CustomFuncs) HoistSelectSubquery(
 	input memo.RelExpr, filters memo.FiltersExpr,
 ) memo.RelExpr {
@@ -157,13 +156,12 @@ func (c *CustomFuncs) HoistSelectSubquery(
 // correlated subqueries. Any found queries are hoisted into LeftJoinApply
 // or InnerJoinApply operators, depending on subquery cardinality:
 //
-//   SELECT (SELECT max(u) FROM uv WHERE u=x) AS max FROM xy
-//   =>
-//   SELECT max
-//   FROM xy
-//   INNER JOIN LATERAL (SELECT max(u) FROM uv WHERE u=x)
-//   ON True
-//
+//	SELECT (SELECT max(u) FROM uv WHERE u=x) AS max FROM xy
+//	=>
+//	SELECT max
+//	FROM xy
+//	INNER JOIN LATERAL (SELECT max(u) FROM uv WHERE u=x)
+//	ON True
 func (c *CustomFuncs) HoistProjectSubquery(
 	input memo.RelExpr, projections memo.ProjectionsExpr, passthrough opt.ColSet,
 ) memo.RelExpr {
@@ -188,22 +186,21 @@ func (c *CustomFuncs) HoistProjectSubquery(
 // subqueries. Any found queries are hoisted into LeftJoinApply or
 // InnerJoinApply operators, depending on subquery cardinality:
 //
-//   SELECT y, z
-//   FROM xy
-//   FULL JOIN yz
-//   ON (SELECT u FROM uv WHERE u=x LIMIT 1) IS NULL
-//   =>
-//   SELECT y, z
-//   FROM xy
-//   FULL JOIN LATERAL
-//   (
-//     SELECT *
-//     FROM yz
-//     LEFT JOIN LATERAL (SELECT u FROM uv WHERE u=x LIMIT 1)
-//     ON True
-//   )
-//   ON u IS NULL
-//
+//	SELECT y, z
+//	FROM xy
+//	FULL JOIN yz
+//	ON (SELECT u FROM uv WHERE u=x LIMIT 1) IS NULL
+//	=>
+//	SELECT y, z
+//	FROM xy
+//	FULL JOIN LATERAL
+//	(
+//	  SELECT *
+//	  FROM yz
+//	  LEFT JOIN LATERAL (SELECT u FROM uv WHERE u=x LIMIT 1)
+//	  ON True
+//	)
+//	ON u IS NULL
 func (c *CustomFuncs) HoistJoinSubquery(
 	op opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr, private *memo.JoinPrivate,
 ) memo.RelExpr {
@@ -232,18 +229,18 @@ func (c *CustomFuncs) HoistJoinSubquery(
 // subqueries. Any found queries are hoisted into LeftJoinApply or
 // InnerJoinApply operators, depending on subquery cardinality:
 //
-//   SELECT (VALUES (SELECT u FROM uv WHERE u=x LIMIT 1)) FROM xy
-//   =>
-//   SELECT
-//   (
-//     SELECT vals.*
-//     FROM (VALUES ())
-//     LEFT JOIN LATERAL (SELECT u FROM uv WHERE u=x LIMIT 1)
-//     ON True
-//     INNER JOIN LATERAL (VALUES (u)) vals
-//     ON True
-//   )
-//   FROM xy
+//	SELECT (VALUES (SELECT u FROM uv WHERE u=x LIMIT 1)) FROM xy
+//	=>
+//	SELECT
+//	(
+//	  SELECT vals.*
+//	  FROM (VALUES ())
+//	  LEFT JOIN LATERAL (SELECT u FROM uv WHERE u=x LIMIT 1)
+//	  ON True
+//	  INNER JOIN LATERAL (VALUES (u)) vals
+//	  ON True
+//	)
+//	FROM xy
 //
 // The dummy VALUES clause with a singleton empty row is added to the tree in
 // order to use the hoister, which requires an initial input query. While a
@@ -273,25 +270,24 @@ func (c *CustomFuncs) HoistValuesSubquery(
 // correlated subqueries. Any found queries are hoisted into LeftJoinApply or
 // InnerJoinApply operators, depending on subquery cardinality:
 //
-//   SELECT generate_series
-//   FROM xy
-//   INNER JOIN LATERAL ROWS FROM
-//   (
-//     generate_series(1, (SELECT v FROM uv WHERE u=x))
-//   )
-//   =>
-//   SELECT generate_series
-//   FROM xy
-//   ROWS FROM
-//   (
-//     SELECT generate_series
-//     FROM (VALUES ())
-//     LEFT JOIN LATERAL (SELECT v FROM uv WHERE u=x)
-//     ON True
-//     INNER JOIN LATERAL ROWS FROM (generate_series(1, v))
-//     ON True
-//   )
-//
+//	SELECT generate_series
+//	FROM xy
+//	INNER JOIN LATERAL ROWS FROM
+//	(
+//	  generate_series(1, (SELECT v FROM uv WHERE u=x))
+//	)
+//	=>
+//	SELECT generate_series
+//	FROM xy
+//	ROWS FROM
+//	(
+//	  SELECT generate_series
+//	  FROM (VALUES ())
+//	  LEFT JOIN LATERAL (SELECT v FROM uv WHERE u=x)
+//	  ON True
+//	  INNER JOIN LATERAL ROWS FROM (generate_series(1, v))
+//	  ON True
+//	)
 func (c *CustomFuncs) HoistProjectSetSubquery(input memo.RelExpr, zip memo.ZipExpr) memo.RelExpr {
 	newZip := make(memo.ZipExpr, 0, len(zip))
 
@@ -435,11 +431,10 @@ func (c *CustomFuncs) NonKeyCols(in memo.RelExpr) opt.ColSet {
 // sets of aggregate functions to be added to the resulting Aggregations
 // operator, with one set appended to the other, like this:
 //
-//   (Aggregations
-//     [(ConstAgg (Variable 1)) (ConstAgg (Variable 2)) (FirstAgg (Variable 3))]
-//     [1,2,3]
-//   )
-//
+//	(Aggregations
+//	  [(ConstAgg (Variable 1)) (ConstAgg (Variable 2)) (FirstAgg (Variable 3))]
+//	  [1,2,3]
+//	)
 func (c *CustomFuncs) MakeAggCols2(
 	aggOp opt.Operator, cols opt.ColSet, aggOp2 opt.Operator, cols2 opt.ColSet,
 ) memo.AggregationsExpr {
@@ -526,9 +521,9 @@ func (c *CustomFuncs) CanaryColSet(canaryCol opt.ColumnID) opt.ColSet {
 // AggsCanBeDecorrelated returns true if every aggregate satisfies one of the
 // following conditions:
 //
-//   * It is CountRows (because it will be translated into Count),
-//   * It ignores nulls (because nothing extra must be done for it)
-//   * It gives NULL on no input (because this is how we translate non-null
+//   - It is CountRows (because it will be translated into Count),
+//   - It ignores nulls (because nothing extra must be done for it)
+//   - It gives NULL on no input (because this is how we translate non-null
 //     ignoring aggregates)
 //
 // TODO(justin): we can lift the third condition if we have a function that
@@ -769,22 +764,22 @@ func (r *subqueryHoister) input() memo.RelExpr {
 // JoinApply operator to ensure that it has no effect on the cardinality of its
 // input. For example:
 //
-//   SELECT *
-//   FROM xy
-//   WHERE
-//     (SELECT u FROM uv WHERE u=x LIMIT 1) IS NOT NULL
-//     OR EXISTS(SELECT * FROM jk WHERE j=x)
-//   =>
-//   SELECT xy.*
-//   FROM xy
-//   LEFT JOIN LATERAL (SELECT u FROM uv WHERE u=x LIMIT 1)
-//   ON True
-//   INNER JOIN LATERAL
-//   (
-//     SELECT (CONST_AGG(True) IS NOT NULL) AS exists FROM jk WHERE j=x
-//   )
-//   ON True
-//   WHERE u IS NOT NULL OR exists
+//	SELECT *
+//	FROM xy
+//	WHERE
+//	  (SELECT u FROM uv WHERE u=x LIMIT 1) IS NOT NULL
+//	  OR EXISTS(SELECT * FROM jk WHERE j=x)
+//	=>
+//	SELECT xy.*
+//	FROM xy
+//	LEFT JOIN LATERAL (SELECT u FROM uv WHERE u=x LIMIT 1)
+//	ON True
+//	INNER JOIN LATERAL
+//	(
+//	  SELECT (CONST_AGG(True) IS NOT NULL) AS exists FROM jk WHERE j=x
+//	)
+//	ON True
+//	WHERE u IS NOT NULL OR exists
 //
 // The choice of whether to use LeftJoinApply or InnerJoinApply depends on the
 // cardinality of the hoisted subquery. If zero rows can be returned from the
@@ -859,18 +854,18 @@ func (r *subqueryHoister) hoistAll(scalar opt.ScalarExpr) opt.ScalarExpr {
 
 // constructGroupByExists transforms a scalar Exists expression like this:
 //
-//   EXISTS(SELECT * FROM a WHERE a.x=b.x)
+//	EXISTS(SELECT * FROM a WHERE a.x=b.x)
 //
 // into a scalar GroupBy expression that returns a one row, one column relation:
 //
-//   SELECT (CONST_AGG(True) IS NOT NULL) AS exists
-//   FROM (SELECT * FROM a WHERE a.x=b.x)
+//	SELECT (CONST_AGG(True) IS NOT NULL) AS exists
+//	FROM (SELECT * FROM a WHERE a.x=b.x)
 //
 // The expression uses an internally-defined CONST_AGG aggregation function,
 // since it's able to short-circuit on the first non-null it encounters. The
 // above expression is equivalent to:
 //
-//   SELECT COUNT(True) > 0 FROM (SELECT * FROM a WHERE a.x=b.x)
+//	SELECT COUNT(True) > 0 FROM (SELECT * FROM a WHERE a.x=b.x)
 //
 // CONST_AGG (and COUNT) always return exactly one boolean value in the context
 // of a scalar GroupBy expression. Because its operand is always True, the only
@@ -912,23 +907,23 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.RelExpr) memo.Rel
 
 // constructGroupByAny transforms a scalar Any expression like this:
 //
-//   z = ANY(SELECT x FROM xy)
+//	z = ANY(SELECT x FROM xy)
 //
 // into a scalar GroupBy expression that returns a one row, one column relation
 // that is equivalent to this:
 //
-//   SELECT
-//     CASE
-//       WHEN bool_or(notnull) AND z IS NOT Null THEN True
-//       ELSE bool_or(notnull) IS NULL THEN False
-//       ELSE Null
-//     END
-//   FROM
-//   (
-//     SELECT x IS NOT Null AS notnull
-//     FROM xy
-//     WHERE (z=x) IS NOT False
-//   )
+//	SELECT
+//	  CASE
+//	    WHEN bool_or(notnull) AND z IS NOT Null THEN True
+//	    ELSE bool_or(notnull) IS NULL THEN False
+//	    ELSE Null
+//	  END
+//	FROM
+//	(
+//	  SELECT x IS NOT Null AS notnull
+//	  FROM xy
+//	  WHERE (z=x) IS NOT False
+//	)
 //
 // BOOL_OR returns true if any input is true, else false if any input is false,
 // else null. This is a mismatch with ANY, which returns true if any input is
@@ -938,46 +933,46 @@ func (r *subqueryHoister) constructGroupByExists(subquery memo.RelExpr) memo.Rel
 // are difficult to hoist above left joins). The following procedure solves the
 // mismatch between BOOL_OR and ANY, as well as avoids correlated projections:
 //
-//   1. Filter out false comparison rows with an initial filter. The result of
-//      ANY does not change, no matter how many false rows are added or removed.
-//      This step has the effect of mapping a set containing only false
-//      comparison rows to the empty set (which is desirable).
+//  1. Filter out false comparison rows with an initial filter. The result of
+//     ANY does not change, no matter how many false rows are added or removed.
+//     This step has the effect of mapping a set containing only false
+//     comparison rows to the empty set (which is desirable).
 //
-//   2. Step #1 leaves only true and null comparison rows. A null comparison row
-//      occurs when either the left or right comparison operand is null (Any
-//      only allows comparison operators that propagate nulls). Map each null
-//      row to a false row, but only in the case where the right operand is null
-//      (i.e. the operand that came from the subquery). The case where the left
-//      operand is null will be handled later.
+//  2. Step #1 leaves only true and null comparison rows. A null comparison row
+//     occurs when either the left or right comparison operand is null (Any
+//     only allows comparison operators that propagate nulls). Map each null
+//     row to a false row, but only in the case where the right operand is null
+//     (i.e. the operand that came from the subquery). The case where the left
+//     operand is null will be handled later.
 //
-//   3. Use the BOOL_OR aggregation function on the true/false values from step
-//      #2. If there is at least one true value, then BOOL_OR returns true. If
-//      there are no values (the empty set case), then BOOL_OR returns null.
-//      Because of the previous steps, this indicates that the original set
-//      contained only false values (or no values at all).
+//  3. Use the BOOL_OR aggregation function on the true/false values from step
+//     #2. If there is at least one true value, then BOOL_OR returns true. If
+//     there are no values (the empty set case), then BOOL_OR returns null.
+//     Because of the previous steps, this indicates that the original set
+//     contained only false values (or no values at all).
 //
-//   4. A True result from BOOL_OR is ambiguous. It could mean that the
-//      comparison returned true for one of the rows in the group. Or, it could
-//      mean that the left operand was null. The CASE statement ensures that
-//      True is only returned if the left operand was not null.
+//  4. A True result from BOOL_OR is ambiguous. It could mean that the
+//     comparison returned true for one of the rows in the group. Or, it could
+//     mean that the left operand was null. The CASE statement ensures that
+//     True is only returned if the left operand was not null.
 //
-//   5. In addition, the CASE statement maps a null return value to false, and
-//      false to null. This matches ANY behavior.
+//  5. In addition, the CASE statement maps a null return value to false, and
+//     false to null. This matches ANY behavior.
 //
 // The following is a table showing the various interesting cases:
 //
-//         | subquery  | before        | after   | after
-//     z   | x values  | BOOL_OR       | BOOL_OR | CASE
-//   ------+-----------+---------------+---------+-------
-//     1   | (1)       | (true)        | true    | true
-//     1   | (1, null) | (true, false) | true    | true
-//     1   | (1, 2)    | (true)        | true    | true
-//     1   | (null)    | (false)       | false   | null
-//    null | (1)       | (true)        | true    | null
-//    null | (1, null) | (true, false) | true    | null
-//    null | (null)    | (false)       | false   | null
-//     2   | (1)       | (empty)       | null    | false
-//   *any* | (empty)   | (empty)       | null    | false
+//	      | subquery  | before        | after   | after
+//	  z   | x values  | BOOL_OR       | BOOL_OR | CASE
+//	------+-----------+---------------+---------+-------
+//	  1   | (1)       | (true)        | true    | true
+//	  1   | (1, null) | (true, false) | true    | true
+//	  1   | (1, 2)    | (true)        | true    | true
+//	  1   | (null)    | (false)       | false   | null
+//	 null | (1)       | (true)        | true    | null
+//	 null | (1, null) | (true, false) | true    | null
+//	 null | (null)    | (false)       | false   | null
+//	  2   | (1)       | (empty)       | null    | false
+//	*any* | (empty)   | (empty)       | null    | false
 //
 // It is important that the set given to BOOL_OR does not contain any null
 // values (the reason for step #2). Null is reserved for use by the

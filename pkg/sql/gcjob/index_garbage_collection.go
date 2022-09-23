@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -44,6 +45,10 @@ func deleteIndexData(
 	// are no longer in use. This is necessary in the case of truncate, where we
 	// schedule a GC Job in the transaction that commits the truncation.
 	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID)
+	if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		handleTableDescriptorDeleted(ctx, parentID, progress)
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -89,6 +94,10 @@ func gcIndexes(
 	// are no longer in use. This is necessary in the case of truncate, where we
 	// schedule a GC Job in the transaction that commits the truncation.
 	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID)
+	if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		handleTableDescriptorDeleted(ctx, parentID, progress)
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -129,10 +138,15 @@ func gcIndexes(
 				ctx, txn, execCfg, descriptors, freshParentTableDesc, []uint32{uint32(index.IndexID)},
 			)
 		}
-		if err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs); err != nil {
+		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)
+		if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+			sqlerrors.IsUndefinedRelationError(err) {
+			handleTableDescriptorDeleted(ctx, parentID, progress)
+			return nil
+		}
+		if err != nil {
 			return errors.Wrapf(err, "removing index %d zone configs", index.IndexID)
 		}
-
 		markIndexGCed(
 			ctx, index.IndexID, progress, jobspb.SchemaChangeGCProgress_CLEARED,
 		)
@@ -214,7 +228,8 @@ func deleteIndexZoneConfigsAfterGC(
 		}
 		err := sql.DescsTxn(ctx, execCfg, removeIndexZoneConfigs)
 		switch {
-		case errors.Is(err, catalog.ErrDescriptorNotFound):
+		case errors.Is(err, catalog.ErrDescriptorNotFound),
+			sqlerrors.IsUndefinedRelationError(err):
 			log.Infof(ctx, "removing index %d zone config from table %d failed: %v",
 				index.IndexID, parentID, err)
 		case err != nil:
@@ -225,4 +240,21 @@ func deleteIndexZoneConfigsAfterGC(
 		)
 	}
 	return nil
+}
+
+// handleTableDescriptorDeleted should be called when logic detects that
+// a table descriptor has been deleted while attempting to GC an index.
+// The function marks in progress that all indexes have been cleared.
+func handleTableDescriptorDeleted(
+	ctx context.Context, parentID descpb.ID, progress *jobspb.SchemaChangeGCProgress,
+) {
+	droppedIndexes := progress.Indexes
+	// If the descriptor has been removed, then we need to assume that the relevant
+	// zone configs and data have been cleaned up by another process.
+	log.Infof(ctx, "descriptor %d dropped, assuming another process has handled GC", parentID)
+	for _, index := range droppedIndexes {
+		markIndexGCed(
+			ctx, index.IndexID, progress, jobspb.SchemaChangeGCProgress_CLEARED,
+		)
+	}
 }

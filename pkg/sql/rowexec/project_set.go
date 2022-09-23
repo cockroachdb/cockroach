@@ -179,10 +179,12 @@ func (ps *projectSetProcessor) nextInputRow() (
 					return nil, nil, err
 				}
 			}
+			// Store the generator before Start so that it'll be closed even if
+			// Start returns an error.
+			ps.gens[i] = gen
 			if err := gen.Start(ps.Ctx, ps.FlowCtx.Txn); err != nil {
 				return nil, nil, err
 			}
-			ps.gens[i] = gen
 		}
 		ps.done[i] = false
 	}
@@ -309,13 +311,18 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) rowenc.EncDa
 }
 
 func (ps *projectSetProcessor) close() {
-	ps.InternalCloseEx(func() {
-		for _, gen := range ps.gens {
-			if gen != nil {
-				gen.Close(ps.Ctx)
-			}
+	if ps.Closed {
+		return
+	}
+	// Close all generator functions before the context is replaced in
+	// InternalClose().
+	for i, gen := range ps.gens {
+		if gen != nil {
+			gen.Close(ps.Ctx)
+			ps.gens[i] = nil
 		}
-	})
+	}
+	ps.InternalClose()
 }
 
 // ConsumerClosed is part of the RowSource interface.

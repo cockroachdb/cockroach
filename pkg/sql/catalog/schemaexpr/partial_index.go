@@ -39,7 +39,6 @@ import (
 //     functions.
 //   - It does not reference a column which is in the process of being added
 //     or removed.
-//
 func ValidatePartialIndexPredicate(
 	ctx context.Context,
 	desc catalog.MutableTableDescriptor,

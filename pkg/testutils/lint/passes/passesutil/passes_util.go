@@ -79,16 +79,15 @@ func HasNolintComment(pass *analysis.Pass, n ast.Node, nolintName string) bool {
 // For example, imagine that n is the *ast.CallExpr on the method foo in the
 // following snippet:
 //
-//  func nonsense() bool {
-//      if v := (g.foo() + 1) > 2; !v {
-//          return true
-//      }
-//      return false
-//  }
+//	func nonsense() bool {
+//	    if v := (g.foo() + 1) > 2; !v {
+//	        return true
+//	    }
+//	    return false
+//	}
 //
 // This function would return all of the nodes up to the `IfStmt` as relevant
 // and would return the `BlockStmt` of the function nonsense as containing.
-//
 func findNodesInBlock(f *ast.File, n ast.Node) (relevant []ast.Node, containing ast.Node) {
 	stack, _ := astutil.PathEnclosingInterval(f, n.Pos(), n.End())
 	// Add all of the children of n to the set of relevant nodes.

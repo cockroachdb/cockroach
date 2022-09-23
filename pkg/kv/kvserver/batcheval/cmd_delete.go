@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
@@ -34,6 +35,16 @@ func Delete(
 	reply.FoundKey, err = storage.MVCCDelete(
 		ctx, readWriter, cArgs.Stats, args.Key, h.Timestamp, cArgs.Now, h.Txn,
 	)
+
+	// If requested, replace point tombstones with range tombstones.
+	if cArgs.EvalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes && err == nil && h.Txn == nil {
+		if err := storage.ReplacePointTombstonesWithRangeTombstones(
+			ctx, spanset.DisableReadWriterAssertions(readWriter),
+			cArgs.Stats, args.Key, args.EndKey); err != nil {
+			return result.Result{}, err
+		}
+	}
+
 	// NB: even if MVCC returns an error, it may still have written an intent
 	// into the batch. This allows callers to consume errors like WriteTooOld
 	// without re-evaluating the batch. This behavior isn't particularly

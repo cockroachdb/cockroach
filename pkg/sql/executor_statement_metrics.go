@@ -106,11 +106,11 @@ func (GuardrailMetrics) MetricStruct() {}
 // recordStatementSummary gathers various details pertaining to the
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
-// - distSQLUsed reports whether the query was distributed.
-// - automaticRetryCount is the count of implicit txn retries
-//   so far.
-// - result is the result set computed by the query/statement.
-// - err is the error encountered, if any.
+//   - distSQLUsed reports whether the query was distributed.
+//   - automaticRetryCount is the count of implicit txn retries
+//     so far.
+//   - result is the result set computed by the query/statement.
+//   - err is the error encountered, if any.
 func (ex *connExecutor) recordStatementSummary(
 	ctx context.Context,
 	planner *planner,
@@ -195,7 +195,7 @@ func (ex *connExecutor) recordStatementSummary(
 		IndexRecommendations: idxRecommendations,
 		Query:                stmt.StmtNoConstants,
 		StartTime:            phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt),
-		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerEndExecStmt),
+		EndTime:              phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).Add(svcLatRaw),
 		FullScan:             fullScan,
 		SessionData:          planner.SessionData(),
 		ExecStats:            queryLevelStats,

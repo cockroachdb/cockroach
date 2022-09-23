@@ -1,0 +1,31 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "generate-bazel-extra_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-bazel-extra",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_alessio_shellescape//:shellescape"],
+)
+
+go_binary(
+    name = "generate-bazel-extra",
+    embed = [":generate-bazel-extra_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "generate-bazel-extra_test",
+    size = "small",
+    srcs = ["main_test.go"],
+    args = ["-test.timeout=55s"],
+    data = glob(["testdata/**"]),
+    embed = [":generate-bazel-extra_lib"],
+    deps = [
+        "//pkg/testutils",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scanner"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 	readline "github.com/knz/go-libedit"
 )
@@ -279,12 +280,10 @@ func (c *cliState) addHistory(line string) {
 		return
 	}
 
-	// ins.AddHistory will push command into memory and try to
-	// persist to disk (if ins's history file is set). err can
-	// be not nil only if it got a IO error while trying to persist.
+	// ins.AddHistory will push command into memory. err can
+	// be not nil only if it got a memory error.
 	if err := c.ins.AddHistory(line); err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "warning: cannot save command-line history: %v\n", err)
-		c.ins.SetAutoSaveHistory("", false)
+		fmt.Fprintf(c.iCtx.stderr, "warning: cannot add entry to history: %v\n", err)
 	}
 }
 
@@ -768,7 +767,7 @@ const unknownTxnStatus = " ?"
 // doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
 func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
-	if !c.hasEditor() {
+	if !c.iCtx.displayPrompt {
 		return nextState
 	}
 
@@ -782,7 +781,9 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 			c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
 		}
 
-		c.ins.SetLeftPrompt(c.continuePrompt)
+		if c.hasEditor() {
+			c.ins.SetLeftPrompt(c.continuePrompt)
+		}
 		return nextState
 	}
 
@@ -848,7 +849,9 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	c.currentPrompt = c.fullPrompt
 
 	// Configure the editor to use the new prompt.
-	c.ins.SetLeftPrompt(c.currentPrompt)
+	if c.hasEditor() {
+		c.ins.SetLeftPrompt(c.currentPrompt)
+	}
 
 	return nextState
 }
@@ -1019,6 +1022,13 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 			fmt.Fprintln(c.iCtx.stdout)
 		}
 	} else {
+		if c.iCtx.displayPrompt {
+			prompt := c.currentPrompt
+			if c.useContinuePrompt {
+				prompt = c.continuePrompt
+			}
+			fmt.Fprint(c.iCtx.stdout, prompt)
+		}
 		l, err = c.buf.ReadString('\n')
 		// bufio.ReadString() differs from readline.Readline in the handling of
 		// EOF. Readline only returns EOF when there is nothing left to read and
@@ -1143,6 +1153,47 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 	}
 
 	return nextState
+}
+
+func (c *cliState) setupChangefeedOutput() (undo func(), err error) {
+	prevTableFmt := c.sqlExecCtx.TableDisplayFormat
+	prevByteaOutput, err := c.getSessionVarValue("bytea_output")
+	if err != nil {
+		return nil, err
+	}
+	var undoSteps []func()
+	undo = func() {
+		for _, s := range undoSteps {
+			s()
+		}
+	}
+	// The table display format, default for interactive shells,
+	// doesn't work well with changefeeds as it buffers indefinitely.
+	// Newline-delimited JSON doesn't need to buffer and can display
+	// variably-structured data.
+	if prevTableFmt == clisqlexec.TableDisplayTable {
+		c.sqlExecCtx.TableDisplayFormat = clisqlexec.TableDisplayNDJSON
+		undoSteps = append(undoSteps, func() { c.sqlExecCtx.TableDisplayFormat = prevTableFmt })
+	}
+
+	// bytea_output is defined and enforced server-side. Changefeed
+	// record values are output as bytea datums, and escaped output
+	// is much more readable than the default hex.
+	if prevByteaOutput == `hex` {
+		err := c.conn.Exec(context.Background(), `SET SESSION bytea_output=escape`)
+		if err != nil {
+			undo()
+			return nil, err
+		}
+		undoSteps = append(undoSteps, func() {
+			c.exitErr = errors.CombineErrors(
+				c.exitErr, c.conn.Exec(context.Background(), `SET SESSION bytea_output=hex`),
+			)
+		})
+	}
+
+	return undo, nil
+
 }
 
 func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnum {
@@ -1511,7 +1562,7 @@ func (c *cliState) handleConnectInternal(cmd []string) error {
 		if dbName == "" {
 			dbName = currURL.GetDatabase()
 		}
-		fmt.Fprintf(c.iCtx.stdout, "Connection string: %s\n", currURL.ToPQ())
+		fmt.Fprintf(c.iCtx.stdout, "Connection string: %s\n", currURL.ToPQRedacted())
 		fmt.Fprintf(c.iCtx.stdout, "You are connected to database %q as user %q.\n", dbName, currURL.GetUsername())
 		return nil
 
@@ -1767,6 +1818,21 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 // doRunStatements runs all the statements that have been accumulated by
 // concatLines.
 func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
+	if err := c.iCtx.maybeWrapStatement(context.Background(), c.concatLines, c); err != nil {
+		c.exitErr = err
+		if !c.singleStatement {
+			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
+		}
+		if c.iCtx.errExit {
+			return cliStop
+		}
+		return nextState
+	}
+	if c.iCtx.afterRun != nil {
+		defer c.iCtx.afterRun()
+		c.iCtx.afterRun = nil
+	}
+
 	// Once we send something to the server, the txn status may change arbitrarily.
 	// Clear the known state so that further entries do not assume anything.
 	c.lastKnownTxnStatus = " ?"
@@ -2041,7 +2107,10 @@ func (c *cliState) configurePreShellDefaults(
 	// An interactive readline prompter is comparatively slow at
 	// reading input, so we only use it in interactive mode and when
 	// there is also a terminal on stdout.
-	if c.cliCtx.IsInteractive && c.sqlExecCtx.TerminalOutput {
+	canUseEditor := c.cliCtx.IsInteractive && c.sqlExecCtx.TerminalOutput
+	useEditor := canUseEditor && !c.sqlCtx.DisableLineEditor
+	c.iCtx.displayPrompt = canUseEditor
+	if useEditor {
 		// The readline initialization is not placed in
 		// the doStart() method because of the defer.
 		c.ins, c.exitErr = readline.InitFiles("cockroach",
@@ -2073,20 +2142,32 @@ func (c *cliState) configurePreShellDefaults(
 		cleanupFn = func() {}
 	}
 
+	if c.iCtx.displayPrompt {
+		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
+		c.iCtx.customPromptPattern = defaultPromptPattern
+		if c.sqlConnCtx.DebugMode {
+			c.iCtx.customPromptPattern = debugPromptPattern
+		}
+	}
+
 	if c.hasEditor() {
 		// We only enable prompt and history management when the
 		// interactive input prompter is enabled. This saves on churn and
 		// memory when e.g. piping a large SQL script through the
 		// command-line client.
 
-		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
-		c.iCtx.customPromptPattern = defaultPromptPattern
-		if c.sqlConnCtx.DebugMode {
-			c.iCtx.customPromptPattern = debugPromptPattern
-		}
+		// maxHistEntries is the maximum number of entries to
+		// preserve. Note that libedit de-duplicates entries under the
+		// hood. We expect that folk entering SQL in a shell will often
+		// reuse the same queries over time, so we don't expect this limit
+		// to ever be reached in practice, or to be an annoyance to
+		// anyone. We do prefer a limit however (as opposed to no limit at
+		// all), to prevent abnormal situation where a history runs into
+		// megabytes and starts slowing down the shell.
+		const maxHistEntries = 10000
 
 		c.ins.SetCompleter(c)
-		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
+		if err := c.ins.UseHistory(maxHistEntries, true /*dedup*/); err != nil {
 			fmt.Fprintf(c.iCtx.stderr, "warning: cannot enable history: %v\n ", err)
 		} else {
 			homeDir, err := envutil.HomeDir()
@@ -2099,7 +2180,22 @@ func (c *cliState) configurePreShellDefaults(
 					fmt.Fprintf(c.iCtx.stderr, "warning: cannot load the command-line history (file corrupted?): %v\n", err)
 					fmt.Fprintf(c.iCtx.stderr, "note: the history file will be cleared upon first entry\n")
 				}
-				c.ins.SetAutoSaveHistory(histFile, true)
+				// SetAutoSaveHistory() does two things:
+				// - it preserves the name of the history file, for use
+				//   by the final SaveHistory() call.
+				// - it decides whether to save the history to file upon
+				//   every new command.
+				// We disable the latter, since a history file can grow somewhat
+				// large and we don't want the excess I/O latency to be interleaved
+				// in-between every command.
+				c.ins.SetAutoSaveHistory(histFile, false)
+				prevCleanup := cleanupFn
+				cleanupFn = func() {
+					if err := c.ins.SaveHistory(); err != nil {
+						fmt.Fprintf(c.iCtx.stderr, "warning: cannot save command-line history: %v\n", err)
+					}
+					prevCleanup()
+				}
 			}
 		}
 	}
@@ -2114,6 +2210,20 @@ func (c *cliState) configurePreShellDefaults(
 		}
 		c.sqlCtx.SetStmts = nil
 		c.sqlCtx.ExecStmts = append(setStmts, c.sqlCtx.ExecStmts...)
+	}
+
+	if c.sqlExecCtx.TerminalOutput {
+		c.iCtx.addStatementWrapper(statementWrapper{
+			Pattern: createSinklessChangefeed,
+			Wrapper: func(ctx context.Context, statement string, state *cliState) error {
+				undo, err := c.setupChangefeedOutput()
+				if err != nil {
+					return err
+				}
+				c.iCtx.afterRun = undo
+				return nil
+			},
+		})
 	}
 
 	return cleanupFn, nil
@@ -2234,8 +2344,15 @@ func (c *cliState) maybeHandleInterrupt() func() {
 				cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
 				c.iCtx.mu.Unlock()
 				if cancelFn == nil {
-					// No query currently executing; nothing to do.
-					continue
+					// No query currently executing.
+					// Do we have a line editor? If so, do nothing.
+					if c.ins != noLineEditor {
+						continue
+					}
+					// Otherwise, ctrl+c interrupts the shell. We do this
+					// by re-throwing the signal after stopping the signal capture.
+					signal.Reset(os.Interrupt)
+					_ = sysutil.InterruptSelf()
 				}
 
 				fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")

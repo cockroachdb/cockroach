@@ -93,6 +93,9 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 		scanInterval: defaultScanInterval,
 		jitterFn:     p.jitterInterval,
 	}
+	if cfg.Knobs != nil {
+		p.jobMonitor.testingKnobs.updateCheckInterval = cfg.Knobs.JobMonitorUpdateCheckInterval
+	}
 
 	return p
 }
@@ -164,7 +167,8 @@ func (s *PersistedSQLStats) GetNextFlushAt() time.Time {
 
 // nextFlushInterval calculates the wait interval that is between:
 // [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
-//  (1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
+//
+//	(1 + SQLStatsFlushJitter) * SQLStatsFlushInterval)]
 func (s *PersistedSQLStats) nextFlushInterval() time.Duration {
 	baseInterval := SQLStatsFlushInterval.Get(&s.cfg.Settings.SV)
 	waitInterval := s.jitterInterval(baseInterval)

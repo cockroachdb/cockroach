@@ -25,7 +25,7 @@ import {
   InsightsSortedTable,
   makeInsightsColumns,
 } from "src/insightsTable/insightsTable";
-import { populateStatementInsightsFromProblems } from "../utils";
+import { populateStatementInsightsFromProblemAndCauses } from "../utils";
 import {
   InsightNameEnum,
   StatementInsightEvent,
@@ -59,7 +59,7 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
 
   renderContent = (): React.ReactElement => {
     const insightDetailsArr = [this.props.insightEventDetails];
-    populateStatementInsightsFromProblems(insightDetailsArr);
+    populateStatementInsightsFromProblemAndCauses(insightDetailsArr);
     const insightDetails = insightDetailsArr[0];
     const isCockroachCloud = useContext(CockroachCloudContext);
     const insightsColumns = makeInsightsColumns(isCockroachCloud);
@@ -74,9 +74,9 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
 
       insightDetails.insights.forEach(insight => {
         switch (insight.name) {
-          case InsightNameEnum.highContentionTime:
+          case InsightNameEnum.highContention:
             rec = {
-              type: "HighContentionTime",
+              type: "HighContention",
               execution: execDetails,
               details: {
                 duration: insightDetails.elapsedTimeMillis,
@@ -123,6 +123,10 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
           default:
             rec = {
               type: "Unknown",
+              details: {
+                duration: insightDetails.elapsedTimeMillis,
+                description: insight.description,
+              },
             };
             break;
         }

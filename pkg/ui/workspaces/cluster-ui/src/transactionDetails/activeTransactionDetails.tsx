@@ -60,7 +60,6 @@ export const ActiveTxnInsightsLabels = {
   LAST_STATEMENT_EXEC_ID: "Most Recent Statement Execution ID",
   SESSION_ID: "Session ID",
   PRIORITY: "Priority",
-  FULL_SCAN: "Full Scan",
 };
 
 export const RECENT_STATEMENT_NOT_FOUND_MESSAGE =
@@ -128,7 +127,9 @@ export const ActiveTransactionDetails: React.FC<
                     />
                     <SummaryCardItem
                       label={ActiveTxnInsightsLabels.ELAPSED_TIME}
-                      value={Duration(transaction.elapsedTimeMillis * 1e6)}
+                      value={Duration(
+                        transaction.elapsedTime.asMilliseconds() * 1e6,
+                      )}
                     />
                     <SummaryCardItem
                       label={ActiveTxnInsightsLabels.STATUS}
@@ -142,10 +143,6 @@ export const ActiveTransactionDetails: React.FC<
                     <SummaryCardItem
                       label={ActiveTxnInsightsLabels.PRIORITY}
                       value={capitalize(transaction.priority)}
-                    />
-                    <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.FULL_SCAN}
-                      value={transaction.isFullScan.toString()}
                     />
                   </Col>
                 </Row>

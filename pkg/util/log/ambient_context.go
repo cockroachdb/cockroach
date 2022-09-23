@@ -23,33 +23,34 @@ import (
 // server components.
 //
 // Example:
-//   type SomeServer struct {
-//     log.AmbientContext
-//     ...
-//   }
 //
-//   ac := AmbientContext{Tracer: tracing.NewTracer()}
-//   ac.AddLogTag("n", 1)
+//	type SomeServer struct {
+//	  log.AmbientContext
+//	  ...
+//	}
 //
-//   s := &SomeServer{
-//     AmbientContext: ac
-//     ...
-//   }
+//	ac := AmbientContext{Tracer: tracing.NewTracer()}
+//	ac.AddLogTag("n", 1)
 //
-//   // on an operation with context ctx
-//   ctx = s.AnnotateCtx(ctx)
-//   ...
+//	s := &SomeServer{
+//	  AmbientContext: ac
+//	  ...
+//	}
 //
-//   // run a worker
-//   s.stopper.RunWorker(func() {
-//     ctx := s.AnnotateCtx(context.Background())
-//     ...
-//   })
+//	// on an operation with context ctx
+//	ctx = s.AnnotateCtx(ctx)
+//	...
 //
-//   // start a background operation
-//   ctx, span := s.AnnotateCtxWithSpan(context.Background(), "some-op")
-//   defer span.Finish()
-//   ...
+//	// run a worker
+//	s.stopper.RunWorker(func() {
+//	  ctx := s.AnnotateCtx(context.Background())
+//	  ...
+//	})
+//
+//	// start a background operation
+//	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "some-op")
+//	defer span.Finish()
+//	...
 type AmbientContext struct {
 	// Tracer is used to open spans (see AnnotateCtxWithSpan).
 	Tracer *tracing.Tracer
@@ -98,11 +99,11 @@ func (ac *AmbientContext) refreshCache() {
 }
 
 // AnnotateCtx annotates a given context with the information in AmbientContext:
-//  - the EventLog is embedded in the context if the context doesn't already
-//    have an event log or an open trace.
-//  - the log tags in AmbientContext are added (if ctx doesn't already have
-//  them). If the tags already exist, the values from the AmbientContext
-//  overwrite the existing values, but the order of the tags might change.
+//   - the EventLog is embedded in the context if the context doesn't already
+//     have an event log or an open trace.
+//   - the log tags in AmbientContext are added (if ctx doesn't already have
+//     them). If the tags already exist, the values from the AmbientContext
+//     overwrite the existing values, but the order of the tags might change.
 //
 // For background operations, context.Background() should be passed; however, in
 // that case it is strongly recommended to open a span if possible (using

@@ -93,8 +93,8 @@ func (t *entitySet) insert(v interface{}, es entityStore) (int, error) {
 			})
 			attrs = append(attrs, t.schema.attrs[field.attr])
 			return 0, errors.AssertionFailedf(
-				"invalid entity %T has too many attributes: maximum allowed is 8, have at least %v",
-				v, attrs)
+				"invalid entity %T has too many attributes: maximum allowed is %d, have at least %v",
+				v, numAttrs, attrs)
 		}
 	}
 	t.entities[id] = entity(ev)

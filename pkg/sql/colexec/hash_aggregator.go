@@ -271,62 +271,68 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 //
 // Let's go through an example of how this function works: our input stream
 // contains the following tuples:
-//   {-3}, {-3}, {-2}, {-1}, {-4}, {-1}, {-1}, {-4}.
+//
+//	{-3}, {-3}, {-2}, {-1}, {-4}, {-1}, {-1}, {-4}.
+//
 // (Note that negative values are chosen in order to visually distinguish them
 // from the IDs that we'll be working with below.)
 // We will use coldata.BatchSize() == 4 and let's assume that we will use a
 // simple hash function h(i) = i % 2 with two buckets in the hash table.
 //
 // I. we get a batch [-3, -3, -2, -1].
-//   1. a) compute hash buckets: ProbeScratch.Next = [reserved, 1, 1, 0, 1]
-//      b) build 'Next' chains between hash buckets:
-//           ProbeScratch.First = [3, 1] (length of First == # of hash buckets)
-//           ProbeScratch.Next = [reserved, 2, 4, 0, 0]
-//         (Note that we have a hash collision in the bucket with hash 1.)
-//      c) find "equality" buckets (populate HeadID):
-//           ProbeScratch.HeadID = [1, 1, 3, 4]
-//         (This means that tuples at position 0 and 1 are the same, and the
-//          tuple at position HeadID-1 is the head of the equality chain.)
-//   2. divide all tuples into the equality chains based on HeadID:
-//        eqChains[0] = [0, 1]
-//        eqChains[1] = [2]
-//        eqChains[2] = [3]
-//      The special "heads of equality chains" selection vector is [0, 2, 3].
-//   3. we don't have any existing buckets yet, so this step is a noop.
-//   4. each of the three equality chains contains tuples from a separate
-//      aggregation group, so we perform aggregation on each of them in turn.
-//   After we do so, we will have three buckets and the hash table will contain
-//   three tuples (with buckets and tuples corresponding to each other):
+//  1. a) compute hash buckets: ProbeScratch.Next = [reserved, 1, 1, 0, 1]
+//     b) build 'Next' chains between hash buckets:
+//     ProbeScratch.First = [3, 1] (length of First == # of hash buckets)
+//     ProbeScratch.Next = [reserved, 2, 4, 0, 0]
+//     (Note that we have a hash collision in the bucket with hash 1.)
+//     c) find "equality" buckets (populate HeadID):
+//     ProbeScratch.HeadID = [1, 1, 3, 4]
+//     (This means that tuples at position 0 and 1 are the same, and the
+//     tuple at position HeadID-1 is the head of the equality chain.)
+//  2. divide all tuples into the equality chains based on HeadID:
+//     eqChains[0] = [0, 1]
+//     eqChains[1] = [2]
+//     eqChains[2] = [3]
+//     The special "heads of equality chains" selection vector is [0, 2, 3].
+//  3. we don't have any existing buckets yet, so this step is a noop.
+//  4. each of the three equality chains contains tuples from a separate
+//     aggregation group, so we perform aggregation on each of them in turn.
+//     After we do so, we will have three buckets and the hash table will contain
+//     three tuples (with buckets and tuples corresponding to each other):
 //     buckets = [<bucket for -3>, <bucket for -2>, <bucket for -1>]
 //     ht.Vals = [-3, -2, -1].
-//   We have fully processed the first batch.
+//     We have fully processed the first batch.
 //
 // II. we get a batch [-4, -1, -1, -4].
-//   1. a) compute hash buckets: ProbeScratch.Next = [reserved, 0, 1, 1, 0]
-//      b) build 'next' chains between hash buckets:
-//           ProbeScratch.First = [1, 2]
-//           ProbeScratch.Next = [reserved, 4, 3, 0, 0]
-//      c) find "equality" buckets:
-//           ProbeScratch.HeadID = [1, 2, 2, 1]
-//   2. divide all tuples into the equality chains based on HeadID:
-//        eqChains[0] = [0, 3]
-//        eqChains[1] = [1, 2]
-//      The special "heads of equality chains" selection vector is [0, 1].
-//   3. probe that special "heads" selection vector against the tuples already
-//      present in the hash table:
-//        ProbeScratch.HeadID = [0, 3]
-//      Value 0 indicates that the first equality chain doesn't have an
-//      existing bucket, but the second chain does and the ID of its bucket is
-//      HeadID-1 = 2. We aggregate the second equality chain into that bucket.
-//   4. the first equality chain contains tuples from a new aggregation group,
-//      so we create a new bucket for it and perform the aggregation.
-//   After we do so, we will have four buckets and the hash table will contain
-//   four tuples:
+//
+//  1. a) compute hash buckets: ProbeScratch.Next = [reserved, 0, 1, 1, 0]
+//     b) build 'next' chains between hash buckets:
+//     ProbeScratch.First = [1, 2]
+//     ProbeScratch.Next = [reserved, 4, 3, 0, 0]
+//     c) find "equality" buckets:
+//     ProbeScratch.HeadID = [1, 2, 2, 1]
+//
+//  2. divide all tuples into the equality chains based on HeadID:
+//     eqChains[0] = [0, 3]
+//     eqChains[1] = [1, 2]
+//     The special "heads of equality chains" selection vector is [0, 1].
+//
+//  3. probe that special "heads" selection vector against the tuples already
+//     present in the hash table:
+//     ProbeScratch.HeadID = [0, 3]
+//     Value 0 indicates that the first equality chain doesn't have an
+//     existing bucket, but the second chain does and the ID of its bucket is
+//     HeadID-1 = 2. We aggregate the second equality chain into that bucket.
+//
+//  4. the first equality chain contains tuples from a new aggregation group,
+//     so we create a new bucket for it and perform the aggregation.
+//     After we do so, we will have four buckets and the hash table will contain
+//     four tuples:
 //     buckets = [<bucket for -3>, <bucket for -2>, <bucket for -1>, <bucket for -4>]
 //     ht.Vals = [-3, -2, -1, -4].
-//   We have fully processed the second batch.
+//     We have fully processed the second batch.
 //
-//  We have processed the input fully, so we're ready to emit the output.
+//     We have processed the input fully, so we're ready to emit the output.
 //
 // NOTE: b *must* be a non-zero length batch.
 func (op *hashAggregator) onlineAgg(b coldata.Batch) {

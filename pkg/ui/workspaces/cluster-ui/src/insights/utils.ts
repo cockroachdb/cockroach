@@ -10,24 +10,25 @@
 
 import { unset } from "src/util";
 import {
+  StatementInsights,
   TransactionInsightEventDetailsResponse,
   TransactionInsightEventDetailsState,
   TransactionInsightEventsResponse,
   TransactionInsightEventState,
-  StatementInsights,
 } from "src/api/insightsApi";
 import {
   getInsightFromProblem,
   Insight,
+  InsightExecEnum,
+  InsightNameEnum,
+  InsightRecommendation,
+  InsightType,
+  InsightTypes,
+  SchemaInsightEventFilters,
+  StatementInsightEvent,
   TransactionInsightEvent,
   TransactionInsightEventDetails,
   WorkloadInsightEventFilters,
-  InsightExecEnum,
-  InsightTypes,
-  SchemaInsightEventFilters,
-  InsightType,
-  InsightRecommendation,
-  StatementInsightEvent,
 } from "./types";
 
 export const getTransactionInsights = (
@@ -36,16 +37,18 @@ export const getTransactionInsights = (
     | TransactionInsightEventDetailsState,
 ): Insight[] => {
   const insights: Insight[] = [];
-  InsightTypes.forEach(insight => {
-    if (
-      insight(eventState.execType, eventState.contentionThreshold).name ==
-      eventState.insightName
-    ) {
-      insights.push(
-        insight(eventState.execType, eventState.contentionThreshold),
-      );
-    }
-  });
+  if (eventState) {
+    InsightTypes.forEach(insight => {
+      if (
+        insight(eventState.execType, eventState.contentionThreshold).name ==
+        eventState.insightName
+      ) {
+        insights.push(
+          insight(eventState.execType, eventState.contentionThreshold),
+        );
+      }
+    });
+  }
   return insights;
 };
 
@@ -68,7 +71,7 @@ export function getInsightsFromState(
         queries: e.queries,
         insights: insightsForEvent,
         startTime: e.startTime,
-        elapsedTimeMillis: e.elapsedTimeMillis,
+        contentionDuration: e.contentionDuration,
         application: e.application,
         execType: InsightExecEnum.TRANSACTION,
         contentionThreshold: e.contentionThreshold,
@@ -84,12 +87,12 @@ export function getTransactionInsightEventDetailsFromState(
 ): TransactionInsightEventDetails {
   let insightEventDetails: TransactionInsightEventDetails = null;
   const insightsForEventDetails = getTransactionInsights(
-    insightEventDetailsResponse[0],
+    insightEventDetailsResponse,
   );
   if (insightsForEventDetails.length > 0) {
-    delete insightEventDetailsResponse[0].insightName;
+    delete insightEventDetailsResponse.insightName;
     insightEventDetails = {
-      ...insightEventDetailsResponse[0],
+      ...insightEventDetailsResponse,
       insights: insightsForEventDetails,
     };
   }
@@ -213,23 +216,25 @@ export const filterSchemaInsights = (
 export function insightType(type: InsightType): string {
   switch (type) {
     case "CreateIndex":
-      return "Create New Index";
+      return "Create Index";
     case "DropIndex":
       return "Drop Unused Index";
     case "ReplaceIndex":
       return "Replace Index";
-    case "HighContentionTime":
-      return "High Contention Time";
+    case "AlterIndex":
+      return "Alter Index";
+    case "HighContention":
+      return "High Contention";
     case "HighRetryCount":
       return "High Retry Counts";
     case "SuboptimalPlan":
-      return "Sub-Optimal Plan";
+      return "Suboptimal Plan";
     case "PlanRegression":
       return "Plan Regression";
     case "FailedExecution":
       return "Failed Execution";
     default:
-      return "Insight";
+      return "Slow Execution";
   }
 }
 
@@ -298,16 +303,34 @@ export function getAppsFromStatementInsights(
   return Array.from(uniqueAppNames).sort();
 }
 
-export function populateStatementInsightsFromProblems(
+export function populateStatementInsightsFromProblemAndCauses(
   statements: StatementInsightEvent[],
 ): void {
   if (!statements || statements?.length === 0) {
     return;
   }
-
   statements.map(x => {
-    x.insights = x.problems?.map(x =>
-      getInsightFromProblem(x, InsightExecEnum.STATEMENT),
-    );
+    // TODO(ericharmeling,todd): Replace these strings when using the insights protos.
+    if (x.problem === "SlowExecution") {
+      if (x.causes?.length === 0) {
+        x.insights = [
+          getInsightFromProblem(
+            InsightNameEnum.slowExecution,
+            InsightExecEnum.STATEMENT,
+          ),
+        ];
+      } else {
+        x.insights = x.causes?.map(x =>
+          getInsightFromProblem(x, InsightExecEnum.STATEMENT),
+        );
+      }
+    } else if (x.problem === "FailedExecution") {
+      x.insights = [
+        getInsightFromProblem(
+          InsightNameEnum.failedExecution,
+          InsightExecEnum.STATEMENT,
+        ),
+      ];
+    }
   });
 }

@@ -32,6 +32,7 @@ go_library(
 go_test(
     name = "azure_test",
     srcs = ["azure_storage_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":azure"],
     deps = [
         "//pkg/cloud",

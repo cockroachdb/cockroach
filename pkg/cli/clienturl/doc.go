@@ -10,8 +10,8 @@
 
 // Package clienturl provides glue between:
 //
-// - security/clientconnurl, which is able to translate configuration
-//   parameters for SQL clients and compute security parameters,
+//   - security/clientconnurl, which is able to translate configuration
+//     parameters for SQL clients and compute security parameters,
 //
 // - cli/clisqlcfg, which serves as input for a SQL shell.
 //

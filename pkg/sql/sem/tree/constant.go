@@ -186,20 +186,22 @@ func (expr *NumVal) Format(ctx *FmtCtx) {
 }
 
 // canBeInt64 checks if it's possible for the value to become an int64:
-//  1   = yes
-//  1.0 = yes
-//  1.1 = no
-//  123...overflow...456 = no
+//
+//	1   = yes
+//	1.0 = yes
+//	1.1 = no
+//	123...overflow...456 = no
 func (expr *NumVal) canBeInt64() bool {
 	_, err := expr.AsInt64()
 	return err == nil
 }
 
 // ShouldBeInt64 checks if the value naturally is an int64:
-//  1   = yes
-//  1.0 = no
-//  1.1 = no
-//  123...overflow...456 = no
+//
+//	1   = yes
+//	1.0 = no
+//	1.1 = no
+//	123...overflow...456 = no
 func (expr *NumVal) ShouldBeInt64() bool {
 	return expr.Kind() == constant.Int && expr.canBeInt64()
 }
@@ -562,12 +564,13 @@ var (
 // respective datum types could succeed. The hope was to eliminate impossibilities
 // and constrain the returned type sets as much as possible. Unfortunately, two issues
 // were found with this approach:
-// - date and timestamp formats do not always imply a fixed-length valid input. For
-//   instance, timestamp formats that take fractional seconds can successfully parse
-//   inputs of varied length.
-// - the set of date and timestamp formats are not disjoint, which means that ambiguity
-//   can not be eliminated when inferring the type of string literals that use these
-//   shared formats.
+//   - date and timestamp formats do not always imply a fixed-length valid input. For
+//     instance, timestamp formats that take fractional seconds can successfully parse
+//     inputs of varied length.
+//   - the set of date and timestamp formats are not disjoint, which means that ambiguity
+//     can not be eliminated when inferring the type of string literals that use these
+//     shared formats.
+//
 // While these limitations still permitted improved type inference in many cases, they
 // resulted in behavior that was ultimately incomplete, resulted in unpredictable levels
 // of inference, and occasionally failed to eliminate ambiguity. Further heuristics could

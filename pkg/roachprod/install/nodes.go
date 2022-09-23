@@ -31,12 +31,11 @@ type Nodes []Node
 // node ranges. Nodes are 1-indexed.
 //
 // Examples:
-//  - "all"
-//  - "1"
-//  - "1-3"
-//  - "1,3,5"
-//  - "1,2-4,7-8"
-//
+//   - "all"
+//   - "1"
+//   - "1-3"
+//   - "1,3,5"
+//   - "1,2-4,7-8"
 func ListNodes(s string, numNodesInCluster int) (Nodes, error) {
 	if s == "" {
 		return nil, errors.AssertionFailedf("empty node selector")

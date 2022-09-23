@@ -846,6 +846,7 @@ func validateStringBytes(b []byte) error {
 }
 
 // PGNumericSign indicates the sign of a numeric.
+//
 //go:generate stringer -type=PGNumericSign
 type PGNumericSign uint16
 

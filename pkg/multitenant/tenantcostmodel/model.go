@@ -29,21 +29,22 @@ type RU float64
 //
 // The cost model takes into account the following activities:
 //
-//  - KV "read" and "write" batches. KV batches that read or write data have a
-//      base cost, a per-request cost, and a per-byte cost. Specifically, the
-//      cost of a read batch is:
-//      RUs = KVReadBatch +
-//     	      <count of reads in batch> * KVReadRequest +
-//    	      <size of reads in bytes> * KVReadByte
-//    The cost of a write batch is:
-//      RUs = KVWriteBatch +
-//            <count of writes in batch> * KVWriteRequest +
-//            <size of writes in bytes> * KVWriteByte
+//   - KV "read" and "write" batches. KV batches that read or write data have a
+//     base cost, a per-request cost, and a per-byte cost. Specifically, the
+//     cost of a read batch is:
+//     RUs = KVReadBatch +
+//     <count of reads in batch> * KVReadRequest +
+//     <size of reads in bytes> * KVReadByte
+//     The cost of a write batch is:
+//     RUs = KVWriteBatch +
+//     <count of writes in batch> * KVWriteRequest +
+//     <size of writes in bytes> * KVWriteByte
 //
-//  - CPU usage on the tenant's SQL pods.
-//  - Writes to external storage services such as S3.
-//  - Count of bytes returned from SQL to the client (network egress).
+//   - CPU usage on the tenant's SQL pods.
 //
+//   - Writes to external storage services such as S3.
+//
+//   - Count of bytes returned from SQL to the client (network egress).
 type Config struct {
 	// KVReadBatch is the baseline cost of a batch of KV reads.
 	KVReadBatch RU

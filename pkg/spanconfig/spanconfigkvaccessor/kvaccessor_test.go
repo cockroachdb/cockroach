@@ -37,28 +37,28 @@ import (
 // TestDataDriven runs datadriven tests against the kvaccessor interface.
 // The syntax is as follows:
 //
-// 		kvaccessor-get
-// 		span [a,e)
-// 		span [a,b)
-// 		span [b,c)
-//		system-target {cluster}
-//		system-target {source=1,target=20}
-//		system-target {source=1,target=1}
-//		system-target {source=20,target=20}
-// 		system-target {source=1, all-tenant-keyspace-targets-set}
-//      ----
+//			kvaccessor-get
+//			span [a,e)
+//			span [a,b)
+//			span [b,c)
+//			system-target {cluster}
+//			system-target {source=1,target=20}
+//			system-target {source=1,target=1}
+//			system-target {source=20,target=20}
+//			system-target {source=1, all-tenant-keyspace-targets-set}
+//	     ----
 //
-// 		kvaccessor-update
-// 		delete [c,e)
-// 		upsert [c,d):C
-// 		upsert [d,e):D
-// 		delete {source=1,target=1}
-// 		upsert {source=1,target=1}:A
-// 		upsert {cluster}:F
-//      ----
+//			kvaccessor-update
+//			delete [c,e)
+//			upsert [c,d):C
+//			upsert [d,e):D
+//			delete {source=1,target=1}
+//			upsert {source=1,target=1}:A
+//			upsert {cluster}:F
+//	     ----
 //
-// 		kvaccessor-get-all-system-span-configs-that-apply tenant-id=<tenantID>
-//      ----
+//			kvaccessor-get-all-system-span-configs-that-apply tenant-id=<tenantID>
+//	     ----
 //
 // They tie into GetSpanConfigRecords and UpdateSpanConfigRecords
 // respectively. For kvaccessor-get, each listed target is added to the set of

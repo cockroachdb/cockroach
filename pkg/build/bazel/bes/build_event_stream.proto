@@ -1,0 +1,1149 @@
+// Copyright 2016 The Bazel Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package build_event_stream;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "src/main/protobuf/command_line.proto";
+import "src/main/protobuf/failure_details.proto";
+import "src/main/protobuf/invocation_policy.proto";
+
+option java_package = "com.google.devtools.build.lib.buildeventstream";
+option java_outer_classname = "BuildEventStreamProtos";
+
+// Identifier for a build event. It is deliberately structured to also provide
+// information about which build target etc the event is related to.
+//
+// Events are chained via the event id as follows: each event has an id and a
+// set of ids of children events such that apart from the initial event each
+// event has an id that is mentioned as child id in an earlier event and a build
+// invocation is complete if and only if all direct and indirect children of the
+// initial event have been posted.
+message BuildEventId {
+  // Generic identifier for a build event. This is the default type of
+  // BuildEventId, but should not be used outside testing; nevertheless,
+  // tools should handle build events with this kind of id gracefully.
+  message UnknownBuildEventId {
+    string details = 1;
+  }
+
+  // Identifier of an event reporting progress. Those events are also used to
+  // chain in events that come early.
+  message ProgressId {
+    // Unique identifier. No assumption should be made about how the ids are
+    // assigned; the only meaningful operation on this field is test for
+    // equality.
+    int32 opaque_count = 1;
+  }
+
+  // Identifier of an event indicating the beginning of a build; this will
+  // normally be the first event.
+  message BuildStartedId {}
+
+  // Identifier on an event indicating the original commandline received by
+  // the bazel server.
+  message UnstructuredCommandLineId {}
+
+  // Identifier on an event describing the commandline received by Bazel.
+  message StructuredCommandLineId {
+    // A title for this command line value, as there may be multiple.
+    // For example, a single invocation may wish to report both the literal and
+    // canonical command lines, and this label would be used to differentiate
+    // between both versions.
+    string command_line_label = 1;
+  }
+
+  // Identifier of an event indicating the workspace status.
+  message WorkspaceStatusId {}
+
+  // Identifier on an event reporting on the options included in the command
+  // line, both explicitly and implicitly.
+  message OptionsParsedId {}
+
+  // Identifier of an event reporting that an external resource was fetched
+  // from.
+  message FetchId {
+    // The external resource that was fetched from.
+    string url = 1;
+  }
+
+  // Identifier of an event indicating that a target pattern has been expanded
+  // further.
+  // Messages of this shape are also used to describe parts of a pattern that
+  // have been skipped for some reason, if the actual expansion was still
+  // carried out (e.g., if keep_going is set). In this case, the
+  // pattern_skipped choice in the id field is to be made.
+  message PatternExpandedId {
+    repeated string pattern = 1;
+  }
+
+  message WorkspaceConfigId {}
+
+  message BuildMetadataId {}
+
+  // Identifier of an event indicating that a target has been expanded by
+  // identifying for which configurations it should be build.
+  message TargetConfiguredId {
+    string label = 1;
+
+    // If empty, the id refers to the expansion of the target. If not-empty,
+    // the id refers to the expansion of an aspect applied to the (already
+    // expanded) target.
+    //
+    // For example, when building an apple_binary that depends on proto_library
+    // "//:foo_proto", there will be two TargetConfigured events for
+    // "//:foo_proto":
+    //
+    // 1. An event with an empty aspect, corresponding to actions producing
+    // language-agnostic outputs from the proto_library; and
+    // 2. An event with aspect "ObjcProtoAspect", corresponding to Objective-C
+    // code generation.
+    string aspect = 2;
+  }
+
+  // Identifier of an event introducing a named set of files (usually artifacts)
+  // to be referred to in later messages.
+  message NamedSetOfFilesId {
+    // Identifier of the file set; this is an opaque string valid only for the
+    // particular instance of the event stream.
+    string id = 1;
+  }
+
+  // Identifier of an event introducing a configuration.
+  message ConfigurationId {
+    // Identifier of the configuration; users of the protocol should not make
+    // any assumptions about it having any structure, or equality of the
+    // identifier between different streams.
+    string id = 1;
+  }
+
+  // Identifier of an event indicating that a target was built completely; this
+  // does not include running the test if the target is a test target.
+  message TargetCompletedId {
+    string label = 1;
+
+    // The configuration for which the target was built.
+    ConfigurationId configuration = 3;
+
+    // If empty, the id refers to the completion of the target. If not-empty,
+    // the id refers to the completion of an aspect applied to the (already
+    // completed) target.
+    //
+    // For example, when building an apple_binary that depends on proto_library
+    // "//:foo_proto", there will be two TargetCompleted events for
+    // "//:foo_proto":
+    //
+    // 1. An event with an empty aspect, corresponding to actions producing
+    // language-agnostic outputs from the proto_library; and
+    // 2. An event with aspect "ObjcProtoAspect", corresponding to Objective-C
+    // code generation.
+    string aspect = 2;
+  }
+
+  // Identifier of an event reporting that an action was completed (not all
+  // actions are reported, only the ones that can be considered important;
+  // this includes all failed actions).
+  message ActionCompletedId {
+    string primary_output = 1;
+    // Optional, the label of the owner of the action, for reference.
+    string label = 2;
+    // Optional, the id of the configuration of the action owner.
+    ConfigurationId configuration = 3;
+  }
+
+  // Identifier of an event reporting an event associated with an unconfigured
+  // label. Usually, this indicates a failure due to a missing input file. In
+  // any case, it will report some form of error (i.e., the payload will be an
+  // Aborted event); there are no regular events using this identifier. The
+  // purpose of those events is to serve as the root cause of a failed target.
+  message UnconfiguredLabelId {
+    string label = 1;
+  }
+
+  // Identifier of an event reporting an event associated with a configured
+  // label, usually a visibility error. In any case, an event with such an
+  // id will always report some form of error (i.e., the payload will be an
+  // Aborted event); there are no regular events using this identifier.
+  message ConfiguredLabelId {
+    string label = 1;
+    ConfigurationId configuration = 2;
+  }
+
+  // Identifier of an event reporting on an individual test run. The label
+  // identifies the test that is reported about, the remaining fields are
+  // in such a way as to uniquely identify the action within a build. In fact,
+  // attempts for the same test, run, shard triple are counted sequentially,
+  // starting with 1.
+  message TestResultId {
+    string label = 1;
+    ConfigurationId configuration = 5;
+    int32 run = 2;
+    int32 shard = 3;
+    int32 attempt = 4;
+  }
+
+  // Identifier of an event reporting the summary of a test.
+  message TestSummaryId {
+    string label = 1;
+    ConfigurationId configuration = 2;
+  }
+
+  // Identifier of an event reporting the summary of a target.
+  message TargetSummaryId {
+    string label = 1;
+    ConfigurationId configuration = 2;
+  }
+
+  // Identifier of the BuildFinished event, indicating the end of a build.
+  message BuildFinishedId {}
+
+  // Identifier of an event providing additional logs/statistics after
+  // completion of the build.
+  message BuildToolLogsId {}
+
+  // Identifier of an event providing build metrics after completion
+  // of the build.
+  message BuildMetricsId {}
+
+  // Identifier of an event providing convenience symlinks information.
+  message ConvenienceSymlinksIdentifiedId {}
+
+  oneof id {
+    UnknownBuildEventId unknown = 1;
+    ProgressId progress = 2;
+    BuildStartedId started = 3;
+    UnstructuredCommandLineId unstructured_command_line = 11;
+    StructuredCommandLineId structured_command_line = 18;
+    WorkspaceStatusId workspace_status = 14;
+    OptionsParsedId options_parsed = 12;
+    FetchId fetch = 17;
+    ConfigurationId configuration = 15;
+    TargetConfiguredId target_configured = 16;
+    PatternExpandedId pattern = 4;
+    PatternExpandedId pattern_skipped = 10;
+    NamedSetOfFilesId named_set = 13;
+    TargetCompletedId target_completed = 5;
+    ActionCompletedId action_completed = 6;
+    UnconfiguredLabelId unconfigured_label = 19;
+    ConfiguredLabelId configured_label = 21;
+    TestResultId test_result = 8;
+    TestSummaryId test_summary = 7;
+    TargetSummaryId target_summary = 26;
+    BuildFinishedId build_finished = 9;
+    BuildToolLogsId build_tool_logs = 20;
+    BuildMetricsId build_metrics = 22;
+    WorkspaceConfigId workspace = 23;
+    BuildMetadataId build_metadata = 24;
+    ConvenienceSymlinksIdentifiedId convenience_symlinks_identified = 25;
+  }
+}
+
+// Payload of an event summarizing the progress of the build so far. Those
+// events are also used to be parents of events where the more logical parent
+// event cannot be posted yet as the needed information is not yet complete.
+message Progress {
+  // The next chunk of stdout that bazel produced since the last progress event
+  // or the beginning of the build.
+  string stdout = 1;
+
+  // The next chunk of stderr that bazel produced since the last progress event
+  // or the beginning of the build.
+  string stderr = 2;
+}
+
+// Payload of an event indicating that an expected event will not come, as
+// the build is aborted prematurely for some reason.
+message Aborted {
+  enum AbortReason {
+    UNKNOWN = 0;
+
+    // The user requested the build to be aborted (e.g., by hitting Ctl-C).
+    USER_INTERRUPTED = 1;
+
+    // The user requested that no analysis be performed.
+    NO_ANALYZE = 8;
+
+    // The user requested that no build be carried out.
+    NO_BUILD = 9;
+
+    // The build or target was aborted as a timeout was exceeded.
+    TIME_OUT = 2;
+
+    // The build or target was aborted as some remote environment (e.g., for
+    // remote execution of actions) was not available in the expected way.
+    REMOTE_ENVIRONMENT_FAILURE = 3;
+
+    // Failure due to reasons entirely internal to the build tool, i.e. an
+    // unexpected crash due to programmer error.
+    INTERNAL = 4;
+
+    // A Failure occurred in the loading phase of a target.
+    LOADING_FAILURE = 5;
+
+    // A Failure occurred in the analysis phase of a target.
+    ANALYSIS_FAILURE = 6;
+
+    // Target build was skipped (e.g. due to incompatible CPU constraints).
+    SKIPPED = 7;
+
+    // Build incomplete due to an earlier build failure (e.g. --keep_going was
+    // set to false causing the build be ended upon failure).
+    INCOMPLETE = 10;
+
+    // The build tool ran out of memory and crashed.
+    OUT_OF_MEMORY = 11;
+  }
+  AbortReason reason = 1;
+
+  // A human readable description with more details about there reason, where
+  // available and useful.
+  string description = 2;
+}
+
+// Payload of an event indicating the beginning of a new build. Usually, events
+// of those type start a new build-event stream. The target pattern requested
+// to be build is contained in one of the announced child events; it is an
+// invariant that precisely one of the announced child events has a non-empty
+// target pattern.
+message BuildStarted {
+  string uuid = 1;
+
+  // Start of the build in ms since the epoch.
+  //
+  // Deprecated, use `start_time` instead.
+  //
+  // TODO(yannic): Remove.
+  int64 start_time_millis = 2 [deprecated = true];
+
+  // Start of the build.
+  google.protobuf.Timestamp start_time = 9;
+
+  // Version of the build tool that is running.
+  string build_tool_version = 3;
+
+  // A human-readable description of all the non-default option settings
+  string options_description = 4;
+
+  // The name of the command that the user invoked.
+  string command = 5;
+
+  // The working directory from which the build tool was invoked.
+  string working_directory = 6;
+
+  // The directory of the workspace.
+  string workspace_directory = 7;
+
+  // The process ID of the Bazel server.
+  int64 server_pid = 8;
+}
+
+// Configuration related to the blaze workspace and output tree.
+message WorkspaceConfig {
+  // The root of the local blaze exec root. All output files live underneath
+  // this at "blaze-out/".
+  string local_exec_root = 1;
+}
+
+// Payload of an event reporting the command-line of the invocation as
+// originally received by the server. Note that this is not the command-line
+// given by the user, as the client adds information about the invocation,
+// like name and relevant entries of rc-files and client environment variables.
+// However, it does contain enough information to reproduce the build
+// invocation.
+message UnstructuredCommandLine {
+  repeated string args = 1;
+}
+
+// Payload of an event reporting on the parsed options, grouped in various ways.
+message OptionsParsed {
+  repeated string startup_options = 1;
+  repeated string explicit_startup_options = 2;
+  repeated string cmd_line = 3;
+  repeated string explicit_cmd_line = 4;
+  blaze.invocation_policy.InvocationPolicy invocation_policy = 5;
+  string tool_tag = 6;
+}
+
+// Payload of an event indicating that an external resource was fetched. This
+// event will only occur in streams where an actual fetch happened, not in ones
+// where a cached copy of the entity to be fetched was used.
+message Fetch {
+  bool success = 1;
+}
+
+// Payload of an event reporting the workspace status. Key-value pairs can be
+// provided by specifying the workspace_status_command to an executable that
+// returns one key-value pair per line of output (key and value separated by a
+// space).
+message WorkspaceStatus {
+  message Item {
+    string key = 1;
+    string value = 2;
+  }
+  repeated Item item = 1;
+}
+
+// Payload of an event reporting custom key-value metadata associated with the
+// build.
+message BuildMetadata {
+  // Custom metadata for the build.
+  map<string, string> metadata = 1;
+}
+
+// Payload of an event reporting details of a given configuration.
+message Configuration {
+  string mnemonic = 1;
+  string platform_name = 2;
+  string cpu = 3;
+  map<string, string> make_variable = 4;
+  // Whether this configuration is used for building tools.
+  bool is_tool = 5;
+}
+
+// Payload of the event indicating the expansion of a target pattern.
+// The main information is in the chaining part: the id will contain the
+// target pattern that was expanded and the children id will contain the
+// target or target pattern it was expanded to.
+message PatternExpanded {
+  // Represents a test_suite target and the tests that it expanded to. Nested
+  // test suites are recursively expanded. The test labels only contain the
+  // final test targets, not any nested suites.
+  message TestSuiteExpansion {
+    // The label of the test_suite rule.
+    string suite_label = 1;
+    // Labels of the test targets included in the suite. Includes all tests in
+    // the suite regardless of any filters or negative patterns which may result
+    // in the test not actually being run.
+    repeated string test_labels = 2;
+  }
+
+  // All test suites requested via top-level target patterns. Does not include
+  // test suites whose label matched a negative pattern.
+  repeated TestSuiteExpansion test_suite_expansions = 1;
+}
+
+// Enumeration type characterizing the size of a test, as specified by the
+// test rule.
+enum TestSize {
+  UNKNOWN = 0;
+  SMALL = 1;
+  MEDIUM = 2;
+  LARGE = 3;
+  ENORMOUS = 4;
+}
+
+// Payload of the event indicating that the configurations for a target have
+// been identified. As with pattern expansion the main information is in the
+// chaining part: the id will contain the target that was configured and the
+// children id will contain the configured targets it was configured to.
+message TargetConfigured {
+  // The kind of target (e.g.,  e.g. "cc_library rule", "source file",
+  // "generated file") where the completion is reported.
+  string target_kind = 1;
+
+  // The size of the test, if the target is a test target. Unset otherwise.
+  TestSize test_size = 2;
+
+  // List of all tags associated with this target (for all possible
+  // configurations).
+  repeated string tag = 3;
+}
+
+message File {
+  // A sequence of prefixes to apply to the file name to construct a full path.
+  // In most but not all cases, there will be 3 entries:
+  //  1. A root output directory, eg "bazel-out"
+  //  2. A configuration mnemonic, eg "k8-fastbuild"
+  //  3. An output category, eg "genfiles"
+  repeated string path_prefix = 4;
+
+  // identifier indicating the nature of the file (e.g., "stdout", "stderr")
+  string name = 1;
+
+  oneof file {
+    // A location where the contents of the file can be found. The string is
+    // encoded according to RFC2396.
+    string uri = 2;
+    // The contents of the file, if they are guaranteed to be short.
+    bytes contents = 3;
+  }
+
+  // Digest of the file, using the build tool's configured digest algorithm,
+  // hex-encoded.
+  string digest = 5;
+
+  // Length of the file in bytes.
+  int64 length = 6;
+}
+
+// Payload of a message to describe a set of files, usually build artifacts, to
+// be referred to later by their name. In this way, files that occur identically
+// as outputs of several targets have to be named only once.
+message NamedSetOfFiles {
+  // Files that belong to this named set of files.
+  repeated File files = 1;
+
+  // Other named sets whose members also belong to this set.
+  repeated BuildEventId.NamedSetOfFilesId file_sets = 2;
+}
+
+// Payload of the event indicating the completion of an action. The main purpose
+// of posting those events is to provide details on the root cause for a target
+// failing; however, consumers of the build-event protocol must not assume
+// that only failed actions are posted.
+message ActionExecuted {
+  bool success = 1;
+
+  // The mnemonic of the action that was executed
+  string type = 8;
+
+  // The exit code of the action, if it is available.
+  int32 exit_code = 2;
+
+  // Location where to find the standard output of the action
+  // (e.g., a file path).
+  File stdout = 3;
+
+  // Location where to find the standard error of the action
+  // (e.g., a file path).
+  File stderr = 4;
+
+  // Deprecated. This field is now present on ActionCompletedId.
+  string label = 5 [deprecated = true];
+
+  // Deprecated. This field is now present on ActionCompletedId.
+  BuildEventId.ConfigurationId configuration = 7 [deprecated = true];
+
+  // Primary output; only provided for successful actions.
+  File primary_output = 6;
+
+  // The command-line of the action, if the action is a command.
+  repeated string command_line = 9;
+
+  // List of paths to log files
+  repeated File action_metadata_logs = 10;
+
+  // Only populated if success = false, and sometimes not even then.
+  failure_details.FailureDetail failure_detail = 11;
+}
+
+// Collection of all output files belonging to that output group.
+message OutputGroup {
+  // Ids of fields that have been removed.
+  reserved 2;
+
+  // Name of the output group
+  string name = 1;
+
+  // List of file sets that belong to this output group as well.
+  repeated BuildEventId.NamedSetOfFilesId file_sets = 3;
+
+  // Indicates that one or more of the output group's files were not built
+  // successfully (the generating action failed).
+  bool incomplete = 4;
+}
+
+// Payload of the event indicating the completion of a target. The target is
+// specified in the id. If the target failed the root causes are provided as
+// children events.
+message TargetComplete {
+  bool success = 1;
+
+  // The kind of target (e.g.,  e.g. "cc_library rule", "source file",
+  // "generated file") where the completion is reported.
+  // Deprecated: use the target_kind field in TargetConfigured instead.
+  string target_kind = 5 [deprecated = true];
+
+  // The size of the test, if the target is a test target. Unset otherwise.
+  // Deprecated: use the test_size field in TargetConfigured instead.
+  TestSize test_size = 6 [deprecated = true];
+
+  // The output files are arranged by their output group. If an output file
+  // is part of multiple output groups, it appears once in each output
+  // group.
+  repeated OutputGroup output_group = 2;
+
+  // Temporarily, also report the important outputs directly. This is only to
+  // allow existing clients help transition to the deduplicated representation;
+  // new clients should not use it.
+  repeated File important_output = 4 [deprecated = true];
+
+  // Report output artifacts (referenced transitively via output_group) which
+  // emit directories instead of singleton files. These directory_output entries
+  // will never include a uri.
+  repeated File directory_output = 8;
+
+  // List of tags associated with this configured target.
+  repeated string tag = 3;
+
+  // The timeout specified for test actions under this configured target.
+  //
+  // Deprecated, use `test_timeout` instead.
+  //
+  // TODO(yannic): Remove.
+  int64 test_timeout_seconds = 7 [deprecated = true];
+
+  // The timeout specified for test actions under this configured target.
+  google.protobuf.Duration test_timeout = 10;
+
+  // Failure information about the target, only populated if success is false,
+  // and sometimes not even then. Equal to one of the ActionExecuted
+  // failure_detail fields for one of the root cause ActionExecuted events.
+  failure_details.FailureDetail failure_detail = 9;
+}
+
+enum TestStatus {
+  NO_STATUS = 0;
+  PASSED = 1;
+  FLAKY = 2;
+  TIMEOUT = 3;
+  FAILED = 4;
+  INCOMPLETE = 5;
+  REMOTE_FAILURE = 6;
+  FAILED_TO_BUILD = 7;
+  TOOL_HALTED_BEFORE_TESTING = 8;
+}
+
+// Payload on events reporting about individual test action.
+message TestResult {
+  reserved 1;
+
+  // The status of this test.
+  TestStatus status = 5;
+
+  // Additional details about the status of the test. This is intended for
+  // user display and must not be parsed.
+  string status_details = 9;
+
+  // True, if the reported attempt is taken from the tool's local cache.
+  bool cached_locally = 4;
+
+  // Time in milliseconds since the epoch at which the test attempt was started.
+  // Note: for cached test results, this is time can be before the start of the
+  // build.
+  //
+  // Deprecated, use `test_attempt_start` instead.
+  //
+  // TODO(yannic): Remove.
+  int64 test_attempt_start_millis_epoch = 6 [deprecated = true];
+
+  // Time at which the test attempt was started.
+  // Note: for cached test results, this is time can be before the start of the
+  // build.
+  google.protobuf.Timestamp test_attempt_start = 10;
+
+  // Time the test took to run. For locally cached results, this is the time
+  // the cached invocation took when it was invoked.
+  //
+  // Deprecated, use `test_attempt_duration` instead.
+  //
+  // TODO(yannic): Remove.
+  int64 test_attempt_duration_millis = 3 [deprecated = true];
+
+  // Time the test took to run. For locally cached results, this is the time
+  // the cached invocation took when it was invoked.
+  google.protobuf.Duration test_attempt_duration = 11;
+
+  // Files (logs, test.xml, undeclared outputs, etc) generated by that test
+  // action.
+  repeated File test_action_output = 2;
+
+  // Warnings generated by that test action.
+  repeated string warning = 7;
+
+  // Message providing optional meta data on the execution of the test action,
+  // if available.
+  message ExecutionInfo {
+    // Deprecated, use TargetComplete.test_timeout instead.
+    int32 timeout_seconds = 1 [deprecated = true];
+
+    // Name of the strategy to execute this test action (e.g., "local",
+    // "remote")
+    string strategy = 2;
+
+    // True, if the reported attempt was a cache hit in a remote cache.
+    bool cached_remotely = 6;
+
+    // The exit code of the test action.
+    int32 exit_code = 7;
+
+    // The hostname of the machine where the test action was executed (in case
+    // of remote execution), if known.
+    string hostname = 3;
+
+    // Represents a hierarchical timing breakdown of an activity.
+    // The top level time should be the total time of the activity.
+    // Invariant: `time` >= sum of `time`s of all direct children.
+    message TimingBreakdown {
+      repeated TimingBreakdown child = 1;
+      string name = 2;
+      // Deprecated, use `time` instead.
+      //
+      // TODO(yannic): Remove.
+      int64 time_millis = 3 [deprecated = true];
+      google.protobuf.Duration time = 4;
+    }
+    TimingBreakdown timing_breakdown = 4;
+
+    message ResourceUsage {
+      string name = 1;
+      int64 value = 2;
+    }
+    repeated ResourceUsage resource_usage = 5;
+  }
+  ExecutionInfo execution_info = 8;
+}
+
+// Payload of the event summarizing a test.
+message TestSummary {
+  // Wrapper around BlazeTestStatus to support importing that enum to proto3.
+  // Overall status of test, accumulated over all runs, shards, and attempts.
+  TestStatus overall_status = 5;
+
+  // Total number of shard attempts.
+  // E.g., if a target has 4 runs, 3 shards, each with 2 attempts,
+  // then total_run_count will be 4*3*2 = 24.
+  int32 total_run_count = 1;
+
+  // Value of runs_per_test for the test.
+  int32 run_count = 10;
+
+  // Number of attempts.
+  // If there are a different number of attempts per shard, the highest attempt
+  // count across all shards for each run is used.
+  int32 attempt_count = 15;
+
+  // Number of shards.
+  int32 shard_count = 11;
+
+  // Path to logs of passed runs.
+  repeated File passed = 3;
+
+  // Path to logs of failed runs;
+  repeated File failed = 4;
+
+  // Total number of cached test actions
+  int32 total_num_cached = 6;
+
+  // When the test first started running.
+  //
+  // Deprecated, use `first_start_time` instead.
+  //
+  // TODO(yannic): Remove.
+  int64 first_start_time_millis = 7 [deprecated = true];
+
+  // When the test first started running.
+  google.protobuf.Timestamp first_start_time = 13;
+
+  // When the last test action completed.
+  //
+  // Deprecated, use `last_stop_time` instead.
+  //
+  // TODO(yannic): Remove.
+  int64 last_stop_time_millis = 8 [deprecated = true];
+
+  // When the test first started running.
+  google.protobuf.Timestamp last_stop_time = 14;
+
+  // The total runtime of the test.
+  //
+  // Deprecated, use `total_run` instead.
+  //
+  // TODO(yannic): Remove.
+  int64 total_run_duration_millis = 9 [deprecated = true];
+
+  // The total runtime of the test.
+  google.protobuf.Duration total_run_duration = 12;
+}
+
+// Payload of the event summarizing a target (test or non-test).
+message TargetSummary {
+  // Conjunction of TargetComplete events for this target, including aspects.
+  bool overall_build_success = 1;
+
+  // Repeats TestSummary's overall_status if available.
+  TestStatus overall_test_status = 2;
+}
+
+// Event indicating the end of a build.
+message BuildFinished {
+  // Exit code of a build. The possible values correspond to the predefined
+  // codes in bazel's lib.ExitCode class, as well as any custom exit code a
+  // module might define. The predefined exit codes are subject to change (but
+  // rarely do) and are not part of the public API.
+  //
+  // A build was successful iff ExitCode.code equals 0.
+  message ExitCode {
+    // The name of the exit code.
+    string name = 1;
+
+    // The exit code.
+    int32 code = 2;
+  }
+
+  // Things that happened during the build that could be of interest.
+  message AnomalyReport {
+    // Was the build suspended at any time during the build.
+    // Examples of suspensions are SIGSTOP, or the hardware being put to sleep.
+    // If was_suspended is true, then most of the timings for this build are
+    // suspect.
+    // NOTE: This is no longer set and is deprecated.
+    bool was_suspended = 1;
+  }
+
+  // If the build succeeded or failed.
+  bool overall_success = 1 [deprecated = true];
+
+  // The overall status of the build. A build was successful iff
+  // ExitCode.code equals 0.
+  ExitCode exit_code = 3;
+
+  // End of the build in ms since the epoch.
+  //
+  // Deprecated, use `finish_time` instead.
+  //
+  // TODO(yannic): Remove.
+  int64 finish_time_millis = 2 [deprecated = true];
+
+  // End of the build.
+  google.protobuf.Timestamp finish_time = 5;
+
+  AnomalyReport anomaly_report = 4 [deprecated = true];
+}
+
+message BuildMetrics {
+  message ActionSummary {
+    // The total number of actions created and registered during the build,
+    // including both aspects and configured targets. This metric includes
+    // unused actions that were constructed but not executed during this build.
+    // It does not include actions that were created on prior builds that are
+    // still valid, even if those actions had to be re-executed on this build.
+    // For the total number of actions that would be created if this invocation
+    // were "clean", see BuildGraphMetrics below.
+    int64 actions_created = 1;
+
+    // The total number of actions created this build just by configured
+    // targets. Used mainly to allow consumers of actions_created, which used to
+    // not include aspects' actions, to normalize across the Blaze release that
+    // switched actions_created to include all created actions.
+    int64 actions_created_not_including_aspects = 3;
+
+    // The total number of actions executed during the build. This includes any
+    // remote cache hits, but excludes local action cache hits.
+    int64 actions_executed = 2;
+
+    message ActionData {
+      string mnemonic = 1;
+
+      // The total number of actions of this type executed during the build. As
+      // above, includes remote cache hits but excludes local action cache hits.
+      int64 actions_executed = 2;
+
+      // When the first action of this type started being executed, in
+      // milliseconds from the epoch.
+      int64 first_started_ms = 3;
+
+      // When the last action of this type ended being executed, in
+      // milliseconds from the epoch.
+      int64 last_ended_ms = 4;
+    }
+    // Contains the top N actions by number of actions executed.
+    repeated ActionData action_data = 4;
+
+    // Deprecated. The total number of remote cache hits.
+    int64 remote_cache_hits = 5 [deprecated = true];
+
+    message RunnerCount {
+      string name = 1;
+      int32 count = 2;
+    }
+    repeated RunnerCount runner_count = 6;
+  }
+  ActionSummary action_summary = 1;
+
+  message MemoryMetrics {
+    // Size of the JVM heap post build in bytes. This is only collected if
+    // --memory_profile is set, since it forces a full GC.
+    int64 used_heap_size_post_build = 1;
+
+    // Size of the peak JVM heap size in bytes post GC. Note that this reports 0
+    // if there was no major GC during the build.
+    int64 peak_post_gc_heap_size = 2;
+
+    // Size of the peak tenured space JVM heap size event in bytes post GC. Note
+    // that this reports 0 if there was no major GC during the build.
+    int64 peak_post_gc_tenured_space_heap_size = 4;
+
+    message GarbageMetrics {
+      // Type of garbage collected, e.g. G1 Old Gen.
+      string type = 1;
+      // Number of bytes of garbage of the given type collected during this
+      // invocation.
+      int64 garbage_collected = 2;
+    }
+
+    repeated GarbageMetrics garbage_metrics = 3;
+  }
+  MemoryMetrics memory_metrics = 2;
+
+  message TargetMetrics {
+    // DEPRECATED
+    // No longer populated. It never measured what it was supposed to (targets
+    // loaded): it counted targets that were analyzed even if the underlying
+    // package had not changed.
+    // TODO(janakr): rename and remove.
+    int64 targets_loaded = 1;
+
+    // Number of targets/aspects configured during this build. Does not include
+    // targets/aspects that were configured on prior builds on this server and
+    // were cached. See BuildGraphMetrics below if you need that.
+    int64 targets_configured = 2;
+
+    // Number of configured targets analyzed during this build. Does not include
+    // aspects. Used mainly to allow consumers of targets_configured, which used
+    // to not include aspects, to normalize across the Blaze release that
+    // switched targets_configured to include aspects.
+    int64 targets_configured_not_including_aspects = 3;
+  }
+  TargetMetrics target_metrics = 3;
+
+  message PackageMetrics {
+    // Number of BUILD files (aka packages) successfully loaded during this
+    // build.
+    //
+    // [For Bazel binaries built at source states] Before Dec 2021, this value
+    // was the number of packages attempted to be loaded, for a particular
+    // definition of "attempted".
+    //
+    // After Dec 2021, this value would sometimes overcount because the same
+    // package could sometimes be attempted to be loaded multiple times due to
+    // memory pressure.
+    //
+    // After Feb 2022, this value is the number of packages successfully
+    // loaded.
+    int64 packages_loaded = 1;
+  }
+  PackageMetrics package_metrics = 4;
+
+  message TimingMetrics {
+    // The CPU time in milliseconds consumed during this build.
+    int64 cpu_time_in_ms = 1;
+    // The elapsed wall time in milliseconds during this build.
+    int64 wall_time_in_ms = 2;
+    // The elapsed wall time in milliseconds during the analysis phase.
+    // When analysis and execution phases are interleaved, this measures the
+    // elapsed time from the first analysis work to the last.
+    int64 analysis_phase_time_in_ms = 3;
+  }
+  TimingMetrics timing_metrics = 5;
+
+  message CumulativeMetrics {
+    // One-indexed number of "analyses" the server has run, including the
+    // current one. Will be incremented for every build/test/cquery/etc. command
+    // that reaches the analysis phase.
+    int32 num_analyses = 11;
+    // One-indexed number of "builds" the server has run, including the current
+    // one. Will be incremented for every build/test/run/etc. command that
+    // reaches the execution phase.
+    int32 num_builds = 12;
+  }
+
+  CumulativeMetrics cumulative_metrics = 6;
+
+  message ArtifactMetrics {
+    reserved 1;
+
+    message FilesMetric {
+      int64 size_in_bytes = 1;
+      int32 count = 2;
+    }
+
+    // Measures all source files newly read this build. Does not include
+    // unchanged sources on incremental builds.
+    FilesMetric source_artifacts_read = 2;
+    // Measures all output artifacts from executed actions. This includes
+    // actions that were cached locally (via the action cache) or remotely (via
+    // a remote cache or executor), but does *not* include outputs of actions
+    // that were cached internally in Skyframe.
+    FilesMetric output_artifacts_seen = 3;
+    // Measures all output artifacts from actions that were cached locally
+    // via the action cache. These artifacts were already present on disk at the
+    // start of the build. Does not include Skyframe-cached actions' outputs.
+    FilesMetric output_artifacts_from_action_cache = 4;
+    // Measures all artifacts that belong to a top-level output group. Does not
+    // deduplicate, so if there are two top-level targets in this build that
+    // share an artifact, it will be counted twice.
+    FilesMetric top_level_artifacts = 5;
+  }
+
+  ArtifactMetrics artifact_metrics = 7;
+
+  // Information about the size and shape of the build graph. Some fields may
+  // not be populated if Bazel was able to skip steps due to caching.
+  message BuildGraphMetrics {
+    // How many configured targets/aspects were in this build, including any
+    // that were analyzed on a prior build and are still valid. May not be
+    // populated if analysis phase was fully cached. Note: for historical
+    // reasons this includes input/output files and other configured targets
+    // that do not actually have associated actions.
+    int32 action_lookup_value_count = 1;
+    // How many configured targets alone were in this build: always at most
+    // action_lookup_value_count. Useful mainly for historical comparisons to
+    // TargetMetrics.targets_configured, which used to not count aspects. This
+    // also includes configured targets that do not have associated actions.
+    int32 action_lookup_value_count_not_including_aspects = 5;
+    // How many actions belonged to the configured targets/aspects above. It may
+    // not be necessary to execute all of these actions to build the requested
+    // targets. May not be populated if analysis phase was fully cached.
+    int32 action_count = 2;
+    // How many actions belonged to configured targets: always at most
+    // action_count. Useful mainly for historical comparisons to
+    // ActionMetrics.actions_created, which used to not count aspects' actions.
+    int32 action_count_not_including_aspects = 6;
+    // How many "input file" configured targets there were: one per source file.
+    // Should agree with artifact_metrics.source_artifacts_read.count above,
+    int32 input_file_configured_target_count = 7;
+    // How many "output file" configured targets there were: output files that
+    // are targets (not implicit outputs).
+    int32 output_file_configured_target_count = 8;
+    // How many "other" configured targets there were (like alias,
+    // package_group, and other non-rule non-file configured targets).
+    int32 other_configured_target_count = 9;
+    // How many artifacts are outputs of the above actions. May not be populated
+    // if analysis phase was fully cached.
+    int32 output_artifact_count = 3;
+    // How many Skyframe nodes there are in memory at the end of the build. This
+    // may underestimate the number of nodes when running with memory-saving
+    // settings or with Skybuild, and may overestimate if there are nodes from
+    // prior evaluations still in the cache.
+    int32 post_invocation_skyframe_node_count = 4;
+  }
+
+  BuildGraphMetrics build_graph_metrics = 8;
+
+  // Information about all workers that were alive during the invocation.
+  message WorkerMetrics {
+    // Unique id of worker.
+    int32 worker_id = 1;
+    // Worker process id. If there is no process for worker, equals to zero.
+    uint32 process_id = 2;
+    // Mnemonic of running worker.
+    string mnemonic = 3;
+    // Multiplex or singleplex worker.
+    bool is_multiplex = 4;
+    // Using worker sandbox file system or not.
+    bool is_sandbox = 5;
+    // Shows is worker stats measured at the end of invocation.
+    bool is_measurable = 6;
+
+    // Information collected from worker at some point.
+    message WorkerStats {
+      // Epoch unix time of collection of metrics.
+      int64 collect_time_in_ms = 1;
+      // RSS size of worker process.
+      int32 worker_memory_in_kb = 2;
+    }
+
+    // Combined workers statistics.
+    repeated WorkerStats worker_stats = 7;
+  }
+
+  repeated WorkerMetrics worker_metrics = 9;
+}
+
+// Event providing additional statistics/logs after completion of the build.
+message BuildToolLogs {
+  repeated File log = 1;
+}
+
+// Event describing all convenience symlinks (i.e., workspace symlinks) to be
+// created or deleted once the execution phase has begun. Note that this event
+// does not say anything about whether or not the build tool actually executed
+// these filesystem operations; it only says what logical operations should be
+// performed. This event is emitted exactly once per build; if no symlinks are
+// to be modified, the event is still emitted with empty contents.
+message ConvenienceSymlinksIdentified {
+  repeated ConvenienceSymlink convenience_symlinks = 1;
+}
+
+// The message that contains what type of action to perform on a given path and
+// target of a symlink.
+message ConvenienceSymlink {
+  enum Action {
+    UNKNOWN = 0;
+
+    // Indicates a symlink should be created, or overwritten if it already
+    // exists.
+    CREATE = 1;
+
+    // Indicates a symlink should be deleted if it already exists.
+    DELETE = 2;
+  }
+
+  // The path of the symlink to be created or deleted, absolute or relative to
+  // the workspace, creating any directories necessary. If a symlink already
+  // exists at that location, then it should be replaced by a symlink pointing
+  // to the new target.
+  string path = 1;
+
+  // The operation we are performing on the symlink.
+  Action action = 2;
+
+  // If action is CREATE, this is the target path that the symlink should point
+  // to. If the path points underneath the output base, it is relative to the
+  // output base; otherwise it is absolute.
+  //
+  // If action is DELETE, this field is not set.
+  string target = 3;
+}
+
+// Message describing a build event. Events will have an identifier that
+// is unique within a given build invocation; they also announce follow-up
+// events as children. More details, which are specific to the kind of event
+// that is observed, is provided in the payload. More options for the payload
+// might be added in the future.
+message BuildEvent {
+  reserved 11, 19;
+  BuildEventId id = 1;
+  repeated BuildEventId children = 2;
+  bool last_message = 20;
+  oneof payload {
+    Progress progress = 3;
+    Aborted aborted = 4;
+    BuildStarted started = 5;
+    UnstructuredCommandLine unstructured_command_line = 12;
+    command_line.CommandLine structured_command_line = 22;
+    OptionsParsed options_parsed = 13;
+    WorkspaceStatus workspace_status = 16;
+    Fetch fetch = 21;
+    Configuration configuration = 17;
+    PatternExpanded expanded = 6;
+    TargetConfigured configured = 18;
+    ActionExecuted action = 7;
+    NamedSetOfFiles named_set_of_files = 15;
+    TargetComplete completed = 8;
+    TestResult test_result = 10;
+    TestSummary test_summary = 9;
+    TargetSummary target_summary = 28;
+    BuildFinished finished = 14;
+    BuildToolLogs build_tool_logs = 23;
+    BuildMetrics build_metrics = 24;
+    WorkspaceConfig workspace_info = 25;
+    BuildMetadata build_metadata = 26;
+    ConvenienceSymlinksIdentified convenience_symlinks_identified = 27;
+  }
+}

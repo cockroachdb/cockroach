@@ -134,9 +134,10 @@ func TestDetachMemoRace(t *testing.T) {
 }
 
 // TestCoster files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/sort"
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
-//   ...
+//
+//	make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/sort"
+//	make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
+//	...
 func TestCoster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -148,9 +149,10 @@ func TestCoster(t *testing.T) {
 }
 
 // TestPhysicalProps files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/ordering"
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
-//   ...
+//
+//	make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/ordering"
+//	make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
+//	...
 func TestPhysicalProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -168,8 +170,9 @@ func TestPhysicalProps(t *testing.T) {
 }
 
 // TestRuleProps files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestRuleProps/orderings"
-//   ...
+//
+//	make test PKG=./pkg/sql/opt/xform TESTS="TestRuleProps/orderings"
+//	...
 func TestRuleProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -182,9 +185,10 @@ func TestRuleProps(t *testing.T) {
 }
 
 // TestRules files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/scan"
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/select"
-//   ...
+//
+//	make test PKG=./pkg/sql/opt/xform TESTS="TestRules/scan"
+//	make test PKG=./pkg/sql/opt/xform TESTS="TestRules/select"
+//	...
 func TestRules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -206,12 +210,13 @@ var externalTestData = flag.String(
 // over time.
 //
 // TestExternal files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestExternal/tpch"
-//   ...
+//
+//	make test PKG=./pkg/sql/opt/xform TESTS="TestExternal/tpch"
+//	...
 //
 // Test files from another location can be run using the -d flag:
-//   make test PKG=./pkg/sql/opt/xform TESTS=TestExternal TESTFLAGS='-d /some-dir'
 //
+//	make test PKG=./pkg/sql/opt/xform TESTS=TestExternal TESTFLAGS='-d /some-dir'
 func TestExternal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -237,10 +242,11 @@ func TestPlaceholderFastPath(t *testing.T) {
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
-//   <command>
-//   <SQL statement>
-//   ----
-//   <expected results>
+//
+//	<command>
+//	<SQL statement>
+//	----
+//	<expected results>
 //
 // See OptTester.Handle for supported commands.
 func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {

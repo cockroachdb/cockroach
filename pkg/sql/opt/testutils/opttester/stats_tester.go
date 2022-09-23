@@ -60,7 +60,6 @@ type statsTester struct {
 // table to recalculate the actual statistics. Otherwise, it will reuse the
 // actual stats in the test output (calculated previously) to compare against
 // the estimated stats.
-//
 func (st statsTester) testStats(
 	catalog *testcat.Catalog, prevOutputs []string, tableName, headingSep string,
 ) (_ string, err error) {
@@ -166,9 +165,9 @@ func (st statsTester) testStats(
 // getActualStats gets the actual statistics from the test output or
 // recalculates them if rewriteActualStats is true.
 // Returns:
-// 1. The actual statistics as a slice of strings (one for each row)
-// 2. A map from column names to statistic for comparison with the estimated
-//    stats.
+//  1. The actual statistics as a slice of strings (one for each row)
+//  2. A map from column names to statistic for comparison with the estimated
+//     stats.
 func (st statsTester) getActualStats(
 	prevOutput string, tableName string, sep string,
 ) ([]string, map[string]statistic, error) {
@@ -315,7 +314,7 @@ func (st statsTester) getActualStatsMap(actualStats []string) (map[string]statis
 // qErr calculates the q-error for the given estimated and actual values.
 // q-error is symmetric and multiplicative, and satisfies the formula:
 //
-//   (1/q) * actual <= estimated <= q * actual
+//	(1/q) * actual <= estimated <= q * actual
 //
 // A q-error of 1 is a perfect estimate, and a q-error <= 1.9 is considered
 // acceptable.

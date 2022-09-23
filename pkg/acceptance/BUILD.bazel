@@ -42,6 +42,7 @@ go_test(
         "debug_remote_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=3595s"],
     data = glob([
         "testdata/**",
         "compose/**",

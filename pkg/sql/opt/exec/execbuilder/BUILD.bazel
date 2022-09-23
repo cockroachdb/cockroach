@@ -48,6 +48,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
@@ -62,6 +63,7 @@ go_test(
         "main_test.go",
         "mutation_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = [
         ":testdata",
         "//c-deps:libgeos",

@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -177,12 +176,6 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	}
 	if cfg.testingKnobCfg != "" {
 		switch cfg.testingKnobCfg {
-		case "RecoverFromIterPanic":
-			params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
-				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-					RecoverFromIterPanic: true,
-				},
-			}
 		default:
 			t.Fatalf("TestingKnobCfg %s not found", cfg.testingKnobCfg)
 		}
@@ -389,11 +382,59 @@ func TestDataDriven(t *testing.T) {
 		defer ds.cleanup(ctx)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 
+			execWithTagAndPausePoint := func(jobType jobspb.Type) string {
+				const user = "root"
+				sqlDB := ds.getSQLDB(t, lastCreatedServer, user)
+				// First, run the schema change.
+
+				_, err := sqlDB.Exec(d.Input)
+
+				var jobID jobspb.JobID
+				{
+					const qFmt = `SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s' ORDER BY created DESC LIMIT 1`
+					errJob := sqlDB.QueryRow(fmt.Sprintf(qFmt, jobType)).Scan(&jobID)
+					if !errors.Is(errJob, gosql.ErrNoRows) {
+						require.NoError(t, errJob)
+					}
+					require.NotZerof(t, jobID, "job not found for %q: %+v", d.Input, err)
+				}
+
+				// Tag the job.
+				if d.HasArg("tag") {
+					var jobTag string
+					d.ScanArgs(t, "tag", &jobTag)
+					if _, exists := ds.jobTags[jobTag]; exists {
+						t.Fatalf("failed to `tag`, job with tag %s already exists", jobTag)
+					}
+					ds.jobTags[jobTag] = jobID
+				}
+
+				// Check if we expect a pausepoint error.
+				if d.HasArg("expect-pausepoint") {
+					// Check if we are expecting a pausepoint error.
+					require.NotNilf(t, err, "expected pause point error")
+					require.Regexp(t, "pause point .* hit$", err.Error())
+					jobutils.WaitForJobToPause(t, sqlutils.MakeSQLRunner(sqlDB), jobID)
+					ret := append(ds.noticeBuffer, "job paused at pausepoint")
+					return strings.Join(ret, "\n")
+				}
+
+				// All other errors are bad.
+				require.NoError(t, err)
+				return ""
+			}
+
 			for v := range ds.vars {
 				d.Input = strings.Replace(d.Input, v, ds.vars[v], -1)
 				d.Expected = strings.Replace(d.Expected, v, ds.vars[v], -1)
 			}
 			switch d.Cmd {
+			case "skip":
+				var issue int
+				d.ScanArgs(t, "issue-num", &issue)
+				skip.WithIssue(t, issue)
+				return ""
+
 			case "reset":
 				ds.cleanup(ctx)
 				ds = newDatadrivenTestState()
@@ -603,58 +644,12 @@ func TestDataDriven(t *testing.T) {
 				return ""
 
 			case "backup":
-				server := lastCreatedServer
-				user := "root"
-				jobType := "BACKUP"
-
-				// First, run the backup.
-				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
-
-				// Tag the job.
-				if d.HasArg("tag") {
-					tagJob(t, server, user, jobType, ds, d)
-				}
-
-				// Check if we expect a pausepoint error.
-				if d.HasArg("expect-pausepoint") {
-					expectPausepoint(t, err, jobType, server, user, ds)
-					ret := append(ds.noticeBuffer, "job paused at pausepoint")
-					return strings.Join(ret, "\n")
-				}
-
-				// All other errors are bad.
-				require.NoError(t, err)
-				return ""
+				return execWithTagAndPausePoint(jobspb.TypeBackup)
 
 			case "import":
-				server := lastCreatedServer
-				user := "root"
-				jobType := "IMPORT"
-
-				// First, run the backup.
-				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
-
-				// Tag the job.
-				if d.HasArg("tag") {
-					tagJob(t, server, user, jobType, ds, d)
-				}
-
-				// Check if we expect a pausepoint error.
-				if d.HasArg("expect-pausepoint") {
-					expectPausepoint(t, err, jobType, server, user, ds)
-					ret := append(ds.noticeBuffer, "job paused at pausepoint")
-					return strings.Join(ret, "\n")
-				}
-
-				// All other errors are bad.
-				require.NoError(t, err)
-				return ""
+				return execWithTagAndPausePoint(jobspb.TypeImport)
 
 			case "restore":
-				server := lastCreatedServer
-				user := "root"
-				jobType := "RESTORE"
-
 				if d.HasArg("aost") {
 					var aost string
 					d.ScanArgs(t, "aost", &aost)
@@ -668,95 +663,17 @@ func TestDataDriven(t *testing.T) {
 					d.Input = strings.Replace(d.Input, aost,
 						fmt.Sprintf("'%s'", ts), 1)
 				}
-
-				// First, run the restore.
-				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
-
-				// Tag the job.
-				if d.HasArg("tag") {
-					tagJob(t, server, user, jobType, ds, d)
-				}
-
-				// Check if the job must be run aost.
-				if d.HasArg("aost") {
-					var aost string
-					d.ScanArgs(t, "aost", &aost)
-				}
-
-				// Check if we expect a pausepoint error.
-				if d.HasArg("expect-pausepoint") {
-					expectPausepoint(t, err, jobType, server, user, ds)
-					ret := append(ds.noticeBuffer, "job paused at pausepoint")
-					return strings.Join(ret, "\n")
-				}
-
-				// All other errors are bad.
-				require.NoError(t, err)
-				return ""
+				return execWithTagAndPausePoint(jobspb.TypeRestore)
 
 			case "new-schema-change":
-				server := lastCreatedServer
-				user := "root"
-				jobType := "NEW SCHEMA CHANGE"
-
-				// First, run the schema change.
-				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
-
-				// Tag the job.
-				if d.HasArg("tag") {
-					tagJob(t, server, user, jobType, ds, d)
-				}
-
-				// Check if the job must be run aost.
-				if d.HasArg("aost") {
-					var aost string
-					d.ScanArgs(t, "aost", &aost)
-				}
-
-				// Check if we expect a pausepoint error.
-				if d.HasArg("expect-pausepoint") {
-					expectPausepoint(t, err, jobType, server, user, ds)
-					ret := append(ds.noticeBuffer, "job paused at pausepoint")
-					return strings.Join(ret, "\n")
-				}
-
-				// All other errors are bad.
-				require.NoError(t, err)
-				return ""
+				return execWithTagAndPausePoint(jobspb.TypeNewSchemaChange)
 
 			case "schema-change":
-				server := lastCreatedServer
-				user := "root"
-				jobType := "SCHEMA CHANGE"
-
-				// First, run the schema change.
-				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
-
-				// Tag the job.
-				if d.HasArg("tag") {
-					tagJob(t, server, user, jobType, ds, d)
-				}
-
-				// Check if the job must be run aost.
-				if d.HasArg("aost") {
-					var aost string
-					d.ScanArgs(t, "aost", &aost)
-				}
-
-				// Check if we expect a pausepoint error.
-				if d.HasArg("expect-pausepoint") {
-					expectPausepoint(t, err, jobType, server, user, ds)
-					ret := append(ds.noticeBuffer, "job paused at pausepoint")
-					return strings.Join(ret, "\n")
-				}
-
-				// All other errors are bad.
-				require.NoError(t, err)
-				return ""
+				return execWithTagAndPausePoint(jobspb.TypeSchemaChange)
 
 			case "job":
 				server := lastCreatedServer
-				user := "root"
+				const user = "root"
 
 				if d.HasArg("cancel") {
 					var cancelJobTag string
@@ -816,7 +733,7 @@ func TestDataDriven(t *testing.T) {
 
 			case "save-cluster-ts":
 				server := lastCreatedServer
-				user := "root"
+				const user = "root"
 				var timestampTag string
 				d.ScanArgs(t, "tag", &timestampTag)
 				if _, ok := ds.clusterTimestamps[timestampTag]; ok {
@@ -852,7 +769,7 @@ func TestDataDriven(t *testing.T) {
 
 			case "corrupt-backup":
 				server := lastCreatedServer
-				user := "root"
+				const user = "root"
 				var uri string
 				d.ScanArgs(t, "uri", &uri)
 				parsedURI, err := url.Parse(strings.Replace(uri, "'", "", -1))
@@ -917,44 +834,4 @@ func handleKVRequest(
 	} else {
 		t.Fatalf("Unknown kv request")
 	}
-}
-
-// findMostRecentJobWithType returns the most recently created job of `job_type`
-// jobType.
-func findMostRecentJobWithType(
-	t *testing.T, ds datadrivenTestState, server, user string, jobType string,
-) jobspb.JobID {
-	var jobID jobspb.JobID
-	require.NoError(
-		t, ds.getSQLDB(t, server, user).QueryRow(
-			fmt.Sprintf(
-				`SELECT job_id FROM [SHOW JOBS] WHERE job_type = '%s' ORDER BY created DESC LIMIT 1`,
-				jobType)).Scan(&jobID))
-	return jobID
-}
-
-// expectPausepoint waits for the job to hit a pausepoint and enter a paused
-// state.
-func expectPausepoint(
-	t *testing.T, err error, jobType, server, user string, ds datadrivenTestState,
-) {
-	// Check if we are expecting a pausepoint error.
-	require.NotNilf(t, err, "expected pause point error")
-
-	runner := sqlutils.MakeSQLRunner(ds.getSQLDB(t, server, user))
-	jobutils.WaitForJobToPause(t, runner,
-		findMostRecentJobWithType(t, ds, server, user, jobType))
-}
-
-// tagJob stores the jobID of the most recent job of `jobType`. Users can use
-// the tag to refer to the job in the future.
-func tagJob(
-	t *testing.T, server, user, jobType string, ds datadrivenTestState, d *datadriven.TestData,
-) {
-	var jobTag string
-	d.ScanArgs(t, "tag", &jobTag)
-	if _, exists := ds.jobTags[jobTag]; exists {
-		t.Fatalf("failed to `tag`, job with tag %s already exists", jobTag)
-	}
-	ds.jobTags[jobTag] = findMostRecentJobWithType(t, ds, server, user, jobType)
 }

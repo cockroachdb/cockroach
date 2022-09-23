@@ -70,7 +70,7 @@ eexpect ":/# "
 end_test
 
 start_test "Check that conflicting legacy and new flags are properly rejected for client commands"
-send "$argv sql --insecure --logtostderr=true --log=abc\r"
+send "$argv sql --no-line-editor --insecure --logtostderr=true --log=abc\r"
 eexpect "log is incompatible with legacy discrete logging flag"
 eexpect ":/# "
 end_test

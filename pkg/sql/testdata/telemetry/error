@@ -41,11 +41,11 @@ SELECT crdb_internal.unsafe_upsert_descriptor(id, crdb_internal.json_to_pb('desc
 
 # Table descriptor validation failure on read.
 feature-usage
-SELECT * FROM tbl;
+DROP TABLE tbl CASCADE;
 ----
 error: pq: internal error: relation "tbl" (...): missing fk back reference "tbl_customer_fkey" to "tbl" from "fktbl"
 errorcodes.XX000
-sql.schema.validation_errors.read.cross_references.relation
+sql.schema.validation_errors.read.backward_references.relation
 
 exec
 CREATE TYPE greeting AS ENUM('hello', 'hi');

@@ -21,12 +21,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
@@ -96,11 +94,7 @@ func registerSQLSmith(r registry.Registry) {
 
 		// With 50% chance use the cockroach-short binary that was compiled with
 		// --crdb_test build tag.
-		maybeUseBuildWithEnabledAssertions(ctx, t, c, rng, 0.5)
-		if err := c.PutLibraries(ctx, "./lib"); err != nil {
-			t.Fatalf("could not initialize libraries: %v", err)
-		}
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+		maybeUseBuildWithEnabledAssertions(ctx, t, c, rng, 0.5 /* eaProb */)
 
 		setupFunc, ok := setups[setupName]
 		if !ok {
@@ -234,6 +228,11 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 					_, err := conn.Exec(stmt)
 					if err == nil {
 						logStmt(stmt)
+						stmt = "EXPLAIN " + stmt
+						_, err = conn.Exec(stmt)
+						if err == nil {
+							logStmt(stmt)
+						}
 					}
 					done <- err
 				}(ctx)
@@ -319,6 +318,7 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 			Name:            fmt.Sprintf("sqlsmith/setup=%s/setting=%s", setup, setting),
 			Owner:           registry.OwnerSQLQueries,
 			Cluster:         clusterSpec,
+			NativeLibs:      registry.LibGEOS,
 			Timeout:         time.Minute * 20,
 			RequiresLicense: true,
 			// NB: sqlsmith failures should never block a release.

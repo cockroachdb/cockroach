@@ -26,7 +26,9 @@ import (
 //
 // Internally, it is a sequence of nul-delimited strings,
 // interleaving tag key and value strings. For example:
-//    {'n', 0, '1', 0, 's', 0, '2', 0}
+//
+//	{'n', 0, '1', 0, 's', 0, '2', 0}
+//
 // to encode e.g. n=1,s=2
 //
 // Note that we preserve the invariant that there is always a value

@@ -57,32 +57,31 @@ type Pattern map[State]map[Event]Transition
 // expandPattern expands the States and Events in a Pattern to produce a new
 // Pattern with no wildcards or variable bindings. For example:
 //
-//   Pattern{
-//       state3{Any}: {
-//           event1{}: {state2{}, ...},
-//       },
-//       state1{}: {
-//           event4{Any, Var("x")}: {state3{Var("x")}, ...},
-//       },
-//   }
+//	Pattern{
+//	    state3{Any}: {
+//	        event1{}: {state2{}, ...},
+//	    },
+//	    state1{}: {
+//	        event4{Any, Var("x")}: {state3{Var("x")}, ...},
+//	    },
+//	}
 //
 // is expanded to:
 //
-//   Pattern{
-//       state3{False}: {
-//           event1{}: {state2{}, ...},
-//       },
-//       state3{True}: {
-//           event1{}: {state2{}, ...},
-//       },
-//       state1{}: {
-//           event4{False, False}: {state3{False}, ...},
-//           event4{False, True}:  {state3{True},  ...},
-//           event4{True, False}:  {state3{False}, ...},
-//           event4{True, True}:   {state3{True},  ...},
-//       },
-//   }
-//
+//	Pattern{
+//	    state3{False}: {
+//	        event1{}: {state2{}, ...},
+//	    },
+//	    state3{True}: {
+//	        event1{}: {state2{}, ...},
+//	    },
+//	    state1{}: {
+//	        event4{False, False}: {state3{False}, ...},
+//	        event4{False, True}:  {state3{True},  ...},
+//	        event4{True, False}:  {state3{False}, ...},
+//	        event4{True, True}:   {state3{True},  ...},
+//	    },
+//	}
 func expandPattern(p Pattern) Pattern {
 	xp := make(Pattern)
 	for s, sm := range p {

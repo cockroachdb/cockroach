@@ -185,7 +185,7 @@ func (b *Builder) buildProjectionList(inScope *scope, projectionsScope *scope) {
 // resolveColRef looks for the common case of a standalone column reference
 // expression, like this:
 //
-//   SELECT ..., c, ... FROM ...
+//	SELECT ..., c, ... FROM ...
 //
 // It resolves the column name to a scopeColumn and returns it as a TypedExpr.
 func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
@@ -227,13 +227,18 @@ func (b *Builder) getColName(expr tree.SelectExpr) string {
 // the expression as its value.
 //
 // texpr     The given scalar expression. The expression is any scalar
-//           expression except for a bare variable or aggregate (those are
-//           handled separately in buildVariableProjection and
-//           buildFunction).
+//
+//	expression except for a bare variable or aggregate (those are
+//	handled separately in buildVariableProjection and
+//	buildFunction).
+//
 // scalar    The memo expression that has already been built for the given
-//           typed expression.
+//
+//	typed expression.
+//
 // outCol    The output column of the scalar which is being built. It can be
-//           nil if outScope is nil.
+//
+//	nil if outScope is nil.
 //
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
@@ -269,9 +274,12 @@ func (b *Builder) finishBuildScalar(
 //
 // col      Column containing the scalar expression that's been referenced.
 // outCol   The output column which is being built. It can be nil if outScope is
-//          nil.
+//
+//	nil.
+//
 // colRefs  The set of columns referenced so far by the scalar expression being
-//          built. If not nil, it is updated with the ID of this column.
+//
+//	built. If not nil, it is updated with the ID of this column.
 //
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
@@ -324,10 +332,10 @@ func (b *Builder) finishBuildScalarRef(
 //
 // Sample usage:
 //
-//   pb := makeProjectionBuilder(b, scope)
-//   b.Add(name, expr, typ)
-//   ...
-//   scope = pb.Finish()
+//	pb := makeProjectionBuilder(b, scope)
+//	b.Add(name, expr, typ)
+//	...
+//	scope = pb.Finish()
 //
 // Note that this is all a cheap no-op if Add is not called.
 type projectionBuilder struct {

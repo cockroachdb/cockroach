@@ -32,7 +32,14 @@ import (
 // max number of compactions). And we will need to incorporate overload due to
 // disk bandwidth bottleneck.
 func (iot *IOThreshold) Score() (float64, bool) {
-	if iot == nil {
+	// iot.L0NumFilesThreshold and iot.L0NumSubLevelsThreshold are initialized to
+	// 0 by default, and there appears to be a period of time before we update
+	// iot.L0NumFilesThreshold and iot.L0NumSubLevelsThreshold to their
+	// appropriate values. During this period of time, to prevent dividing by 0
+	// below and Score() returning NaN, we check if iot.L0NumFilesThreshold or
+	// iot.L0NumSubLevelsThreshold are 0 (i.e. currently uninitialized) and
+	// return 0 as the score if so.
+	if iot == nil || iot.L0NumFilesThreshold == 0 || iot.L0NumSubLevelsThreshold == 0 {
 		return 0, false
 	}
 	f := math.Max(

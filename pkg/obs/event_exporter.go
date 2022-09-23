@@ -34,6 +34,8 @@ import (
 // implemented by EventsServer.
 type EventsExporter interface {
 	// SendEvent buffers an event to be sent to subscribers.
+	//
+	// SendEvent does not block. If the buffer is full, old events are dropped.
 	SendEvent(ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord)
 }
 
@@ -119,9 +121,10 @@ var _ obspb.ObsServer = &EventsServer{}
 //
 // |msg|msg|msg|msg|msg|msg|msg|msg|msg|
 // └----------------------^--------------┘
-//                      triggerSize    maxBufferSize
-//                        └--------------┘
-//                           sized-based flush is triggered when size falls in this range
+//
+//	triggerSize    maxBufferSize
+//	  └--------------┘
+//	     sized-based flush is triggered when size falls in this range
 //
 // maxBufferSize should also be set such that it makes sense in relationship
 // with the flush latency: only one flush is ever in flight at a time, so the

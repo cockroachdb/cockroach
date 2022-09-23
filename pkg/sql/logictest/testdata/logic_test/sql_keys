@@ -66,3 +66,8 @@ query II
 SELECT count(key), count(DISTINCT key) FROM crdb_internal.scan(crdb_internal.table_span($tableid))
 ----
 4096 4096
+
+# Regression test for not closing the generator builtin if it encounters an
+# error in Start() (#87248).
+statement error failed to verify keys for Scan
+SELECT crdb_internal.scan('\xff':::BYTES, '\x3f5918':::BYTES);

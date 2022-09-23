@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -401,18 +402,17 @@ func mergeWithData(t *testing.T, retries int64) {
 // LHS is properly updated after a merge. The test contains a subtest for each
 // of the combinations of the following boolean options:
 //
-// - disjointLeaseholders: configures whether or not the leaseholder of the
+//   - disjointLeaseholders: configures whether or not the leaseholder of the
 //     LHS range is disjoint from the leaseholder of the RHS range. If false,
 //     the leaseholders are collocated before the merge is initiated.
 //
-// - throughSnapshot: configures whether or not the leaseholder of the LHS of
+//   - throughSnapshot: configures whether or not the leaseholder of the LHS of
 //     the merge hears about and applies the merge through a Raft snapshot, as
 //     opposed to through normal Raft log application.
 //
-// - futureRead: configures whether or not the reads performed on the RHS range
+//   - futureRead: configures whether or not the reads performed on the RHS range
 //     before the merge is initiated are performed in the future of present
 //     time using synthetic timestamps.
-//
 func TestStoreRangeMergeTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -539,6 +539,9 @@ func mergeCheckingTimestampCaches(
 			}
 			if !rhsRepl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
 				return errors.New("rhs store does not own valid lease for rhs range")
+			}
+			if rhsRepl.CurrentLeaseStatus(ctx).Lease.Type() != roachpb.LeaseEpoch {
+				return errors.Errorf("lease still an expiration based lease")
 			}
 			return nil
 		})
@@ -1005,6 +1008,9 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		}
 		if !lhsRepl1.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
 			return errors.New("s2 does not own valid lease for lhs range")
+		}
+		if lhsRepl1.CurrentLeaseStatus(ctx).Lease.Type() != roachpb.LeaseEpoch {
+			return errors.Errorf("lease still an expiration based lease")
 		}
 		return nil
 	})
@@ -1737,10 +1743,7 @@ func checkConsistencyArgs(desc *roachpb.RangeDescriptor) *roachpb.CheckConsisten
 			Key:    desc.StartKey.AsRawKey(),
 			EndKey: desc.EndKey.AsRawKey(),
 		},
-		WithDiff:   false,
-		Mode:       1,
-		Checkpoint: false,
-		Terminate:  nil,
+		Mode: roachpb.ChecksumMode_CHECK_FULL,
 	}
 }
 
@@ -2223,7 +2226,7 @@ func TestStoreRangeMergeCheckConsistencyAfterSubsumption(t *testing.T) {
 	close(abortMergeTxn)
 
 	pErr := <-mergeErr
-	require.IsType(t, &roachpb.Error{}, pErr)
+	require.IsType(t, (*roachpb.Error)(nil), pErr)
 	require.Regexp(t, "abort the merge for test", pErr.String())
 
 	testutils.SucceedsSoon(t, func() error {
@@ -2370,17 +2373,17 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 //
 // Consider the following sequence of events observed in a real cluster:
 //
-//     1. Adjacent ranges Q and R are slated to be merged. Q has replicas on
-//        stores S1, S2, and S3, while R has replicas on S1, S2, and S4.
-//     2. To collocate Q and R, the merge queue adds a replica of R on S3 and
-//        removes the replica on S4. The replica on S4 is queued for garbage
-//        collection, but is not yet processed.
-//     3. The merge transaction commits, deleting R's range descriptor from the
-//        meta2 index.
-//     4. The replica GC queue processes the former replica of R on S4. It
-//        performs a consistent lookup of R's start key in the meta2 index to
-//        determine whether the replica is still a member of R. Since R has been
-//        deleted, the lookup returns Q's range descriptor, not R's.
+//  1. Adjacent ranges Q and R are slated to be merged. Q has replicas on
+//     stores S1, S2, and S3, while R has replicas on S1, S2, and S4.
+//  2. To collocate Q and R, the merge queue adds a replica of R on S3 and
+//     removes the replica on S4. The replica on S4 is queued for garbage
+//     collection, but is not yet processed.
+//  3. The merge transaction commits, deleting R's range descriptor from the
+//     meta2 index.
+//  4. The replica GC queue processes the former replica of R on S4. It
+//     performs a consistent lookup of R's start key in the meta2 index to
+//     determine whether the replica is still a member of R. Since R has been
+//     deleted, the lookup returns Q's range descriptor, not R's.
 //
 // The replica GC queue would previously fail to notice that it had received Q's
 // range descriptor, not R's. It would then proceed to call store.RemoveReplica
@@ -3878,7 +3881,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		var mismatchedSstsIdx []int
 		// Iterate over all the tested SSTs and check that they're byte-by-byte equal.
 		for i := range sstNamesSubset {
-			actualSST, err := receivingEng.ReadFile(sstNamesSubset[i])
+			actualSST, err := fs.ReadFile(receivingEng, sstNamesSubset[i])
 			if err != nil {
 				return err
 			}

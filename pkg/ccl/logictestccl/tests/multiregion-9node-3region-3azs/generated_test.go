@@ -122,6 +122,13 @@ func TestCCLLogic_multi_region_import_export(
 	runCCLLogicTest(t, "multi_region_import_export")
 }
 
+func TestCCLLogic_multi_region_locality_optimized_search_query_behavior(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_locality_optimized_search_query_behavior")
+}
+
 func TestCCLLogic_multi_region_privileges(
 	t *testing.T,
 ) {

@@ -173,3 +173,15 @@ func (ol *OpLoggerBatch) LogicalOps() []enginepb.MVCCLogicalOp {
 	}
 	return ol.ops
 }
+
+// DisableOpLogger disables op logging for the given read/writer.
+func DisableOpLogger(rw ReadWriter) ReadWriter {
+	return &noOpLogger{ReadWriter: rw}
+}
+
+type noOpLogger struct {
+	ReadWriter
+}
+
+func (n *noOpLogger) LogLogicalOp(MVCCLogicalOpType, MVCCLogicalOpDetails) {
+}

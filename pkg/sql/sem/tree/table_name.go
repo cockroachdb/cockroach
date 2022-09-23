@@ -143,18 +143,18 @@ func (ts *TableNames) String() string { return AsString(ts) }
 
 // TableIndexName refers to a table index. There are a few cases:
 //
-//  - if both the table name and the index name are set, refers to a specific
-//    index in a specific table.
+//   - if both the table name and the index name are set, refers to a specific
+//     index in a specific table.
 //
-//  - if the table name is set and index name is empty, refers to the primary
-//    index of that table.
+//   - if the table name is set and index name is empty, refers to the primary
+//     index of that table.
 //
-//  - if the table name is empty and the index name is set, refers to an index
-//    of that name among all tables within a catalog/schema; if there is a
-//    duplicate name, that will result in an error. Note that it is possible to
-//    specify the schema or catalog without specifying a table name; in this
-//    case, Table.ObjectNamePrefix has the fields set but Table.ObjectName is
-//    empty.
+//   - if the table name is empty and the index name is set, refers to an index
+//     of that name among all tables within a catalog/schema; if there is a
+//     duplicate name, that will result in an error. Note that it is possible to
+//     specify the schema or catalog without specifying a table name; in this
+//     case, Table.ObjectNamePrefix has the fields set but Table.ObjectName is
+//     empty.
 type TableIndexName struct {
 	Table TableName
 	Index UnrestrictedName

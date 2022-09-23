@@ -42,6 +42,7 @@ go_test(
         "row_decoder_external_test.go",
         "settings_watcher_external_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         ":settingswatcher",
         "//pkg/base",
@@ -49,6 +50,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
+        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

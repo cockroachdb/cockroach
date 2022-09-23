@@ -3250,22 +3250,32 @@ func TestStoreSplitDisappearingReplicas(t *testing.T) {
 //
 // Or, in pictures (s3 looks like s1 throughout and is omitted):
 //
-//     s1:  [----r1@all-------------]
-//     s2:  [----r1@all-------------]
+//	s1:  [----r1@all-------------]
+//	s2:  [----r1@all-------------]
+//
 // Remove s2:
-//     s1:  [----r1@s1s3------------]
-//     s2:  [----r1@all-------------] (outdated)
+//
+//	s1:  [----r1@s1s3------------]
+//	s2:  [----r1@all-------------] (outdated)
+//
 // Split r1:
-//     s1:  [-r1@s1s3-|--r2@s1s3----]
-//     s2:  [----r1@all-------------] (outdated)
+//
+//	s1:  [-r1@s1s3-|--r2@s1s3----]
+//	s2:  [----r1@all-------------] (outdated)
+//
 // Add s2:
-//     s1:  [-r1@all-|--r2@s1s3-----]
-//     s2:  [----r1@all-------------] (outdated)
+//
+//	s1:  [-r1@all-|--r2@s1s3-----]
+//	s2:  [----r1@all-------------] (outdated)
+//
 // Add learner to s2 on r2 (remains uninitialized due to LHS state blocking it):
-//     s1:  [-r1@s1s3-|--r2@all-----]
-//     s2:  [----r1@all-------------] (outdated), uninitialized replica r2/3
+//
+//	s1:  [-r1@s1s3-|--r2@all-----]
+//	s2:  [----r1@all-------------] (outdated), uninitialized replica r2/3
+//
 // Remove and re-add learner multiple times: r2/3 becomes r2/100
-//     (diagram looks the same except for replacing r2/3)
+//
+//	(diagram looks the same except for replacing r2/3)
 //
 // When connectivity is restored, r1@s2 will start to catch up on the raft log
 // after it learns of its new replicaID. It first processes the replication

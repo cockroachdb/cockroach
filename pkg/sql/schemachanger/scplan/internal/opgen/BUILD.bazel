@@ -66,6 +66,7 @@ go_library(
         "//pkg/sql/schemachanger/scplan/internal/scgraph",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sem/catid",
+        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
@@ -78,6 +79,7 @@ go_test(
     name = "opgen_test",
     size = "small",
     srcs = ["register_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":opgen"],
     deps = ["//pkg/sql/schemachanger/scpb"],
 )

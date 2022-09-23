@@ -13,10 +13,12 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,6 +50,7 @@ func (n *discardNode) startExec(params runParams) error {
 
 		// RESET ALL
 		if err := params.p.resetAllSessionVars(params.ctx); err != nil {
+
 			return err
 		}
 
@@ -59,13 +62,44 @@ func (n *discardNode) startExec(params runParams) error {
 			m.data.SequenceState = sessiondata.NewSequenceState()
 			m.initSequenceCache()
 		})
+
+		// DISCARD TEMP
+		err := deleteTempTables(params.ctx, params.p)
+		if err != nil {
+			return err
+		}
+
 	case tree.DiscardModeSequences:
 		params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
 			m.data.SequenceState = sessiondata.NewSequenceState()
 			m.initSequenceCache()
 		})
+	case tree.DiscardModeTemp:
+		err := deleteTempTables(params.ctx, params.p)
+		if err != nil {
+			return err
+		}
 	default:
 		return errors.AssertionFailedf("unknown mode for DISCARD: %d", n.mode)
 	}
 	return nil
+}
+
+func deleteTempTables(ctx context.Context, p *planner) error {
+	return p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		codec := p.execCfg.Codec
+		descCol := p.Descriptors()
+		allDbDescs, err := descCol.GetAllDatabaseDescriptors(ctx, p.Txn())
+		if err != nil {
+			return err
+		}
+		for _, dbDesc := range allDbDescs {
+			schemaName := p.TemporarySchemaName()
+			err = cleanupSchemaObjects(ctx, p.Txn(), descCol, codec, ie, dbDesc, schemaName)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

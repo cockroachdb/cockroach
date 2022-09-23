@@ -23,11 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -40,20 +40,33 @@ func init() {
 	randutil.SeedForTests()
 }
 
+const increment = -1
+
+func getAllocator(increment int64) (_ *colmem.Allocator, _ *mon.BoundAccount, cleanup func()) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	testMemMonitor := mon.NewMonitor(
+		"test-mem" /* name */, mon.MemoryResource, nil, /* curCount */
+		nil /* maxHist */, increment, math.MaxInt64 /* noteworthy */, st,
+	)
+	testMemMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
+	memAcc := testMemMonitor.MakeBoundAccount()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
+	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+	cleanup = func() {
+		memAcc.Close(ctx)
+		testMemMonitor.Stop(ctx)
+	}
+	return testAllocator, &memAcc, cleanup
+}
+
 func TestMaybeAppendColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
-	defer testMemMonitor.Stop(ctx)
-	memAcc := testMemMonitor.MakeBoundAccount()
-	defer memAcc.Close(ctx)
-	evalCtx := eval.MakeTestingEvalContext(st)
-	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
-	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
-
+	testAllocator, _, cleanup := getAllocator(increment)
+	defer cleanup()
 	t.Run("VectorAlreadyPresent", func(t *testing.T) {
 		b := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{types.Int})
 		b.SetLength(coldata.BatchSize())
@@ -109,16 +122,9 @@ func TestPerformAppend(t *testing.T) {
 	const nullOk = false
 	const resetChance = 0.5
 
-	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
-	st := cluster.MakeTestingClusterSettings()
-	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
-	defer testMemMonitor.Stop(ctx)
-	memAcc := testMemMonitor.MakeBoundAccount()
-	defer memAcc.Close(ctx)
-	evalCtx := eval.MakeTestingEvalContext(st)
-	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
-	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+	testAllocator, _, cleanup := getAllocator(increment)
+	defer cleanup()
 
 	batch1 := colexecutils.NewAppendOnlyBufferedBatch(testAllocator, typs, nil /* colsToStore */)
 	batch2 := colexecutils.NewAppendOnlyBufferedBatch(testAllocator, typs, nil /* colsToStore */)
@@ -192,25 +198,9 @@ func TestAccountingHelper(t *testing.T) {
 		require.NoError(t, coldata.SetBatchSizeForTests(oldBatchSize))
 	}()
 
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
 	// Use increment of 1 so that no allocations are "reserved".
-	testMemMonitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		1,             /* increment */
-		math.MaxInt64, /* noteworthy */
-		st,
-	)
-	testMemMonitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-	defer testMemMonitor.Stop(ctx)
-	memAcc := testMemMonitor.MakeBoundAccount()
-	defer memAcc.Close(ctx)
-	evalCtx := eval.MakeTestingEvalContext(st)
-	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
-	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+	testAllocator, _, cleanup := getAllocator(1 /* increment */)
+	defer cleanup()
 
 	// Allocate a scratch bytes value that exceeds the target size in all
 	// scenarios.
@@ -384,17 +374,9 @@ func TestSetAccountingHelper(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
-	st := cluster.MakeTestingClusterSettings()
-	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
-	defer testMemMonitor.Stop(ctx)
-	memAcc := testMemMonitor.MakeBoundAccount()
-	defer memAcc.Close(ctx)
-	evalCtx := eval.MakeTestingEvalContext(st)
-	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
-	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
-
+	testAllocator, _, cleanup := getAllocator(increment)
+	defer cleanup()
 	numCols := rng.Intn(10) + 1
 	typs := make([]*types.T, numCols)
 	for i := range typs {
@@ -460,6 +442,78 @@ func TestSetAccountingHelper(t *testing.T) {
 	}
 }
 
+// TestSetAccountingHelperMemoryLimit verifies that colmem.SetAccountingHelper
+// reasonably uses the capacity of already allocated batches.
+func TestSetAccountingHelperMemoryLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if coldata.BatchSize() < 4 {
+		skip.IgnoreLint(t, "the test assumes coldata.BatchSize() is at least 4")
+	}
+
+	// Use increment of 1 so that no allocations are "reserved".
+	testAllocator, _, cleanup := getAllocator(1 /* increment */)
+	defer cleanup()
+
+	// We need to use at least one type of variable width in order to trigger
+	// more interesting path in AccountForSet.
+	typs := []*types.T{types.Bytes}
+
+	// We will ask the helper for batches of different sizes ("small" doesn't
+	// exceed the memory limit, and "large" exceeds it by too much so it is not
+	// actually allocated according to the ask - instead a "medium" batch is
+	// allocated).
+	largeCap := coldata.BatchSize()
+	smallCap := largeCap / 4
+	mediumCap := smallCap * 2
+	// Use memory limit that is exactly the footprint of the medium batch.
+	memoryLimit := colmem.GetBatchMemSize(testAllocator.NewMemBatchWithFixedCapacity(typs, mediumCap))
+	testAllocator.ReleaseAll()
+
+	var helper colmem.SetAccountingHelper
+	helper.Init(testAllocator, memoryLimit, typs)
+
+	// Allocate the small batch and ensure that we use all tuples inside of it.
+	b, _ := helper.ResetMaybeReallocate(typs, nil /* oldBatch */, smallCap)
+	var rowIdx int
+	for batchDone := false; !batchDone; {
+		batchDone = helper.AccountForSet(rowIdx)
+		rowIdx++
+	}
+	require.Equal(t, smallCap, rowIdx)
+
+	// Attempt to allocate a batch with too large of a capacity.
+	b, reallocated := helper.ResetMaybeReallocate(typs, b, largeCap)
+	require.True(t, reallocated)
+	// We expect that the ask of largeCap is not satisfied and that the batch
+	// of exactly mediumCap is allocated.
+	require.Equal(t, b.Capacity(), mediumCap)
+	// Ensure that the helper still uses the whole capacity.
+	rowIdx = 0
+	for batchDone := false; !batchDone; {
+		batchDone = helper.AccountForSet(rowIdx)
+		rowIdx++
+	}
+	require.Equal(t, b.Capacity(), rowIdx)
+
+	// Increase the limit by a little so that the previously allocated batch is
+	// below the new limit. This also unsets the memorized max capacity so that
+	// the helper considers allocating a new batch.
+	helper.TestingUpdateMemoryLimit(memoryLimit + 1)
+	// Now try to allocate a batch of medium capacity plus one, but a new batch
+	// won't be allocated because the helper will estimate that it would exceed
+	// the (newly-updated) memory limit.
+	b, reallocated = helper.ResetMaybeReallocate(typs, b, mediumCap+1)
+	require.False(t, reallocated)
+	rowIdx = 0
+	for batchDone := false; !batchDone; {
+		batchDone = helper.AccountForSet(rowIdx)
+		rowIdx++
+	}
+	require.Equal(t, b.Capacity(), rowIdx)
+}
+
 // TestEstimateBatchSizeBytes verifies that EstimateBatchSizeBytes returns such
 // an estimate that it equals the actual footprint of the newly-created batch
 // with no values set.
@@ -467,16 +521,9 @@ func TestEstimateBatchSizeBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
-	st := cluster.MakeTestingClusterSettings()
-	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
-	defer testMemMonitor.Stop(ctx)
-	memAcc := testMemMonitor.MakeBoundAccount()
-	defer memAcc.Close(ctx)
-	evalCtx := eval.MakeTestingEvalContext(st)
-	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
-	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+	testAllocator, memAcc, cleanup := getAllocator(increment)
+	defer cleanup()
 
 	numCols := rng.Intn(10) + 1
 	typs := make([]*types.T, numCols)
@@ -485,7 +532,7 @@ func TestEstimateBatchSizeBytes(t *testing.T) {
 	}
 	const numRuns = 10
 	for run := 0; run < numRuns; run++ {
-		memAcc.Clear(ctx)
+		memAcc.Clear(context.Background())
 		numRows := rng.Intn(coldata.BatchSize()) + 1
 		batch := testAllocator.NewMemBatchWithFixedCapacity(typs, numRows)
 		expected := memAcc.Used()

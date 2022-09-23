@@ -1782,7 +1782,11 @@ func (d *DUuid) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.UUID.String())
+
+	buf := ctx.scratch[:uuid.RFC4122StrSize]
+	d.UUID.StringBytes(buf)
+	ctx.Write(buf)
+
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2344,7 +2348,7 @@ func (d *DTime) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(timeofday.TimeOfDay(*d).String())
+	ctx.Write(timeofday.TimeOfDay(*d).AppendFormat(ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -2520,7 +2524,7 @@ func (d *DTimeTZ) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.TimeTZ.String())
+	ctx.Write(d.TimeTZ.AppendFormat(ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -3603,7 +3607,7 @@ func (d *DBox2D) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(d.CartesianBoundingBox.Repr())
+	ctx.Write(d.CartesianBoundingBox.AppendFormat(ctx.scratch[:0]))
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -3731,10 +3735,10 @@ func AsJSON(
 		// without the T separator. This causes some compatibility problems
 		// with certain JSON consumers, so we'll use an alternate formatting
 		// path here to maintain consistency with PostgreSQL.
-		return json.FromString(t.Time.In(loc).Format(time.RFC3339Nano)), nil
+		return json.FromString(formatTime(t.Time.In(loc), time.RFC3339Nano)), nil
 	case *DTimestamp:
 		// This is RFC3339Nano, but without the TZ fields.
-		return json.FromString(t.UTC().Format("2006-01-02T15:04:05.999999999")), nil
+		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc))), nil
 	case *DGeometry:
@@ -3750,6 +3754,16 @@ func AsJSON(
 
 		return nil, errors.AssertionFailedf("unexpected type %T for AsJSON", d)
 	}
+}
+
+// formatTime formats time with specified layout.
+// TODO(yuzefovich): consider using this function in more places.
+func formatTime(t time.Time, layout string) string {
+	// We only need FmtCtx to access its buffer so
+	// that we get 0 amortized allocations.
+	ctx := NewFmtCtx(FmtSimple)
+	ctx.Write(t.AppendFormat(ctx.scratch[:0], layout))
+	return ctx.CloseAndGetString()
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -4209,9 +4223,10 @@ func (d *DTuple) Size() uintptr {
 
 // ContainsNull returns true if the tuple contains NULL, possibly nested inside
 // other tuples. For example, all the following tuples contain NULL:
-//  (1, 2, NULL)
-//  ((1, 1), (2, NULL))
-//  (((1, 1), (2, 2)), ((3, 3), (4, NULL)))
+//
+//	(1, 2, NULL)
+//	((1, 1), (2, NULL))
+//	(((1, 1), (2, 2)), ((3, 3), (4, NULL)))
 func (d *DTuple) ContainsNull() bool {
 	for _, r := range d.D {
 		if r == DNull {
@@ -5059,14 +5074,13 @@ func (d *DOid) CompareError(ctx CompareContext, other Datum) (int, error) {
 
 // Format implements the Datum interface.
 func (d *DOid) Format(ctx *FmtCtx) {
-	s := strconv.FormatUint(uint64(d.Oid), 10)
 	if d.semanticType.Oid() == oid.T_oid || d.name == "" {
-		ctx.WriteString(s)
+		ctx.Write(strconv.AppendUint(ctx.scratch[:0], uint64(d.Oid), 10))
 	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
 		ctx.WriteString("crdb_internal.create_")
 		ctx.WriteString(d.semanticType.SQLStandardName())
 		ctx.WriteByte('(')
-		ctx.WriteString(s)
+		ctx.Write(strconv.AppendUint(ctx.scratch[:0], uint64(d.Oid), 10))
 		ctx.WriteByte(',')
 		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncNoFlags)
 		ctx.WriteByte(')')
@@ -5126,14 +5140,13 @@ func (d *DOid) Min(ctx CompareContext) (Datum, bool) {
 //
 // Instead, DOidWrapper allows a standard Datum to be wrapped with a new Oid.
 // This approach provides two major advantages:
-// - performance of the existing Datum types are not affected because they
-//   do not need to have custom oid.Oids added to their structure.
-// - the introduction of new Datum aliases is straightforward and does not require
-//   additions to typing rules or type-dependent evaluation behavior.
+//   - performance of the existing Datum types are not affected because they
+//     do not need to have custom oid.Oids added to their structure.
+//   - the introduction of new Datum aliases is straightforward and does not require
+//     additions to typing rules or type-dependent evaluation behavior.
 //
 // Types that currently benefit from DOidWrapper are:
 // - DName => DOidWrapper(*DString, oid.T_name)
-//
 type DOidWrapper struct {
 	Wrapped Datum
 	Oid     oid.Oid
@@ -5514,8 +5527,9 @@ var baseDatumTypeSizes = map[types.Family]struct {
 
 // MaxDistinctCount returns the maximum number of distinct values between the
 // given datums (inclusive). This is possible if:
-//   a. the types of the datums are equivalent and countable, or
-//   b. the datums have the same value (in which case the distinct count is 1).
+//
+//	a. the types of the datums are equivalent and countable, or
+//	b. the datums have the same value (in which case the distinct count is 1).
 //
 // If neither of these conditions hold, MaxDistinctCount returns ok=false.
 // Additionally, it must be the case that first <= last, otherwise
@@ -5594,12 +5608,12 @@ func MaxDistinctCount(evalCtx CompareContext, first, last Datum) (_ int64, ok bo
 		return 0, false
 	}
 
-	delta := end - start
-	if delta < 0 {
+	delta := (end - start) + 1
+	if delta <= 0 {
 		// Overflow or underflow.
 		return 0, false
 	}
-	return delta + 1, true
+	return delta, true
 }
 
 // ParsePath splits a string of the form "/foo/bar" into strings ["foo", "bar"].

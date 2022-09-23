@@ -30,6 +30,7 @@ go_test(
         "constraint_builder_test.go",
         "exports_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":lookupjoin"],
     deps = [

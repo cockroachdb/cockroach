@@ -18,12 +18,29 @@ import (
 // Clauses exists to handle flattening of a slice of clauses before marshaling.
 type Clauses []Clause
 
+func replaceVars(replacements, before []Var, cl Clause) Clause {
+	maybeReplace := func(in Var) (_ Var, replaced bool) {
+		for i, v := range before {
+			if in == v && replacements[i] != v {
+				return replacements[i], true
+			}
+		}
+		return in, false
+	}
+	replaced, _ := walkVars(cl, maybeReplace)
+	return replaced
+}
+
 func expanded(c Clauses) Clauses {
 	needsExpansion := func() bool {
 		for _, cl := range c {
-			switch cl.(type) {
-			case and, ruleInvocation:
+			switch cl := cl.(type) {
+			case and:
 				return true
+			case ruleInvocation:
+				if !cl.rule.isNotJoin {
+					return true
+				}
 			}
 		}
 		return false
@@ -32,18 +49,6 @@ func expanded(c Clauses) Clauses {
 	if !needsExpansion() {
 		return c
 	}
-	replaceVars := func(replacements, before []Var, cl Clause) Clause {
-		maybeReplace := func(in Var) (_ Var, replaced bool) {
-			for i, v := range before {
-				if in == v && replacements[i] != v {
-					return replacements[i], true
-				}
-			}
-			return in, false
-		}
-		replaced, _ := walkVars(cl, maybeReplace)
-		return replaced
-	}
 
 	var ret Clauses
 	for _, cl := range c {
@@ -51,8 +56,12 @@ func expanded(c Clauses) Clauses {
 		case and:
 			ret = append(ret, expanded(Clauses(cl))...)
 		case ruleInvocation:
-			for _, clause := range expanded(cl.rule.Clauses) {
-				ret = append(ret, replaceVars(cl.args, cl.rule.Params, clause))
+			if cl.rule.isNotJoin {
+				ret = append(ret, cl)
+				continue
+			}
+			for _, clause := range expanded(cl.rule.clauses) {
+				ret = append(ret, replaceVars(cl.args, cl.rule.paramVars, clause))
 			}
 		default:
 			ret = append(ret, cl)
