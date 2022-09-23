@@ -298,6 +298,9 @@ const (
 	// leases to nodes that (i) don't expect them for certain keyspans, and (ii)
 	// don't know to upgrade them to efficient epoch-based ones.
 	EnableLeaseUpgrade
+	// SupportAssumeRoleAuth is the version where assume role authorization is
+	// supported in cloud storage and KMS.
+	SupportAssumeRoleAuth
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -480,6 +483,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     EnableLeaseUpgrade,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 72},
+	},
+	{
+		Key:     SupportAssumeRoleAuth,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 74},
 	},
 
 	// *************************************************

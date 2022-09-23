@@ -18,6 +18,7 @@ import (
 
 	kms "cloud.google.com/go/kms/apiv1"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/api/option"
 	kmspb "google.golang.org/genproto/googleapis/cloud/kms/v1"
@@ -126,6 +127,10 @@ func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	if kmsURIParams.assumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
+		if !env.ClusterSettings().Version.IsActive(ctx, clusterversion.SupportAssumeRoleAuth) {
+			return nil, errors.New("cannot authenticate to KMS via assume role until cluster has fully upgraded to 22.2")
+		}
+
 		assumeOpt, err := createImpersonateCredentials(ctx, kmsURIParams.assumeRole, kmsURIParams.delegateRoles, kms.DefaultAuthScopes(), credentialsOpt...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to assume role")
