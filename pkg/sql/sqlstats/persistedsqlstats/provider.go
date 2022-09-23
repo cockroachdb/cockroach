@@ -162,6 +162,11 @@ func (s *PersistedSQLStats) GetNextFlushAt() time.Time {
 	return s.atomic.nextFlushAt.Load().(time.Time)
 }
 
+// GetSQLInstanceID returns the SQLInstanceID.
+func (s *PersistedSQLStats) GetSQLInstanceID() base.SQLInstanceID {
+	return s.cfg.SQLIDContainer.SQLInstanceID()
+}
+
 // nextFlushInterval calculates the wait interval that is between:
 // [(1 - SQLStatsFlushJitter) * SQLStatsFlushInterval),
 //
