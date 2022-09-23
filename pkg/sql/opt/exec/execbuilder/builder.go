@@ -152,6 +152,14 @@ type Builder struct {
 	// was used in the query.
 	JoinAlgorithmCounts map[exec.JoinAlgorithm]int
 
+	// ScanCounts records the number of times scans were used in the query.
+	ScanCounts [exec.NumScanCountTypes]int
+
+	// TotalScanWithStatsForecastRows is the total number of rows read by the
+	// scans which used forecasted statistics in the query, as estimated by the
+	// optimizer.
+	TotalScanWithStatsForecastRows float64
+
 	// wrapFunctionOverride overrides default implementation to return resolvable
 	// function reference for function with specified function name.
 	// The default can be overridden by calling SetBuiltinFuncWrapper method to provide

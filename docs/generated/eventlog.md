@@ -2817,6 +2817,10 @@ contains common SQL event/execution details.
 | `KVRowsRead` | The number of rows read at the KV layer for this query. | no |
 | `NetworkMessages` | The number of network messages sent by nodes for this query. | no |
 | `IndexRecommendations` | Generated index recommendations for this query. | no |
+| `ScanCount` | The number of scans in the query plan. | no |
+| `ScanWithStatsCount` | The number of scans using statistics (including forecasted statistics) in the query plan. | no |
+| `ScanWithStatsForecastCount` | The number of scans using forecasted statistics in the query plan. | no |
+| `TotalScanWithStatsForecastRowsEstimate` | Total number of rows read by the scans which used forecasted statistics in the query, as estimated by the optimizer. | no |
 
 
 #### Common fields

@@ -174,6 +174,14 @@ type instrumentationHelper struct {
 	// joinAlgorithmCounts records the number of times each type of join algorithm
 	// was used in the query.
 	joinAlgorithmCounts map[exec.JoinAlgorithm]int
+
+	// scanCounts records the number of times scans were used in the query.
+	scanCounts [exec.NumScanCountTypes]int
+
+	// totalScanWithStatsForecastRows is the total number of rows read by the
+	// scans which used forecasted statistics in the query, as estimated by the
+	// optimizer.
+	totalScanWithStatsForecastRows float64
 }
 
 // outputMode indicates how the statement output needs to be populated (for

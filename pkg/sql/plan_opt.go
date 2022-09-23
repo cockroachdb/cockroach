@@ -637,6 +637,8 @@ func (opc *optPlanningCtx) runExecBuilder(
 	planTop.instrumentation.nanosSinceStatsCollected = bld.NanosSinceStatsCollected
 	planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
 	planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
+	planTop.instrumentation.scanCounts = bld.ScanCounts
+	planTop.instrumentation.totalScanWithStatsForecastRows = bld.TotalScanWithStatsForecastRows
 	if gf != nil {
 		planTop.instrumentation.planGist = gf.PlanGist()
 	}

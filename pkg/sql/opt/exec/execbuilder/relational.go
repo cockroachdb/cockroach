@@ -741,15 +741,28 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		}
 	}
 
-	// Save the total estimated number of rows scanned and the time since stats
-	// were collected.
+	// Save some instrumentation info.
+	b.ScanCounts[exec.ScanCount]++
 	if stats.Available {
 		b.TotalScanRows += stats.RowCount
-		if tab.StatisticCount() > 0 {
-			// The first stat is the most recent one.
-			nanosSinceStatsCollected := timeutil.Since(tab.Statistic(0).CreatedAt())
-			if nanosSinceStatsCollected > b.NanosSinceStatsCollected {
-				b.NanosSinceStatsCollected = nanosSinceStatsCollected
+		// The first stat is the most recent one.
+		var first int
+		if !b.evalCtx.SessionData().OptimizerUseForecasts {
+			for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
+				first++
+			}
+		}
+		if first < tab.StatisticCount() {
+			b.ScanCounts[exec.ScanWithStatsCount]++
+			stat := tab.Statistic(first)
+			if stat.IsForecast() {
+				b.ScanCounts[exec.ScanWithStatsForecastCount]++
+				b.TotalScanWithStatsForecastRows += stats.RowCount
+			} else {
+				nanosSinceStatsCollected := timeutil.Since(stat.CreatedAt())
+				if nanosSinceStatsCollected > b.NanosSinceStatsCollected {
+					b.NanosSinceStatsCollected = nanosSinceStatsCollected
+				}
 			}
 		}
 	}

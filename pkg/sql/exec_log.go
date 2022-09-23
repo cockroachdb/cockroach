@@ -457,6 +457,11 @@ func (p *planner) maybeLogStatementInternal(
 				KVRowsRead:               stats.KVRowsRead,
 				NetworkMessages:          stats.NetworkMessages,
 				IndexRecommendations:     indexRecs,
+
+				ScanCount:                              int64(p.curPlan.instrumentation.scanCounts[exec.ScanCount]),
+				ScanWithStatsCount:                     int64(p.curPlan.instrumentation.scanCounts[exec.ScanWithStatsCount]),
+				ScanWithStatsForecastCount:             int64(p.curPlan.instrumentation.scanCounts[exec.ScanWithStatsForecastCount]),
+				TotalScanWithStatsForecastRowsEstimate: p.curPlan.instrumentation.totalScanWithStatsForecastRows,
 			}
 			p.logOperationalEventsOnlyExternally(ctx, isCopy, &sampledQuery)
 		} else {
