@@ -10,7 +10,7 @@
 
 import React from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { limitText } from "src/util";
+import { limitStringArray } from "src/util";
 import classNames from "classnames/bind";
 import styles from "./workloadInsights.module.scss";
 
@@ -25,25 +25,20 @@ export function QueriesCell(
     transactionQueries[0].length < textLimit
   ) {
     return <div>{transactionQueries[0]}</div>;
-  } else {
-    const limitedText = limitText(transactionQueries[0], textLimit);
-    return (
-      <Tooltip
-        placement="bottom"
-        content={
-          <div>
-            {transactionQueries.map((query, idx, arr) => (
-              <div key={Math.random()}>
-                {idx != 0 && <br />}
-                {query}
-                {idx != arr.length - 1 && <br />}
-              </div>
-            ))}
-          </div>
-        }
-      >
-        <span className={cx("queries-row")}>{limitedText}</span>
-      </Tooltip>
-    );
   }
+
+  const combinedQuery = transactionQueries.map((query, idx, arr) => (
+    <div key={idx}>
+      {idx != 0 && <br />}
+      {query}
+      {idx != arr.length - 1 && <br />}
+    </div>
+  ));
+
+  const limitedText = limitStringArray(transactionQueries, 50);
+  return (
+    <Tooltip placement="bottom" content={<div>{combinedQuery}</div>}>
+      <span className={cx("queries-row")}>{limitedText}</span>
+    </Tooltip>
+  );
 }

@@ -62,10 +62,10 @@ type virtualTableGeneratorResponse struct {
 
 // setupGenerator takes in a worker that generates rows eagerly and transforms
 // it into a lazy row generator. It returns two functions:
-// * next: A handle that can be called to generate a row from the worker. Next
-//   cannot be called once cleanup has been called.
-// * cleanup: Performs all cleanup. This function must be called exactly once
-//   to ensure that resources are cleaned up.
+//   - next: A handle that can be called to generate a row from the worker. Next
+//     cannot be called once cleanup has been called.
+//   - cleanup: Performs all cleanup. This function must be called exactly once
+//     to ensure that resources are cleaned up.
 func setupGenerator(
 	ctx context.Context,
 	worker func(ctx context.Context, pusher rowPusher) error,

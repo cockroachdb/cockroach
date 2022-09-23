@@ -16,7 +16,6 @@ go_library(
         "//pkg/ccl/backupccl/backuputils",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
-        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/security/username",
@@ -30,6 +29,7 @@ go_library(
         "//pkg/util/ioctx",
         "//pkg/util/mon",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -41,6 +41,7 @@ go_test(
         "incrementals_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":backupdest"],
     deps = [
         "//pkg/ccl/backupccl/backupbase",

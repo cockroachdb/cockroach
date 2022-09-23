@@ -5164,3 +5164,78 @@ project
  │    └── filters (true)
  └── projections
       └── NULL [as="?column?":18]
+
+# Regression test for #86308.
+exec-ddl
+CREATE TABLE table86308 (
+  col3_0 INET NOT NULL,
+  col3_1 INT4 NOT NULL,
+  col3_2 TIMETZ NOT NULL,
+  col3_3 FLOAT4 NOT NULL,
+  col3_4 BIT(17) NOT NULL,
+  col3_5 GEOGRAPHY NOT NULL,
+  col3_6 BIT(22) NOT NULL,
+  col3_7 STRING NOT NULL,
+  col3_8 UUID NOT NULL,
+  col3_9 FLOAT8 NOT NULL AS (col3_3 + 0.7530620098114014:::FLOAT8) STORED,
+  col3_10 STRING NOT NULL AS (lower(CAST(col3_0 AS STRING))) STORED,
+  col3_11 FLOAT8 NOT NULL AS (col3_3 + 0.8790965676307678:::FLOAT8) VIRTUAL,
+  col3_12 STRING NOT NULL AS (lower(CAST(col3_0 AS STRING))) VIRTUAL,
+  col3_13 STRING NOT NULL AS (lower(CAST(col3_6 AS STRING))) STORED,
+  col3_14 FLOAT8 NOT NULL AS (col3_3 + (-0.27059364318847656):::FLOAT8) STORED,
+  col3_15 STRING NOT NULL AS (lower(CAST(col3_5 AS STRING))) STORED,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT table3_pkey PRIMARY KEY (rowid ASC),
+  UNIQUE INDEX table3_col3_4_col3_11_col3_1_col3_0_col3_3_key (col3_4 DESC, col3_11 ASC, col3_1 DESC, col3_0 ASC, col3_3 DESC) STORING (col3_5, col3_8, col3_9, col3_10, col3_13) WHERE ((((col3_9 = 5e-324:::FLOAT8) OR (col3_1 = (-32768):::INT8)) OR (col3_15 = '':::STRING)) AND (col3_3 > 3.4028234663852886e+38:::FLOAT8)) AND (col3_12 != '""':::STRING)
+);
+----
+
+# Before the fix, PruneGroupByCols would fire to push a Project below the
+# GroupBy. Then, since PruneWindowInputCols was disabled,
+# EliminateGroupByProject would remove the Project and the cycle would repeat.
+norm disable=PruneWindowInputCols format=hide-all
+SELECT concat_agg(tab_1739.col3_7::STRING ORDER BY tab_1739.col3_7 DESC)::STRING AS col_4664
+FROM table86308@[0] AS tab_1739 GROUP BY tab_1739.col3_7 HAVING bool_and(false::BOOL)::BOOL
+----
+project
+ └── group-by (hash)
+      ├── select
+      │    ├── window partition=(8)
+      │    │    ├── window partition=(8)
+      │    │    │    ├── project
+      │    │    │    │    ├── scan table86308
+      │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    ├── col3_9
+      │    │    │    │    │    │    │    └── col3_3 + 0.7530620098114014
+      │    │    │    │    │    │    ├── col3_10
+      │    │    │    │    │    │    │    └── lower(col3_0::STRING)
+      │    │    │    │    │    │    ├── col3_11
+      │    │    │    │    │    │    │    └── col3_3 + 0.8790965676307678
+      │    │    │    │    │    │    ├── col3_12
+      │    │    │    │    │    │    │    └── lower(col3_0::STRING)
+      │    │    │    │    │    │    ├── col3_13
+      │    │    │    │    │    │    │    └── lower(col3_6::STRING)
+      │    │    │    │    │    │    ├── col3_14
+      │    │    │    │    │    │    │    └── col3_3 + -0.27059364318847656
+      │    │    │    │    │    │    └── col3_15
+      │    │    │    │    │    │         └── lower(col3_5::STRING)
+      │    │    │    │    │    └── partial index predicates
+      │    │    │    │    │         └── table3_col3_4_col3_11_col3_1_col3_0_col3_3_key: filters
+      │    │    │    │    │              ├── ((col3_9 = 5e-324) OR (col3_1 = -32768)) OR (col3_15 = '')
+      │    │    │    │    │              ├── col3_3 > 3.4028234663852886e+38
+      │    │    │    │    │              └── lower(col3_0::STRING) != '""'
+      │    │    │    │    └── projections
+      │    │    │    │         ├── false
+      │    │    │    │         ├── col3_3 + 0.8790965676307678
+      │    │    │    │         └── lower(col3_0::STRING)
+      │    │    │    └── windows
+      │    │    │         └── concat-agg [frame="range from unbounded to unbounded"]
+      │    │    │              └── col3_7
+      │    │    └── windows
+      │    │         └── bool-and [frame="range from unbounded to unbounded"]
+      │    │              └── column21
+      │    └── filters
+      │         └── bool_and
+      └── aggregations
+           └── const-agg
+                └── concat_agg

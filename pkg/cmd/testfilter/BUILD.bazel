@@ -19,6 +19,7 @@ go_test(
     name = "testfilter_test",
     size = "small",
     srcs = ["main_test.go"],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":testfilter_lib"],
     deps = [

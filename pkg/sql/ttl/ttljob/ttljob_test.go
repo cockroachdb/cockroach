@@ -21,12 +21,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -57,14 +60,18 @@ type rowLevelTTLTestJobTestHelper struct {
 	server           ttlServer
 	env              *jobstest.JobSchedulerTestEnv
 	cfg              *scheduledjobs.JobExecutionConfig
-	tc               serverutils.TestClusterInterface
+	testCluster      serverutils.TestClusterInterface
 	sqlDB            *sqlutils.SQLRunner
 	kvDB             *kv.DB
 	executeSchedules func() error
 }
 
 func newRowLevelTTLTestJobTestHelper(
-	t *testing.T, testingKnobs *sql.TTLTestingKnobs, testMultiTenant bool, numNodes int,
+	t *testing.T,
+	testingKnobs *sql.TTLTestingKnobs,
+	testMultiTenant bool,
+	numNodes int,
+	version clusterversion.Key,
 ) (*rowLevelTTLTestJobTestHelper, func()) {
 	th := &rowLevelTTLTestJobTestHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
@@ -74,7 +81,16 @@ func newRowLevelTTLTestJobTestHelper(
 		),
 	}
 
+	var serverTestingKnobs base.ModuleTestingKnobs
+	if version != 0 {
+		serverTestingKnobs = &server.TestingKnobs{
+			BinaryVersionOverride:          clusterversion.ByKey(version),
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
+		}
+	}
+
 	baseTestingKnobs := base.TestingKnobs{
+		Server: serverTestingKnobs,
 		JobsTestingKnobs: &jobs.TestingKnobs{
 			JobSchedulerEnv: th.env,
 			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
@@ -94,15 +110,15 @@ func newRowLevelTTLTestJobTestHelper(
 	if numNodes > 1 {
 		replicationMode = base.ReplicationManual
 	}
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	testCluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: replicationMode,
 		ServerArgs: base.TestServerArgs{
 			Knobs:                           baseTestingKnobs,
 			DisableWebSessionAuthentication: true,
 		},
 	})
-	th.tc = tc
-	ts := tc.Server(0)
+	th.testCluster = testCluster
+	ts := testCluster.Server(0)
 	// As `ALTER TABLE ... SPLIT AT ...` is not supported in multi-tenancy, we
 	// do not run those tests.
 	if testMultiTenant {
@@ -130,7 +146,7 @@ func newRowLevelTTLTestJobTestHelper(
 	th.kvDB = ts.DB()
 
 	return th, func() {
-		tc.Stopper().Stop(context.Background())
+		testCluster.Stopper().Stop(context.Background())
 	}
 }
 
@@ -194,7 +210,10 @@ func (h *rowLevelTTLTestJobTestHelper) verifyNonExpiredRows(
 	require.Equal(t, expectedNumNonExpiredRows, actualNumNonExpiredRows)
 }
 
-func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(t *testing.T, expectedNumExpiredRows int) {
+// todo(ewall): migrate usages to verifyExpiredRows and switch SPLIT AT usage to SplitTable
+func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRowsJobOnly(
+	t *testing.T, expectedNumExpiredRows int,
+) {
 	rows := h.sqlDB.Query(t, `
 				SELECT sys_j.status, sys_j.progress
 				FROM crdb_internal.jobs AS crdb_j
@@ -212,8 +231,53 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(t *testing.T, expectedN
 		var progress jobspb.Progress
 		require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
 
-		actualNumExpiredRows := progress.UnwrapDetails().(jobspb.RowLevelTTLProgress).RowCount
+		actualNumExpiredRows := progress.UnwrapDetails().(jobspb.RowLevelTTLProgress).JobRowCount
 		require.Equal(t, int64(expectedNumExpiredRows), actualNumExpiredRows)
+		jobCount++
+	}
+	require.Equal(t, 1, jobCount)
+}
+
+func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
+	t *testing.T, expectedSQLInstanceIDToProcessorRowCountMap map[base.SQLInstanceID]int64,
+) {
+	rows := h.sqlDB.Query(t, `
+				SELECT sys_j.status, sys_j.progress
+				FROM crdb_internal.jobs AS crdb_j
+				JOIN system.jobs as sys_j ON crdb_j.job_id = sys_j.id
+				WHERE crdb_j.job_type = 'ROW LEVEL TTL'
+			`)
+	jobCount := 0
+	for rows.Next() {
+		var status string
+		var progressBytes []byte
+		require.NoError(t, rows.Scan(&status, &progressBytes))
+
+		require.Equal(t, "succeeded", status)
+
+		var progress jobspb.Progress
+		require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
+		rowLevelTTLProgress := progress.UnwrapDetails().(jobspb.RowLevelTTLProgress)
+
+		processorProgresses := rowLevelTTLProgress.ProcessorProgresses
+		processorIDs := make(map[int32]struct{}, len(processorProgresses))
+		sqlInstanceIDs := make(map[base.SQLInstanceID]struct{}, len(processorProgresses))
+		expectedJobRowCount := int64(0)
+		for i, processorProgress := range rowLevelTTLProgress.ProcessorProgresses {
+			processorID := processorProgress.ProcessorID
+			require.NotContains(t, processorIDs, processorID, i)
+
+			sqlInstanceID := processorProgress.SQLInstanceID
+			require.NotContains(t, sqlInstanceIDs, sqlInstanceID, i)
+			sqlInstanceIDs[sqlInstanceID] = struct{}{}
+
+			expectedProcessorRowCount, ok := expectedSQLInstanceIDToProcessorRowCountMap[sqlInstanceID]
+			require.True(t, ok, i)
+			require.Equal(t, expectedProcessorRowCount, processorProgress.ProcessorRowCount)
+
+			expectedJobRowCount += expectedProcessorRowCount
+		}
+		require.Equal(t, expectedJobRowCount, rowLevelTTLProgress.JobRowCount)
 		jobCount++
 	}
 	require.Equal(t, 1, jobCount)
@@ -228,6 +292,7 @@ func TestRowLevelTTLNoTestingKnobs(t *testing.T) {
 		nil,  /* SQLTestingKnobs */
 		true, /* testMultiTenant */
 		1,    /* numNodes */
+		0,    /* version */
 	)
 	defer cleanupFunc()
 
@@ -289,6 +354,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 				},
 				false, /* testMultiTenant */
 				1,     /* numNodes */
+				0,     /* version */
 			)
 			defer cleanupFunc()
 			th.sqlDB.Exec(t, createTable)
@@ -339,7 +405,9 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 					AOSTDuration: &zeroDuration,
 				},
 				true, /* testMultiTenant */
-				1 /* numNodes */)
+				1,    /* numNodes */
+				0,    /* version */
+			)
 			defer cleanupFunc()
 
 			th.sqlDB.ExecMultiple(t, strings.Split(tc.setup, ";")...)
@@ -361,7 +429,23 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 	testCases := []struct {
 		desc     string
 		splitAts []int
+		version  clusterversion.Key
 	}{
+		{
+			desc:     "no split 22_1",
+			splitAts: []int{},
+			version:  clusterversion.V22_1,
+		},
+		{
+			desc:     "1 split 22_1",
+			splitAts: []int{10_000},
+			version:  clusterversion.V22_1,
+		},
+		{
+			desc:     "2 splits 22_1",
+			splitAts: []int{10_000, 20_000},
+			version:  clusterversion.V22_1,
+		},
 		{
 			desc:     "no split",
 			splitAts: []int{},
@@ -380,15 +464,18 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			const numNodes = 5
 			splitAts := tc.splitAts
+			numRanges := len(splitAts) + 1
+			version := tc.version
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
 				t,
 				&sql.TTLTestingKnobs{
 					AOSTDuration:              &zeroDuration,
 					ReturnStatsError:          true,
-					ExpectedNumSpanPartitions: len(splitAts) + 1,
+					ExpectedNumSpanPartitions: numRanges,
 				},
 				false, /* testMultiTenant */ // SHOW RANGES FROM TABLE does not work with multi-tenant
 				numNodes,
+				version,
 			)
 			defer cleanupFunc()
 
@@ -411,46 +498,79 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 				tableName,
 			))
 			require.Equal(t, 1, len(ranges))
-			leaseHolderIdx, err := strconv.Atoi(ranges[0][4])
+			leaseHolderNodeIDInt, err := strconv.Atoi(ranges[0][4])
+			leaseHolderNodeID := roachpb.NodeID(leaseHolderNodeIDInt)
 			require.NoError(t, err)
+			leaseHolderServerIdx := -1
+			testCluster := th.testCluster
+			for i := 0; i < testCluster.NumServers(); i++ {
+				s := testCluster.Server(i)
+				if s.NodeID() == leaseHolderNodeID {
+					leaseHolderServerIdx = i
+					break
+				}
+			}
+			require.NotEqual(t, -1, leaseHolderServerIdx)
+
+			const rowsPerRange = 10
+			type rangeSplit struct {
+				sqlInstanceID base.SQLInstanceID
+				offset        int
+			}
+			// points to split the range
+			splitPoints := make([]serverutils.SplitPoint, len(splitAts))
+			// all ranges including the original range (1 more than number of splitPoints)
+			leaseHolderSQLInstanceID := base.SQLInstanceID(leaseHolderNodeID)
+			rangeSplits := []rangeSplit{{
+				sqlInstanceID: leaseHolderSQLInstanceID,
+				offset:        0,
+			}}
+			for i, splitAt := range splitAts {
+				newLeaseHolderServerIdx := (leaseHolderServerIdx + 1 + i) % numNodes
+				splitPoints[i] = serverutils.SplitPoint{
+					TargetNodeIdx: newLeaseHolderServerIdx,
+					Vals:          []interface{}{splitAt},
+				}
+				newLeaseHolderNodeID := testCluster.Server(newLeaseHolderServerIdx).NodeID()
+				rangeSplits = append(rangeSplits, rangeSplit{
+					sqlInstanceID: base.SQLInstanceID(newLeaseHolderNodeID),
+					offset:        splitAt,
+				})
+			}
 			tableDesc := desctestutils.TestingGetPublicTableDescriptor(
 				th.kvDB,
 				keys.SystemSQLCodec,
 				"defaultdb", /* database */
 				tableName,
 			)
-			const rowsPerRange = 10
-			splitPoints := make([]serverutils.SplitPoint, len(splitAts))
-			for i, splitAt := range splitAts {
-				newLeaseHolderIdx := (leaseHolderIdx + 1 + i) % numNodes
-				splitPoints[i] = serverutils.SplitPoint{
-					TargetNodeIdx: newLeaseHolderIdx,
-					Vals:          []interface{}{splitAt},
-				}
-			}
-			th.tc.SplitTable(t, tableDesc, splitPoints)
+			testCluster.SplitTable(t, tableDesc, splitPoints)
 			newRanges := sqlDB.QueryStr(t, fmt.Sprintf(
 				`SHOW RANGES FROM TABLE %s`,
 				tableName,
 			))
-			require.Equal(t, len(splitAts)+1, len(newRanges))
+			require.Equal(t, numRanges, len(newRanges))
 
 			// Populate table - even pk is non-expired, odd pk is expired
 			expectedNumNonExpiredRows := 0
-			expectedNumExpiredRows := 0
 			ts := timeutil.Now()
 			nonExpiredTs := ts.Add(time.Hour * 24 * 30)
 			expiredTs := ts.Add(-time.Hour)
 			const insertStatement = `INSERT INTO tbl VALUES ($1, $2)`
-			offsets := append(splitAts, 0)
-			for _, offset := range offsets { // insert into both ranges
+			expectedSQLInstanceIDToProcessorRowCountMap := make(map[base.SQLInstanceID]int64, numRanges)
+			for _, rangeSplit := range rangeSplits {
+				offset := rangeSplit.offset
 				for i := offset; i < offset+rowsPerRange; {
 					sqlDB.Exec(t, insertStatement, i, nonExpiredTs)
 					i++
 					expectedNumNonExpiredRows++
 					sqlDB.Exec(t, insertStatement, i, expiredTs)
 					i++
-					expectedNumExpiredRows++
+					expectedSQLInstanceID := rangeSplit.sqlInstanceID
+					// one node deletes all rows in 22.1
+					if version != 0 {
+						expectedSQLInstanceID = leaseHolderSQLInstanceID
+					}
+					expectedSQLInstanceIDToProcessorRowCountMap[expectedSQLInstanceID]++
 				}
 			}
 
@@ -459,7 +579,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 
 			// Verify results
 			th.verifyNonExpiredRows(t, tableName, expirationExpr, expectedNumNonExpiredRows)
-			th.verifyExpiredRows(t, expectedNumExpiredRows)
+			th.verifyExpiredRows(t, expectedSQLInstanceIDToProcessorRowCountMap)
 		})
 	}
 }
@@ -694,6 +814,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				},
 				tc.numSplits == 0 && !tc.forceNonMultiTenant, // SPLIT AT does not work with multi-tenant
 				1, /* numNodes */
+				0, /* version */
 			)
 			defer cleanupFunc()
 
@@ -778,7 +899,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 
 			th.verifyNonExpiredRows(t, tableName, expirationExpression, tc.numNonExpiredRows)
 
-			th.verifyExpiredRows(t, tc.numExpiredRows)
+			th.verifyExpiredRowsJobOnly(t, tc.numExpiredRows)
 		})
 	}
 }

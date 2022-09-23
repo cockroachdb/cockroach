@@ -135,6 +135,7 @@ type hashBasedPartitioner struct {
 		fdSemaphore semaphore.Semaphore
 		acquiredFDs int
 	}
+	cancelChecker colexecutils.CancelChecker
 
 	partitioners      []*colcontainer.PartitionedDiskQueue
 	partitionedInputs []*partitionerToOperator
@@ -321,6 +322,7 @@ func (op *hashBasedPartitioner) Init(ctx context.Context) {
 	for i := range op.inputs {
 		op.inputs[i].Init(op.Ctx)
 	}
+	op.cancelChecker.Init(op.Ctx)
 	op.partitionsToProcessUsingMain = make(map[int]*hbpPartitionInfo)
 	// If we are initializing the hash-based partitioner, it means that we had
 	// to fallback from the in-memory one since the inputs had more tuples that
@@ -405,6 +407,7 @@ func (op *hashBasedPartitioner) Next() coldata.Batch {
 	var batches [2]coldata.Batch
 StateChanged:
 	for {
+		op.cancelChecker.CheckEveryCall()
 		switch op.state {
 		case hbpInitialPartitioning:
 			allZero := true

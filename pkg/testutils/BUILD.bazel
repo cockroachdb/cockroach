@@ -48,6 +48,7 @@ go_test(
         "net_test.go",
         "soon_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":testutils"],
     deps = [
         "//pkg/util",

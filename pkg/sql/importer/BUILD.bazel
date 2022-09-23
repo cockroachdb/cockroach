@@ -32,6 +32,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
+        "//pkg/cloud/cloudprivilege",
         "//pkg/clusterversion",
         "//pkg/col/coldata",
         "//pkg/featureflag",
@@ -147,6 +148,7 @@ go_test(
         "read_import_pgdump_test.go",
         "testutils_test.go",
     ],
+    args = ["-test.timeout=895s"],
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":importer"],
     # It's a large test, so use 16 shards to run test cases.
@@ -203,6 +205,7 @@ go_test(
         "//pkg/sql/stats",
         "//pkg/sql/tests",
         "//pkg/sql/types",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",

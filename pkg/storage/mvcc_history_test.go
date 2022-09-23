@@ -56,6 +56,7 @@ var (
 		"engine", "readonly", "batch", "snapshot").(string)
 	sstIterVerify           = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
 	metamorphicIteratorSeed = util.ConstantWithMetamorphicTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
+	separateEngineBlocks    = util.ConstantWithMetamorphicTestBool("mvcc-histories-separate-engine-blocks", false)
 )
 
 // TestMVCCHistories verifies that sequences of MVCC reads and writes
@@ -113,6 +114,7 @@ var (
 // clear_time_range k=<key> end=<key> ts=<int>[,<int>] targetTs=<int>[,<int>] [clearRangeThreshold=<int>] [maxBatchSize=<int>] [maxBatchByteSize=<int>]
 //
 // gc_clear_range k=<key> end=<key> startTs=<int>[,<int>] ts=<int>[,<int>]
+// replace_point_tombstones_with_range_tombstones k=<key> [end=<key>]
 //
 // sst_put            [ts=<int>[,<int>]] [localTs=<int>[,<int>]] k=<key> [v=<string>]
 // sst_put_rangekey   ts=<int>[,<int>] [localTS=<int>[,<int>]] k=<key> end=<key>
@@ -132,16 +134,18 @@ var (
 //
 // Additionally, the pseudo-command `with` enables sharing
 // a group of arguments between multiple commands, for example:
-//   with t=A
-//     txn_begin
-//     with k=a
-//       put v=b
-//       resolve_intent
-// Really means:
-//   txn_begin          t=A
-//   put v=b        k=a t=A
-//   resolve_intent k=a t=A
 //
+//	with t=A
+//	  txn_begin
+//	  with k=a
+//	    put v=b
+//	    resolve_intent
+//
+// Really means:
+//
+//	txn_begin          t=A
+//	put v=b        k=a t=A
+//	resolve_intent k=a t=A
 func TestMVCCHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -156,8 +160,24 @@ func TestMVCCHistories(t *testing.T) {
 	const statsTS = 100e9
 
 	datadriven.Walk(t, testutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
+		disableSeparateEngineBlocks := strings.Contains(path, "_disable_separate_engine_blocks")
+
+		engineOpts := []ConfigOption{CacheSize(1 << 20 /* 1 MiB */), ForTesting}
+		// If enabled by metamorphic parameter, use very small blocks to provoke TBI
+		// optimization. We'll also flush after each command.
+		if separateEngineBlocks && !disableSeparateEngineBlocks {
+			engineOpts = append(engineOpts, func(cfg *engineConfig) error {
+				cfg.Opts.DisableAutomaticCompactions = true
+				for i := range cfg.Opts.Levels {
+					cfg.Opts.Levels[i].BlockSize = 1
+					cfg.Opts.Levels[i].IndexBlockSize = 1
+				}
+				return nil
+			})
+		}
+
 		// We start from a clean slate in every test file.
-		engine, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), ForTesting)
+		engine, err := Open(ctx, InMemory(), engineOpts...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -530,6 +550,10 @@ func TestMVCCHistories(t *testing.T) {
 					// Run the command.
 					foundErr = cmd.fn(e)
 
+					if separateEngineBlocks && !disableSeparateEngineBlocks && dataChange {
+						require.NoError(t, e.engine.Flush())
+					}
+
 					if trace {
 						// If tracing is enabled, we report the intermediate results
 						// after each individual step in the script.
@@ -703,6 +727,8 @@ var commands = map[string]cmd{
 	"sst_finish":         {typDataUpdate, cmdSSTFinish},
 	"sst_reset":          {typDataUpdate, cmdSSTReset},
 	"sst_iter_new":       {typReadOnly, cmdSSTIterNew},
+
+	"replace_point_tombstones_with_range_tombstones": {typDataUpdate, cmdReplacePointTombstonesWithRangeTombstones},
 }
 
 func cmdTxnAdvance(e *evalCtx) error {
@@ -876,11 +902,20 @@ func cmdCheckIntent(e *evalCtx) error {
 	if e.hasArg("none") {
 		wantIntent = false
 	}
-	metaKey := mvccKey(key)
+
 	var meta enginepb.MVCCMetadata
-	ok, _, _, err := e.engine.MVCCGetProto(metaKey, &meta)
+	iter := e.engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: key})
+	ok, err := iter.Valid()
 	if err != nil {
 		return err
+	}
+	ok = ok && iter.UnsafeKey().Timestamp.IsEmpty()
+	if ok {
+		if err = iter.ValueProto(&meta); err != nil {
+			return err
+		}
 	}
 	if !ok && wantIntent {
 		return errors.Newf("meta: %v -> expected intent, found none", key)
@@ -1077,8 +1112,9 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
 		// Some tests will submit invalid MVCC range keys, where e.g. the end key is
-		// before the start key -- ignore them to avoid iterator panics.
-		if key.Compare(endKey) < 0 {
+		// before the start key -- don't attempt to compute covered stats for these
+		// to avoid iterator panics.
+		if key.Compare(endKey) < 0 && key.Compare(keys.LocalMax) >= 0 {
 			ms, err := ComputeStats(e.engine, key, endKey, ts.WallTime)
 			if err != nil {
 				return err
@@ -1239,7 +1275,7 @@ func cmdIsSpanEmpty(e *evalCtx) error {
 	if err != nil {
 		return err
 	}
-	e.results.buf.Print(isEmpty)
+	e.results.buf.Printf("%t\n", isEmpty)
 	return nil
 }
 
@@ -1275,7 +1311,7 @@ func cmdExport(e *evalCtx) error {
 	}
 	e.results.buf.Printf("\n")
 
-	iter, err := NewPebbleMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
+	iter, err := NewMemSSTIterator(sstFile.Bytes(), false /* verify */, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})
@@ -1699,7 +1735,7 @@ func cmdSSTIterNew(e *evalCtx) error {
 	for i, sst := range e.ssts {
 		ssts[len(ssts)-i-1] = sst
 	}
-	iter, err := NewPebbleMultiMemSSTIterator(ssts, sstIterVerify, IterOptions{
+	iter, err := NewMultiMemSSTIterator(ssts, sstIterVerify, IterOptions{
 		KeyTypes:   IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})
@@ -1709,6 +1745,11 @@ func cmdSSTIterNew(e *evalCtx) error {
 	e.iter = newMetamorphicIterator(e.t, e.metamorphicIterSeed(), iter)
 	e.iterRangeKeys.Clear()
 	return nil
+}
+
+func cmdReplacePointTombstonesWithRangeTombstones(e *evalCtx) error {
+	start, end := e.getKeyRange()
+	return ReplacePointTombstonesWithRangeTombstones(e.ctx, e.engine, e.ms, start, end)
 }
 
 func printIter(e *evalCtx) {
@@ -2301,7 +2342,8 @@ func metamorphicReader(e *evalCtx) (r Reader, closer func()) {
 	case "engine":
 		return e.engine, nil
 	case "readonly":
-		return e.engine.NewReadOnly(StandardDurability), nil
+		readOnly := e.engine.NewReadOnly(StandardDurability)
+		return readOnly, readOnly.Close
 	case "batch":
 		batch := e.engine.NewBatch()
 		return batch, batch.Close

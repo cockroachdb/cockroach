@@ -224,6 +224,13 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 	}
 	br, pErr := sr.wrapped.SendLocked(ctx, ba)
 
+	// We might receive errors with the WriteTooOld flag set. This interceptor
+	// wants to always terminate that flag. In the case of an error, we can just
+	// ignore it.
+	if pErr != nil && pErr.GetTxn() != nil {
+		pErr.GetTxn().WriteTooOld = false
+	}
+
 	if pErr == nil && br.Txn.WriteTooOld {
 		// If we got a response with the WriteTooOld flag set, then we pretend that
 		// we got a WriteTooOldError, which will cause us to attempt to refresh and
@@ -559,8 +566,9 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 func (sr *txnSpanRefresher) appendRefreshSpans(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) error {
+	expLogEnabled := log.ExpensiveLogEnabled(ctx, 3)
 	return ba.RefreshSpanIterate(br, func(span roachpb.Span) {
-		if log.ExpensiveLogEnabled(ctx, 3) {
+		if expLogEnabled {
 			log.VEventf(ctx, 3, "recording span to refresh: %s", span.String())
 		}
 		sr.refreshFootprint.insert(span)

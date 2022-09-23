@@ -20,3 +20,4 @@ stmt_without_legacy_transaction ::=
 	| declare_cursor_stmt
 	| fetch_cursor_stmt
 	| move_cursor_stmt
+	| unlisten_stmt

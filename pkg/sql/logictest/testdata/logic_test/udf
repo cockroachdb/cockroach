@@ -55,16 +55,6 @@ CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT * FROM ab WHERE a
 statement ok
 CREATE FUNCTION d(i INT2) RETURNS INT4 LANGUAGE SQL AS 'SELECT i'
 
-# TODO(mgartner): This should be allowed because the cast from INT2::FLOAT4 is
-# allowed in implicit contexts.
-statement error return type mismatch in function declared to return float4\nDETAIL: Actual return type is int2
-CREATE FUNCTION e(i INT2) RETURNS FLOAT4 LANGUAGE SQL AS 'SELECT i'
-
-# TODO(mgartner): This should be allowed because the cast from BOOL::STRING is
-# allowed in assignment contexts.
-statement error return type mismatch in function declared to return string\nDETAIL: Actual return type is bool
-CREATE FUNCTION f(b BOOL) RETURNS STRING LANGUAGE SQL AS 'SELECT b'
-
 statement error return type mismatch in function declared to return bool\nDETAIL: Actual return type is int
 CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
 
@@ -78,12 +68,6 @@ CREATE FUNCTION err(i INT, j INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i - j'
 # It should pass the return type validation and stored as a tuple type.
 statement ok
 CREATE TABLE t_implicit_type(a INT PRIMARY KEY, b STRING);
-
-statement error pq: unimplemented: implicit record types as argument or return types in user-defined functions are not supported
-CREATE FUNCTION f() RETURNS t_implicit_type IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
-
-statement error pq: unimplemented: implicit record types as argument or return types in user-defined functions are not supported
-CREATE FUNCTION f(t_implicit_type) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$
 
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is record
 CREATE FUNCTION f() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a, b from t_implicit_type $$
@@ -143,7 +127,7 @@ CREATE FUNCTION public.f(IN a test.public.notmyworkday)
     SELECT a FROM test.public.t;
     SELECT b FROM test.public.t@t_idx_b;
     SELECT c FROM test.public.t@t_idx_c;
-    SELECT nextval(114:::REGCLASS);
+    SELECT nextval('public.sq1'::REGCLASS);
 $$
 
 statement error pq: unimplemented: alter function depends on extension not supported.*
@@ -168,9 +152,20 @@ query TTTTTBBBTITTTTT
 SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
 ----
-100118  proc_f    4101115737  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
-100119  proc_f    4101115737  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
-100121  proc_f_2  131273696   1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
+100118  proc_f    105  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
+100119  proc_f    105  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
+100121  proc_f_2  120  1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
+
+statement ok
+USE defaultdb;
+
+query TTTTTBBBTITTTTT
+SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
+FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
+----
+
+statement ok
+USE test;
 
 subtest create_function_statements
 
@@ -1211,6 +1206,401 @@ CREATE FUNCTION public.f_test_cor(IN a INT8, IN b INT8)
   SELECT 3;
 $$
 
+subtest seq_qualified_name
+
+statement ok
+CREATE SCHEMA sc_seq_qualified_name;
+CREATE SEQUENCE sc_seq_qualified_name.sq;
+
+statement error pq: relation "sc_seq_qualified_name.sq" does not exist
+CREATE FUNCTION f_seq_qualified_name() RETURNS INT LANGUAGE SQL AS $$ SELECT * FROM nextval('"sc_seq_qualified_name.sq"') $$;
+
+statement ok
+CREATE FUNCTION f_seq_qualified_name() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc_seq_qualified_name.sq') $$;
+
+query I
+SELECT f_seq_qualified_name()
+----
+1
+
+statement ok
+CREATE FUNCTION f_seq_qualified_name_quoted() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('"sc_seq_qualified_name"."sq"') $$;
+
+query I
+SELECT f_seq_qualified_name_quoted()
+----
+2
+
+subtest udt_rewrite
+
+statement ok
+CREATE FUNCTION f_udt_rewrite() RETURNS notmyworkday LANGUAGE SQL AS $$ SELECT 'Monday':: notmyworkday $$;
+
+query T
+SELECT @2 FROM [SHOW CREATE FUNCTION f_udt_rewrite];
+----
+CREATE FUNCTION public.f_udt_rewrite()
+    RETURNS test.public.notmyworkday
+    VOLATILE
+    NOT LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT 'Monday':::test.public.notmyworkday;
+$$
+
+query T
+SELECT f_udt_rewrite()
+----
+Monday
+
+statement ok
+ALTER TYPE notmyworkday RENAME TO notmyworkday_new;
+
+query T
+SELECT f_udt_rewrite()
+----
+Monday
+
+statement ok
+ALTER TYPE notmyworkday_new RENAME TO notmyworkday;
+
+query T
+SELECT f_udt_rewrite()
+----
+Monday
+
+subtest cross_db
+
+statement ok
+CREATE DATABASE cross_db1;
+CREATE SCHEMA cross_db1.sc;
+CREATE TYPE cross_db1.sc.workday AS ENUM ('MON');
+CREATE TABLE cross_db1.sc.tbl(a INT PRIMARY KEY, b cross_db1.sc.workday);
+CREATE VIEW cross_db1.sc.v AS SELECT a FROM cross_db1.sc.tbl;
+
+statement error pq: cross database type references are not supported: cross_db1.sc.workday
+CREATE FUNCTION f_cross_db(cross_db1.sc.workday) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+statement error pq: cross database type references are not supported: cross_db1.sc.workday
+CREATE FUNCTION f_cross_db() RETURNS cross_db1.sc.workday LANGUAGE SQL AS $$ SELECT 'MON'::cross_db1.sc.workday $$;
+
+statement error pq: the function cannot refer to other databases
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM cross_db1.sc.tbl $$;
+
+statement error pq: the function cannot refer to other databases
+CREATE FUNCTION f_cross_db() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM cross_db1.sc.v $$;
+
+subtest db_rename
+
+statement ok
+CREATE DATABASE rename_db1;
+SET DATABASE = rename_db1;
+
+statement ok
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE TYPE sc1.workday AS ENUM ('Mon');
+CREATE TABLE sc1.tbl(a INT PRIMARY KEY);
+CREATE SEQUENCE sc1.sq;
+
+statement ok
+CREATE FUNCTION sc1.f_tbl() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc1.tbl $$;
+CREATE FUNCTION sc1.f_type() RETURNS sc1.workday LANGUAGE SQL AS $$ SELECT 'Mon'::sc1.workday $$;
+CREATE FUNCTION sc1.f_seq() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc1.sq') $$;
+CREATE FUNCTION sc2.f_tbl() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc1.tbl $$;
+CREATE FUNCTION sc2.f_type() RETURNS sc1.workday LANGUAGE SQL AS $$ SELECT 'Mon'::sc1.workday $$;
+CREATE FUNCTION sc2.f_seq() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc1.sq') $$;
+
+query T
+SELECT sc1.f_type()
+----
+Mon
+
+query I
+SELECT sc1.f_seq()
+----
+1
+
+query T
+SELECT sc2.f_type()
+----
+Mon
+
+query I
+SELECT sc2.f_seq()
+----
+2
+
+statement error pq: cannot rename database because relation "rename_db1.sc1.f_tbl" depends on relation "rename_db1.sc1.tbl"
+ALTER DATABASE rename_db1 RENAME TO rename_db2;
+
+statement ok
+DROP FUNCTION sc1.f_tbl()
+
+statement error pq: cannot rename database because relation "rename_db1.sc2.f_tbl" depends on relation "rename_db1.sc1.tbl"
+ALTER DATABASE rename_db1 RENAME TO rename_db2;
+
+statement ok
+DROP FUNCTION sc2.f_tbl()
+
+statement ok
+ALTER DATABASE rename_db1 RENAME TO rename_db2;
+
+# Make sure that db renaming does not affect types and sequences in UDF.
+query T
+SELECT sc1.f_type()
+----
+Mon
+
+query I
+SELECT sc1.f_seq()
+----
+3
+
+query T
+SELECT sc2.f_type()
+----
+Mon
+
+query I
+SELECT sc2.f_seq()
+----
+4
+
+statement ok
+SET DATABASE = test
+
+statement ok
+CREATE DATABASE rename_sc1;
+SET DATABASE = rename_sc1;
+
+statement ok
+CREATE SCHEMA sc1;
+CREATE SCHEMA sc2;
+CREATE TYPE sc1.workday AS ENUM ('Mon');
+CREATE TABLE sc1.tbl(a INT PRIMARY KEY);
+CREATE SEQUENCE sc1.sq;
+
+statement ok
+CREATE FUNCTION sc1.f_tbl() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc1.tbl $$;
+CREATE FUNCTION sc1.f_type() RETURNS sc1.workday LANGUAGE SQL AS $$ SELECT 'Mon'::sc1.workday $$;
+CREATE FUNCTION sc1.f_seq() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc1.sq') $$;
+CREATE FUNCTION sc2.f_tbl() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc1.tbl $$;
+CREATE FUNCTION sc2.f_type() RETURNS sc1.workday LANGUAGE SQL AS $$ SELECT 'Mon'::sc1.workday $$;
+CREATE FUNCTION sc2.f_seq() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('sc1.sq') $$;
+
+query T
+SELECT sc1.f_type()
+----
+Mon
+
+query I
+SELECT sc1.f_seq()
+----
+5
+
+query T
+SELECT sc2.f_type()
+----
+Mon
+
+query I
+SELECT sc2.f_seq()
+----
+6
+
+statement error pq: cannot rename schema because relation "rename_sc1.sc1.f_tbl" depends on relation "rename_sc1.sc1.tbl"
+ALTER SCHEMA sc1 RENAME TO sc1_new
+
+statement ok
+DROP FUNCTION sc1.f_tbl()
+
+statement error pq: cannot rename schema because relation "rename_sc1.sc2.f_tbl" depends on relation "rename_sc1.sc1.tbl"
+ALTER SCHEMA sc1 RENAME TO sc1_new
+
+statement ok
+DROP FUNCTION sc2.f_tbl()
+
+statement ok
+ALTER SCHEMA sc1 RENAME TO sc1_new
+
+# Make sure that db renaming does not affect types and sequences in UDF.
+query T
+SELECT sc1.f_type()
+----
+Mon
+
+query I
+SELECT sc1.f_seq()
+----
+7
+
+query T
+SELECT sc2.f_type()
+----
+Mon
+
+query I
+SELECT sc2.f_seq()
+----
+8
+
+statement ok
+SET DATABASE = test
+
+subtest select_from_seq_rename
+
+statement ok
+CREATE DATABASE tdb_seq_select;
+SET DATABASE = tdb_seq_select;
+
+statement ok
+CREATE SCHEMA sc;
+CREATE SEQUENCE sc.sq;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT last_value FROM sc.sq $$;
+
+query I
+SELECT f()
+----
+0
+
+statement ok
+ALTER SEQUENCE sc.sq RENAME TO sq_new;
+
+statement error pq: relation "tdb_seq_select.sc.sq" does not exist
+SELECT f()
+
+statement ok
+ALTER SEQUENCE sc.sq_new RENAME TO sq;
+SELECT f();
+
+statement ok
+ALTER SCHEMA sc RENAME TO sc_new;
+
+statement error pq: unknown schema "sc"
+SELECT f()
+
+statement ok
+ALTER SCHEMA sc_new RENAME TO sc;
+SELECT f()
+
+statement ok
+ALTER DATABASE tdb_seq_select RENAME TO tdb_seq_select_new;
+SET DATABASE = tdb_seq_select_new;
+
+statement error pq: database "tdb_seq_select" does not exist
+SELECT f()
+
+statement ok
+ALTER DATABASE tdb_seq_select_new RENAME TO tdb_seq_select;
+SET DATABASE = tdb_seq_select;
+SELECT f()
+
+statement ok
+SET DATABASE = test;
+
+subtest event_logging
+
+statement ok
+CREATE USER u_test_event;
+CREATE SCHEMA sc_test_event;
+DELETE FROM system.eventlog;
+
+statement ok
+CREATE FUNCTION f_test_log() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+query TTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'create_function'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
+----
+create_function  203  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
+
+statement ok
+CREATE OR REPLACE FUNCTION f_test_log() RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
+
+query TTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'create_function'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
+----
+create_function  203  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 1;$$"
+create_function  203  "test.public.f_test_log"  "CREATE OR REPLACE FUNCTION test.public.f_test_log()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT 2;$$"
+
+statement ok
+ALTER FUNCTION f_test_log RENAME TO f_test_log_new;
+
+query TTTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'rename_function'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'NewFunctionName', info_json->'Statement' FROM tmp;
+----
+rename_function  203  "test.public.f_test_log"  "test.public.f_test_log_new"  "ALTER FUNCTION \"\".\"\".f_test_log RENAME TO f_test_log_new"
+
+statement ok
+ALTER FUNCTION f_test_log_new RENAME TO f_test_log;
+
+statement ok
+ALTER FUNCTION f_test_log OWNER TO u_test_event;
+
+query TTTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'alter_function_owner'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Owner', info_json->'Statement' FROM tmp;
+----
+alter_function_owner  203  "test.public.f_test_log"  "u_test_event"  "ALTER FUNCTION \"\".\"\".f_test_log OWNER TO u_test_event"
+
+statement ok
+ALTER FUNCTION f_test_log SET SCHEMA sc_test_event;
+
+query TTTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'set_schema'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'DescriptorName', info_json->'NewDescriptorName', info_json->'Statement' FROM tmp;
+----
+set_schema  203  "test.public.f_test_log"  "test.sc_test_event.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log SET SCHEMA sc_test_event"
+
+statement ok
+ALTER FUNCTION sc_test_event.f_test_log SET SCHEMA public;
+ALTER FUNCTION f_test_log IMMUTABLE;
+DROP FUNCTION f_test_log;
+
+query TTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'alter_function_options'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
+----
+alter_function_options  203  "test.public.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log IMMUTABLE"
+
+query TTTT retry
+WITH tmp AS (
+  SELECT "eventType" AS etype, info::JSONB AS info_json
+  FROM system.eventlog
+  WHERE "eventType" = 'drop_function'
+)
+SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
+----
+drop_function  203  "test.public.f_test_log"  "DROP FUNCTION \"\".\"\".f_test_log"
+
 subtest execution
 
 statement ok
@@ -1252,7 +1642,7 @@ a  b
 
 statement ok
 CREATE FUNCTION max_in_values() RETURNS INT LANGUAGE SQL AS $$
-SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
+  SELECT i FROM (VALUES (1, 0), (2, 0), (3, 0)) AS v(i, j) ORDER BY i DESC
 $$
 
 query I
@@ -1377,6 +1767,15 @@ query I
 SELECT fetch_b(99999999)
 ----
 NULL
+
+statement ok
+CREATE FUNCTION one_nth(n INT) RETURNS INT LANGUAGE SQL AS 'SELECT 1/n'
+
+statement error pgcode 22012 division by zero
+SELECT one_nth(0)
+
+statement error pgcode 22012 division by zero
+SELECT int_identity((1/0)::INT)
 
 
 subtest args
@@ -1522,6 +1921,36 @@ CREATE FUNCTION int_identity_v(i INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
 SELECT i;
 $$;
 
+query T
+SELECT pg_get_functiondef('get_l'::regproc::oid)
+----
+CREATE FUNCTION public.get_l(IN i INT8)
+    RETURNS INT8
+    IMMUTABLE
+    LEAKPROOF
+    CALLED ON NULL INPUT
+    LANGUAGE SQL
+    AS $$
+    SELECT v FROM test.public.kv WHERE k = i;
+$$
+
+query T
+SELECT pg_get_functiondef(NULL)
+----
+NULL
+
+query T
+SELECT pg_get_functiondef(123456)
+----
+NULL
+
+# Postgres behaves differently for builtin functions, but we don't yet support
+# the syntax for defining non-SQL functions.
+query T
+SELECT pg_get_functiondef('soundex'::regproc::oid)
+----
+soundex
+
 # Only the volatile functions should see the changes made by the UPDATE in the
 # CTE.
 query IIIIIIII colnames
@@ -1539,3 +1968,186 @@ l1  l2  i1  i2  s1  s2  v1  v2
 1   1   1   1   1   1   11  11
 2   2   2   2   2   2   12  12
 3   3   3   3   3   3   13  13
+
+
+subtest implicit_record_types
+
+statement ok
+CREATE TABLE imp(k INT PRIMARY KEY, a INT, b TEXT);
+INSERT INTO imp VALUES (1, 2, 'a');
+
+statement ok
+CREATE FUNCTION imp_const_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')
+$$
+
+query TBT
+SELECT imp_const_tup(), (11,22,'b')::imp = imp_const_tup(), pg_typeof(imp_const_tup())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (11, 22, 'b')::imp
+$$
+
+query TBT
+SELECT imp_const_cast(), (11,22,'b')::imp = imp_const_cast(), pg_typeof(imp_const_cast())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11 AS k, 22 AS a, 'b' AS b
+$$
+
+query TBT
+SELECT imp_const(), (11,22,'b')::imp = imp_const(), pg_typeof(imp_const())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_const_unnamed() RETURNS imp LANGUAGE SQL AS $$
+  SELECT 11, 22, 'b'
+$$
+
+query TBT
+SELECT imp_const_unnamed(), (11,22,'b')::imp = imp_const_unnamed(), pg_typeof(imp_const_unnamed())
+----
+(11,22,b)  true  imp
+
+statement ok
+CREATE FUNCTION imp_tup() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp
+$$
+
+# TODO(mgartner): pg_typeof(imp_tup()) is omitted because we get different
+# results for different configurations, due to #58252.
+query TB
+SELECT imp_tup(), (1,2,'a')::imp = imp_tup()
+----
+(1,2,a)  true
+
+statement ok
+CREATE FUNCTION imp() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp
+$$
+
+query TBT
+SELECT imp(), (1,2,'a')::imp = imp(), pg_typeof(imp())
+----
+(1,2,a)  true  imp
+
+statement ok
+CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
+  SELECT * FROM imp
+$$
+
+query TBT
+SELECT imp_star(), (1,2,'a')::imp = imp_star(), pg_typeof(imp_star())
+----
+(1,2,a)  true  imp
+
+statement ok
+INSERT INTO imp VALUES (100, 200, 'z')
+
+statement ok
+CREATE FUNCTION imp_tup_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (k, a, b) FROM imp ORDER BY b DESC
+$$
+
+# TODO(mgartner): pg_typeof(imp_tup_ordered()) is omitted because we get
+# different results for different configurations, due to #58252.
+query TB
+SELECT imp_tup_ordered(), (100,200,'z')::imp = imp_tup_ordered()
+----
+(100,200,z)  true
+
+statement ok
+CREATE FUNCTION imp_ordered() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b FROM imp ORDER BY b DESC
+$$
+
+query TBT
+SELECT imp_ordered(), (100,200,'z')::imp = imp_ordered(), pg_typeof(imp_ordered())
+----
+(100,200,z)  true  imp
+
+statement ok
+CREATE FUNCTION imp_identity(i imp) RETURNS imp LANGUAGE SQL AS $$
+  SELECT i
+$$
+
+query TT
+SELECT imp_identity((1,2,'a')), imp_identity((1,2,'a')::imp)
+----
+(1,2,a)  (1,2,a)
+
+statement ok
+CREATE FUNCTION imp_a(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT (i).a
+$$
+
+query II
+SELECT imp_a((1,2,'a')), imp_a((1,2,'a')::imp)
+----
+2  2
+
+statement ok
+CREATE FUNCTION imp_cast() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2, 3)
+$$
+
+query TBT
+SELECT imp_cast(), (1,2,'3') = imp_cast(), pg_typeof(imp_cast())
+----
+(1,2,3)  true  imp
+
+statement error return type mismatch in function declared to return imp
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT (1, 2)
+$$
+
+# TODO(mgartner): The error message should say "imp" instead of "record".
+statement error pgcode 42P13 return type mismatch in function declared to return record
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a FROM imp
+$$
+
+# TODO(mgartner): The error message should say "imp" instead of "record".
+statement error pgcode 42P13 return type mismatch in function declared to return record
+CREATE FUNCTION err() RETURNS imp LANGUAGE SQL AS $$
+  SELECT k, a, b::INT FROM imp
+$$
+
+statement error pgcode 42P13 return type mismatch in function declared to return int
+CREATE FUNCTION err(i imp) RETURNS INT LANGUAGE SQL AS $$
+  SELECT i
+$$
+
+
+subtest return_type_assignment_casts
+
+# Do not allow functions with return type mismatches that cannot be cast in an
+# implicit or assignment context.
+statement error pgcode 42P13 return type mismatch in function declared to return bool
+CREATE FUNCTION err(i INT) RETURNS BOOL LANGUAGE SQL AS 'SELECT i'
+
+statement ok
+CREATE FUNCTION itof(i INT) RETURNS FLOAT8 LANGUAGE SQL AS 'SELECT i'
+
+query FT
+SELECT itof(123), pg_typeof(itof(123))
+----
+123  double precision
+
+statement ok
+CREATE FUNCTION stoc(s STRING) RETURNS CHAR LANGUAGE SQL AS 'SELECT s'
+
+query FT
+SELECT stoc('a'), pg_typeof(stoc('a'))
+----
+a  text
+
+statement error pgcode 22001 value too long for type CHAR
+SELECT stoc('abc')

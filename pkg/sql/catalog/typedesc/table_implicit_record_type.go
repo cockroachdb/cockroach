@@ -204,8 +204,14 @@ func (v TableImplicitRecordType) GetReferencedDescIDs() (catalog.DescriptorIDSet
 func (v TableImplicitRecordType) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
 }
 
-// ValidateCrossReferences implements the Descriptor interface.
-func (v TableImplicitRecordType) ValidateCrossReferences(
+// ValidateForwardReferences implements the Descriptor interface.
+func (v TableImplicitRecordType) ValidateForwardReferences(
+	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
+) {
+}
+
+// ValidateBackReferences implements the Descriptor interface.
+func (v TableImplicitRecordType) ValidateBackReferences(
 	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }
@@ -226,7 +232,7 @@ func (v TableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
 func (v TableImplicitRecordType) HydrateTypeInfoWithName(
 	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
 ) error {
-	if typ.IsHydrated() {
+	if typ.IsHydrated() && typ.TypeMeta.Version == uint32(v.desc.GetVersion()) {
 		return nil
 	}
 	if typ.Family() != types.TupleFamily {

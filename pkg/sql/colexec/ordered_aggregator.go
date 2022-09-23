@@ -134,6 +134,7 @@ type orderedAggregator struct {
 	seenNonEmptyBatch bool
 	datumAlloc        tree.DatumAlloc
 	toClose           colexecop.Closers
+	cancelChecker     colexecutils.CancelChecker
 }
 
 var _ colexecop.ResettableOperator = &orderedAggregator{}
@@ -179,11 +180,13 @@ func (a *orderedAggregator) Init(ctx context.Context) {
 	}
 	a.Input.Init(a.Ctx)
 	a.bucket.init(a.bucket.fns, a.aggHelper.makeSeenMaps(), a.groupCol)
+	a.cancelChecker.Init(ctx)
 }
 
 func (a *orderedAggregator) Next() coldata.Batch {
 	stateAfterOutputting := orderedAggregatorUnknown
 	for {
+		a.cancelChecker.CheckEveryCall()
 		switch a.state {
 		case orderedAggregatorAggregating:
 			if a.scratch.shouldResetInternalBatch {
@@ -252,7 +255,18 @@ func (a *orderedAggregator) Next() coldata.Batch {
 						}
 					})
 				}
-				a.scratch.resumeIdx = a.bucket.fns[0].CurrentOutputIndex()
+				if len(a.bucket.fns) > 0 {
+					a.scratch.resumeIdx = a.bucket.fns[0].CurrentOutputIndex()
+				} else {
+					// When there are no aggregate functions to compute, we
+					// simply need to output the same number of empty rows as
+					// the number of groups.
+					for _, newGroup := range a.groupCol[:batchLength] {
+						if newGroup {
+							a.scratch.resumeIdx++
+						}
+					}
+				}
 			}
 			if batchLength == 0 {
 				a.state = orderedAggregatorOutputting

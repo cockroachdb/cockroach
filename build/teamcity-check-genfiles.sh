@@ -52,10 +52,3 @@ cd ..
 
 end_check_generated_code_tests
 tc_end_block "Ensure dependencies are up-to-date"
-
-tc_start_block "Test web UI"
-# Run the UI tests. This logically belongs in teamcity-test.sh, but we do it
-# here to minimize total build time since this build has already generated the
-# UI.
-run build/builder.sh make -C pkg/ui
-tc_end_block "Test web UI"

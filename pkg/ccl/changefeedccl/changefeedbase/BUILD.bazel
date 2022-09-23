@@ -27,6 +27,7 @@ go_library(
 go_test(
     name = "changefeedbase_test",
     srcs = ["options_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":changefeedbase"],
     deps = [
         "//pkg/util/leaktest",

@@ -43,11 +43,22 @@ func testMakeRangeSplitChange(splitKey Key) func(s State) Change {
 	}
 }
 
+func testMakeLeaseTransferChange(rangeKey Key, target StoreID) func(s State) Change {
+	return func(s State) Change {
+		return &LeaseTransferChange{
+			Wait:           testingDelay,
+			TransferTarget: target,
+			RangeID:        s.RangeFor(rangeKey).RangeID(),
+		}
+	}
+}
+
 func testMakeReplicaState(replCounts map[StoreID]int) (State, Range) {
 	state := NewTestStateReplCounts(replCounts, 3 /* replsPerRange */)
 	// The first range has ID 1, this is the initial range in the keyspace.
 	// We split that and use the rhs, range 2.
 	rng, _ := state.Range(RangeID(2))
+	state.TransferLease(rng.RangeID(), 1)
 	return state, rng
 }
 
@@ -66,6 +77,19 @@ func testGetAllReplLocations(
 		storeView[int64(start)] = stores
 	}
 	return rmapView, storeView
+}
+
+func testGetLHLocations(state State, excludedRanges map[RangeID]bool) map[int64]int {
+	leases := make(map[int64]int)
+	for rangeID := range state.Ranges() {
+		if _, ok := excludedRanges[rangeID]; ok {
+			continue
+		}
+		startKey, _, _ := state.RangeSpan(rangeID)
+		lh, _ := state.LeaseholderStore(rangeID)
+		leases[int64(startKey)] = int(lh.StoreID())
+	}
+	return leases
 }
 
 func testGetReplLocations(state State, r Range) ([]int, []int) {
@@ -90,7 +114,9 @@ func testGetReplLocations(state State, r Range) ([]int, []int) {
 // (1) changes either all succeed or all fail.
 // (2) removes fail if it is the leaseholder.
 // (3) add and removes fail if the removed store is the leaseholder and it
-//     cannot be transferred to the added store.
+//
+//	cannot be transferred to the added store.
+//
 // (4) In (3) the lease transfers when to the newly added store when possible.
 func TestReplicaChange(t *testing.T) {
 	testCases := []struct {
@@ -178,12 +204,13 @@ func TestReplicaStateChanger(t *testing.T) {
 	start := TestingStartTime()
 
 	testCases := []struct {
-		desc               string
-		initRepls          map[StoreID]int
-		ticks              []int64
-		pushes             map[int64]func(s State) Change
-		expected           map[int64]map[int64][]int
-		expectedTimestamps []int64
+		desc                string
+		initRepls           map[StoreID]int
+		ticks               []int64
+		pushes              map[int64]func(s State) Change
+		expected            map[int64]map[int64][]int
+		expectedLeaseholder map[int64]map[int64]int
+		expectedTimestamps  []int64
 	}{
 		{
 			desc:      "move s1 -> s2",
@@ -195,6 +222,10 @@ func TestReplicaStateChanger(t *testing.T) {
 			expected: map[int64]map[int64][]int{
 				5:  {0: {1}},
 				10: {0: {2}},
+			},
+			expectedLeaseholder: map[int64]map[int64]int{
+				5:  {0: 1},
+				10: {0: 2},
 			},
 			expectedTimestamps: []int64{10},
 		},
@@ -210,6 +241,11 @@ func TestReplicaStateChanger(t *testing.T) {
 				5:  {0: {1}},
 				10: {0: {2}},
 				15: {0: {3}},
+			},
+			expectedLeaseholder: map[int64]map[int64]int{
+				5:  {0: 1},
+				10: {0: 2},
+				15: {0: 3},
 			},
 			expectedTimestamps: []int64{10, 15},
 		},
@@ -227,6 +263,12 @@ func TestReplicaStateChanger(t *testing.T) {
 				10: {0: {2, 3, 6}},
 				15: {0: {3, 5, 6}},
 				20: {0: {4, 5, 6}},
+			},
+			expectedLeaseholder: map[int64]map[int64]int{
+				5:  {0: 1},
+				10: {0: 6},
+				15: {0: 6},
+				20: {0: 6},
 			},
 			expectedTimestamps: []int64{10, 15, 20},
 		},
@@ -344,6 +386,85 @@ func TestReplicaStateChanger(t *testing.T) {
 			},
 			expectedTimestamps: []int64{10, 15, 16},
 		},
+		{
+			desc:      "transfer lease (1,2,3) 1 -> 3",
+			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
+			ticks:     []int64{5, 10},
+			pushes: map[int64]func(s State) Change{
+				5: testMakeLeaseTransferChange(100, 3),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1, 2, 3}},
+				10: {0: {1, 2, 3}},
+			},
+			expectedLeaseholder: map[int64]map[int64]int{
+				5:  {0: 1},
+				10: {0: 3},
+			},
+			expectedTimestamps: []int64{10},
+		},
+		{
+			desc:      "transfer lease (1,2,3) 1 -> 2 -> 3",
+			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
+			ticks:     []int64{5, 10, 15},
+			pushes: map[int64]func(s State) Change{
+				5:  testMakeLeaseTransferChange(100, 2),
+				10: testMakeLeaseTransferChange(100, 3),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1, 2, 3}},
+				10: {0: {1, 2, 3}},
+				15: {0: {1, 2, 3}},
+			},
+			expectedLeaseholder: map[int64]map[int64]int{
+				5:  {0: 1},
+				10: {0: 2},
+				15: {0: 3},
+			},
+			expectedTimestamps: []int64{10, 15},
+		},
+		{
+			desc:      "",
+			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
+			ticks:     []int64{5, 10, 15},
+			pushes: map[int64]func(s State) Change{
+				5:  testMakeLeaseTransferChange(100, 2),
+				10: testMakeLeaseTransferChange(100, 3),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1, 2, 3}},
+				10: {0: {1, 2, 3}},
+				15: {0: {1, 2, 3}},
+			},
+			expectedLeaseholder: map[int64]map[int64]int{
+				5:  {0: 1},
+				10: {0: 2},
+				15: {0: 3},
+			},
+			expectedTimestamps: []int64{10, 15},
+		},
+		{
+			desc:      "overlapping lh and split changes are blocked",
+			initRepls: map[StoreID]int{1: 1, 2: 1, 3: 1},
+			ticks:     []int64{5, 6, 15},
+			pushes: map[int64]func(s State) Change{
+				// NB: Two changes affect the same range (move & transfer), only
+				// one concurrent change per range may be enqueued at any time.
+				5: testMakeLeaseTransferChange(100, 2),
+				6: testMakeRangeSplitChange(100),
+			},
+			expected: map[int64]map[int64][]int{
+				5:  {0: {1, 2, 3}},
+				6:  {0: {1, 2, 3}},
+				15: {0: {1, 2, 3}},
+			},
+			expectedLeaseholder: map[int64]map[int64]int{
+				5:  {0: 1},
+				6:  {0: 1},
+				15: {0: 2},
+			},
+			expectedTimestamps: []int64{10},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -352,6 +473,7 @@ func TestReplicaStateChanger(t *testing.T) {
 			state, _ := testMakeReplicaState(tc.initRepls)
 			results := make(map[int64]map[int64][]int)
 			tsResults := make([]int64, 0, 1)
+			resultLeaseholders := make(map[int64]map[int64]int)
 
 			for _, tick := range tc.ticks {
 				changer.Tick(OffsetTick(start, tick), state)
@@ -363,9 +485,14 @@ func TestReplicaStateChanger(t *testing.T) {
 				rmapView, storeView := testGetAllReplLocations(state, map[RangeID]bool{1: true})
 				require.Equal(t, rmapView, storeView, "RangeMap state and the Store state have different values")
 				results[tick] = rmapView
+				resultLeaseholders[tick] = testGetLHLocations(state, map[RangeID]bool{1: true})
 			}
+
 			require.Equal(t, tc.expected, results)
 			require.Equal(t, tc.expectedTimestamps, tsResults)
+			if tc.expectedLeaseholder != nil {
+				require.Equal(t, tc.expectedLeaseholder, resultLeaseholders)
+			}
 		})
 	}
 }

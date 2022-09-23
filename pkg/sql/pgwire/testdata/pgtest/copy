@@ -927,3 +927,37 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"{2,3,4,5,6}"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 2"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send crdb_only
+Query {"String": "COPY c(d) FROM STDIN WITH CSV"}
+CopyData {"Data": "\"{0,1}\"\n"}
+CopyData {"Data": "\"{2,3,4,5,6}\"\n"}
+CopyData {"Data": "\\.\n"}
+CopyDone
+----
+
+
+until crdb_only ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"CopyInResponse","ColumnFormatCodes":[0]}
+{"Type":"CommandComplete","CommandTag":"COPY 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# SHOW LAST QUERY STATISTICS cannot be used as a statement source, so we
+# store the result as a variable in the test.
+let $copy_service_latency crdb_only
+Query {"String": "SHOW LAST QUERY STATISTICS RETURNING service_latency"}
+----
+
+send crdb_only
+Query {"String": "SELECT '$copy_service_latency'::INTERVAL > '0 seconds'::INTERVAL"}
+----
+
+until crdb_only ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"t"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

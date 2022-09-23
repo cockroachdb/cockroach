@@ -17,8 +17,23 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/duration.proto";
 
 enum Problem {
-  // We were unable to identify specific reasons why this statement was slow.
-  Unknown = 0;
+  // This statement execution was not itself problematic, but it happened in
+  // the same transaction as another problematic statement.
+  None = 0;
+
+  // This statement execution was slow, either above a fixed latency threshold
+  // or detected as an anomaly.
+  SlowExecution = 1;
+
+  // This statement execution failed completely, due to contention, resource
+  // saturation, or syntax errors.
+  FailedExecution = 2;
+}
+
+enum Cause {
+  // We have not identified specific reasons why this statement was slow.
+  // We will not explicitly use this zero value; it is here defensively.
+  Unset = 0;
 
   // This statement was slow because we picked the wrong plan, possibly due to
   // outdated statistics, the statement using different literals or search
@@ -30,16 +45,12 @@ enum Problem {
   SuboptimalPlan = 2;
 
   // This statement was slow because of contention.
-  HighContentionTime = 3;
+  HighContention = 3;
 
   // This statement was slow because of being retried multiple times, again due
   // to contention. The "high" threshold may be configured by the
   // `sql.insights.high_retry_count.threshold` cluster setting.
   HighRetryCount = 4;
-
-  // This statement execution failed completely, due to contention, resource
-  // saturation, or syntax errors.
-  FailedExecution = 5;
 }
 
 message Session {
@@ -96,5 +107,7 @@ message Insight {
   Transaction transaction = 2;
   Statement statement = 3;
 
-  repeated Problem problems = 4;
+  Problem problem = 4;
+
+  repeated Cause causes = 5;
 }

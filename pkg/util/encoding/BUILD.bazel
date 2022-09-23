@@ -39,6 +39,7 @@ go_test(
         "main_test.go",
         "printer_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":encoding"],
     deps = [
         "//pkg/geo",

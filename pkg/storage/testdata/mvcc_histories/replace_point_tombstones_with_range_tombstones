@@ -1,0 +1,244 @@
+# Tests ReplacePointTombstonesWithRangeTombstones(), in particular MVCC
+# stats calculations.
+#
+# Initial state, where x is tombstone, o---o is range tombstone, [] is intent:
+#
+# 5                    [f5] [x]              k5  x   m5  x
+# 4                              o---------------------------o
+# 3                  x           o---------------------------o
+# 2              d2  x
+# 1      b1  x   x   e1  x   x   h1  x       x   l1  
+#    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o
+
+run ok
+put k=b ts=1 v=b1
+del k=c ts=1
+del k=d ts=1
+put k=d ts=2 v=d2
+put k=e ts=1 v=e1
+del k=e ts=2
+del k=e ts=3
+del k=f ts=1
+del k=g ts=1
+put k=h ts=1 v=h1
+del k=i ts=1
+del k=k ts=1
+put k=l ts=1 v=l1
+del_range_ts k=h end=o ts=3
+del_range_ts k=h end=o ts=4
+put k=k ts=5 v=k5
+del k=l ts=5
+put k=m ts=5 v=m5
+del k=n ts=5
+with t=A
+  txn_begin ts=5
+  put k=f v=f5
+  del k=g
+----
+del: "c": found key false
+del: "d": found key false
+del: "e": found key true
+del: "e": found key false
+del: "f": found key false
+del: "g": found key false
+del: "i": found key false
+del: "k": found key false
+del: "l": found key false
+del: "n": found key false
+del: "g": found key false
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "d"/1.000000000,0 -> /<empty>
+data: "e"/3.000000000,0 -> /<empty>
+data: "e"/2.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/5.000000000,0 -> /BYTES/f5
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/5.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/h1
+data: "i"/1.000000000,0 -> /<empty>
+data: "k"/5.000000000,0 -> /BYTES/k5
+data: "k"/1.000000000,0 -> /<empty>
+data: "l"/5.000000000,0 -> /<empty>
+data: "l"/1.000000000,0 -> /BYTES/l1
+data: "m"/5.000000000,0 -> /BYTES/m5
+data: "n"/5.000000000,0 -> /<empty>
+
+# First, replace the entire span.
+run stats ok
+replace_point_tombstones_with_range_tombstones k=a end=z
+----
+>> replace_point_tombstones_with_range_tombstones k=a end=z
+stats: key_count=-2 key_bytes=-52 val_count=-4 range_key_count=+6 range_key_bytes=+138 range_val_count=+12 gc_bytes_age=+8298
+>> at end:
+rangekey: c{-\x00}/[1.000000000,0=/<empty>]
+rangekey: e{-\x00}/[3.000000000,0=/<empty>]
+rangekey: {h-l}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: l{-\x00}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {l\x00-n}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: n{-\x00}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {n\x00-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "d"/1.000000000,0 -> /<empty>
+data: "e"/2.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/5.000000000,0 -> /BYTES/f5
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/5.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/h1
+data: "i"/1.000000000,0 -> /<empty>
+data: "k"/5.000000000,0 -> /BYTES/k5
+data: "k"/1.000000000,0 -> /<empty>
+data: "l"/1.000000000,0 -> /BYTES/l1
+data: "m"/5.000000000,0 -> /BYTES/m5
+stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 separated_intent_count=2 intent_age=190
+
+
+# Then, set the dataset up again and replace point keys.
+run ok
+txn_remove t=A
+clear_range k=a end=z
+put k=b ts=1 v=b1
+del k=c ts=1
+del k=d ts=1
+put k=d ts=2 v=d2
+put k=e ts=1 v=e1
+del k=e ts=2
+del k=e ts=3
+del k=f ts=1
+del k=g ts=1
+put k=h ts=1 v=h1
+del k=i ts=1
+del k=k ts=1
+put k=l ts=1 v=l1
+del_range_ts k=h end=o ts=3
+del_range_ts k=h end=o ts=4
+put k=k ts=5 v=k5
+del k=l ts=5
+put k=m ts=5 v=m5
+del k=n ts=5
+with t=A
+  txn_begin ts=5
+  put k=f v=f5
+  del k=g
+----
+del: "c": found key false
+del: "d": found key false
+del: "e": found key true
+del: "e": found key false
+del: "f": found key false
+del: "g": found key false
+del: "i": found key false
+del: "k": found key false
+del: "l": found key false
+del: "n": found key false
+del: "g": found key false
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+rangekey: {h-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/1.000000000,0 -> /<empty>
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "d"/1.000000000,0 -> /<empty>
+data: "e"/3.000000000,0 -> /<empty>
+data: "e"/2.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/5.000000000,0 -> /BYTES/f5
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/5.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/h1
+data: "i"/1.000000000,0 -> /<empty>
+data: "k"/5.000000000,0 -> /BYTES/k5
+data: "k"/1.000000000,0 -> /<empty>
+data: "l"/5.000000000,0 -> /<empty>
+data: "l"/1.000000000,0 -> /BYTES/l1
+data: "m"/5.000000000,0 -> /BYTES/m5
+data: "n"/5.000000000,0 -> /<empty>
+
+run stats ok
+replace_point_tombstones_with_range_tombstones k=a
+replace_point_tombstones_with_range_tombstones k=b
+replace_point_tombstones_with_range_tombstones k=c
+replace_point_tombstones_with_range_tombstones k=d
+replace_point_tombstones_with_range_tombstones k=e
+replace_point_tombstones_with_range_tombstones k=f
+replace_point_tombstones_with_range_tombstones k=g
+replace_point_tombstones_with_range_tombstones k=h
+replace_point_tombstones_with_range_tombstones k=i
+replace_point_tombstones_with_range_tombstones k=j
+replace_point_tombstones_with_range_tombstones k=k
+replace_point_tombstones_with_range_tombstones k=l
+replace_point_tombstones_with_range_tombstones k=m
+replace_point_tombstones_with_range_tombstones k=n
+replace_point_tombstones_with_range_tombstones k=o
+----
+>> replace_point_tombstones_with_range_tombstones k=a
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=b
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=c
+stats: key_count=-1 key_bytes=-14 val_count=-1 range_key_count=+1 range_key_bytes=+14 range_val_count=+1
+>> replace_point_tombstones_with_range_tombstones k=d
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=e
+stats: key_bytes=-12 val_count=-1 range_key_count=+1 range_key_bytes=+14 range_val_count=+1 gc_bytes_age=+196
+>> replace_point_tombstones_with_range_tombstones k=f
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=g
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=h
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=i
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=j
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=k
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=l
+stats: key_bytes=-12 val_count=-1 range_key_count=+2 range_key_bytes=+55 range_val_count=+5 gc_bytes_age=+4148
+>> replace_point_tombstones_with_range_tombstones k=m
+stats: no change
+>> replace_point_tombstones_with_range_tombstones k=n
+stats: key_count=-1 key_bytes=-14 val_count=-1 range_key_count=+2 range_key_bytes=+55 range_val_count=+5 gc_bytes_age=+3954
+>> replace_point_tombstones_with_range_tombstones k=o
+stats: no change
+>> at end:
+rangekey: c{-\x00}/[1.000000000,0=/<empty>]
+rangekey: e{-\x00}/[3.000000000,0=/<empty>]
+rangekey: {h-l}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: l{-\x00}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {l\x00-n}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: n{-\x00}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {n\x00-o}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "d"/2.000000000,0 -> /BYTES/d2
+data: "d"/1.000000000,0 -> /<empty>
+data: "e"/2.000000000,0 -> /<empty>
+data: "e"/1.000000000,0 -> /BYTES/e1
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/5.000000000,0 -> /BYTES/f5
+data: "f"/1.000000000,0 -> /<empty>
+meta: "g"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "g"/5.000000000,0 -> /<empty>
+data: "g"/1.000000000,0 -> /<empty>
+data: "h"/1.000000000,0 -> /BYTES/h1
+data: "i"/1.000000000,0 -> /<empty>
+data: "k"/5.000000000,0 -> /BYTES/k5
+data: "k"/1.000000000,0 -> /<empty>
+data: "l"/1.000000000,0 -> /BYTES/l1
+data: "m"/5.000000000,0 -> /BYTES/m5
+stats: key_count=10 key_bytes=200 val_count=15 val_bytes=152 range_key_count=7 range_key_bytes=160 range_val_count=14 live_count=5 live_bytes=153 gc_bytes_age=34769 intent_count=2 intent_bytes=31 separated_intent_count=2 intent_age=190

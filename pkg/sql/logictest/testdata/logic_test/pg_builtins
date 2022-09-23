@@ -268,6 +268,34 @@ SELECT current_setting('statement_timeout'), current_setting('search_path')
 query error unrecognized configuration parameter
 SELECT pg_catalog.current_setting('woo', false)
 
+# Check that current_setting handles custom settings correctly.
+query T
+SELECT current_setting('my.custom', true)
+----
+NULL
+
+statement ok
+PREPARE check_custom AS SELECT current_setting('my.custom', true)
+
+query T
+EXECUTE check_custom
+----
+NULL
+
+statement ok
+BEGIN;
+SET LOCAL my.custom = 'foo'
+
+# Check that the existence of my.custom is checked depending on the execution
+# context, and not at PREPARE time.
+query T
+EXECUTE check_custom
+----
+foo
+
+statement ok
+COMMIT
+
 # check error on unsupported session var.
 query error configuration setting.*not supported
 SELECT current_setting('vacuum_cost_delay', false)

@@ -12,8 +12,10 @@ package persistedsqlstats
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -472,13 +474,7 @@ func (s *PersistedSQLStats) insertStatementStats(
 	serializedPlanHash []byte,
 	stats *roachpb.CollectedStatementStatistics,
 ) (rowsAffected int, err error) {
-	insertStmt := `
-INSERT INTO system.statement_statistics
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
-             aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
-DO NOTHING
-`
+
 	aggInterval := s.GetAggregationInterval()
 
 	// Prepare data for insertion.
@@ -495,21 +491,8 @@ DO NOTHING
 	statistics := tree.NewDJSON(statisticsJSON)
 
 	plan := tree.NewDJSON(sqlstatsutil.ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription))
-	indexRecommendations := tree.NewDArray(types.String)
-	for _, recommendation := range stats.Stats.IndexRecommendations {
-		if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
-			return 0, err
-		}
-	}
-
-	rowsAffected, err = s.cfg.InternalExecutor.ExecEx(
-		ctx,
-		"insert-stmt-stats",
-		txn, /* txn */
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		},
-		insertStmt,
+	values := "$1 ,$2, $3, $4, $5, $6, $7, $8, $9, $10"
+	args := append(make([]interface{}, 0, 11),
 		aggregatedTs,                         // aggregated_ts
 		serializedFingerprintID,              // fingerprint_id
 		serializedTransactionFingerprintID,   // transaction_fingerprint_id
@@ -520,7 +503,34 @@ DO NOTHING
 		metadata,                             // metadata
 		statistics,                           // statistics
 		plan,                                 // plan
-		indexRecommendations,                 // index_recommendations
+	)
+	if s.cfg.Settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations) {
+		values = values + ", $11"
+		indexRecommendations := tree.NewDArray(types.String)
+		for _, recommendation := range stats.Stats.IndexRecommendations {
+			if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+				return 0, err
+			}
+		}
+		args = append(args, indexRecommendations)
+	}
+
+	insertStmt := fmt.Sprintf(`
+INSERT INTO system.statement_statistics
+VALUES (%s)
+ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
+             aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
+DO NOTHING
+`, values)
+	rowsAffected, err = s.cfg.InternalExecutor.ExecEx(
+		ctx,
+		"insert-stmt-stats",
+		txn, /* txn */
+		sessiondata.InternalExecutorOverride{
+			User: username.NodeUserName(),
+		},
+		insertStmt,
+		args...,
 	)
 
 	return rowsAffected, err

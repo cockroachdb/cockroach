@@ -22,6 +22,7 @@ go_test(
     name = "catalogkeys_test",
     size = "small",
     srcs = ["keys_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":catalogkeys"],
     deps = [
         "//pkg/keys",

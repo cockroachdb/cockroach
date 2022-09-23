@@ -53,11 +53,12 @@ import (
 // 1
 // There are three 1s on the left and two 1s on the right, so we emit 1, 1.
 // Nothing else is in both.
-//  emitRight: For each row, increment the map entry.
-//  emitLeft: For each row, if the row is not present in the map, it was not in
-//    both, don't emit. Otherwise, if the count for the row was > 0, emit and
-//    decrement the entry. Otherwise, the row was on the right, but we've
-//    already emitted as many as were on the right, don't emit.
+//
+//	emitRight: For each row, increment the map entry.
+//	emitLeft: For each row, if the row is not present in the map, it was not in
+//	  both, don't emit. Otherwise, if the count for the row was > 0, emit and
+//	  decrement the entry. Otherwise, the row was on the right, but we've
+//	  already emitted as many as were on the right, don't emit.
 type unionNode struct {
 	// right and left are the data source operands.
 	// right is read first, to populate the `emit` field.

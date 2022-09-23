@@ -18,7 +18,6 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
-        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -61,6 +60,7 @@ go_test(
         "rangefeed_mock_test.go",
         ":mock_rangefeed",  # keep
     ],
+    args = ["-test.timeout=295s"],
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",

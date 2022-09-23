@@ -660,7 +660,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		if err != nil {
 			return err
 		}
-		namespaceOid := h.NamespaceOid(db.GetID(), scName)
+		namespaceOid := h.NamespaceOid(db, scName)
 		if err := addRow(
 			tableOid(table.GetID()),        // oid
 			tree.NewDName(table.GetName()), // relname
@@ -771,7 +771,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false /* requiresPrivileges */, func(db catalog.DatabaseDescriptor) error {
-			namespaceOid := h.NamespaceOid(db.GetID(), pgCatalogName)
+			namespaceOid := h.NamespaceOid(db, pgCatalogName)
 			add := func(collName string) error {
 				return addRow(
 					h.CollationOid(collName),  // oid
@@ -854,7 +854,7 @@ func populateTableConstraints(
 	if err != nil {
 		return err
 	}
-	namespaceOid := h.NamespaceOid(db.GetID(), scName)
+	namespaceOid := h.NamespaceOid(db, scName)
 	tblOid := tableOid(table.GetID())
 	for conName, con := range conInfo {
 		conoid := tree.DNull
@@ -2093,10 +2093,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 						ownerOID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
 					}
 					return addRow(
-						h.NamespaceOid(db.GetID(), sc.GetName()), // oid
-						tree.NewDString(sc.GetName()),            // nspname
-						ownerOID,                                 // nspowner
-						tree.DNull,                               // nspacl
+						h.NamespaceOid(db, sc.GetName()), // oid
+						tree.NewDString(sc.GetName()),    // nspname
+						ownerOID,                         // nspowner
+						tree.DNull,                       // nspacl
 					)
 				})
 			})
@@ -2128,7 +2128,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 	schema: vtable.PGCatalogOperator,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
+		nspOid := h.NamespaceOid(db, pgCatalogName)
 		addOp := func(opName string, kind tree.Datum, params tree.TypeList, returnTyper tree.ReturnTyper) error {
 			var leftType, rightType *tree.DOid
 			switch params.Length() {
@@ -2297,8 +2297,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		// builtin function since they don't really belong to any database.
 		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
-				for _, name := range builtins.AllBuiltinNames {
+				nspOid := h.NamespaceOid(db, pgCatalogName)
+				for _, name := range builtins.AllBuiltinNames() {
 					// parser.Builtins contains duplicate uppercase and lowercase keys.
 					// Only return the lowercase ones for compatibility with postgres.
 					var first rune
@@ -2422,11 +2422,16 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		if err != nil {
 			return err
 		}
-		return forEachDatabaseDesc(ctx, p, nil /* dbContext */, false, /* requiresPrivileges */
+		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(dbDesc catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, dbDesc, func(scDesc catalog.SchemaDescriptor) error {
 					return scDesc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-						fnDesc, err := p.Descriptors().GetImmutableFunctionByID(ctx, p.Txn(), overload.ID, tree.ObjectLookupFlags{})
+						fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
+							ctx, p.Txn(), overload.ID,
+							tree.ObjectLookupFlags{
+								CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+							},
+						)
 						if err != nil {
 							return err
 						}
@@ -2457,10 +2462,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						}
 
 						return addRow(
-							tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())),  // oid
-							tree.NewDName(fnDesc.GetName()),                  // proname
-							h.NamespaceOid(dbDesc.GetID(), scDesc.GetName()), // pronamespace
-							h.UserOid(fnDesc.GetPrivileges().Owner()),        // proowner
+							tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())), // oid
+							tree.NewDName(fnDesc.GetName()),                 // proname
+							h.NamespaceOid(dbDesc, scDesc.GetName()),        // pronamespace
+							h.UserOid(fnDesc.GetPrivileges().Owner()),       // proowner
 							// In postgres oid of sql language is 14, need to add a mapping if
 							// we are going to support more languages.
 							tree.NewDOid(14), // prolang
@@ -2952,7 +2957,7 @@ func addPGTypeRowForTable(
 	table catalog.TableDescriptor,
 	addRow func(...tree.Datum) error,
 ) error {
-	nspOid := h.NamespaceOid(db.GetID(), scName)
+	nspOid := h.NamespaceOid(db, scName)
 	ownerOID, err := getOwnerOID(ctx, p, table)
 	if err != nil {
 		return err
@@ -3108,7 +3113,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
+				nspOid := h.NamespaceOid(db, pgCatalogName)
 
 				// Generate rows for all predefined types.
 				for _, typ := range types.OidToType {
@@ -3136,7 +3141,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					p,
 					db,
 					func(_ catalog.DatabaseDescriptor, scName string, typDesc catalog.TypeDescriptor) error {
-						nspOid := h.NamespaceOid(db.GetID(), scName)
+						nspOid := h.NamespaceOid(db, scName)
 						typ, err := typDesc.MakeTypesT(ctx, tree.NewQualifiedTypeName(db.GetName(), scName, typDesc.GetName()), p)
 						if err != nil {
 							return err
@@ -3158,7 +3163,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				addRow func(...tree.Datum) error) (bool, error) {
 
 				h := makeOidHasher()
-				nspOid := h.NamespaceOid(db.GetID(), pgCatalogName)
+				nspOid := h.NamespaceOid(db, pgCatalogName)
 				coid := tree.MustBeDOid(unwrappedConstraint)
 				ooid := coid.Oid
 
@@ -3226,7 +3231,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return true, nil
 				}
 
-				nspOid = h.NamespaceOid(db.GetID(), scName)
+				nspOid = h.NamespaceOid(db, scName)
 				typ, err = typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(typDesc.GetName()), p)
 				if err != nil {
 					return false, err
@@ -3771,12 +3776,12 @@ https://www.postgresql.org/docs/14/view-pg-cursors.html`,
 				return err
 			}
 			if err := addRow(
-				tree.NewDString(name),        /* name */
-				tree.NewDString(c.statement), /* statement */
-				tree.DBoolFalse,              /* is_holdable */
-				tree.DBoolFalse,              /* is_binary */
-				tree.DBoolFalse,              /* is_scrollable */
-				tz,                           /* creation_date */
+				tree.NewDString(string(name)), /* name */
+				tree.NewDString(c.statement),  /* statement */
+				tree.DBoolFalse,               /* is_holdable */
+				tree.DBoolFalse,               /* is_binary */
+				tree.DBoolFalse,               /* is_scrollable */
+				tz,                            /* creation_date */
 			); err != nil {
 				return err
 			}
@@ -4290,7 +4295,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				for _, name := range builtins.AllAggregateBuiltinNames {
+				for _, name := range builtins.AllAggregateBuiltinNames() {
 					if name == builtins.AnyNotNull {
 						// any_not_null is treated as a special case.
 						continue
@@ -4386,16 +4391,15 @@ func init() {
 // are 32 bits and that they are stable across accesses.
 //
 // The type has a few layers of methods:
-// - write<go_type> methods write concrete types to the underlying running hash.
-// - write<db_object> methods account for single database objects like TableDescriptors
-//   or IndexDescriptors in the running hash. These methods aim to write information
-//   that would uniquely fingerprint the object to the hash using the first layer of
-//   methods.
-// - <DB_Object>Oid methods use the second layer of methods to construct a unique
-//   object identifier for the provided database object. This object identifier will
-//   be returned as a *tree.DInt, and the running hash will be reset. These are the
-//   only methods that are part of the oidHasher's external facing interface.
-//
+//   - write<go_type> methods write concrete types to the underlying running hash.
+//   - write<db_object> methods account for single database objects like TableDescriptors
+//     or IndexDescriptors in the running hash. These methods aim to write information
+//     that would uniquely fingerprint the object to the hash using the first layer of
+//     methods.
+//   - <DB_Object>Oid methods use the second layer of methods to construct a unique
+//     object identifier for the provided database object. This object identifier will
+//     be returned as a *tree.DInt, and the running hash will be reset. These are the
+//     only methods that are part of the oidHasher's external facing interface.
 type oidHasher struct {
 	h hash.Hash32
 }
@@ -4500,9 +4504,12 @@ func (h oidHasher) writeForeignKeyConstraint(fk *descpb.ForeignKeyConstraint) {
 	h.writeStr(fk.Name)
 }
 
-func (h oidHasher) NamespaceOid(dbID descpb.ID, scName string) *tree.DOid {
+func (h oidHasher) NamespaceOid(db catalog.DatabaseDescriptor, scName string) *tree.DOid {
+	if scID := db.GetSchemaID(scName); scID != 0 {
+		return tree.NewDOid(oid.Oid(scID))
+	}
 	h.writeTypeTag(namespaceTypeTag)
-	h.writeDB(dbID)
+	h.writeDB(db.GetID())
 	h.writeSchema(scName)
 	return h.getOid()
 }

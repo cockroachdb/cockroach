@@ -73,9 +73,10 @@ type Covering []Range
 // returned as a `[]interface{}` and in the same order as they are in coverings.
 //
 // Example:
-//  covering 1: [1, 2) -> 'a', [3, 4) -> 'b', [6, 7) -> 'c'
-//  covering 2: [1, 5) -> 'd'
-//  output: [1, 2) -> 'ad', [2, 3) -> `d`, [3, 4) -> 'bd', [4, 5) -> 'd', [6, 7) -> 'c'
+//
+//	covering 1: [1, 2) -> 'a', [3, 4) -> 'b', [6, 7) -> 'c'
+//	covering 2: [1, 5) -> 'd'
+//	output: [1, 2) -> 'ad', [2, 3) -> `d`, [3, 4) -> 'bd', [4, 5) -> 'd', [6, 7) -> 'c'
 //
 // The input is mutated (sorted). It is also assumed (and not checked) to be
 // valid (e.g. non-overlapping intervals in each covering).

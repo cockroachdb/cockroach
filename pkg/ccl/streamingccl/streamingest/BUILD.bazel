@@ -74,6 +74,7 @@ go_test(
         "stream_ingestion_test.go",
         "stream_replication_e2e_test.go",
     ],
+    args = ["-test.timeout=895s"],
     embed = [":streamingest"],
     deps = [
         "//pkg/base",

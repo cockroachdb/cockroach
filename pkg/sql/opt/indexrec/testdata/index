@@ -1759,3 +1759,153 @@ scalar-group-by
  └── aggregations
       └── bool-and [as=bool_and:26, outer=(25)]
            └── column25:25
+
+exec-ddl
+CREATE TABLE t5 (
+  k INT PRIMARY KEY,
+  v INT,
+  i INT,
+  j INT
+)
+----
+
+exec-ddl
+CREATE INDEX idx_1 ON t5(v)
+----
+
+exec-ddl
+CREATE INDEX idx_2 ON t5(v) STORING (i)
+----
+
+# The index recommendation picks the best existing index candidate to drop. In
+# this case, idx_2 is closer to this new index recommendation than idx_1 as it
+# stores i.
+index-recommendations
+SELECT i, j FROM t5 WHERE v > 1
+----
+replacement: CREATE INDEX ON t5 (v) STORING (i, j); DROP INDEX t5@idx_2;
+--
+optimal plan:
+project
+ ├── columns: i:3 j:4
+ ├── cost: 374.04
+ └── scan t5@_hyp_3
+      ├── columns: v:2!null i:3 j:4
+      ├── constraint: /2/1: [/2 - ]
+      └── cost: 370.686667
+
+exec-ddl
+DROP INDEX idx_2
+----
+
+exec-ddl
+CREATE INDEX idx_3 ON t5(v, i)
+----
+
+# The index recommendation still picks idx_1 to drop because idx_3 does not
+# store the same explicit columns as wanted.
+index-recommendations
+SELECT i, j FROM t5 WHERE v > 1
+----
+replacement: CREATE INDEX ON t5 (v) STORING (i, j); DROP INDEX t5@idx_1;
+--
+optimal plan:
+project
+ ├── columns: i:3 j:4
+ ├── cost: 374.04
+ └── scan t5@_hyp_3
+      ├── columns: v:2!null i:3 j:4
+      ├── constraint: /2/1: [/2 - ]
+      └── cost: 370.686667
+
+# The following tests check for not visible indexes. Note that for alter index
+# visibility, the output, optimal plan, for index recommendations uses the
+# hypothetical indexes created instead of using the visible version of the
+# original indexes. This is not ideal, but we will accept this behaviour as of
+# now since it is not user-facing.
+
+exec-ddl
+CREATE TABLE t_notvisible (
+  k INT PRIMARY KEY,
+  v INT,
+  i INT,
+  INDEX idx_i_visible(i) VISIBLE,
+  INDEX idx_v_invisible(v) NOT VISIBLE
+)
+----
+
+# If the index is visible and stores the same column, no recommendation.
+index-recommendations
+SELECT i FROM t_notvisible WHERE i > 1
+----
+no index recommendations
+--
+optimal plan:
+scan t_notvisible@idx_i_visible
+ ├── columns: i:3!null
+ ├── constraint: /3/1: [/2 - ]
+ └── cost: 357.353333
+
+# If the index is not visible and stores the same column, recommend alter index.
+# visible.
+index-recommendations
+SELECT v FROM t_notvisible WHERE v > 1
+----
+alteration: ALTER INDEX t_notvisible@idx_v_invisible VISIBLE;
+--
+optimal plan:
+scan t_notvisible@_hyp_3
+ ├── columns: v:2!null
+ ├── constraint: /2/1: [/2 - ]
+ └── cost: 360.686667
+
+# If the index is not visible and need to store more columns, still recommend
+# create index. We do not want to recommend dropping any invisible index.
+index-recommendations
+SELECT i FROM t_notvisible WHERE v > 1
+----
+creation: CREATE INDEX ON t_notvisible (v) STORING (i);
+--
+optimal plan:
+project
+ ├── columns: i:3
+ ├── cost: 367.373333
+ └── scan t_notvisible@_hyp_3
+      ├── columns: v:2!null i:3
+      ├── constraint: /2/1: [/2 - ]
+      └── cost: 364.02
+
+# If there exists both not visible and visible indexes storing the same explicit
+# column, the index recommendation should not recommend alter index just because
+# not visible index is in the front.
+exec-ddl
+CREATE INDEX idx_v_visible ON t_notvisible(v) VISIBLE
+----
+
+index-recommendations
+SELECT v FROM t_notvisible WHERE v > 1
+----
+no index recommendations
+--
+optimal plan:
+scan t_notvisible@idx_v_visible
+ ├── columns: v:2!null
+ ├── constraint: /2/1: [/2 - ]
+ └── cost: 357.353333
+
+# If there exists both visible and invisible index, the index recommendation
+# should not recommend dropping the not visible index even if it stores the same
+# key column.
+index-recommendations
+SELECT i FROM t_notvisible WHERE v > 1
+----
+replacement: CREATE INDEX ON t_notvisible (v) STORING (i); DROP INDEX t_notvisible@idx_v_visible;
+--
+optimal plan:
+project
+ ├── columns: i:3
+ ├── cost: 367.373333
+ └── scan t_notvisible@_hyp_4
+      ├── columns: v:2!null i:3
+      ├── constraint: /2/1: [/2 - ]
+      └── cost: 364.02

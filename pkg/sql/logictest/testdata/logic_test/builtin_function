@@ -2302,6 +2302,14 @@ SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid, false)
 SELECT a, b FROM test.public.pg_viewdef_test
 
 statement ok
+CREATE MATERIALIZED VIEW test.pg_viewdef_mview AS SELECT b, a FROM test.pg_viewdef_test
+
+query T
+SELECT pg_catalog.pg_get_viewdef('pg_viewdef_mview'::regclass::oid)
+----
+SELECT b, a FROM test.public.pg_viewdef_test
+
+statement ok
 CREATE TABLE test.pg_constraintdef_test (
   a int,
   b int unique,

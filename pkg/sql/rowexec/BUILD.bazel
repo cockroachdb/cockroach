@@ -139,6 +139,7 @@ go_test(
         "windower_test.go",
         "zigzagjoiner_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":rowexec"],
     tags = ["no-remote"],
     deps = [

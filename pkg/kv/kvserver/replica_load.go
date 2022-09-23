@@ -29,13 +29,17 @@ type ReplicaLoad struct {
 // NewReplicaLoad returns a new ReplicaLoad, which may be used to track the
 // request throughput of a replica.
 func NewReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracle) *ReplicaLoad {
+	// NB: We only wish to record the locality of a request for QPS, where it
+	// as only follow-the-workload lease transfers use this per-locality
+	// request count. Maintaining more than one bucket for client requests
+	// increases the memory footprint O(localities).
 	return &ReplicaLoad{
 		batchRequests: replicastats.NewReplicaStats(clock, getNodeLocality),
-		requests:      replicastats.NewReplicaStats(clock, getNodeLocality),
-		writeKeys:     replicastats.NewReplicaStats(clock, getNodeLocality),
-		readKeys:      replicastats.NewReplicaStats(clock, getNodeLocality),
-		writeBytes:    replicastats.NewReplicaStats(clock, getNodeLocality),
-		readBytes:     replicastats.NewReplicaStats(clock, getNodeLocality),
+		requests:      replicastats.NewReplicaStats(clock, nil),
+		writeKeys:     replicastats.NewReplicaStats(clock, nil),
+		readKeys:      replicastats.NewReplicaStats(clock, nil),
+		writeBytes:    replicastats.NewReplicaStats(clock, nil),
+		readBytes:     replicastats.NewReplicaStats(clock, nil),
 	}
 }
 

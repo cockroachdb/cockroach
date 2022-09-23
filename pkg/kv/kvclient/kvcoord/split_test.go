@@ -262,9 +262,9 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 
 // TestSplitStickyBit checks that the sticky bit is set when performing a manual
 // split. There are two cases to consider:
-// 1. Range is split so sticky bit is updated on RHS.
-// 2. Range is already split and split key is the start key of a range, so update
-//    the sticky bit of that range, but no range is split.
+//  1. Range is split so sticky bit is updated on RHS.
+//  2. Range is already split and split key is the start key of a range, so update
+//     the sticky bit of that range, but no range is split.
 func TestRangeSplitsStickyBit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -38,25 +38,24 @@ import (
 //
 //   - index-constraints [arg | arg=val | arg=(val1,val2, ...)]...
 //
-//   Takes a scalar expression, builds a memo for it, and computes index
-//   constraints. Arguments:
+//     Takes a scalar expression, builds a memo for it, and computes index
+//     constraints. Arguments:
 //
-//     - vars=(<column> <type> [not null], ...)
+//   - vars=(<column> <type> [not null], ...)
 //
-//       Information about the columns.
+//     Information about the columns.
 //
-//     - index=(<column> [ascending|asc|descending|desc], ...)
+//   - index=(<column> [ascending|asc|descending|desc], ...)
 //
-//       Information for the index (used by index-constraints).
+//     Information for the index (used by index-constraints).
 //
-//     - nonormalize
+//   - nonormalize
 //
-//       Disable the optimizer normalization rules.
+//     Disable the optimizer normalization rules.
 //
-//     - semtree-normalize
+//   - semtree-normalize
 //
-//       Run TypedExpr normalization before building the memo.
-//
+//     Run TypedExpr normalization before building the memo.
 func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -254,7 +253,8 @@ func BenchmarkIndexConstraints(b *testing.B) {
 
 // parseIndexColumns parses descriptions of index columns; each
 // string corresponds to an index column and is of the form:
-//   @id [ascending|asc|descending|desc] [not null]
+//
+//	@id [ascending|asc|descending|desc] [not null]
 func parseIndexColumns(tb testing.TB, md *opt.Metadata, colStrs []string) []opt.OrderingColumn {
 	findCol := func(alias string) opt.ColumnID {
 		for i := 0; i < md.NumColumns(); i++ {

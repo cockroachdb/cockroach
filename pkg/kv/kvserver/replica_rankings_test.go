@@ -33,7 +33,7 @@ func TestReplicaRankings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	rr := newReplicaRankings()
+	rr := NewReplicaRankings()
 
 	testCases := []struct {
 		replicasByQPS []float64
@@ -47,7 +47,7 @@ func TestReplicaRankings(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		acc := rr.newAccumulator()
+		acc := rr.NewAccumulator()
 
 		// Randomize the order of the inputs each time the test is run.
 		want := make([]float64, len(tc.replicasByQPS))
@@ -57,26 +57,26 @@ func TestReplicaRankings(t *testing.T) {
 		})
 
 		for i, replQPS := range tc.replicasByQPS {
-			acc.addReplica(replicaWithStats{
-				repl: &Replica{RangeID: roachpb.RangeID(i)},
-				qps:  replQPS,
+			acc.AddReplica(candidateReplica{
+				Replica: &Replica{RangeID: roachpb.RangeID(i)},
+				qps:     replQPS,
 			})
 		}
-		rr.update(acc)
+		rr.Update(acc)
 
 		// Make sure we can read off all expected replicas in the correct order.
-		repls := rr.topQPS()
+		repls := rr.TopQPS()
 		if len(repls) != len(want) {
 			t.Errorf("wrong number of replicas in output; got: %v; want: %v", repls, tc.replicasByQPS)
 			continue
 		}
 		for i := range want {
-			if repls[i].qps != want[i] {
-				t.Errorf("got %f for %d'th element; want %f (input: %v)", repls[i].qps, i, want, tc.replicasByQPS)
+			if repls[i].QPS() != want[i] {
+				t.Errorf("got %f for %d'th element; want %f (input: %v)", repls[i].QPS(), i, want, tc.replicasByQPS)
 				break
 			}
 		}
-		replsCopy := rr.topQPS()
+		replsCopy := rr.TopQPS()
 		if !reflect.DeepEqual(repls, replsCopy) {
 			t.Errorf("got different replicas on second call to topQPS; first call: %v, second call: %v", repls, replsCopy)
 		}
@@ -232,6 +232,8 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 		{1, 1, 1, 0, writeSize, 0},
 		{4, 4, 4, 0, 4 * writeSize, 0},
 		{64, 64, 64, 0, 64 * writeSize, 0},
+		{111, 111, 111, 0, 111 * writeSize, 0},
+		{1234, 1234, 1234, 0, 1234 * writeSize, 0},
 	}
 
 	store, err := ts.GetStores().(*Stores).GetStore(ts.GetFirstStoreID())
@@ -308,9 +310,12 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 			assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
 			assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
 			assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
-			assertGreaterThanInDelta(t, testCase.expectedWBPS, writeBytesAfter, epsilonAllowed)
 			assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
-
+			// NB: We assert that the written bytes is greater than the write
+			// batch request size. However the size multiplication factor,
+			// varies between 3 and 5 so we instead assert that it is greater
+			// than the logical bytes.
+			require.GreaterOrEqual(t, writeBytesAfter, testCase.expectedWBPS)
 			return nil
 		})
 	}

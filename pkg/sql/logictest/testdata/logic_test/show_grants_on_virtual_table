@@ -1,0 +1,32 @@
+query TTTTTB colnames
+SHOW GRANTS ON crdb_internal.tables
+----
+database_name  schema_name    table_name  grantee  privilege_type  is_grantable
+test           crdb_internal  tables      public   SELECT          false
+
+statement ok
+GRANT SELECT ON crdb_internal.tables TO testuser
+
+query TTTTTB colnames
+SHOW GRANTS ON crdb_internal.tables
+----
+database_name  schema_name    table_name  grantee   privilege_type  is_grantable
+test           crdb_internal  tables      public    SELECT          false
+test           crdb_internal  tables      testuser  SELECT          false
+
+statement ok
+GRANT ALL ON crdb_internal.tables TO testuser
+
+statement ok
+CREATE USER testuser2
+
+statement ok
+GRANT SELECT ON crdb_internal.tables TO testuser2 WITH GRANT OPTION
+
+query TTTTTB colnames
+SHOW GRANTS ON crdb_internal.tables
+----
+database_name  schema_name    table_name  grantee    privilege_type  is_grantable
+test           crdb_internal  tables      public     SELECT          false
+test           crdb_internal  tables      testuser   ALL             false
+test           crdb_internal  tables      testuser2  SELECT          true

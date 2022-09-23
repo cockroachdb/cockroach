@@ -309,7 +309,9 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 		HeartbeatSuccesses: metric.NewCounter(metaHeartbeatSuccesses),
 		HeartbeatFailures:  telemetry.NewCounterWithMetric(metaHeartbeatFailures),
 		EpochIncrements:    telemetry.NewCounterWithMetric(metaEpochIncrements),
-		HeartbeatLatency:   metric.NewLatency(metaHeartbeatLatency, opts.HistogramWindowInterval),
+		HeartbeatLatency: metric.NewHistogram(
+			metaHeartbeatLatency, opts.HistogramWindowInterval, metric.NetworkLatencyBuckets,
+		),
 	}
 	nl.mu.nodes = make(map[roachpb.NodeID]Record)
 	nl.heartbeatToken <- struct{}{}

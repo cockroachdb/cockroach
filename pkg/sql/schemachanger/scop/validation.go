@@ -18,8 +18,11 @@ type validationOp struct{ baseOp }
 
 func (validationOp) Type() Type { return ValidationType }
 
-// ValidateUniqueIndex validates uniqueness of entries for a unique index.
-type ValidateUniqueIndex struct {
+// ValidateIndex validates the following on an index
+// addition that is in WRITE_ONLY:
+//  1. its row count is equal to the current primary index row count;
+//  2. check for entry uniqueness if it's a unique index;
+type ValidateIndex struct {
 	validationOp
 	TableID descpb.ID
 	IndexID descpb.IndexID

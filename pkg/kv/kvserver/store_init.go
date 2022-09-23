@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -79,11 +78,15 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 // Args:
 // eng: the engine to which data is to be written.
 // initialValues: an optional list of k/v to be written as well after each
-//   value's checksum is initialized.
+//
+//	value's checksum is initialized.
+//
 // bootstrapVersion: the version at which the cluster is bootstrapped.
 // numStores: the number of stores this node will have.
 // splits: an optional list of split points. Range addressing will be created
-//   for all the splits. The list needs to be sorted.
+//
+//	for all the splits. The list needs to be sorted.
+//
 // nowNanos: the timestamp at which to write the initial engine data.
 func WriteInitialClusterData(
 	ctx context.Context,
@@ -204,7 +207,7 @@ func WriteInitialClusterData(
 
 		// If requested, write an MVCC range tombstone at the bottom of the
 		// keyspace, for performance and correctness testing.
-		if kvserverbase.GlobalMVCCRangeTombstoneForTesting {
+		if knobs.GlobalMVCCRangeTombstone {
 			if err := writeGlobalMVCCRangeTombstone(ctx, batch, desc, now.Prev()); err != nil {
 				return err
 			}

@@ -74,10 +74,10 @@ type mtClient struct {
 
 // TestMonotonicInserts replicates the 'monotonic' test from the Jepsen
 // CockroachDB test suite:
-//   https://github.com/jepsen-io/jepsen/blob/master/cockroachdb/src/jepsen/cockroach/monotonic.clj
+//
+//	https://github.com/jepsen-io/jepsen/blob/master/cockroachdb/src/jepsen/cockroach/monotonic.clj
 func TestMonotonicInserts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 68784, "flaky test")
 
 	for _, distSQLMode := range []sessiondatapb.DistSQLExecMode{
 		sessiondatapb.DistSQLOff, sessiondatapb.DistSQLOn,
@@ -93,6 +93,8 @@ func testMonotonicInserts(t *testing.T, distSQLMode sessiondatapb.DistSQLExecMod
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
+	skip.UnderRace(t) // Too slow under race.
+
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(
 		t, 3,

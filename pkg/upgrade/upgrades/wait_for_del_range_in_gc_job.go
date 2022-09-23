@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -34,6 +35,9 @@ func waitForDelRangeInGCJob(
 	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
 ) error {
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+		if !storage.CanUseMVCCRangeTombstones(ctx, deps.Settings) {
+			return nil
+		}
 		jobIDs, err := collectJobIDsFromQuery(
 			ctx, deps.InternalExecutor, "wait-for-gc-job-upgrades", `
         WITH jobs AS (

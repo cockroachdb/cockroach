@@ -67,7 +67,7 @@ func assertProjOpAgainstRowByRow(
 ) {
 	ctx := context.Background()
 	input := execinfra.NewRepeatableRowSource(inputTypes, inputRows)
-	columnarizer := NewBufferingColumnarizer(testAllocator, flowCtx, 1 /* processorID */, input)
+	columnarizer := NewBufferingColumnarizerForTests(testAllocator, flowCtx, 1 /* processorID */, input)
 	projOp, err := colexectestutils.CreateTestProjectingOperator(
 		ctx, flowCtx, columnarizer, inputTypes, projExpr, testMemAcc,
 	)

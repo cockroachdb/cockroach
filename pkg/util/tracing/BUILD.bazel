@@ -65,6 +65,7 @@ go_test(
         "tracer_external_test.go",
         "tracer_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":tracing"],
     deps = [
         "//pkg/base",

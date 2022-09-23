@@ -96,7 +96,6 @@ func (m *RowLevelTTLAggMetrics) loadMetrics(labelMetrics bool, relation string) 
 }
 
 func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Struct {
-	sigFigs := 2
 	b := aggmetric.MakeBuilder("relation")
 	ret := &RowLevelTTLAggMetrics{
 		RangeTotalDuration: b.Histogram(
@@ -108,8 +107,7 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 			},
 			histogramWindowInterval,
-			time.Hour.Nanoseconds(),
-			sigFigs,
+			metric.LongRunning60mLatencyBuckets,
 		),
 		SelectDuration: b.Histogram(
 			metric.Metadata{
@@ -120,8 +118,7 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 			},
 			histogramWindowInterval,
-			time.Minute.Nanoseconds(),
-			sigFigs,
+			metric.BatchProcessLatencyBuckets,
 		),
 		DeleteDuration: b.Histogram(
 			metric.Metadata{
@@ -132,8 +129,7 @@ func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Str
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 			},
 			histogramWindowInterval,
-			time.Minute.Nanoseconds(),
-			sigFigs,
+			metric.BatchProcessLatencyBuckets,
 		),
 		RowSelections: b.Counter(
 			metric.Metadata{

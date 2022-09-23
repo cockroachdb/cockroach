@@ -30,7 +30,8 @@ type commentOnDatabaseNode struct {
 
 // CommentOnDatabase add comment on a database.
 // Privileges: CREATE on database.
-//   notes: postgres requires CREATE on the database.
+//
+//	notes: postgres requires CREATE on the database.
 func (p *planner) CommentOnDatabase(
 	ctx context.Context, n *tree.CommentOnDatabase,
 ) (planNode, error) {

@@ -1,0 +1,181 @@
+# Walk through the basics of this test. We initialize a granter with a default
+# limit of 5% CPU limit on an 8-core machine.
+init
+----
+token-bucket:    refill=400ms/s burst=400ms available=400ms across 8 procs
+metrics/granter: limit=5.00%
+
+# We can muck with the utilization limits directly.
+set-utilization-limit limit=50% print
+----
+token-bucket:    refill=4s/s burst=4s available=4s across 8 procs
+metrics/granter: limit=50.00%
+
+# We can try and obtain CPU time, like requests would, and observe how the
+# underlying token bucket is affected. Since there's enough quota, we're
+# granted admission. Ensure that the underlying metrics and available quota
+# make sense.
+try-get duration=4s print
+----
+granted:         true
+token-bucket:    refill=4s/s burst=4s available=0s across 8 procs
+metrics/granter: limit=50.00%
+
+# If we try and grant some more we'll be unable to.
+try-get duration=1s print
+----
+granted:         false
+token-bucket:    refill=4s/s burst=4s available=0s across 8 procs
+metrics/granter: limit=50.00%
+
+# We can move time forward, refilling some quota back into the pool.
+advance duration=250ms print
+----
+token-bucket:    refill=4s/s burst=4s available=1s across 8 procs
+metrics/granter: limit=50.00%
+
+# We should now be able to get admission.
+try-get duration=1s print
+----
+granted:         true
+token-bucket:    refill=4s/s burst=4s available=0s across 8 procs
+metrics/granter: limit=50.00%
+
+# We should be able to go into debt, without it messing with granter
+# statistics. This happens when requests end up using more than they originally
+# requested.
+took-without-permission duration=1s print
+----
+token-bucket:    refill=4s/s burst=4s available=-1s across 8 procs
+metrics/granter: limit=50.00%
+
+# Going into debt penalizes future requests.
+try-get duration=1s
+----
+granted:         false
+
+advance duration=500ms print
+----
+token-bucket:    refill=4s/s burst=4s available=1s across 8 procs
+metrics/granter: limit=50.00%
+
+try-get duration=1s print
+----
+granted:         true
+token-bucket:    refill=4s/s burst=4s available=0s across 8 procs
+metrics/granter: limit=50.00%
+
+# Requests that use less quota than originally requested are able to return the
+# unused portion back to the granter. If there are no requests waiting, no
+# grant forwarding occurs.
+return-grant duration=1s print
+----
+token-bucket:    refill=4s/s burst=4s available=1s across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=false
+
+# The granter periodically checks for waiters, trying to grant to them. There
+# still isn't any.
+try-grant print
+----
+token-bucket:    refill=4s/s burst=4s available=1s across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=false
+
+# Set up a requester that wants 250ms out of 1s available.
+requester num-waiting-requests=1 duration=250ms
+----
+
+# Granting now should forward it to the requester just fine.
+try-grant print
+----
+token-bucket:    refill=4s/s burst=4s available=750ms across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=true granted=250ms
+                 has-waiting=false
+
+# Set up another requester wanting slightly more than what's available.
+requester num-waiting-requests=1 duration=800ms
+----
+
+# It's also granted admission, though putting the quota pool into debt (and
+# full utilization).
+try-grant print
+----
+token-bucket:    refill=4s/s burst=4s available=-50ms across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=true granted=800ms
+                 has-waiting=false
+
+# Similar to before, subsequent requests are penalized.
+requester num-waiting-requests=1 duration=150ms
+----
+
+try-grant print
+----
+token-bucket:    refill=4s/s burst=4s available=-50ms across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=true
+
+advance duration=50ms print
+----
+token-bucket:    refill=4s/s burst=4s available=150ms across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=true
+
+try-grant print
+----
+token-bucket:    refill=4s/s burst=4s available=0s across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=true granted=150ms
+                 has-waiting=false
+
+# Set up a requester that doesn't actually accept the grant. First, refill the
+# quota pool to its halfway point.
+advance duration=0.5s print
+----
+token-bucket:    refill=4s/s burst=4s available=2s across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=true granted=150ms
+                 has-waiting=false
+
+requester num-waiting-requests=1 duration=0s
+----
+
+# Since it didn't take any quota, we shouldn't see any decrease in what's
+# available.
+try-grant print
+----
+token-bucket:    refill=4s/s burst=4s available=2s across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=true granted=0s
+
+# Set up three waiting requests, each requesting 500ms worth of tokens. They
+# should all receive a grant.
+requester num-waiting-requests=3 duration=500ms
+----
+
+try-grant print
+----
+token-bucket:    refill=4s/s burst=4s available=500ms across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=true granted=500ms
+                 has-waiting=true granted=500ms
+                 has-waiting=true granted=500ms
+                 has-waiting=false
+
+
+# Set up three more waiters, two of them should receive a grant but send the
+# quota pool into debt (and blocking the third request).
+requester num-waiting-requests=3 duration=495ms
+----
+
+try-grant print
+----
+token-bucket:    refill=4s/s burst=4s available=-490ms across 8 procs
+metrics/granter: limit=50.00%
+requester:       has-waiting=true granted=495ms
+                 has-waiting=true granted=495ms
+                 has-waiting=true
+
+# vim:ft=sh

@@ -553,7 +553,7 @@ func TestSpanRecordingFinished(t *testing.T) {
 
 	tr2 := NewTracer()
 	childTraceInfo := child.Meta().ToProto()
-	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithRemoteParentFromTraceInfo(&childTraceInfo))
+	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithRemoteParentFromTraceInfo(childTraceInfo))
 	child.ImportRemoteRecording(remoteChildChild.GetRecording(tracingpb.RecordingVerbose))
 	remoteChildChild.Finish()
 

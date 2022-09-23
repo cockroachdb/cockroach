@@ -1,0 +1,31 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "adminccl_test",
+    srcs = [
+        "main_test.go",
+        "tenant_admin_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    deps = [
+        "//pkg/ccl",
+        "//pkg/ccl/serverccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/serverpb",
+        "//pkg/spanconfig",
+        "//pkg/sql/tests",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

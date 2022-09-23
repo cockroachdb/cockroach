@@ -279,25 +279,12 @@ func (rd *restoreDataProcessor) openSSTs(
 		}
 	}()
 
-	var recoverFromIterPanic bool
-	if restoreKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
-		recoverFromIterPanic = restoreKnobs.RecoverFromIterPanic
-	}
-
 	// sendIter sends a multiplexed iterator covering the currently accumulated files over the
 	// channel.
 	sendIter := func(iter storage.SimpleMVCCIterator, dirsToSend []cloud.ExternalStorage) error {
 		readAsOfIter := storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
 
 		cleanup := func() {
-			if recoverFromIterPanic {
-				defer func() {
-					if r := recover(); r != nil {
-						log.Errorf(ctx, "recovered from Iter panic %v", r)
-					}
-				}()
-			}
-
 			readAsOfIter.Close()
 
 			for _, dir := range dirsToSend {
@@ -433,7 +420,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 			evalCtx.Settings,
 			disallowShadowingBelow,
 			writeAtBatchTS,
-			false, /* splitFilledRanges */
+			false, /* scatterSplitRanges */
 			rd.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(),
 			rd.flowCtx.Cfg.BulkSenderLimiter,
 		)
@@ -464,7 +451,15 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
 		value := roachpb.Value{RawBytes: valueScratch}
 
-		key.Key, ok, err = kr.RewriteKey(key.Key)
+		key.Key, ok, err = kr.RewriteKey(key.Key, key.Timestamp.WallTime)
+
+		if errors.Is(err, ErrImportingKeyError) {
+			// The keyRewriter returns ErrImportingKeyError iff the key is part of an
+			// in-progress import. Keys from in-progress imports never get restored,
+			// since the key's table gets restored to its pre-import state. Therefore,
+			// elide ingesting this key.
+			continue
+		}
 		if err != nil {
 			return summary, err
 		}

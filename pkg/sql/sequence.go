@@ -792,6 +792,7 @@ func (p *planner) dropSequencesOwnedByCol(
 //   - removes the reference from the column descriptor to the sequence descriptor.
 //   - removes the reference from the sequence descriptor to the column descriptor.
 //   - writes the sequence descriptor and notifies a schema change.
+//
 // The column descriptor is mutated but not saved to persistent storage; the caller must save it.
 func (p *planner) removeSequenceDependencies(
 	ctx context.Context, tableDesc *tabledesc.Mutable, col catalog.Column,

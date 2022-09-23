@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type alterFunctionOptionsNode struct {
@@ -87,7 +87,18 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 		return err
 	}
 
-	return params.p.writeFuncSchemaChange(params.ctx, fnDesc)
+	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+		return err
+	}
+
+	fnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	if err != nil {
+		return err
+	}
+	event := eventpb.AlterFunctionOptions{
+		FunctionName: fnName.FQString(),
+	}
+	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionOptionsNode) Next(params runParams) (bool, error) { return false, nil }
@@ -114,6 +125,10 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	// referenced by other objects. This is needed when want to allow function
 	// references.
 	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	if err != nil {
+		return err
+	}
+	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
 	if err != nil {
 		return err
 	}
@@ -146,7 +161,19 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 
-	return params.p.writeSchemaDescChange(params.ctx, scDesc, "alter function name")
+	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "alter function name"); err != nil {
+		return err
+	}
+
+	newFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	if err != nil {
+		return err
+	}
+	event := eventpb.RenameFunction{
+		FunctionName:    oldFnName.FQString(),
+		NewFunctionName: newFnName.FQString(),
+	}
+	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionRenameNode) Next(params runParams) (bool, error) { return false, nil }
@@ -194,7 +221,19 @@ func (n *alterFunctionSetOwnerNode) startExec(params runParams) error {
 	}
 
 	fnDesc.GetPrivileges().SetOwner(newOwner)
-	return params.p.writeFuncSchemaChange(params.ctx, fnDesc)
+	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+		return err
+	}
+
+	fnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	if err != nil {
+		return err
+	}
+	event := eventpb.AlterFunctionOwner{
+		FunctionName: fnName.FQString(),
+		Owner:        newOwner.Normalized(),
+	}
+	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionSetOwnerNode) Next(params runParams) (bool, error) { return false, nil }
@@ -224,6 +263,10 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	if err != nil {
+		return err
+	}
 	// Functions cannot be resolved across db, so just use current db name to get
 	// the descriptor.
 	db, err := params.p.Descriptors().GetMutableDatabaseByName(
@@ -233,8 +276,9 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 
-	sc, err := params.p.Descriptors().GetMutableSchemaByName(
-		params.ctx, params.p.txn, db, string(n.n.NewSchemaName), tree.SchemaLookupFlags{Required: true},
+	scFlags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
+	sc, err := params.p.Descriptors().GetImmutableSchemaByName(
+		params.ctx, params.p.txn, db, string(n.n.NewSchemaName), scFlags,
 	)
 	if err != nil {
 		return err
@@ -256,10 +300,15 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		}
 	}
 
-	targetSc := sc.(*schemadesc.Mutable)
-	if targetSc.GetID() == fnDesc.GetParentSchemaID() {
+	if sc.GetID() == fnDesc.GetParentSchemaID() {
 		// No-op if moving to the same schema.
 		return nil
+	}
+	targetSc, err := params.p.Descriptors().GetMutableSchemaByID(
+		params.ctx, params.p.txn, sc.GetID(), params.p.CommonLookupFlagsRequired(),
+	)
+	if err != nil {
+		return err
 	}
 
 	// Check if there is a conflicting function exists.
@@ -293,7 +342,20 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		return err
 	}
 	fnDesc.SetParentSchemaID(targetSc.GetID())
-	return params.p.writeFuncSchemaChange(params.ctx, fnDesc)
+	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+		return err
+	}
+
+	newFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	if err != nil {
+		return err
+	}
+	event := eventpb.SetSchema{
+		DescriptorName:    oldFnName.FQString(),
+		NewDescriptorName: newFnName.FQString(),
+		DescriptorType:    string(fnDesc.DescriptorType()),
+	}
+	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionSetSchemaNode) Next(params runParams) (bool, error) { return false, nil }

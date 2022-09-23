@@ -22,6 +22,7 @@ go_test(
     name = "telemetry_test",
     size = "small",
     srcs = ["features_test.go"],
+    args = ["-test.timeout=55s"],
     deps = [
         ":telemetry",
         "//pkg/util/metric",

@@ -328,6 +328,11 @@ func createChangefeedJobRecord(
 	}
 	var initialHighWater hlc.Timestamp
 	evalTimestamp := func(s string) (hlc.Timestamp, error) {
+		if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+			if knobs != nil && knobs.OverrideCursor != nil {
+				s = knobs.OverrideCursor(&statementTime)
+			}
+		}
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(s)}
 		asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)
 		if err != nil {
@@ -420,6 +425,8 @@ func createChangefeedJobRecord(
 		// that support it.
 		details.Select = cdceval.AsStringUnredacted(normalized.Clause())
 
+		opts.SetDefaultEnvelope(changefeedbase.OptEnvelopeBare)
+
 		// TODO(#85143): do not enforce schema_change_policy='stop' for changefeed expressions.
 		schemachangeOptions, err := opts.GetSchemaChangeHandlingOptions()
 		if err != nil {
@@ -497,7 +504,8 @@ func createChangefeedJobRecord(
 	//   the default error to avoid claiming the user set an option they didn't
 	//   explicitly set. Fortunately we know the only way to cause this is to
 	//   set envelope.
-	if isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink) {
+	if (isCloudStorageSink(parsedSink) || isWebhookSink(parsedSink)) &&
+		encodingOpts.Envelope != changefeedbase.OptEnvelopeBare {
 		if err = opts.ForceKeyInValue(); err != nil {
 			return nil, errors.Errorf(`this sink is incompatible with envelope=%s`, encodingOpts.Envelope)
 		}
@@ -610,14 +618,6 @@ func validateSettings(ctx context.Context, p sql.PlanHookState) error {
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
 
-	ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return pgerror.New(pgcode.InsufficientPrivilege, "current user must have a role WITH CONTROLCHANGEFEED")
-	}
-
 	return nil
 }
 
@@ -675,6 +675,18 @@ func getTargetsAndTables(
 	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
 	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTarget)
 
+	hasControlChangefeed, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var requiredPrivilegePerTable privilege.Kind
+	if hasControlChangefeed {
+		requiredPrivilegePerTable = privilege.SELECT
+	} else {
+		requiredPrivilegePerTable = privilege.CHANGEFEED
+	}
+
 	for i, ct := range rawTargets {
 		desc, ok := targetDescs[ct.TableName]
 		if !ok {
@@ -685,8 +697,8 @@ func getTargetsAndTables(
 			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(&ct))
 		}
 
-		if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-			return nil, nil, err
+		if err := p.CheckPrivilege(ctx, desc, requiredPrivilegePerTable); err != nil {
+			return nil, nil, errors.WithHint(err, `Users with CONTROLCHANGEFEED need SELECT, other users need CHANGEFEED.`)
 		}
 
 		if spec, ok := originalSpecs[ct]; ok {
@@ -786,35 +798,31 @@ func changefeedJobDescription(
 		changefeedbase.SinkParamCACert,
 		changefeedbase.SinkParamClientCert,
 	})
-
 	if err != nil {
 		return "", err
 	}
 
-	cleanedSinkURI = redactUser(cleanedSinkURI)
+	cleanedSinkURI, err = changefeedbase.RedactUserFromURI(cleanedSinkURI)
+	if err != nil {
+		return "", err
+	}
 
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
 		SinkURI: tree.NewDString(cleanedSinkURI),
 		Select:  changefeed.Select,
 	}
-	opts.ForEachWithRedaction(func(k string, v string) {
+	if err = opts.ForEachWithRedaction(func(k string, v string) {
 		opt := tree.KVOption{Key: tree.Name(k)}
 		if len(v) > 0 {
 			opt.Value = tree.NewDString(v)
 		}
 		c.Options = append(c.Options, opt)
-	})
+	}); err != nil {
+		return "", err
+	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
 	return tree.AsString(c), nil
-}
-
-func redactUser(uri string) string {
-	u, _ := url.Parse(uri)
-	if u.User != nil {
-		u.User = url.User(`redacted`)
-	}
-	return u.String()
 }
 
 func validateDetailsAndOptions(

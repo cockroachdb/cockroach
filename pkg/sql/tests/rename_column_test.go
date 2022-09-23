@@ -40,7 +40,7 @@ func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 
 	const (
 		_ eventType = iota
-		publishDeleteAndWriteOnly
+		publishWriteOnly
 		backfill
 		resume
 	)
@@ -67,7 +67,7 @@ func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 					RunBeforePublishWriteAndDelete: func() {
-						maybeBlockOnEvent(publishDeleteAndWriteOnly)
+						maybeBlockOnEvent(publishWriteOnly)
 					},
 					RunBeforeBackfill: func() error {
 						maybeBlockOnEvent(backfill)
@@ -96,7 +96,7 @@ func TestRenameColumnDuringConcurrentMutation(t *testing.T) {
 		name   string
 		evType eventType
 	}{
-		{"publishDeleteAndWriteOnly", publishDeleteAndWriteOnly},
+		{"publishWriteOnly", publishWriteOnly},
 		{"backfill", backfill},
 		{"resume", resume},
 	} {

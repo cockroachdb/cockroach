@@ -44,7 +44,6 @@ import (
 //
 // SELECT * FROM abcd@c_idx WHERE c = 2 AND d = 3;
 //
-//
 // Without a zigzag joiner, this query would previously execute: index scan on
 // `c_idx`, followed by an index join on the primary index, then filter out rows
 // where `d ≠ 3`.
@@ -79,23 +78,28 @@ import (
 //
 // The actual execution can be visualized below :
 //
-//   c_idx         d_idx
+//	c_idx         d_idx
+//
 // c | a, b       d | a, b
 // ============= ============
 // --> 2   1  1 ----> 3   1  1 ---+ X
-//                                |
+//
+//	|
+//
 // +----------------- 3   4  2 <--+
 // |                  3   4  3
 // |                  3   5  6
 // |                  3   7  2
 // +--> 2  8  2 -------------------+
-//                                 |
+//
+//	|
+//
 // +----------------- 3   8  3 ----+
 // |
 // +-> 2  9  3 -----> 3   9  3 --+ X
-//                               |
-//                 nil (Done) <--+
 //
+//	              |
+//	nil (Done) <--+
 //
 // - The execution starts by fetching the (2, 1, 1) row from c_idx. This is the
 // first row fetched when an index lookup in `c_idx` where `c = 2`. Let this be
@@ -127,7 +131,6 @@ import (
 // - We are done when the index lookup returns `nil`. There were no more rows in
 // this index that could satisfy the join.
 //
-//
 // When Can a Zigzag Join Be Planned:
 //
 // Every side of a zigzag join has fixed columns, equality columns, and index
@@ -151,7 +154,7 @@ import (
 //
 // For a description of index columns, refer to Appendix A.
 //
-// Additional Cases
+// # Additional Cases
 //
 // Normal Joins
 // This algorithm can also be applied to normal joins such as:
@@ -173,7 +176,7 @@ import (
 // - Index: `abcd@primary`
 // - Equality columns: (a)
 // - Fixed columns: None
-//- Fixed values: None
+// - Fixed values: None
 //
 // Note: If the query were to `SELECT *` instead of `SELECT a, b` a further
 // index join would be needed, but this index join would only be applied on the
@@ -191,7 +194,6 @@ import (
 // the sides until a match is found on all sides of the join. It is expected
 // that a zigzag join’s utility will increase as the number of sides increases
 // because more rows will be able to be skipped.
-//
 //
 // Appendix A: Indexes
 //

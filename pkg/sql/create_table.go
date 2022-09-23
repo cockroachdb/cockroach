@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -83,22 +82,21 @@ func (n *createTableNode) ReadingOwnWrites() {}
 func (p *planner) getNonTemporarySchemaForCreate(
 	ctx context.Context, db catalog.DatabaseDescriptor, scName string,
 ) (catalog.SchemaDescriptor, error) {
-	res, err := p.Descriptors().GetMutableSchemaByName(
-		ctx, p.txn, db, scName, tree.SchemaLookupFlags{
-			Required:       true,
-			RequireMutable: true,
-		})
+	flags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
+	sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db, scName, flags)
 	if err != nil {
 		return nil, err
 	}
-	switch res.SchemaKind() {
-	case catalog.SchemaPublic, catalog.SchemaUserDefined:
-		return res, nil
+	switch sc.SchemaKind() {
+	case catalog.SchemaPublic:
+		return sc, nil
+	case catalog.SchemaUserDefined:
+		return p.Descriptors().GetMutableSchemaByID(ctx, p.txn, sc.GetID(), flags)
 	case catalog.SchemaVirtual:
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
 		return nil, errors.AssertionFailedf(
-			"invalid schema kind for getNonTemporarySchemaForCreate: %d", res.SchemaKind())
+			"invalid schema kind for getNonTemporarySchemaForCreate: %d", sc.SchemaKind())
 	}
 }
 
@@ -403,7 +401,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 			var foundExternalReference bool
 			for id := range refs {
-				if t, err := params.p.Descriptors().GetUncommittedMutableTableByID(id); err != nil {
+				if _, t, err := params.p.Descriptors().GetUncommittedMutableTableByID(id); err != nil {
 					return err
 				} else if t == nil || !t.IsNew() {
 					foundExternalReference = true
@@ -1782,7 +1780,7 @@ func NewTableDesc(
 			); err != nil {
 				return nil, err
 			}
-			if err := checkIndexColumns(&desc, d.Columns, d.Storing); err != nil {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted); err != nil {
 				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
@@ -1998,14 +1996,6 @@ func NewTableDesc(
 
 	for i := range desc.Columns {
 		if _, ok := primaryIndexColumnSet[desc.Columns[i].Name]; ok {
-			if !st.Version.IsActive(ctx, clusterversion.Start22_1) {
-				if desc.Columns[i].Virtual {
-					return nil, pgerror.Newf(
-						pgcode.FeatureNotSupported,
-						"cannot use virtual column %q in primary key", desc.Columns[i].Name,
-					)
-				}
-			}
 			desc.Columns[i].Nullable = false
 		}
 	}

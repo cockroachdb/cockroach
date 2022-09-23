@@ -29,13 +29,16 @@ type CapacityLimiter func() int64
 // as a generic data structure as something like:
 //
 // template<typename T>
-// class ConcurrentBuffer<T> {
-//   std::vector<T> buffer;
-//   ...
+//
+//	class ConcurrentBuffer<T> {
+//	  std::vector<T> buffer;
+//	  ...
+//
 // public:
-//   void write(T val);
-//   std::vector<T> read() const;
-// };
+//
+//	  void write(T val);
+//	  std::vector<T> read() const;
+//	};
 //
 // To work around the lacking of generic, ConcurrentBufferGuard is designed to
 // be embedded into higher-level structs that implements the buffer read/write
@@ -85,15 +88,15 @@ func NewConcurrentBufferGuard(
 // If the reserved index is valid, AtomicWrite immediately executes the
 // bufferWriteOp with the reserved index. However, if the reserved index is not
 // valid, (that is, array index out of bound), there are two scenarios:
-// 1. If the reserved index == size of the array, then the caller of AtomicWrite()
-//    method is responsible for executing the onBufferFullHandler() callback. The
-//    caller does so by upgrading the read-lock to a write-lock, therefore
-//    blocks all future writers. After the callback is executed, the write-lock
-//    is then downgraded to a read-lock.
-// 2. If the reserved index > size of the array, then the caller of AtomicWrite()
-//    is blocked until the array is flushed. This is achieved by waiting on the
-//    conditional variable (flushDone) while holding onto the read-lock. After
-//    the flush is completed, the writer is unblocked and allowed to retry.
+//  1. If the reserved index == size of the array, then the caller of AtomicWrite()
+//     method is responsible for executing the onBufferFullHandler() callback. The
+//     caller does so by upgrading the read-lock to a write-lock, therefore
+//     blocks all future writers. After the callback is executed, the write-lock
+//     is then downgraded to a read-lock.
+//  2. If the reserved index > size of the array, then the caller of AtomicWrite()
+//     is blocked until the array is flushed. This is achieved by waiting on the
+//     conditional variable (flushDone) while holding onto the read-lock. After
+//     the flush is completed, the writer is unblocked and allowed to retry.
 func (c *ConcurrentBufferGuard) AtomicWrite(op bufferWriteOp) {
 	size := c.limiter()
 	c.flushSyncLock.RLock()

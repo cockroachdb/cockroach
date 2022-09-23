@@ -15,8 +15,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // Default value used to designate the maximum frequency at which events
@@ -53,10 +55,11 @@ type TelemetryLoggingTestingKnobs struct {
 	// getTimeNow allows tests to override the timeutil.Now() function used
 	// when updating rolling query counts.
 	getTimeNow func() time.Time
-	// getContentionNanos allows tests to override the recorded contention time
-	// for the query. Used to stub non-zero values to populate the log's contention
-	// time field.
-	getContentionNanos func() int64
+	// getQueryLevelMetrics allows tests to override the recorded query level stats.
+	getQueryLevelStats func() execstats.QueryLevelStats
+	// getTracingStatus allows tests to override whether the current query has tracing
+	// enabled or not. Queries with tracing enabled are always sampled to telemetry.
+	getTracingStatus func() bool
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
@@ -87,11 +90,20 @@ func (t *TelemetryLoggingMetrics) maybeUpdateLastEmittedTime(
 	return false
 }
 
-func (t *TelemetryLoggingMetrics) getContentionTime(contentionTimeInNanoseconds int64) int64 {
-	if t.Knobs != nil && t.Knobs.getContentionNanos != nil {
-		return t.Knobs.getContentionNanos()
+func (t *TelemetryLoggingMetrics) getQueryLevelStats(
+	queryLevelStats execstats.QueryLevelStats,
+) execstats.QueryLevelStats {
+	if t.Knobs != nil && t.Knobs.getQueryLevelStats != nil {
+		return t.Knobs.getQueryLevelStats()
 	}
-	return contentionTimeInNanoseconds
+	return queryLevelStats
+}
+
+func (t *TelemetryLoggingMetrics) isTracing(_ *tracing.Span, tracingEnabled bool) bool {
+	if t.Knobs != nil && t.Knobs.getTracingStatus != nil {
+		return t.Knobs.getTracingStatus()
+	}
+	return tracingEnabled
 }
 
 func (t *TelemetryLoggingMetrics) resetSkippedQueryCount() (res uint64) {

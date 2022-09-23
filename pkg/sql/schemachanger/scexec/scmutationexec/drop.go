@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) CreateGcJobForTable(ctx context.Context, op scop.CreateGcJobForTable) error {
+func (m *visitor) CreateGCJobForTable(ctx context.Context, op scop.CreateGCJobForTable) error {
 	desc, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -32,8 +32,8 @@ func (m *visitor) CreateGcJobForTable(ctx context.Context, op scop.CreateGcJobFo
 	return nil
 }
 
-func (m *visitor) CreateGcJobForDatabase(
-	ctx context.Context, op scop.CreateGcJobForDatabase,
+func (m *visitor) CreateGCJobForDatabase(
+	ctx context.Context, op scop.CreateGCJobForDatabase,
 ) error {
 	desc, err := m.checkOutDatabase(ctx, op.DatabaseID)
 	if err != nil {
@@ -43,7 +43,7 @@ func (m *visitor) CreateGcJobForDatabase(
 	return nil
 }
 
-func (m *visitor) CreateGcJobForIndex(ctx context.Context, op scop.CreateGcJobForIndex) error {
+func (m *visitor) CreateGCJobForIndex(ctx context.Context, op scop.CreateGCJobForIndex) error {
 	desc, err := m.s.GetDescriptor(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -63,7 +63,7 @@ func (m *visitor) CreateGcJobForIndex(ctx context.Context, op scop.CreateGcJobFo
 func (m *visitor) MarkDescriptorAsPublic(
 	ctx context.Context, op scop.MarkDescriptorAsPublic,
 ) error {
-	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
+	desc, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err
 	}
@@ -71,21 +71,23 @@ func (m *visitor) MarkDescriptorAsPublic(
 	return nil
 }
 
-func (m *visitor) MarkDescriptorAsOffline(
-	ctx context.Context, op scop.MarkDescriptorAsOffline,
+func (m *visitor) MarkDescriptorAsSyntheticallyDropped(
+	ctx context.Context, op scop.MarkDescriptorAsSyntheticallyDropped,
 ) error {
-	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
+	desc, err := m.s.GetDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err
 	}
-	desc.SetOffline(op.Reason)
+	synth := desc.NewBuilder().BuildExistingMutable()
+	synth.SetDropped()
+	m.sd.AddSyntheticDescriptor(synth)
 	return nil
 }
 
 func (m *visitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {
-	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
+	desc, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err
 	}
@@ -155,7 +157,7 @@ func (m *visitor) RemoveDatabaseRoleSettings(
 }
 
 func (m *visitor) RemoveUserPrivileges(ctx context.Context, op scop.RemoveUserPrivileges) error {
-	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
+	desc, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err
 	}

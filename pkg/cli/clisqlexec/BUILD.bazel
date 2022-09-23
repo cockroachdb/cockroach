@@ -38,6 +38,7 @@ go_test(
         "main_test.go",
         "run_query_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":clisqlexec"],
     deps = [
         "//pkg/build",

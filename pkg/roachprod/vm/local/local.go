@@ -34,10 +34,12 @@ const ProviderName = config.Local
 // Node indexes start at 1.
 //
 // If the cluster name is "local", node 1 directory is:
-//   ${HOME}/local/1
+//
+//	${HOME}/local/1
 //
 // If the cluster name is "local-foo", node 1 directory is:
-//   ${HOME}/local/foo-1
+//
+//	${HOME}/local/foo-1
 //
 // WARNING: when we destroy a local cluster, we remove these directories so it's
 // important that this function never returns things like "" or "/".

@@ -144,16 +144,16 @@ func (d ReplicaSet) containsVoterIncoming() bool {
 // For simplicity, CockroachDB treats learner replicas the same as voter
 // replicas as much as possible, but there are a few exceptions:
 //
-// - Learner replicas are not considered when calculating quorum size, and thus
-//   do not affect the computation of which ranges are under-replicated for
-//   upreplication/alerting/debug/etc purposes. Ditto for over-replicated.
-// - Learner replicas cannot become raft leaders, so we also don't allow them to
-//   become leaseholders. As a result, DistSender and the various oracles don't
-//   try to send them traffic.
-// - The raft snapshot queue tries to avoid sending snapshots to ephemeral
-//   learners (but not to non-voting replicas, which are also etcd learners) for
-//   reasons described below.
-// - Merges won't run while a learner replica is present.
+//   - Learner replicas are not considered when calculating quorum size, and thus
+//     do not affect the computation of which ranges are under-replicated for
+//     upreplication/alerting/debug/etc purposes. Ditto for over-replicated.
+//   - Learner replicas cannot become raft leaders, so we also don't allow them to
+//     become leaseholders. As a result, DistSender and the various oracles don't
+//     try to send them traffic.
+//   - The raft snapshot queue tries to avoid sending snapshots to ephemeral
+//     learners (but not to non-voting replicas, which are also etcd learners) for
+//     reasons described below.
+//   - Merges won't run while a learner replica is present.
 //
 // Replicas are now added in two ConfChange transactions. The first creates the
 // learner and the second promotes it to a voter. If the node that is
@@ -507,6 +507,9 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // leaseHolderRemovalAllowed is intended to check if the cluster version is
 // EnableLeaseHolderRemoval or higher.
 // TODO(shralex): remove this flag in 23.1
+// NB: This logic should be in sync with constraint_stats_report as report
+// will check voter constraint violations. When changing this method, you need
+// to update replica filter in report to keep it correct.
 func CheckCanReceiveLease(
 	wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet, leaseHolderRemovalAllowed bool,
 ) error {

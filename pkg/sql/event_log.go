@@ -164,6 +164,9 @@ type eventLogOptions struct {
 
 	// Additional redaction options, if necessary.
 	rOpts redactionOptions
+
+	// isCopy notes whether the current event is related to COPY.
+	isCopy bool
 }
 
 // redactionOptions contains instructions on how to redact the SQL
@@ -276,7 +279,12 @@ func logEventInternalForSQLStatements(
 ) error {
 	// Inject the common fields into the payload provided by the caller.
 	injectCommonFields := func(event logpb.EventPayload) error {
-		event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+		if opts.isCopy {
+			// No txn is set for COPY, so use now instead.
+			event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+		} else {
+			event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+		}
 		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 		if !ok {
 			return errors.AssertionFailedf("unknown event type: %T", event)
@@ -494,9 +502,9 @@ func InsertEventRecords(
 // for tests.
 //
 // Otherwise, an asynchronous task is spawned to do the write:
-// - if there's at txn, after the txn commit time (i.e. we don't log
-//   if the txn ends up aborting), using a txn commit trigger.
-// - otherwise (no txn), immediately.
+//   - if there's at txn, after the txn commit time (i.e. we don't log
+//     if the txn ends up aborting), using a txn commit trigger.
+//   - otherwise (no txn), immediately.
 func insertEventRecords(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
@@ -565,7 +573,7 @@ func insertEventRecords(
 	if txn != nil && syncWrites {
 		// Yes, do it now.
 		query, args, otelEvents := prepareEventWrite(ctx, execCfg, entries)
-		txn.AddCommitTrigger(func(ctx context.Context) { sendOtelEvents(ctx, execCfg, otelEvents) })
+		txn.AddCommitTrigger(func(ctx context.Context) { sendEventsToObsService(ctx, execCfg, otelEvents) })
 		return writeToSystemEventsTable(ctx, execCfg.InternalExecutor, txn, len(entries), query, args)
 	}
 	// No: do them async.
@@ -607,15 +615,14 @@ func asyncWriteToOtelAndSystemEventsTable(
 			ctx = logtags.AddTags(ctx, logtags.FromContext(origCtx))
 
 			// Stop writing the event when the server shuts down.
-			stopCtx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
+			ctx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
 			defer stopCancel()
-			ctx = stopCtx
 
 			// Prepare the data to send.
 			query, args, otelEvents := prepareEventWrite(ctx, execCfg, entries)
 
-			// Export to OpenTelemetry.
-			sendOtelEvents(ctx, execCfg, otelEvents)
+			// Send to the Obs Service.
+			sendEventsToObsService(ctx, execCfg, otelEvents)
 
 			// We use a retry loop in case there are transient
 			// non-retriable errors on the cluster during the table write.
@@ -644,21 +651,11 @@ func asyncWriteToOtelAndSystemEventsTable(
 	}
 }
 
-func sendOtelEvents(ctx context.Context, execCfg *ExecutorConfig, events []otel_logs_pb.LogRecord) {
-	// Export to OpenTelemetry.
-	// We use another async task here so that a clogged Otel output pipe
-	// cannot hinder the system table write below.
-	if err := execCfg.RPCContext.Stopper.RunAsyncTask(ctx, "send-otel", func(ctx context.Context) {
-		for i := range events {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			execCfg.EventsExporter.SendEvent(ctx, obspb.EventlogEvent, events[i])
-		}
-	}); err != nil {
-		log.Warningf(ctx, "error spawning task to send otel events: %v", err)
+func sendEventsToObsService(
+	ctx context.Context, execCfg *ExecutorConfig, events []otel_logs_pb.LogRecord,
+) {
+	for i := range events {
+		execCfg.EventsExporter.SendEvent(ctx, obspb.EventlogEvent, events[i])
 	}
 }
 

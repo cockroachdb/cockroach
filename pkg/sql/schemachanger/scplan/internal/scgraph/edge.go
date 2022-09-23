@@ -41,8 +41,6 @@ type OpEdge struct {
 	// permanently or publishes new information externally has yet been
 	// run for this target.
 	revertible bool
-
-	minPhase scop.Phase
 }
 
 // From implements the Edge interface.
@@ -65,11 +63,6 @@ func (oe *OpEdge) CanFail() bool { return oe.canFail }
 // Type returns the types of operations associated with this edge.
 func (oe *OpEdge) Type() scop.Type {
 	return oe.typ
-}
-
-// IsPhaseSatisfied returns true iff the operations can run in the given phase.
-func (oe *OpEdge) IsPhaseSatisfied(phase scop.Phase) bool {
-	return phase >= oe.minPhase
 }
 
 // String returns a string representation of this edge
@@ -102,6 +95,12 @@ const (
 	// be reached before the destination (to), and _must_ do so in a previous
 	// stage.
 	PreviousStagePrecedence
+
+	// PreviousTransactionPrecedence is like PreviousStagePrecedence but does
+	// not allow the transition to occur unless the current phase is at least
+	// PostCommitPhase, because StatementPhase and PreCommitPhase are special
+	// in that they take place in the same transaction.
+	PreviousTransactionPrecedence
 )
 
 // DepEdge represents a dependency between two nodes. A dependency

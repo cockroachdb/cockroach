@@ -11,9 +11,7 @@
 package rules
 
 import (
-	"fmt"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -40,16 +38,11 @@ func TestRulesYAML(t *testing.T) {
 					return s[i].Name < s[j].Name
 				})
 				for _, def := range s {
-					var clauses yaml.Node
-					if err := clauses.Encode(def.Clauses); err != nil {
+					var rule yaml.Node
+					if err := rule.Encode(def); err != nil {
 						panic(err)
 					}
-					m.Content = append(m.Content, &yaml.Node{
-						Kind: yaml.ScalarNode,
-						Value: fmt.Sprintf(
-							"%s(%v)", def.Name, strings.Join(toStrings(def.Params), ", "),
-						),
-					}, &clauses)
+					m.Content = append(m.Content, rule.Content...)
 				}
 				out, err := yaml.Marshal(m)
 				if err != nil {
@@ -81,14 +74,6 @@ func TestRulesYAML(t *testing.T) {
 			return ""
 		})
 	})
-}
-
-func toStrings(params []rel.Var) []string {
-	ret := make([]string, 0, len(params))
-	for _, p := range params {
-		ret = append(ret, string(p))
-	}
-	return ret
 }
 
 func (r registeredDepRule) MarshalYAML() (interface{}, error) {

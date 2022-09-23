@@ -13,4 +13,4 @@ vectorized: true
 ·
 • scan
   table: a@a_pkey
-  spans: 1 span
+  spans: 1+ spans

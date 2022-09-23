@@ -560,6 +560,27 @@ DROP TABLE defaultdb.ttyp;
 statement ok
 DROP TYPE defaultdb.typ;
 
+# Demonstrate that descriptors dropped in a transaction figure appropriately
+# into virtual tables. Most virtual tables omit the dropped descriptors, some
+# show their status.
+
+query I
+SELECT count(*)
+  FROM information_schema.tables
+ WHERE table_schema = 'public'
+   AND table_name LIKE '%typ%';
+----
+0
+
+query TT
+   SELECT name, state
+     FROM crdb_internal.tables
+    WHERE schema_name = 'public'
+      AND name LIKE '%typ%'
+ ORDER BY name;
+----
+ttyp  DROP
+
 statement ok
 COMMIT;
 
@@ -727,7 +748,7 @@ BEGIN
 statement ok
 DROP DATABASE db1 CASCADE
 
-statement error database "db1" is offline: DROP DATABASE db1 CASCADE
+statement error pgcode 3D000 database "db1" does not exist
 SELECT * from db1.sc1.v1
 
 statement ok

@@ -12,6 +12,7 @@ go_library(
 go_test(
     name = "contentionutils_test",
     srcs = ["concurrent_buffer_guard_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":contentionutils"],
     deps = [
         "//pkg/util/syncutil",

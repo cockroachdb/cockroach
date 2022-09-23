@@ -101,8 +101,8 @@ func TestCriticalLocalitiesReport(t *testing.T) {
 					// All the learners are dead, but learners don't matter. So only reg1
 					// is critical for this range.
 					{key: "/Table/t5", stores: "1 2 3 4l 5l 6l 7l"},
-					// Joint-consensus case. Here 1,2,3 are part of the outgoing quorum and
-					// 1,4,8 are part of the incoming quorum. 4 and 5 are dead, which
+					// Joint-consensus case. Here 1,2,4 are part of the outgoing quorum and
+					// 1,5,8 are part of the incoming quorum. 4 and 5 are dead, which
 					// makes all the other nodes critical. So localities "reg1",
 					// "reg1,az1", "reg1,az=2" and "reg8" are critical for this range.
 					{key: "/Table/t6", stores: "1 2o 4o 5i 8i"},

@@ -51,7 +51,7 @@ upsert descriptor #104
   +        width: 64
   +    direction: DROP
   +    mutationId: 1
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
   +  - direction: ADD
   +    index:
   +      constraintId: 2
@@ -173,14 +173,6 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     mutations:
-     - column:
-  ...
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a)"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -204,7 +196,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
@@ -287,7 +279,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: MERGING
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: ADD
        index:
   ...
@@ -479,7 +471,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      name: t
      nextColumnId: 3
   ...
@@ -562,7 +554,7 @@ upsert descriptor #104
          version: 4
        mutationId: 1
   -    state: MERGING
-  +    state: DELETE_AND_WRITE_ONLY
+  +    state: WRITE_ONLY
      - direction: DROP
        index:
   ...
@@ -596,7 +588,7 @@ upsert descriptor #104
   ...
        direction: DROP
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
   +  - direction: DROP
@@ -605,14 +597,14 @@ upsert descriptor #104
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - direction: ADD
        index:
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
   +  - direction: DROP
@@ -621,7 +613,7 @@ upsert descriptor #104
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 3
@@ -693,7 +685,7 @@ upsert descriptor #104
   -      unique: true
   -      version: 4
   -    mutationId: 1
-       state: DELETE_AND_WRITE_ONLY
+       state: WRITE_ONLY
   -  - direction: DROP
   -    index:
   -      constraintId: 1
@@ -793,7 +785,7 @@ upsert descriptor #104
   ...
          version: 4
        mutationId: 1
-  -    state: DELETE_AND_WRITE_ONLY
+  -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
      nextColumnId: 3

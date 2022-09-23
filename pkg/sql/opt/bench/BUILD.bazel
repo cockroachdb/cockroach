@@ -15,6 +15,7 @@ go_test(
         "bench_test.go",
         "fk_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":bench"],
     deps = [
         "//pkg/base",

@@ -48,21 +48,21 @@ import (
 // being a WithScan of the mutation input and the right side being the
 // referenced table. A simple example of an insert with a FK check:
 //
-//   insert child
-//    ├── ...
-//    ├── input binding: &1
-//    └── f-k-checks
-//         └── f-k-checks-item: child(p) -> parent(p)
-//              └── anti-join (hash)
-//                   ├── columns: column2:5!null
-//                   ├── with-scan &1
-//                   │    ├── columns: column2:5!null
-//                   │    └── mapping:
-//                   │         └──  column2:4 => column2:5
-//                   ├── scan parent
-//                   │    └── columns: parent.p:6!null
-//                   └── filters
-//                        └── column2:5 = parent.p:6
+//	insert child
+//	 ├── ...
+//	 ├── input binding: &1
+//	 └── f-k-checks
+//	      └── f-k-checks-item: child(p) -> parent(p)
+//	           └── anti-join (hash)
+//	                ├── columns: column2:5!null
+//	                ├── with-scan &1
+//	                │    ├── columns: column2:5!null
+//	                │    └── mapping:
+//	                │         └──  column2:4 => column2:5
+//	                ├── scan parent
+//	                │    └── columns: parent.p:6!null
+//	                └── filters
+//	                     └── column2:5 = parent.p:6
 //
 // See testdata/fk-checks-insert for more examples.
 func (mb *mutationBuilder) buildFKChecksForInsert() {
@@ -90,21 +90,22 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 // In the case of delete, each FK check query is a semi-join with the left side
 // being a WithScan of the mutation input and the right side being the
 // referencing table. For example:
-//   delete parent
-//    ├── ...
-//    ├── input binding: &1
-//    └── f-k-checks
-//         └── f-k-checks-item: child(p) -> parent(p)
-//              └── semi-join (hash)
-//                   ├── columns: p:7!null
-//                   ├── with-scan &1
-//                   │    ├── columns: p:7!null
-//                   │    └── mapping:
-//                   │         └──  parent.p:5 => p:7
-//                   ├── scan child
-//                   │    └── columns: child.p:9!null
-//                   └── filters
-//                        └── p:7 = child.p:9
+//
+//	delete parent
+//	 ├── ...
+//	 ├── input binding: &1
+//	 └── f-k-checks
+//	      └── f-k-checks-item: child(p) -> parent(p)
+//	           └── semi-join (hash)
+//	                ├── columns: p:7!null
+//	                ├── with-scan &1
+//	                │    ├── columns: p:7!null
+//	                │    └── mapping:
+//	                │         └──  parent.p:5 => p:7
+//	                ├── scan child
+//	                │    └── columns: child.p:9!null
+//	                └── filters
+//	                     └── p:7 = child.p:9
 //
 // See testdata/fk-checks-delete for more examples.
 //
@@ -112,7 +113,6 @@ func (mb *mutationBuilder) buildFKChecksForInsert() {
 //
 // See onDeleteCascadeBuilder, onDeleteFastCascadeBuilder, onDeleteSetBuilder
 // for details.
-//
 func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 	if mb.tab.InboundForeignKeyCount() == 0 {
 		// No relevant FKs.
@@ -177,56 +177,55 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 //
 // In the case of update, there are two types of FK check queries:
 //
-//  - insertion-side checks are very similar to the checks we issue for insert;
-//    they are an anti-join with the left side being a WithScan of the "new"
-//    values for each row. For example:
-//      update child
-//       ├── ...
-//       ├── input binding: &1
-//       └── f-k-checks
-//            └── f-k-checks-item: child(p) -> parent(p)
-//                 └── anti-join (hash)
-//                      ├── columns: column5:6!null
-//                      ├── with-scan &1
-//                      │    ├── columns: column5:6!null
-//                      │    └── mapping:
-//                      │         └──  column5:5 => column5:6
-//                      ├── scan parent
-//                      │    └── columns: parent.p:8!null
-//                      └── filters
-//                           └── column5:6 = parent.p:8
+//   - insertion-side checks are very similar to the checks we issue for insert;
+//     they are an anti-join with the left side being a WithScan of the "new"
+//     values for each row. For example:
+//     update child
+//     ├── ...
+//     ├── input binding: &1
+//     └── f-k-checks
+//     └── f-k-checks-item: child(p) -> parent(p)
+//     └── anti-join (hash)
+//     ├── columns: column5:6!null
+//     ├── with-scan &1
+//     │    ├── columns: column5:6!null
+//     │    └── mapping:
+//     │         └──  column5:5 => column5:6
+//     ├── scan parent
+//     │    └── columns: parent.p:8!null
+//     └── filters
+//     └── column5:6 = parent.p:8
 //
-//  - deletion-side checks are similar to the checks we issue for delete; they
-//    are a semi-join but the left side input is more complicated: it is an
-//    Except between a WithScan of the "old" values and a WithScan of the "new"
-//    values for each row (this is the set of values that are effectively
-//    removed from the table). For example:
-//      update parent
-//       ├── ...
-//       ├── input binding: &1
-//       └── f-k-checks
-//            └── f-k-checks-item: child(p) -> parent(p)
-//                 └── semi-join (hash)
-//                      ├── columns: p:8!null
-//                      ├── except
-//                      │    ├── columns: p:8!null
-//                      │    ├── left columns: p:8!null
-//                      │    ├── right columns: column7:9
-//                      │    ├── with-scan &1
-//                      │    │    ├── columns: p:8!null
-//                      │    │    └── mapping:
-//                      │    │         └──  parent.p:5 => p:8
-//                      │    └── with-scan &1
-//                      │         ├── columns: column7:9!null
-//                      │         └── mapping:
-//                      │              └──  column7:7 => column7:9
-//                      ├── scan child
-//                      │    └── columns: child.p:11!null
-//                      └── filters
-//                           └── p:8 = child.p:11
+//   - deletion-side checks are similar to the checks we issue for delete; they
+//     are a semi-join but the left side input is more complicated: it is an
+//     Except between a WithScan of the "old" values and a WithScan of the "new"
+//     values for each row (this is the set of values that are effectively
+//     removed from the table). For example:
+//     update parent
+//     ├── ...
+//     ├── input binding: &1
+//     └── f-k-checks
+//     └── f-k-checks-item: child(p) -> parent(p)
+//     └── semi-join (hash)
+//     ├── columns: p:8!null
+//     ├── except
+//     │    ├── columns: p:8!null
+//     │    ├── left columns: p:8!null
+//     │    ├── right columns: column7:9
+//     │    ├── with-scan &1
+//     │    │    ├── columns: p:8!null
+//     │    │    └── mapping:
+//     │    │         └──  parent.p:5 => p:8
+//     │    └── with-scan &1
+//     │         ├── columns: column7:9!null
+//     │         └── mapping:
+//     │              └──  column7:7 => column7:9
+//     ├── scan child
+//     │    └── columns: child.p:11!null
+//     └── filters
+//     └── p:8 = child.p:11
 //
 // Only FK relations that involve updated columns result in FK checks.
-//
 func (mb *mutationBuilder) buildFKChecksForUpdate() {
 	if mb.tab.OutboundForeignKeyCount() == 0 && mb.tab.InboundForeignKeyCount() == 0 {
 		return
@@ -360,14 +359,15 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 // The main difference is that for update, the "new" values were readily
 // available, whereas for upsert, the "new" values can be the result of an
 // expression of the form:
-//   CASE WHEN canary IS NULL THEN inserter-value ELSE updated-value END
+//
+//	CASE WHEN canary IS NULL THEN inserter-value ELSE updated-value END
+//
 // These expressions are already projected as part of the mutation input and are
 // directly accessible through WithScan.
 //
 // Only FK relations that involve updated columns result in deletion-side FK
 // checks. The insertion-side FK checks are always needed (similar to insert)
 // because any of the rows might result in an insert rather than an update.
-//
 func (mb *mutationBuilder) buildFKChecksForUpsert() {
 	numOutbound := mb.tab.OutboundForeignKeyCount()
 	numInbound := mb.tab.InboundForeignKeyCount()

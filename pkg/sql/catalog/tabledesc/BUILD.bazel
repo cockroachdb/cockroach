@@ -41,6 +41,7 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/privilege",
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scpb",
@@ -77,6 +78,7 @@ go_test(
         "table_desc_test.go",
         "validate_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":tabledesc"],
     deps = [
         "//pkg/base",

@@ -361,20 +361,19 @@ func getTxn(ctx context.Context, txn *kv.Txn) (*roachpb.Transaction, *roachpb.Er
 func verifyCleanup(
 	key roachpb.Key, eng storage.Engine, t *testing.T, coords ...*kvcoord.TxnCoordSender,
 ) {
+	ctx := context.Background()
 	testutils.SucceedsSoon(t, func() error {
 		for _, coord := range coords {
 			if coord.IsTracking() {
 				return fmt.Errorf("expected no heartbeat")
 			}
 		}
-		meta := &enginepb.MVCCMetadata{}
-		//lint:ignore SA1019 historical usage of deprecated eng.MVCCGetProto is OK
-		ok, _, _, err := eng.MVCCGetProto(storage.MakeMVCCMetadataKey(key), meta)
-		if err != nil {
-			return errors.Wrap(err, "error getting MVCC metadata")
-		}
-		if ok && meta.Txn != nil {
-			return fmt.Errorf("found unexpected write intent: %s", meta)
+		_, intent, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
+			Inconsistent: true,
+		})
+		require.NoError(t, err)
+		if intent != nil {
+			return fmt.Errorf("found unexpected write intent: %s", intent)
 		}
 		return nil
 	})
@@ -932,6 +931,61 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	}
 }
 
+// TestWTOBitTerminatedOnErrorResponses is a regression test for #85711. It
+// ensures that when batch request errors have the WTO bit set, subsequent
+// request don't carry that bit (something that's asserted on in client-side
+// interceptors).
+func TestWTOBitTerminatedOnErrorResponses(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Split to ensure batch requests get split through the distsender.
+	require.NoError(t, db.AdminSplit(ctx, keyB /* splitKey */, hlc.MaxTimestamp /* expirationTimestamp */))
+
+	// Write a key that the txn-al CPut below doesn't expect, failing the batch
+	// request.
+	require.NoError(t, db.Put(ctx, keyB, []byte("b-unexpected")))
+
+	txn := db.NewTxn(ctx, "root")
+
+	// Read a key to pin the read timestamp. We'll use it to trigger to WTO
+	// error below.
+	b0 := txn.NewBatch()
+	b0.Get(keyB)
+	require.NoError(t, txn.Run(ctx, b0))
+
+	// Write to keyA out-of-band to induce a WTO condition in the txn-al Put
+	// below.
+	require.NoError(t, db.Put(ctx, keyA, "a-unexpected"))
+
+	// Send a batch (as part of a leaf txn) that will be split into two
+	// sub-batches: [Put(a), CPut(b, nil)]. Put(a) should observe the WTO bit
+	// set in the batch response, whereas the CPut induces an error response.
+	// Since these are two separate requests, the error response is combined
+	// with the batch request such that the error itself has the WTO bit set. In
+	// #85711 we observed that the bit was not terminated on the client side,
+	// and subsequent requests were issued with the WTO bit set, which tripped
+	// up assertions.
+	b1 := txn.NewBatch()
+	b1.Put(keyA, "a")
+	b1.CPut(keyB, "b", nil /* expValue */)
+	require.True(t, testutils.IsError(txn.Run(ctx, b1), "unexpected value"))
+	require.False(t, txn.TestingCloneTxn().WriteTooOld) // WTO bit is terminated
+
+	b2 := txn.NewBatch()
+	b2.Put(keyB, "b")
+	require.NoError(t, txn.Run(ctx, b2))
+	require.False(t, txn.TestingCloneTxn().WriteTooOld) // WTO bit is terminated
+	require.NoError(t, txn.Commit(ctx))
+}
+
 // TestTxnMultipleCoord checks that multiple txn coordinators can be
 // used for reads by a single transaction, and their state can be combined.
 func TestTxnMultipleCoord(t *testing.T) {
@@ -1073,15 +1127,12 @@ func checkTxnMetrics(
 	commits, commits1PC, aborts, restarts int64,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		return checkTxnMetricsOnce(t, metrics, name, commits, commits1PC, aborts, restarts)
+		return checkTxnMetricsOnce(metrics, name, commits, commits1PC, aborts, restarts)
 	})
 }
 
 func checkTxnMetricsOnce(
-	t *testing.T,
-	metrics kvcoord.TxnMetrics,
-	name string,
-	commits, commits1PC, aborts, restarts int64,
+	metrics kvcoord.TxnMetrics, name string, commits, commits1PC, aborts, restarts int64,
 ) error {
 	testcases := []struct {
 		name string
@@ -1091,28 +1142,13 @@ func checkTxnMetricsOnce(
 		{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
 		{"aborts", metrics.Aborts.Count(), aborts},
 		{"durations", metrics.Durations.TotalCount(), commits + aborts},
+		{"restarts", metrics.Restarts.TotalCount(), restarts},
 	}
 
 	for _, tc := range testcases {
 		if tc.a != tc.e {
 			return errors.Errorf("%s: actual %s %d != expected %d", name, tc.name, tc.a, tc.e)
 		}
-	}
-
-	// Handle restarts separately, because that's a histogram. Though the
-	// histogram is approximate, we're recording so few distinct values
-	// that we should be okay.
-	dist := metrics.Restarts.Snapshot().Distribution()
-	var actualRestarts int64
-	for _, b := range dist {
-		if b.From == b.To {
-			actualRestarts += b.From * b.Count
-		} else {
-			t.Fatalf("unexpected value in histogram: %d-%d", b.From, b.To)
-		}
-	}
-	if a, e := actualRestarts, restarts; a != e {
-		return errors.Errorf("%s: actual restarts %d != expected %d", name, a, e)
 	}
 
 	return nil
@@ -1324,10 +1360,13 @@ func TestTxnDurations(t *testing.T) {
 		t.Fatalf("durations %d != expected %d", a, e)
 	}
 
-	// Metrics lose fidelity, so we can't compare incr directly.
-	if min, thresh := hist.Min(), (incr - 10).Nanoseconds(); min < thresh {
-		t.Fatalf("min %d < %d", min, thresh)
+	for _, b := range hist.ToPrometheusMetric().GetHistogram().GetBucket() {
+		thresh := incr.Nanoseconds()
+		if *b.UpperBound < float64(thresh) && *b.CumulativeCount != 0 {
+			t.Fatalf("expected no values in bucket: %f", *b.UpperBound)
+		}
 	}
+
 }
 
 // TestTxnCommitWait tests the commit-wait sleep phase of transactions under

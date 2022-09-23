@@ -80,9 +80,6 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		if err := c.PutLibraries(ctx, "./lib"); err != nil {
-			t.Fatal(err)
-		}
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		if opt.dbSetupFunc != nil {
@@ -237,10 +234,11 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    opt.testName,
-		Owner:   registry.OwnerSQLExperience,
-		Cluster: r.MakeClusterSpec(1),
-		Tags:    []string{`default`, `orm`},
+		Name:       opt.testName,
+		Owner:      registry.OwnerSQLExperience,
+		Cluster:    r.MakeClusterSpec(1),
+		NativeLibs: registry.LibGEOS,
+		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runHibernate(ctx, t, c)
 		},

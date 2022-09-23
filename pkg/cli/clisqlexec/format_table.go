@@ -149,14 +149,14 @@ func newRowIter(rows clisqlclient.Rows, showMoreChars bool) *rowIter {
 }
 
 // rowReporter is used to render result sets.
-// - describe is called once in any case with the result column set.
-// - beforeFirstRow is called once upon the first row encountered.
-// - iter is called for every row, including the first (called after beforeFirstRowFn).
-// - doneRows is called once after the last row encountered (in case of no error).
-//   This can also be called when there were no rows, if the rowsAffectedHook
-//   passed to render() returns false.
-// - doneNoRows is called once when there were no rows and the rowsAffectedHook
-//   returns true.
+//   - describe is called once in any case with the result column set.
+//   - beforeFirstRow is called once upon the first row encountered.
+//   - iter is called for every row, including the first (called after beforeFirstRowFn).
+//   - doneRows is called once after the last row encountered (in case of no error).
+//     This can also be called when there were no rows, if the rowsAffectedHook
+//     passed to render() returns false.
+//   - doneNoRows is called once when there were no rows and the rowsAffectedHook
+//     returns true.
 type rowReporter interface {
 	describe(w io.Writer, cols []string) error
 	beforeFirstRow(w io.Writer, allRows RowStrIter) error

@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -86,6 +87,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/ptp"
@@ -486,6 +488,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// InternalExecutor uses this one instance.
 	internalExecutor := &sql.InternalExecutor{}
 	jobRegistry := &jobs.Registry{} // ditto
+	collectionFactory := &descs.CollectionFactory{}
 
 	// Create an ExternalStorageBuilder. This is only usable after Start() where
 	// we initialize all the configuration params.
@@ -661,14 +664,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TimeSeriesDataStore:      tsDB,
 		ClosedTimestampSender:    ctSender,
 		ClosedTimestampReceiver:  ctReceiver,
-		ExternalStorage:          externalStorage,
-		ExternalStorageFromURI:   externalStorageFromURI,
 		ProtectedTimestampReader: protectedTSReader,
 		KVMemoryMonitor:          kvMemoryMonitor,
 		RangefeedBudgetFactory:   rangeReedBudgetFactory,
 		SystemConfigProvider:     systemConfigWatcher,
 		SpanConfigSubscriber:     spanConfig.subscriber,
 		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
+		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
+		SnapshotSendLimit:        cfg.SnapshotSendLimit,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -709,6 +712,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		stores,
 		cfg.ClusterIDContainer,
 		gcoords.Regular.GetWorkQueue(admission.KVWork),
+		gcoords.Elastic,
 		gcoords.Stores,
 		tenantUsage,
 		tenantSettingsWatcher,
@@ -718,6 +722,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
+
+	{ // wire up admission control's scheduler latency listener
+		slcbID := schedulerlatency.RegisterCallback(
+			node.storeCfg.SchedulerLatencyListener.SchedulerLatency,
+		)
+		stopper.AddCloser(stop.CloserFn(func() {
+			schedulerlatency.UnregisterCallback(slcbID)
+		}))
+	}
 
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor, systemConfigWatcher,
@@ -825,6 +838,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		closedSessionCache:       closedSessionCache,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
+		collectionFactory:        collectionFactory,
 		internalExecutorFactory:  nil, // will be initialized in server.newSQLServer.
 		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,
@@ -1010,11 +1024,11 @@ func (s *Server) Start(ctx context.Context) error {
 // underinitialized services. This is avoided with some additional
 // complexity that can be summarized as follows:
 //
-// - before blocking trying to connect to the Gossip network, we already open
-//   the admin UI (so that its diagnostics are available)
-// - we also allow our Gossip and our connection health Ping service
-// - everything else returns Unavailable errors (which are retryable)
-// - once the node has started, unlock all RPCs.
+//   - before blocking trying to connect to the Gossip network, we already open
+//     the admin UI (so that its diagnostics are available)
+//   - we also allow our Gossip and our connection health Ping service
+//   - everything else returns Unavailable errors (which are retryable)
+//   - once the node has started, unlock all RPCs.
 //
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
@@ -1072,6 +1086,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.nodeDialer,
 		s.cfg.TestingKnobs,
 		&fileTableInternalExecutor,
+		s.sqlServer.execCfg.CollectionFactory,
 		s.db,
 		nil, /* TenantExternalIORecorder */
 	)
@@ -1388,6 +1403,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
+	if err := schedulerlatency.StartSampler(
+		ctx, s.st, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
+	); err != nil {
+		return err
+	}
+
 	hlcUpperBoundExists, err := s.checkHLCUpperBoundExistsAndEnsureMonotonicity(ctx, initialStart)
 	if err != nil {
 		return err
@@ -1518,14 +1539,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 	logPendingLossOfQuorumRecoveryEvents(ctx, s.node.stores)
 
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
-		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
+		redact.Safe(s.cfg.HTTPRequestScheme()), log.SafeManaged(s.cfg.HTTPAddr), log.SafeManaged(s.cfg.HTTPAdvertiseAddr))
 	rpcConnType := redact.SafeString("grpc/postgres")
 	if s.cfg.SplitListenSQL {
 		rpcConnType = "grpc"
-		log.Ops.Infof(ctx, "starting postgres server at %s (use: %s)", s.cfg.SQLAddr, s.cfg.SQLAdvertiseAddr)
+		log.Ops.Infof(ctx, "starting postgres server at %s (use: %s)",
+			log.SafeManaged(s.cfg.SQLAddr), log.SafeManaged(s.cfg.SQLAdvertiseAddr))
 	}
-	log.Ops.Infof(ctx, "starting %s server at %s", rpcConnType, s.cfg.Addr)
-	log.Ops.Infof(ctx, "advertising CockroachDB node at %s", s.cfg.AdvertiseAddr)
+	log.Ops.Infof(ctx, "starting %s server at %s", log.SafeManaged(rpcConnType), log.SafeManaged(s.cfg.Addr))
+	log.Ops.Infof(ctx, "advertising CockroachDB node at %s", log.SafeManaged(s.cfg.AdvertiseAddr))
 
 	log.Event(ctx, "accepting connections")
 

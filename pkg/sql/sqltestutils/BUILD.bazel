@@ -46,6 +46,7 @@ go_library(
 go_test(
     name = "sqltestutils_test",
     srcs = ["large_schema_test.go"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":sqltestutils"],
     deps = [

@@ -42,10 +42,11 @@ func (p *planner) prepareSetSchema(
 	}
 
 	// Lookup the schema we want to set to.
-	res, err := p.Descriptors().GetMutableSchemaByName(
+	res, err := p.Descriptors().GetImmutableSchemaByName(
 		ctx, p.txn, db, schema, tree.SchemaLookupFlags{
 			Required:       true,
 			RequireMutable: true,
+			AvoidLeased:    true,
 		})
 	if err != nil {
 		return 0, err

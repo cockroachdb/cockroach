@@ -82,7 +82,8 @@ import (
 // stmt: The statement to execute.
 // res: Used to produce query results.
 // pinfo: The values to use for the statement's placeholders. If nil is passed,
-// 	 then the statement cannot have any placeholder.
+//
+//	then the statement cannot have any placeholder.
 func (ex *connExecutor) execStmt(
 	ctx context.Context,
 	parserStmt parser.Statement,
@@ -519,6 +520,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	case *tree.BeginTransaction:
 		// BEGIN is only allowed if we are in an implicit txn.
 		if os.ImplicitTxn.Get() {
+			// When executing the BEGIN, we also need to set any transaction modes
+			// that were specified on the BEGIN statement.
+			if _, err := ex.planner.SetTransaction(ctx, &tree.SetTransaction{Modes: s.Modes}); err != nil {
+				return makeErrEvent(err)
+			}
 			ex.sessionDataStack.PushTopClone()
 			return eventTxnUpgradeToExplicit{}, nil, nil
 		}
@@ -557,12 +563,13 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		var typeHints tree.PlaceholderTypes
+		// We take max(len(s.Types), stmt.NumPlaceHolders) as the length of types.
+		numParams := len(s.Types)
+		if stmt.NumPlaceholders > numParams {
+			numParams = stmt.NumPlaceholders
+		}
 		if len(s.Types) > 0 {
-			if len(s.Types) > stmt.NumPlaceholders {
-				err := pgerror.Newf(pgcode.Syntax, "too many types provided")
-				return makeErrEvent(err)
-			}
-			typeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
+			typeHints = make(tree.PlaceholderTypes, numParams)
 			for i, t := range s.Types {
 				resolved, err := tree.ResolveType(ctx, t, ex.planner.semaCtx.GetTypeResolver())
 				if err != nil {
@@ -972,9 +979,11 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	// Now that we've committed, if we modified any descriptor we need to make sure
 	// to release the leases for them so that the schema change can proceed and
 	// we don't block the client.
-	if descs := ex.extraTxnState.descCollection.GetDescriptorsWithNewVersion(); descs != nil {
-		ex.extraTxnState.descCollection.ReleaseLeases(ctx)
+	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil || withNewVersion == nil {
+		return err
 	}
+	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 	return nil
 }
 
@@ -1070,6 +1079,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
+			false, /* isCopy */
 			int(ex.state.mu.autoRetryCounter),
 			ex.extraTxnState.txnCounter,
 			res.RowsAffected(),
@@ -1674,9 +1684,9 @@ func (ex *connExecutor) beginImplicitTxn(
 
 // execStmtInAbortedState executes a statement in a txn that's in state
 // Aborted or RestartWait. All statements result in error events except:
-// - COMMIT / ROLLBACK: aborts the current transaction.
-// - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
-//   allowing it to be retried.
+//   - COMMIT / ROLLBACK: aborts the current transaction.
+//   - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
+//     allowing it to be retried.
 func (ex *connExecutor) execStmtInAbortedState(
 	ctx context.Context, ast tree.Statement, res RestrictedCommandResult,
 ) (_ fsm.Event, payload fsm.EventPayload) {

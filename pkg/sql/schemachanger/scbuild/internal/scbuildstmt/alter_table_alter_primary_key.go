@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -134,6 +133,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 		}
 	}
 	out.apply(b.Drop)
+	checkIfConstraintNameAlreadyExists(b, tbl, t)
 	sharding := makeShardedDescriptor(b, t)
 	var sourcePrimaryIndexElem *scpb.PrimaryIndex
 	if rowidToDrop == nil {
@@ -244,13 +244,6 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 		if colTypeElem.IsNullable {
 			panic(pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column "+
 				"%q in primary key", col.Column))
-		}
-
-		if !b.EvalCtx().Settings.Version.IsActive(b, clusterversion.Start22_1) {
-			if colTypeElem.IsVirtual {
-				panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot use virtual column %q "+
-					"in primary key", col.Column))
-			}
 		}
 	}
 }
@@ -378,8 +371,7 @@ func fallBackIfRegionalByRowTable(b BuildCtx, t alterPrimaryKeySpec, tableID cat
 // error if the table is a (row-level-ttl table && (it has a descending
 // key column || it has any inbound/outbound FK constraint)).
 func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t alterPrimaryKeySpec) {
-	_, _, rowLevelTTLElem := scpb.FindRowLevelTTL(b.QueryByID(tableID))
-	if rowLevelTTLElem == nil {
+	if _, _, rowLevelTTLElem := scpb.FindRowLevelTTL(b.QueryByID(tableID)); rowLevelTTLElem == nil {
 		return
 	}
 
@@ -392,18 +384,15 @@ func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t al
 	}
 
 	_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
-	hasFKConstraintError := scerrors.NotImplementedErrorf(t.n,
-		`foreign keys to/from table with TTL %q are not permitted`, ns.Name)
 	// Panic if there is any inbound/outbound FK constraints.
-	_, _, inboundFKElem := scpb.FindForeignKeyConstraint(b.BackReferences(tableID))
-	if inboundFKElem != nil {
-		panic(hasFKConstraintError)
+	if _, _, inboundFKElem := scpb.FindForeignKeyConstraint(b.BackReferences(tableID)); inboundFKElem != nil {
+		panic(scerrors.NotImplementedErrorf(t.n,
+			`foreign keys to table with TTL %q are not permitted`, ns.Name))
 	}
-	scpb.ForEachForeignKeyConstraint(b.QueryByID(tableID), func(
-		current scpb.Status, target scpb.TargetStatus, e *scpb.ForeignKeyConstraint,
-	) {
-		panic(hasFKConstraintError)
-	})
+	if _, _, outboundFKElem := scpb.FindForeignKeyConstraint(b.QueryByID(tableID)); outboundFKElem != nil {
+		panic(scerrors.NotImplementedErrorf(t.n,
+			`foreign keys from table with TTL %q are not permitted`, ns.Name))
+	}
 }
 
 func mustRetrievePrimaryIndexElement(b BuildCtx, tableID catid.DescID) (res *scpb.PrimaryIndex) {
@@ -509,6 +498,25 @@ func mustRetrieveKeyIndexColumns(
 			"index %v from table %v", indexID, tableID))
 	}
 	return indexColumns
+}
+
+func checkIfConstraintNameAlreadyExists(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
+	if t.Name == "" {
+		return
+	}
+	// Check explicit constraint names.
+	publicTableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
+	scpb.ForEachConstraintName(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintName) {
+		if e.Name == string(t.Name) {
+			panic(pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", t.Name))
+		}
+	})
+	// Check index names.
+	scpb.ForEachIndexName(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, n *scpb.IndexName) {
+		if n.Name == string(t.Name) {
+			panic(pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", t.Name))
+		}
+	})
 }
 
 // makeShardedDescriptor construct a sharded descriptor for the new primary key.

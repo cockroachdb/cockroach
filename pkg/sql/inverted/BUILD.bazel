@@ -21,6 +21,7 @@ go_test(
     name = "inverted_test",
     size = "small",
     srcs = ["expression_test.go"],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":inverted"],
     deps = [

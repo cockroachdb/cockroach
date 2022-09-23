@@ -54,6 +54,7 @@ go_test(
         "main_test.go",
         "roundtrip_format_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         ":rowenc",

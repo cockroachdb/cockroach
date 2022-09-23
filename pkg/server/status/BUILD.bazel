@@ -126,6 +126,7 @@ go_test(
         "runtime_stats_test.go",
         "runtime_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":status"],
     deps = [
         "//pkg/base",
@@ -147,7 +148,6 @@ go_test(
         "//pkg/util/system",
         "//pkg/util/timeutil",
         "@com_github_kr_pretty//:pretty",
-        "@com_github_prometheus_client_golang//prometheus",
         "@com_github_shirou_gopsutil_v3//net",
     ],
 )

@@ -21,11 +21,11 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │    └── 10 Mutation operations
       │         ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"t_j_idx","TableID":104}
-      │         ├── MakeDroppedIndexDeleteOnly {"IndexID":4,"TableID":104}
-      │         ├── MakeColumnPublic {"ColumnID":2,"TableID":104}
+      │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
+      │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
-      │         ├── MakeAddedSecondaryIndexPublic {"IndexID":2,"TableID":104}
-      │         ├── CreateGcJobForIndex {"IndexID":3,"TableID":104}
+      │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
@@ -33,7 +33,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
            ├── 1 element transitioning toward ABSENT
            │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
            └── 4 Mutation operations
-                ├── CreateGcJobForIndex {"IndexID":4,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

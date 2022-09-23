@@ -615,14 +615,14 @@ func (c *conn) serveImpl(
 //
 // Args:
 // ac: An interface used by the authentication process to receive password data
-//   and to ultimately declare the authentication successful.
+// and to ultimately declare the authentication successful.
 // reserved: Reserved memory. This method takes ownership and guarantees that it
-//   will be closed when this function returns.
+// will be closed when this function returns.
 // cancelConn: A function to be called when this goroutine exits. Its goal is to
-//   cancel the connection's context, thus stopping the connection's goroutine.
-//   The returned channel is also closed before this goroutine dies, but the
-//   connection's goroutine is not expected to be reading from that channel
-//   (instead, it's expected to always be monitoring the network connection).
+// cancel the connection's context, thus stopping the connection's goroutine.
+// The returned channel is also closed before this goroutine dies, but the
+// connection's goroutine is not expected to be reading from that channel
+// (instead, it's expected to always be monitoring the network connection).
 func (c *conn) processCommandsAsync(
 	ctx context.Context,
 	authOpt authOptions,
@@ -860,7 +860,18 @@ func (c *conn) handleSimpleQuery(
 			}
 			copyDone := sync.WaitGroup{}
 			copyDone.Add(1)
-			if err := c.stmtBuf.Push(ctx, sql.CopyIn{Conn: c, Stmt: cp, CopyDone: &copyDone}); err != nil {
+			if err := c.stmtBuf.Push(
+				ctx,
+				sql.CopyIn{
+					Conn:         c,
+					ParsedStmt:   stmts[i],
+					Stmt:         cp,
+					CopyDone:     &copyDone,
+					TimeReceived: timeReceived,
+					ParseStart:   startParse,
+					ParseEnd:     endParse,
+				},
+			); err != nil {
 				return err
 			}
 			copyDone.Wait()
@@ -926,19 +937,17 @@ func (c *conn) handleParse(
 	}
 	// len(stmts) == 0 results in a nil (empty) statement.
 
-	if len(inTypeHints) > stmt.NumPlaceholders {
-		err := pgwirebase.NewProtocolViolationErrorf(
-			"received too many type hints: %d vs %d placeholders in query",
-			len(inTypeHints), stmt.NumPlaceholders,
-		)
-		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
+	// We take max(len(s.Types), stmt.NumPlaceHolders) as the length of types.
+	numParams := len(inTypeHints)
+	if stmt.NumPlaceholders > numParams {
+		numParams = stmt.NumPlaceholders
 	}
 
 	var sqlTypeHints tree.PlaceholderTypes
 	if len(inTypeHints) > 0 {
 		// Prepare the mapping of SQL placeholder names to types. Pre-populate it with
 		// the type hints received from the client, if any.
-		sqlTypeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
+		sqlTypeHints = make(tree.PlaceholderTypes, numParams)
 		for i, t := range inTypeHints {
 			if t == 0 {
 				continue
@@ -1000,7 +1009,7 @@ func (c *conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer) e
 	return c.stmtBuf.Push(
 		ctx,
 		sql.DescribeStmt{
-			Name: name,
+			Name: tree.Name(name),
 			Type: typ,
 		})
 }
@@ -1300,8 +1309,10 @@ func cookTag(
 		tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 
 	case tree.Rows:
-		tag = append(tag, ' ')
-		tag = strconv.AppendUint(tag, uint64(rowsAffected), 10)
+		if tagStr != "SHOW" {
+			tag = append(tag, ' ')
+			tag = strconv.AppendUint(tag, uint64(rowsAffected), 10)
+		}
 
 	case tree.Ack, tree.DDL:
 		if tagStr == "SELECT" {

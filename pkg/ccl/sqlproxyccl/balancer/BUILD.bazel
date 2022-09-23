@@ -36,6 +36,7 @@ go_test(
         "conn_tracker_test.go",
         "pod_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":balancer"],
     deps = [
         "//pkg/ccl/sqlproxyccl/tenant",

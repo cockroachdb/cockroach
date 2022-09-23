@@ -1891,6 +1891,15 @@ func (*UnionClause) StatementType() StatementType { return TypeDML }
 func (*UnionClause) StatementTag() string { return "UNION" }
 
 // StatementReturnType implements the Statement interface.
+func (*Unlisten) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*Unlisten) StatementType() StatementType { return TypeTCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Unlisten) StatementTag() string { return "UNLISTEN" }
+
+// StatementReturnType implements the Statement interface.
 func (*ValuesClause) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.

@@ -69,6 +69,7 @@ go_test(
         "tls_test.go",
         "x509_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":security"],
     deps = [
         "//pkg/base",

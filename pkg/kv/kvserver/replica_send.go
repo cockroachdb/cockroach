@@ -51,55 +51,63 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 // is presented below, with a focus on where requests may spend
 // most of their time (once they arrive at the Node.Batch endpoint).
 //
-//                                 DistSender (tenant)
-//                                      │
-//                                      ┆ (RPC)
-//                                      │
-//                                      ▼
-//                                 Node.Batch (host cluster)
-//                                      │
-//                                      ▼
-//                              Admission control
-//                                      │
-//                                      ▼
-//                                 Replica.Send
-//                                      │
-//                                Circuit breaker
-//                                      │
-//                                      ▼
-//                      Replica.maybeBackpressureBatch (if Range too large)
-//                                      │
-//                                      ▼
-//               Replica.maybeRateLimitBatch (tenant rate limits)
-//                                      │
-//                                      ▼
-//                 Replica.maybeCommitWaitBeforeCommitTrigger (if committing with commit-trigger)
-//                                      │
+//	                  DistSender (tenant)
+//	                       │
+//	                       ┆ (RPC)
+//	                       │
+//	                       ▼
+//	                  Node.Batch (host cluster)
+//	                       │
+//	                       ▼
+//	               Admission control
+//	                       │
+//	                       ▼
+//	                  Replica.Send
+//	                       │
+//	                 Circuit breaker
+//	                       │
+//	                       ▼
+//	       Replica.maybeBackpressureBatch (if Range too large)
+//	                       │
+//	                       ▼
+//	Replica.maybeRateLimitBatch (tenant rate limits)
+//	                       │
+//	                       ▼
+//	  Replica.maybeCommitWaitBeforeCommitTrigger (if committing with commit-trigger)
+//	                       │
+//
 // read-write ◄─────────────────────────┴────────────────────────► read-only
-//     │                                                               │
-//     │                                                               │
-//     ├─────────────► executeBatchWithConcurrencyRetries ◄────────────┤
-//     │               (handles leases and txn conflicts)              │
-//     │                                                               │
-//     ▼                                                               │
+//
+//	│                                                               │
+//	│                                                               │
+//	├─────────────► executeBatchWithConcurrencyRetries ◄────────────┤
+//	│               (handles leases and txn conflicts)              │
+//	│                                                               │
+//	▼                                                               │
+//
 // executeWriteBatch                                                   │
-//     │                                                               │
-//     ▼                                                               ▼
+//
+//	│                                                               │
+//	▼                                                               ▼
+//
 // evalAndPropose         (turns the BatchRequest        executeReadOnlyBatch
-//     │                   into pebble WriteBatch)
-//     │
-//     ├──────────────────► (writes that can use async consensus do not
-//     │                     wait for replication and are done here)
-//     │
-//     ├──────────────────► maybeAcquireProposalQuota
-//     │                    (applies backpressure in case of
-//     │                     lagging Raft followers)
-//     │
-//     │
-//     ▼
+//
+//	│                   into pebble WriteBatch)
+//	│
+//	├──────────────────► (writes that can use async consensus do not
+//	│                     wait for replication and are done here)
+//	│
+//	├──────────────────► maybeAcquireProposalQuota
+//	│                    (applies backpressure in case of
+//	│                     lagging Raft followers)
+//	│
+//	│
+//	▼
+//
 // handleRaftReady        (drives the Raft loop, first appending to the log
-//                         to commit the command, then signaling proposer and
-//                         applying the command)
+//
+//	to commit the command, then signaling proposer and
+//	applying the command)
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -196,6 +204,7 @@ func (r *Replica) SendWithWriteBytes(
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
 	}
 
+	r.recordRequestWriteBytes(writeBytes)
 	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
 	return br, writeBytes, pErr
 }
@@ -347,16 +356,16 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 // caller. However, it does not need to. Instead, it can assume responsibility
 // for releasing the concurrency guard it was provided by returning nil. This is
 // useful is cases where the function:
-// 1. eagerly released the concurrency guard after it determined that isolation
-//    from conflicting requests was no longer needed.
-// 2. is continuing to execute asynchronously and needs to maintain isolation
-//    from conflicting requests throughout the lifetime of its asynchronous
-//    processing. The most prominent example of asynchronous processing is
-//    with requests that have the "async consensus" flag set. A more subtle
-//    case is with requests that are acknowledged by the Raft machinery after
-//    their Raft entry has been committed but before it has been applied to
-//    the replicated state machine. In all of these cases, responsibility
-//    for releasing the concurrency guard is handed to Raft.
+//  1. eagerly released the concurrency guard after it determined that isolation
+//     from conflicting requests was no longer needed.
+//  2. is continuing to execute asynchronously and needs to maintain isolation
+//     from conflicting requests throughout the lifetime of its asynchronous
+//     processing. The most prominent example of asynchronous processing is
+//     with requests that have the "async consensus" flag set. A more subtle
+//     case is with requests that are acknowledged by the Raft machinery after
+//     their Raft entry has been committed but before it has been applied to
+//     the replicated state machine. In all of these cases, responsibility
+//     for releasing the concurrency guard is handed to Raft.
 //
 // However, this option is not permitted if the function returns a "server-side
 // concurrency retry error" (see isConcurrencyRetryError for more details). If
@@ -1003,7 +1012,6 @@ func (r *Replica) recordBatchRequestLoad(ctx context.Context, ba *roachpb.BatchR
 
 	r.loadStats.batchRequests.RecordCount(adjustedQPS, ba.Header.GatewayNodeID)
 	r.loadStats.requests.RecordCount(float64(len(ba.Requests)), ba.Header.GatewayNodeID)
-	r.loadStats.writeBytes.RecordCount(getBatchRequestWriteBytes(ba), ba.Header.GatewayNodeID)
 }
 
 // getBatchRequestQPS calculates the cost estimation of a BatchRequest. The
@@ -1036,18 +1044,18 @@ func (r *Replica) getBatchRequestQPS(ctx context.Context, ba *roachpb.BatchReque
 	return count
 }
 
-func getBatchRequestWriteBytes(ba *roachpb.BatchRequest) float64 {
-	if !ba.IsWrite() {
-		return 0
+// recordRequestWriteBytes records the write bytes from a replica batch
+// request.
+func (r *Replica) recordRequestWriteBytes(writeBytes *StoreWriteBytes) {
+	if writeBytes == nil {
+		return
 	}
-
-	var writeBytes int64
-	for i := range ba.Requests {
-		if swr, isSizedWrite := ba.Requests[i].GetInner().(roachpb.SizedWriteRequest); isSizedWrite {
-			writeBytes += swr.WriteBytes()
-		}
-	}
-	return float64(writeBytes)
+	// TODO(kvoli): Consider recording the ingested bytes (AddSST) separately
+	// to the write bytes.
+	r.loadStats.writeBytes.RecordCount(
+		float64(writeBytes.WriteBytes+writeBytes.IngestedBytes),
+		0,
+	)
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In particular,

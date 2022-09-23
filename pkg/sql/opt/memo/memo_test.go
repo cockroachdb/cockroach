@@ -362,7 +362,7 @@ func TestStatsAvailable(t *testing.T) {
 
 	testNotAvailable := func(expr memo.RelExpr) {
 		traverseExpr(expr, func(e memo.RelExpr) {
-			if e.Relational().Stats.Available {
+			if e.Relational().Statistics().Available {
 				t.Fatal("stats should not be available")
 			}
 		})
@@ -400,7 +400,7 @@ func TestStatsAvailable(t *testing.T) {
 
 	testAvailable := func(expr memo.RelExpr) {
 		traverseExpr(expr, func(e memo.RelExpr) {
-			if !e.Relational().Stats.Available {
+			if !e.Relational().Statistics().Available {
 				t.Fatal("stats should be available")
 			}
 		})
@@ -432,10 +432,11 @@ func traverseExpr(expr memo.RelExpr, f func(memo.RelExpr)) {
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
-//   <command>
-//   <SQL statement>
-//   ----
-//   <expected results>
+//
+//	<command>
+//	<SQL statement>
+//	----
+//	<expected results>
 //
 // See OptTester.Handle for supported commands.
 func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {

@@ -170,6 +170,9 @@ function formatIdxRecommendations(
       case "drop":
         idxType = "DropIndex";
         break;
+      case "alteration":
+        idxType = "AlterIndex";
+        break;
     }
     const idxRec: InsightRecommendation = {
       type: idxType,
@@ -207,7 +210,7 @@ function Insights({
   onChangeSortSetting,
 }: InsightsProps): React.ReactElement {
   const isCockroachCloud = useContext(CockroachCloudContext);
-  const insightsColumns = makeInsightsColumns(isCockroachCloud);
+  const insightsColumns = makeInsightsColumns(isCockroachCloud, true);
   const data = formatIdxRecommendations(
     idxRecommendations,
     plan,

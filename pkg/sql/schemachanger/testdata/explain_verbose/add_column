@@ -15,7 +15,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       ├── • 7 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
-│       │   │     ABSENT → DELETE_ONLY
+│       │   │   │ ABSENT → DELETE_ONLY
+│       │   │   │
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "Column transitions to PUBLIC uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}
 │       │   │   │ ABSENT → PUBLIC
@@ -40,8 +43,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │   │         rule: "column existence precedes index existence"
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   │     rule: "column existence precedes index existence"
+│       │   │   │
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
@@ -63,8 +69,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
-│       │   │         rule: "column existence precedes temp index existence"
+│       │   │   ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   │     rule: "column existence precedes temp index existence"
+│       │   │   │
+│       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
 │       │   │   │ ABSENT → PUBLIC
@@ -83,7 +92,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       │
 │       └── • 11 Mutation operations
 │           │
-│           ├── • MakeAddedColumnDeleteOnly
+│           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
 │           │       ColumnID: 2
 │           │       PgAttributeNum: 2
@@ -128,7 +137,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │         Expr: 42:::INT8
 │           │       TableID: 106
 │           │
-│           ├── • MakeAddedIndexBackfilling
+│           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
 │           │       ConstraintID: 2
 │           │       IndexID: 2
@@ -148,7 +157,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           │     Kind: 2
 │           │     TableID: 106
 │           │
-│           ├── • MakeAddedTempIndexDeleteOnly
+│           ├── • MakeAbsentTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 3
 │           │       IndexID: 3
@@ -199,6 +208,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │   └── • Column:{DescID: 106, ColumnID: 2}
 │   │   │       │ DELETE_ONLY → WRITE_ONLY
 │   │   │       │
+│   │   │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│   │   │       │     rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │       │
 │   │   │       └── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │   │   │             rule: "DEFAULT or ON UPDATE existence precedes writes to column"
 │   │   │
@@ -210,6 +222,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │       ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
 │   │   │       │     rule: "column is WRITE_ONLY before temporary index is WRITE_ONLY"
 │   │   │       │
+│   │   │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+│   │   │       │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
 │   │   │       │     rule: "index-column added to index before temp index receives writes"
 │   │   │       │
@@ -218,11 +233,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │
 │   │   └── • 4 Mutation operations
 │   │       │
-│   │       ├── • MakeAddedColumnDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyColumnWriteOnly
 │   │       │     ColumnID: 2
 │   │       │     TableID: 106
 │   │       │
-│   │       ├── • MakeAddedIndexDeleteAndWriteOnly
+│   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 3
 │   │       │     TableID: 106
 │   │       │
@@ -239,6 +254,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │       │ BACKFILL_ONLY → BACKFILLED
+│   │   │       │
+│   │   │       ├── • PreviousTransactionPrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │       │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILL_ONLY->BACKFILLED"
 │   │   │       │
 │   │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
 │   │   │       │     rule: "index-column added to index before index is backfilled"
@@ -261,7 +279,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│   │   │         BACKFILLED → DELETE_ONLY
+│   │   │       │ BACKFILLED → DELETE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from BACKFILLED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: BACKFILLED->DELETE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -281,7 +302,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│   │   │         DELETE_ONLY → MERGE_ONLY
+│   │   │       │ DELETE_ONLY → MERGE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->MERGE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -301,7 +325,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│   │   │         MERGE_ONLY → MERGED
+│   │   │       │ MERGE_ONLY → MERGED
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGE_ONLY->MERGED"
 │   │   │
 │   │   └── • 1 Backfill operation
 │   │       │
@@ -315,7 +342,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   ├── • 1 element transitioning toward PUBLIC
 │   │   │   │
 │   │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│   │   │         MERGED → WRITE_ONLY
+│   │   │       │ MERGED → WRITE_ONLY
+│   │   │       │
+│   │   │       └── • PreviousTransactionPrecedence dependency from MERGED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│   │   │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: MERGED->WRITE_ONLY"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -335,11 +365,14 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │       ├── • 1 element transitioning toward PUBLIC
 │       │   │
 │       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │         WRITE_ONLY → VALIDATED
+│       │       │ WRITE_ONLY → VALIDATED
+│       │       │
+│       │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │       │
 │       └── • 1 Validation operation
 │           │
-│           └── • ValidateUniqueIndex
+│           └── • ValidateIndex
 │                 IndexID: 2
 │                 TableID: 106
 │
@@ -351,6 +384,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   │
     │   │   ├── • Column:{DescID: 106, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → PUBLIC
+    │   │   │   │
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 106, Name: j, ColumnID: 2}
     │   │   │   │     rule: "column dependents exist before column becomes public"
@@ -376,6 +412,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   │   ├── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
     │   │   │   │     rule: "primary index swap"
     │   │   │   │
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │   │     rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
+    │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
     │   │   │   │     rule: "index dependents exist before index becomes public"
     │   │   │   │     rule: "index named right before index becomes public"
@@ -395,7 +434,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   ├── • 3 elements transitioning toward TRANSIENT_ABSENT
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
-    │   │   │     WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
     │   │   │   │ PUBLIC → TRANSIENT_ABSENT
@@ -421,7 +463,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-    │   │   │     PUBLIC → WRITE_ONLY
+    │   │   │   │ PUBLIC → VALIDATED
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │   │         rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
     │   │   │
     │   │   └── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
     │   │       │ PUBLIC → ABSENT
@@ -431,7 +476,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │
     │   └── • 9 Mutation operations
     │       │
-    │       ├── • MakeDroppedPrimaryIndexDeleteAndWriteOnly
+    │       ├── • MakePublicPrimaryIndexWriteOnly
     │       │     IndexID: 1
     │       │     TableID: 106
     │       │
@@ -445,11 +490,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       │     Name: tbl_pkey
     │       │     TableID: 106
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
-    │       ├── • MakeAddedPrimaryIndexPublic
+    │       ├── • MakeValidatedPrimaryIndexPublic
     │       │     EventBase:
     │       │       Authorization:
     │       │         UserName: root
@@ -462,7 +507,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       │     IndexID: 2
     │       │     TableID: 106
     │       │
-    │       ├── • MakeColumnPublic
+    │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 2
     │       │     EventBase:
     │       │       Authorization:
@@ -493,6 +538,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   └── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
     │   │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
     │   │       │
+    │   │       ├── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+    │   │       │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+    │   │       │
     │   │       ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
     │   │       │     rule: "dependents removed before index"
     │   │       │
@@ -502,20 +550,23 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   ├── • 1 element transitioning toward ABSENT
     │   │   │
     │   │   └── • PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-    │   │         WRITE_ONLY → DELETE_ONLY
+    │   │       │ VALIDATED → DELETE_ONLY
+    │   │       │
+    │   │       └── • PreviousTransactionPrecedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+    │   │             rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY"
     │   │
     │   └── • 5 Mutation operations
     │       │
-    │       ├── • MakeDroppedIndexDeleteOnly
-    │       │     IndexID: 1
-    │       │     TableID: 106
-    │       │
-    │       ├── • CreateGcJobForIndex
+    │       ├── • CreateGCJobForIndex
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 1
     │       │     TableID: 106
     │       │
     │       ├── • SetJobStateOnDescriptor
@@ -536,12 +587,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
         │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
         │       │     rule: "dependents removed before index"
         │       │
+        │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+        │       │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │       │
         │       └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
         │             rule: "dependents removed before index"
         │
         └── • 4 Mutation operations
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
             │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42

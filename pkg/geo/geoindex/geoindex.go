@@ -386,17 +386,17 @@ func (rc simpleCovererImpl) covering(regions []s2.Region) s2.CellUnion {
 // cells below c). For example, consider a portion of the cell quad-tree
 // below:
 //
-//                      c0
-//                      |
-//                      c3
-//                      |
-//                  +---+---+
-//                  |       |
-//                 c13      c15
-//                  |       |
-//                 c53   +--+--+
-//                       |     |
-//                      c61    c64
+//	     c0
+//	     |
+//	     c3
+//	     |
+//	 +---+---+
+//	 |       |
+//	c13      c15
+//	 |       |
+//	c53   +--+--+
+//	      |     |
+//	     c61    c64
 //
 // Shape s could have a regular covering c15, c53, where c15 has 4 child cells
 // c61..c64, and shape s only intersects wit c61, c64. A different shape x
@@ -584,39 +584,43 @@ func coveredBy(_ context.Context, rc *s2.RegionCoverer, r []s2.Region) RPKeyExpr
 
 // The quad-trees stored in presentCells together represent a set expression.
 // This expression specifies:
-// - the path for each leaf to the root of that quad-tree. The index entries
-//   on each such path represent the shapes that cover that leaf. Hence these
-//   index entries for a single path need to be unioned to give the shapes
-//   that cover the leaf.
-// - The full expression specifies the shapes that cover all the leaves, so
-//   the union expressions for the paths must be intersected with each other.
+//   - the path for each leaf to the root of that quad-tree. The index entries
+//     on each such path represent the shapes that cover that leaf. Hence these
+//     index entries for a single path need to be unioned to give the shapes
+//     that cover the leaf.
+//   - The full expression specifies the shapes that cover all the leaves, so
+//     the union expressions for the paths must be intersected with each other.
 //
 // Reusing an example from earlier in this file, say the quad-tree is:
-//                      c0
-//                      |
-//                      c3
-//                      |
-//                  +---+---+
-//                  |       |
-//                 c13      c15
-//                  |       |
-//                 c53   +--+--+
-//                       |     |
-//                      c61    c64
+//
+//	     c0
+//	     |
+//	     c3
+//	     |
+//	 +---+---+
+//	 |       |
+//	c13      c15
+//	 |       |
+//	c53   +--+--+
+//	      |     |
+//	     c61    c64
 //
 // This tree represents the following expression (where I(c) are the index
 // entries stored at cell c):
-//  (I(c64) \union I(c15) \union I(c3) \union I(c0)) \intersection
-//  (I(c61) \union I(c15) \union I(c3) \union I(c0)) \intersection
-//  (I(c53) \union I(c13) \union I(c3) \union I(c0))
+//
+//	(I(c64) \union I(c15) \union I(c3) \union I(c0)) \intersection
+//	(I(c61) \union I(c15) \union I(c3) \union I(c0)) \intersection
+//	(I(c53) \union I(c13) \union I(c3) \union I(c0))
+//
 // In this example all the union sub-expressions have the same number of terms
 // but that does not need to be true.
 //
 // The above expression can be factored to eliminate repetition of the
 // same cell. The factored expression for this example is:
-//   I(c0) \union I(c3) \union
-//    ((I(c13) \union I(c53)) \intersection
-//     (I(c15) \union (I(c61) \intersection I(c64)))
+//
+//	I(c0) \union I(c3) \union
+//	 ((I(c13) \union I(c53)) \intersection
+//	  (I(c15) \union (I(c61) \intersection I(c64)))
 //
 // This function generates this factored expression represented in reverse
 // polish notation.

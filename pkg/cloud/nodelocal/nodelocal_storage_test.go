@@ -30,7 +30,11 @@ func TestPutLocal(t *testing.T) {
 	testSettings.ExternalIODir = p
 	dest := MakeLocalStorageURI(p)
 
-	cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), nil, nil, testSettings)
-	cloudtestutils.CheckListFiles(t, "nodelocal://0/listing-test/basepath",
-		username.RootUserName(), nil, nil, testSettings)
+	cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), nil, nil, nil, testSettings)
+	cloudtestutils.CheckListFiles(t, "nodelocal://0/listing-test/basepath", username.RootUserName(),
+		nil, /* ie */
+		nil, /* cf */
+		nil, /* kvDB */
+		testSettings,
+	)
 }

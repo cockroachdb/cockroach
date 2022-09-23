@@ -30,8 +30,9 @@ type commentOnTableNode struct {
 
 // CommentOnTable add comment on a table.
 // Privileges: CREATE on table.
-//   notes: postgres requires CREATE on the table.
-//          mysql requires ALTER, CREATE, INSERT on the table.
+//
+//	notes: postgres requires CREATE on the table.
+//	       mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (planNode, error) {
 	if err := checkSchemaChangeEnabled(
 		ctx,

@@ -1131,7 +1131,12 @@ CREATE TABLE ab(a INT DEFAULT nextval('owned_seq'), b INT DEFAULT nextval('owned
 statement ok
 ALTER SEQUENCE owned_seq OWNED BY ab.a;
 
+skipif config local-legacy-schema-changer
 statement error cannot drop column a because other objects depend on it
+ALTER TABLE ab DROP COLUMN a;
+
+onlyif config local-legacy-schema-changer
+statement error cannot drop table ab because other objects depend on it
 ALTER TABLE ab DROP COLUMN a;
 
 statement ok
@@ -1186,7 +1191,12 @@ CREATE TABLE b(b INT DEFAULT nextval('seq'));
 statement error cannot drop table a because other objects depend on it
 DROP TABLE a
 
+skipif config local-legacy-schema-changer
 statement error cannot drop column a because other objects depend on it
+ALTER TABLE a DROP COLUMN a;
+
+onlyif config local-legacy-schema-changer
+statement error cannot drop table a because other objects depend on it
 ALTER TABLE a DROP COLUMN a;
 
 statement ok

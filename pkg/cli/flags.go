@@ -47,11 +47,11 @@ import (
 // structs.
 //
 // Corollaries:
-// - it would be a programming error to access these variables directly
-//   outside of this file (flags.go)
-// - the underlying context parameters must receive defaults in
-//   initCLIDefaults() even when they are otherwise overridden by the
-//   flags logic, because some tests to not use the flag logic at all.
+//   - it would be a programming error to access these variables directly
+//     outside of this file (flags.go)
+//   - the underlying context parameters must receive defaults in
+//     initCLIDefaults() even when they are otherwise overridden by the
+//     flags logic, because some tests to not use the flag logic at all.
 var serverListenPort, serverSocketDir string
 var serverAdvertiseAddr, serverAdvertisePort string
 var serverSQLAddr, serverSQLPort string
@@ -515,7 +515,7 @@ func init() {
 	}
 
 	// Flags that apply to commands that start servers.
-	telemetryEnabledCmds := append(serverCmds, demoCmd)
+	telemetryEnabledCmds := append(serverCmds, demoCmd, statementBundleRecreateCmd)
 	telemetryEnabledCmds = append(telemetryEnabledCmds, demoCmd.Commands()...)
 	for _, cmd := range telemetryEnabledCmds {
 		// Report flag usage for server commands in telemetry. We do this
@@ -649,6 +649,8 @@ func init() {
 	{
 		f := debugZipCmd.Flags()
 		cliflagcfg.BoolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
+		_ = f.MarkDeprecated(cliflags.ZipRedactLogs.Name, "use --"+cliflags.ZipRedact.Name+" instead")
+		cliflagcfg.BoolFlag(f, &zipCtx.redact, cliflags.ZipRedact)
 		cliflagcfg.DurationFlag(f, &zipCtx.cpuProfDuration, cliflags.ZipCPUProfileDuration)
 		cliflagcfg.IntFlag(f, &zipCtx.concurrency, cliflags.ZipConcurrency)
 	}
@@ -698,7 +700,10 @@ func init() {
 	sqlCmds = append(sqlCmds, importCmds...)
 	sqlCmds = append(sqlCmds, userFileCmds...)
 	for _, cmd := range sqlCmds {
-		clientflags.AddSQLFlags(cmd, &cliCtx.clientOpts, sqlCtx, cmd == sqlShellCmd, cmd == demoCmd)
+		clientflags.AddSQLFlags(cmd, &cliCtx.clientOpts, sqlCtx,
+			cmd == sqlShellCmd, /* isShell */
+			cmd == demoCmd || cmd == statementBundleRecreateCmd, /* isDemo */
+		)
 	}
 
 	// Make the non-SQL client commands also recognize --url in strict SSL mode
@@ -744,11 +749,11 @@ func init() {
 	}
 
 	// demo command.
-	{
+	for _, cmd := range []*cobra.Command{demoCmd, statementBundleRecreateCmd} {
 		// We use the persistent flag set so that the flags apply to every
 		// workload sub-command. This enables e.g.
 		// ./cockroach demo movr --nodes=3.
-		f := demoCmd.PersistentFlags()
+		f := cmd.PersistentFlags()
 
 		cliflagcfg.IntFlag(f, &demoCtx.NumNodes, cliflags.DemoNodes)
 		cliflagcfg.BoolFlag(f, &demoCtx.RunWorkload, cliflags.RunDemoWorkload)
@@ -772,11 +777,6 @@ func init() {
 		_ = f.MarkHidden(cliflags.DemoMultitenant.Name)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
-		// The --empty flag is only valid for the top level demo command,
-		// so we use the regular flag set.
-		cliflagcfg.BoolFlag(demoCmd.Flags(), &demoCtx.NoExampleDatabase, cliflags.UseEmptyDatabase)
-		_ = f.MarkDeprecated(cliflags.UseEmptyDatabase.Name, "use --no-workload-database")
-		cliflagcfg.BoolFlag(demoCmd.Flags(), &demoCtx.NoExampleDatabase, cliflags.NoExampleDatabase)
 		// We also support overriding the GEOS library path for 'demo'.
 		// Even though the demoCtx uses mostly different configuration
 		// variables from startCtx, this is one case where we afford
@@ -786,6 +786,15 @@ func init() {
 		cliflagcfg.IntFlag(f, &demoCtx.SQLPort, cliflags.DemoSQLPort)
 		cliflagcfg.IntFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
 		cliflagcfg.StringFlag(f, &demoCtx.ListeningURLFile, cliflags.ListeningURLFile)
+	}
+
+	{
+		// The --empty flag is only valid for the top level demo command,
+		// so we use the regular flag set.
+		f := demoCmd.Flags()
+		cliflagcfg.BoolFlag(f, &demoCtx.NoExampleDatabase, cliflags.UseEmptyDatabase)
+		_ = f.MarkDeprecated(cliflags.UseEmptyDatabase.Name, "use --no-example-database")
+		cliflagcfg.BoolFlag(f, &demoCtx.NoExampleDatabase, cliflags.NoExampleDatabase)
 	}
 
 	// statement-diag command.
@@ -1049,17 +1058,19 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.SplitListenSQL = changed(fs, cliflags.ListenSQLAddr.Name)
 
 	// Fill in the defaults for --advertise-sql-addr, if the flag exists on `cmd`.
-	advSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
+	advHostSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
 		changed(fs, cliflags.AdvertiseHost.Name)
+	advPortSpecified := changed(fs, cliflags.AdvertiseAddr.Name) ||
+		changed(fs, cliflags.AdvertisePort.Name)
 	if serverSQLAdvertiseAddr == "" {
-		if advSpecified {
+		if advHostSpecified {
 			serverSQLAdvertiseAddr = serverAdvertiseAddr
 		} else {
 			serverSQLAdvertiseAddr = serverSQLAddr
 		}
 	}
 	if serverSQLAdvertisePort == "" {
-		if advSpecified && !serverCfg.SplitListenSQL {
+		if advPortSpecified && !serverCfg.SplitListenSQL {
 			serverSQLAdvertisePort = serverAdvertisePort
 		} else {
 			serverSQLAdvertisePort = serverSQLPort
@@ -1097,7 +1108,7 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
 
 	if serverHTTPAdvertiseAddr == "" {
-		if advSpecified {
+		if advHostSpecified || advPortSpecified {
 			serverHTTPAdvertiseAddr = serverAdvertiseAddr
 		} else {
 			serverHTTPAdvertiseAddr = serverHTTPAddr

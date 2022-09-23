@@ -61,6 +61,7 @@ go_test(
     name = "testcat_test",
     size = "small",
     srcs = ["test_catalog_test.go"],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     deps = [
         ":testcat",

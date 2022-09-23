@@ -228,21 +228,25 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 // is a view, it drops the views.
 // This is called when the DropBehavior is DropCascade.
 func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc.Mutable) error {
-	for _, dependent := range seqDesc.DependedOnBy {
+	for len(seqDesc.DependedOnBy) > 0 {
+		dependent := seqDesc.DependedOnBy[0]
 		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, dependent.ID)
 		if err != nil {
 			return err
 		}
 		switch t := desc.(type) {
 		case *tabledesc.Mutable:
-			return dropDepTableOnSequence(ctx, p, t, seqDesc.Name, dependent.ColumnIDs)
+			err = dropDepTableOnSequence(ctx, p, t, seqDesc.Name, dependent.ColumnIDs)
 		case *funcdesc.Mutable:
-			return p.dropFunctionImpl(ctx, t)
+			err = p.dropFunctionImpl(ctx, t)
 		default:
-			return errors.AssertionFailedf(
+			err = errors.AssertionFailedf(
 				"unexpected dependent %s %s on sequence %s",
 				desc.DescriptorType(), desc.GetName(), seqDesc.Name,
 			)
+		}
+		if err != nil {
+			return err
 		}
 	}
 	return nil

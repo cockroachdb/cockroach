@@ -134,6 +134,7 @@ cr="${abase}/cockroach${local}"
 # disambiguated by a timestamp because one often ends up invoking roachtest on
 # the same SHA multiple times and artifacts shouldn't mix.
 a="${abase}/$(date '+%H%M%S')"
+ln -fs "${a}" "artifacts/latest"
 
 if [ ! -f "${cr}" ] || [ "${force_build}" = "y" ]; then
   if [ -z "${local}" ]; then

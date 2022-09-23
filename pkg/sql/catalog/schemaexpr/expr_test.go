@@ -27,7 +27,7 @@ func TestValidateExpr(t *testing.T) {
 	semaCtx := tree.MakeSemaContext()
 
 	// Trick to get the init() for the builtins package to run.
-	_ = builtins.AllBuiltinNames
+	_ = builtins.AllBuiltinNames()
 
 	database := tree.Name("foo")
 	table := tree.Name("bar")
@@ -111,7 +111,7 @@ func TestValidateExpr(t *testing.T) {
 
 func TestExtractColumnIDs(t *testing.T) {
 	// Trick to get the init() for the builtins package to run.
-	_ = builtins.AllBuiltinNames
+	_ = builtins.AllBuiltinNames()
 
 	table := tree.Name("foo")
 	desc := testTableDesc(
@@ -154,7 +154,7 @@ func TestExtractColumnIDs(t *testing.T) {
 
 func TestValidColumnReferences(t *testing.T) {
 	// Trick to get the init() for the builtins package to run.
-	_ = builtins.AllBuiltinNames
+	_ = builtins.AllBuiltinNames()
 
 	table := tree.Name("foo")
 	desc := testTableDesc(

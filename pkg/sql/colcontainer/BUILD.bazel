@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/colexecerror",
         "//pkg/sql/types",
         "//pkg/storage/fs",
+        "//pkg/util/cancelchecker",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/uuid",
@@ -32,6 +33,7 @@ go_test(
         "main_test.go",
         "partitionedqueue_test.go",
     ],
+    args = ["-test.timeout=55s"],
     deps = [
         ":colcontainer",
         "//pkg/col/coldata",

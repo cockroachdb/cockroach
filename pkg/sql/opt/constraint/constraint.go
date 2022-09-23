@@ -34,9 +34,9 @@ import (
 // Set struct comment for more details.
 //
 // A few examples:
-//  - a constraint on @1 > 1: a single span             /@1: (/1 - ]
-//  - a constraint on @1 = 1 AND @2 >= 1: a single span /@1/@2: [/1/1 - /1]
-//  - a constraint on @1 < 5 OR @1 > 10: multiple spans /@1: [ - /5) (10 - ]
+//   - a constraint on @1 > 1: a single span             /@1: (/1 - ]
+//   - a constraint on @1 = 1 AND @2 >= 1: a single span /@1/@2: [/1/1 - /1]
+//   - a constraint on @1 < 5 OR @1 > 10: multiple spans /@1: [ - /5) (10 - ]
 type Constraint struct {
 	Columns Columns
 
@@ -340,9 +340,10 @@ func (c *Constraint) findIntersectingSpan(keyCtx *KeyContext, sp *Span) (_ *Span
 
 // Combine refines the receiver constraint using constraints on a suffix of the
 // same list of columns. For example:
-//  c:      /a/b: [/1 - /2] [/4 - /4]
-//  other:  /b: [/5 - /5]
-//  result: /a/b: [/1/5 - /2/5] [/4/5 - /4/5]
+//
+//	c:      /a/b: [/1 - /2] [/4 - /4]
+//	other:  /b: [/5 - /5]
+//	result: /a/b: [/1/5 - /2/5] [/4/5 - /4/5]
 func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
 	if !other.Columns.IsStrictSuffixOf(&c.Columns) {
 		// Note: we don't want to let the c and other pointers escape by passing
@@ -472,7 +473,9 @@ func (c *Constraint) Combine(evalCtx *eval.Context, other *Constraint) {
 }
 
 // ConsolidateSpans merges spans that have consecutive boundaries. For example:
-//   [/1 - /2] [/3 - /4] becomes [/1 - /4].
+//
+//	[/1 - /2] [/3 - /4] becomes [/1 - /4].
+//
 // An optional PrefixSorter parameter describes the localities of partitions in
 // the index for which the Constraint is being built. Spans belonging to 100%
 // local partitions will not be consolidated with spans that overlap any remote
@@ -545,11 +548,12 @@ func (c *Constraint) ConsolidateSpans(evalCtx *eval.Context, ps partition.Prefix
 
 // ExactPrefix returns the length of the longest column prefix which are
 // constrained to a single value. For example:
-//   /a/b/c: [/1/2/3 - /1/2/3]                    ->  ExactPrefix = 3
-//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]  ->  ExactPrefix = 2
-//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8]  ->  ExactPrefix = 1
-//   /a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3]  ->  ExactPrefix = 1
-//   /a/b/c: [/1/2/3 - /1/2/3] [/3 - /4]          ->  ExactPrefix = 0
+//
+//	/a/b/c: [/1/2/3 - /1/2/3]                    ->  ExactPrefix = 3
+//	/a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]  ->  ExactPrefix = 2
+//	/a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8]  ->  ExactPrefix = 1
+//	/a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3]  ->  ExactPrefix = 1
+//	/a/b/c: [/1/2/3 - /1/2/3] [/3 - /4]          ->  ExactPrefix = 0
 func (c *Constraint) ExactPrefix(evalCtx *eval.Context) int {
 	if c.IsContradiction() {
 		return 0
@@ -578,7 +582,9 @@ func (c *Constraint) ExactPrefix(evalCtx *eval.Context) int {
 
 // ConstrainedColumns returns the number of columns which are constrained by
 // the Constraint. For example:
-//   /a/b/c: [/1/1 - /1] [/3 - /3]
+//
+//	/a/b/c: [/1/1 - /1] [/3 - /3]
+//
 // has 2 constrained columns. This may be less than the total number of columns
 // in the constraint, especially if it represents an index constraint.
 func (c *Constraint) ConstrainedColumns(evalCtx *eval.Context) int {
@@ -600,13 +606,16 @@ func (c *Constraint) ConstrainedColumns(evalCtx *eval.Context) int {
 
 // Prefix returns the length of the longest prefix of columns for which all the
 // spans have the same start and end values. For example:
-//   /a/b/c: [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]
+//
+//	/a/b/c: [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]
+//
 // has prefix 2.
 //
 // Note that Prefix returns a value that is greater than or equal to the value
 // returned by ExactPrefix. For example:
-//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8] -> ExactPrefix = 1, Prefix = 1
-//   /a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3] -> ExactPrefix = 1, Prefix = 3
+//
+//	/a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8] -> ExactPrefix = 1, Prefix = 1
+//	/a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3] -> ExactPrefix = 1, Prefix = 3
 func (c *Constraint) Prefix(evalCtx *eval.Context) int {
 	if c.IsContradiction() {
 		return 0
@@ -632,10 +641,13 @@ func (c *Constraint) Prefix(evalCtx *eval.Context) int {
 // constant by the constraint.
 //
 // For example, in this constraint, columns a and c are constant:
-//   /a/b/c: [/1/1/1 - /1/1/1] [/1/4/1 - /1/4/1]
+//
+//	/a/b/c: [/1/1/1 - /1/1/1] [/1/4/1 - /1/4/1]
 //
 // However, none of the columns in this constraint are constant:
-//   /a/b: [/1/1 - /2/1] [/3/1 - /3/1]
+//
+//	/a/b: [/1/1 - /2/1] [/3/1 - /3/1]
+//
 // Even though column b might appear to be constant, the first span allows
 // column b to take on any value. For example, a=1 and b=100 is contained in
 // the first span.
@@ -737,6 +749,7 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *eval.Context) opt.ColSet {
 //     specify any nulls.
 //  2. All spans cover all the columns of the index and have equal start and
 //     end keys up to but not necessarily including the last column.
+//
 // TODO(asubiotto): The only reason to extract this is that both the heuristic
 // planner and optimizer need this logic, due to the heuristic planner planning
 // mutations. Once the optimizer plans mutations, this method can go away.

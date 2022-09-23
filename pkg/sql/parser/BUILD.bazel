@@ -55,6 +55,7 @@ go_test(
         "scanner_test.go",
         ":gen-helpmap-test",  # keep
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":parser"],
     deps = [

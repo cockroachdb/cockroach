@@ -29,6 +29,7 @@ import {
   terminateQueryAction,
   terminateSessionAction,
 } from "src/redux/sessions/sessionsSagas";
+import { setTimeScale } from "src/redux/timeScale";
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
 
@@ -63,6 +64,7 @@ const SessionDetailsPageConnected = withRouter(
       cancelQuery: terminateQueryAction,
       refreshNodes: refreshNodes,
       refreshNodesLiveness: refreshLiveness,
+      setTimeScale,
     },
   )(SessionDetails),
 );

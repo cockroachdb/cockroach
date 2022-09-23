@@ -158,7 +158,7 @@ describe("flattenStatementStats", () => {
         key: {
           key_data: {
             query:
-              "INSERT INTO system.public.lease(\"descID\", version, \"nodeID\", expiration) VALUES ('1232', '111', __more2__)",
+              "INSERT INTO system.public.lease(\"descID\", version, \"nodeID\", expiration) VALUES ('1232', '111', __more1_10__)",
             query_summary:
               'INSERT INTO system.public.lease("descID", versi...)',
             app: "test_summary",

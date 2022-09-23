@@ -483,10 +483,16 @@ type ShowGrants struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShowGrants) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW GRANTS")
+	ctx.WriteString("SHOW ")
+	if node.Targets != nil && node.Targets.System {
+		ctx.WriteString("SYSTEM ")
+	}
+	ctx.WriteString("GRANTS")
 	if node.Targets != nil {
-		ctx.WriteString(" ON ")
-		ctx.FormatNode(node.Targets)
+		if !node.Targets.System {
+			ctx.WriteString(" ON ")
+			ctx.FormatNode(node.Targets)
+		}
 	}
 	if node.Grantees != nil {
 		ctx.WriteString(" FOR ")

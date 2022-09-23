@@ -7,6 +7,7 @@ go_library(
         "api.go",
         "context.go",
         "doc.go",
+        "parser.go",
         "sql.go",
         "statement_diag.go",
         "statements_value.go",
@@ -30,6 +31,7 @@ go_library(
         "//pkg/sql/sqlfsm",
         "//pkg/util/envutil",
         "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_knz_go_libedit//:go-libedit",
     ],
@@ -42,6 +44,7 @@ go_test(
         "sql_internal_test.go",
         "sql_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":clisqlshell"],
     deps = [

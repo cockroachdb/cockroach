@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func initWindowBuiltins() {
+func init() {
 	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range windows {
 		if v.props.Class != tree.WindowClass {
@@ -511,7 +511,8 @@ func (w *denseRankWindow) Reset(context.Context) {
 func (w *denseRankWindow) Close(context.Context, *eval.Context) {}
 
 // percentRankWindow computes the relative rank of the current row using:
-//   (rank - 1) / (total rows - 1)
+//
+//	(rank - 1) / (total rows - 1)
 type percentRankWindow struct {
 	peerRes *tree.DFloat
 }
@@ -545,7 +546,8 @@ func (w *percentRankWindow) Reset(context.Context) {
 func (w *percentRankWindow) Close(context.Context, *eval.Context) {}
 
 // cumulativeDistWindow computes the relative rank of the current row using:
-//   (number of rows preceding or peer with current row) / (total rows)
+//
+//	(number of rows preceding or peer with current row) / (total rows)
 type cumulativeDistWindow struct {
 	peerRes *tree.DFloat
 }

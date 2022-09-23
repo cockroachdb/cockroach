@@ -65,6 +65,9 @@ type jobMonitor struct {
 	db           *kv.DB
 	scanInterval time.Duration
 	jitterFn     func(time.Duration) time.Duration
+	testingKnobs struct {
+		updateCheckInterval time.Duration
+	}
 }
 
 func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
@@ -79,6 +82,11 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 		// Ensure schedule at startup.
 		timer.Reset(0)
 		defer timer.Stop()
+
+		updateCheckInterval := time.Minute
+		if j.testingKnobs.updateCheckInterval != 0 {
+			updateCheckInterval = j.testingKnobs.updateCheckInterval
+		}
 
 		// This loop runs every minute to check if we need to update the job schedule.
 		// We only hit the jobs table if the schedule needs to be updated due to a
@@ -97,7 +105,7 @@ func (j *jobMonitor) start(ctx context.Context, stopper *stop.Stopper) {
 				currentRecurrence = SQLStatsCleanupRecurrence.Get(&j.st.SV)
 			}
 
-			timer.Reset(time.Minute)
+			timer.Reset(updateCheckInterval)
 		}
 	})
 }

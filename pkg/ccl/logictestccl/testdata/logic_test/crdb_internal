@@ -35,6 +35,7 @@ CREATE table t2 (a STRING PRIMARY KEY) PARTITION BY LIST (a) (
 
 # Since there are no zone configurations on any of these partitions, tables,
 # or databases, these partitions inherit directly from the default config.
+skipif backup-restore
 query IITTITTTII
 SELECT * FROM crdb_internal.partitions ORDER BY table_id, index_id, name
 ----
@@ -64,6 +65,7 @@ CREATE TABLE t4 (a INT PRIMARY KEY, b INT); CREATE INDEX myt4index ON t4 (b); AL
 
 user testuser
 
+skipif backup-restore
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----

@@ -54,6 +54,7 @@ go_test(
         "statistics_test.go",
         "volatility_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":props"],
     deps = [
         "//pkg/settings/cluster",

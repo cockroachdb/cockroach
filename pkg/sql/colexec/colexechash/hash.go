@@ -55,6 +55,7 @@ func readUnaligned64(p unsafe.Pointer) uint64 {
 }
 
 // Should be a built-in for unsafe.Pointer?
+//
 //go:nosplit
 func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 	return unsafe.Pointer(uintptr(p) + x)
@@ -66,6 +67,7 @@ func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 // output depends on the input.  noescape is inlined and currently
 // compiles down to zero instructions.
 // USE CAREFULLY!
+//
 //go:nosplit
 func noescape(p unsafe.Pointer) unsafe.Pointer {
 	x := uintptr(p)

@@ -110,7 +110,8 @@ func RowModuloFn(modulo int) GenValueFn {
 
 // IntToEnglish returns an English (pilot style) string for the given integer,
 // for example:
-//   IntToEnglish(135) = "one-three-five"
+//
+//	IntToEnglish(135) = "one-three-five"
 func IntToEnglish(val int) string {
 	if val < 0 {
 		panic(val)

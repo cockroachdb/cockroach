@@ -16,7 +16,7 @@ type Op interface {
 }
 
 // Type represents the type of operation for an Op. Ops can be grouped into the
-// the same Stage only if they share a type.
+// same Stage only if they share a type.
 type Type int
 
 //go:generate stringer -type=Type
@@ -30,6 +30,13 @@ const (
 	// ValidationType represents constraint and unique index validations
 	// performed using internal queries.
 	ValidationType
+
+	maxType int = iota - 1
 )
+
+// IsValid is true if the Type has a valid value.
+func (t Type) IsValid() bool {
+	return t > 0 && t <= Type(maxType)
+}
 
 type baseOp struct{}

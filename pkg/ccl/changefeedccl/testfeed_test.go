@@ -55,16 +55,41 @@ import (
 )
 
 type sinklessFeedFactory struct {
-	s    serverutils.TestTenantInterface
-	sink url.URL
+	s           serverutils.TestTenantInterface
+	sink        url.URL
+	sinkForUser sinkForUser
 }
 
 // makeSinklessFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeSinklessFeedFactory(
-	s serverutils.TestTenantInterface, sink url.URL,
+	s serverutils.TestTenantInterface, sink url.URL, sinkForUser sinkForUser,
 ) cdctest.TestFeedFactory {
-	return &sinklessFeedFactory{s: s, sink: sink}
+	return &sinklessFeedFactory{s: s, sink: sink, sinkForUser: sinkForUser}
+}
+
+func (f *sinklessFeedFactory) AsUser(user string, fn func()) error {
+	prevSink := f.sink
+	password := `hunter2`
+	if err := setPassword(user, password, f.sink); err != nil {
+		return err
+	}
+	defer func() { f.sink = prevSink }()
+	var cleanup func()
+	f.sink, cleanup = f.sinkForUser(user, password)
+	fn()
+	cleanup()
+	return nil
+}
+
+func setPassword(user, password string, uri url.URL) error {
+	rootDB, err := gosql.Open("postgres", uri.String())
+	if err != nil {
+		return err
+	}
+	defer rootDB.Close()
+	_, err = rootDB.Exec(fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
+	return err
 }
 
 // Feed implements the TestFeedFactory interface
@@ -602,20 +627,59 @@ func (di *depInjector) getJobFeed(jobID jobspb.JobID) *jobFeed {
 }
 
 type enterpriseFeedFactory struct {
-	s  serverutils.TestTenantInterface
-	di *depInjector
-	db *gosql.DB
+	s      serverutils.TestTenantInterface
+	di     *depInjector
+	db     *gosql.DB
+	rootDB *gosql.DB
+}
+
+func (e *enterpriseFeedFactory) jobsTableConn() *gosql.DB {
+	if e.rootDB == nil {
+		return e.db
+	}
+	return e.rootDB
+}
+
+// AsUser uses the previous (assumed to be root) connection to ensure
+// the user has the ability to authenticate, and saves it to poll
+// job status, then implements TestFeedFactory.AsUser().
+func (e *enterpriseFeedFactory) AsUser(user string, fn func()) error {
+	prevDB := e.db
+	e.rootDB = e.db
+	defer func() { e.db = prevDB }()
+	password := `password`
+	_, err := e.rootDB.Exec(fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
+	if err != nil {
+		return err
+	}
+	pgURL := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   e.s.SQLAddr(),
+		Path:   `d`,
+	}
+	db2, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		return err
+	}
+	defer db2.Close()
+	e.db = db2
+	fn()
+	return nil
 }
 
 func (e enterpriseFeedFactory) startFeedJob(f *jobFeed, create string, args ...interface{}) error {
 	log.Infof(context.Background(), "Starting feed job: %q", create)
 	e.di.prepareJob(f)
 	if err := e.db.QueryRow(create, args...).Scan(&f.jobID); err != nil {
+		e.di.pendingJob = nil
 		return err
 	}
 	e.di.startJob(f)
 	return nil
 }
+
+type sinkForUser func(username string, password ...string) (uri url.URL, cleanup func())
 
 type tableFeedFactory struct {
 	enterpriseFeedFactory
@@ -665,7 +729,7 @@ func (f *tableFeedFactory) Feed(
 	}
 
 	c := &tableFeed{
-		jobFeed:        newJobFeed(f.db, wrapSink),
+		jobFeed:        newJobFeed(f.jobsTableConn(), wrapSink),
 		ss:             ss,
 		seenTrackerMap: make(map[string]struct{}),
 		sinkDB:         sinkDB,
@@ -832,6 +896,16 @@ func (f *cloudFeedFactory) Feed(
 	if createStmt.SinkURI != nil {
 		return nil, errors.Errorf(`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
 	}
+
+	if createStmt.Select != nil {
+		createStmt.Options = append(createStmt.Options,
+			// Normally, cloud storage requires key_in_value; but if we use bare envelope,
+			// this option is not required.  However, we need it to make this
+			// test feed work -- so, set it.
+			tree.KVOption{Key: changefeedbase.OptKeyInValue},
+		)
+	}
+
 	feedDir := strconv.Itoa(f.feedIdx)
 	f.feedIdx++
 	sinkURI := `experimental-nodelocal://0/` + feedDir
@@ -853,10 +927,11 @@ func (f *cloudFeedFactory) Feed(
 	}
 
 	c := &cloudFeed{
-		jobFeed:        newJobFeed(f.db, wrapSink),
+		jobFeed:        newJobFeed(f.jobsTableConn(), wrapSink),
 		ss:             ss,
 		seenTrackerMap: make(map[string]struct{}),
 		dir:            feedDir,
+		isBare:         createStmt.Select != nil,
 	}
 	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
 		return nil, err
@@ -877,8 +952,9 @@ type cloudFeedEntry struct {
 type cloudFeed struct {
 	*jobFeed
 	seenTrackerMap
-	ss  *sinkSynchronizer
-	dir string
+	ss     *sinkSynchronizer
+	dir    string
+	isBare bool
 
 	resolved string
 	rows     []cloudFeedEntry
@@ -913,21 +989,53 @@ func reformatJSON(j interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// extractKeyFromJSONValue extracts the `WITH key_in_value` key from a `WITH
-// format=json, envelope=wrapped` value.
-func extractKeyFromJSONValue(wrapped []byte) (key []byte, value []byte, _ error) {
+func extractFieldFromJSONValue(
+	fieldName string, isBare bool, wrapped []byte,
+) (field gojson.RawMessage, value []byte, err error) {
 	parsed := make(map[string]gojson.RawMessage)
+
 	if err := gojson.Unmarshal(wrapped, &parsed); err != nil {
 		return nil, nil, err
 	}
-	keyParsed := parsed[`key`]
-	delete(parsed, `key`)
 
-	var err error
-	if key, err = reformatJSON(keyParsed); err != nil {
+	if isBare {
+		meta := make(map[string]gojson.RawMessage)
+		if metaVal, haveMeta := parsed[jsonMetaSentinel]; haveMeta {
+			if err := gojson.Unmarshal(metaVal, &meta); err != nil {
+				return nil, nil, err
+			}
+			field = meta[fieldName]
+			delete(meta, fieldName)
+			if len(meta) == 0 {
+				delete(parsed, jsonMetaSentinel)
+			} else {
+				if metaVal, err = reformatJSON(meta); err != nil {
+					return nil, nil, err
+				}
+				parsed[jsonMetaSentinel] = metaVal
+			}
+		}
+	} else {
+		field = parsed[fieldName]
+		delete(parsed, fieldName)
+	}
+
+	if value, err = reformatJSON(parsed); err != nil {
 		return nil, nil, err
 	}
-	if value, err = reformatJSON(parsed); err != nil {
+	return field, value, nil
+}
+
+// extractKeyFromJSONValue extracts the `WITH key_in_value` key from a `WITH
+// format=json, envelope=wrapped` value.
+func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []byte, err error) {
+	var keyParsed gojson.RawMessage
+	keyParsed, value, err = extractFieldFromJSONValue("key", isBare, wrapped)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if key, err = reformatJSON(keyParsed); err != nil {
 		return nil, nil, err
 	}
 	return key, value, nil
@@ -963,7 +1071,7 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 					//
 					// TODO(dan): Leave the key in the value if the TestFeed user
 					// specifically requested it.
-					if m.Key, m.Value, err = extractKeyFromJSONValue(m.Value); err != nil {
+					if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
 						return nil, err
 					}
 					if isNew := c.markSeen(m); !isNew {
@@ -1330,7 +1438,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 	}
 
 	c := &kafkaFeed{
-		jobFeed:        newJobFeed(k.db, wrapSink),
+		jobFeed:        newJobFeed(k.jobsTableConn(), wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		source:         feedCh,
 		tg:             tg,
@@ -1467,7 +1575,12 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 
 	// required value
 	createStmt.Options = append(createStmt.Options, tree.KVOption{Key: changefeedbase.OptTopicInValue})
-
+	if createStmt.Select != nil {
+		// Normally, webhook requires key_in_value; but if we use bare envelope,
+		// this option is not required.  However, we need it to make this
+		// test feed work -- so, set it.
+		createStmt.Options = append(createStmt.Options, tree.KVOption{Key: changefeedbase.OptKeyInValue})
+	}
 	var sinkDest *cdctest.MockWebhookSink
 
 	cert, _, err := cdctest.NewCACertBase64Encoded()
@@ -1510,9 +1623,10 @@ func (f *webhookFeedFactory) Feed(create string, args ...interface{}) (cdctest.T
 	}
 
 	c := &webhookFeed{
-		jobFeed:        newJobFeed(f.db, wrapSink),
+		jobFeed:        newJobFeed(f.jobsTableConn(), wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
+		isBare:         createStmt.Select != nil,
 		mockSink:       sinkDest,
 	}
 	if err := f.startFeedJob(c.jobFeed, createStmt.String(), args...); err != nil {
@@ -1530,6 +1644,7 @@ type webhookFeed struct {
 	*jobFeed
 	seenTrackerMap
 	ss       *sinkSynchronizer
+	isBare   bool
 	mockSink *cdctest.MockWebhookSink
 }
 
@@ -1552,17 +1667,15 @@ func isResolvedTimestamp(message []byte) (bool, error) {
 
 // extractTopicFromJSONValue extracts the `WITH topic_in_value` topic from a `WITH
 // format=json, envelope=wrapped` value.
-func extractTopicFromJSONValue(wrapped []byte) (topic string, value []byte, _ error) {
-	parsedValue := make(map[string]gojson.RawMessage)
-	if err := gojson.Unmarshal(wrapped, &parsedValue); err != nil {
+func extractTopicFromJSONValue(
+	isBare bool, wrapped []byte,
+) (topic string, value []byte, err error) {
+	var topicRaw gojson.RawMessage
+	topicRaw, value, err = extractFieldFromJSONValue("topic", isBare, wrapped)
+	if err != nil {
 		return "", nil, err
 	}
-	if err := gojson.Unmarshal(parsedValue[`topic`], &topic); err != nil {
-		return "", nil, err
-	}
-	delete(parsedValue, `topic`)
-	var err error
-	if value, err = reformatJSON(parsedValue); err != nil {
+	if err := gojson.Unmarshal(topicRaw, &topic); err != nil {
 		return "", nil, err
 	}
 	return topic, value, nil
@@ -1575,7 +1688,12 @@ type webhookSinkTestfeedPayload struct {
 
 // extractValueFromJSONMessage extracts the value of the first element of
 // the payload array from an webhook sink JSON message.
-func extractValueFromJSONMessage(message []byte) ([]byte, error) {
+func extractValueFromJSONMessage(message []byte) (val []byte, err error) {
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "message was '%s'", message)
+		}
+	}()
 	var parsed webhookSinkTestfeedPayload
 	if err := gojson.Unmarshal(message, &parsed); err != nil {
 		return nil, err
@@ -1585,7 +1703,6 @@ func extractValueFromJSONMessage(message []byte) ([]byte, error) {
 		return nil, fmt.Errorf("payload value in json message contains no elements")
 	}
 
-	var err error
 	var value []byte
 	if value, err = reformatJSON(keyParsed[0]); err != nil {
 		return nil, err
@@ -1617,10 +1734,10 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 						if err != nil {
 							return nil, err
 						}
-						if m.Key, m.Value, err = extractKeyFromJSONValue(wrappedValue); err != nil {
+						if m.Key, m.Value, err = extractKeyFromJSONValue(f.isBare, wrappedValue); err != nil {
 							return nil, err
 						}
-						if m.Topic, m.Value, err = extractTopicFromJSONValue(m.Value); err != nil {
+						if m.Topic, m.Value, err = extractTopicFromJSONValue(f.isBare, m.Value); err != nil {
 							return nil, err
 						}
 						if isNew := f.markSeen(m); !isNew {
@@ -1791,7 +1908,7 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 	}
 
 	c := &pubsubFeed{
-		jobFeed:        newJobFeed(p.db, wrapSink),
+		jobFeed:        newJobFeed(p.jobsTableConn(), wrapSink),
 		seenTrackerMap: make(map[string]struct{}),
 		ss:             ss,
 		client:         client,

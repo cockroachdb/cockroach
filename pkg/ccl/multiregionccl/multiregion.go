@@ -95,6 +95,12 @@ func initializeMultiRegionMetadata(
 		regionNames = append(regionNames, primaryRegion)
 	}
 
+	if secondaryRegion != catpb.RegionName(tree.SecondaryRegionNotSpecifiedName) {
+		if _, ok := seenRegions[secondaryRegion]; !ok {
+			regionNames = append(regionNames, secondaryRegion)
+		}
+	}
+
 	sort.SliceStable(regionNames, func(i, j int) bool {
 		return regionNames[i] < regionNames[j]
 	})

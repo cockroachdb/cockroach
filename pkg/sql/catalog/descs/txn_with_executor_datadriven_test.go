@@ -39,9 +39,10 @@ import (
 //
 // The commands are exec and query which take statements as input.
 // The args are:
-//  db: db name
-//  search_path: csv of strings, optional
-//  error: expected error, optional
+//
+//	db: db name
+//	search_path: csv of strings, optional
+//	error: expected error, optional
 func TestTxnWithExecutorDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

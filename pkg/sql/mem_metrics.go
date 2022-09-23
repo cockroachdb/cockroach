@@ -41,22 +41,6 @@ func (MemoryMetrics) MetricStruct() {}
 
 var _ metric.Struct = MemoryMetrics{}
 
-// TODO(knz): Until #10014 is addressed, the UI graphs don't have a
-// log scale on the Y axis and the histograms are thus displayed using
-// a manual log scale: we store the logarithm in the value in the DB
-// and plot that logarithm in the UI.
-//
-// We could, but do not, store the full value in the DB and compute
-// the log in the UI, because the current histogram implementation
-// does not deal well with large maxima (#10015).
-//
-// Since the DB stores an integer, we scale the values by 1000 so that
-// a modicum of precision is restored when exponentiating the value.
-//
-
-// log10int64times1000 = log10(math.MaxInt64) * 1000, rounded up somewhat
-const log10int64times1000 = 19 * 1000
-
 func makeMemMetricMetadata(name, help string) metric.Metadata {
 	return metric.Metadata{
 		Name:        name,
@@ -73,7 +57,7 @@ func MakeBaseMemMetrics(endpoint string, histogramWindow time.Duration) BaseMemo
 	MetaMemMaxBytes := makeMemMetricMetadata(prefix+".max", "Memory usage per sql statement for "+endpoint)
 	MetaMemCurBytes := makeMemMetricMetadata(prefix+".current", "Current sql statement memory usage for "+endpoint)
 	return BaseMemoryMetrics{
-		MaxBytesHist:  metric.NewHistogram(MetaMemMaxBytes, histogramWindow, log10int64times1000, 3),
+		MaxBytesHist:  metric.NewHistogram(MetaMemMaxBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
 		CurBytesCount: metric.NewGauge(MetaMemCurBytes),
 	}
 }
@@ -88,9 +72,9 @@ func MakeMemMetrics(endpoint string, histogramWindow time.Duration) MemoryMetric
 	MetaMemSessionCurBytes := makeMemMetricMetadata(prefix+".session.current", "Current sql session memory usage for "+endpoint)
 	return MemoryMetrics{
 		BaseMemoryMetrics:    base,
-		TxnMaxBytesHist:      metric.NewHistogram(MetaMemMaxTxnBytes, histogramWindow, log10int64times1000, 3),
+		TxnMaxBytesHist:      metric.NewHistogram(MetaMemMaxTxnBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
 		TxnCurBytesCount:     metric.NewGauge(MetaMemTxnCurBytes),
-		SessionMaxBytesHist:  metric.NewHistogram(MetaMemMaxSessionBytes, histogramWindow, log10int64times1000, 3),
+		SessionMaxBytesHist:  metric.NewHistogram(MetaMemMaxSessionBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
 		SessionCurBytesCount: metric.NewGauge(MetaMemSessionCurBytes),
 	}
 

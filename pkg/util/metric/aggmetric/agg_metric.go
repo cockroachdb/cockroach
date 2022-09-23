@@ -51,9 +51,9 @@ func (b Builder) Counter(metadata metric.Metadata) *AggCounter {
 
 // Histogram constructs a new AggHistogram with the Builder's labels.
 func (b Builder) Histogram(
-	metadata metric.Metadata, duration time.Duration, maxVal int64, sigFigs int,
+	metadata metric.Metadata, duration time.Duration, buckets []float64,
 ) *AggHistogram {
-	return NewHistogram(metadata, duration, maxVal, sigFigs, b.labels...)
+	return NewHistogram(metadata, duration, buckets, b.labels...)
 }
 
 type childSet struct {

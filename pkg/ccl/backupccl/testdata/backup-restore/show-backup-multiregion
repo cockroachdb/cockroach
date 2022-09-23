@@ -1,0 +1,41 @@
+# These tests validate the SHOW BACKUP command for multi-region databases.
+
+new-server name=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1
+----
+
+exec-sql
+CREATE DATABASE d PRIMARY REGION "us-east-1" REGIONS "us-west-1", "eu-central-1";
+CREATE TABLE d.t (x INT);
+INSERT INTO d.t VALUES (1), (2), (3);
+----
+
+exec-sql
+CREATE DATABASE foo;
+CREATE TABLE foo.t (x INT);
+INSERT INTO foo.t VALUES (1), (2), (3);
+----
+
+exec-sql
+BACKUP DATABASE d, foo INTO 'nodelocal://1/database_backup/';
+----
+
+query-sql
+SELECT object_name, regions FROM [SELECT * FROM [SHOW BACKUP LATEST IN 'nodelocal://1/database_backup/'] WHERE object_type='database'];
+----
+d ALTER DATABASE d SET PRIMARY REGION "us-east-1"; ALTER DATABASE d ADD REGION "eu-central-1"; ALTER DATABASE d ADD REGION "us-west-1";
+foo <nil>
+
+# Here we copied the output of SHOW BACKUP to see if it creates an identical multi-region database.
+
+exec-sql
+DROP DATABASE d CASCADE;
+CREATE DATABASE d;
+ALTER DATABASE d SET PRIMARY REGION "us-east-1"; ALTER DATABASE d ADD REGION "eu-central-1"; ALTER DATABASE d ADD REGION "us-west-1";
+----
+
+query-sql
+SELECT * FROM [SHOW REGIONS FROM DATABASE d] ORDER BY region;
+----
+d eu-central-1 false false {eu-central-1}
+d us-east-1 true false {us-east1}
+d us-west-1 false false {us-west1}

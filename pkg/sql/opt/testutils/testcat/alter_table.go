@@ -26,9 +26,8 @@ import (
 // AlterTable is a partial implementation of the ALTER TABLE statement.
 //
 // Supported commands:
-//  - INJECT STATISTICS: imports table statistics from a JSON object.
-//  - ADD CONSTRAINT FOREIGN KEY: add a foreign key reference.
-//
+//   - INJECT STATISTICS: imports table statistics from a JSON object.
+//   - ADD CONSTRAINT FOREIGN KEY: add a foreign key reference.
 func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 	tn := stmt.Table.ToTableName()
 	// Update the table name to include catalog and schema if not provided.

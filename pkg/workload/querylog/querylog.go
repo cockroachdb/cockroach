@@ -17,7 +17,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -600,7 +599,7 @@ const (
 
 // parseFile parses the file one line at a time. First queryLogHeaderLines are
 // skipped, and all other lines are expected to match the pattern of re.
-func (w *querylog) parseFile(ctx context.Context, fileInfo os.FileInfo, re *regexp.Regexp) error {
+func (w *querylog) parseFile(ctx context.Context, fileInfo os.DirEntry, re *regexp.Regexp) error {
 	start := timeutil.Now()
 	file, err := os.Open(w.dirPath + "/" + fileInfo.Name())
 	if err != nil {
@@ -682,7 +681,7 @@ func (w *querylog) processQueryLog(ctx context.Context) error {
 		log.Infof(ctx, "Unzipping to %s is complete", w.dirPath)
 	}
 
-	files, err := ioutil.ReadDir(w.dirPath)
+	files, err := os.ReadDir(w.dirPath)
 	if err != nil {
 		return err
 	}

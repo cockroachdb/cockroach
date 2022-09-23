@@ -24,6 +24,7 @@ go_test(
     name = "lexbase_test",
     size = "small",
     srcs = ["encode_test.go"],
+    args = ["-test.timeout=55s"],
     deps = [
         ":lexbase",
         "//pkg/sql/parser",

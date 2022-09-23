@@ -22,6 +22,7 @@ go_test(
         "schemachanger_test.go",
         ":test_gen",  # keep
     ],
+    args = ["-test.timeout=895s"],
     data = [":testdata"],
     shard_count = 16,
     deps = [

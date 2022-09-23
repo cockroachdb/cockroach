@@ -665,7 +665,12 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	found := errors.New(``)
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
-			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */)
+			it, err := storage.NewMemSSTIterator(file.SST, false /* verify */, storage.IterOptions{
+				// NB: We assume there will be no MVCC range tombstones here.
+				KeyTypes:   storage.IterKeyTypePointsOnly,
+				LowerBound: keys.MinKey,
+				UpperBound: keys.MaxKey,
+			})
 			if err != nil {
 				return err
 			}

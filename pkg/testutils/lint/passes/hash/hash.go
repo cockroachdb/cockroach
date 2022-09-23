@@ -34,7 +34,7 @@ var Analyzer = &analysis.Analyzer{
 // mistake is to assume that the Sum function returns the hash of its input,
 // like so:
 //
-//     hashedBytes := sha256.New().Sum(inputBytes)
+//	hashedBytes := sha256.New().Sum(inputBytes)
 //
 // In fact, the parameter to Sum is not the bytes to be hashed, but a slice that
 // will be used as output in case the caller wants to avoid an allocation. In
@@ -43,14 +43,14 @@ var Analyzer = &analysis.Analyzer{
 //
 // Correct uses of the hash.Hash interface are as follows:
 //
-//     h := sha256.New()
-//     h.Write(inputBytes)
-//     hashedBytes := h.Sum(nil)
+//	h := sha256.New()
+//	h.Write(inputBytes)
+//	hashedBytes := h.Sum(nil)
 //
-//     h := sha256.New()
-//     h.Write(inputBytes)
-//     var hashedBytes [sha256.Size]byte
-//     h.Sum(hashedBytes[:0])
+//	h := sha256.New()
+//	h.Write(inputBytes)
+//	var hashedBytes [sha256.Size]byte
+//	h.Sum(hashedBytes[:0])
 //
 // To differentiate between correct and incorrect usages, hashChecker applies a
 // simple heuristic: it flags calls to Sum where a) the parameter is non-nil and

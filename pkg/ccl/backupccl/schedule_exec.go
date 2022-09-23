@@ -439,7 +439,9 @@ func unlinkDependentSchedule(
 
 	// Clear the DependentID field since we are dropping the record associated
 	// with it.
+	// TODO(benbardin): Resolve https://github.com/cockroachdb/cockroach/issues/87435 as well.
 	dependentArgs.DependentScheduleID = 0
+	dependentArgs.UnpauseOnSuccess = 0
 	any, err := pbtypes.MarshalAny(dependentArgs)
 	if err != nil {
 		return err

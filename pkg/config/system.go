@@ -362,7 +362,7 @@ func DecodeKeyIntoZoneIDAndSuffix(
 	if !ok {
 		// Not in the structured data namespace.
 		objectID = keys.RootNamespaceID
-	} else if objectID <= keys.SystemDatabaseID || isPseudoTableID(uint32(objectID)) {
+	} else if objectID <= keys.SystemDatabaseID || keys.IsPseudoTableID(uint32(objectID)) {
 		// Pseudo-table ids should be considered to be a part of the
 		// system database as they aren't real tables.
 		objectID = keys.SystemDatabaseID
@@ -385,16 +385,6 @@ func DecodeKeyIntoZoneIDAndSuffix(
 	return objectID, keySuffix
 }
 
-// isPseudoTableID returns true if id is in keys.PseudoTableIDs.
-func isPseudoTableID(id uint32) bool {
-	for _, pseudoTableID := range keys.PseudoTableIDs {
-		if id == pseudoTableID {
-			return true
-		}
-	}
-	return false
-}
-
 // GetZoneConfigForObject returns the combined zone config for the given object
 // identifier and SQL codec.
 //
@@ -410,6 +400,22 @@ func (s *SystemConfig) GetZoneConfigForObject(
 		return nil, err
 	}
 	return entry.combined, nil
+}
+
+// PurgeZoneConfigCache allocates a new zone config cache in this system config
+// so that tables with stale zone config information could have this info
+// looked up from using the most up-to-date zone config the next time it's
+// requested. Note, this function is only intended to be called during test
+// execution, such as logic tests.
+func (s *SystemConfig) PurgeZoneConfigCache() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.mu.zoneCache) != 0 {
+		s.mu.zoneCache = map[ObjectID]zoneEntry{}
+	}
+	if len(s.mu.shouldSplitCache) != 0 {
+		s.mu.shouldSplitCache = map[ObjectID]bool{}
+	}
 }
 
 // getZoneEntry returns the zone entry for the given system-tenant

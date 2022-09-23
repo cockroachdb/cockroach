@@ -417,11 +417,30 @@ func upgradeNodes(
 			newVersionMsg = "<current>"
 		}
 		t.L().Printf("restarting node %d into version %s", node, newVersionMsg)
-		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(node))
+		// Stop the cockroach process gracefully in order to drain it properly.
+		// This makes the upgrade closer to how users do it in production, but
+		// it's also needed to eliminate flakiness. In particular, this will
+		// make sure that DistSQL draining information is dissipated through
+		// gossip so that other nodes running an older version don't consider
+		// this upgraded node for DistSQL plans (see #87154 for more details).
+		// TODO(yuzefovich): ideally, we would also check that the drain was
+		// successful since if it wasn't, then we might see flakes too.
+		if err := c.StopCockroachGracefullyOnNode(ctx, t.L(), node); err != nil {
+			t.Fatal(err)
+		}
 
 		binary := uploadVersion(ctx, t, c, c.Node(node), newVersion)
 		settings := install.MakeClusterSettings(install.BinaryOption(binary))
 		c.Start(ctx, t.L(), startOpts, settings, c.Node(node))
+
+		// We have seen cases where a transient error could occur when this
+		// newly upgraded node serves as a gateway for a distributed query due
+		// to remote nodes not being able to dial back to the gateway for some
+		// reason (investigation of it is tracked in #87634). For now, we're
+		// papering over these flakes by this sleep. For more context, see
+		// #87104.
+		// TODO(yuzefovich): remove this sleep once #87634 is fixed.
+		time.Sleep(4 * time.Second)
 	}
 }
 

@@ -29,7 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -76,6 +78,11 @@ type sessionVar struct {
 	// Get returns a string representation of a given variable to be used
 	// either by SHOW or in the pg_catalog table.
 	Get func(evalCtx *extendedEvalContext, kv *kv.Txn) (string, error)
+
+	// Exists returns true if this custom session option exists in the current
+	// context. It's needed to support the current_setting builtin for custom
+	// options. It is only defined for custom options.
+	Exists func(evalCtx *extendedEvalContext, kv *kv.Txn) bool
 
 	// GetFromSessionData returns a string representation of a given variable to
 	// be used by BufferParamStatus. This is only required if the variable
@@ -1880,6 +1887,69 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`join_reader_no_ordering_strategy_batch_size`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			size, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			if size <= 0 {
+				return errors.New("join_reader_no_ordering_strategy_batch_size can only be set to a positive value")
+			}
+			m.SetJoinReaderNoOrderingStrategyBatchSize(size)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderNoOrderingStrategyBatchSize)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return string(humanizeutil.IBytes(rowexec.JoinReaderNoOrderingStrategyBatchSize.Get(sv)))
+		},
+	},
+
+	// CockroachDB extension.
+	`join_reader_index_join_strategy_batch_size`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			size, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			if size <= 0 {
+				return errors.New("join_reader_index_join_strategy_batch_size can only be set to a positive value")
+			}
+			m.SetJoinReaderIndexJoinStrategyBatchSize(size)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(humanizeutil.IBytes(evalCtx.SessionData().JoinReaderIndexJoinStrategyBatchSize)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return string(humanizeutil.IBytes(execinfra.JoinReaderIndexJoinStrategyBatchSize.Get(sv)))
+		},
+	},
+
+	// CockroachDB extension.
+	`index_join_streamer_batch_size`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			size, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			if size <= 0 {
+				return errors.New("index_join_streamer_batch_size can only be set to a positive value")
+			}
+			m.SetIndexJoinStreamerBatchSize(size)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(humanizeutil.IBytes(evalCtx.SessionData().IndexJoinStreamerBatchSize)), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return string(humanizeutil.IBytes(colfetcher.IndexJoinStreamerBatchSize.Get(sv)))
+		},
+	},
+
+	// CockroachDB extension.
 	`parallelize_multi_key_lookup_joins_enabled`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`parallelize_multi_key_lookup_joins_enabled`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
@@ -2542,6 +2612,10 @@ func getCustomOptionSessionVar(varName string) (sv sessionVar, isCustom bool) {
 				}
 				return v, nil
 			},
+			Exists: func(evalCtx *extendedEvalContext, _ *kv.Txn) bool {
+				_, ok := evalCtx.SessionData().CustomOptions[varName]
+				return ok
+			},
 			Set: func(ctx context.Context, m sessionDataMutator, val string) error {
 				// TODO(#72026): do some memory accounting.
 				m.SetCustomOption(varName, val)
@@ -2563,6 +2637,11 @@ func (p *planner) GetSessionVar(
 	ok, v, err := getSessionVar(name, missingOk)
 	if err != nil || !ok {
 		return ok, "", err
+	}
+	if existsFn := v.Exists; existsFn != nil {
+		if missingOk && !existsFn(&p.extendedEvalCtx, p.Txn()) {
+			return false, "", nil
+		}
 	}
 	val, err := v.Get(&p.extendedEvalCtx, p.Txn())
 	return true, val, err

@@ -33,23 +33,22 @@ import (
 // TestDataDriven is a data-driven test for spanconfig.Limiter. It offers the
 // following commands:
 //
-// - "initialize" tenant=<int>
-//   Initialize a secondary tenant with the given ID.
+//   - "initialize" tenant=<int>
+//     Initialize a secondary tenant with the given ID.
 //
-// - "exec-sql" [tenant=<int>]
-//   Executes the input SQL query for the given tenant. All statements are
-//   executed in a single transaction.
+//   - "exec-sql" [tenant=<int>]
+//     Executes the input SQL query for the given tenant. All statements are
+//     executed in a single transaction.
 //
-// - "query-sql" [tenant=<int>] [retry]
-//   Executes the input SQL query for the given tenant and print the results.
-//   If retry is specified and the expected results do not match the actual
-//   results, the query will be retried under a testutils.SucceedsSoon block.
-//   If run with -rewrite, we insert a 500ms sleep before executing the query
-//   once.
+//   - "query-sql" [tenant=<int>] [retry]
+//     Executes the input SQL query for the given tenant and print the results.
+//     If retry is specified and the expected results do not match the actual
+//     results, the query will be retried under a testutils.SucceedsSoon block.
+//     If run with -rewrite, we insert a 500ms sleep before executing the query
+//     once.
 //
-// - override limit=<int>
-//   Override the span limit each tenant is configured with.
-//
+//   - override limit=<int>
+//     Override the span limit each tenant is configured with.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

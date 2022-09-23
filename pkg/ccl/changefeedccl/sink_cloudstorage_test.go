@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -95,7 +94,7 @@ func TestCloudStorageSink(t *testing.T) {
 		var folders []string
 
 		hasChildDirs := func(path string) bool {
-			files, err := ioutil.ReadDir(path)
+			files, err := os.ReadDir(path)
 			if err != nil {
 				return false
 			}
@@ -163,14 +162,20 @@ func TestCloudStorageSink(t *testing.T) {
 		// NB: compression added in single-node subtest.
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
-	e, err := makeJSONEncoder(opts, changefeedbase.Targets{})
+	e, err := makeJSONEncoder(opts)
 	require.NoError(t, err)
 
 	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
 	externalStorageFromURI := func(ctx context.Context, uri string, user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage,
 		error) {
 		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
-			clientFactory, user, nil, nil, nil, opts...)
+			clientFactory,
+			user,
+			nil, /* ie */
+			nil, /* cf */
+			nil, /* kvDB */
+			nil, /* limiters */
+			opts...)
 	}
 
 	user := username.RootUserName()

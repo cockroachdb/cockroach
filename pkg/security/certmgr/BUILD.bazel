@@ -30,6 +30,7 @@ go_test(
         "self_signed_cert_test.go",
         ":mocks_certmgr",  # keep
     ],
+    args = ["-test.timeout=295s"],
     embed = [":certmgr"],
     deps = [
         "//pkg/testutils",

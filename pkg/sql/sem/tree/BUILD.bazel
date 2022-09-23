@@ -105,6 +105,7 @@ go_library(
         "typing.go",
         "udf.go",
         "union.go",
+        "unlisten.go",
         "unsupported_error.go",
         "update.go",
         "values.go",
@@ -183,6 +184,7 @@ go_test(
         "function_name_test.go",
         "indexed_vars_test.go",
         "interval_test.go",
+        "json_test.go",
         "main_test.go",
         "name_part_test.go",
         "name_resolution_test.go",
@@ -201,6 +203,7 @@ go_test(
         "udf_test.go",
         "var_expr_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + ["//pkg/sql/parser:sql.y"],
     embed = [":tree"],
     deps = [

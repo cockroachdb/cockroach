@@ -20,7 +20,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_DROPPED),
-			to(scpb.Status_OFFLINE,
+			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.Schema) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
@@ -28,17 +28,16 @@ func init() {
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.Schema) *scop.MarkDescriptorAsPublic {
 					return &scop.MarkDescriptorAsPublic{
-						DescID: this.SchemaID,
+						DescriptorID: this.SchemaID,
 					}
 				}),
 			),
 		),
 		toAbsent(scpb.Status_PUBLIC,
-			to(scpb.Status_OFFLINE,
-				emit(func(this *scpb.Schema, md *targetsWithElementMap) *scop.MarkDescriptorAsOffline {
-					return &scop.MarkDescriptorAsOffline{
-						DescID: this.SchemaID,
-						Reason: statementForDropJob(this, md).Statement,
+			to(scpb.Status_TXN_DROPPED,
+				emit(func(this *scpb.Schema, md *targetsWithElementMap) *scop.MarkDescriptorAsSyntheticallyDropped {
+					return &scop.MarkDescriptorAsSyntheticallyDropped{
+						DescriptorID: this.SchemaID,
 					}
 				}),
 			),
@@ -46,7 +45,7 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.Schema) *scop.MarkDescriptorAsDropped {
 					return &scop.MarkDescriptorAsDropped{
-						DescID: this.SchemaID,
+						DescriptorID: this.SchemaID,
 					}
 				}),
 			),

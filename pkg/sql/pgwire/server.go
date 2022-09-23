@@ -292,11 +292,13 @@ func makeServerMetrics(
 	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
 ) ServerMetrics {
 	return ServerMetrics{
-		BytesInCount:                metric.NewCounter(MetaBytesIn),
-		BytesOutCount:               metric.NewCounter(MetaBytesOut),
-		Conns:                       metric.NewGauge(MetaConns),
-		NewConns:                    metric.NewCounter(MetaNewConns),
-		ConnLatency:                 metric.NewLatency(MetaConnLatency, histogramWindow),
+		BytesInCount:  metric.NewCounter(MetaBytesIn),
+		BytesOutCount: metric.NewCounter(MetaBytesOut),
+		Conns:         metric.NewGauge(MetaConns),
+		NewConns:      metric.NewCounter(MetaNewConns),
+		ConnLatency: metric.NewHistogram(
+			MetaConnLatency, histogramWindow, metric.IOLatencyBuckets,
+		),
 		ConnFailures:                metric.NewCounter(MetaConnFailures),
 		PGWireCancelTotalCount:      metric.NewCounter(MetaPGWireCancelTotal),
 		PGWireCancelIgnoredCount:    metric.NewCounter(MetaPGWireCancelIgnored),

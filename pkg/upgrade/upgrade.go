@@ -60,7 +60,6 @@ import (
 // [2]: pkg/clusterversion/cockroach_versions.go
 // [3]: truncatedStateMigration
 // [4]: pkg/kv/kvserver/batch_eval/cmd_migrate.go
-//
 type Upgrade interface {
 	ClusterVersion() clusterversion.ClusterVersion
 	Name() string

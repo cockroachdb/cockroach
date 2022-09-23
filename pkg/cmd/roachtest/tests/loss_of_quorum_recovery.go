@@ -293,7 +293,11 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		t.L().Printf("workload finished")
 
 		t.L().Printf("ensuring nodes are decommissioned")
-		require.NoError(t, setSnapshotRate(db, 512))
+		if err := setSnapshotRate(db, 512); err != nil {
+			// Set snapshot executes SQL query against cluster, if query failed then
+			// cluster is not healthy after recovery and that means restart failed.
+			return &recoveryImpossibleError{testOutcome: restartFailed}
+		}
 		if err := contextutil.RunWithTimeout(ctx, "decommission-removed-nodes", 5*time.Minute,
 			func(ctx context.Context) error {
 				decommissionCmd := fmt.Sprintf(

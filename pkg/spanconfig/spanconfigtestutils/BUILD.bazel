@@ -25,6 +25,7 @@ go_library(
 go_test(
     name = "spanconfigtestutils_test",
     srcs = ["utils_test.go"],
+    args = ["-test.timeout=295s"],
     embed = [":spanconfigtestutils"],
     deps = ["@com_github_stretchr_testify//require"],
 )

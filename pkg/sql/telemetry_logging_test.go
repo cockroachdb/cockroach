@@ -22,65 +22,30 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
-type stubTime struct {
-	syncutil.RWMutex
-	t time.Time
-}
-
-func (s *stubTime) setTime(t time.Time) {
-	s.RWMutex.Lock()
-	defer s.RWMutex.Unlock()
-	s.t = t
-}
-
-func (s *stubTime) TimeNow() time.Time {
-	s.RWMutex.RLock()
-	defer s.RWMutex.RUnlock()
-	return s.t
-}
-
-type stubQueryMetrics struct {
-	syncutil.RWMutex
-	contentionNanos int64
-}
-
-func (s *stubQueryMetrics) setContentionNanos(t int64) {
-	s.RWMutex.Lock()
-	defer s.RWMutex.Unlock()
-	s.contentionNanos = t
-}
-
-func (s *stubQueryMetrics) ContentionNanos() int64 {
-	s.RWMutex.RLock()
-	defer s.RWMutex.RUnlock()
-	return s.contentionNanos
-}
-
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
 // and are sampled according to the configured sample rate.
 func TestTelemetryLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 86118, "flaky test")
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
 	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
 	defer cleanup()
 
-	st := stubTime{}
-	sqm := stubQueryMetrics{}
+	st := logtestutils.StubTime{}
+	sqm := logtestutils.StubQueryStats{}
+	sts := logtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -91,7 +56,8 @@ func TestTelemetryLogging(t *testing.T) {
 			},
 			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
 				getTimeNow:         st.TimeNow,
-				getContentionNanos: sqm.ContentionNanos,
+				getQueryLevelStats: sqm.QueryLevelStats,
+				getTracingStatus:   sts.TracingStatus,
 			},
 		},
 	})
@@ -142,7 +108,8 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedRead            bool
 		expectedWrite           bool
 		expectedErr             string // Empty string means no error is expected.
-		contentionNanos         int64
+		queryLevelStats         execstats.QueryLevelStats
+		enableTracing           bool
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -162,7 +129,16 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  false,
 			expectedRead:            false,
 			expectedWrite:           false,
-			contentionNanos:         0,
+			queryLevelStats: execstats.QueryLevelStats{
+				ContentionTime:   0 * time.Nanosecond,
+				NetworkBytesSent: 1,
+				MaxMemUsage:      2,
+				MaxDiskUsage:     3,
+				KVBytesRead:      4,
+				KVRowsRead:       5,
+				NetworkMessages:  6,
+			},
+			enableTracing: false,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -180,7 +156,10 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  false,
 			expectedRead:            false,
 			expectedWrite:           false,
-			contentionNanos:         1,
+			queryLevelStats: execstats.QueryLevelStats{
+				ContentionTime: 1 * time.Nanosecond,
+			},
+			enableTracing: false,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -199,7 +178,13 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
-			contentionNanos:         2,
+			queryLevelStats: execstats.QueryLevelStats{
+				ContentionTime:   2 * time.Nanosecond,
+				NetworkBytesSent: 1,
+				MaxMemUsage:      2,
+				NetworkMessages:  6,
+			},
+			enableTracing: false,
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -217,7 +202,16 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
-			contentionNanos:         3,
+			queryLevelStats: execstats.QueryLevelStats{
+				ContentionTime:   3 * time.Nanosecond,
+				NetworkBytesSent: 1124,
+				MaxMemUsage:      132,
+				MaxDiskUsage:     3,
+				KVBytesRead:      4,
+				KVRowsRead:       2345,
+				NetworkMessages:  36,
+			},
+			enableTracing: false,
 		},
 		{
 			// Test case with a full scan.
@@ -235,7 +229,15 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
-			contentionNanos:         0,
+			queryLevelStats: execstats.QueryLevelStats{
+				ContentionTime:   0 * time.Nanosecond,
+				NetworkBytesSent: 124235,
+				MaxMemUsage:      12412,
+				MaxDiskUsage:     3,
+				KVRowsRead:       5,
+				NetworkMessages:  6235,
+			},
+			enableTracing: false,
 		},
 		{
 			// Test case with a write.
@@ -253,7 +255,14 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           true,
-			contentionNanos:         0,
+			queryLevelStats: execstats.QueryLevelStats{
+				ContentionTime:   0 * time.Nanosecond,
+				NetworkBytesSent: 1,
+				KVBytesRead:      4,
+				KVRowsRead:       5,
+				NetworkMessages:  6,
+			},
+			enableTracing: false,
 		},
 		// Not of type DML so not sampled
 		{
@@ -271,6 +280,35 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedRead:            false,
 			expectedWrite:           false,
 			expectedErr:             "a role/user named ‹root› already exists",
+			enableTracing:           false,
+		},
+		{
+			// Test case with statement that is of type DML.
+			// All statements should be logged despite not exceeding the necessary elapsed time (0.1s)
+			// due to tracing being enabled.
+			name:                    "select-with-tracing",
+			query:                   "SELECT * FROM u LIMIT 4;",
+			queryNoConstants:        "SELECT * FROM u LIMIT _",
+			execTimestampsSeconds:   []float64{10, 10.01, 10.02, 10.03, 10.04, 10.05},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".u LIMIT ‹4›`,
+			stubMaxEventFrequency:   10,
+			expectedSkipped:         []int{0, 0, 0, 0, 0, 0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        false,
+			expectedStatsAvailable:  true,
+			expectedRead:            true,
+			expectedWrite:           false,
+			queryLevelStats: execstats.QueryLevelStats{
+				ContentionTime:   2 * time.Nanosecond,
+				NetworkBytesSent: 10,
+				MaxMemUsage:      20,
+				MaxDiskUsage:     33,
+				KVBytesRead:      24,
+				KVRowsRead:       55,
+				NetworkMessages:  66,
+			},
+			enableTracing: true,
 		},
 	}
 
@@ -278,8 +316,9 @@ func TestTelemetryLogging(t *testing.T) {
 		telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
 		for _, execTimestamp := range tc.execTimestampsSeconds {
 			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
-			st.setTime(stubTime)
-			sqm.setContentionNanos(tc.contentionNanos)
+			st.SetTime(stubTime)
+			sqm.SetQueryLevelStats(tc.queryLevelStats)
+			sts.SetTracingStatus(tc.enableTracing)
 			_, err := db.DB.ExecContext(context.Background(), tc.query)
 			if err != nil && tc.expectedErr == "" {
 				t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
@@ -444,12 +483,60 @@ func TestTelemetryLogging(t *testing.T) {
 						}
 					}
 					contentionNanos := regexp.MustCompile("\"ContentionNanos\":[0-9]*")
-					if tc.contentionNanos > 0 && !contentionNanos.MatchString(e.Message) {
+					if tc.queryLevelStats.ContentionTime.Nanoseconds() > 0 && !contentionNanos.MatchString(e.Message) {
 						// If we have contention, we expect the ContentionNanos field to be populated.
 						t.Errorf("expected to find ContentionNanos but none was found")
-					} else if tc.contentionNanos == 0 && contentionNanos.MatchString(e.Message) {
+					} else if tc.queryLevelStats.ContentionTime.Nanoseconds() == 0 && contentionNanos.MatchString(e.Message) {
 						// If we do not have contention, expect no ContentionNanos field.
 						t.Errorf("expected no ContentionNanos field, but was found")
+					}
+					networkBytesSent := regexp.MustCompile("\"NetworkBytesSent\":[0-9]*")
+					if tc.queryLevelStats.NetworkBytesSent > 0 && !networkBytesSent.MatchString(e.Message) {
+						// If we have sent network bytes, we expect the NetworkBytesSent field to be populated.
+						t.Errorf("expected to find NetworkBytesSent but none was found")
+					} else if tc.queryLevelStats.NetworkBytesSent == 0 && networkBytesSent.MatchString(e.Message) {
+						// If we have not sent network bytes, expect no NetworkBytesSent field.
+						t.Errorf("expected no NetworkBytesSent field, but was found")
+					}
+					maxMemUsage := regexp.MustCompile("\"MaxMemUsage\":[0-9]*")
+					if tc.queryLevelStats.MaxMemUsage > 0 && !maxMemUsage.MatchString(e.Message) {
+						// If we have a max memory usage, we expect the MaxMemUsage field to be populated.
+						t.Errorf("expected to find MaxMemUsage but none was found")
+					} else if tc.queryLevelStats.MaxMemUsage == 0 && maxMemUsage.MatchString(e.Message) {
+						// If we do not have a max memory usage, expect no MaxMemUsage field.
+						t.Errorf("expected no MaxMemUsage field, but was found")
+					}
+					maxDiskUsage := regexp.MustCompile("\"MaxDiskUsage\":[0-9]*")
+					if tc.queryLevelStats.MaxDiskUsage > 0 && !maxDiskUsage.MatchString(e.Message) {
+						// If we have a max disk usage, we expect the MaxDiskUsage field to be populated.
+						t.Errorf("expected to find MaxDiskUsage but none was found")
+					} else if tc.queryLevelStats.MaxDiskUsage == 0 && maxDiskUsage.MatchString(e.Message) {
+						// If we do not a max disk usage, expect no MaxDiskUsage field.
+						t.Errorf("expected no MaxDiskUsage field, but was found")
+					}
+					kvBytesRead := regexp.MustCompile("\"KVBytesRead\":[0-9]*")
+					if tc.queryLevelStats.KVBytesRead > 0 && !kvBytesRead.MatchString(e.Message) {
+						// If we have read bytes from KV, we expect the KVBytesRead field to be populated.
+						t.Errorf("expected to find KVBytesRead but none was found")
+					} else if tc.queryLevelStats.KVBytesRead == 0 && kvBytesRead.MatchString(e.Message) {
+						// If we have not read bytes from KV, expect no KVBytesRead field.
+						t.Errorf("expected no KVBytesRead field, but was found")
+					}
+					kvRowsRead := regexp.MustCompile("\"KVRowsRead\":[0-9]*")
+					if tc.queryLevelStats.KVRowsRead > 0 && !kvRowsRead.MatchString(e.Message) {
+						// If we have read rows from KV, we expect the KVRowsRead field to be populated.
+						t.Errorf("expected to find KVRowsRead but none was found")
+					} else if tc.queryLevelStats.KVRowsRead == 0 && kvRowsRead.MatchString(e.Message) {
+						// If we have not read rows from KV, expect no KVRowsRead field.
+						t.Errorf("expected no KVRowsRead field, but was found")
+					}
+					networkMessages := regexp.MustCompile("\"NetworkMessages\":[0-9]*")
+					if tc.queryLevelStats.NetworkMessages > 0 && !networkMessages.MatchString(e.Message) {
+						// If we have network messages, we expect the NetworkMessages field to be populated.
+						t.Errorf("expected to find NetworkMessages but none was found")
+					} else if tc.queryLevelStats.NetworkMessages == 0 && networkMessages.MatchString(e.Message) {
+						// If we do not have network messages, expect no NetworkMessages field.
+						t.Errorf("expected no NetworkMessages field, but was found")
 					}
 					if tc.expectedErr != "" {
 						if !strings.Contains(e.Message, tc.expectedErr) {
@@ -474,7 +561,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
 	defer cleanup()
 
-	st := stubTime{}
+	st := logtestutils.StubTime{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -526,7 +613,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 		// Set the time for when we issue a query to enable/disable
 		// troubleshooting mode.
 		setTroubleshootModeTime := timeutil.FromUnixMicros(int64(idx * 1e6))
-		st.setTime(setTroubleshootModeTime)
+		st.SetTime(setTroubleshootModeTime)
 		if tc.enableTroubleshootingMode {
 			db.Exec(t, `SET troubleshooting_mode = true;`)
 		} else {
@@ -535,7 +622,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 		// Advance time 1 second from previous query. Ensure enough time has passed
 		// from when we set troubleshooting mode for this query to be sampled.
 		setQueryTime := timeutil.FromUnixMicros(int64((idx + 1) * 1e6))
-		st.setTime(setQueryTime)
+		st.SetTime(setQueryTime)
 		db.Exec(t, tc.query)
 	}
 

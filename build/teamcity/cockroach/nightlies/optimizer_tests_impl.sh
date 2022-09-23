@@ -14,8 +14,8 @@ ARTIFACTS_DIR=/artifacts/fast_int_set_large
 mkdir $ARTIFACTS_DIR
 GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 exit_status_large=0
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci --artifacts_dir $ARTIFACTS_DIR \
-    test //pkg/sql/opt:opt_test -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --artifacts_dir $ARTIFACTS_DIR -- \
+    test //pkg/sql/opt:opt_test --config=ci \
     --define gotags=bazel,crdb_test,fast_int_set_large \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE || exit_status_large=$?
 process_test_json \
@@ -34,8 +34,9 @@ ARTIFACTS_DIR=/artifacts/fast_int_set_small
 mkdir $ARTIFACTS_DIR
 GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 exit_status_small=0
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci \
-    test //pkg/sql/opt:opt_test -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --artifacts_dir $ARTIFACTS_DIR -- \
+    test --config=ci \
+    //pkg/sql/opt:opt_test \
     --define gotags=bazel,crdb_test,fast_int_set_small \
     --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE || exit_status_small=$?
 process_test_json \

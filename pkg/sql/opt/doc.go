@@ -17,7 +17,7 @@ equivalent query plans with vastly different execution times. The Cockroach
 optimizer is cost-based, meaning that it enumerates some or all of these
 alternate plans and chooses the one with the lowest estimated cost.
 
-Overview
+# Overview
 
 SQL query planning is often described in terms of 8 modules:
 
@@ -43,52 +43,52 @@ representing the forest of trees generated during Search. Stats, Properties,
 Cost Model and Transformations are modules that power the Prep, Rewrite and
 Search phases.
 
-                       SQL query text
-                             |
-                       +-----v-----+  - parse SQL text according to grammar
-                       |   Parse   |  - report syntax errors
-                       +-----+-----+
-                             |
-                           (ast)
-                             |
-                       +-----v-----+  - fold constants, check types, resolve
-                       |  Analyze  |    names
-                       +-----+-----+  - annotate tree with semantic info
-                             |        - report semantic errors
-                           (ast+)
-         +-------+           |
-         | Stats +----->-----v-----+  - normalize tree with cost-agnostic
-         +-------+     |   Prep    |    transforms (placeholders present)
-                    +-->-----+-----+  - compute initial properties
-                    |        |        - retrieve and attach stats
-                    |     (expr)      - done once per PREPARE
-                    |        |
-    +------------+  |  +-----v-----+  - capture placeholder values / timestamps
-    | Transforms |--+-->  Rewrite  |  - normalize tree with cost-agnostic
-    +------------+  |  +-----+-----+    transforms (placeholders not present)
-                    |        |        - done once per EXECUTE
-                    |     (expr)
-                    |        |
-                    +-->-----v-----+  - generate equivalent expression trees
-    +------------+     |  Search   |  - find lowest cost physical plan
-    | Cost Model +----->-----+-----+  - includes DistSQL physical planning
-    +------------+           |
-                      (physical plan)
-                             |
-                       +-----v-----+
-                       | Execution |
-                       +-----------+
+	                   SQL query text
+	                         |
+	                   +-----v-----+  - parse SQL text according to grammar
+	                   |   Parse   |  - report syntax errors
+	                   +-----+-----+
+	                         |
+	                       (ast)
+	                         |
+	                   +-----v-----+  - fold constants, check types, resolve
+	                   |  Analyze  |    names
+	                   +-----+-----+  - annotate tree with semantic info
+	                         |        - report semantic errors
+	                       (ast+)
+	     +-------+           |
+	     | Stats +----->-----v-----+  - normalize tree with cost-agnostic
+	     +-------+     |   Prep    |    transforms (placeholders present)
+	                +-->-----+-----+  - compute initial properties
+	                |        |        - retrieve and attach stats
+	                |     (expr)      - done once per PREPARE
+	                |        |
+	+------------+  |  +-----v-----+  - capture placeholder values / timestamps
+	| Transforms |--+-->  Rewrite  |  - normalize tree with cost-agnostic
+	+------------+  |  +-----+-----+    transforms (placeholders not present)
+	                |        |        - done once per EXECUTE
+	                |     (expr)
+	                |        |
+	                +-->-----v-----+  - generate equivalent expression trees
+	+------------+     |  Search   |  - find lowest cost physical plan
+	| Cost Model +----->-----+-----+  - includes DistSQL physical planning
+	+------------+           |
+	                  (physical plan)
+	                         |
+	                   +-----v-----+
+	                   | Execution |
+	                   +-----------+
 
 The opt-related packages implement portions of these modules, while other parts
 are implemented elsewhere. For example, other sql packages are used to perform
 name resolution and type checking which are part of the Analyze phase.
 
-Parse
+# Parse
 
 The parse phase is not discussed in this document. It transforms the SQL query
 text into an abstract syntax tree (AST).
 
-Analyze
+# Analyze
 
 The analyze phase ensures that the AST obeys all SQL semantic rules, and
 annotates the AST with information that will be used by later phases. In
@@ -116,7 +116,7 @@ legal static types. For example, the CONCAT function only accepts zero or more
 arguments that are statically typed as strings. Violation of the typing rules
 produces a semantic error.
 
-Properties
+# Properties
 
 Properties are meta-information that are computed (and sometimes stored) for
 each node in an expression. Properties power transformations and optimization.
@@ -145,7 +145,7 @@ forms a key (unique values) in the results. A derived property is one derived
 by the optimizer for an expression based on the properties of the child
 expressions. For example:
 
-  SELECT k+1 FROM kv
+	SELECT k+1 FROM kv
 
 Once the ordering of "k" is known from kv's descriptor, the same ordering
 property can be derived for k+1. During optimization, for each expression with
@@ -156,7 +156,7 @@ that provides the required property. For example, an ORDER BY clause creates a
 required ordering property that can cause the optimizer to add a Sort operator
 as an enforcer of that property.
 
-Stats
+# Stats
 
 Table statistics power both the cost model and the search of alternate query
 plans. A simple example of where statistics guide the search of alternate query
@@ -190,7 +190,7 @@ system may bound the inaccuracy by recomputing the stats based on how fast a
 table is being modified. Or the system may notice when stat estimations are
 inaccurate during query execution.
 
-Cost Model
+# Cost Model
 
 The cost model takes an expression as input and computes an estimated "cost"
 to execute that expression. The unit of "cost" can be arbitrary, though it is
@@ -225,7 +225,7 @@ Search finds the lowest cost plan using dynamic programming. That imposes a
 restriction on the cost model: it must exhibit optimal substructure. An optimal
 solution can be constructed from optimal solutions of its sub-problems.
 
-Memo
+# Memo
 
 Memo is a data structure for efficiently storing a forest of query plans.
 Conceptually, the memo is composed of a numbered set of equivalency classes
@@ -298,7 +298,7 @@ Notice that there are now two expressions in memo group 6. The coster (see Cost
 Model section for more details) will estimate the execution cost of each
 expression, and the optimizer will select the lowest cost alternative.
 
-Transforms
+# Transforms
 
 Transforms convert an input expression tree into zero or more logically
 equivalent trees. Transforms consist of two parts: a "match pattern" and a
@@ -377,13 +377,13 @@ tool called Optgen, short for "optimizer generator". Optgen is a domain-
 specific language (DSL) that provides an intuitive syntax for defining
 transform rules. Here is an example:
 
-  [NormalizeEq]
-  (Eq
-    $left:^(Variable)
-    $right:(Variable)
-  )
-  =>
-  (Eq $right $left)
+	[NormalizeEq]
+	(Eq
+	  $left:^(Variable)
+	  $right:(Variable)
+	)
+	=>
+	(Eq $right $left)
 
 The expression above the arrow is the match pattern and the expression below
 the arrow is the replace pattern. This example rule will match Eq expressions
@@ -392,7 +392,7 @@ which is a Variable operator. The replace pattern will trigger a replacement
 that reverses the two inputs. In addition, custom match and replace functions
 can be defined in order to run arbitrary Go code.
 
-Prep
+# Prep
 
 Prep (short for "prepare") is the first phase of query optimization, in which
 the annotated AST is transformed into a single normalized "expression tree".
@@ -445,7 +445,7 @@ columns of each (sub-)expression, equivalent columns, not-null columns and
 functional dependencies. These properties are computed bottom-up as part of
 constructing the expression tree.
 
-Rewrite
+# Rewrite
 
 Rewrite is the second phase of query optimization. Placeholder values are
 available starting at this phase, so new normalization rules will typically
@@ -473,7 +473,7 @@ join that requires its inner child to return its rows in a specific order. The
 same group can be (and sometimes is) optimized multiple times, but with
 different required properties each time.
 
-Search
+# Search
 
 Search is the final phase of optimization. Search begins with a single
 normalized tree that was created by the earlier phases. For each group, the

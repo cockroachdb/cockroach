@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
@@ -153,6 +154,7 @@ type ExternalStorageContext struct {
 	Settings          *cluster.Settings
 	BlobClientFactory blobs.BlobClientFactory
 	InternalExecutor  sqlutil.InternalExecutor
+	CollectionFactory *descs.CollectionFactory
 	DB                *kv.DB
 	Options           []ExternalStorageOption
 	Limiters          Limiters

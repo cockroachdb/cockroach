@@ -19,10 +19,9 @@ import (
 // Verify runs consistency checks against the shared properties, in order to
 // ensure that they conform to several invariants:
 //
-//   1. The properties must have been built.
-//   2. If HasCorrelatedSubquery is true, then HasSubquery must be true as well.
-//   3. If Mutate is true, then VolatilitySet must contain Volatile.
-//
+//  1. The properties must have been built.
+//  2. If HasCorrelatedSubquery is true, then HasSubquery must be true as well.
+//  3. If Mutate is true, then VolatilitySet must contain Volatile.
 func (s *Shared) Verify() {
 	if !buildutil.CrdbTestBuild {
 		return
@@ -41,12 +40,11 @@ func (s *Shared) Verify() {
 // Verify runs consistency checks against the relational properties, in order to
 // ensure that they conform to several invariants:
 //
-//   1. Functional dependencies are internally consistent.
-//   2. Not null columns are a subset of output columns.
-//   3. Outer columns do not intersect output columns.
-//   4. If functional dependencies indicate that the relation can have at most
-//      one row, then the cardinality reflects that as well.
-//
+//  1. Functional dependencies are internally consistent.
+//  2. Not null columns are a subset of output columns.
+//  3. Outer columns do not intersect output columns.
+//  4. If functional dependencies indicate that the relation can have at most
+//     one row, then the cardinality reflects that as well.
 func (r *Relational) Verify() {
 	if !buildutil.CrdbTestBuild {
 		return
@@ -102,8 +100,7 @@ func (r *Relational) VerifyAgainst(other *Relational) {
 // Verify runs consistency checks against the relational properties, in order to
 // ensure that they conform to several invariants:
 //
-//   1. Functional dependencies are internally consistent.
-//
+//  1. Functional dependencies are internally consistent.
 func (s *Scalar) Verify() {
 	if !buildutil.CrdbTestBuild {
 		return

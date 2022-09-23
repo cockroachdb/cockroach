@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -872,8 +871,6 @@ func TestPebbleMVCCTimeIntervalWithClears(t *testing.T) {
 func TestPebbleMVCCTimeIntervalWithRangeClears(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	skip.WithIssue(t, 83376, "property filters may ignore Pebble range tombstones")
-
 	// Set up an engine with tiny blocks, so each point key gets its own block,
 	// and disable compactions to keep SSTs separate.
 	overrideOptions := func(cfg *engineConfig) error {
@@ -1065,8 +1062,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators())
 	// Returns the value found or nil.
 	checkGetAndIter := func(reader Reader) []byte {
-		v, err := reader.MVCCGet(k)
-		require.NoError(t, err)
+		v := mvccGetRaw(t, reader, k)
 		iter := reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{UpperBound: k.Key.Next()})
 		defer iter.Close()
 		iter.SeekGE(k)

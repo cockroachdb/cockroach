@@ -1232,7 +1232,7 @@ func TestCheckNodeHealth(t *testing.T) {
 				connHealth:  connHealthy,
 				isAvailable: test.isAvailable,
 			}
-			if err := h.check(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
+			if err := h.checkSystem(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
 			}
 		})
@@ -1253,7 +1253,7 @@ func TestCheckNodeHealth(t *testing.T) {
 				connHealth:  test.connHealth,
 				isAvailable: available,
 			}
-			if err := h.check(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
+			if err := h.checkSystem(context.Background(), sqlInstanceID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
 			}
 		})

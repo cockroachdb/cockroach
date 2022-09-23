@@ -105,7 +105,6 @@ func (a *arbiterSet) ContainsUniqueConstraint(uniq cat.UniqueOrdinal) bool {
 //     pred is nil.
 //   - canaryOrd is the table column ordinal of a not-null column in the
 //     constraint's table.
-//
 func (a *arbiterSet) ForEach(
 	f func(name string, conflictOrds util.FastIntSet, pred tree.Expr, canaryOrd int),
 ) {
@@ -150,14 +149,14 @@ func (a *arbiterSet) removeIndex(idx cat.IndexOrdinal) {
 // unique constraints. It is only useful when an ON CONFLICT statement specifies
 // no columns or constraints. For example, consider the table and statement:
 //
-//   CREATE TABLE t (
-//     a INT,
-//     b INT,
-//     UNIQUE INDEX a_b_key (a, b),
-//     UNIQUE WITHOUT INDEX b_key (b)
-//   )
+//	CREATE TABLE t (
+//	  a INT,
+//	  b INT,
+//	  UNIQUE INDEX a_b_key (a, b),
+//	  UNIQUE WITHOUT INDEX b_key (b)
+//	)
 //
-//   INSERT INTO t VALUES (1, 2) ON CONFLICT DO NOTHING
+//	INSERT INTO t VALUES (1, 2) ON CONFLICT DO NOTHING
 //
 // There is no need to use both a_b_key and b_key as arbiters for the INSERT
 // statement because any conflict in a_b_key will also be a conflict in b_key.
@@ -230,10 +229,9 @@ func (m *minArbiterSet) ArbiterSet() arbiterSet {
 // the unique constraint. An arbiter index is redundant if both of the following
 // hold:
 //
-//   1. Its conflict columns are a super set of the given conflict columns.
-//   2. The index and unique constraint are both non-partial, or have the same
-//      partial predicate.
-//
+//  1. Its conflict columns are a super set of the given conflict columns.
+//  2. The index and unique constraint are both non-partial, or have the same
+//     partial predicate.
 func (m *minArbiterSet) findRedundantIndex(
 	uniq cat.UniqueConstraint,
 ) (_ cat.IndexOrdinal, ok bool) {

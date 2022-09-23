@@ -250,10 +250,6 @@ const scheduleBackupOp = "CREATE SCHEDULE FOR BACKUP"
 func doCreateBackupSchedules(
 	ctx context.Context, p sql.PlanHookState, eval *scheduledBackupEval, resultsCh chan<- tree.Datums,
 ) error {
-	if err := p.RequireAdminRole(ctx, scheduleBackupOp); err != nil {
-		return err
-	}
-
 	if eval.ScheduleLabelSpec.IfNotExists {
 		scheduleLabel, err := eval.scheduleLabel()
 		if err != nil {

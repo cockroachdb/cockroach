@@ -189,7 +189,6 @@ func (t *Task) assertDecoded() {
 //     the method takes a maxIndex parameter that limits the indexes that it will
 //     acknowledge. Typically, callers will supply the highest index that they have
 //     durably written to their raft log for this upper bound.
-//
 func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxIndex uint64) error {
 	t.assertDecoded()
 	if !t.anyLocal {

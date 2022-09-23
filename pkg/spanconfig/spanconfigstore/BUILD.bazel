@@ -36,6 +36,7 @@ go_test(
         "system_store_test.go",
         ":entry_interval_btree_test.go",  # keep
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":spanconfigstore"],
     deps = [

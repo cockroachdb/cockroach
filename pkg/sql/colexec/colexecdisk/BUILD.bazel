@@ -49,6 +49,7 @@ go_test(
         "inject_setup_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":colexecdisk"],
     deps = [
         "//pkg/col/coldata",

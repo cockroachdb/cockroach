@@ -32,6 +32,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/norm",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
@@ -72,6 +73,7 @@ go_test(
         "general_funcs_test.go",
         "norm_test.go",
     ],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + [
         "//c-deps:libgeos",
         "//pkg/sql/opt/testutils/opttester:testfixtures",

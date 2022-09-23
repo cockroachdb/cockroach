@@ -28,6 +28,7 @@ go_test(
         "jobs_protected_ts_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

@@ -32,8 +32,18 @@ import {
   selectTransactionInsights,
 } from "src/views/insights/insightsSelectors";
 import { bindActionCreators } from "redux";
+import { LocalSetting } from "src/redux/localsettings";
 
-const mapStateToProps = (
+export const insightStatementColumnsLocalSetting = new LocalSetting<
+  AdminUIState,
+  string | null
+>(
+  "columns/StatementsInsightsPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
+);
+
+const transactionMapStateToProps = (
   state: AdminUIState,
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
@@ -51,9 +61,11 @@ const statementMapStateToProps = (
   statementsError: state.cachedData?.statementInsights.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
+  selectedColumnNames:
+    insightStatementColumnsLocalSetting.selectorToArray(state),
 });
 
-const DispatchProps = {
+const TransactionDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
@@ -65,6 +77,8 @@ const StatementDispatchProps: StatementInsightsViewDispatchProps = {
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
   refreshStatementInsights: refreshStatementInsights,
+  onColumnsChange: (value: string[]) =>
+    insightStatementColumnsLocalSetting.set(value.join(",")),
 };
 
 type StateProps = {
@@ -85,12 +99,15 @@ const WorkloadInsightsPageConnected = withRouter(
     WorkloadInsightsViewProps
   >(
     (state: AdminUIState, props: RouteComponentProps) => ({
-      transactionInsightsViewStateProps: mapStateToProps(state, props),
+      transactionInsightsViewStateProps: transactionMapStateToProps(
+        state,
+        props,
+      ),
       statementInsightsViewStateProps: statementMapStateToProps(state, props),
     }),
     dispatch => ({
       transactionInsightsViewDispatchProps: bindActionCreators(
-        DispatchProps,
+        TransactionDispatchProps,
         dispatch,
       ),
       statementInsightsViewDispatchProps: bindActionCreators(

@@ -26,18 +26,20 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// GrantCoordinators holds a regular GrantCoordinator for all work, and a
-// StoreGrantCoordinators that allows for per-store GrantCoordinators for
-// KVWork that involves writes.
+// GrantCoordinators holds {regular,elastic} GrantCoordinators for
+// {regular,elastic} work, and a StoreGrantCoordinators that allows for
+// per-store GrantCoordinators for KVWork that involves writes.
 type GrantCoordinators struct {
-	Stores  *StoreGrantCoordinators
 	Regular *GrantCoordinator
+	Elastic *ElasticCPUGrantCoordinator
+	Stores  *StoreGrantCoordinators
 }
 
 // Close implements the stop.Closer interface.
 func (gcs GrantCoordinators) Close() {
 	gcs.Stores.close()
 	gcs.Regular.Close()
+	gcs.Elastic.close()
 }
 
 // StoreGrantCoordinators is a container for GrantCoordinators for each store,
@@ -211,9 +213,9 @@ func (sgc *StoreGrantCoordinators) close() {
 
 // GrantCoordinator is the top-level object that coordinates grants across
 // different WorkKinds (for more context see the comment in admission.go, and
-// the comment where WorkKind is declared). Typically there will one
-// GrantCoordinator in a node for CPU intensive work, and for nodes that also
-// have the KV layer, one GrantCoordinator per store (these are managed by
+// the comment where WorkKind is declared). Typically there will be one
+// GrantCoordinator in a node for CPU intensive regular work, and for nodes that
+// also have the KV layer, one GrantCoordinator per store (these are managed by
 // StoreGrantCoordinators) for KVWork that uses that store. See the
 // NewGrantCoordinators and NewGrantCoordinatorSQL functions.
 type GrantCoordinator struct {
@@ -338,29 +340,90 @@ type makeStoreRequesterFunc func(
 	settings *cluster.Settings, opts workQueueOptions) storeRequester
 
 // NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
-// regular cluster node. Caller is responsible for hooking up
-// GrantCoordinators.Regular to receive calls to CPULoad, and to set a
-// PebbleMetricsProvider on GrantCoordinators.Stores. Every request must pass
-// through GrantCoordinators.Regular, while only subsets of requests pass
-// through each store's GrantCoordinator. We arrange these such that requests
-// (that need to) first pass through a store's GrantCoordinator and then
-// through the regular one. This ensures that we are not using slots in the
-// latter on requests that are blocked elsewhere for admission. Additionally,
-// we don't want the CPU scheduler signal that is implicitly used in grant
-// chains to delay admission through the per store GrantCoordinators since
-// they are not trying to control CPU usage, so we turn off grant chaining in
-// those coordinators.
+// regular cluster node. Caller is responsible for:
+// - hooking up GrantCoordinators.Regular to receive calls to CPULoad, and
+// - to set a PebbleMetricsProvider on GrantCoordinators.Stores
+//
+// Regular and elastic requests pass through GrantCoordinators.{Regular,Elastic}
+// respectively, and a subset of requests pass through each store's
+// GrantCoordinator. We arrange these such that requests (that need to) first
+// pass through a store's GrantCoordinator and then through the
+// {regular,elastic} one. This ensures that we are not using slots/elastic CPU
+// tokens in the latter level on requests that are blocked elsewhere for
+// admission. Additionally, we don't want the CPU scheduler signal that is
+// implicitly used in grant chains to delay admission through the per store
+// GrantCoordinators since they are not trying to control CPU usage, so we turn
+// off grant chaining in those coordinators.
 func NewGrantCoordinators(
 	ambientCtx log.AmbientContext, opts Options,
 ) (GrantCoordinators, []metric.Struct) {
-	makeRequester := makeWorkQueue
-	if opts.makeRequesterFunc != nil {
-		makeRequester = opts.makeRequesterFunc
-	}
 	st := opts.Settings
 
 	metrics := makeGrantCoordinatorMetrics()
 	metricStructs := append([]metric.Struct(nil), metrics)
+
+	regularCoord := makeRegularGrantCoordinator(ambientCtx, opts, st, metrics)
+	storeCoordinators := makeStoreGrantCoordinators(opts, st, metrics)
+	metricStructs = appendMetricStructsForQueues(metricStructs, regularCoord)
+	metricStructs = append(metricStructs, storeCoordinators.workQueueMetrics)
+
+	elasticCPUGranterMetrics := makeElasticCPUGranterMetrics()
+	schedulerLatencyListenerMetrics := makeSchedulerLatencyListenerMetrics()
+	elasticWorkQueueMetrics := makeWorkQueueMetrics("elastic-cpu")
+	elasticCPUGranter := newElasticCPUGranter(ambientCtx, st, elasticCPUGranterMetrics)
+	schedulerLatencyListener := newSchedulerLatencyListener(ambientCtx, st, schedulerLatencyListenerMetrics, elasticCPUGranter)
+	elasticCPUInternalWorkQueue := &WorkQueue{}
+	initWorkQueue(elasticCPUInternalWorkQueue, ambientCtx, KVWork, elasticCPUGranter, st, workQueueOptions{
+		usesTokens: true,
+		metrics:    &elasticWorkQueueMetrics,
+	}) // will be closed by the embedding *ElasticCPUWorkQueue
+	elasticCPUWorkQueue := makeElasticCPUWorkQueue(st, elasticCPUInternalWorkQueue, elasticCPUGranter, elasticCPUGranterMetrics)
+	elasticCPUGrantCoordinator := makeElasticCPUGrantCoordinator(elasticCPUGranter, elasticCPUWorkQueue, schedulerLatencyListener)
+	elasticCPUGranter.setRequester(elasticCPUInternalWorkQueue)
+	schedulerLatencyListener.setCoord(elasticCPUGrantCoordinator)
+	metricStructs = append(metricStructs, elasticCPUGranterMetrics)
+	metricStructs = append(metricStructs, schedulerLatencyListenerMetrics)
+	metricStructs = append(metricStructs, elasticWorkQueueMetrics)
+
+	return GrantCoordinators{
+		Stores:  storeCoordinators,
+		Regular: regularCoord,
+		Elastic: elasticCPUGrantCoordinator,
+	}, metricStructs
+}
+
+func makeStoreGrantCoordinators(
+	opts Options, st *cluster.Settings, metrics GrantCoordinatorMetrics,
+) *StoreGrantCoordinators {
+	// TODO(sumeerbhola): these metrics are shared across all stores and all
+	// priorities across stores (even the coarser workClasses, which are a
+	// mapping from priority, share the same metrics). Fix this by adding
+	// labeled Prometheus metrics.
+	storeWorkQueueMetrics := makeWorkQueueMetrics(string(workKindString(KVWork)) + "-stores")
+	makeStoreRequester := makeStoreWorkQueue
+	if opts.makeStoreRequesterFunc != nil {
+		makeStoreRequester = opts.makeStoreRequesterFunc
+	}
+	storeCoordinators := &StoreGrantCoordinators{
+		settings:                    st,
+		makeStoreRequesterFunc:      makeStoreRequester,
+		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
+		workQueueMetrics:            storeWorkQueueMetrics,
+	}
+	return storeCoordinators
+}
+
+func makeRegularGrantCoordinator(
+	ambientCtx log.AmbientContext,
+	opts Options,
+	st *cluster.Settings,
+	metrics GrantCoordinatorMetrics,
+) *GrantCoordinator {
+	makeRequester := makeWorkQueue
+	if opts.makeRequesterFunc != nil {
+		makeRequester = opts.makeRequesterFunc
+	}
+
 	kvSlotAdjuster := &kvSlotAdjuster{
 		settings:                 st,
 		minCPUSlots:              opts.MinCPUSlots,
@@ -447,27 +510,7 @@ func NewGrantCoordinators(
 	coord.queues[SQLStatementRootStartWork] = req
 	sg.requester = req
 	coord.granters[SQLStatementRootStartWork] = sg
-
-	metricStructs = appendMetricStructsForQueues(metricStructs, coord)
-
-	// TODO(sumeerbhola): these metrics are shared across all stores and all
-	// priorities across stores (even the coarser workClasses, which are a
-	// mapping from priority, share the same metrics). Fix this by adding
-	// labeled Prometheus metrics.
-	storeWorkQueueMetrics := makeWorkQueueMetrics(string(workKindString(KVWork)) + "-stores")
-	metricStructs = append(metricStructs, storeWorkQueueMetrics)
-	makeStoreRequester := makeStoreWorkQueue
-	if opts.makeStoreRequesterFunc != nil {
-		makeStoreRequester = opts.makeStoreRequesterFunc
-	}
-	storeCoordinators := &StoreGrantCoordinators{
-		settings:                    st,
-		makeStoreRequesterFunc:      makeStoreRequester,
-		kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-		workQueueMetrics:            storeWorkQueueMetrics,
-	}
-
-	return GrantCoordinators{Stores: storeCoordinators, Regular: coord}, metricStructs
+	return coord
 }
 
 // NewGrantCoordinatorSQL constructs a GrantCoordinator and WorkQueues for a
@@ -646,7 +689,9 @@ func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod tim
 }
 
 // tryGet is called by granter.tryGet with the WorkKind.
-func (coord *GrantCoordinator) tryGet(workKind WorkKind, count int64, demuxHandle int8) bool {
+func (coord *GrantCoordinator) tryGet(
+	workKind WorkKind, count int64, demuxHandle int8,
+) (granted bool) {
 	coord.mu.Lock()
 	defer coord.mu.Unlock()
 	// It is possible that a grant chain is active, and has not yet made its way
@@ -923,3 +968,47 @@ func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 
 // Prevent the linter from emitting unused warnings.
 var _ = NewGrantCoordinatorSQL
+
+// ElasticCPUGrantCoordinator coordinates grants for elastic CPU tokens, it has
+// a single granter-requester pair. Since it's used for elastic CPU work, and
+// the total allotment of CPU available for such work is reduced before getting
+// close to CPU saturation (we observe 1ms+ p99 scheduling latencies when
+// running at 65% utilization on 8vCPU machines, which is enough to affect
+// foreground latencies), we don't want it to serve as a gatekeeper for
+// SQL-level admission. All this informs why its structured as a separate grant
+// coordinator.
+//
+// TODO(irfansharif): Ideally we wouldn't use this separate
+// ElasticGrantCoordinator and just make this part of the one GrantCoordinator
+// above but given we're dealing with a different workClass (elasticWorkClass)
+// but for an existing WorkKind (KVWork), and not all APIs on the grant
+// coordinator currently segment across the two, it was easier to copy over some
+// of the mediating code instead (grant chains also don't apply in this scheme).
+// Try to do something better here and revisit the existing abstractions; see
+// github.com/cockroachdb/cockroach/pull/86638#pullrequestreview-1084437330.
+type ElasticCPUGrantCoordinator struct {
+	SchedulerLatencyListener SchedulerLatencyListener
+	ElasticCPUWorkQueue      *ElasticCPUWorkQueue
+	elasticCPUGranter        *elasticCPUGranter
+}
+
+func makeElasticCPUGrantCoordinator(
+	elasticCPUGranter *elasticCPUGranter,
+	elasticCPUWorkQueue *ElasticCPUWorkQueue,
+	listener *schedulerLatencyListener,
+) *ElasticCPUGrantCoordinator {
+	return &ElasticCPUGrantCoordinator{
+		elasticCPUGranter:        elasticCPUGranter,
+		ElasticCPUWorkQueue:      elasticCPUWorkQueue,
+		SchedulerLatencyListener: listener,
+	}
+}
+
+func (e *ElasticCPUGrantCoordinator) close() {
+	e.ElasticCPUWorkQueue.close()
+}
+
+// tryGrant is used to attempt to grant to waiting requests.
+func (e *ElasticCPUGrantCoordinator) tryGrant() {
+	e.elasticCPUGranter.tryGrant()
+}

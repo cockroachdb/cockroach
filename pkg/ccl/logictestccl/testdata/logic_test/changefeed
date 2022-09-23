@@ -6,11 +6,6 @@ CREATE TABLE t ()
 statement ok
 SET CLUSTER SETTING kv.rangefeed.enabled = true
 
-user testuser
-
-statement error current user must have a role WITH CONTROLCHANGEFEED
-CREATE CHANGEFEED FOR t
-
 user root
 
 # Test granting CONTROLCHANGEFEED.
@@ -20,7 +15,7 @@ GRANT CONNECT ON DATABASE test TO testuser
 
 user testuser
 
-# Now we should pass the CONTROLCHANGEFEED permission check but error on missing
+# We should pass the CONTROLCHANGEFEED permission check but error on missing
 # SELECT privileges.
 statement error user testuser does not have SELECT privilege on relation t
 CREATE CHANGEFEED FOR t
@@ -29,9 +24,21 @@ CREATE CHANGEFEED FOR t
 user root
 
 statement ok
-ALTER USER testuser NOCONTROLCHANGEFEED
+ALTER USER testuser NOCONTROLCHANGEFEED;
+GRANT SELECT ON TABLE t TO testuser
 
 user testuser
 
-statement error current user must have a role WITH CONTROLCHANGEFEED
+statement error user testuser does not have CHANGEFEED privilege on relation t
 CREATE CHANGEFEED FOR t
+
+# The CHANGEFEED privilege can be granted granularly.
+
+user root
+statement ok
+GRANT CHANGEFEED ON table t TO testuser
+
+user testuser
+
+statement ok
+CREATE CHANGEFEED FOR t with initial_scan='only'

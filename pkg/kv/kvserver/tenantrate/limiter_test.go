@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,8 +38,6 @@ import (
 
 func TestCloser(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 86822, "flaky test")
-
 	st := cluster.MakeTestingClusterSettings()
 	start := timeutil.Now()
 	timeSource := timeutil.NewManualTime(start)
@@ -54,7 +51,7 @@ func TestCloser(t *testing.T) {
 	// First Wait call will not block.
 	require.NoError(t, limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1)))
 	errCh := make(chan error, 1)
-	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1<<30)) }()
+	go func() { errCh <- limiter.Wait(ctx, tenantcostmodel.TestingRequestInfo(1, 1, 1<<31)) }()
 	testutils.SucceedsSoon(t, func() error {
 		if timers := timeSource.Timers(); len(timers) != 1 {
 			return errors.Errorf("expected 1 timer, found %d", len(timers))
@@ -132,14 +129,13 @@ var t0 = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 // The argument is a yaml serialization of LimitConfigs. It returns the time as
 // of initialization (00:00:00.000). For example:
 //
-//  init
-//  rate:  1
-//  burst: 2
-//  read:  { perbatch: 1, perrequest: 1, perbyte: 1 }
-//  write: { perbatch: 1, perrequest: 1, perbyte: 1 }
-//  ----
-//  00:00:00.000
-//
+//	init
+//	rate:  1
+//	burst: 2
+//	read:  { perbatch: 1, perrequest: 1, perbyte: 1 }
+//	write: { perbatch: 1, perrequest: 1, perbyte: 1 }
+//	----
+//	00:00:00.000
 func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 	if ts.initialized {
 		d.Fatalf(t, "already ran init")
@@ -174,11 +170,10 @@ func (ts *testState) updateSettings(t *testing.T, d *datadriven.TestData) string
 // advance advances the clock by the provided duration and returns the new
 // current time.
 //
-//  advance
-//  2s
-//  ----
-//  00:00:02.000
-//
+//	advance
+//	2s
+//	----
+//	00:00:02.000
 func (ts *testState) advance(t *testing.T, d *datadriven.TestData) string {
 	dur, err := time.ParseDuration(d.Input)
 	if err != nil {
@@ -201,12 +196,11 @@ func (ts *testState) advance(t *testing.T, d *datadriven.TestData) string {
 // The below example would launch two requests with ids "a" and "b"
 // corresponding to tenants 2 and 3 respectively.
 //
-//  launch
-//  - { id: a, tenant: 2, writebytes: 3}
-//  - { id: b, tenant: 3}
-//  ----
-//  [a@2, b@3]
-//
+//	launch
+//	- { id: a, tenant: 2, writebytes: 3}
+//	- { id: b, tenant: 3}
+//	----
+//	[a@2, b@3]
 func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 	var cmds []struct {
 		ID            string
@@ -251,11 +245,10 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 //
 // For example:
 //
-//  await
-//  [a]
-//  ----
-//  [b@3]
-//
+//	await
+//	[a]
+//	----
+//	[b@3]
 func (ts *testState) await(t *testing.T, d *datadriven.TestData) string {
 	ids := parseStrings(t, d)
 	const awaitTimeout = 1000 * time.Second
@@ -285,11 +278,10 @@ func (ts *testState) await(t *testing.T, d *datadriven.TestData) string {
 // from the set of outstanding requests. The set of remaining requests will be
 // returned. See launch for details on the serialization of the output.
 //
-//  cancel
-//  [b]
-//  ----
-//  [a@2]
-//
+//	cancel
+//	[b]
+//	----
+//	[a@2]
 func (ts *testState) cancel(t *testing.T, d *datadriven.TestData) string {
 	ids := parseStrings(t, d)
 	for _, id := range ids {
@@ -314,11 +306,10 @@ func (ts *testState) cancel(t *testing.T, d *datadriven.TestData) string {
 //
 // For example:
 //
-//  record_read
-//  - { tenant: 2, readrequests: 1, readbytes: 32 }
-//  ----
-//  [a@2]
-//
+//	record_read
+//	- { tenant: 2, readrequests: 1, readbytes: 32 }
+//	----
+//	[a@2]
 func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 	var reads []struct {
 		Tenant       uint64
@@ -347,38 +338,37 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 //
 // For example:
 //
-//  metrics
-//  ----
-//  kv_tenant_rate_limit_current_blocked 0
-//  kv_tenant_rate_limit_current_blocked{tenant_id="2"} 0
-//  kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
-//  kv_tenant_rate_limit_num_tenants 0
-//  kv_tenant_rate_limit_read_bytes_admitted 0
-//  kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 0
-//  kv_tenant_rate_limit_read_bytes_admitted{tenant_id="system"} 100
-//  kv_tenant_rate_limit_read_requests_admitted 0
-//  kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 0
-//  kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 0
-//  kv_tenant_rate_limit_read_batches_admitted 0
-//  kv_tenant_rate_limit_read_batches_admitted{tenant_id="2"} 0
-//  kv_tenant_rate_limit_read_batches_admitted{tenant_id="system"} 0
-//  kv_tenant_rate_limit_write_bytes_admitted 50
-//  kv_tenant_rate_limit_write_bytes_admitted{tenant_id="2"} 50
-//  kv_tenant_rate_limit_write_bytes_admitted{tenant_id="system"} 0
-//  kv_tenant_rate_limit_write_requests_admitted 0
-//  kv_tenant_rate_limit_write_requests_admitted{tenant_id="2"} 0
-//  kv_tenant_rate_limit_write_requests_admitted{tenant_id="system"} 0
-//  kv_tenant_rate_limit_write_batches_admitted 0
-//  kv_tenant_rate_limit_write_batches_admitted{tenant_id="2"} 0
-//  kv_tenant_rate_limit_write_batches_admitted{tenant_id="system"} 0
+//	metrics
+//	----
+//	kv_tenant_rate_limit_current_blocked 0
+//	kv_tenant_rate_limit_current_blocked{tenant_id="2"} 0
+//	kv_tenant_rate_limit_current_blocked{tenant_id="system"} 0
+//	kv_tenant_rate_limit_num_tenants 0
+//	kv_tenant_rate_limit_read_bytes_admitted 0
+//	kv_tenant_rate_limit_read_bytes_admitted{tenant_id="2"} 0
+//	kv_tenant_rate_limit_read_bytes_admitted{tenant_id="system"} 100
+//	kv_tenant_rate_limit_read_requests_admitted 0
+//	kv_tenant_rate_limit_read_requests_admitted{tenant_id="2"} 0
+//	kv_tenant_rate_limit_read_requests_admitted{tenant_id="system"} 0
+//	kv_tenant_rate_limit_read_batches_admitted 0
+//	kv_tenant_rate_limit_read_batches_admitted{tenant_id="2"} 0
+//	kv_tenant_rate_limit_read_batches_admitted{tenant_id="system"} 0
+//	kv_tenant_rate_limit_write_bytes_admitted 50
+//	kv_tenant_rate_limit_write_bytes_admitted{tenant_id="2"} 50
+//	kv_tenant_rate_limit_write_bytes_admitted{tenant_id="system"} 0
+//	kv_tenant_rate_limit_write_requests_admitted 0
+//	kv_tenant_rate_limit_write_requests_admitted{tenant_id="2"} 0
+//	kv_tenant_rate_limit_write_requests_admitted{tenant_id="system"} 0
+//	kv_tenant_rate_limit_write_batches_admitted 0
+//	kv_tenant_rate_limit_write_batches_admitted{tenant_id="2"} 0
+//	kv_tenant_rate_limit_write_batches_admitted{tenant_id="system"} 0
 //
 // Or with a regular expression:
 //
-//  metrics
-//  write_bytes_admitted\{tenant_id="2"\}
-//  ----
-//  kv_tenant_rate_limit_write_bytes_admitted{tenant_id="2"} 50
-//
+//	metrics
+//	write_bytes_admitted\{tenant_id="2"\}
+//	----
+//	kv_tenant_rate_limit_write_bytes_admitted{tenant_id="2"} 50
 func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 	// Compile the input into a regular expression.
 	re, err := regexp.Compile(d.Input)
@@ -421,11 +411,10 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 // The following example would wait for there to be two outstanding timers at
 // 00:00:01.000 and 00:00:02.000.
 //
-//  timers
-//  ----
-//  00:00:01.000
-//  00:00:02.000
-//
+//	timers
+//	----
+//	00:00:01.000
+//	00:00:02.000
 func (ts *testState) timers(t *testing.T, d *datadriven.TestData) string {
 	// If we are rewriting the test, just sleep a bit before returning the
 	// timers.
@@ -462,11 +451,10 @@ func timesToString(times []time.Time) string {
 //
 // For example:
 //
-//  get_tenants
-//  [2, 3, 2]
-//  ----
-//  [2#2, 3#1]
-//
+//	get_tenants
+//	[2, 3, 2]
+//	----
+//	[2#2, 3#1]
 func (ts *testState) getTenants(t *testing.T, d *datadriven.TestData) string {
 	ctx := context.Background()
 	tenantIDs := parseTenantIDs(t, d)
@@ -483,11 +471,10 @@ func (ts *testState) getTenants(t *testing.T, d *datadriven.TestData) string {
 //
 // For example:
 //
-//  release_tenants
-//  [2, 3]
-//  ----
-//  [2#1]
-//
+//	release_tenants
+//	[2, 3]
+//	----
+//	[2#1]
 func (ts *testState) releaseTenants(t *testing.T, d *datadriven.TestData) string {
 	tenantIDs := parseTenantIDs(t, d)
 	for i := range tenantIDs {
@@ -512,13 +499,12 @@ func (ts *testState) releaseTenants(t *testing.T, d *datadriven.TestData) string
 //
 // For example:
 //
-//  estimate_iops
-//  readpercentage: 50
-//  readsize: 4096
-//  writesize: 4096
-//  ----
-//  Mixed workload (50% reads; 4.0 KiB reads; 4.0 KiB writes): 256 sustained IOPS, 256 burst.
-//
+//	estimate_iops
+//	readpercentage: 50
+//	readsize: 4096
+//	writesize: 4096
+//	----
+//	Mixed workload (50% reads; 4.0 KiB reads; 4.0 KiB writes): 256 sustained IOPS, 256 burst.
 func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 	var workload struct {
 		ReadPercentage int

@@ -35,6 +35,7 @@ go_test(
         "txn_id_cache_test.go",
         "writer_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":txnidcache"],
     deps = [

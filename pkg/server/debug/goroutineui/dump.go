@@ -13,7 +13,6 @@ package goroutineui
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"runtime"
 	"sort"
 	"strings"
@@ -49,7 +48,7 @@ func NewDump() Dump {
 // newDumpFromBytes is like NewDump, but treats the supplied bytes as a goroutine
 // dump. The function accepts the options to pass to panicparse/stack.ScanSnapshot.
 func newDumpFromBytes(b []byte, opts *stack.Opts) Dump {
-	s, _, err := stack.ScanSnapshot(bytes.NewBuffer(b), ioutil.Discard, opts)
+	s, _, err := stack.ScanSnapshot(bytes.NewBuffer(b), io.Discard, opts)
 	if err != io.EOF {
 		return Dump{err: err}
 	}

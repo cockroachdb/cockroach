@@ -26,9 +26,9 @@ import (
 // StableID permanently and uniquely identifies a catalog object (table, view,
 // index, column, etc.) within its scope:
 //
-//   data source StableID: unique within database
-//   index StableID: unique within table
-//   column StableID: unique within table
+//	data source StableID: unique within database
+//	index StableID: unique within table
+//	column StableID: unique within table
 //
 // If a new catalog object is created, it will always be assigned a new StableID
 // that has never, and will never, be reused by a different object in the same

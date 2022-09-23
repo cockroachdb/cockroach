@@ -18,11 +18,7 @@ import * as matchers from "redux-saga-test-plan/matchers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { getJobs } from "src/api/jobsApi";
-import {
-  refreshJobsSaga,
-  requestJobsSaga,
-  receivedJobsSaga,
-} from "./jobs.sagas";
+import { refreshJobsSaga, requestJobsSaga } from "./jobs.sagas";
 import { actions, reducer, JobsState } from "./jobs.reducer";
 import {
   allJobsFixture,
@@ -81,28 +77,6 @@ describe("jobs sagas", () => {
           inFlight: false,
         })
         .run();
-    });
-  });
-
-  describe("receivedJobsSaga", () => {
-    it("sets valid status to false after specified period of time", () => {
-      const timeout = 500;
-      return expectSaga(receivedJobsSaga, timeout)
-        .delay(timeout)
-        .put(actions.invalidated())
-        .withReducer(reducer, {
-          data: jobsResponse,
-          lastError: null,
-          valid: true,
-          inFlight: false,
-        })
-        .hasFinalState<JobsState>({
-          data: jobsResponse,
-          lastError: null,
-          valid: false,
-          inFlight: false,
-        })
-        .run(1000);
     });
   });
 });

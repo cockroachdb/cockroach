@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/duration",
+        "//pkg/util/strutil",
         "//pkg/util/timeutil",
     ],
 )
@@ -16,6 +17,7 @@ go_test(
     name = "timeofday_test",
     size = "small",
     srcs = ["time_of_day_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":timeofday"],
     deps = ["//pkg/util/duration"],
 )

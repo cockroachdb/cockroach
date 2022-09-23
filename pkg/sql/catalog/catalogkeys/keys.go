@@ -77,14 +77,14 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 // PrettyKey pretty-prints the specified key, skipping over the first `skip`
 // fields. The pretty printed key looks like:
 //
-//   /Table/<tableID>/<indexID>/...
+//	/Table/<tableID>/<indexID>/...
 //
 // We always strip off the /Table prefix and then `skip` more fields. Note that
 // this assumes that the fields themselves do not contain '/', but that is
 // currently true for the fields we care about stripping (the table and index
 // ID).
 func PrettyKey(valDirs []encoding.Direction, key roachpb.Key, skip int) string {
-	p := key.StringWithDirs(valDirs, 0 /* maxLen */)
+	p := key.StringWithDirs(valDirs)
 	for i := 0; i <= skip; i++ {
 		n := strings.IndexByte(p[1:], '/')
 		if n == -1 {

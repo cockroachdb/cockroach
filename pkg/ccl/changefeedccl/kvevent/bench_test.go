@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -38,12 +37,9 @@ func BenchmarkMemBuffer(b *testing.B) {
 		p := make([]kvevent.Event, 32<<10)
 		for i := range p {
 			if rng.Int31()%20 == 0 {
-				p[i] = kvevent.MakeResolvedEvent(generateSpan(rng), hlc.Timestamp{}, jobspb.ResolvedSpan_NONE)
+				p[i] = kvevent.MakeResolvedEvent(generateRangeFeedCheckpoint(rng), jobspb.ResolvedSpan_NONE)
 			} else {
-				p[i] = kvevent.MakeKVEvent(
-					makeKV(rng, valSize),
-					roachpb.Value{RawBytes: randutil.RandBytes(rng, rng.Intn(valSize))},
-					hlc.Timestamp{})
+				p[i] = kvevent.MakeKVEvent(makeRangeFeedEvent(rng, valSize, valSize))
 			}
 		}
 		return p
@@ -116,7 +112,7 @@ func BenchmarkMemBuffer(b *testing.B) {
 	_ = wg.Wait() // Ignore error -- this group returns context cancellation.
 }
 
-func generateSpan(rng *rand.Rand) roachpb.Span {
+func generateRangeFeedCheckpoint(rng *rand.Rand) *roachpb.RangeFeedEvent {
 	start := rng.Intn(2 << 20)
 	end := start + rng.Intn(2<<20)
 	startDatum := tree.NewDInt(tree.DInt(start))
@@ -141,8 +137,12 @@ func generateSpan(rng *rand.Rand) roachpb.Span {
 		panic(err)
 	}
 
-	return roachpb.Span{
-		Key:    startKey,
-		EndKey: endKey,
+	return &roachpb.RangeFeedEvent{
+		Checkpoint: &roachpb.RangeFeedCheckpoint{
+			Span: roachpb.Span{
+				Key:    startKey,
+				EndKey: endKey,
+			},
+		},
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -63,6 +64,9 @@ func TestParseCartesianBoundingBox(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tc.expected, ret)
+				// Test Repr/AppendFormat round trip.
+				require.Equal(t, strings.ToUpper(tc.s), ret.Repr())
+				require.Equal(t, strings.ToUpper(tc.s), string(ret.AppendFormat(nil)))
 			}
 		})
 	}

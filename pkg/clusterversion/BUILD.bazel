@@ -21,6 +21,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/protoutil",
@@ -38,6 +39,7 @@ go_test(
         "clusterversion_test.go",
         "cockroach_versions_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":clusterversion"],
     deps = [
         "//pkg/roachpb",

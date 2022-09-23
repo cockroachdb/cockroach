@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,8 +34,6 @@ func IsSpanEmpty(
 	isEmpty, err := storage.MVCCIsSpanEmpty(ctx, reader, storage.MVCCIsSpanEmptyOptions{
 		StartKey: args.Key,
 		EndKey:   args.EndKey,
-		StartTS:  hlc.MinTimestamp, // beginning of time
-		EndTS:    hlc.MaxTimestamp, // end of time
 	})
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "IsSpanEmpty")

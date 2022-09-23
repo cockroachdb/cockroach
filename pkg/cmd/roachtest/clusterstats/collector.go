@@ -84,16 +84,17 @@ func (cs *clusterStatCollector) Exporter() StatExporter {
 // tagged values. For example, if the query were rebalancing_queriespersecond
 // at time 110 and there were two stores (1,2) with ip addresses 10.0.0.1 and
 // 127.0.0.1, for store 2 and store 1 respectively.
-// {
-//    "store": {
-//        "1": {Time: 100, Value: 777},
-//        "2": {Time: 100, Value: 42},
-//    },
-//    "instance": {
-//         "10.0.0.1":  {Time: 100, Value: 42},
-//         "127.0.0.1": {Time: 100, Value: 777},
-//     },
-// }
+//
+//	{
+//	   "store": {
+//	       "1": {Time: 100, Value: 777},
+//	       "2": {Time: 100, Value: 42},
+//	   },
+//	   "instance": {
+//	        "10.0.0.1":  {Time: 100, Value: 42},
+//	        "127.0.0.1": {Time: 100, Value: 777},
+//	    },
+//	}
 func (cs *clusterStatCollector) CollectPoint(
 	ctx context.Context, l *logger.Logger, at time.Time, q string,
 ) (map[string]map[string]StatPoint, error) {
@@ -133,28 +134,29 @@ func (cs *clusterStatCollector) CollectPoint(
 // were rebalancing_queriespersecond in the interval [100,110] and there were
 // two stores (1,2) with ip addresses 10.0.0.1 and 127.0.0.1, for store 2 and
 // store 1 respectively.
-// {
-//    "store": {
-//        "1": {
-//            {Time: 100, Value: 777},
-//            {Time: 110, Value: 888}
-//        },
-//        "2": {
-//            {Time: 100, Value: 42},
-//            {Time: 110, Value 42},
-//        },
-//    },
-//    "instance": {
-//         "10.0.0.1":  {
-//            {Time: 100, Value: 42},
-//            {Time: 110, Value 42},
-//        },
-//         "127.0.0.1": {
-//            {Time: 100, Value: 777},
-//            {Time: 110, Value: 888}
-//        },
-//     },
-// }
+//
+//	{
+//	   "store": {
+//	       "1": {
+//	           {Time: 100, Value: 777},
+//	           {Time: 110, Value: 888}
+//	       },
+//	       "2": {
+//	           {Time: 100, Value: 42},
+//	           {Time: 110, Value 42},
+//	       },
+//	   },
+//	   "instance": {
+//	        "10.0.0.1":  {
+//	           {Time: 100, Value: 42},
+//	           {Time: 110, Value 42},
+//	       },
+//	        "127.0.0.1": {
+//	           {Time: 100, Value: 777},
+//	           {Time: 110, Value: 888}
+//	       },
+//	    },
+//	}
 func (cs *clusterStatCollector) CollectInterval(
 	ctx context.Context, l *logger.Logger, interval Interval, q string,
 ) (map[string]map[string]StatSeries, error) {

@@ -1,2 +1,2 @@
 alter_backup_schedule ::=
-	'ALTER' 'BACKUP' 'SCHEDULE' iconst64 alter_backup_schedule_cmds
+	'ALTER' 'BACKUP' 'SCHEDULE' schedule_id 'SET' ( 'LABEL' schedule_label | 'INTO' collectionURI | 'WITH' option | 'RECURRING' crontab | 'FULL BACKUP' ( crontab | 'ALWAYS' ) | 'SCHEDULE OPTION' schedule_option ) ( ',' 'SET' ( 'LABEL' schedule_label | 'INTO' collectionURI | 'WITH' option | 'RECURRING' crontab | 'FULL BACKUP' ( crontab | 'ALWAYS' ) | 'SCHEDULE OPTION' schedule_option ) )*

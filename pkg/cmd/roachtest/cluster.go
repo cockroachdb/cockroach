@@ -35,6 +35,7 @@ import (
 	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -184,6 +185,36 @@ func findBinaryOrLibrary(binOrLib string, name string) (string, error) {
 		return "", errBinaryOrLibraryNotFound{name}
 	}
 	return filepathAbs(path)
+}
+
+// VerifyLibraries verifies that the required libraries, specified by name, are
+// available for the target environment.
+func VerifyLibraries(requiredLibs []string) error {
+	for _, requiredLib := range requiredLibs {
+		if !contains(libraryFilePaths, libraryNameFromPath, requiredLib) {
+			return errors.Wrap(errors.Errorf("missing required library %s", requiredLib), "cluster.VerifyLibraries")
+		}
+	}
+	return nil
+}
+
+// libraryNameFromPath returns the name of a library without the extension, for a
+// given path.
+func libraryNameFromPath(path string) string {
+	filename := filepath.Base(path)
+	return strings.TrimSuffix(filename, filepath.Ext(filename))
+}
+
+func contains(list []string, transformString func(s string) string, str string) bool {
+	if transformString == nil {
+		transformString = func(s string) string { return s }
+	}
+	for _, element := range list {
+		if transformString(element) == str {
+			return true
+		}
+	}
+	return false
 }
 
 func initBinariesAndLibraries() {
@@ -807,9 +838,9 @@ func (f *clusterFactory) clusterMock(cfg clusterConfig) *clusterImpl {
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func (f *clusterFactory) newCluster(
 	ctx context.Context, cfg clusterConfig, setStatus func(string), teeOpt logger.TeeOptType,
-) (*clusterImpl, error) {
+) (*clusterImpl, *vm.CreateOpts, error) {
 	if ctx.Err() != nil {
-		return nil, errors.Wrap(ctx.Err(), "newCluster")
+		return nil, nil, errors.Wrap(ctx.Err(), "newCluster")
 	}
 
 	if overrideFlagset != nil && overrideFlagset.Changed("nodes") {
@@ -820,9 +851,9 @@ func (f *clusterFactory) newCluster(
 		// For tests, use a mock cluster.
 		c := f.clusterMock(cfg)
 		if err := f.r.registerCluster(c); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return c, nil
+		return c, nil, nil
 	}
 
 	if cfg.localCluster {
@@ -845,7 +876,7 @@ func (f *clusterFactory) newCluster(
 		// We must release the allocation because cluster creation is not possible at this point.
 		cfg.alloc.Release()
 
-		return nil, err
+		return nil, nil, err
 	}
 	if cfg.spec.Cloud != spec.Local {
 		providerOptsContainer.SetProviderOpts(cfg.spec.Cloud, providerOpts)
@@ -899,18 +930,18 @@ func (f *clusterFactory) newCluster(
 		err = roachprod.Create(ctx, l, cfg.username, cfg.spec.NodeCount, createVMOpts, providerOptsContainer)
 		if err == nil {
 			if err := f.r.registerCluster(c); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			c.status("idle")
 			l.Close()
-			return c, nil
+			return c, &createVMOpts, nil
 		}
 
 		if errors.HasType(err, (*roachprod.ClusterAlreadyExistsError)(nil)) {
 			// If the cluster couldn't be created because it existed already, bail.
 			// In reality when this is hit is when running with the `local` flag
 			// or a destroy from the previous iteration failed.
-			return nil, err
+			return nil, nil, err
 		}
 
 		l.PrintfCtx(ctx, "cluster creation failed, cleaning up in case it was partially created: %s", err)
@@ -922,7 +953,7 @@ func (f *clusterFactory) newCluster(
 		if i >= maxAttempts {
 			// Here we have to release the alloc, as we are giving up.
 			cfg.alloc.Release()
-			return nil, err
+			return nil, nil, err
 		}
 		// Try again to create the cluster.
 	}
@@ -1098,13 +1129,13 @@ func (c *clusterImpl) Node(i int) option.NodeListOption {
 
 // FetchLogs downloads the logs from the cluster using `roachprod get`.
 // The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchLogs(ctx context.Context, t test.Test) error {
+func (c *clusterImpl) FetchLogs(ctx context.Context, l *logger.Logger) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
 	}
 
-	t.L().Printf("fetching logs\n")
+	l.Printf("fetching logs\n")
 	c.status("fetching logs")
 
 	// Don't hang forever if we can't fetch the logs.
@@ -1115,14 +1146,14 @@ func (c *clusterImpl) FetchLogs(ctx context.Context, t test.Test) error {
 		}
 
 		if err := c.Get(ctx, c.l, "logs" /* src */, path /* dest */); err != nil {
-			t.L().Printf("failed to fetch logs: %v", err)
+			l.Printf("failed to fetch logs: %v", err)
 			if ctx.Err() != nil {
 				return errors.Wrap(err, "cluster.FetchLogs")
 			}
 		}
 
 		if err := c.RunE(ctx, c.All(), "mkdir -p logs/redacted && ./cockroach debug merge-logs --redact logs/*.log > logs/redacted/combined.log"); err != nil {
-			t.L().Printf("failed to redact logs: %v", err)
+			l.Printf("failed to redact logs: %v", err)
 			if ctx.Err() != nil {
 				return err
 			}
@@ -1174,17 +1205,17 @@ func (c *clusterImpl) CopyRoachprodState(ctx context.Context) error {
 // the first available node. They can be visualized via:
 //
 // `COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob ./cockroach start-single-node --insecure --store=$(mktemp -d)`
-func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t test.Test) error {
+func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger) error {
 	return contextutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
 		node := 1
 		for ; node <= c.spec.NodeCount; node++ {
-			db, err := c.ConnE(ctx, t.L(), node)
+			db, err := c.ConnE(ctx, l, node)
 			if err == nil {
 				err = db.Ping()
 				db.Close()
 			}
 			if err != nil {
-				t.L().Printf("node %d not responding to SQL, trying next one", node)
+				l.Printf("node %d not responding to SQL, trying next one", node)
 				continue
 			}
 			break
@@ -1211,7 +1242,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, t test.Test) erro
 		); err != nil {
 			return errors.Wrap(err, "cluster.FetchTimeseriesData")
 		}
-		db, err := c.ConnE(ctx, t.L(), node)
+		db, err := c.ConnE(ctx, l, node)
 		if err != nil {
 			return err
 		}
@@ -1247,13 +1278,13 @@ COCKROACH_DEBUG_TS_IMPORT_FILE=tsdump.gob cockroach start-single-node --insecure
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
 // The logs will be placed in the test's artifacts dir.
-func (c *clusterImpl) FetchDebugZip(ctx context.Context, t test.Test) error {
+func (c *clusterImpl) FetchDebugZip(ctx context.Context, l *logger.Logger) error {
 	if c.spec.NodeCount == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return nil
 	}
 
-	t.L().Printf("fetching debug zip\n")
+	l.Printf("fetching debug zip\n")
 	c.status("fetching debug zip")
 
 	// Don't hang forever if we can't fetch the debug zip.
@@ -1274,7 +1305,7 @@ func (c *clusterImpl) FetchDebugZip(ctx context.Context, t test.Test) error {
 			si := strconv.Itoa(i)
 			cmd := []string{"./cockroach", "debug", "zip", "--exclude-files='*.log,*.txt,*.pprof'", "--url", "{pgurl:" + si + "}", zipName}
 			if err := c.RunE(ctx, c.All(), cmd...); err != nil {
-				t.L().Printf("./cockroach debug zip failed: %v", err)
+				l.Printf("./cockroach debug zip failed: %v", err)
 				if i < c.spec.NodeCount {
 					continue
 				}
@@ -1303,53 +1334,8 @@ func (c *clusterImpl) assertNoDeadNode(ctx context.Context, t test.Test) {
 	}
 }
 
-// CheckReplicaDivergenceOnDB runs a fast consistency check of the whole keyspace
-// against the provided db. If an inconsistency is found, it returns it in the
-// error. Note that this will swallow errors returned directly from the consistency
-// check since we know that such spurious errors are possibly without any relation
-// to the check having failed.
-func (c *clusterImpl) CheckReplicaDivergenceOnDB(
-	ctx context.Context, l *logger.Logger, db *gosql.DB,
-) error {
-	// NB: we set a statement_timeout since context cancellation won't work here,
-	// see:
-	// https://github.com/cockroachdb/cockroach/pull/34520
-	//
-	// We've seen the consistency checks hang indefinitely in some cases.
-	rows, err := db.QueryContext(ctx, `
-SET statement_timeout = '5m';
-SELECT t.range_id, t.start_key_pretty, t.status, t.detail
-FROM
-crdb_internal.check_consistency(true, '', '') as t
-WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
-	if err != nil {
-		// TODO(tbg): the checks can fail for silly reasons like missing gossiped
-		// descriptors, etc. -- not worth failing the test for. Ideally this would
-		// be rock solid.
-		l.Printf("consistency check failed with %v; ignoring", err)
-		return nil
-	}
-	defer rows.Close()
-	var finalErr error
-	for rows.Next() {
-		var rangeID int32
-		var prettyKey, status, detail string
-		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); scanErr != nil {
-			l.Printf("consistency check failed with %v; ignoring", scanErr)
-			return nil
-		}
-		finalErr = errors.CombineErrors(finalErr,
-			errors.Newf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail))
-	}
-	if err := rows.Err(); err != nil {
-		l.Printf("consistency check failed with %v; ignoring", err)
-		return nil
-	}
-	return finalErr
-}
-
 // FailOnReplicaDivergence fails the test if
-// crdb_internal.check_consistency(true, '', '') indicates that any ranges'
+// crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
 // replicas are inconsistent with each other. It uses the first node that
 // is up to run the query.
 func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) {
@@ -1385,7 +1371,7 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) 
 	if err := contextutil.RunWithTimeout(
 		ctx, "consistency check", 5*time.Minute,
 		func(ctx context.Context) error {
-			return c.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
+			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},
 	); err != nil {
 		t.Errorf("consistency check failed: %v", err)
@@ -1394,14 +1380,14 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) 
 
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
 // `sudo dmesg` on the remote nodes.
-func (c *clusterImpl) FetchDmesg(ctx context.Context, t test.Test) error {
+func (c *clusterImpl) FetchDmesg(ctx context.Context, l *logger.Logger) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
 		return nil
 	}
 
-	t.L().Printf("fetching dmesg\n")
+	l.Printf("fetching dmesg\n")
 	c.status("fetching dmesg")
 
 	// Don't hang forever.
@@ -1425,7 +1411,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t test.Test) error {
 			if result.Err != nil {
 				// Store `Run` errors to return later (after copying files from successful nodes).
 				combinedDmesgError = errors.CombineErrors(combinedDmesgError, result.Err)
-				t.L().Printf("running dmesg failed on node %d: %v", result.Node, result.Err)
+				l.Printf("running dmesg failed on node %d: %v", result.Node, result.Err)
 			} else {
 				// Only run `Get` on successful nodes to avoid pseudo-failure on `Get` caused by an earlier failure on `Run`.
 				successfulNodes = append(successfulNodes, int(result.Node))
@@ -1434,7 +1420,7 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t test.Test) error {
 
 		// Get dmesg files from successful nodes only.
 		if err := c.Get(ctx, c.l, name /* src */, path /* dest */, successfulNodes); err != nil {
-			t.L().Printf("getting dmesg files failed: %v", err)
+			l.Printf("getting dmesg files failed: %v", err)
 			return errors.Wrap(err, "cluster.FetchDmesg")
 		}
 
@@ -1445,14 +1431,14 @@ func (c *clusterImpl) FetchDmesg(ctx context.Context, t test.Test) error {
 
 // FetchJournalctl grabs the journalctl logs if possible. This requires being
 // able to run `sudo journalctl` on the remote nodes.
-func (c *clusterImpl) FetchJournalctl(ctx context.Context, t test.Test) error {
+func (c *clusterImpl) FetchJournalctl(ctx context.Context, l *logger.Logger) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab journalctl on local runs.
 		return nil
 	}
 
-	t.L().Printf("fetching journalctl\n")
+	l.Printf("fetching journalctl\n")
 	c.status("fetching journalctl")
 
 	// Don't hang forever.
@@ -1476,7 +1462,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, t test.Test) error {
 			if result.Err != nil {
 				// Store `Run` errors to return later (after copying files from successful nodes).
 				combinedJournalctlError = errors.CombineErrors(combinedJournalctlError, result.Err)
-				t.L().Printf("running journalctl failed on node %d: %v", result.Node, result.Err)
+				l.Printf("running journalctl failed on node %d: %v", result.Node, result.Err)
 			} else {
 				// Only run `Get` on successful nodes to avoid pseudo-failure on `Get` caused by an earlier failure on `Run`.
 				successfulNodes = append(successfulNodes, int(result.Node))
@@ -1485,7 +1471,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, t test.Test) error {
 
 		// Get files from successful nodes only.
 		if err := c.Get(ctx, c.l, name /* src */, path /* dest */, successfulNodes); err != nil {
-			t.L().Printf("getting files failed: %v", err)
+			l.Printf("getting files failed: %v", err)
 			return errors.Wrap(err, "cluster.FetchJournalctl")
 		}
 
@@ -1495,7 +1481,7 @@ func (c *clusterImpl) FetchJournalctl(ctx context.Context, t test.Test) error {
 }
 
 // FetchCores fetches any core files on the cluster.
-func (c *clusterImpl) FetchCores(ctx context.Context, t test.Test) error {
+func (c *clusterImpl) FetchCores(ctx context.Context, l *logger.Logger) error {
 	if c.spec.NodeCount == 0 || c.IsLocal() {
 		// No nodes can happen during unit tests and implies nothing to do.
 		// Also, don't grab dmesg on local runs.
@@ -1507,11 +1493,11 @@ func (c *clusterImpl) FetchCores(ctx context.Context, t test.Test) error {
 		// from having the cores, but we should push them straight into a temp
 		// bucket on S3 instead. OTOH, the ROI of this may be low; I don't know
 		// of a recent example where we've wanted the Core dumps.
-		t.L().Printf("skipped fetching cores\n")
+		l.Printf("skipped fetching cores\n")
 		return nil
 	}
 
-	t.L().Printf("fetching cores\n")
+	l.Printf("fetching cores\n")
 	c.status("fetching cores")
 
 	// Don't hang forever. The core files can be large, so we give a generous
@@ -1648,13 +1634,17 @@ func (c *clusterImpl) PutE(
 	return errors.Wrap(roachprod.Put(ctx, l, c.MakeNodes(nodes...), src, dest, true /* useTreeDist */), "cluster.PutE")
 }
 
-// PutLibraries inserts all available library files into all nodes on the cluster
+// PutLibraries inserts the specified libraries, by name, into all nodes on the cluster
 // at the specified location.
-func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error {
+func (c *clusterImpl) PutLibraries(
+	ctx context.Context, libraryDir string, libraries []string,
+) error {
+	if len(libraries) == 0 {
+		return nil
+	}
 	if ctx.Err() != nil {
 		return errors.Wrap(ctx.Err(), "cluster.Put")
 	}
-
 	c.status("uploading library files")
 	defer c.status("")
 
@@ -1662,6 +1652,9 @@ func (c *clusterImpl) PutLibraries(ctx context.Context, libraryDir string) error
 		return err
 	}
 	for _, libraryFilePath := range libraryFilePaths {
+		if !contains(libraries, nil, libraryNameFromPath(libraryFilePath)) {
+			continue
+		}
 		putPath := filepath.Join(libraryDir, filepath.Base(libraryFilePath))
 		if err := c.PutE(
 			ctx,

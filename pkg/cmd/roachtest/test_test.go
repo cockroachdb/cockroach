@@ -13,7 +13,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -82,8 +83,8 @@ func TestMatchOrSkip(t *testing.T) {
 
 func nilLogger() *logger.Logger {
 	lcfg := logger.Config{
-		Stdout: ioutil.Discard,
-		Stderr: ioutil.Discard,
+		Stdout: io.Discard,
+		Stderr: io.Discard,
 	}
 	l, err := lcfg.NewLogger("" /* path */)
 	if err != nil {
@@ -98,8 +99,8 @@ func alwaysFailingClusterAllocator(
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
-) (*clusterImpl, error) {
-	return nil, errors.New("cluster creation failed")
+) (*clusterImpl, *vm.CreateOpts, error) {
+	return nil, nil, errors.New("cluster creation failed")
 }
 
 func TestRunnerRun(t *testing.T) {
@@ -434,8 +435,8 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	lopt := loggingOpt{
 		l:            nilLogger(),
 		tee:          logger.NoTee,
-		stdout:       ioutil.Discard,
-		stderr:       ioutil.Discard,
+		stdout:       io.Discard,
+		stderr:       io.Discard,
 		artifactsDir: "",
 	}
 	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt, nil /* clusterAllocator */)

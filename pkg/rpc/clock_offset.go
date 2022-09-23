@@ -122,7 +122,9 @@ func newRemoteClockMonitor(
 	r.metrics = RemoteClockMetrics{
 		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
 		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
-		LatencyHistogramNanos:  metric.NewLatency(metaLatencyHistogramNanos, histogramWindowInterval),
+		LatencyHistogramNanos: metric.NewHistogram(
+			metaLatencyHistogramNanos, histogramWindowInterval, metric.IOLatencyBuckets,
+		),
 	}
 	return &r
 }

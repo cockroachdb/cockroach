@@ -15,6 +15,7 @@ go_library(
 go_test(
     name = "ulid_test",
     srcs = ["ulid_test.go"],
+    args = ["-test.timeout=295s"],
     deps = [
         ":ulid",
         "//pkg/util/syncutil",

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -34,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -47,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -176,7 +175,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 			t.Fatal(err)
 		}
 		// The expected end state.
-		expectedState := descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+		expectedState := descpb.DescriptorMutation_WRITE_ONLY
 		if direction == descpb.DescriptorMutation_DROP {
 			expectedState = descpb.DescriptorMutation_DELETE_ONLY
 		}
@@ -1516,20 +1515,21 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		timeoutCtx, cancel := context.WithTimeout(ctx, base.DefaultDescriptorLeaseDuration/2)
 		defer cancel()
 		if err := sql.TestingDescsTxn(timeoutCtx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			tbl, err := col.Direct().MustGetTableDescByID(ctx, txn, tableDesc.GetID())
+			flags := tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required: true, AvoidLeased: true,
+				},
+			}
+			tbl, err := col.GetMutableTableByID(ctx, txn, tableDesc.GetID(), flags)
 			if err != nil {
 				return err
 			}
-			table := tabledesc.NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
-			if err != nil {
-				return err
-			}
-			table.MaybeIncrementVersion()
+			tbl.Version++
 			ba := txn.NewBatch()
-			if err := col.WriteDescToBatch(ctx, false /* kvTrace */, table, ba); err != nil {
+			if err := col.WriteDescToBatch(ctx, false /* kvTrace */, tbl, ba); err != nil {
 				return err
 			}
-			version = table.GetVersion()
+			version = tbl.GetVersion()
 
 			// Here we don't want to actually wait for the backfill to drop its lease.
 			// To avoid that, we hack the machinery which tries oh so hard to make it
@@ -2366,7 +2366,7 @@ ALTER TABLE t.test DROP column v`)
 	// Unfortunately this is the same failure present when an index drop
 	// fails, so the rollback never completes and leaves orphaned kvs.
 	// TODO(erik): Ignore errors or individually drop indexes in
-	// DELETE_AND_WRITE_ONLY which failed during the creation backfill
+	// WRITE_ONLY which failed during the creation backfill
 	// as a rollback from a drop.
 	if e := 1; e != len(tableDesc.PublicColumns()) {
 		t.Fatalf("e = %d, v = %d, columns = %+v", e, len(tableDesc.PublicColumns()), tableDesc.PublicColumns())
@@ -3105,7 +3105,7 @@ CREATE TABLE t.test (
 	}()
 
 	// Wait for the temporary indexes for the new primary indexes
-	// to move to the DELETE_AND_WRITE_ONLY state, which happens
+	// to move to the WRITE_ONLY state, which happens
 	// right before backfilling of the index begins.
 	<-backfillNotification
 
@@ -7460,6 +7460,7 @@ func TestClockSyncErrorsAreNotPermanent(t *testing.T) {
 						return clock.UpdateAndCheckMaxOffset(ctx, farInTheFuture.UnsafeToClockTimestamp())
 					},
 				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
 		},
 	})
@@ -8254,37 +8255,6 @@ DROP VIEW IF EXISTS v
 		go runWorker(i)
 	}
 	wg.Wait()
-}
-
-func TestVirtualColumnNotAllowedInPkeyBefore22_1(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.Server = &server.TestingKnobs{
-		DisableAutomaticVersionUpgrade: make(chan struct{}),
-		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V21_2),
-	}
-
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	_, err := sqlDB.Exec(`CREATE TABLE t (a INT NOT NULL AS (1+1) VIRTUAL, PRIMARY KEY (a))`)
-	require.Error(t, err)
-	require.Equal(t, "pq: cannot use virtual column \"a\" in primary key", err.Error())
-
-	_, err = sqlDB.Exec(`CREATE TABLE t (a INT NOT NULL AS (1+1) VIRTUAL PRIMARY KEY)`)
-	require.Error(t, err)
-	require.Equal(t, "pq: cannot use virtual column \"a\" in primary key", err.Error())
-
-	_, err = sqlDB.Exec(`CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL AS (1+1) VIRTUAL)`)
-	require.NoError(t, err)
-
-	_, err = sqlDB.Exec(`ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b)`)
-	require.Error(t, err)
-	require.Equal(t, "pq: cannot use virtual column \"b\" in primary key", err.Error())
 }
 
 // TestColumnBackfillProcessingDoesNotHoldLockOnJobsTable is a

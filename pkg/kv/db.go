@@ -317,8 +317,8 @@ func NewDBWithContext(
 // Get retrieves the value for a key, returning the retrieved key/value or an
 // error. It is not considered an error for the key not to exist.
 //
-//   r, err := db.Get("a")
-//   // string(r.Key) == "a"
+//	r, err := db.Get("a")
+//	// string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
@@ -331,8 +331,8 @@ func (db *DB) Get(ctx context.Context, key interface{}) (KeyValue, error) {
 // or an error. An unreplicated, exclusive lock is acquired on the key, if it
 // exists. It is not considered an error for the key not to exist.
 //
-//   r, err := db.GetForUpdate("a")
-//   // string(r.Key) == "a"
+//	r, err := db.GetForUpdate("a")
+//	// string(r.Key) == "a"
 //
 // key can be either a byte slice or a string.
 func (db *DB) GetForUpdate(ctx context.Context, key interface{}) (KeyValue, error) {
@@ -888,13 +888,14 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 // use TxnWithAdmissionControl.
 //
 // For example:
-// err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-//		if kv, err := txn.Get(ctx, key); err != nil {
-//			return err
-//		}
-//		// ...
-//		return nil
-//	})
+//
+//	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+//			if kv, err := txn.Get(ctx, key); err != nil {
+//				return err
+//			}
+//			// ...
+//			return nil
+//		})
 //
 // Note that once the transaction encounters a retryable error, the txn object
 // is marked as poisoned and all future ops fail fast until the retry. The

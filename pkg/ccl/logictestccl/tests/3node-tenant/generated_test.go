@@ -687,6 +687,13 @@ func TestTenantLogic_drop_table(
 	runLogicTest(t, "drop_table")
 }
 
+func TestTenantLogic_drop_temp(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_temp")
+}
+
 func TestTenantLogic_drop_type(
 	t *testing.T,
 ) {
@@ -1688,6 +1695,20 @@ func TestTenantLogic_show_fingerprints(
 	runLogicTest(t, "show_fingerprints")
 }
 
+func TestTenantLogic_show_grants_on_virtual_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_grants_on_virtual_table")
+}
+
+func TestTenantLogic_show_grants_synthetic(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_grants_synthetic")
+}
+
 func TestTenantLogic_show_indexes(
 	t *testing.T,
 ) {
@@ -1737,6 +1758,13 @@ func TestTenantLogic_statement_statistics(
 	runLogicTest(t, "statement_statistics")
 }
 
+func TestTenantLogic_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "stats")
+}
+
 func TestTenantLogic_storing(
 	t *testing.T,
 ) {
@@ -1772,6 +1800,13 @@ func TestTenantLogic_subquery_correlated(
 	runLogicTest(t, "subquery_correlated")
 }
 
+func TestTenantLogic_synthetic_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "synthetic_privileges")
+}
+
 func TestTenantLogic_system(
 	t *testing.T,
 ) {
@@ -1791,13 +1826,6 @@ func TestTenantLogic_system_namespace(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "system_namespace")
-}
-
-func TestTenantLogic_system_privileges(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "system_privileges")
 }
 
 func TestTenantLogic_table(

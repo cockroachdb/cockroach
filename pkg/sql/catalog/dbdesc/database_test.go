@@ -275,11 +275,11 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			cb.UpsertDescriptorEntry(schemadesc.NewBuilder(&schemaDesc).BuildImmutable())
 		}
 		_ = cb.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-			cb.UpsertNamespaceEntry(desc, desc.GetID())
+			cb.UpsertNamespaceEntry(desc, desc.GetID(), desc.GetModificationTime())
 			return nil
 		})
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
+		results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validate.Write, desc)
 		if err := results.CombinedError(); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)

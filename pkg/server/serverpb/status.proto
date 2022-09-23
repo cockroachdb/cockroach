@@ -862,6 +862,10 @@ message TxnInfo {
 
   // Error message describing the cause for the txn's last automatic retry.
   string last_auto_retry_reason = 15;
+
+  // Time elapsed since this transaction started execution.
+  google.protobuf.Duration elapsed_time = 16
+  [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -905,6 +909,9 @@ message ActiveQuery {
   // field is only valid if the query is in the EXECUTING phase.
   bool is_full_scan = 10;
 
+  // Time elapsed since this query started execution.
+  google.protobuf.Duration elapsed_time = 11
+  [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
 }
 
 // Request object for ListSessions and ListLocalSessions.
@@ -916,6 +923,12 @@ message ListSessionsRequest {
   // Boolean to exclude closed sessions; if unspecified, defaults
   // to false and closed sessions are included in the response.
   bool exclude_closed_sessions = 2;
+  // Boolean to surface internal sessions in the response. Note
+  // that this param currently serves as an override for the cluster
+  // setting sql.stats.response.show_internal.enabled until #87200
+  // is addressed, and setting this param to false is equivalent
+  // to setting the value to sql.stats.response.show_internal.enabled
+  bool include_internal = 3;
 }
 
 // Session represents one SQL session.
@@ -1781,7 +1794,7 @@ message TableIndexStatsResponse {
   }
 
   repeated ExtendedCollectedIndexUsageStatistics statistics = 1;
-  // Timestamp of the last index usage stats reset.
+  // Timestamp of the latest reset index usage statistics request.
   google.protobuf.Timestamp last_reset = 2 [(gogoproto.stdtime) = true];
   repeated cockroach.sql.IndexRecommendation index_recommendations = 3;
 }
@@ -1789,6 +1802,9 @@ message TableIndexStatsResponse {
 // Request object for issuing a index usage stats reset request.
 message ResetIndexUsageStatsRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // Timestamp for the start time of the latest reset index usage statistics
+  // request on the cluster.
+  google.protobuf.Timestamp cluster_reset_start_time = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
 // Response object returned by ResetIndexUsageStatsRequest.

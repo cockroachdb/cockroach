@@ -795,8 +795,8 @@ SQLPARSER_TARGETS = \
 
 PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources
 
-SWAGGER_TARGETS := \
-  docs/generated/swagger/spec.json
+SWAGGER_TARGETS :=
+  #docs/generated/swagger/spec.json
 
 DOCGEN_TARGETS := \
 	bin/.docgen_bnfs \
@@ -821,7 +821,7 @@ EXECGEN_TARGETS = \
   pkg/sql/colexec/is_null_ops.eg.go \
   pkg/sql/colexec/ordered_synchronizer.eg.go \
   pkg/sql/colexec/pdqsort.eg.go \
-  pkg/sql/colexec/rowstovec.eg.go \
+  pkg/sql/colexec/rowtovec.eg.go \
   pkg/sql/colexec/select_in.eg.go \
   pkg/sql/colexec/sort.eg.go \
   pkg/sql/colexec/sorttopk.eg.go \
@@ -997,13 +997,11 @@ $(go-targets): override LINKFLAGS += \
 $(COCKROACH) $(COCKROACHOSS) go-install: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')"
 
-settings-doc-gen = $(if $(filter buildshort,$(MAKECMDGOALS)),$(COCKROACHSHORT),$(COCKROACH))
+docs/generated/settings/settings.html: $(COCKROACHSHORT)
+	@$(COCKROACHSHORT) gen settings-list --format=rawhtml > $@
 
-docs/generated/settings/settings.html: $(settings-doc-gen)
-	@$(settings-doc-gen) gen settings-list --format=rawhtml > $@
-
-docs/generated/settings/settings-for-tenants.txt:  $(settings-doc-gen)
-	@$(settings-doc-gen) gen settings-list --without-system-only > $@
+docs/generated/settings/settings-for-tenants.txt: $(COCKROACHSHORT)
+	@$(COCKROACHSHORT) gen settings-list --without-system-only > $@
 
 SETTINGS_DOC_PAGES := docs/generated/settings/settings.html docs/generated/settings/settings-for-tenants.txt
 
@@ -1339,7 +1337,7 @@ GW_TS_PROTOS := ./pkg/ts/tspb/timeseries.proto
 GW_PROTOS  := $(GW_SERVER_PROTOS) $(GW_TS_PROTOS)
 GW_SOURCES := $(GW_PROTOS:%.proto=%.pb.gw.go)
 
-GO_PROTOS := $(sort $(shell $(FIND_RELEVANT) -type f -name '*.proto' -print))
+GO_PROTOS := $(sort $(shell $(FIND_RELEVANT) -type f -name '*.proto' \( -path './pkg/build/bazel/bes/*' -prune -o -print \) ))
 GO_SOURCES := $(GO_PROTOS:%.proto=%.pb.go)
 
 PBJS := $(NODE_RUN) pkg/ui/workspaces/db-console/src/js/node_modules/.bin/pbjs
@@ -1488,7 +1486,13 @@ ui-clean: ## Remove build artifacts.
 ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
 	$(info $(yellow)[WARNING] Use `dev ui clean --all` instead.$(term-reset))
-	rm -rf pkg/ui/node_modules pkg/ui/workspaces/db-console/node_modules pkg/ui/yarn.installed pkg/ui/workspaces/cluster-ui/node_modules pkg/ui/workspaces/db-console/src/js/node_modules
+	rm -rf pkg/ui/node_modules \
+		pkg/ui/workspaces/db-console/node_modules \
+		pkg/ui/yarn.installed \
+		pkg/ui/workspaces/cluster-ui/node_modules \
+		pkg/ui/workspaces/db-console/src/js/node_modules \
+		pkg/ui/workspaces/e2e-tests/node_modules \
+		pkg/ui/workspaces/eslint-plugin-crdb/node_modules
 
 pkg/roachprod/vm/aws/embedded.go: bin/.bootstrap pkg/roachprod/vm/aws/config.json pkg/roachprod/vm/aws/old.json bin/terraformgen
 	(cd pkg/roachprod/vm/aws && $(GO) generate)
@@ -1629,6 +1633,7 @@ EVENTPB_PROTOS = \
   pkg/util/log/eventpb/cluster_events.proto \
   pkg/util/log/eventpb/job_events.proto \
   pkg/util/log/eventpb/health_events.proto \
+  pkg/util/log/eventpb/storage_events.proto \
   pkg/util/log/eventpb/telemetry.proto
 
 EVENTLOG_PROTOS = pkg/util/log/logpb/event.proto $(EVENTPB_PROTOS)

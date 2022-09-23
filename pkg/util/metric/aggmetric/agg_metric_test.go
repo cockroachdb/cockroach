@@ -64,7 +64,7 @@ func TestAggMetric(t *testing.T) {
 
 	h := aggmetric.NewHistogram(metric.Metadata{
 		Name: "histo_gram",
-	}, base.DefaultHistogramWindowInterval(), 100, 1, "tenant_id")
+	}, base.DefaultHistogramWindowInterval(), metric.Count1KBuckets, "tenant_id")
 	r.AddMetric(h)
 
 	tenant2 := roachpb.MakeTenantID(2)
@@ -99,18 +99,47 @@ foo_counter 6
 foo_counter{tenant_id="2"} 2
 foo_counter{tenant_id="3"} 4
 histo_gram_bucket{le="+Inf"} 2
-histo_gram_bucket{le="10"} 1
-histo_gram_bucket{le="91"} 2
+histo_gram_bucket{le="1"} 0
+histo_gram_bucket{le="1024"} 2
+histo_gram_bucket{le="128"} 2
+histo_gram_bucket{le="16"} 1
+histo_gram_bucket{le="2"} 0
+histo_gram_bucket{le="256"} 2
+histo_gram_bucket{le="32"} 1
+histo_gram_bucket{le="4"} 0
+histo_gram_bucket{le="512"} 2
+histo_gram_bucket{le="64"} 1
+histo_gram_bucket{le="8"} 0
 histo_gram_bucket{tenant_id="2",le="+Inf"} 1
-histo_gram_bucket{tenant_id="2",le="10"} 1
+histo_gram_bucket{tenant_id="2",le="1"} 0
+histo_gram_bucket{tenant_id="2",le="1024"} 1
+histo_gram_bucket{tenant_id="2",le="128"} 1
+histo_gram_bucket{tenant_id="2",le="16"} 1
+histo_gram_bucket{tenant_id="2",le="2"} 0
+histo_gram_bucket{tenant_id="2",le="256"} 1
+histo_gram_bucket{tenant_id="2",le="32"} 1
+histo_gram_bucket{tenant_id="2",le="4"} 0
+histo_gram_bucket{tenant_id="2",le="512"} 1
+histo_gram_bucket{tenant_id="2",le="64"} 1
+histo_gram_bucket{tenant_id="2",le="8"} 0
 histo_gram_bucket{tenant_id="3",le="+Inf"} 1
-histo_gram_bucket{tenant_id="3",le="91"} 1
+histo_gram_bucket{tenant_id="3",le="1"} 0
+histo_gram_bucket{tenant_id="3",le="1024"} 1
+histo_gram_bucket{tenant_id="3",le="128"} 1
+histo_gram_bucket{tenant_id="3",le="16"} 0
+histo_gram_bucket{tenant_id="3",le="2"} 0
+histo_gram_bucket{tenant_id="3",le="256"} 1
+histo_gram_bucket{tenant_id="3",le="32"} 0
+histo_gram_bucket{tenant_id="3",le="4"} 0
+histo_gram_bucket{tenant_id="3",le="512"} 1
+histo_gram_bucket{tenant_id="3",le="64"} 0
+histo_gram_bucket{tenant_id="3",le="8"} 0
 histo_gram_count 2
 histo_gram_count{tenant_id="2"} 1
 histo_gram_count{tenant_id="3"} 1
-histo_gram_sum 101
+histo_gram_sum 100
 histo_gram_sum{tenant_id="2"} 10
-histo_gram_sum{tenant_id="3"} 91`,
+histo_gram_sum{tenant_id="3"} 90`,
 			writePrometheusMetrics(t))
 	})
 
@@ -127,13 +156,32 @@ baz_gauge{tenant_id="2"} 1.5
 foo_counter 6
 foo_counter{tenant_id="3"} 4
 histo_gram_bucket{le="+Inf"} 2
-histo_gram_bucket{le="10"} 1
-histo_gram_bucket{le="91"} 2
+histo_gram_bucket{le="1"} 0
+histo_gram_bucket{le="1024"} 2
+histo_gram_bucket{le="128"} 2
+histo_gram_bucket{le="16"} 1
+histo_gram_bucket{le="2"} 0
+histo_gram_bucket{le="256"} 2
+histo_gram_bucket{le="32"} 1
+histo_gram_bucket{le="4"} 0
+histo_gram_bucket{le="512"} 2
+histo_gram_bucket{le="64"} 1
+histo_gram_bucket{le="8"} 0
 histo_gram_bucket{tenant_id="2",le="+Inf"} 1
-histo_gram_bucket{tenant_id="2",le="10"} 1
+histo_gram_bucket{tenant_id="2",le="1"} 0
+histo_gram_bucket{tenant_id="2",le="1024"} 1
+histo_gram_bucket{tenant_id="2",le="128"} 1
+histo_gram_bucket{tenant_id="2",le="16"} 1
+histo_gram_bucket{tenant_id="2",le="2"} 0
+histo_gram_bucket{tenant_id="2",le="256"} 1
+histo_gram_bucket{tenant_id="2",le="32"} 1
+histo_gram_bucket{tenant_id="2",le="4"} 0
+histo_gram_bucket{tenant_id="2",le="512"} 1
+histo_gram_bucket{tenant_id="2",le="64"} 1
+histo_gram_bucket{tenant_id="2",le="8"} 0
 histo_gram_count 2
 histo_gram_count{tenant_id="2"} 1
-histo_gram_sum 101
+histo_gram_sum 100
 histo_gram_sum{tenant_id="2"} 10`,
 			writePrometheusMetrics(t))
 	})
@@ -167,15 +215,45 @@ foo_counter 6
 foo_counter{tenant_id="2"} 0
 foo_counter{tenant_id="3"} 4
 histo_gram_bucket{le="+Inf"} 2
-histo_gram_bucket{le="10"} 1
-histo_gram_bucket{le="91"} 2
+histo_gram_bucket{le="1"} 0
+histo_gram_bucket{le="1024"} 2
+histo_gram_bucket{le="128"} 2
+histo_gram_bucket{le="16"} 1
+histo_gram_bucket{le="2"} 0
+histo_gram_bucket{le="256"} 2
+histo_gram_bucket{le="32"} 1
+histo_gram_bucket{le="4"} 0
+histo_gram_bucket{le="512"} 2
+histo_gram_bucket{le="64"} 1
+histo_gram_bucket{le="8"} 0
 histo_gram_bucket{tenant_id="2",le="+Inf"} 1
-histo_gram_bucket{tenant_id="2",le="10"} 1
+histo_gram_bucket{tenant_id="2",le="1"} 0
+histo_gram_bucket{tenant_id="2",le="1024"} 1
+histo_gram_bucket{tenant_id="2",le="128"} 1
+histo_gram_bucket{tenant_id="2",le="16"} 1
+histo_gram_bucket{tenant_id="2",le="2"} 0
+histo_gram_bucket{tenant_id="2",le="256"} 1
+histo_gram_bucket{tenant_id="2",le="32"} 1
+histo_gram_bucket{tenant_id="2",le="4"} 0
+histo_gram_bucket{tenant_id="2",le="512"} 1
+histo_gram_bucket{tenant_id="2",le="64"} 1
+histo_gram_bucket{tenant_id="2",le="8"} 0
 histo_gram_bucket{tenant_id="3",le="+Inf"} 0
+histo_gram_bucket{tenant_id="3",le="1"} 0
+histo_gram_bucket{tenant_id="3",le="1024"} 0
+histo_gram_bucket{tenant_id="3",le="128"} 0
+histo_gram_bucket{tenant_id="3",le="16"} 0
+histo_gram_bucket{tenant_id="3",le="2"} 0
+histo_gram_bucket{tenant_id="3",le="256"} 0
+histo_gram_bucket{tenant_id="3",le="32"} 0
+histo_gram_bucket{tenant_id="3",le="4"} 0
+histo_gram_bucket{tenant_id="3",le="512"} 0
+histo_gram_bucket{tenant_id="3",le="64"} 0
+histo_gram_bucket{tenant_id="3",le="8"} 0
 histo_gram_count 2
 histo_gram_count{tenant_id="2"} 1
 histo_gram_count{tenant_id="3"} 0
-histo_gram_sum 101
+histo_gram_sum 100
 histo_gram_sum{tenant_id="2"} 10
 histo_gram_sum{tenant_id="3"} 0`,
 			writePrometheusMetrics(t))
@@ -195,7 +273,7 @@ func TestAggMetricBuilder(t *testing.T) {
 	g := b.Gauge(metric.Metadata{Name: "bar_gauge"})
 	f := b.GaugeFloat64(metric.Metadata{Name: "baz_gauge"})
 	h := b.Histogram(metric.Metadata{Name: "histo_gram"},
-		base.DefaultHistogramWindowInterval(), 100, 1)
+		base.DefaultHistogramWindowInterval(), metric.Count1KBuckets)
 
 	for i := 5; i < 10; i++ {
 		tenantLabel := roachpb.MakeTenantID(uint64(i)).String()

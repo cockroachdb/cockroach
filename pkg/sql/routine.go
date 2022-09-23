@@ -53,8 +53,13 @@ func (p *planner) EvalRoutineExpr(
 		prevSteppingMode := txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 		prevSeqNum := txn.GetLeafTxnInputState(ctx).ReadSeqNum
 		defer func() {
-			_ = p.Txn().ConfigureStepping(ctx, prevSteppingMode)
-			err = txn.SetReadSeqNum(prevSeqNum)
+			// If the routine errored, the transaction should be aborted, so
+			// there is no need to reconfigure stepping or revert to the
+			// original sequence number.
+			if err == nil {
+				_ = p.Txn().ConfigureStepping(ctx, prevSteppingMode)
+				err = txn.SetReadSeqNum(prevSeqNum)
+			}
 		}()
 	}
 
@@ -94,13 +99,6 @@ func (p *planner) EvalRoutineExpr(
 
 	// Fetch the first row from the row container and return the first
 	// datum.
-	// TODO(mgartner): Consider adding an assertion error if more than one
-	// row exists in the row container. This would require the optimizer to
-	// automatically add LIMIT 1 expressions on the last statement in a
-	// routine to avoid errors when a statement returns more than one row.
-	// Adding the limit would be valid because any other rows after the
-	// first can simply be ignored. The limit could also be beneficial
-	// because it could allow additional query plan optimizations.
 	rightRowsIterator := newRowContainerIterator(ctx, rch, retTypes)
 	defer rightRowsIterator.Close()
 	res, err := rightRowsIterator.Next()

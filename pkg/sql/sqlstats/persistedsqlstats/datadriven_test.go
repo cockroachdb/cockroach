@@ -47,23 +47,23 @@ const (
 
 // TestSQLStatsDataDriven runs the data-driven tests in
 // pkg/sql/sqlstats/persistedsqlstats/testdata. It has the following directives:
-// * exec-sql: executes SQL statements in the exec connection. This should be
-//             executed under a specific app_name in order to get deterministic
-//             results when testing for stmt/txn statistics. No output will be
-//             returned for SQL statements executed under this directive.
-// * observe-sql: executes SQL statements in the observer connection. This
-//                should be executed under a different app_name. This is used
-//                to test the statement/transaction statistics executed under
-//                exec-sql. Running them in different connection ensures that
-//                observing statements will not mess up the statistics of the
-//                statements that they are observing.
-// * sql-stats-flush: this triggers the SQL Statistics to be flushed into
-//                    system table.
-// * set-time: this changes the clock time perceived by SQL Stats subsystem.
-//             This is useful when unit tests need to manipulate times.
-// * should-sample-logical-plan: this checks if the given tuple of
-//                               (db, implicitTxn, fingerprint) will be sampled
-//                               next time it is being executed.
+//   - exec-sql: executes SQL statements in the exec connection. This should be
+//     executed under a specific app_name in order to get deterministic
+//     results when testing for stmt/txn statistics. No output will be
+//     returned for SQL statements executed under this directive.
+//   - observe-sql: executes SQL statements in the observer connection. This
+//     should be executed under a different app_name. This is used
+//     to test the statement/transaction statistics executed under
+//     exec-sql. Running them in different connection ensures that
+//     observing statements will not mess up the statistics of the
+//     statements that they are observing.
+//   - sql-stats-flush: this triggers the SQL Statistics to be flushed into
+//     system table.
+//   - set-time: this changes the clock time perceived by SQL Stats subsystem.
+//     This is useful when unit tests need to manipulate times.
+//   - should-sample-logical-plan: this checks if the given tuple of
+//     (db, implicitTxn, fingerprint) will be sampled
+//     next time it is being executed.
 func TestSQLStatsDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -93,6 +93,10 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	observerConn := cluster.ServerConn(1 /* idx */)
 
 	observer := sqlutils.MakeSQLRunner(observerConn)
+	_, err := sqlConn.Exec(`SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = true;`)
+	if err != nil {
+		t.Errorf("failed to enable plan collection due to %s", err.Error())
+	}
 
 	execDataDrivenTestCmd := func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {

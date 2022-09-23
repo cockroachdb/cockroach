@@ -228,10 +228,17 @@ func (c *csvRowConsumer) FillDatums(
 				conv.Datums[datumIdx], _, err2 = tree.ParseAndRequireString(conv.VisibleColTypes[i], field.Val, conv.EvalCtx)
 				if err2 != nil {
 					col := conv.VisibleCols[i]
-					return newImportRowError(
+					parseRowErr := newImportRowError(
 						errors.Wrapf(errors.CombineErrors(err, err2), "parse %q as %s", col.GetName(), col.GetType().SQLString()),
 						strRecord(record, c.opts.Comma),
 						rowNum)
+					if field.Quoted && !c.opts.AllowQuotedNull && field.Val == nullEncoding {
+						return errors.WithHint(parseRowErr, "null value is quoted but allow_quoted_null option is not set")
+					}
+					if strings.TrimSpace(field.Val) == nullEncoding {
+						return errors.WithHint(parseRowErr, "null value must not have extra whitespace")
+					}
+					return parseRowErr
 				}
 			}
 		}

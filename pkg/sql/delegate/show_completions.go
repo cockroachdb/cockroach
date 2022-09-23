@@ -56,7 +56,8 @@ func (d *delegator) delegateShowCompletions(n *tree.ShowCompletions) (tree.State
 // RunShowCompletions returns a list of completion keywords for the given
 // statement and offset.
 func RunShowCompletions(stmt string, offset int) ([]string, error) {
-	if offset <= 0 || offset > len(stmt) {
+	byteStmt := []byte(stmt)
+	if offset <= 0 || offset > len(byteStmt) {
 		return nil, nil
 	}
 
@@ -66,10 +67,9 @@ func RunShowCompletions(stmt string, offset int) ([]string, error) {
 	// Ie "SELECT ", will only return one token being "SELECT".
 	// If we're at the whitespace, we do not want to return completion
 	// recommendations for "SELECT".
-	if unicode.IsSpace([]rune(stmt)[offset-1]) {
+	if unicode.IsSpace(rune(byteStmt[offset-1])) {
 		return nil, nil
 	}
-
 	sqlTokens := parser.TokensIgnoreErrors(string([]rune(stmt)[:offset]))
 	if len(sqlTokens) == 0 {
 		return nil, nil

@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -721,6 +722,24 @@ ORDER BY table_name
 			data:     `dog,{some,thing}`,
 			err:      "error parsing row 1: expected 2 fields, got 3",
 			rejected: "dog,{some,thing}\n",
+		},
+		{
+			name:     "hint for quoted string matching nullif when allow_quoted_null is not set",
+			create:   `a string, b bool`,
+			with:     `WITH nullif = 'NULL'`,
+			typ:      "CSV",
+			data:     `dog,"NULL"`,
+			err:      "null value is quoted but allow_quoted_null option is not set",
+			rejected: "dog,\"NULL\"\n",
+		},
+		{
+			name:     "hint for extra leading whitespace in string matching nullif",
+			create:   `a string, b bool`,
+			with:     `WITH nullif = 'NULL'`,
+			typ:      "CSV",
+			data:     `dog, NULL`,
+			err:      "null value must not have extra whitespace",
+			rejected: "dog, NULL\n",
 		},
 
 		// PG COPY
@@ -1980,7 +1999,9 @@ func TestFailedImportGC(t *testing.T) {
 		SQLMemoryPoolSize:        256 << 20,
 		ExternalIODir:            baseDir,
 		Knobs: base.TestingKnobs{
-			GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
+			GCJob: &sql.GCJobTestingKnobs{
+				RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil },
+			},
 		},
 	}})
 	defer tc.Stopper().Stop(ctx)
@@ -2005,6 +2026,9 @@ func TestFailedImportGC(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	// The test assumes we'll use the MVCC range tombstone in the GC job. We need
+	// to set this cluster setting to make that true.
+	sqlDB.Exec(t, `SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true`)
 
 	forceFailure = true
 	defer func() { forceFailure = false }()
@@ -2054,9 +2078,9 @@ func TestFailedImportGC(t *testing.T) {
 }
 
 // Verify that a failed import will clean up after itself. This means:
-//  - Delete the garbage data that it partially imported.
-//  - Delete the table descriptor for the table that was created during the
-//  import.
+//   - Delete the garbage data that it partially imported.
+//   - Delete the table descriptor for the table that was created during the
+//     import.
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2678,8 +2702,9 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	writeToUserfile := func(filename, data string) {
 		// Write to userfile storage now that testuser has CREATE privileges.
 		ie := tc.Server(0).InternalExecutor().(*sql.InternalExecutor)
+		cf := tc.Server(0).CollectionFactory().(*descs.CollectionFactory)
 		fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.TestUserName(), ie, tc.Server(0).DB(), nil)
+			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.TestUserName(), ie, cf, tc.Server(0).DB(), nil)
 		require.NoError(t, err)
 		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data))))
 	}
@@ -2748,100 +2773,6 @@ b) CSV DATA ('%s')`, userFileDest))
 			userFileDest))
 		require.NoError(t, err)
 	})
-}
-
-// TestURIRequiresAdminRole tests the IMPORT logic which guards certain
-// privileged ExternalStorage IO paths with an admin only check.
-func TestURIRequiresAdminRole(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	const nodes = 3
-
-	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		SQLMemoryPoolSize: 256 << 20,
-	}})
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0)
-	rootDB := sqlutils.MakeSQLRunner(conn)
-
-	rootDB.Exec(t, `CREATE USER testuser`)
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, tc.Server(0).ServingSQLAddr(), "TestImportPrivileges-testuser",
-		url.User("testuser"),
-	)
-	defer cleanupFunc()
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer testuser.Close()
-	rootDB.Exec(t, `CREATE TABLE foo (id INT)`)
-
-	for _, tc := range []struct {
-		name          string
-		uri           string
-		requiresAdmin bool
-	}{
-		{
-			name:          "s3-implicit",
-			uri:           "s3://foo/bar?AUTH=implicit",
-			requiresAdmin: true,
-		},
-		{
-			name:          "s3-specified",
-			uri:           "s3://foo/bar?AUTH=specified&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456",
-			requiresAdmin: false,
-		},
-		{
-			name:          "s3-custom",
-			uri:           "s3://foo/bar?AUTH=specified&AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456&AWS_ENDPOINT=baz",
-			requiresAdmin: true,
-		},
-		{
-			name:          "gs-implicit",
-			uri:           "gs://foo/bar?AUTH=implicit",
-			requiresAdmin: true,
-		},
-		{
-			name:          "gs-specified",
-			uri:           "gs://foo/bar?AUTH=specified",
-			requiresAdmin: false,
-		},
-		{
-			name:          "userfile",
-			uri:           "userfile:///foo",
-			requiresAdmin: false,
-		},
-		{
-			name:          "nodelocal",
-			uri:           "nodelocal://self/foo",
-			requiresAdmin: true,
-		},
-		{
-			name:          "http",
-			uri:           "http://foo/bar",
-			requiresAdmin: true,
-		},
-		{
-			name:          "https",
-			uri:           "https://foo/bar",
-			requiresAdmin: true,
-		},
-	} {
-		t.Run(tc.name+"-via-import", func(t *testing.T) {
-			_, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO foo CSV DATA ('%s')`, tc.uri))
-			if tc.requiresAdmin {
-				require.True(t, testutils.IsError(err, "only users with the admin role are allowed to IMPORT"))
-			} else {
-				require.False(t, testutils.IsError(err, "only users with the admin role are allowed to IMPORT"))
-			}
-		})
-
-		t.Run(tc.name+"-direct", func(t *testing.T) {
-			conf, err := cloud.ExternalStorageConfFromURI(tc.uri, username.RootUserName())
-			require.NoError(t, err)
-			require.Equal(t, !tc.requiresAdmin, conf.AccessIsWithExplicitAuth())
-		})
-	}
 }
 
 func TestExportImportRoundTrip(t *testing.T) {
@@ -5200,7 +5131,6 @@ func TestImportControlJobRBAC(t *testing.T) {
 // worker node.
 func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 73546, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	allowResponse := make(chan struct{})
@@ -5215,6 +5145,11 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Lower the initial buffering adder ingest size to allow import jobs to run
+	// without exceeding the test memory monitor.
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.index_buffer_size = '16MiB'`)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -5916,7 +5851,11 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			tc.Server(0).ClusterSettings(),
 			blobs.TestEmptyBlobClientFactory,
 			username.RootUserName(),
-			tc.Server(0).InternalExecutor().(*sql.InternalExecutor), tc.Server(0).DB(), nil)
+			tc.Server(0).InternalExecutor().(*sql.InternalExecutor),
+			tc.Server(0).CollectionFactory().(*descs.CollectionFactory),
+			tc.Server(0).DB(),
+			nil,
+		)
 		require.NoError(t, err)
 		defer store.Close()
 
@@ -6145,12 +6084,19 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	const nodes = 1
 	ctx := context.Background()
 	baseDir := testutils.TestDataPath(t, "pgdump")
-	args := base.TestServerArgs{ExternalIODir: baseDir}
+	mkArgs := func() base.TestServerArgs {
+		s := cluster.MakeTestingClusterSettings()
+		storage.MVCCRangeTombstonesEnabled.Override(ctx, &s.SV, true)
+		return base.TestServerArgs{
+			Settings:      s,
+			ExternalIODir: baseDir,
+		}
+	}
 
 	// Simple schema test which creates 3 schemas with a single `test` table in
 	// each schema.
 	t.Run("schema.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6203,7 +6149,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	})
 
 	t.Run("target-table-schema.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6248,6 +6194,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 		// Test fails within a test tenant. More investigation is required.
 		// Tracked with #76378.
+		args := mkArgs()
 		args.DisableDefaultTestTenant = true
 		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)

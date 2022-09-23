@@ -38,8 +38,8 @@ type scrubNode struct {
 // then bundled together and iterated through to pull results.
 //
 // NB: Other changes that need to be made to implement a new check are:
-//  1) Add the option parsing in startScrubTable
-//  2) Queue the checkOperation structs into scrubNode.checkQueue.
+//  1. Add the option parsing in startScrubTable
+//  2. Queue the checkOperation structs into scrubNode.checkQueue.
 //
 // TODO(joey): Eventually we will add the ability to repair check
 // failures. In that case, we can add a AttemptRepair function that is
@@ -178,7 +178,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		_, objDesc, err := p.Accessor().GetObjectDesc(
+		_, objDesc, err := p.descCollection.GetObjectByName(
 			ctx, p.txn, tableName.Catalog(), tableName.Schema(), tableName.Table(),
 			p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
 		)
@@ -320,9 +320,12 @@ func colRefs(tableAlias string, columnNames []string) []string {
 
 // pairwiseOp joins each string on the left with the string on the right, with a
 // given operator in-between. For example
-//   pairwiseOp([]string{"a","b"}, []string{"x", "y"}, "=")
+//
+//	pairwiseOp([]string{"a","b"}, []string{"x", "y"}, "=")
+//
 // returns
-//   []string{"a = x", "b = y"}.
+//
+//	[]string{"a = x", "b = y"}.
 func pairwiseOp(left []string, right []string, op string) []string {
 	if len(left) != len(right) {
 		panic(errors.AssertionFailedf("slice length mismatch (%d vs %d)", len(left), len(right)))

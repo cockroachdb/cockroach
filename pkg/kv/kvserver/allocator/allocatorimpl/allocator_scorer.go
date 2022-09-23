@@ -325,7 +325,7 @@ func (o RangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 	// 1. We rebalance if `store` is too far above the mean (i.e. stores
 	// that are overfull).
 	if store.Capacity.RangeCount > overfullThreshold {
-		log.VEventf(ctx, 2,
+		log.KvDistribution.VEventf(ctx, 2,
 			"s%d: should-rebalance(ranges-overfull): rangeCount=%d, mean=%.2f, overfull-threshold=%d",
 			store.StoreID, store.Capacity.RangeCount, sl.CandidateRanges.Mean, overfullThreshold)
 		return true
@@ -337,7 +337,7 @@ func (o RangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 		underfullThreshold := int32(math.Floor(underfullRangeThreshold(&o, sl.CandidateRanges.Mean)))
 		for _, desc := range sl.Stores {
 			if desc.Capacity.RangeCount < underfullThreshold {
-				log.VEventf(ctx, 2,
+				log.KvDistribution.VEventf(ctx, 2,
 					"s%d: should-rebalance(better-fit-ranges=s%d): rangeCount=%d, otherRangeCount=%d, "+
 						"mean=%.2f, underfull-threshold=%d",
 					store.StoreID, desc.StoreID, store.Capacity.RangeCount, desc.Capacity.RangeCount,
@@ -473,22 +473,22 @@ func (o QPSScorerOptions) shouldRebalanceBasedOnThresholds(
 	switch declineReason {
 	case noBetterCandidate:
 		metrics.LoadBasedReplicaRebalanceMetrics.CannotFindBetterCandidate.Inc(1)
-		log.VEventf(
+		log.KvDistribution.VEventf(
 			ctx, 4, "could not find a better candidate to replace s%d", eqClass.existing.StoreID,
 		)
 	case existingNotOverfull:
 		metrics.LoadBasedReplicaRebalanceMetrics.ExistingNotOverfull.Inc(1)
-		log.VEventf(ctx, 4, "existing store s%d is not overfull", eqClass.existing.StoreID)
+		log.KvDistribution.VEventf(ctx, 4, "existing store s%d is not overfull", eqClass.existing.StoreID)
 	case deltaNotSignificant:
 		metrics.LoadBasedReplicaRebalanceMetrics.DeltaNotSignificant.Inc(1)
-		log.VEventf(
+		log.KvDistribution.VEventf(
 			ctx, 4,
 			"delta between s%d and the next best candidate is not significant enough",
 			eqClass.existing.StoreID,
 		)
 	case missingStatsForExistingStore:
 		metrics.LoadBasedReplicaRebalanceMetrics.MissingStatsForExistingStore.Inc(1)
-		log.VEventf(ctx, 4, "missing QPS stats for s%d", eqClass.existing.StoreID)
+		log.KvDistribution.VEventf(ctx, 4, "missing QPS stats for s%d", eqClass.existing.StoreID)
 	case shouldRebalance:
 		metrics.LoadBasedReplicaRebalanceMetrics.ShouldRebalance.Inc(1)
 		var bestStoreQPS float64
@@ -497,7 +497,7 @@ func (o QPSScorerOptions) shouldRebalanceBasedOnThresholds(
 				bestStoreQPS = store.Capacity.QueriesPerSecond
 			}
 		}
-		log.VEventf(
+		log.KvDistribution.VEventf(
 			ctx, 4,
 			"should rebalance replica with %0.2f qps from s%d (qps=%0.2f) to s%d (qps=%0.2f)",
 			o.QPSPerReplica, eqClass.existing.StoreID,
@@ -505,7 +505,7 @@ func (o QPSScorerOptions) shouldRebalanceBasedOnThresholds(
 			bestStore, bestStoreQPS,
 		)
 	default:
-		log.Fatalf(ctx, "unknown reason to decline rebalance: %v", declineReason)
+		log.KvDistribution.Fatalf(ctx, "unknown reason to decline rebalance: %v", declineReason)
 	}
 
 	return declineReason == shouldRebalance
@@ -956,7 +956,7 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 		if !isStoreValidForRoutineReplicaTransfer(ctx, s.StoreID) {
-			log.VEventf(
+			log.KvDistribution.VEventf(
 				ctx,
 				3,
 				"not considering store s%d as a potential rebalance candidate because it is on a non-live node n%d",
@@ -1348,14 +1348,14 @@ func rankedCandidateListForRebalancing(
 
 			if !valid {
 				if !needRebalanceFrom {
-					log.VEventf(ctx, 2, "s%d: should-rebalance(invalid): locality:%q",
+					log.KvDistribution.VEventf(ctx, 2, "s%d: should-rebalance(invalid): locality:%q",
 						store.StoreID, store.Locality())
 				}
 				needRebalanceFrom = true
 			}
 			if fullDisk {
 				if !needRebalanceFrom {
-					log.VEventf(ctx, 2, "s%d: should-rebalance(full-disk): capacity:%q",
+					log.KvDistribution.VEventf(ctx, 2, "s%d: should-rebalance(full-disk): capacity:%q",
 						store.StoreID, store.Capacity)
 				}
 				needRebalanceFrom = true
@@ -1407,7 +1407,7 @@ func rankedCandidateListForRebalancing(
 			// Ignore any stores on dead nodes or stores that contain any of the
 			// replicas within `replicasOnExemptedStores`.
 			if !isStoreValidForRoutineReplicaTransfer(ctx, store.StoreID) {
-				log.VEventf(
+				log.KvDistribution.VEventf(
 					ctx,
 					3,
 					"not considering store s%d as a potential rebalance candidate because it is on a non-live node n%d",
@@ -1425,7 +1425,7 @@ func rankedCandidateListForRebalancing(
 			var exempted bool
 			for _, replOnExemptedStore := range replicasOnExemptedStores {
 				if store.StoreID == replOnExemptedStore.StoreID {
-					log.VEventf(
+					log.KvDistribution.VEventf(
 						ctx,
 						6,
 						"s%d is not a possible rebalance candidate for non-voters because it already has a voter of the range; ignoring",
@@ -1460,7 +1460,7 @@ func rankedCandidateListForRebalancing(
 
 				if !needRebalanceFrom && !needRebalanceTo && existing.less(cand) {
 					needRebalanceTo = true
-					log.VEventf(ctx, 2,
+					log.KvDistribution.VEventf(ctx, 2,
 						"s%d: should-rebalance(necessary/diversity=s%d): oldNecessary:%t, newNecessary:%t, "+
 							"oldDiversity:%f, newDiversity:%f, locality:%q",
 						existing.store.StoreID, store.StoreID, existing.necessary, cand.necessary,
@@ -1521,7 +1521,7 @@ func rankedCandidateListForRebalancing(
 	for _, comparable := range equivalenceClasses {
 		existing, ok := existingStores[comparable.existing.StoreID]
 		if !ok {
-			log.Errorf(ctx, "BUG: missing candidate struct for existing store %+v; stores: %+v",
+			log.KvDistribution.Errorf(ctx, "BUG: missing candidate struct for existing store %+v; stores: %+v",
 				comparable.existing, existingStores)
 			continue
 		}
@@ -1583,7 +1583,7 @@ func rankedCandidateListForRebalancing(
 			existing:   existing,
 			candidates: improvementCandidates,
 		})
-		log.VEventf(ctx, 5, "rebalance candidates #%d: %s\nexisting replicas: %s",
+		log.KvDistribution.VEventf(ctx, 5, "rebalance candidates #%d: %s\nexisting replicas: %s",
 			len(results), results[len(results)-1].candidates, results[len(results)-1].existing)
 	}
 
@@ -2098,13 +2098,13 @@ func (o StoreHealthOptions) readAmpIsHealthy(
 	// where candidate stores are still targets, despite exeeding the
 	// threshold.
 	if float64(store.Capacity.L0Sublevels) < avg*l0SubLevelWaterMark {
-		log.Eventf(ctx, "s%d, allocate check l0 sublevels %d exceeds threshold %d, but below average: %f, action enabled %d",
+		log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check l0 sublevels %d exceeds threshold %d, but below average: %f, action enabled %d",
 			store.StoreID, store.Capacity.L0Sublevels,
 			o.L0SublevelThreshold, avg, o.EnforcementLevel)
 		return true
 	}
 
-	log.Eventf(ctx, "s%d, allocate check l0 sublevels %d exceeds threshold %d, above average: %f, action enabled %d",
+	log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check l0 sublevels %d exceeds threshold %d, above average: %f, action enabled %d",
 		store.StoreID, store.Capacity.L0Sublevels,
 		o.L0SublevelThreshold, avg, o.EnforcementLevel)
 
@@ -2125,13 +2125,13 @@ func (o StoreHealthOptions) rebalanceToReadAmpIsHealthy(
 	}
 
 	if float64(store.Capacity.L0Sublevels) < avg*l0SubLevelWaterMark {
-		log.Eventf(ctx, "s%d, allocate check l0 sublevels %d exceeds threshold %d, but below average watermark: %f, action enabled %d",
+		log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check l0 sublevels %d exceeds threshold %d, but below average watermark: %f, action enabled %d",
 			store.StoreID, store.Capacity.L0Sublevels,
 			o.L0SublevelThreshold, avg*l0SubLevelWaterMark, o.EnforcementLevel)
 		return true
 	}
 
-	log.Eventf(ctx, "s%d, allocate check l0 sublevels %d exceeds threshold %d, above average watermark: %f, action enabled %d",
+	log.KvDistribution.VEventf(ctx, 5, "s%d, allocate check l0 sublevels %d exceeds threshold %d, above average watermark: %f, action enabled %d",
 		store.StoreID, store.Capacity.L0Sublevels,
 		o.L0SublevelThreshold, avg*l0SubLevelWaterMark, o.EnforcementLevel)
 

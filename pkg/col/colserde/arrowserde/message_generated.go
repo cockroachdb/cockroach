@@ -4,14 +4,14 @@ package arrowserde
 
 import flatbuffers "github.com/google/flatbuffers/go"
 
-/// ----------------------------------------------------------------------
-/// The root Message type
-/// This union enables us to easily send different message types without
-/// redundant storage, and in the future we can easily add new message types.
-///
-/// Arrow implementations do not need to implement all of the message types,
-/// which may include experimental metadata types. For maximum compatibility,
-/// it is best to send data using RecordBatch
+// / ----------------------------------------------------------------------
+// / The root Message type
+// / This union enables us to easily send different message types without
+// / redundant storage, and in the future we can easily add new message types.
+// /
+// / Arrow implementations do not need to implement all of the message types,
+// / which may include experimental metadata types. For maximum compatibility,
+// / it is best to send data using RecordBatch
 type MessageHeader = byte
 
 const (
@@ -32,15 +32,15 @@ var EnumNamesMessageHeader = map[MessageHeader]string{
 	MessageHeaderSparseTensor:    "SparseTensor",
 }
 
-/// ----------------------------------------------------------------------
-/// Data structures for describing a table row batch (a collection of
-/// equal-length Arrow arrays)
-/// Metadata about a field at some level of a nested type tree (but not
-/// its children).
-///
-/// For example, a List<Int16> with values [[1, 2, 3], null, [4], [5, 6], null]
-/// would have {length: 5, null_count: 2} for its List node, and {length: 6,
-/// null_count: 0} for its Int16 node, as separate FieldNode structs
+// / ----------------------------------------------------------------------
+// / Data structures for describing a table row batch (a collection of
+// / equal-length Arrow arrays)
+// / Metadata about a field at some level of a nested type tree (but not
+// / its children).
+// /
+// / For example, a List<Int16> with values [[1, 2, 3], null, [4], [5, 6], null]
+// / would have {length: 5, null_count: 2} for its List node, and {length: 6,
+// / null_count: 0} for its Int16 node, as separate FieldNode structs
 type FieldNode struct {
 	_tab flatbuffers.Struct
 }
@@ -54,28 +54,28 @@ func (rcv *FieldNode) Table() flatbuffers.Table {
 	return rcv._tab.Table
 }
 
-/// The number of value slots in the Arrow array at this level of a nested
-/// tree
+// / The number of value slots in the Arrow array at this level of a nested
+// / tree
 func (rcv *FieldNode) Length() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(0))
 }
 
-/// The number of value slots in the Arrow array at this level of a nested
-/// tree
+// / The number of value slots in the Arrow array at this level of a nested
+// / tree
 func (rcv *FieldNode) MutateLength(n int64) bool {
 	return rcv._tab.MutateInt64(rcv._tab.Pos+flatbuffers.UOffsetT(0), n)
 }
 
-/// The number of observed nulls. Fields with null_count == 0 may choose not
-/// to write their physical validity bitmap out as a materialized buffer,
-/// instead setting the length of the bitmap buffer to 0.
+// / The number of observed nulls. Fields with null_count == 0 may choose not
+// / to write their physical validity bitmap out as a materialized buffer,
+// / instead setting the length of the bitmap buffer to 0.
 func (rcv *FieldNode) NullCount() int64 {
 	return rcv._tab.GetInt64(rcv._tab.Pos + flatbuffers.UOffsetT(8))
 }
 
-/// The number of observed nulls. Fields with null_count == 0 may choose not
-/// to write their physical validity bitmap out as a materialized buffer,
-/// instead setting the length of the bitmap buffer to 0.
+// / The number of observed nulls. Fields with null_count == 0 may choose not
+// / to write their physical validity bitmap out as a materialized buffer,
+// / instead setting the length of the bitmap buffer to 0.
 func (rcv *FieldNode) MutateNullCount(n int64) bool {
 	return rcv._tab.MutateInt64(rcv._tab.Pos+flatbuffers.UOffsetT(8), n)
 }
@@ -89,9 +89,9 @@ func CreateFieldNode(
 	return builder.Offset()
 }
 
-/// A data header describing the shared memory layout of a "record" or "row"
-/// batch. Some systems call this a "row batch" internally and others a "record
-/// batch".
+// / A data header describing the shared memory layout of a "record" or "row"
+// / batch. Some systems call this a "row batch" internally and others a "record
+// / batch".
 type RecordBatch struct {
 	_tab flatbuffers.Table
 }
@@ -112,8 +112,8 @@ func (rcv *RecordBatch) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-/// number of records / rows. The arrays in the batch should all have this
-/// length
+// / number of records / rows. The arrays in the batch should all have this
+// / length
 func (rcv *RecordBatch) Length() int64 {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
@@ -122,13 +122,13 @@ func (rcv *RecordBatch) Length() int64 {
 	return 0
 }
 
-/// number of records / rows. The arrays in the batch should all have this
-/// length
+// / number of records / rows. The arrays in the batch should all have this
+// / length
 func (rcv *RecordBatch) MutateLength(n int64) bool {
 	return rcv._tab.MutateInt64Slot(4, n)
 }
 
-/// Nodes correspond to the pre-ordered flattened logical schema
+// / Nodes correspond to the pre-ordered flattened logical schema
 func (rcv *RecordBatch) Nodes(obj *FieldNode, j int) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
@@ -148,13 +148,13 @@ func (rcv *RecordBatch) NodesLength() int {
 	return 0
 }
 
-/// Nodes correspond to the pre-ordered flattened logical schema
-/// Buffers correspond to the pre-ordered flattened buffer tree
-///
-/// The number of buffers appended to this list depends on the schema. For
-/// example, most primitive arrays will have 2 buffers, 1 for the validity
-/// bitmap and 1 for the values. For struct arrays, there will only be a
-/// single buffer for the validity (nulls) bitmap
+// / Nodes correspond to the pre-ordered flattened logical schema
+// / Buffers correspond to the pre-ordered flattened buffer tree
+// /
+// / The number of buffers appended to this list depends on the schema. For
+// / example, most primitive arrays will have 2 buffers, 1 for the validity
+// / bitmap and 1 for the values. For struct arrays, there will only be a
+// / single buffer for the validity (nulls) bitmap
 func (rcv *RecordBatch) Buffers(obj *Buffer, j int) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
@@ -174,12 +174,12 @@ func (rcv *RecordBatch) BuffersLength() int {
 	return 0
 }
 
-/// Buffers correspond to the pre-ordered flattened buffer tree
-///
-/// The number of buffers appended to this list depends on the schema. For
-/// example, most primitive arrays will have 2 buffers, 1 for the validity
-/// bitmap and 1 for the values. For struct arrays, there will only be a
-/// single buffer for the validity (nulls) bitmap
+// / Buffers correspond to the pre-ordered flattened buffer tree
+// /
+// / The number of buffers appended to this list depends on the schema. For
+// / example, most primitive arrays will have 2 buffers, 1 for the validity
+// / bitmap and 1 for the values. For struct arrays, there will only be a
+// / single buffer for the validity (nulls) bitmap
 func RecordBatchStart(builder *flatbuffers.Builder) {
 	builder.StartObject(3)
 }
@@ -204,12 +204,12 @@ func RecordBatchEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
 
-/// For sending dictionary encoding information. Any Field can be
-/// dictionary-encoded, but in this case none of its children may be
-/// dictionary-encoded.
-/// There is one vector / column per dictionary, but that vector / column
-/// may be spread across multiple dictionary batches by using the isDelta
-/// flag
+// / For sending dictionary encoding information. Any Field can be
+// / dictionary-encoded, but in this case none of its children may be
+// / dictionary-encoded.
+// / There is one vector / column per dictionary, but that vector / column
+// / may be spread across multiple dictionary batches by using the isDelta
+// / flag
 type DictionaryBatch struct {
 	_tab flatbuffers.Table
 }
@@ -255,8 +255,8 @@ func (rcv *DictionaryBatch) Data(obj *RecordBatch) *RecordBatch {
 	return nil
 }
 
-/// If isDelta is true the values in the dictionary are to be appended to a
-/// dictionary with the indicated id
+// / If isDelta is true the values in the dictionary are to be appended to a
+// / dictionary with the indicated id
 func (rcv *DictionaryBatch) IsDelta() byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
 	if o != 0 {
@@ -265,8 +265,8 @@ func (rcv *DictionaryBatch) IsDelta() byte {
 	return 0
 }
 
-/// If isDelta is true the values in the dictionary are to be appended to a
-/// dictionary with the indicated id
+// / If isDelta is true the values in the dictionary are to be appended to a
+// / dictionary with the indicated id
 func (rcv *DictionaryBatch) MutateIsDelta(n byte) bool {
 	return rcv._tab.MutateByteSlot(8, n)
 }

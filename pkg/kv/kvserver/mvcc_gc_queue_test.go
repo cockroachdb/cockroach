@@ -482,6 +482,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 	defer eng.Close()
 
 	rng, _ := randutil.NewTestRand()
+	localMax, maxKey := keys.LocalMax, keys.MaxKey
 
 	var keys []roachpb.Key
 	fillDataForStats := func(rw storage.ReadWriter, keyCount, valCount int) (enginepb.MVCCStats, hlc.Timestamp) {
@@ -505,7 +506,7 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 
 	deleteWithTombstone := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
 		require.NoError(t, storage.MVCCDeleteRangeUsingTombstone(
-			ctx, rw, ms, []byte{0}, []byte{0xff}, delTime, hlc.ClockTimestamp{}, nil, nil, false, 1, nil))
+			ctx, rw, ms, localMax, maxKey, delTime, hlc.ClockTimestamp{}, nil, nil, false, 1, nil))
 	}
 	deleteWithPoints := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
 		for _, key := range keys {
@@ -524,8 +525,8 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 
 	rangeMs := ms
 	pointMs := ms
-	deleteWithTombstone(eng.NewBatch(), deletionTime, &rangeMs)
-	deleteWithPoints(eng.NewBatch(), deletionTime, &pointMs)
+	withBatch(eng, func(b storage.Batch) { deleteWithTombstone(b, deletionTime, &rangeMs) })
+	withBatch(eng, func(b storage.Batch) { deleteWithPoints(b, deletionTime, &pointMs) })
 
 	gcTTL := time.Minute * 30
 	for _, d := range []struct {
@@ -546,6 +547,12 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 			require.Equal(t, d.rangeDel, dr, "expect enqueue metric for range deletion")
 		})
 	}
+}
+
+func withBatch(eng storage.Engine, fn func(b storage.Batch)) {
+	b := eng.NewBatch()
+	defer b.Close()
+	fn(b)
 }
 
 // TestMVCCGCQueueProcess creates test data in the range over various time

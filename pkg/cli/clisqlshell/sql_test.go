@@ -12,7 +12,7 @@ package clisqlshell_test
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -371,7 +371,7 @@ func Example_sql_lex() {
 	defer c.Cleanup()
 
 	var sqlConnCtx clisqlclient.Context
-	conn := sqlConnCtx.MakeSQLConn(ioutil.Discard, ioutil.Discard,
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard,
 		fmt.Sprintf("postgres://%s@%s/?sslmode=disable",
 			username.RootUser, c.ServingSQLAddr()))
 	defer func() {

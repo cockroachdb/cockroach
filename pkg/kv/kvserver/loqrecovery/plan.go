@@ -173,10 +173,14 @@ func PlanReplicas(
 // validateReplicaSets evaluates provided set of replicas and an optional
 // deadStoreIDs request and produces consistency info containing:
 // availableStores  - all storeIDs for which info was collected, i.e.
-//                    (barring operator error) the conclusive list of all
-//                    remaining stores in the cluster.
+//
+//	(barring operator error) the conclusive list of all
+//	remaining stores in the cluster.
+//
 // missingStores    - all dead stores (stores that are referenced by replicas,
-//                    but not present in any of descriptors)
+//
+//	but not present in any of descriptors)
+//
 // If inconsistency is found e.g. no info was provided for a store but it is
 // not present in explicit deadStoreIDs list, error is returned.
 func validateReplicaSets(

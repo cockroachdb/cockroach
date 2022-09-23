@@ -30,6 +30,7 @@ go_library(
 go_test(
     name = "instanceprovider_test",
     srcs = ["instanceprovider_test.go"],
+    args = ["-test.timeout=295s"],
     deps = [
         ":instanceprovider",
         "//pkg/base",

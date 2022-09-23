@@ -12,6 +12,8 @@ import { StatementInsightsViewProps } from "./statementInsightsView";
 import moment from "moment";
 
 export const statementInsightsPropsFixture: StatementInsightsViewProps = {
+  onColumnsChange: x => {},
+  selectedColumnNames: [],
   statements: [
     {
       statementID: "f72f37ea-b3a0-451f-80b8-dfb27d0bc2a9",
@@ -29,7 +31,8 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       lastRetryReason: null,
       isFullScan: false,
       retries: 0,
-      problems: ["HighContentionTime"],
+      problem: "SlowExecution",
+      causes: ["HighContention"],
       priority: "high",
       sessionID: "103",
       timeSpentWaiting: null,
@@ -43,7 +46,7 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       statementFingerprintID: "938x3",
       transactionFingerprintID: "1971x3",
       transactionID: "e72f37ea-b3a0-451f-80b8-dfb27d0bc2a5",
-      query: "INSERT INTO vehicles VALUES ($1, $2, __more6__)",
+      query: "INSERT INTO vehicles VALUES ($1, $2, __more1_10__)",
       startTime: moment.utc("2022.08.10"),
       endTime: moment.utc("2022.08.10 00:00:00.25"),
       elapsedTimeMillis: moment.duration("00:00:00.25").asMilliseconds(),
@@ -53,7 +56,8 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       lastRetryReason: null,
       isFullScan: false,
       retries: 0,
-      problems: ["HighContentionTime"],
+      problem: "SlowExecution",
+      causes: ["HighContention"],
       priority: "high",
       sessionID: "103",
       timeSpentWaiting: null,
@@ -78,7 +82,8 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       lastRetryReason: null,
       isFullScan: false,
       retries: 0,
-      problems: ["HighContentionTime"],
+      problem: "SlowExecution",
+      causes: ["HighContention"],
       priority: "high",
       sessionID: "103",
       timeSpentWaiting: null,

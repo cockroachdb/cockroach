@@ -75,12 +75,23 @@ var (
 
 	// PrettyPrintKey prints a key in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
-	// package circle import.
+	// circular package import dependencies (see keys.PrettyPrint for
+	// implementation).
 	// valDirs correspond to the encoding direction of each encoded value
 	// in the key (if known). If left unspecified, the default encoding
 	// direction for each value type is used (see
 	// encoding.go:prettyPrintFirstValue).
+	// See SafeFormatKey for a redaction-safe implementation.
 	PrettyPrintKey func(valDirs []encoding.Direction, key Key) string
+
+	// SafeFormatKey is the generalized redaction function used to redact pretty
+	// printed keys. It's implemented in git.com/cockroachdb/cockroach/keys to
+	// avoid circular package import dependencies (see keys.SafeFormat for
+	// implementation).
+	// valDirs correspond to the encoding direction of each encoded value
+	// in the key (if known). If left unspecified, the default encoding
+	// direction for each value type is used (see encoding.go:prettyPrintFirstValue).
+	SafeFormatKey func(w redact.SafeWriter, valDirs []encoding.Direction, key Key)
 
 	// PrettyPrintRange prints a key range in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
@@ -133,13 +144,18 @@ func (rk RKey) PrefixEnd() RKey {
 	return RKey(keysbase.PrefixEnd(rk))
 }
 
+// SafeFormat - see Key.SafeFormat.
+func (rk RKey) SafeFormat(w redact.SafePrinter, r rune) {
+	rk.AsRawKey().SafeFormat(w, r)
+}
+
 func (rk RKey) String() string {
 	return Key(rk).String()
 }
 
-// StringWithDirs - see Key.String.WithDirs.
-func (rk RKey) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
-	return Key(rk).StringWithDirs(valDirs, maxLen)
+// StringWithDirs - see Key.StringWithDirs.
+func (rk RKey) StringWithDirs(valDirs []encoding.Direction) string {
+	return Key(rk).StringWithDirs(valDirs)
 }
 
 // Key is a custom type for a byte string in proto
@@ -202,28 +218,31 @@ func (k Key) Compare(b Key) int {
 	return bytes.Compare(k, b)
 }
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (k Key) SafeFormat(w redact.SafePrinter, _ rune) {
+	SafeFormatKey(w, nil /* valDirs */, k)
+}
+
 // String returns a string-formatted version of the key.
 func (k Key) String() string {
-	return k.StringWithDirs(nil /* valDirs */, 0 /* maxLen */)
+	return redact.StringWithoutMarkers(k)
 }
 
 // StringWithDirs is the value encoding direction-aware version of String.
 //
 // Args:
-// valDirs: The direction for the key's components, generally needed for correct
-// 	decoding. If nil, the values are pretty-printed with default encoding
-// 	direction.
-// maxLen: If not 0, only the first maxLen chars from the decoded key are
-//   returned, plus a "..." suffix.
-func (k Key) StringWithDirs(valDirs []encoding.Direction, maxLen int) string {
+//
+//	valDirs: The direction for the key's components, generally needed for
+//	correct decoding. If nil, the values are pretty-printed with default
+//	encoding direction.
+//
+//	returned, plus a "..." suffix.
+func (k Key) StringWithDirs(valDirs []encoding.Direction) string {
 	var s string
 	if PrettyPrintKey != nil {
 		s = PrettyPrintKey(valDirs, k)
 	} else {
 		s = fmt.Sprintf("%q", []byte(k))
-	}
-	if maxLen != 0 && len(s) > maxLen {
-		return s[0:maxLen] + "..."
 	}
 	return s
 }
@@ -1340,28 +1359,29 @@ func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.ClockTimestamp, b
 //
 // Additionally, the caller must ensure:
 //
-// 1) if the new range overlaps with some range in the list, then it
-//    also overlaps with every subsequent range in the list.
+//  1. if the new range overlaps with some range in the list, then it
+//     also overlaps with every subsequent range in the list.
 //
-// 2) the new range's "end" seqnum is larger or equal to the "end"
-//    seqnum of the last element in the list.
+//  2. the new range's "end" seqnum is larger or equal to the "end"
+//     seqnum of the last element in the list.
 //
 // For example:
-//     current list [3 5] [10 20] [22 24]
-//     new item:    [8 26]
-//     final list:  [3 5] [8 26]
 //
-//     current list [3 5] [10 20] [22 24]
-//     new item:    [28 32]
-//     final list:  [3 5] [10 20] [22 24] [28 32]
+//	current list [3 5] [10 20] [22 24]
+//	new item:    [8 26]
+//	final list:  [3 5] [8 26]
+//
+//	current list [3 5] [10 20] [22 24]
+//	new item:    [28 32]
+//	final list:  [3 5] [10 20] [22 24] [28 32]
 //
 // This corresponds to savepoints semantics:
 //
-// - Property 1 says that a rollback to an earlier savepoint
-//   rolls back over all writes following that savepoint.
-// - Property 2 comes from that the new range's 'end' seqnum is the
-//   current write seqnum and thus larger than or equal to every
-//   previously seen value.
+//   - Property 1 says that a rollback to an earlier savepoint
+//     rolls back over all writes following that savepoint.
+//   - Property 2 comes from that the new range's 'end' seqnum is the
+//     current write seqnum and thus larger than or equal to every
+//     previously seen value.
 func (t *Transaction) AddIgnoredSeqNumRange(newRange enginepb.IgnoredSeqNumRange) {
 	// Truncate the list at the last element not included in the new range.
 
@@ -2101,11 +2121,11 @@ func (s Span) Equal(o Span) bool {
 }
 
 // Overlaps returns true WLOG for span A and B iff:
-// 1. Both spans contain one key (just the start key) and they are equal; or
-// 2. The span with only one key is contained inside the other span; or
-// 3. The end key of span A is strictly greater than the start key of span B
-//    and the end key of span B is strictly greater than the start key of span
-//    A.
+//  1. Both spans contain one key (just the start key) and they are equal; or
+//  2. The span with only one key is contained inside the other span; or
+//  3. The end key of span A is strictly greater than the start key of span B
+//     and the end key of span B is strictly greater than the start key of span
+//     A.
 func (s Span) Overlaps(o Span) bool {
 	if !s.Valid() || !o.Valid() {
 		return false

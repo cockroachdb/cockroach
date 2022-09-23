@@ -15,13 +15,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,6 +44,51 @@ import (
 type ttlProcessor struct {
 	execinfra.ProcessorBase
 	ttlSpec execinfrapb.TTLSpec
+
+	// ttlProcessorOverride allows the job to override fields that would normally
+	// come from the DistSQL processor for 22.1 compatibility.
+	ttlProcessorOverride *ttlProcessorOverride
+}
+
+type ttlProcessorOverride struct {
+	descsCol       *descs.Collection
+	db             *kv.DB
+	codec          keys.SQLCodec
+	jobRegistry    *jobs.Registry
+	sqlInstanceID  base.SQLInstanceID
+	settingsValues *settings.Values
+	ie             sqlutil.InternalExecutor
+}
+
+func (t *ttlProcessor) getWorkFields() (
+	*descs.Collection,
+	*kv.DB,
+	keys.SQLCodec,
+	*jobs.Registry,
+	base.SQLInstanceID,
+) {
+	tpo := t.ttlProcessorOverride
+	if tpo != nil {
+		return tpo.descsCol, tpo.db, tpo.codec, tpo.jobRegistry, tpo.sqlInstanceID
+	}
+	flowCtx := t.FlowCtx
+	serverCfg := flowCtx.Cfg
+	return flowCtx.Descriptors, serverCfg.DB, serverCfg.Codec, serverCfg.JobRegistry, flowCtx.NodeID.SQLInstanceID()
+}
+
+func (t *ttlProcessor) getRangeFields() (
+	*settings.Values,
+	sqlutil.InternalExecutor,
+	*kv.DB,
+	*descs.Collection,
+) {
+	tpo := t.ttlProcessorOverride
+	if tpo != nil {
+		return tpo.settingsValues, tpo.ie, tpo.db, tpo.descsCol
+	}
+	flowCtx := t.FlowCtx
+	serverCfg := flowCtx.Cfg
+	return &serverCfg.Settings.SV, serverCfg.Executor, serverCfg.DB, flowCtx.Descriptors
 }
 
 func (t *ttlProcessor) Start(ctx context.Context) {
@@ -53,11 +100,7 @@ func (t *ttlProcessor) Start(ctx context.Context) {
 func (t *ttlProcessor) work(ctx context.Context) error {
 
 	ttlSpec := t.ttlSpec
-	flowCtx := t.FlowCtx
-	descsCol := flowCtx.Descriptors
-	serverCfg := flowCtx.Cfg
-	db := serverCfg.DB
-	codec := serverCfg.Codec
+	descsCol, db, codec, jobRegistry, sqlInstanceID := t.getWorkFields()
 	details := ttlSpec.RowLevelTTLDetails
 	rangeConcurrency := ttlSpec.RangeConcurrency
 
@@ -113,7 +156,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		return err
 	}
 
-	metrics := serverCfg.JobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
+	metrics := jobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
 		labelMetrics,
 		relationName,
 	)
@@ -151,51 +194,18 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 		// Iterate over every range to feed work for the goroutine processors.
 		var alloc tree.DatumAlloc
-		ri := kvcoord.MakeRangeIterator(serverCfg.DistSender)
 		for _, span := range ttlSpec.Spans {
-			rangeSpan := span
-			ri.Seek(ctx, roachpb.RKey(span.Key), kvcoord.Ascending)
-			for done := false; ri.Valid() && !done; ri.Next(ctx) {
-				// Send range info to each goroutine worker.
-				rangeDesc := ri.Desc()
-				var nextRange rangeToProcess
-				// A single range can contain multiple tables or indexes.
-				// If this is the case, the rangeDesc.StartKey would be less than span.Key
-				// or the rangeDesc.EndKey would be greater than the span.EndKey, meaning
-				// the range contains the start or the end of the range respectively.
-				// Trying to decode keys outside the PK range will lead to a decoding error.
-				// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
-				// (by default, a 0 element startPK or endPK means the beginning or end).
-				if rangeDesc.StartKey.AsRawKey().Compare(span.Key) > 0 {
-					var err error
-					nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, codec, pkTypes, &alloc)
-					if err != nil {
-						return errors.Wrapf(
-							err,
-							"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
-							rangeDesc.RangeID,
-							rangeDesc.StartKey.AsRawKey(),
-							span.Key,
-						)
-					}
-				}
-				if rangeDesc.EndKey.AsRawKey().Compare(span.EndKey) < 0 {
-					rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
-					var err error
-					nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, codec, pkTypes, &alloc)
-					if err != nil {
-						return errors.Wrapf(
-							err,
-							"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
-							rangeDesc.RangeID,
-							rangeDesc.EndKey.AsRawKey(),
-							span.EndKey,
-						)
-					}
-				} else {
-					done = true
-				}
-				rangeChan <- nextRange
+			startPK, err := keyToDatums(roachpb.RKey(span.Key), codec, pkTypes, &alloc)
+			if err != nil {
+				return err
+			}
+			endPK, err := keyToDatums(roachpb.RKey(span.EndKey), codec, pkTypes, &alloc)
+			if err != nil {
+				return err
+			}
+			rangeChan <- rangeToProcess{
+				startPK: startPK,
+				endPK:   endPK,
 			}
 		}
 		return nil
@@ -209,7 +219,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	}
 
 	jobID := ttlSpec.JobID
-	return serverCfg.JobRegistry.UpdateJobWithTxn(
+	return jobRegistry.UpdateJobWithTxn(
 		ctx,
 		jobID,
 		nil,  /* txn */
@@ -217,14 +227,19 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
 			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
-			existingRowCount := rowLevelTTL.RowCount
-			rowLevelTTL.RowCount += processorRowCount
+			rowLevelTTL.JobRowCount += processorRowCount
+			processorID := t.ProcessorID
+			rowLevelTTL.ProcessorProgresses = append(rowLevelTTL.ProcessorProgresses, jobspb.RowLevelTTLProcessorProgress{
+				ProcessorID:       processorID,
+				SQLInstanceID:     sqlInstanceID,
+				ProcessorRowCount: processorRowCount,
+			})
 			ju.UpdateProgress(progress)
 			log.VInfof(
 				ctx,
 				2, /* level */
-				"TTL processorRowCount updated jobID=%d processorID=%d tableID=%d existingRowCount=%d processorRowCount=%d progress=%s",
-				jobID, t.ProcessorID, details.TableID, existingRowCount, processorRowCount, progress,
+				"TTL processorRowCount updated jobID=%d processorID=%d sqlInstanceID=%d tableID=%d jobRowCount=%d processorRowCount=%d",
+				jobID, processorID, sqlInstanceID, details.TableID, rowLevelTTL.JobRowCount, processorRowCount,
 			)
 			return nil
 		},
@@ -250,9 +265,7 @@ func (t *ttlProcessor) runTTLOnRange(
 	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
-	flowCtx := t.FlowCtx
-	serverCfg := flowCtx.Cfg
-	ie := serverCfg.Executor
+	settingsValues, ie, db, descsCol := t.getRangeFields()
 
 	selectBatchSize := ttlSpec.SelectBatchSize
 	selectBuilder := makeSelectQueryBuilder(
@@ -292,7 +305,7 @@ func (t *ttlProcessor) runTTLOnRange(
 
 	for {
 		// Check the job is enabled on every iteration.
-		if err := checkEnabled(&serverCfg.Settings.SV); err != nil {
+		if err := checkEnabled(settingsValues); err != nil {
 			return rangeRowCount, err
 		}
 
@@ -314,10 +327,10 @@ func (t *ttlProcessor) runTTLOnRange(
 				until = numExpiredRows
 			}
 			deleteBatch := expiredRowsPKs[startRowIdx:until]
-			if err := serverCfg.DB.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
+			if err := db.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
 				// If we detected a schema change here, the DELETE will not succeed
 				// (the SELECT still will because of the AOST). Early exit here.
-				desc, err := flowCtx.Descriptors.GetImmutableTableByID(
+				desc, err := descsCol.GetImmutableTableByID(
 					ctx,
 					txn,
 					details.TableID,
@@ -369,27 +382,19 @@ func (t *ttlProcessor) runTTLOnRange(
 func keyToDatums(
 	key roachpb.RKey, codec keys.SQLCodec, pkTypes []*types.T, alloc *tree.DatumAlloc,
 ) (tree.Datums, error) {
-	rKey := key.AsRawKey()
 
-	// If any of these errors, that means we reached an "empty" key, which
-	// symbolizes the start or end of a range.
-	if _, _, err := codec.DecodeTablePrefix(rKey); err != nil {
-		return nil, nil //nolint:returnerrcheck
-	}
-	if _, _, _, err := codec.DecodeIndexPrefix(rKey); err != nil {
-		return nil, nil //nolint:returnerrcheck
-	}
+	rKey := key.AsRawKey()
 
 	// Decode the datums ourselves, instead of using rowenc.DecodeKeyVals.
 	// We cannot use rowenc.DecodeKeyVals because we may not have the entire PK
 	// as the key for the range (e.g. a PK (a, b) may only be split on (a)).
-	rKey, err := codec.StripTenantPrefix(key.AsRawKey())
+	rKey, err := codec.StripTenantPrefix(rKey)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error decoding tenant prefix of %x", key)
 	}
-	rKey, _, _, err = rowenc.DecodePartialTableIDIndexID(key)
+	rKey, _, _, err = rowenc.DecodePartialTableIDIndexID(rKey)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error decoding table/index ID of %x", key)
+		return nil, errors.Wrapf(err, "error decoding table/index ID of key=%x", key)
 	}
 	encDatums := make([]rowenc.EncDatum, 0, len(pkTypes))
 	for len(rKey) > 0 && len(encDatums) < len(pkTypes) {

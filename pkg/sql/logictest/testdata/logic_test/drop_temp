@@ -1,0 +1,44 @@
+subtest drop_temp_tables_seqs
+
+user root
+
+statement ok
+SET experimental_enable_temp_tables=on;
+
+statement ok
+CREATE TEMP TABLE t_tmp(X int);
+
+statement ok
+CREATE TEMP SEQUENCE s_tmp START 1 INCREMENT 1;
+
+statement ok
+CREATE USER tmp_dropper;
+
+statement ok
+SET ROLE tmp_dropper;
+
+statement error pq: user tmp_dropper does not have DROP privilege on relation t_tmp
+DROP TABLE t_tmp;
+
+statement error pq: user tmp_dropper does not have DROP privilege on relation s_tmp
+DROP SEQUENCE s_tmp;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT DROP ON TABLE t_tmp to tmp_dropper;
+GRANT DROP ON SEQUENCE s_tmp to tmp_dropper;
+
+
+statement ok
+SET ROLE tmp_dropper;
+
+statement ok
+DROP TABLE t_tmp;
+
+statement ok
+DROP SEQUENCE s_tmp;
+
+statement ok
+SET ROLE root;

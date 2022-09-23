@@ -40,6 +40,7 @@ go_test(
     name = "schemadesc_test",
     size = "small",
     srcs = ["schema_desc_test.go"],
+    args = ["-test.timeout=55s"],
     deps = [
         ":schemadesc",
         "//pkg/clusterversion",

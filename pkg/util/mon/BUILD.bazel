@@ -30,6 +30,7 @@ go_test(
     name = "mon_test",
     size = "small",
     srcs = ["bytes_usage_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":mon"],
     deps = [
         "//pkg/settings/cluster",

@@ -24,18 +24,18 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // This mechanism can be used to provide a "window" of compatibility when new
 // features are added. Example:
-//  - we start with Version=1; distsql servers with version 1 only accept
-//    requests with version 1.
-//  - a new distsql feature is added; Version is bumped to 2. The
-//    planner does not yet use this feature by default; it still issues
-//    requests with version 1.
-//  - MinAcceptedVersion is still 1, i.e. servers with version 2
-//    accept both versions 1 and 2.
-//  - after an upgrade cycle, we can enable the feature in the planner,
-//    requiring version 2.
-//  - at some later point, we can choose to deprecate version 1 and have
-//    servers only accept versions >= 2 (by setting
-//    MinAcceptedVersion to 2).
+//   - we start with Version=1; distsql servers with version 1 only accept
+//     requests with version 1.
+//   - a new distsql feature is added; Version is bumped to 2. The
+//     planner does not yet use this feature by default; it still issues
+//     requests with version 1.
+//   - MinAcceptedVersion is still 1, i.e. servers with version 2
+//     accept both versions 1 and 2.
+//   - after an upgrade cycle, we can enable the feature in the planner,
+//     requiring version 2.
+//   - at some later point, we can choose to deprecate version 1 and have
+//     servers only accept versions >= 2 (by setting
+//     MinAcceptedVersion to 2).
 //
 // Why does this all matter? Because of rolling upgrades, distsql servers across
 // nodes may not have an overlapping window of compatibility, so only a subset

@@ -43,6 +43,7 @@ go_test(
         "safe_format_test.go",
         "type_desc_test.go",
     ],
+    args = ["-test.timeout=55s"],
     deps = [
         ":typedesc",
         "//pkg/clusterversion",

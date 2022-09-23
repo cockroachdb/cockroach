@@ -57,6 +57,7 @@ go_test(
         "operator_test.go",
         "ordering_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":opt"],
     deps = [
         "//pkg/settings/cluster",

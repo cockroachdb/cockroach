@@ -72,7 +72,7 @@ func makeLeasedDescriptors(lm leaseManager) leasedDescriptors {
 // transaction, and supports access by name and by ID.
 type leasedDescriptors struct {
 	lm    leaseManager
-	cache nstree.Map
+	cache nstree.NameMap
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the

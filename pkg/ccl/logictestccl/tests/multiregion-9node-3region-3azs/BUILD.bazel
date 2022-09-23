@@ -5,6 +5,7 @@ go_test(
     name = "multiregion-9node-3region-3azs_test",
     size = "enormous",
     srcs = ["generated_test.go"],
+    args = ["-test.timeout=3595s"],
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/ccl/logictestccl:testdata",  # keep

@@ -46,13 +46,14 @@ func TestIsAtLeastVersionBuiltin(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 
+	v := clusterversion.ByKey(clusterversion.Start22_2).String()
 	// Check that the builtin returns false when comparing against 22.1-2
 	// version because we are still on 22.1-0.
-	sqlDB.CheckQueryResults(t, "SELECT crdb_internal.is_at_least_version('22.1-2')", [][]string{{"false"}})
+	sqlDB.CheckQueryResults(t, "SELECT crdb_internal.is_at_least_version('"+v+"')", [][]string{{"false"}})
 
 	// Run the upgrade.
-	sqlDB.Exec(t, "SET CLUSTER SETTING version = $1", clusterversion.ByKey(clusterversion.Start22_2).String())
+	sqlDB.Exec(t, "SET CLUSTER SETTING version = $1", v)
 
 	// It should now return true.
-	sqlDB.CheckQueryResultsRetry(t, "SELECT crdb_internal.is_at_least_version('22.1-2')", [][]string{{"true"}})
+	sqlDB.CheckQueryResultsRetry(t, "SELECT crdb_internal.is_at_least_version('"+v+"')", [][]string{{"true"}})
 }

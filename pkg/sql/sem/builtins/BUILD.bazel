@@ -8,6 +8,7 @@ go_library(
         "aggregate_builtins.go",
         "all_builtins.go",
         "builtins.go",
+        "fixed_oids.go",
         "generator_builtins.go",
         "generator_probe_ranges.go",
         "geo_builtins.go",
@@ -58,7 +59,6 @@ go_library(
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/memsize",
-        "//pkg/sql/oidext",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -145,6 +145,7 @@ go_test(
         "show_create_all_tables_builtin_test.go",
         "window_frame_builtins_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":builtins"],
     deps = [

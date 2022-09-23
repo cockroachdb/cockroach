@@ -41,6 +41,7 @@ go_test(
         "all_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=895s"],
     embed = [":allccl"],
     shard_count = 16,
     deps = [

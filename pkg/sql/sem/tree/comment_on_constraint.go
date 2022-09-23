@@ -12,14 +12,14 @@ package tree
 
 import "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 
-//CommentOnConstraint represents a COMMENT ON CONSTRAINT statement
+// CommentOnConstraint represents a COMMENT ON CONSTRAINT statement
 type CommentOnConstraint struct {
 	Constraint Name
 	Table      *UnresolvedObjectName
 	Comment    *string
 }
 
-//Format implements the NodeFormatter interface.
+// Format implements the NodeFormatter interface.
 func (n *CommentOnConstraint) Format(ctx *FmtCtx) {
 	ctx.WriteString("COMMENT ON CONSTRAINT ")
 	ctx.FormatNode(&n.Constraint)

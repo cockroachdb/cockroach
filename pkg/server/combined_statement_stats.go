@@ -109,7 +109,10 @@ func getCombinedStatementsQueryClausesAndArgs(
 		buffer.WriteString(" WHERE true")
 	} else {
 		// Filter out internal statements by app name.
-		buffer.WriteString(fmt.Sprintf(" WHERE app_name NOT LIKE '%s%%'", catconstants.InternalAppNamePrefix))
+		buffer.WriteString(fmt.Sprintf(
+			" WHERE app_name NOT LIKE '%s%%' AND app_name NOT LIKE '%s%%'",
+			catconstants.InternalAppNamePrefix,
+			catconstants.DelegatedAppNamePrefix))
 	}
 
 	if start != nil {

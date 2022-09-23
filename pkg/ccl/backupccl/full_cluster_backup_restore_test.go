@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -183,8 +184,8 @@ CREATE TABLE data2.foo (a int);
 
 	doneRestore := make(chan struct{})
 	go func() {
+		defer close(doneRestore)
 		sqlDBRestore.Exec(t, `RESTORE FROM $1`, localFoo)
-		close(doneRestore)
 	}()
 
 	// Check that zones are restored during pre-restore.
@@ -922,10 +923,13 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	restoreBlockEntiresThreshold := 4
 	entriesCount := 0
 	params := base.TestClusterArgs{}
+	var mu syncutil.Mutex
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
 				RunAfterProcessingRestoreSpanEntry: func(_ context.Context) {
+					mu.Lock()
+					defer mu.Unlock()
 					if entriesCount == 0 {
 						close(dbRestoreStarted)
 					}

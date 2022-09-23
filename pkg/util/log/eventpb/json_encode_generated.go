@@ -300,6 +300,62 @@ func (m *AlterDefaultPrivileges) AppendJSONFields(printComma bool, b redact.Reda
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *AlterFunctionOptions) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.FunctionName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FunctionName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.FunctionName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *AlterFunctionOwner) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.FunctionName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FunctionName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.FunctionName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.Owner != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Owner\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.Owner)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *AlterIndex) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -732,6 +788,26 @@ func (m *CapturedIndexUsageStats) AppendJSONFields(printComma bool, b redact.Red
 		}
 		printComma = true
 		b = append(b, "\"IsInverted\":true"...)
+	}
+
+	if m.CreatedAt != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CreatedAt\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.CreatedAt)))
+		b = append(b, '"')
+	}
+
+	if m.SchemaName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SchemaName\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.SchemaName)))
+		b = append(b, '"')
 	}
 
 	return printComma, b
@@ -2090,6 +2166,36 @@ func (m *CreateDatabase) AppendJSONFields(printComma bool, b redact.RedactableBy
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *CreateFunction) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.FunctionName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FunctionName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.FunctionName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.IsReplace {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IsReplace\":true"...)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *CreateIndex) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -2492,6 +2598,28 @@ func (m *DropDatabase) AppendJSONFields(printComma bool, b redact.RedactableByte
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *DropFunction) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.FunctionName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FunctionName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.FunctionName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *DropIndex) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -2836,6 +2964,145 @@ func (m *LargeRowInternal) AppendJSONFields(printComma bool, b redact.Redactable
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
 
 	printComma, b = m.CommonLargeRowDetails.AppendJSONFields(printComma, b)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *LevelStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"Level\":"...)
+	b = strconv.AppendUint(b, uint64(m.Level), 10)
+
+	if m.NumFiles != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumFiles\":"...)
+		b = strconv.AppendInt(b, int64(m.NumFiles), 10)
+	}
+
+	if m.SizeBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SizeBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.SizeBytes), 10)
+	}
+
+	if m.Score != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Score\":"...)
+		b = strconv.AppendFloat(b, float64(m.Score), 'f', -1, 32)
+	}
+
+	if m.BytesIn != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"BytesIn\":"...)
+		b = strconv.AppendUint(b, uint64(m.BytesIn), 10)
+	}
+
+	if m.BytesIngested != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"BytesIngested\":"...)
+		b = strconv.AppendUint(b, uint64(m.BytesIngested), 10)
+	}
+
+	if m.BytesMoved != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"BytesMoved\":"...)
+		b = strconv.AppendUint(b, uint64(m.BytesMoved), 10)
+	}
+
+	if m.BytesRead != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"BytesRead\":"...)
+		b = strconv.AppendUint(b, uint64(m.BytesRead), 10)
+	}
+
+	if m.BytesCompacted != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"BytesCompacted\":"...)
+		b = strconv.AppendUint(b, uint64(m.BytesCompacted), 10)
+	}
+
+	if m.BytesFlushed != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"BytesFlushed\":"...)
+		b = strconv.AppendUint(b, uint64(m.BytesFlushed), 10)
+	}
+
+	if m.TablesCompacted != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TablesCompacted\":"...)
+		b = strconv.AppendUint(b, uint64(m.TablesCompacted), 10)
+	}
+
+	if m.TablesFlushed != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TablesFlushed\":"...)
+		b = strconv.AppendUint(b, uint64(m.TablesFlushed), 10)
+	}
+
+	if m.TablesIngested != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TablesIngested\":"...)
+		b = strconv.AppendUint(b, uint64(m.TablesIngested), 10)
+	}
+
+	if m.TablesMoved != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TablesMoved\":"...)
+		b = strconv.AppendUint(b, uint64(m.TablesMoved), 10)
+	}
+
+	if m.NumSublevels != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumSublevels\":"...)
+		b = strconv.AppendInt(b, int64(m.NumSublevels), 10)
+	}
 
 	return printComma, b
 }
@@ -3193,6 +3460,16 @@ func (m *RecoveryEvent) AppendJSONFields(printComma bool, b redact.RedactableByt
 		b = append(b, "\"IgnoreExistingBackup\":true"...)
 	}
 
+	if m.ApplicationName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ApplicationName\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.ApplicationName)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 
@@ -3235,6 +3512,40 @@ func (m *RenameDatabase) AppendJSONFields(printComma bool, b redact.RedactableBy
 		b = append(b, "\"NewDatabaseName\":\""...)
 		b = append(b, redact.StartMarker()...)
 		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.NewDatabaseName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *RenameFunction) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.FunctionName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FunctionName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.FunctionName)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.NewFunctionName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NewFunctionName\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.NewFunctionName)))))
 		b = append(b, redact.EndMarker()...)
 		b = append(b, '"')
 	}
@@ -3884,6 +4195,77 @@ func (m *SampledQuery) AppendJSONFields(printComma bool, b redact.RedactableByte
 		b = append(b, ']')
 	}
 
+	if m.NetworkBytesSent != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NetworkBytesSent\":"...)
+		b = strconv.AppendInt(b, int64(m.NetworkBytesSent), 10)
+	}
+
+	if m.MaxMemUsage != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MaxMemUsage\":"...)
+		b = strconv.AppendInt(b, int64(m.MaxMemUsage), 10)
+	}
+
+	if m.MaxDiskUsage != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MaxDiskUsage\":"...)
+		b = strconv.AppendInt(b, int64(m.MaxDiskUsage), 10)
+	}
+
+	if m.KVBytesRead != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KVBytesRead\":"...)
+		b = strconv.AppendInt(b, int64(m.KVBytesRead), 10)
+	}
+
+	if m.KVRowsRead != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"KVRowsRead\":"...)
+		b = strconv.AppendInt(b, int64(m.KVRowsRead), 10)
+	}
+
+	if m.NetworkMessages != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NetworkMessages\":"...)
+		b = strconv.AppendInt(b, int64(m.NetworkMessages), 10)
+	}
+
+	if len(m.IndexRecommendations) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IndexRecommendations\":["...)
+		for i, v := range m.IndexRecommendations {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '"')
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), v))
+			b = append(b, '"')
+		}
+		b = append(b, ']')
+	}
+
 	return printComma, b
 }
 
@@ -4202,6 +4584,310 @@ func (m *SlowQueryInternal) AppendJSONFields(printComma bool, b redact.Redactabl
 	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
 
 	printComma, b = m.CommonSQLExecDetails.AppendJSONFields(printComma, b)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *StoreStats) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	if m.NodeId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NodeId\":"...)
+		b = strconv.AppendInt(b, int64(m.NodeId), 10)
+	}
+
+	if m.StoreId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StoreId\":"...)
+		b = strconv.AppendInt(b, int64(m.StoreId), 10)
+	}
+
+	if len(m.Levels) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Levels\":["...)
+		for i, l := range m.Levels {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '{')
+			printComma, b = l.AppendJSONFields(false, b)
+			b = append(b, '}')
+		}
+		b = append(b, ']')
+	}
+
+	if m.CacheSize != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CacheSize\":"...)
+		b = strconv.AppendInt(b, int64(m.CacheSize), 10)
+	}
+
+	if m.CacheCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CacheCount\":"...)
+		b = strconv.AppendInt(b, int64(m.CacheCount), 10)
+	}
+
+	if m.CacheHits != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CacheHits\":"...)
+		b = strconv.AppendInt(b, int64(m.CacheHits), 10)
+	}
+
+	if m.CacheMisses != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CacheMisses\":"...)
+		b = strconv.AppendInt(b, int64(m.CacheMisses), 10)
+	}
+
+	if m.CompactionCountDefault != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CompactionCountDefault\":"...)
+		b = strconv.AppendInt(b, int64(m.CompactionCountDefault), 10)
+	}
+
+	if m.CompactionCountDeleteOnly != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CompactionCountDeleteOnly\":"...)
+		b = strconv.AppendInt(b, int64(m.CompactionCountDeleteOnly), 10)
+	}
+
+	if m.CompactionCountElisionOnly != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CompactionCountElisionOnly\":"...)
+		b = strconv.AppendInt(b, int64(m.CompactionCountElisionOnly), 10)
+	}
+
+	if m.CompactionCountMove != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CompactionCountMove\":"...)
+		b = strconv.AppendInt(b, int64(m.CompactionCountMove), 10)
+	}
+
+	if m.CompactionCountRead != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CompactionCountRead\":"...)
+		b = strconv.AppendInt(b, int64(m.CompactionCountRead), 10)
+	}
+
+	if m.CompactionCountRewrite != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CompactionCountRewrite\":"...)
+		b = strconv.AppendInt(b, int64(m.CompactionCountRewrite), 10)
+	}
+
+	if m.CompactionNumInProgress != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CompactionNumInProgress\":"...)
+		b = strconv.AppendInt(b, int64(m.CompactionNumInProgress), 10)
+	}
+
+	if m.CompactionMarkedFiles != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"CompactionMarkedFiles\":"...)
+		b = strconv.AppendInt(b, int64(m.CompactionMarkedFiles), 10)
+	}
+
+	if m.FlushCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"FlushCount\":"...)
+		b = strconv.AppendInt(b, int64(m.FlushCount), 10)
+	}
+
+	if m.MemtableSize != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MemtableSize\":"...)
+		b = strconv.AppendUint(b, uint64(m.MemtableSize), 10)
+	}
+
+	if m.MemtableCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MemtableCount\":"...)
+		b = strconv.AppendInt(b, int64(m.MemtableCount), 10)
+	}
+
+	if m.MemtableZombieCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MemtableZombieCount\":"...)
+		b = strconv.AppendInt(b, int64(m.MemtableZombieCount), 10)
+	}
+
+	if m.MemtableZombieSize != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"MemtableZombieSize\":"...)
+		b = strconv.AppendUint(b, uint64(m.MemtableZombieSize), 10)
+	}
+
+	if m.WalLiveCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WalLiveCount\":"...)
+		b = strconv.AppendInt(b, int64(m.WalLiveCount), 10)
+	}
+
+	if m.WalLiveSize != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WalLiveSize\":"...)
+		b = strconv.AppendUint(b, uint64(m.WalLiveSize), 10)
+	}
+
+	if m.WalObsoleteCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WalObsoleteCount\":"...)
+		b = strconv.AppendInt(b, int64(m.WalObsoleteCount), 10)
+	}
+
+	if m.WalObsoleteSize != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WalObsoleteSize\":"...)
+		b = strconv.AppendUint(b, uint64(m.WalObsoleteSize), 10)
+	}
+
+	if m.WalPhysicalSize != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WalPhysicalSize\":"...)
+		b = strconv.AppendUint(b, uint64(m.WalPhysicalSize), 10)
+	}
+
+	if m.WalBytesIn != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WalBytesIn\":"...)
+		b = strconv.AppendUint(b, uint64(m.WalBytesIn), 10)
+	}
+
+	if m.WalBytesWritten != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"WalBytesWritten\":"...)
+		b = strconv.AppendUint(b, uint64(m.WalBytesWritten), 10)
+	}
+
+	if m.TableObsoleteCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableObsoleteCount\":"...)
+		b = strconv.AppendInt(b, int64(m.TableObsoleteCount), 10)
+	}
+
+	if m.TableObsoleteSize != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableObsoleteSize\":"...)
+		b = strconv.AppendUint(b, uint64(m.TableObsoleteSize), 10)
+	}
+
+	if m.TableZombieCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableZombieCount\":"...)
+		b = strconv.AppendInt(b, int64(m.TableZombieCount), 10)
+	}
+
+	if m.TableZombieSize != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableZombieSize\":"...)
+		b = strconv.AppendUint(b, uint64(m.TableZombieSize), 10)
+	}
+
+	if m.RangeKeySetsCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RangeKeySetsCount\":"...)
+		b = strconv.AppendUint(b, uint64(m.RangeKeySetsCount), 10)
+	}
 
 	return printComma, b
 }

@@ -1,4 +1,4 @@
-subtest lost-table-data
+subtest lost_table_data
 
 statement ok
 CREATE TABLE corruptdesc (v INT8)
@@ -117,7 +117,7 @@ statement ok
 SELECT * FROM corruptdesc;
 
 # Test the crdb_internal.force_delete_table_data function
-subtest force-delete-data
+subtest force_delete_data
 
 statement ok
 CREATE TABLE forcedeletemydata (v int)
@@ -187,3 +187,113 @@ select * from crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_t
 query I
 SELECT * FROM forcedeletemydata ORDER BY v ASC
 ----
+
+# Test that corrupt back-references should not prevent objects from being queried.
+subtest queryable_despite_corrupt_back_refs
+
+statement ok
+CREATE TABLE corrupt_backref_fk (k INT PRIMARY KEY, v STRING);
+INSERT INTO corrupt_backref_fk (k, v) VALUES (1, 'a');
+CREATE TABLE corrupt_fk (k INT NOT NULL, FOREIGN KEY (k) REFERENCES corrupt_backref_fk (k));
+
+query BB
+SELECT
+	crdb_internal.unsafe_delete_descriptor(id),
+	crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id)
+FROM
+	system.namespace
+WHERE
+	name = 'corrupt_fk'
+----
+true true
+
+query IT
+SELECT * FROM corrupt_backref_fk
+----
+1 a
+
+statement error invalid foreign key backreference
+DROP TABLE corrupt_backref_fk
+
+statement ok
+CREATE TABLE corrupt_backref_view (k INT PRIMARY KEY, v STRING);
+INSERT INTO corrupt_backref_view (k, v) VALUES (1, 'a');
+CREATE VIEW corrupt_view AS SELECT k, v FROM corrupt_backref_view
+
+query BB
+SELECT
+	crdb_internal.unsafe_delete_descriptor(id),
+	crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id)
+FROM
+	system.namespace
+WHERE
+	name = 'corrupt_view'
+----
+true true
+
+query IT
+SELECT * FROM corrupt_backref_view
+----
+1 a
+
+statement error pgcode XX000 invalid depended-on-by relation back reference
+DROP TABLE corrupt_backref_view
+
+statement ok
+CREATE TYPE corrupt_backref_typ AS ENUM ('a', 'b');
+CREATE TABLE corrupt_typ (k INT PRIMARY KEY, v corrupt_backref_typ);
+
+query BB
+SELECT
+	crdb_internal.unsafe_delete_descriptor(id),
+	crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id)
+FROM
+	system.namespace
+WHERE
+	name = 'corrupt_typ'
+----
+true true
+
+query T
+SELECT 'a'::corrupt_backref_typ
+----
+a
+
+statement error pgcode XXUUU referenced descriptor not found
+ALTER TYPE corrupt_backref_typ DROP VALUE 'b'
+
+# This is required to pass the validation tests when the logic test completes.
+subtest cleanup
+
+query TB
+SELECT
+  name,
+	crdb_internal.unsafe_delete_descriptor(id, true)
+FROM
+	system.namespace
+WHERE
+	name LIKE '%corrupt_backref_%'
+ORDER BY
+  name
+----
+_corrupt_backref_typ  true
+corrupt_backref_fk    true
+corrupt_backref_typ   true
+corrupt_backref_view  true
+
+query TBB
+SELECT
+  name,
+	crdb_internal.force_delete_table_data(id),
+	crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id)
+FROM
+	system.namespace
+WHERE
+	name LIKE '%corrupt_backref_%'
+ORDER BY
+  name
+----
+_corrupt_backref_typ  true  true
+corrupt_backref_fk    true  true
+corrupt_backref_typ   true  true
+corrupt_backref_view  true  true

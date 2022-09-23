@@ -139,6 +139,7 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 			)
 		}
 	}
+
 	return nil
 }
 

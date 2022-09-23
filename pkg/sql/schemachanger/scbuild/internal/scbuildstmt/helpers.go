@@ -665,3 +665,17 @@ func fallBackIfZoneConfigExists(b BuildCtx, n tree.NodeFormatter, id catid.DescI
 		}
 	}
 }
+
+// fallBackIfVirtualColumnWithNotNullConstraint throws an unimplemented error
+// if the to-be-added column `d` is a virtual column with not null constraint.
+// This is a quick, temporary fix for the following troubled stmt in the
+// declarative schema changer:
+// `ALTER TABLE t ADD COLUMN j INT AS (NULL::INT) VIRTUAL NOT NULL;` succeeded
+// but expectedly failed in the legacy schema changer.
+func fallBackIfVirtualColumnWithNotNullConstraint(t *tree.AlterTableAddColumn) {
+	d := t.ColumnDef
+	if d.IsVirtual() && d.Nullable.Nullability == tree.NotNull {
+		panic(scerrors.NotImplementedErrorf(t,
+			"virtual column with NOT NULL constraint is not supported"))
+	}
+}

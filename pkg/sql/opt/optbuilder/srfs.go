@@ -72,8 +72,7 @@ var _ tree.TypedExpr = &srf{}
 // returns tuples of values from a,b,c picked "simultaneously". NULLs
 // are used when an iterator is "shorter" than another. For example:
 //
-//    zip([1,2,3], ['a','b']) = [(1,'a'), (2,'b'), (3, null)]
-//
+//	zip([1,2,3], ['a','b']) = [(1,'a'), (2,'b'), (3, null)]
 func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	outScope = inScope.push()
 
@@ -205,7 +204,7 @@ func (b *Builder) finishBuildGeneratorFunction(
 // ProjectSet is necessary in case some of the SRFs depend on the input.
 // For example, consider this query:
 //
-//   SELECT generate_series(t.a, t.a + 1) FROM t
+//	SELECT generate_series(t.a, t.a + 1) FROM t
 //
 // In this case, the inputs to generate_series depend on table t, so during
 // execution, generate_series will be called once for each row of t.

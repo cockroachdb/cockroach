@@ -72,7 +72,7 @@ func SetLocalityRegionalByRow(desc catalog.TableDescriptor) catalog.TableDescrip
 // Yes, this does modify an immutable.
 func AddColumnDropBackfillMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
 	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
-		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		State:       descpb.DescriptorMutation_WRITE_ONLY,
 		Direction:   descpb.DescriptorMutation_DROP,
 		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.GetNextColumnID() - 1)},
 	})
@@ -84,7 +84,7 @@ func AddColumnDropBackfillMutation(desc catalog.TableDescriptor) catalog.TableDe
 func AddNewColumnBackfillMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
 	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
 		Descriptor_: &descpb.DescriptorMutation_Column{Column: MakeColumnDesc(desc.GetNextColumnID())},
-		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		State:       descpb.DescriptorMutation_WRITE_ONLY,
 		Direction:   descpb.DescriptorMutation_ADD,
 		MutationID:  0,
 		Rollback:    false,
@@ -96,7 +96,7 @@ func AddNewColumnBackfillMutation(desc catalog.TableDescriptor) catalog.TableDes
 // Yes, this does modify an immutable.
 func AddPrimaryKeySwapMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
 	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
-		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		State:       descpb.DescriptorMutation_WRITE_ONLY,
 		Direction:   descpb.DescriptorMutation_ADD,
 		Descriptor_: &descpb.DescriptorMutation_PrimaryKeySwap{PrimaryKeySwap: &descpb.PrimaryKeySwap{}},
 	})
@@ -107,7 +107,7 @@ func AddPrimaryKeySwapMutation(desc catalog.TableDescriptor) catalog.TableDescri
 // Yes, this does modify an immutable.
 func AddNewIndexMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
 	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
-		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		State:       descpb.DescriptorMutation_WRITE_ONLY,
 		Direction:   descpb.DescriptorMutation_ADD,
 		Descriptor_: &descpb.DescriptorMutation_Index{Index: &descpb.IndexDescriptor{}},
 	})
@@ -118,7 +118,7 @@ func AddNewIndexMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
 // Yes, this does modify an immutable.
 func AddDropIndexMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {
 	desc.TableDesc().Mutations = append(desc.TableDesc().Mutations, descpb.DescriptorMutation{
-		State:       descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+		State:       descpb.DescriptorMutation_WRITE_ONLY,
 		Direction:   descpb.DescriptorMutation_DROP,
 		Descriptor_: &descpb.DescriptorMutation_Index{Index: &descpb.IndexDescriptor{}},
 	})

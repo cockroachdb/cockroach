@@ -107,18 +107,35 @@ func (n *createViewNode) startExec(params runParams) error {
 	// If so, promote this view to temporary.
 	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable, len(n.planDeps))
 	hasTempBackref := false
-	for id, updated := range n.planDeps {
-		backRefMutable, err := params.p.Descriptors().GetUncommittedMutableTableByID(id)
-		if err != nil {
+	{
+		var ids catalog.DescriptorIDSet
+		for id := range n.planDeps {
+			ids.Add(id)
+		}
+		flags := tree.CommonLookupFlags{
+			Required:       true,
+			RequireMutable: true,
+			AvoidLeased:    true,
+			AvoidSynthetic: true,
+		}
+		// Lookup the dependent tables in bulk to minimize round-trips to KV.
+		if _, err := params.p.Descriptors().GetImmutableDescriptorsByID(
+			params.ctx, params.p.Txn(), flags, ids.Ordered()...,
+		); err != nil {
 			return err
 		}
-		if backRefMutable == nil {
-			backRefMutable = tabledesc.NewBuilder(updated.desc.TableDesc()).BuildExistingMutableTable()
+		for id := range n.planDeps {
+			backRefMutable, err := params.p.Descriptors().GetMutableTableByID(
+				params.ctx, params.p.Txn(), id, tree.ObjectLookupFlagsWithRequired(),
+			)
+			if err != nil {
+				return err
+			}
+			if !n.persistence.IsTemporary() && backRefMutable.Temporary {
+				hasTempBackref = true
+			}
+			backRefMutables[id] = backRefMutable
 		}
-		if !n.persistence.IsTemporary() && backRefMutable.Temporary {
-			hasTempBackref = true
-		}
-		backRefMutables[id] = backRefMutable
 	}
 	if hasTempBackref {
 		n.persistence = tree.PersistenceTemporary
@@ -414,7 +431,7 @@ func makeViewTableDesc(
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery)
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery, false /* multiStmt */)
 	if err != nil {
 		return tabledesc.Mutable{}, err
 	}
@@ -493,7 +510,7 @@ func replaceSeqNamesWithIDs(
 // and serialize any user defined types, so that renaming the type
 // does not corrupt the view.
 func serializeUserDefinedTypes(
-	ctx context.Context, semaCtx *tree.SemaContext, viewQuery string,
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		var innerExpr tree.Expr
@@ -534,16 +551,39 @@ func serializeUserDefinedTypes(
 		return false, parsedExpr, nil
 	}
 
-	stmt, err := parser.ParseOne(viewQuery)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to parse view query")
+	var stmts tree.Statements
+	if multiStmt {
+		parsedStmts, err := parser.Parse(queries)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query")
+		}
+		stmts = make(tree.Statements, len(parsedStmts))
+		for i, stmt := range parsedStmts {
+			stmts[i] = stmt.AST
+		}
+	} else {
+		stmt, err := parser.ParseOne(queries)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query")
+		}
+		stmts = tree.Statements{stmt.AST}
 	}
 
-	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFunc)
-	if err != nil {
-		return "", err
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+		if err != nil {
+			return "", err
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		if multiStmt {
+			fmtCtx.WriteString(";")
+		}
 	}
-	return newStmt.String(), nil
+	return fmtCtx.CloseAndGetString(), nil
 }
 
 // replaceViewDesc modifies and returns the input view descriptor changed

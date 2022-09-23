@@ -74,7 +74,7 @@ func BenchmarkConcurrentSelect1(b *testing.B) {
 				sqlServer.ServerMetrics.
 					StatsMetrics.
 					SQLTxnStatsCollectionOverhead.
-					Snapshot().Mean(),
+					Mean(),
 				"overhead(ns/op)")
 		})
 	}

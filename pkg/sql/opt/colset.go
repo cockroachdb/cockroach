@@ -29,6 +29,7 @@ type ColSet struct {
 const offset = 1
 
 // setVal returns the value to store in the internal set for the given ColumnID.
+//
 //gcassert:inline
 func setVal(col ColumnID) int {
 	return int(col - offset)
@@ -36,6 +37,7 @@ func setVal(col ColumnID) int {
 
 // retVal returns the ColumnID to return for the given value in the internal
 // set.
+//
 //gcassert:inline
 func retVal(i int) ColumnID {
 	return ColumnID(i + offset)
@@ -147,14 +149,16 @@ func (s ColSet) ToList() ColList {
 // relations with a defined column mapping).
 //
 // For example, suppose we have a UNION with the following column mapping:
-//   Left:  1, 2, 3
-//   Right: 4, 5, 6
-//   Out:   7, 8, 9
+//
+//	Left:  1, 2, 3
+//	Right: 4, 5, 6
+//	Out:   7, 8, 9
 //
 // Here are some possible calls to TranslateColSet and their results:
-//   TranslateColSet(ColSet{1, 2}, Left, Right) -> ColSet{4, 5}
-//   TranslateColSet(ColSet{5, 6}, Right, Out)  -> ColSet{8, 9}
-//   TranslateColSet(ColSet{9}, Out, Right)     -> ColSet{6}
+//
+//	TranslateColSet(ColSet{1, 2}, Left, Right) -> ColSet{4, 5}
+//	TranslateColSet(ColSet{5, 6}, Right, Out)  -> ColSet{8, 9}
+//	TranslateColSet(ColSet{9}, Out, Right)     -> ColSet{6}
 //
 // Any columns in the input set that do not appear in the from list are ignored.
 //
@@ -162,7 +166,7 @@ func (s ColSet) ToList() ColList {
 // possible for the input and output sets to have different cardinality.
 // Consider the following case:
 //
-//   SELECT x, x, y FROM xyz UNION SELECT a, b, c FROM abc
+//	SELECT x, x, y FROM xyz UNION SELECT a, b, c FROM abc
 //
 // TranslateColSet(ColSet{x, y}, {x, x, y}, {a, b, c}) returns ColSet{a, b, c}.
 //

@@ -25,7 +25,7 @@ const getID = (item: ContendedExecution, execType: ExecutionType) =>
 export function makeContentionColumns(
   execType: ExecutionType,
 ): ColumnDescriptor<ContendedExecution>[] {
-  return [
+  const columns: ColumnDescriptor<ContendedExecution | null>[] = [
     {
       name: "executionID",
       title: executionsTableTitles.executionID(execType),
@@ -51,6 +51,19 @@ export function makeContentionColumns(
       ),
       sort: item => item.query,
     },
+    execType === "statement"
+      ? {
+          name: "transactionID",
+          title: executionsTableTitles.executionID("transaction"),
+          cell: item => (
+            <Link to={`/execution/transaction/${item.transactionExecutionID}`}>
+              {item.transactionExecutionID}
+            </Link>
+          ),
+          sort: item => item.transactionExecutionID,
+          alwaysShow: true,
+        }
+      : null,
     {
       name: "status",
       title: executionsTableTitles.status(execType),
@@ -75,6 +88,7 @@ export function makeContentionColumns(
       sort: item => item.contentionTime.asSeconds(),
     },
   ];
+  return columns.filter(col => col);
 }
 
 interface ContentionTableProps {

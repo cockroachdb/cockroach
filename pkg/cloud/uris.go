@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -137,21 +136,4 @@ func (u *ConsumeURL) RemainingQueryParams() (res []string) {
 		res = append(res, p)
 	}
 	return
-}
-
-// ValidateQueryParameters checks uri for any unsupported query parameters that
-// are not part of the supportedParameters.
-func ValidateQueryParameters(uri url.URL, supportedParameters []string) error {
-	u := uri
-	validateURL := ConsumeURL{URL: &u}
-	for _, option := range supportedParameters {
-		validateURL.ConsumeParam(option)
-	}
-
-	if unknownParams := validateURL.RemainingQueryParams(); len(unknownParams) > 0 {
-		return errors.Errorf(
-			`unknown query parameters: %s for %s URI`,
-			strings.Join(unknownParams, ", "), uri.Scheme)
-	}
-	return nil
 }

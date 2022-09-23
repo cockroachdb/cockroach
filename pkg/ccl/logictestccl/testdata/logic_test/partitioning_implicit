@@ -347,6 +347,7 @@ ALTER INDEX t_implicit_idx@t_a_idx PARTITION BY LIST (a) (
     PARTITION "one" VALUES IN (1)
 )
 
+skipif backup-restore
 query TTTTTT colnames
 SELECT
   indexrelid, indrelid, indkey, indclass, indoption, indcollation

@@ -10,17 +10,21 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/gogo/protobuf/jsonpb"
 )
 
 // ChangefeedConfig provides a version-agnostic wrapper around jobspb.ChangefeedDetails.
@@ -154,4 +158,18 @@ func makeSpansToProtect(codec keys.SQLCodec, targets changefeedbase.Targets) []r
 	})
 	addTablePrefix(keys.DescriptorTableID)
 	return spansToProtect
+}
+
+// Inject the change feed details marshal logic into the jobspb package.
+func init() {
+	jobspb.ChangefeedDetailsMarshaler = func(m *jobspb.ChangefeedDetails, marshaller *jsonpb.Marshaler) ([]byte, error) {
+		if protoreflect.ShouldRedact(marshaller) {
+			var err error
+			m.SinkURI, err = cloud.SanitizeExternalStorageURI(m.SinkURI, nil)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return json.Marshal(m)
+	}
 }

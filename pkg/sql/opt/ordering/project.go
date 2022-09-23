@@ -82,7 +82,7 @@ func projectBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt
 	// can cause the child to provide an ordering that is equivalent to the
 	// required ordering, but which the parent Project cannot prove is equivalent
 	// because its FDs have less information. This can lead to a panic later on.
-	ordCols := required.ColSet()
+	ordCols := required.ColSet().Union(required.Optional)
 	if !ordCols.SubsetOf(expr.Relational().OutputCols) {
 		panic(errors.AssertionFailedf("expected required columns to be a subset of output columns"))
 	}

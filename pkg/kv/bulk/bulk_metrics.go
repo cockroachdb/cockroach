@@ -43,14 +43,10 @@ var (
 	}
 )
 
-// See pkg/sql/mem_metrics.go
-// log10int64times1000 = log10(math.MaxInt64) * 1000, rounded up somewhat
-const log10int64times1000 = 19 * 1000
-
 // MakeBulkMetrics instantiates the metrics holder for bulk operation monitoring.
 func MakeBulkMetrics(histogramWindow time.Duration) Metrics {
 	return Metrics{
-		MaxBytesHist:  metric.NewHistogram(metaMemMaxBytes, histogramWindow, log10int64times1000, 3),
+		MaxBytesHist:  metric.NewHistogram(metaMemMaxBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
 		CurBytesCount: metric.NewGauge(metaMemCurBytes),
 	}
 }

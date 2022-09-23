@@ -304,27 +304,35 @@ func seqNameToIDMappingInExpr(
 // one that matches all parts of `targetTableName`, if that part exists
 // in both names.
 // Example 1:
-// 		allTableNamesByID = {23 : 'db.sc1.t', 25 : 'db.sc2.t'}
-//		tableName = 'sc2.t'
-//		return = 25 (because `db.sc2.t` best-matches `sc2.t`)
+//
+//	allTableNamesByID = {23 : 'db.sc1.t', 25 : 'db.sc2.t'}
+//	tableName = 'sc2.t'
+//	return = 25 (because `db.sc2.t` best-matches `sc2.t`)
+//
 // Example 2:
-// 		allTableNamesByID = {23 : 'db.sc1.t', 25 : 'sc2.t'}
-//		tableName = 'sc2.t'
-//		return = 25 (because `sc2.t` best-matches `sc2.t`)
+//
+//	allTableNamesByID = {23 : 'db.sc1.t', 25 : 'sc2.t'}
+//	tableName = 'sc2.t'
+//	return = 25 (because `sc2.t` best-matches `sc2.t`)
+//
 // Example 3:
-// 		allTableNamesByID = {23 : 'db.sc1.t', 25 : 'sc2.t'}
-//		tableName = 'db.sc2.t'
-//		return = 25 (because `sc2.t` best-matches `db.sc2.t`)
+//
+//	allTableNamesByID = {23 : 'db.sc1.t', 25 : 'sc2.t'}
+//	tableName = 'db.sc2.t'
+//	return = 25 (because `sc2.t` best-matches `db.sc2.t`)
 //
 // Example 4:
-// 		allTableNamesByID = {23 : 'sc1.t', 25 : 'sc2.t'}
+//
+//		allTableNamesByID = {23 : 'sc1.t', 25 : 'sc2.t'}
 //		tableName = 't'
 //		return = non-nil error (because both 'sc1.t' and 'sc2.t' are equally good matches
 //	 			for 't' and we cannot decide,	i.e., >1 valid candidates left.)
+//
 // Example 5:
-// 		allTableNamesByID = {23 : 'sc1.t', 25 : 'sc2.t'}
-//		tableName = 't2'
-//		return = non-nil error (because neither 'sc1.t' nor 'sc2.t' matches 't2', that is, 0 valid candidate left)
+//
+//	allTableNamesByID = {23 : 'sc1.t', 25 : 'sc2.t'}
+//	tableName = 't2'
+//	return = non-nil error (because neither 'sc1.t' nor 'sc2.t' matches 't2', that is, 0 valid candidate left)
 func findUniqueBestMatchingForTableName(
 	allTableNamesByID map[descpb.ID]*tree.TableName, targetTableName tree.TableName,
 ) (match descpb.ID, err error) {

@@ -37,6 +37,7 @@ go_test(
         "receiver_test.go",
         "sender_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":sidetransport"],
     deps = [
         "//pkg/base",

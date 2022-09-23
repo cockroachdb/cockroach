@@ -76,6 +76,7 @@ export const selectStatementDetails = createSelector(
   ): {
     statementDetails: StatementDetailsResponseMessage;
     isLoading: boolean;
+    lastError: Error;
   } => {
     // Since the aggregation interval is 1h, we want to round the selected timeScale to include
     // the full hour. If a timeScale is between 14:32 - 15:17 we want to search for values
@@ -93,9 +94,10 @@ export const selectStatementDetails = createSelector(
       return {
         statementDetails: statementDetailsStats[key].data,
         isLoading: statementDetailsStats[key].inFlight,
+        lastError: statementDetailsStats[key].lastError,
       };
     }
-    return { statementDetails: null, isLoading: true };
+    return { statementDetails: null, isLoading: true, lastError: null };
   },
 );
 
@@ -103,7 +105,10 @@ const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
 ): StatementDetailsStateProps => {
-  const { statementDetails, isLoading } = selectStatementDetails(state, props);
+  const { statementDetails, isLoading, lastError } = selectStatementDetails(
+    state,
+    props,
+  );
   return {
     statementFingerprintID: getMatchParamByName(props.match, statementAttr),
     statementDetails,
@@ -111,7 +116,7 @@ const mapStateToProps = (
     latestQuery: state.sqlActivity.statementDetailsLatestQuery,
     latestFormattedQuery:
       state.sqlActivity.statementDetailsLatestFormattedQuery,
-    statementsError: state.cachedData.statements.lastError,
+    statementsError: lastError,
     timeScale: selectTimeScale(state),
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),

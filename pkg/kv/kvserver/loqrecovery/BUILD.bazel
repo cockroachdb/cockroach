@@ -41,6 +41,7 @@ go_test(
         "recovery_env_test.go",
         "recovery_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":loqrecovery"],
     deps = [

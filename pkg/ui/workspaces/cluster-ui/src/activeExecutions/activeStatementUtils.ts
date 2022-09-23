@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import moment, { Moment } from "moment";
+import moment from "moment";
 import { byteArrayToUuid } from "src/sessions";
 import { TimestampToMoment, unset } from "src/util";
 import { ActiveTransaction } from ".";
@@ -25,6 +25,7 @@ import {
 } from "./types";
 import { ActiveStatement, ActiveStatementFilters } from "./types";
 import { ClusterLocksResponse, ClusterLockState } from "src/api";
+import { DurationToMomentDuration } from "src/util/convert";
 
 export const ACTIVE_STATEMENT_SEARCH_PARAM = "q";
 export const INTERNAL_APP_NAME_PREFIX = "$ internal";
@@ -83,13 +84,10 @@ export function filterActiveStatements(
  */
 export function getActiveExecutionsFromSessions(
   sessionsResponse: SessionsResponse,
-  lastUpdated: Moment,
 ): ActiveExecutions {
   if (sessionsResponse.sessions == null)
     return { statements: [], transactions: [] };
 
-  const time = lastUpdated || moment.utc();
-  const activeStmtByTxnID: Record<string, ActiveStatement> = {};
   const statements: ActiveStatement[] = [];
   const transactions: ActiveTransaction[] = [];
 
@@ -102,9 +100,12 @@ export function getActiveExecutionsFromSessions(
     .forEach(session => {
       const sessionID = byteArrayToUuid(session.id);
 
-      session.active_queries.forEach(query => {
+      let activeStmt: ActiveStatement = null;
+      if (session.active_queries.length) {
+        // There will only ever be one query in this array.
+        const query = session.active_queries[0];
         const queryTxnID = byteArrayToUuid(query.txn_id);
-        const stmt: ActiveStatement = {
+        activeStmt = {
           statementID: query.id,
           transactionID: queryTxnID,
           sessionID,
@@ -115,16 +116,15 @@ export function getActiveExecutionsFromSessions(
               ? "Executing"
               : "Preparing",
           start: TimestampToMoment(query.start),
-          elapsedTimeMillis: time.diff(TimestampToMoment(query.start), "ms"),
+          elapsedTime: DurationToMomentDuration(query.elapsed_time),
           application: session.application_name,
           user: session.username,
           clientAddress: session.client_address,
           isFullScan: query.is_full_scan || false, // Or here is for conversion in case the field is null.
         };
 
-        statements.push(stmt);
-        activeStmtByTxnID[queryTxnID] = stmt;
-      });
+        statements.push(activeStmt);
+      }
 
       const activeTxn = session.active_txn;
       if (!activeTxn) return;
@@ -132,29 +132,22 @@ export function getActiveExecutionsFromSessions(
       transactions.push({
         transactionID: byteArrayToUuid(activeTxn.id),
         sessionID,
-        query: null,
-        statementID: null,
+        query:
+          activeStmt?.query ??
+          (activeTxn.num_statements_executed
+            ? session.last_active_query
+            : null),
+        statementID: activeStmt?.statementID,
         status: "Executing" as ExecutionStatus,
         start: TimestampToMoment(activeTxn.start),
-        elapsedTimeMillis: time.diff(TimestampToMoment(activeTxn.start), "ms"),
+        elapsedTime: DurationToMomentDuration(activeTxn.elapsed_time),
         application: session.application_name,
         retries: activeTxn.num_auto_retries,
         statementCount: activeTxn.num_statements_executed,
-        isFullScan: session.active_queries.some(query => query.is_full_scan),
         lastAutoRetryReason: activeTxn.last_auto_retry_reason,
         priority: activeTxn.priority,
       });
     });
-
-  // Find most recent statement for each txn.
-  transactions.map(txn => {
-    const mostRecentStmt = activeStmtByTxnID[txn.transactionID];
-    if (!mostRecentStmt) return txn;
-    txn.query = mostRecentStmt.query;
-    txn.statementID = mostRecentStmt.statementID;
-    txn.isFullScan = mostRecentStmt.isFullScan;
-    return txn;
-  });
 
   return {
     transactions,

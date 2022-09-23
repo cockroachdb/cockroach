@@ -36,6 +36,7 @@ go_test(
     name = "eventpb_test",
     size = "small",
     srcs = ["event_test.go"],
+    args = ["-test.timeout=55s"],
     embed = [":eventpb"],
     deps = [
         "//pkg/util/log/logpb",
@@ -58,6 +59,7 @@ proto_library(
         "role_events.proto",
         "session_events.proto",
         "sql_audit_events.proto",
+        "storage_events.proto",
         "telemetry.proto",
         "zone_events.proto",
     ],

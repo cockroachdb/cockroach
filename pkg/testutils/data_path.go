@@ -22,7 +22,7 @@ import (
 )
 
 // TestDataPath returns a path to an asset in the testdata directory. It knows
-// to access accesses the right path when executing under bazel.
+// to access the right path when executing under bazel.
 //
 // For example, if there is a file testdata/a.txt, you can get a path to that
 // file using TestDataPath(t, "a.txt").

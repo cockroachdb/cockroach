@@ -758,7 +758,7 @@ ALTER TABLE d.a EXPERIMENTAL_RELOCATE VALUES (ARRAY[1, 2, 3], 'b', 2)
 ----
 ALTER TABLE d.a RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- normalized!
 ALTER TABLE d.a RELOCATE VOTERS VALUES ((ARRAY[(1), (2), (3)]), ('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a RELOCATE VOTERS VALUES (ARRAY[_, _, __more1__], '_', _) -- literals removed
+ALTER TABLE d.a RELOCATE VOTERS VALUES (ARRAY[_, _, __more1_10__], '_', _) -- literals removed
 ALTER TABLE _._ RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- identifiers removed
 
 parse
@@ -790,7 +790,7 @@ ALTER TABLE d.a EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2)
 ----
 ALTER TABLE d.a RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- normalized!
 ALTER TABLE d.a RELOCATE VOTERS VALUES ((ARRAY[(1), (2), (3)]), ('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a RELOCATE VOTERS VALUES (ARRAY[_, _, __more1__], '_', _) -- literals removed
+ALTER TABLE d.a RELOCATE VOTERS VALUES (ARRAY[_, _, __more1_10__], '_', _) -- literals removed
 ALTER TABLE _._ RELOCATE VOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- identifiers removed
 
 parse
@@ -822,7 +822,7 @@ ALTER TABLE d.a EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[1, 2, 3], 'b', 2)
 ----
 ALTER TABLE d.a RELOCATE NONVOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- normalized!
 ALTER TABLE d.a RELOCATE NONVOTERS VALUES ((ARRAY[(1), (2), (3)]), ('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a RELOCATE NONVOTERS VALUES (ARRAY[_, _, __more1__], '_', _) -- literals removed
+ALTER TABLE d.a RELOCATE NONVOTERS VALUES (ARRAY[_, _, __more1_10__], '_', _) -- literals removed
 ALTER TABLE _._ RELOCATE NONVOTERS VALUES (ARRAY[1, 2, 3], 'b', 2) -- identifiers removed
 
 parse
@@ -846,7 +846,7 @@ ALTER TABLE d.a EXPERIMENTAL_RELOCATE LEASE VALUES (1, 'b', 2)
 ----
 ALTER TABLE d.a RELOCATE LEASE VALUES (1, 'b', 2) -- normalized!
 ALTER TABLE d.a RELOCATE LEASE VALUES ((1), ('b'), (2)) -- fully parenthesized
-ALTER TABLE d.a RELOCATE LEASE VALUES (_, '_', __more1__) -- literals removed
+ALTER TABLE d.a RELOCATE LEASE VALUES (_, '_', __more1_10__) -- literals removed
 ALTER TABLE _._ RELOCATE LEASE VALUES (1, 'b', 2) -- identifiers removed
 
 parse

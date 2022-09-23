@@ -131,13 +131,13 @@ const (
 // For example, here is a query plan with corresponding estimated statistics at
 // each level:
 //
-//        Query:    SELECT y FROM a WHERE x=1
+//	Query:    SELECT y FROM a WHERE x=1
 //
-//        Plan:            Project y        Row Count: 10, Distinct(x): 1
-//                             |
-//                         Select x=1       Row Count: 10, Distinct(x): 1
-//                             |
-//                          Scan a          Row Count: 100, Distinct(x): 10
+//	Plan:            Project y        Row Count: 10, Distinct(x): 1
+//	                     |
+//	                 Select x=1       Row Count: 10, Distinct(x): 1
+//	                     |
+//	                  Scan a          Row Count: 100, Distinct(x): 10
 //
 // The statistics for the Scan operator were presumably retrieved from the
 // underlying table statistics cached in the metadata. The statistics for
@@ -188,7 +188,7 @@ const (
 // To better understand how the statisticsBuilder works, let us consider this
 // simple query, which consists of a scan followed by an aggregation:
 //
-//   SELECT count(*), x, y FROM t GROUP BY x, y
+//	SELECT count(*), x, y FROM t GROUP BY x, y
 //
 // The statistics for the scan of t will be calculated first, since logical
 // properties are built bottom-up. The estimated row count is retrieved from
@@ -206,25 +206,25 @@ const (
 // that no statistics are cached, this is the order of function calls for the
 // above example (somewhat simplified):
 //
-//        +-------------+               +--------------+
-//  1.    | buildScan t |           2.  | buildGroupBy |
-//        +-------------+               +--------------+
-//               |                             |
-//     +-----------------------+   +-------------------------+
-//     | makeTableStatistics t |   | colStatFromChild (x, y) |
-//     +-----------------------+   +-------------------------+
-//                                             |
-//                                   +--------------------+
-//                                   | colStatScan (x, y) |
-//                                   +--------------------+
-//                                             |
-//                                   +---------------------+
-//                                   | colStatTable (x, y) |
-//                                   +---------------------+
-//                                             |
-//                                   +--------------------+
-//                                   | colStatLeaf (x, y) |
-//                                   +--------------------+
+//	      +-------------+               +--------------+
+//	1.    | buildScan t |           2.  | buildGroupBy |
+//	      +-------------+               +--------------+
+//	             |                             |
+//	   +-----------------------+   +-------------------------+
+//	   | makeTableStatistics t |   | colStatFromChild (x, y) |
+//	   +-----------------------+   +-------------------------+
+//	                                           |
+//	                                 +--------------------+
+//	                                 | colStatScan (x, y) |
+//	                                 +--------------------+
+//	                                           |
+//	                                 +---------------------+
+//	                                 | colStatTable (x, y) |
+//	                                 +---------------------+
+//	                                           |
+//	                                 +--------------------+
+//	                                 | colStatLeaf (x, y) |
+//	                                 +--------------------+
 //
 // See props/statistics.go for more details.
 type statisticsBuilder struct {
@@ -269,7 +269,7 @@ func (sb *statisticsBuilder) colStatFromChild(
 // statsFromChild retrieves the main statistics struct from a specific child
 // of the given expression.
 func (sb *statisticsBuilder) statsFromChild(e RelExpr, childIdx int) *props.Statistics {
-	return &e.Child(childIdx).(RelExpr).Relational().Stats
+	return e.Child(childIdx).(RelExpr).Relational().Statistics()
 }
 
 // availabilityFromInput determines the availability of the underlying table
@@ -281,21 +281,21 @@ func (sb *statisticsBuilder) availabilityFromInput(e RelExpr) bool {
 
 	case *LookupJoinExpr:
 		ensureLookupJoinInputProps(t, sb)
-		return t.lookupProps.Stats.Available && t.Input.Relational().Stats.Available
+		return t.lookupProps.Statistics().Available && t.Input.Relational().Statistics().Available
 
 	case *InvertedJoinExpr:
 		ensureInvertedJoinInputProps(t, sb)
-		return t.lookupProps.Stats.Available && t.Input.Relational().Stats.Available
+		return t.lookupProps.Statistics().Available && t.Input.Relational().Statistics().Available
 
 	case *ZigzagJoinExpr:
 		ensureZigzagJoinInputProps(t, sb)
-		return t.leftProps.Stats.Available
+		return t.leftProps.Statistics().Available
 	}
 
 	available := true
 	for i, n := 0, e.ChildCount(); i < n; i++ {
 		if child, ok := e.Child(i).(RelExpr); ok {
-			available = available && child.Relational().Stats.Available
+			available = available && child.Relational().Statistics().Available
 		}
 	}
 	return available
@@ -405,7 +405,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	}
 
 	// Check if the requested column statistic is already cached.
-	if stat, ok := e.Relational().Stats.ColStats.Lookup(colSet); ok {
+	if stat, ok := e.Relational().Statistics().ColStats.Lookup(colSet); ok {
 		return stat
 	}
 
@@ -486,7 +486,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 
 	case opt.FakeRelOp:
 		rel := e.Relational()
-		return sb.colStatLeaf(colSet, &rel.Stats, &rel.FuncDeps, rel.NotNullCols)
+		return sb.colStatLeaf(colSet, rel.Statistics(), &rel.FuncDeps, rel.NotNullCols)
 	}
 
 	panic(errors.AssertionFailedf("unrecognized relational expression type: %v", redact.Safe(e.Op())))
@@ -779,7 +779,7 @@ func (sb *statisticsBuilder) colAvgSize(tabID opt.TableID, col opt.ColumnID) uin
 // +------+
 
 func (sb *statisticsBuilder) buildScan(scan *ScanExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
@@ -974,7 +974,7 @@ func (sb *statisticsBuilder) constrainScan(
 
 func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *props.ColumnStatistic {
 	relProps := scan.Relational()
-	s := &relProps.Stats
+	s := relProps.Statistics()
 
 	inputColStat := sb.colStatTable(scan.Table, colSet)
 	colStat := sb.copyColStat(colSet, s, inputColStat)
@@ -1001,13 +1001,13 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, scan *ScanExpr) *pro
 // +--------+
 
 func (sb *statisticsBuilder) buildSelect(sel *SelectExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(sel)
-	inputStats := &sel.Input.Relational().Stats
+	inputStats := sel.Input.Relational().Statistics()
 	s.RowCount = inputStats.RowCount
 
 	sb.filterRelExpr(sel.Filters, sel, relProps.NotNullCols, relProps, s, &sel.Input.Relational().FuncDeps)
@@ -1019,8 +1019,8 @@ func (sb *statisticsBuilder) colStatSelect(
 	colSet opt.ColSet, sel *SelectExpr,
 ) *props.ColumnStatistic {
 	relProps := sel.Relational()
-	s := &relProps.Stats
-	inputStats := &sel.Input.Relational().Stats
+	s := relProps.Statistics()
+	inputStats := sel.Input.Relational().Statistics()
 	colStat := sb.copyColStatFromChild(colSet, sel, s)
 
 	// It's not safe to use s.Selectivity, because it's possible that some of the
@@ -1041,14 +1041,14 @@ func (sb *statisticsBuilder) colStatSelect(
 // +---------+
 
 func (sb *statisticsBuilder) buildProject(prj *ProjectExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(prj)
 
-	inputStats := &prj.Input.Relational().Stats
+	inputStats := prj.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
 	sb.finalizeFromCardinality(relProps)
@@ -1058,7 +1058,7 @@ func (sb *statisticsBuilder) colStatProject(
 	colSet opt.ColSet, prj *ProjectExpr,
 ) *props.ColumnStatistic {
 	relProps := prj.Relational()
-	s := &relProps.Stats
+	s := relProps.Statistics()
 
 	// Columns may be passed through from the input, or they may reference a
 	// higher scope (in the case of a correlated subquery), or they
@@ -1129,7 +1129,7 @@ func (sb *statisticsBuilder) colStatProject(
 func (sb *statisticsBuilder) buildInvertedFilter(
 	invFilter *InvertedFilterExpr, relProps *props.Relational,
 ) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
@@ -1148,7 +1148,7 @@ func (sb *statisticsBuilder) buildInvertedFilter(
 
 	// Calculate selectivity and row count
 	// -----------------------------------
-	inputStats := &invFilter.Input.Relational().Stats
+	inputStats := invFilter.Input.Relational().Statistics()
 	s.RowCount = inputStats.RowCount
 	corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, invFilter, s)
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, invFilter, s, corr))
@@ -1161,8 +1161,8 @@ func (sb *statisticsBuilder) colStatInvertedFilter(
 	colSet opt.ColSet, invFilter *InvertedFilterExpr,
 ) *props.ColumnStatistic {
 	relProps := invFilter.Relational()
-	s := &relProps.Stats
-	inputStats := &invFilter.Input.Relational().Stats
+	s := relProps.Statistics()
+	inputStats := invFilter.Input.Relational().Statistics()
 	colStat := sb.copyColStatFromChild(colSet, invFilter, s)
 
 	if s.Selectivity != props.OneSelectivity {
@@ -1189,15 +1189,15 @@ func (sb *statisticsBuilder) buildJoin(
 		return
 	}
 
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(join)
 
-	leftStats := &h.leftProps.Stats
-	rightStats := &h.rightProps.Stats
+	leftStats := h.leftProps.Statistics()
+	rightStats := h.rightProps.Statistics()
 	leftCols := h.leftProps.OutputCols.Copy()
 	rightCols := h.rightProps.OutputCols.Copy()
 	equivReps := h.filtersFD.EquivReps()
@@ -1444,7 +1444,7 @@ func (sb *statisticsBuilder) buildJoin(
 
 func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props.ColumnStatistic {
 	relProps := join.Relational()
-	s := &relProps.Stats
+	s := relProps.Statistics()
 
 	var joinType opt.Operator
 	var leftProps, rightProps *props.Relational
@@ -1478,7 +1478,7 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Column stats come from left side of join.
 		colStat := sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, join))
-		colStat.ApplySelectivity(s.Selectivity, leftProps.Stats.RowCount)
+		colStat.ApplySelectivity(s.Selectivity, leftProps.Statistics().RowCount)
 		sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
 		return colStat
 
@@ -1501,8 +1501,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		// - For INNER joins, the selectivity impacts the distinct count of all
 		//   columns.
 		var colStat *props.ColumnStatistic
-		inputRowCount := leftProps.Stats.RowCount * rightProps.Stats.RowCount
-		leftNullCount, rightNullCount := leftProps.Stats.RowCount, rightProps.Stats.RowCount
+		inputRowCount := leftProps.Statistics().RowCount * rightProps.Statistics().RowCount
+		leftNullCount := leftProps.Statistics().RowCount
+		rightNullCount := rightProps.Statistics().RowCount
 		if rightCols.Empty() {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, join))
 			leftNullCount = colStat.NullCount
@@ -1544,9 +1545,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		colStat.NullCount = innerJoinNullCount(
 			s.RowCount,
 			leftNullCount,
-			leftProps.Stats.RowCount,
+			leftProps.Statistics().RowCount,
 			rightNullCount,
-			rightProps.Stats.RowCount,
+			rightProps.Statistics().RowCount,
 		)
 
 		switch joinType {
@@ -1557,9 +1558,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 				leftCols,
 				rightCols,
 				leftNullCount,
-				leftProps.Stats.RowCount,
+				leftProps.Statistics().RowCount,
 				rightNullCount,
-				rightProps.Stats.RowCount,
+				rightProps.Statistics().RowCount,
 				s.RowCount,
 				s.Selectivity.AsFloat()*inputRowCount,
 			)
@@ -1690,14 +1691,14 @@ func (sb *statisticsBuilder) colStatFromJoinRight(
 // +------------+
 
 func (sb *statisticsBuilder) buildIndexJoin(indexJoin *IndexJoinExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(indexJoin)
 
-	inputStats := &indexJoin.Input.Relational().Stats
+	inputStats := indexJoin.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
 	sb.finalizeFromCardinality(relProps)
@@ -1707,7 +1708,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 	colSet opt.ColSet, join *IndexJoinExpr,
 ) *props.ColumnStatistic {
 	relProps := join.Relational()
-	s := &relProps.Stats
+	s := relProps.Statistics()
 
 	inputProps := join.Input.Relational()
 	inputCols := inputProps.OutputCols
@@ -1732,7 +1733,7 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 
 		// Calculate the distinct count of the lookup columns given the selectivity
 		// of any filters on the input.
-		inputStats := &inputProps.Stats
+		inputStats := inputProps.Statistics()
 		tableStats := sb.makeTableStatistics(join.Table)
 		selectivity := props.MakeSelectivity(inputStats.RowCount / tableStats.RowCount)
 		lookupColStat.ApplySelectivity(selectivity, tableStats.RowCount)
@@ -1769,14 +1770,14 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 func (sb *statisticsBuilder) buildZigzagJoin(
 	zigzag *ZigzagJoinExpr, relProps *props.Relational, h *joinPropsHelper,
 ) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(zigzag)
 
-	leftStats := zigzag.leftProps.Stats
+	leftStats := zigzag.leftProps.Statistics()
 	equivReps := h.filtersFD.EquivReps()
 
 	// We assume that we only plan zigzag joins in cases where the result set
@@ -1850,7 +1851,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 // +----------+
 
 func (sb *statisticsBuilder) buildGroupBy(groupNode RelExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
@@ -1905,7 +1906,7 @@ func (sb *statisticsBuilder) colStatGroupBy(
 	colSet opt.ColSet, groupNode RelExpr,
 ) *props.ColumnStatistic {
 	relProps := groupNode.Relational()
-	s := &relProps.Stats
+	s := relProps.Statistics()
 
 	groupingPrivate := groupNode.Private().(*GroupingPrivate)
 	groupingColSet := groupingPrivate.GroupingCols
@@ -1962,7 +1963,7 @@ func (sb *statisticsBuilder) colStatGroupBy(
 // +--------+
 
 func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
@@ -2007,7 +2008,7 @@ func (sb *statisticsBuilder) colStatSetNode(
 func (sb *statisticsBuilder) colStatSetNodeImpl(
 	outputCols opt.ColSet, setNode RelExpr, relProps *props.Relational,
 ) *props.ColumnStatistic {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	setPrivate := setNode.Private().(*SetPrivate)
 
 	leftCols := opt.TranslateColSetStrict(outputCols, setPrivate.OutCols, setPrivate.LeftCols)
@@ -2061,7 +2062,7 @@ func (sb *statisticsBuilder) colStatSetNodeImpl(
 
 // buildValues builds the statistics for a VALUES expression.
 func (sb *statisticsBuilder) buildValues(values ValuesContainer, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
@@ -2075,7 +2076,7 @@ func (sb *statisticsBuilder) buildValues(values ValuesContainer, relProps *props
 func (sb *statisticsBuilder) colStatValues(
 	colSet opt.ColSet, values *ValuesExpr,
 ) *props.ColumnStatistic {
-	s := &values.Relational().Stats
+	s := values.Relational().Statistics()
 	if len(values.Rows) == 0 {
 		colStat, _ := s.ColStats.Add(colSet)
 		return colStat
@@ -2121,7 +2122,7 @@ func (sb *statisticsBuilder) colStatValues(
 func (sb *statisticsBuilder) colStatLiteralValues(
 	colSet opt.ColSet, values *LiteralValuesExpr,
 ) *props.ColumnStatistic {
-	s := &values.Relational().Stats
+	s := values.Relational().Statistics()
 	if values.Len() == 0 {
 		colStat, _ := s.ColStats.Add(colSet)
 		return colStat
@@ -2134,13 +2135,13 @@ func (sb *statisticsBuilder) colStatLiteralValues(
 	// Determine null count by looking at tuples that have only NullOps in them.
 	nullCount := 0
 
-	for i := 0; i < values.Len(); i++ {
+	for rowIndex := 0; rowIndex < values.Len(); rowIndex++ {
 		var h hasher
 		h.Init()
 		hasNonNull := false
-		for j := 0; j < len(values.Cols); j++ {
-			if colSet.Contains(values.Cols[i]) {
-				elem := values.Rows.Rows.Get(i, j).(tree.Datum)
+		for colIndex, col := range values.Cols {
+			if colSet.Contains(col) {
+				elem := values.Rows.Rows.Get(rowIndex, colIndex).(tree.Datum)
 				if elem.ResolvedType().Family() == types.UnknownFamily {
 					hasNonNull = true
 				}
@@ -2166,14 +2167,14 @@ func (sb *statisticsBuilder) colStatLiteralValues(
 // +-------+
 
 func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(limit)
 
-	inputStats := &limit.Input.Relational().Stats
+	inputStats := limit.Input.Relational().Statistics()
 
 	// Copy row count from input.
 	s.RowCount = inputStats.RowCount
@@ -2191,14 +2192,14 @@ func (sb *statisticsBuilder) buildLimit(limit *LimitExpr, relProps *props.Relati
 }
 
 func (sb *statisticsBuilder) buildTopK(topK *TopKExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(topK)
 
-	inputStats := &topK.Input.Relational().Stats
+	inputStats := topK.Input.Relational().Statistics()
 
 	// Copy row count from input.
 	s.RowCount = inputStats.RowCount
@@ -2216,8 +2217,8 @@ func (sb *statisticsBuilder) colStatLimit(
 	colSet opt.ColSet, limit *LimitExpr,
 ) *props.ColumnStatistic {
 	relProps := limit.Relational()
-	s := &relProps.Stats
-	inputStats := &limit.Input.Relational().Stats
+	s := relProps.Statistics()
+	inputStats := limit.Input.Relational().Statistics()
 	colStat := sb.copyColStatFromChild(colSet, limit, s)
 
 	// Scale distinct count based on the selectivity of the limit operation.
@@ -2234,14 +2235,14 @@ func (sb *statisticsBuilder) colStatLimit(
 // +--------+
 
 func (sb *statisticsBuilder) buildOffset(offset *OffsetExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(offset)
 
-	inputStats := &offset.Input.Relational().Stats
+	inputStats := offset.Input.Relational().Statistics()
 
 	// Copy row count from input.
 	s.RowCount = inputStats.RowCount
@@ -2268,8 +2269,8 @@ func (sb *statisticsBuilder) colStatOffset(
 	colSet opt.ColSet, offset *OffsetExpr,
 ) *props.ColumnStatistic {
 	relProps := offset.Relational()
-	s := &relProps.Stats
-	inputStats := &offset.Input.Relational().Stats
+	s := relProps.Statistics()
+	inputStats := offset.Input.Relational().Statistics()
 	colStat := sb.copyColStatFromChild(colSet, offset, s)
 
 	// Scale distinct count based on the selectivity of the offset operation.
@@ -2286,7 +2287,7 @@ func (sb *statisticsBuilder) colStatOffset(
 // +---------+
 
 func (sb *statisticsBuilder) buildMax1Row(max1Row *Max1RowExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
@@ -2300,7 +2301,7 @@ func (sb *statisticsBuilder) buildMax1Row(max1Row *Max1RowExpr, relProps *props.
 func (sb *statisticsBuilder) colStatMax1Row(
 	colSet opt.ColSet, max1Row *Max1RowExpr,
 ) *props.ColumnStatistic {
-	s := &max1Row.Relational().Stats
+	s := max1Row.Relational().Statistics()
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
 	colStat.NullCount = s.RowCount * UnknownNullCountRatio
@@ -2316,14 +2317,14 @@ func (sb *statisticsBuilder) colStatMax1Row(
 // +------------+
 
 func (sb *statisticsBuilder) buildOrdinality(ord *OrdinalityExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(ord)
 
-	inputStats := &ord.Input.Relational().Stats
+	inputStats := ord.Input.Relational().Statistics()
 
 	s.RowCount = inputStats.RowCount
 	sb.finalizeFromCardinality(relProps)
@@ -2333,7 +2334,7 @@ func (sb *statisticsBuilder) colStatOrdinality(
 	colSet opt.ColSet, ord *OrdinalityExpr,
 ) *props.ColumnStatistic {
 	relProps := ord.Relational()
-	s := &relProps.Stats
+	s := relProps.Statistics()
 
 	colStat, _ := s.ColStats.Add(colSet)
 
@@ -2360,14 +2361,14 @@ func (sb *statisticsBuilder) colStatOrdinality(
 // +------------+
 
 func (sb *statisticsBuilder) buildWindow(window *WindowExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 	s.Available = sb.availabilityFromInput(window)
 
-	inputStats := &window.Input.Relational().Stats
+	inputStats := window.Input.Relational().Statistics()
 
 	// The row count of a window is equal to the row count of its input.
 	s.RowCount = inputStats.RowCount
@@ -2379,7 +2380,7 @@ func (sb *statisticsBuilder) colStatWindow(
 	colSet opt.ColSet, window *WindowExpr,
 ) *props.ColumnStatistic {
 	relProps := window.Relational()
-	s := &relProps.Stats
+	s := relProps.Statistics()
 
 	colStat, _ := s.ColStats.Add(colSet)
 
@@ -2428,7 +2429,7 @@ func (sb *statisticsBuilder) colStatWindow(
 func (sb *statisticsBuilder) buildProjectSet(
 	projectSet *ProjectSetExpr, relProps *props.Relational,
 ) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
@@ -2453,7 +2454,7 @@ func (sb *statisticsBuilder) buildProjectSet(
 	}
 
 	// Multiply by the input row count to get the total.
-	inputStats := &projectSet.Input.Relational().Stats
+	inputStats := projectSet.Input.Relational().Statistics()
 	s.RowCount = zipRowCount * inputStats.RowCount
 
 	sb.finalizeFromCardinality(relProps)
@@ -2462,7 +2463,7 @@ func (sb *statisticsBuilder) buildProjectSet(
 func (sb *statisticsBuilder) colStatProjectSet(
 	colSet opt.ColSet, projectSet *ProjectSetExpr,
 ) *props.ColumnStatistic {
-	s := &projectSet.Relational().Stats
+	s := projectSet.Relational().Statistics()
 	if s.RowCount == 0 {
 		// Short cut if cardinality is 0.
 		colStat, _ := s.ColStats.Add(colSet)
@@ -2470,7 +2471,7 @@ func (sb *statisticsBuilder) colStatProjectSet(
 	}
 
 	inputProps := projectSet.Input.Relational()
-	inputStats := inputProps.Stats
+	inputStats := inputProps.Statistics()
 	inputCols := inputProps.OutputCols
 
 	colStat, _ := s.ColStats.Add(colSet)
@@ -2561,21 +2562,21 @@ func (sb *statisticsBuilder) colStatProjectSet(
 func (sb *statisticsBuilder) buildWithScan(
 	withScan *WithScanExpr, relProps, bindingProps *props.Relational,
 ) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 
-	s.Available = bindingProps.Stats.Available
-	s.RowCount = bindingProps.Stats.RowCount
+	s.Available = bindingProps.Statistics().Available
+	s.RowCount = bindingProps.Statistics().RowCount
 	sb.finalizeFromCardinality(relProps)
 }
 
 func (sb *statisticsBuilder) colStatWithScan(
 	colSet opt.ColSet, withScan *WithScanExpr,
 ) *props.ColumnStatistic {
-	s := &withScan.Relational().Stats
+	s := withScan.Relational().Statistics()
 
 	boundExpr := sb.md.WithBinding(withScan.With).(RelExpr)
 
@@ -2596,7 +2597,7 @@ func (sb *statisticsBuilder) colStatWithScan(
 // +--------------------------------+
 
 func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
@@ -2612,7 +2613,7 @@ func (sb *statisticsBuilder) buildMutation(mutation RelExpr, relProps *props.Rel
 func (sb *statisticsBuilder) colStatMutation(
 	colSet opt.ColSet, mutation RelExpr,
 ) *props.ColumnStatistic {
-	s := &mutation.Relational().Stats
+	s := mutation.Relational().Statistics()
 	private := mutation.Private().(*MutationPrivate)
 
 	// Get colstat from child by mapping requested columns to corresponding
@@ -2633,7 +2634,7 @@ func (sb *statisticsBuilder) colStatMutation(
 // +-----------------+
 
 func (sb *statisticsBuilder) buildSequenceSelect(relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	s.Available = true
 	s.RowCount = 1
 	sb.finalizeFromCardinality(relProps)
@@ -2642,7 +2643,7 @@ func (sb *statisticsBuilder) buildSequenceSelect(relProps *props.Relational) {
 func (sb *statisticsBuilder) colStatSequenceSelect(
 	colSet opt.ColSet, seq *SequenceSelectExpr,
 ) *props.ColumnStatistic {
-	s := &seq.Relational().Stats
+	s := seq.Relational().Statistics()
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
@@ -2656,7 +2657,7 @@ func (sb *statisticsBuilder) colStatSequenceSelect(
 // +---------+
 
 func (sb *statisticsBuilder) buildUnknown(relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	s.Available = false
 	s.RowCount = unknownGeneratorRowCount
 	sb.finalizeFromCardinality(relProps)
@@ -2665,7 +2666,7 @@ func (sb *statisticsBuilder) buildUnknown(relProps *props.Relational) {
 func (sb *statisticsBuilder) colStatUnknown(
 	colSet opt.ColSet, relProps *props.Relational,
 ) *props.ColumnStatistic {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = s.RowCount
@@ -2722,7 +2723,7 @@ func (sb *statisticsBuilder) copyColStat(
 }
 
 func (sb *statisticsBuilder) finalizeFromCardinality(relProps *props.Relational) {
-	s := &relProps.Stats
+	s := relProps.Statistics()
 
 	// We don't ever want row count to be zero unless the cardinality is zero.
 	// This is because the stats may be stale, and we can end up with weird and
@@ -2817,7 +2818,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 	case *IndexJoinExpr:
 		// An index join is like a lookup join with no additional ON filters. The
 		// number of rows processed equals the number of output rows.
-		return e.Relational().Stats.RowCount
+		return e.Relational().Statistics().RowCount
 
 	case *LookupJoinExpr:
 		var lookupJoinPrivate *LookupJoinPrivate
@@ -2833,7 +2834,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 			if t.On.IsTrue() {
 				// If there are no additional ON filters, the number of rows processed
 				// equals the number of output rows.
-				return e.Relational().Stats.RowCount
+				return e.Relational().Statistics().RowCount
 			}
 			lookupJoinPrivate = &t.LookupJoinPrivate
 		}
@@ -2841,7 +2842,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
 		withoutOn := e.Memo().MemoizeLookupJoin(t.Input, nil /* on */, lookupJoinPrivate)
-		return withoutOn.Relational().Stats.RowCount
+		return withoutOn.Relational().Statistics().RowCount
 
 	case *InvertedJoinExpr:
 		var invertedJoinPrivate *InvertedJoinPrivate
@@ -2857,7 +2858,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 			if t.On.IsTrue() {
 				// If there are no additional ON filters, the number of rows processed
 				// equals the number of output rows.
-				return e.Relational().Stats.RowCount
+				return e.Relational().Statistics().RowCount
 			}
 			invertedJoinPrivate = &t.InvertedJoinPrivate
 		}
@@ -2865,7 +2866,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
 		withoutOn := e.Memo().MemoizeInvertedJoin(t.Input, nil /* on */, invertedJoinPrivate)
-		return withoutOn.Relational().Stats.RowCount
+		return withoutOn.Relational().Statistics().RowCount
 
 	case *MergeJoinExpr:
 		var mergeJoinPrivate *MergeJoinPrivate
@@ -2881,7 +2882,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 			if t.On.IsTrue() {
 				// If there are no additional ON filters, the number of rows processed
 				// equals the number of output rows.
-				return e.Relational().Stats.RowCount
+				return e.Relational().Statistics().RowCount
 			}
 			mergeJoinPrivate = &t.MergeJoinPrivate
 		}
@@ -2889,7 +2890,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		// We need to determine the row count of the join before the
 		// ON conditions are applied.
 		withoutOn := e.Memo().MemoizeMergeJoin(t.Left, t.Right, nil /* on */, mergeJoinPrivate)
-		return withoutOn.Relational().Stats.RowCount
+		return withoutOn.Relational().Statistics().RowCount
 
 	default:
 		if !opt.IsJoinOp(e) {
@@ -2918,7 +2919,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		default:
 			if len(on) == len(*filters) {
 				// No filters were removed.
-				return e.Relational().Stats.RowCount
+				return e.Relational().Statistics().RowCount
 			}
 
 			switch t := e.(type) {
@@ -2938,7 +2939,7 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 				panic(errors.AssertionFailedf("join type %v not handled", redact.Safe(e.Op())))
 			}
 		}
-		return e.Relational().Stats.RowCount
+		return e.Relational().Statistics().RowCount
 	}
 }
 
@@ -3156,7 +3157,7 @@ func (sb *statisticsBuilder) applyFiltersItem(
 	// want to make sure that we don't include columns that were only present in
 	// equality conjuncts such as var1=var2. The selectivity of these conjuncts
 	// will be accounted for in selectivityFromEquivalencies.
-	s := &relProps.Stats
+	s := relProps.Statistics()
 	scalarProps := filter.ScalarProps()
 	constrainedCols.UnionWith(scalarProps.OuterCols)
 	if scalarProps.Constraints != nil {
@@ -3411,12 +3412,12 @@ func (sb *statisticsBuilder) applyConstraintSet(
 // columns is done in the logical props builder.
 //
 // For example, consider the following constraint sets:
-//   /a/b/c: [/1 - /1/2/3] [/1/2/5 - /1/2/8]
-//   /c: [/6 - /6]
+//
+//	/a/b/c: [/1 - /1/2/3] [/1/2/5 - /1/2/8]
+//	/c: [/6 - /6]
 //
 // The first constraint set filters nulls out of column a, and the
 // second constraint set filters nulls out of column c.
-//
 func (sb *statisticsBuilder) updateNullCountsFromNotNullCols(
 	notNullCols opt.ColSet, s *props.Statistics,
 ) {
@@ -3438,20 +3439,22 @@ func (sb *statisticsBuilder) updateNullCountsFromNotNullCols(
 //
 // For example, consider the following constraint set:
 //
-//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]
-//   /c: [/6 - /6]
+//	/a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]
+//	/c: [/6 - /6]
 //
 // After the first constraint is processed, s.ColStats contains the
 // following:
-//   [a] -> { ... DistinctCount: 1 ... }
-//   [b] -> { ... DistinctCount: 1 ... }
-//   [c] -> { ... DistinctCount: 5 ... }
+//
+//	[a] -> { ... DistinctCount: 1 ... }
+//	[b] -> { ... DistinctCount: 1 ... }
+//	[c] -> { ... DistinctCount: 5 ... }
 //
 // After the second constraint is processed, column c is further constrained,
 // so s.ColStats contains the following:
-//   [a] -> { ... DistinctCount: 1 ... }
-//   [b] -> { ... DistinctCount: 1 ... }
-//   [c] -> { ... DistinctCount: 1 ... }
+//
+//	[a] -> { ... DistinctCount: 1 ... }
+//	[b] -> { ... DistinctCount: 1 ... }
+//	[c] -> { ... DistinctCount: 1 ... }
 //
 // Note that updateDistinctCountsFromConstraint is pessimistic, and assumes
 // that there is at least one row for every possible value provided by the
@@ -3464,7 +3467,7 @@ func (sb *statisticsBuilder) updateNullCountsFromNotNullCols(
 // query specifically mentions some exact values we should use that as a hint.
 // For example, consider the following constraint:
 //
-//   /a: [ - 5][10 - 10][15 - 15]
+//	/a: [ - 5][10 - 10][15 - 15]
 //
 // In this case, updateDistinctCountsFromConstraint will infer that there
 // are at least two distinct values (10 and 15). This lower bound will be
@@ -3666,63 +3669,65 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 // or (2) by assuming they are correlated.
 //
 // (1) Assuming independence between columns, we can calculate the selectivity
-//     by taking the product of selectivities of each constrained column. In
-//     the general case, this can be represented by the formula:
 //
-//                      ┬-┬ ⎛ new_distinct(i) ⎞
-//       selectivity =  │ │ ⎜ --------------- ⎟
-//                      ┴ ┴ ⎝ old_distinct(i) ⎠
-//                     i in
-//                  {constrained
-//                    columns}
+//	by taking the product of selectivities of each constrained column. In
+//	the general case, this can be represented by the formula:
+//
+//	                 ┬-┬ ⎛ new_distinct(i) ⎞
+//	  selectivity =  │ │ ⎜ --------------- ⎟
+//	                 ┴ ┴ ⎝ old_distinct(i) ⎠
+//	                i in
+//	             {constrained
+//	               columns}
 //
 // (2) If we instead assume there is some correlation between columns, we
-//     calculate the selectivity using multi-column statistics.
 //
-//                     ⎛ new_distinct({constrained columns}) ⎞
-//       selectivity = ⎜ ----------------------------------- ⎟
-//                     ⎝ old_distinct({constrained columns}) ⎠
+//	calculate the selectivity using multi-column statistics.
 //
-//     This formula looks simple, but the challenge is that it is difficult
-//     to determine the correct value for new_distinct({constrained columns})
-//     if each column is not constrained to a single value. For example, if
-//     new_distinct(x)=2 and new_distinct(y)=2, new_distinct({x,y}) could be 2,
-//     3 or 4. We estimate the new distinct count as follows, using the concept
-//     of "soft functional dependency (FD) strength" as defined in [1]:
+//	                ⎛ new_distinct({constrained columns}) ⎞
+//	  selectivity = ⎜ ----------------------------------- ⎟
+//	                ⎝ old_distinct({constrained columns}) ⎠
 //
-//       new_distinct({x,y}) = min_value + range * (1 - FD_strength_scaled)
+//	This formula looks simple, but the challenge is that it is difficult
+//	to determine the correct value for new_distinct({constrained columns})
+//	if each column is not constrained to a single value. For example, if
+//	new_distinct(x)=2 and new_distinct(y)=2, new_distinct({x,y}) could be 2,
+//	3 or 4. We estimate the new distinct count as follows, using the concept
+//	of "soft functional dependency (FD) strength" as defined in [1]:
 //
-//     where
+//	  new_distinct({x,y}) = min_value + range * (1 - FD_strength_scaled)
 //
-//       min_value = max(new_distinct(x), new_distinct(y))
-//       max_value = new_distinct(x) * new_distinct(y)
-//       range     = max_value - min_value
+//	where
 //
-//                     ⎛ max(old_distinct(x),old_distinct(y)) ⎞
-//       FD_strength = ⎜ ------------------------------------ ⎟
-//                     ⎝         old_distinct({x,y})          ⎠
+//	  min_value = max(new_distinct(x), new_distinct(y))
+//	  max_value = new_distinct(x) * new_distinct(y)
+//	  range     = max_value - min_value
 //
-//                         ⎛ max(old_distinct(x), old_distinct(y)) ⎞
-//       min_FD_strength = ⎜ ------------------------------------- ⎟
-//                         ⎝   old_distinct(x) * old_distinct(y)   ⎠
+//	                ⎛ max(old_distinct(x),old_distinct(y)) ⎞
+//	  FD_strength = ⎜ ------------------------------------ ⎟
+//	                ⎝         old_distinct({x,y})          ⎠
 //
-//                            ⎛ FD_strength - min_FD_strength ⎞  // scales FD_strength
-//       FD_strength_scaled = ⎜ ----------------------------- ⎟  // to be between
-//                            ⎝      1 - min_FD_strength      ⎠  // 0 and 1
+//	                    ⎛ max(old_distinct(x), old_distinct(y)) ⎞
+//	  min_FD_strength = ⎜ ------------------------------------- ⎟
+//	                    ⎝   old_distinct(x) * old_distinct(y)   ⎠
 //
-//     Suppose that old_distinct(x)=100 and old_distinct(y)=10. If x and y are
-//     perfectly correlated, old_distinct({x,y})=100. Using the example from
-//     above, new_distinct(x)=2 and new_distinct(y)=2. Plugging in the values
-//     into the equation, we get:
+//	                       ⎛ FD_strength - min_FD_strength ⎞  // scales FD_strength
+//	  FD_strength_scaled = ⎜ ----------------------------- ⎟  // to be between
+//	                       ⎝      1 - min_FD_strength      ⎠  // 0 and 1
 //
-//       FD_strength_scaled  = 1
-//       new_distinct({x,y}) = 2 + (4 - 2) * (1 - 1) = 2
+//	Suppose that old_distinct(x)=100 and old_distinct(y)=10. If x and y are
+//	perfectly correlated, old_distinct({x,y})=100. Using the example from
+//	above, new_distinct(x)=2 and new_distinct(y)=2. Plugging in the values
+//	into the equation, we get:
 //
-//     If x and y are completely independent, however, old_distinct({x,y})=1000.
-//     In this case, we get:
+//	  FD_strength_scaled  = 1
+//	  new_distinct({x,y}) = 2 + (4 - 2) * (1 - 1) = 2
 //
-//       FD_strength_scaled  = 0
-//       new_distinct({x,y}) = 2 + (4 - 2) * (1 - 0) = 4
+//	If x and y are completely independent, however, old_distinct({x,y})=1000.
+//	In this case, we get:
+//
+//	  FD_strength_scaled  = 0
+//	  new_distinct({x,y}) = 2 + (4 - 2) * (1 - 0) = 4
 //
 // Note that even if we calculate the selectivity based on equation (2) above,
 // we still want to take equation (1) into account. This is because it is
@@ -3732,7 +3737,7 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 // individually, we must give some weight to equation (1). Therefore, instead
 // of equation (2) we actually return the following selectivity:
 //
-//   selectivity = (1 - w) * (equation 1) + w * (equation 2)
+//	selectivity = (1 - w) * (equation 1) + w * (equation 2)
 //
 // where w is the constant multiColWeight.
 //
@@ -3745,8 +3750,8 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 // correlation.
 //
 // [1] Ilyas, Ihab F., et al. "CORDS: automatic discovery of correlations and
-//     soft functional dependencies." SIGMOD 2004.
 //
+//	soft functional dependencies." SIGMOD 2004.
 func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
 ) (selectivity, selectivityUpperBound props.Selectivity) {
@@ -3894,25 +3899,28 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 // correlation coefficient between pairs of columns during table stats
 // collection. Instead, this is just a proxy obtained by estimating three values
 // for the selectivity of the filter constraining the given columns:
-// 1. lb (lower bound): the value returned by multiplying the individual
-//    conjunct selectivities together, estimated from single-column distinct
-//    counts. This would be the selectivity of the entire predicate if the
-//    columns were completely independent.
-// 2. ub (upper bound): the lowest single-conjunct selectivity estimated from
-//    single-column distinct counts. This would be the selectivity of the entire
-//    predicate if the columns were completely correlated. In other words, this
-//    would be the selectivity if the value of the column with the most
-//    selective predicate functionally determined the value of all other
-//    constrained columns.
-// 3. mc (multi-column selectivity): the value returned by estimating the
-//    predicate selectivity with a combination of single-column and multi-column
-//    distinct counts. It falls somewhere between upper and lower bound, and
-//    thus approximates the level of correlation of the columns.
+//  1. lb (lower bound): the value returned by multiplying the individual
+//     conjunct selectivities together, estimated from single-column distinct
+//     counts. This would be the selectivity of the entire predicate if the
+//     columns were completely independent.
+//  2. ub (upper bound): the lowest single-conjunct selectivity estimated from
+//     single-column distinct counts. This would be the selectivity of the entire
+//     predicate if the columns were completely correlated. In other words, this
+//     would be the selectivity if the value of the column with the most
+//     selective predicate functionally determined the value of all other
+//     constrained columns.
+//  3. mc (multi-column selectivity): the value returned by estimating the
+//     predicate selectivity with a combination of single-column and multi-column
+//     distinct counts. It falls somewhere between upper and lower bound, and
+//     thus approximates the level of correlation of the columns.
 //
 // The "correlation" returned by this function is thus:
-//   corr = (mc - lb) / (ub - lb)
+//
+//	corr = (mc - lb) / (ub - lb)
+//
 // where
-//   lb <= mc <= ub
+//
+//	lb <= mc <= ub
 //
 // This value will be used to refine the selectivity estimate from single-column
 // histograms, which do not contain information about column correlations.
@@ -4123,14 +4131,13 @@ func (sb *statisticsBuilder) selectivityFromNullsRemoved(
 // predicateSelectivity calculates the selectivity of a predicate, using the
 // following formula:
 //
-//   sel = (output row count) / (input row count)
+//	sel = (output row count) / (input row count)
 //
 // where
 //
-//   output row count =
-//     (fraction of non-null values preserved) * (number of non-null input rows) +
-//     (fraction of null values preserved) * (number of null input rows)
-//
+//	output row count =
+//	  (fraction of non-null values preserved) * (number of non-null input rows) +
+//	  (fraction of null values preserved) * (number of null input rows)
 func (sb *statisticsBuilder) predicateSelectivity(
 	nonNullSelectivity, nullSelectivity props.Selectivity, inputNullCount, inputRowCount float64,
 ) props.Selectivity {
@@ -4249,11 +4256,14 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 // selectivity of an individual ORed predicate.
 //
 // Given predicates A and B and probability function P:
-//     P(A or B) = P(A) + P(B) - P(A and B)
+//
+//	P(A or B) = P(A) + P(B) - P(A and B)
+//
 // Continuation:
-//     P(A or B or C) = P(A or B) + P(C) - P((A or B) and C)
-//     P(A or B or C or D) = P(A or B or C) + P(D) - P((A or B or C) and D)
-//     ...
+//
+//	P(A or B or C) = P(A or B) + P(C) - P((A or B) and C)
+//	P(A or B or C or D) = P(A or B or C) + P(D) - P((A or B or C) and D)
+//	...
 //
 // This seems to be a standard approach in the database world.
 // The textbook solution is more complex:
@@ -4261,10 +4271,13 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 // https://stats.stackexchange.com/questions/87533/whats-the-general-disjunction-rule-for-n-events
 //
 // Q: Does the iterative approach do a good enough job of approximating
-//    the non-iterative textbook solution?
+//
+//	the non-iterative textbook solution?
 //
 // In the formula we assume A and B are independent, so:
-//    P(A and B) = P(A) * P(B)
+//
+//	P(A and B) = P(A) * P(B)
+//
 // The independence assumption may not be correct in all cases.
 // Would using the full formula lead to more errors since the independence
 // assumption is used in more terms in that formula?
@@ -4327,10 +4340,19 @@ func addEqExprConjuncts(
 func (sb *statisticsBuilder) selectivityFromEquivalency(
 	equivGroup opt.ColSet, e RelExpr, s *props.Statistics,
 ) (selectivity props.Selectivity) {
+	var derivedEquivCols opt.ColSet
+	if lookupJoinExpr, ok := e.(*LookupJoinExpr); ok {
+		derivedEquivCols = lookupJoinExpr.DerivedEquivCols
+	}
 	// Find the maximum input distinct count for all columns in this equivalency
 	// group.
 	maxDistinctCount := float64(0)
 	equivGroup.ForEach(func(i opt.ColumnID) {
+		if derivedEquivCols.Contains(i) {
+			// Don't apply selectivity from derived equivalencies internally
+			// manufactured by lookup join solely to facilitate index lookups.
+			return
+		}
 		// If any of the distinct counts were updated by the filter, we want to use
 		// the updated value.
 		colSet := opt.MakeColSet(i)
@@ -4423,7 +4445,7 @@ func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 // and the determinant columns each have distinctCount = 1, we should consider
 // the implied correlations for selectivity calculation. Consider the query:
 //
-//   SELECT * FROM customer WHERE id = 123 and name = 'John Smith'
+//	SELECT * FROM customer WHERE id = 123 and name = 'John Smith'
 //
 // If id is the primary key of customer, then name is functionally determined
 // by id. We only need to consider the selectivity of id, not name, since id
@@ -4432,7 +4454,6 @@ func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 // eliminating columns that can be functionally determined by other columns.
 // If the distinct count on all of these reduced columns is one, then we return
 // this reduced column set to be used for selectivity calculation.
-//
 func (sb *statisticsBuilder) tryReduceCols(
 	cols opt.ColSet, s *props.Statistics, fd *props.FuncDepSet,
 ) opt.ColSet {

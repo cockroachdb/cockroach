@@ -57,10 +57,10 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if err != nil {
 		return nil, err
 	}
-	schema, err := p.Descriptors().GetSchemaByName(ctx, p.txn, db,
+	schema, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db,
 		string(n.Schema.SchemaName), tree.SchemaLookupFlags{
-			Required:       true,
-			RequireMutable: true,
+			Required:    true,
+			AvoidLeased: true,
 		})
 	if err != nil {
 		return nil, err
@@ -73,7 +73,11 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
 	case catalog.SchemaUserDefined:
-		desc := schema.(*schemadesc.Mutable)
+		flags := p.CommonLookupFlagsRequired()
+		desc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn, schema.GetID(), flags)
+		if err != nil {
+			return nil, err
+		}
 		// The user must be a superuser or the owner of the schema to modify it.
 		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
@@ -102,6 +106,27 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 
 		oldQualifiedSchemaName, err := params.p.getQualifiedSchemaName(params.ctx, n.desc)
 		if err != nil {
+			return err
+		}
+
+		// Ensure that the new name is a valid schema name.
+		if err := schemadesc.IsSchemaNameValid(newName); err != nil {
+			return err
+		}
+
+		// Check that there isn't a name collision with the new name.
+		found, _, err := schemaExists(params.ctx, params.p.txn, params.p.Descriptors(), n.db.ID, newName)
+		if err != nil {
+			return err
+		}
+		if found {
+			return sqlerrors.NewSchemaAlreadyExistsError(newName)
+		}
+
+		lookupFlags := tree.CommonLookupFlags{Required: true, AvoidLeased: true}
+		if err := maybeFailOnDependentDescInRename(
+			params.ctx, params.p, n.db, n.desc.GetName(), lookupFlags, catalog.Schema,
+		); err != nil {
 			return err
 		}
 
@@ -202,20 +227,6 @@ func (p *planner) renameSchema(
 		ParentID:       desc.GetParentID(),
 		ParentSchemaID: desc.GetParentSchemaID(),
 		Name:           desc.GetName(),
-	}
-
-	// Check that there isn't a name collision with the new name.
-	found, _, err := schemaExists(ctx, p.txn, p.Descriptors(), db.ID, newName)
-	if err != nil {
-		return err
-	}
-	if found {
-		return sqlerrors.NewSchemaAlreadyExistsError(newName)
-	}
-
-	// Ensure that the new name is a valid schema name.
-	if err := schemadesc.IsSchemaNameValid(newName); err != nil {
-		return err
 	}
 
 	// Set the new name for the descriptor.

@@ -41,6 +41,7 @@ go_test(
         "followerreads_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvfollowerreadsccl"],
     deps = [

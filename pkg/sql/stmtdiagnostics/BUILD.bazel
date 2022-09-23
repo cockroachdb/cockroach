@@ -34,6 +34,7 @@ go_test(
         "statement_diagnostics_helpers_test.go",
         "statement_diagnostics_test.go",
     ],
+    args = ["-test.timeout=295s"],
     embed = [":stmtdiagnostics"],
     tags = ["no-remote"],
     deps = [

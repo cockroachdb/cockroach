@@ -81,7 +81,7 @@ func updateRangeAddressing(b *kv.Batch, desc *roachpb.RangeDescriptor) error {
 //  3. If desc.EndKey is normal user key:
 //     - meta2(desc.EndKey)
 //     3a. If desc.StartKey is not normal user key:
-//         - meta1(KeyMax)
+//     - meta1(KeyMax)
 func rangeAddressing(b *kv.Batch, desc *roachpb.RangeDescriptor, action metaAction) error {
 	// 1. handle illegal case of start or end key being meta1.
 	if bytes.HasPrefix(desc.EndKey, keys.Meta1Prefix) ||

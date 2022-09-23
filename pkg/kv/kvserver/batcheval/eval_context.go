@@ -15,14 +15,11 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -278,16 +275,7 @@ func (m *mockEvalCtxImpl) GetClosedTimestampOlderThanStorageSnapshot() hlc.Times
 func (m *mockEvalCtxImpl) GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp {
 	return m.ClosedTimestamp
 }
-func (m *mockEvalCtxImpl) GetExternalStorage(
-	ctx context.Context, dest cloudpb.ExternalStorage,
-) (cloud.ExternalStorage, error) {
-	panic("unimplemented")
-}
-func (m *mockEvalCtxImpl) GetExternalStorageFromURI(
-	ctx context.Context, uri string, user username.SQLUsername,
-) (cloud.ExternalStorage, error) {
-	panic("unimplemented")
-}
+
 func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq roachpb.LeaseSequence) {
 	m.RevokedLeaseSeq = seq
 }

@@ -38,7 +38,8 @@ const (
 	validFrom                = -time.Hour * 24
 	maxPathLength            = 1
 	caCommonName             = "Cockroach CA"
-	tenantURISANFormatString = "crdb://tenant/%d/user/%s"
+	tenantURISANPrefixString = "crdb://"
+	tenantURISANFormatString = tenantURISANPrefixString + "tenant/%d/user/%s"
 
 	// TenantsOU is the OrganizationalUnit that determines a client certificate should be treated as a tenant client
 	// certificate (as opposed to a KV node client certificate).
@@ -331,6 +332,11 @@ func MakeTenantURISANs(
 		urls = append(urls, uri)
 	}
 	return urls, nil
+}
+
+// URISANHasCRDBPrefix indicates whether a URI string has the tenant URI SAN prefix.
+func URISANHasCRDBPrefix(rawlURI string) bool {
+	return strings.HasPrefix(rawlURI, tenantURISANPrefixString)
 }
 
 // ParseTenantURISAN extracts the user and tenant ID contained within a tenant URI SAN.

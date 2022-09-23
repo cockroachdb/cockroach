@@ -1,0 +1,312 @@
+# Test backing up and restoring a database with user defined functions.
+new-server name=s
+----
+
+exec-sql
+CREATE DATABASE db1;
+USE db1;
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+CREATE SEQUENCE sc1.sq1;
+CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sc1.tbl1;
+  SELECT nextval('sc1.sq1');
+$$;
+CREATE SCHEMA sc2;
+CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
+CREATE FUNCTION sc2.f2() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc2.tbl2 LIMIT 1 $$;
+----
+
+exec-sql
+INSERT INTO sc2.tbl2 VALUES (123)
+----
+
+query-sql
+SELECT sc2.f2()
+----
+123
+
+exec-sql
+BACKUP DATABASE db1 INTO 'nodelocal://0/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://0/test/'
+)
+SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
+----
+<nil> <nil> db1 database false
+db1 <nil> public schema false
+db1 <nil> sc1 schema false
+db1 sc1 tbl1 table false
+db1 sc1 enum1 type false
+db1 sc1 _enum1 type false
+db1 sc1 sq1 table false
+db1 sc1 f1 function false
+db1 <nil> sc2 schema false
+db1 sc2 tbl2 table false
+db1 sc2 f2 function false
+
+query-sql
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+----
+CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	AS $$
+	SELECT a FROM db1.sc1.tbl1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+$$
+
+query-sql
+SELECT sc1.f1('Good'::sc1.enum1)
+----
+1
+
+exec-sql
+DROP DATABASE db1
+----
+
+exec-sql
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://0/test/' WITH new_db_name = db1_new
+----
+
+exec-sql
+USE db1_new
+----
+
+# Make sure function ids in signature and body are rewritten.
+# 1. argument type id is rewritten so that type name is deserialized correctly.
+# 2. db name in qualified name is rewritten.
+# 3. sequence id is rewritten so that sequence name is deserialized correctly.
+query-sql
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+----
+CREATE FUNCTION sc1.f1(IN a db1_new.sc1.enum1)
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	AS $$
+	SELECT a FROM db1_new.sc1.tbl1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+$$
+
+# Make sure function signature is rewritten in schema descriptor so that
+# function can be resolved and executed.
+query-sql
+SELECT sc1.f1('Good'::db1_new.sc1.enum1)
+----
+1
+
+# Make sure function still queries from correct table.
+query-sql
+SELECT db1_new.sc2.f2()
+----
+123
+
+# Make sure dependency IDs are rewritten.
+# Note that technically this only tests forward-reference IDs in depended-on
+# objects are rewritten. But since we have cross-references validation, so this
+# also means back-references in UDF descriptor are good.
+exec-sql
+DROP SEQUENCE sc1.sq1
+----
+pq: cannot drop sequence sq1 because other objects depend on it
+
+exec-sql
+DROP TABLE sc1.tbl1
+----
+pq: cannot drop relation "tbl1" because function "f1" depends on it
+HINT: you can drop f1 instead.
+
+exec-sql
+ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
+----
+pq: cannot rename relation "sc1.tbl1" because function "f1" depends on it
+HINT: you can drop f1 instead.
+
+exec-sql
+ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
+----
+pq: cannot set schema on relation "tbl1" because function "f1" depends on it
+HINT: you can drop f1 instead.
+
+exec-sql
+DROP TYPE sc1.enum1
+----
+pq: cannot drop type "enum1" because other objects ([db1_new.sc1.f1]) still depend on it
+
+# Test backing up and restoring a full cluster with user defined function.
+new-server name=s1
+----
+
+exec-sql server=s1
+CREATE DATABASE db1;
+USE db1;
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
+CREATE TYPE sc1.enum1 AS ENUM('Good');
+CREATE SEQUENCE sc1.sq1;
+CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sc1.tbl1;
+  SELECT nextval('sc1.sq1');
+$$;
+CREATE SCHEMA sc2;
+CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
+CREATE FUNCTION sc2.f2() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM sc2.tbl2 LIMIT 1 $$;
+----
+
+exec-sql
+INSERT INTO sc2.tbl2 VALUES (123)
+----
+
+query-sql
+SELECT sc2.f2()
+----
+123
+
+exec-sql
+BACKUP INTO 'nodelocal://0/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://0/test/'
+)
+SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
+----
+<nil> <nil> system database true
+system public users table true
+system public zones table true
+system public settings table true
+system public ui table true
+system public locations table true
+system public role_members table true
+system public comments table true
+system public role_options table true
+system public scheduled_jobs table true
+system public database_role_settings table true
+system public role_id_seq table true
+system public tenant_settings table true
+system public privileges table true
+system public external_connections table true
+<nil> <nil> defaultdb database true
+defaultdb <nil> public schema true
+<nil> <nil> postgres database true
+postgres <nil> public schema true
+<nil> <nil> data database true
+data <nil> public schema true
+data public bank table true
+<nil> <nil> db1 database true
+db1 <nil> public schema true
+db1 <nil> sc1 schema true
+db1 sc1 tbl1 table true
+db1 sc1 enum1 type true
+db1 sc1 _enum1 type true
+db1 sc1 sq1 table true
+db1 sc1 f1 function true
+db1 <nil> sc2 schema true
+db1 sc2 tbl2 table true
+db1 sc2 f2 function true
+
+query-sql
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+----
+CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	AS $$
+	SELECT a FROM db1.sc1.tbl1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+$$
+
+query-sql
+SELECT sc1.f1('Good'::sc1.enum1)
+----
+1
+
+# Start a new cluster with the same IO dir.
+new-server name=s2 share-io-dir=s1
+----
+
+# Restore into the new cluster.
+exec-sql server=s2
+RESTORE FROM LATEST IN 'nodelocal://0/test/'
+----
+
+exec-sql
+USE db1
+----
+
+# Make sure function ids in signature and body are rewritten.
+# 1. argument type id is rewritten so that type name is deserialized correctly.
+# 2. db name in qualified name is rewritten.
+# 3. sequence id is rewritten so that sequence name is deserialized correctly.
+query-sql
+SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f1]
+----
+CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
+	RETURNS INT8
+	VOLATILE
+	NOT LEAKPROOF
+	CALLED ON NULL INPUT
+	LANGUAGE SQL
+	AS $$
+	SELECT a FROM db1.sc1.tbl1;
+	SELECT nextval('sc1.sq1'::REGCLASS);
+$$
+
+# Make sure function signature is rewritten in schema descriptor so that
+# function can be resolved and executed.
+query-sql
+SELECT sc1.f1('Good'::sc1.enum1)
+----
+1
+
+# Make sure function still queries from correct table.
+query-sql
+SELECT sc2.f2()
+----
+123
+
+# Make sure dependency IDs are rewritten.
+# Note that technically this only tests forward-reference IDs in depended-on
+# objects are rewritten. But since we have cross-references validation, so this
+# also means back-references in UDF descriptor are good.
+exec-sql
+DROP SEQUENCE sc1.sq1
+----
+pq: cannot drop sequence sq1 because other objects depend on it
+
+exec-sql
+DROP TABLE sc1.tbl1
+----
+pq: cannot drop relation "tbl1" because function "f1" depends on it
+HINT: you can drop f1 instead.
+
+exec-sql
+ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
+----
+pq: cannot rename relation "sc1.tbl1" because function "f1" depends on it
+HINT: you can drop f1 instead.
+
+exec-sql
+ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
+----
+pq: cannot set schema on relation "tbl1" because function "f1" depends on it
+HINT: you can drop f1 instead.
+
+exec-sql
+DROP TYPE sc1.enum1
+----
+pq: cannot drop type "enum1" because other objects ([db1.sc1.f1]) still depend on it

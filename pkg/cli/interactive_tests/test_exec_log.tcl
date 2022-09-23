@@ -4,7 +4,7 @@ source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
 
-spawn $argv sql
+spawn $argv sql --no-line-editor
 eexpect root@
 
 set logfile logs/db/logs/cockroach-sql-exec.log

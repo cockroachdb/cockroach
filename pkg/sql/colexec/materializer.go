@@ -265,19 +265,7 @@ func (m *Materializer) OutputTypes() []*types.T {
 
 // Start is part of the execinfra.RowSource interface.
 func (m *Materializer) Start(ctx context.Context) {
-	if len(m.drainHelper.statsCollectors) > 0 {
-		// Since we're collecting stats, we'll derive a separate tracing span
-		// for them. If we don't do this, then the stats would be attached to
-		// the span of the materializer's user, and if that user itself has a
-		// lot of payloads to attach (e.g. a joinReader attaching the KV keys it
-		// looked up), then the stats might be dropped based on the maximum size
-		// of structured payload per tracing span of 10KiB (see
-		// tracing.maxStructuredBytesPerSpan). Deriving a separate span
-		// guarantees that the stats won't be dropped.
-		ctx = m.StartInternal(ctx, "materializer" /* name */)
-	} else {
-		ctx = m.StartInternalNoSpan(ctx)
-	}
+	ctx = m.StartInternal(ctx, "materializer" /* name */)
 	// We can encounter an expected error during Init (e.g. an operator
 	// attempts to allocate a batch, but the memory budget limit has been
 	// reached), so we need to wrap it with a catcher.

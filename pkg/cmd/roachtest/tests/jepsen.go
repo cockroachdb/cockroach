@@ -327,9 +327,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	}
 }
 
-// RegisterJepsen registers the Jepsen test suite, which primarily checks for
+// registerJepsen registers the Jepsen test suite, which primarily checks for
 // transaction anomalies.
-func RegisterJepsen(r registry.Registry) {
+func registerJepsen(r registry.Registry) {
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	tests := []string{

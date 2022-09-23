@@ -1024,3 +1024,43 @@ x  duped
 # This session variable has noop and is just kept for backward compatibility.
 statement ok
 set experimental_enable_hash_sharded_indexes = on
+
+
+# This is a regression test for a bug whereby the virtual shard column would
+# not be included in the fetch columns when it was a key in the primary index.
+# This caused the column backfiller to return an error and fail permanently and
+# irrecoverably in the case that the a column backfill were to occur.
+subtest add_non_null_column_to_hash_sharded_primary_key
+
+statement ok
+CREATE TABLE products (
+    id INT8 PRIMARY KEY USING HASH DEFAULT unique_rowid(),
+    title VARCHAR(150) NOT NULL,
+    price INT8 NOT NULL
+);
+
+statement ok
+INSERT INTO products (title, price) VALUES ('Test Product', '55');
+INSERT INTO products (title, price) VALUES ('Test Product B', '60');
+
+
+statement ok
+ALTER TABLE products ADD COLUMN description STRING NOT NULL DEFAULT '';
+
+statement ok
+ALTER TABLE products DROP COLUMN description;
+
+statement ok
+BEGIN;
+SET LOCAL use_declarative_schema_changer = off;
+ALTER TABLE products ADD COLUMN description STRING NOT NULL DEFAULT '';
+COMMIT;
+
+statement ok
+BEGIN;
+SET LOCAL use_declarative_schema_changer = off;
+ALTER TABLE products DROP COLUMN description;
+COMMIT;
+
+statement ok
+DROP TABLE products;

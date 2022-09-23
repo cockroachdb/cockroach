@@ -46,9 +46,8 @@ func (r *systemTableIDResolver) LookupSystemTableID(
 	if err := r.collectionFactory.Txn(ctx, r.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *Collection,
 	) (err error) {
-		id, err = descriptors.stored.lookupName(
-			ctx, txn, nil, /* maybeDatabase */
-			keys.SystemDatabaseID, keys.PublicSchemaID, tableName,
+		id, err = descriptors.stored.LookupDescriptorID(
+			ctx, txn, keys.SystemDatabaseID, keys.PublicSchemaID, tableName,
 		)
 		return err
 	}); err != nil {

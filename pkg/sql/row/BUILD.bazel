@@ -91,6 +91,7 @@ go_test(
         "fetcher_test.go",
         "main_test.go",
     ],
+    args = ["-test.timeout=55s"],
     embed = [":row"],
     deps = [
         "//pkg/base",

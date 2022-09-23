@@ -48,10 +48,10 @@ import (
 // cockroach node with a single store using a local sender. Example
 // usage of a LocalTestCluster follows:
 //
-//   s := &LocalTestCluster{}
-//   s.Start(t, testutils.NewNodeTestBaseContext(),
-//           kv.InitFactoryForLocalTestCluster)
-//   defer s.Stop()
+//	s := &LocalTestCluster{}
+//	s.Start(t, testutils.NewNodeTestBaseContext(),
+//	        kv.InitFactoryForLocalTestCluster)
+//	defer s.Stop()
 //
 // Note that the LocalTestCluster is different from server.TestCluster
 // in that although it uses a distributed sender, there is no RPC traffic.
