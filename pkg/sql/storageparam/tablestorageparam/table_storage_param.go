@@ -27,25 +27,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
 // Setter observes storage parameters for tables.
 type Setter struct {
-	tableDesc *tabledesc.Mutable
+
+	// TableDesc is the table that is modified by the Setter.
+	TableDesc *tabledesc.Mutable
+
+	// UpdatedRowLevelTTL is kept separate from the RowLevelTTL in TableDesc
+	// in case changes need to be made in schema changer.
+	UpdatedRowLevelTTL *catpb.RowLevelTTL
 }
 
 var _ storageparam.Setter = (*Setter)(nil)
 
 // NewSetter returns a new Setter.
 func NewSetter(tableDesc *tabledesc.Mutable) *Setter {
-	return &Setter{tableDesc: tableDesc}
+	var updatedRowLevelTTL *catpb.RowLevelTTL
+	if tableDesc.HasRowLevelTTL() {
+		updatedRowLevelTTL = protoutil.Clone(tableDesc.GetRowLevelTTL()).(*catpb.RowLevelTTL)
+	}
+	return &Setter{
+		TableDesc:          tableDesc,
+		UpdatedRowLevelTTL: updatedRowLevelTTL,
+	}
 }
 
 // RunPostChecks implements the Setter interface.
 func (po *Setter) RunPostChecks() error {
-	ttl := po.tableDesc.GetRowLevelTTL()
-	if err := tabledesc.ValidateRowLevelTTL(ttl); err != nil {
+	if err := tabledesc.ValidateRowLevelTTL(po.UpdatedRowLevelTTL); err != nil {
 		return err
 	}
 	return nil
@@ -90,12 +103,17 @@ func floatFromDatum(evalCtx *eval.Context, key string, datum tree.Datum) (float6
 	return s, nil
 }
 
+func (po *Setter) hasRowLevelTTL() bool {
+	return po.UpdatedRowLevelTTL != nil
+}
+
 func (po *Setter) getOrCreateRowLevelTTL() *catpb.RowLevelTTL {
-	rowLevelTTL := &po.tableDesc.RowLevelTTL
-	if *rowLevelTTL == nil {
-		*rowLevelTTL = &catpb.RowLevelTTL{}
+	rowLevelTTL := po.UpdatedRowLevelTTL
+	if rowLevelTTL == nil {
+		rowLevelTTL = &catpb.RowLevelTTL{}
+		po.UpdatedRowLevelTTL = rowLevelTTL
 	}
-	return *rowLevelTTL
+	return rowLevelTTL
 }
 
 type tableParam struct {
@@ -167,7 +185,7 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			po.tableDesc.RowLevelTTL = nil
+			po.UpdatedRowLevelTTL = nil
 			return nil
 		},
 	},
@@ -226,8 +244,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.DurationExpr = ""
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.DurationExpr = ""
 			}
 			return nil
 		},
@@ -243,8 +261,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.ExpirationExpr = ""
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.ExpirationExpr = ""
 			}
 			return nil
 		},
@@ -263,8 +281,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.SelectBatchSize = 0
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.SelectBatchSize = 0
 			}
 			return nil
 		},
@@ -283,8 +301,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.DeleteBatchSize = 0
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.DeleteBatchSize = 0
 			}
 			return nil
 		},
@@ -303,8 +321,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.RangeConcurrency = 0
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.RangeConcurrency = 0
 			}
 			return nil
 		},
@@ -323,8 +341,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.DeleteRateLimit = 0
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.DeleteRateLimit = 0
 			}
 			return nil
 		},
@@ -340,8 +358,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.LabelMetrics = false
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.LabelMetrics = false
 			}
 			return nil
 		},
@@ -360,8 +378,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.DeletionCron = ""
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.DeletionCron = ""
 			}
 			return nil
 		},
@@ -377,8 +395,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.Pause = false
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.Pause = false
 			}
 			return nil
 		},
@@ -397,8 +415,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.tableDesc.RowLevelTTL != nil {
-				po.tableDesc.RowLevelTTL.RowStatsPollInterval = 0
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.RowStatsPollInterval = 0
 			}
 			return nil
 		},
@@ -406,7 +424,7 @@ var tableParams = map[string]tableParam{
 	`exclude_data_from_backup`: {
 		onSet: func(po *Setter, semaCtx *tree.SemaContext,
 			evalCtx *eval.Context, key string, datum tree.Datum) error {
-			if po.tableDesc.Temporary {
+			if po.TableDesc.Temporary {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"cannot set data in a temporary table to be excluded from backup")
 			}
@@ -416,7 +434,7 @@ var tableParams = map[string]tableParam{
 			// could result in a violation of FK constraints on restore. To prevent this,
 			// we only allow a table with no incoming FK references to be marked as
 			// ephemeral.
-			if len(po.tableDesc.InboundFKs) != 0 {
+			if len(po.TableDesc.InboundFKs) != 0 {
 				return errors.New("cannot set data in a table with inbound foreign key constraints to be excluded from backup")
 			}
 
@@ -426,14 +444,14 @@ var tableParams = map[string]tableParam{
 			}
 			// If the table descriptor being changed has the same value for the
 			// `ExcludeDataFromBackup` flag, no-op.
-			if po.tableDesc.ExcludeDataFromBackup == excludeDataFromBackup {
+			if po.TableDesc.ExcludeDataFromBackup == excludeDataFromBackup {
 				return nil
 			}
-			po.tableDesc.ExcludeDataFromBackup = excludeDataFromBackup
+			po.TableDesc.ExcludeDataFromBackup = excludeDataFromBackup
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			po.tableDesc.ExcludeDataFromBackup = false
+			po.TableDesc.ExcludeDataFromBackup = false
 			return nil
 		},
 	},
@@ -457,11 +475,11 @@ var tableParams = map[string]tableParam{
 			if err != nil {
 				return err
 			}
-			po.tableDesc.ForecastStats = &enabled
+			po.TableDesc.ForecastStats = &enabled
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			po.tableDesc.ForecastStats = nil
+			po.TableDesc.ForecastStats = nil
 			return nil
 		},
 	},
@@ -515,10 +533,10 @@ func autoStatsEnabledSettingFunc(
 	if err != nil {
 		return err
 	}
-	if po.tableDesc.AutoStatsSettings == nil {
-		po.tableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+	if po.TableDesc.AutoStatsSettings == nil {
+		po.TableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
 	}
-	po.tableDesc.AutoStatsSettings.Enabled = &boolVal
+	po.TableDesc.AutoStatsSettings.Enabled = &boolVal
 	return nil
 }
 
@@ -530,13 +548,13 @@ func autoStatsMinStaleRowsSettingFunc(
 		if err != nil {
 			return err
 		}
-		if po.tableDesc.AutoStatsSettings == nil {
-			po.tableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+		if po.TableDesc.AutoStatsSettings == nil {
+			po.TableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
 		}
 		if err = validateFunc(intVal); err != nil {
 			return errors.Wrapf(err, "invalid integer value for %s", key)
 		}
-		po.tableDesc.AutoStatsSettings.MinStaleRows = &intVal
+		po.TableDesc.AutoStatsSettings.MinStaleRows = &intVal
 		return nil
 	}
 }
@@ -550,22 +568,22 @@ func autoStatsFractionStaleRowsSettingFunc(
 		if err != nil {
 			return err
 		}
-		if po.tableDesc.AutoStatsSettings == nil {
-			po.tableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
+		if po.TableDesc.AutoStatsSettings == nil {
+			po.TableDesc.AutoStatsSettings = &catpb.AutoStatsSettings{}
 		}
 		if err = validateFunc(floatVal); err != nil {
 			return errors.Wrapf(err, "invalid float value for %s", key)
 		}
-		po.tableDesc.AutoStatsSettings.FractionStaleRows = &floatVal
+		po.TableDesc.AutoStatsSettings.FractionStaleRows = &floatVal
 		return nil
 	}
 }
 
 func autoStatsTableSettingResetFunc(po *Setter, evalCtx *eval.Context, key string) error {
-	if po.tableDesc.AutoStatsSettings == nil {
+	if po.TableDesc.AutoStatsSettings == nil {
 		return nil
 	}
-	autoStatsSettings := po.tableDesc.AutoStatsSettings
+	autoStatsSettings := po.TableDesc.AutoStatsSettings
 	switch key {
 	case catpb.AutoStatsEnabledTableSettingName:
 		autoStatsSettings.Enabled = nil
@@ -584,7 +602,7 @@ func autoStatsTableSettingResetFunc(po *Setter, evalCtx *eval.Context, key strin
 func (po *Setter) Set(
 	semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum,
 ) error {
-	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
+	if strings.HasPrefix(key, "ttl_") && len(po.TableDesc.AllMutations()) > 0 {
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"cannot modify TTL settings while another schema change on the table is being processed",
@@ -598,7 +616,7 @@ func (po *Setter) Set(
 
 // Reset implements the Setter interface.
 func (po *Setter) Reset(evalCtx *eval.Context, key string) error {
-	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
+	if strings.HasPrefix(key, "ttl_") && len(po.TableDesc.AllMutations()) > 0 {
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"cannot modify TTL settings while another schema change on the table is being processed",

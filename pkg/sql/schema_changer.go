@@ -396,7 +396,7 @@ func (sc *SchemaChanger) maybeUpdateScheduledJobsForRowLevelTTL(
 	ctx context.Context, tableDesc catalog.TableDescriptor,
 ) error {
 	// Drop the scheduled job if one exists and the table descriptor is being dropped.
-	if tableDesc.Dropped() && tableDesc.GetRowLevelTTL() != nil {
+	if tableDesc.Dropped() && tableDesc.HasRowLevelTTL() {
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			scheduleID := tableDesc.GetRowLevelTTL().ScheduleID
 			if scheduleID > 0 {
@@ -1554,8 +1554,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						scTable.RowLevelTTL.ScheduleID = j.ScheduleID()
 					}
 				} else if m.Dropped() {
-					if ttl := scTable.RowLevelTTL; ttl != nil {
-						if err := DeleteSchedule(ctx, sc.execCfg, txn, ttl.ScheduleID); err != nil {
+					if scTable.HasRowLevelTTL() {
+						if err := DeleteSchedule(ctx, sc.execCfg, txn, scTable.GetRowLevelTTL().ScheduleID); err != nil {
 							return err
 						}
 					}
