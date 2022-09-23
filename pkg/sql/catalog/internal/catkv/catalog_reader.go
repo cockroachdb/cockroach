@@ -195,7 +195,7 @@ func (cr catalogReader) GetDescriptorEntries(
 		return nstree.Catalog{}, nil
 	}
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "looking up descriptors by id: %v", ids)
+		log.VEventf(ctx, 2, "looking up descriptors by id: %v", ids)
 	}
 	var needsQuery bool
 	for _, id := range ids {
