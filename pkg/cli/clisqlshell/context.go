@@ -88,6 +88,18 @@ type internalContext struct {
 	// The string used to produce the value of fullPrompt.
 	customPromptPattern string
 
+	// reflowMaxWidth is the maximum reflow width.
+	reflowMaxWidth int
+
+	// reflowAlignMode is the SQL prettify alignment mode.
+	reflowAlignMode int
+
+	// reflowCaseMode is the SQL prettify case mode.
+	reflowCaseMode int
+
+	// reflowTabWidth is the tab width used by the prettify_statement function.
+	reflowTabWidth int
+
 	// current database name, if known. This is maintained on a best-effort basis.
 	dbName string
 
