@@ -1,11 +1,11 @@
-# This is a contrived scenario which makes sure NextKey() handles range keys
-# starting at key.Next() correctly.
+# This is a contrived scenario which makes sure NextKey() handles range
+# tombstones starting at key.Next() correctly.
 run ok
 put k=a ts=2 v=a2
 put k=a ts=3 v=a3
 put k=b ts=1 v=b1
-put_rangekey k=a end=+a ts=5
-put_rangekey k=+a end=b ts=4
+del_range_ts k=a end=+a ts=5
+del_range_ts k=+a end=b ts=4
 ----
 >> at end:
 rangekey: a{-\x00}/[5.000000000,0=/<empty>]

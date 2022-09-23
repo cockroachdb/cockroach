@@ -1,4 +1,4 @@
-# Tests range key handling in MVCC iterators.
+# Tests range tombstone handling in MVCC iterators.
 #
 # Sets up the following dataset, where x is tombstone, o-o is range tombstone, [] is intent.
 #
@@ -12,25 +12,25 @@
 #  1  o---------------------------------------o
 #     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o
 #
-run ok
-put_rangekey k=a end=k ts=1
+run stats ok
+del_range_ts k=a end=k ts=1
 put k=a ts=2 v=a2
 del k=a ts=4
-put_rangekey k=b end=d ts=3
+del_range_ts k=b end=d ts=3
 del k=b ts=4
 put k=d ts=4 v=d4
 put k=e ts=3 v=e3
 put k=f ts=2 v=f2
 put k=g ts=2 v=g2
-put_rangekey k=f end=h ts=3
+del_range_ts k=f end=h ts=3
 put k=f ts=4 v=f4
 put k=g ts=4 v=g4
-put_rangekey k=c end=g ts=5
+del_range_ts k=c end=g ts=5
 put k=f ts=6 v=f6
 put k=h ts=3 v=h3
 del k=h ts=4
 put k=k ts=5 v=k5
-put_rangekey k=m end=n ts=3 localTs=2
+del_range_ts k=m end=n ts=3 localTs=2
 with t=A
   txn_begin ts=7
   put k=a v=a7
@@ -40,9 +40,57 @@ with t=A
   put k=m v=l7
   put k=o v=n7
 ----
+>> del_range_ts k=a end=k ts=1
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 gc_bytes_age=+1287
+>> put k=a ts=2 v=a2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del k=a ts=4
 del: "a": found key true
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
+>> del_range_ts k=b end=d ts=3
+stats: range_key_count=+2 range_key_bytes=+35 range_val_count=+3 gc_bytes_age=+3439
+>> del k=b ts=4
 del: "b": found key false
+stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1344
+>> put k=d ts=4 v=d4
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=e ts=3 v=e3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=f ts=2 v=f2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=g ts=2 v=g2
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del_range_ts k=f end=h ts=3
+stats: range_key_count=+2 range_key_bytes=+35 range_val_count=+3 live_count=-2 live_bytes=-42 gc_bytes_age=+7513
+>> put k=f ts=4 v=f4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
+>> put k=g ts=4 v=g4
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-194
+>> del_range_ts k=c end=g ts=5
+stats: range_key_count=+2 range_key_bytes=+71 range_val_count=+7 live_count=-3 live_bytes=-63 gc_bytes_age=+12822
+>> put k=f ts=6 v=f6
+stats: key_bytes=+12 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21 gc_bytes_age=-190
+>> put k=h ts=3 v=h3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del k=h ts=4
 del: "h": found key true
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
+>> put k=k ts=5 v=k5
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del_range_ts k=m end=n ts=3 localTs=2
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 gc_bytes_age=+2522
+>> put k=a v=a7 t=A
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-192 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+>> put k=d v=d7 t=A
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-190 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+>> put k=j v=j7 t=A
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+>> put k=l v=l7 t=A
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+>> put k=m v=l7 t=A
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+>> put k=o v=n7 t=A
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[1.000000000,0=/<empty>]
@@ -78,6 +126,7 @@ meta: "m"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0
 data: "m"/7.000000000,0 -> /BYTES/l7
 meta: "o"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "o"/7.000000000,0 -> /BYTES/n7
+stats: key_count=12 key_bytes=252 val_count=19 val_bytes=400 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=13 live_count=9 live_bytes=477 gc_bytes_age=34303 intent_count=6 intent_bytes=114 separated_intent_count=6 intent_age=558
 
 # Iterate across the entire span for all key types, and without intents.
 run ok

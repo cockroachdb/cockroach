@@ -14,25 +14,25 @@
 
 # Clear the entire span.
 run ok
-put_rangekey k=a end=k ts=1
+del_range_ts k=a end=k ts=1
 put k=a ts=2 v=a2
 del k=a ts=4
 put k=d ts=2 v=d2
-put_rangekey k=b end=d ts=3
+del_range_ts k=b end=d ts=3
 del k=b ts=4
 put k=d ts=4 v=d4
 put k=e ts=3 v=e3
 put k=f ts=2 v=f2
 del k=f ts=3
 put k=g ts=2 v=g2
-put_rangekey k=g end=i ts=3
+del_range_ts k=g end=i ts=3
 del k=g ts=4
-put_rangekey k=c end=h ts=5
+del_range_ts k=c end=h ts=5
 put k=f ts=6 v=f6
 put k=i ts=3 v=i3
 del k=i ts=4
 put k=k ts=5 v=k5
-put_rangekey k=m end=n ts=3 localTs=2
+del_range_ts k=m end=n ts=3 localTs=2
 ----
 del: "a": found key true
 del: "b": found key false
@@ -74,25 +74,25 @@ stats:
 
 # Clear individual timestamps 7-1.
 run ok
-put_rangekey k=a end=k ts=1
+del_range_ts k=a end=k ts=1
 put k=a ts=2 v=a2
 del k=a ts=4
 put k=d ts=2 v=d2
-put_rangekey k=b end=d ts=3
+del_range_ts k=b end=d ts=3
 del k=b ts=4
 put k=d ts=4 v=d4
 put k=e ts=3 v=e3
 put k=f ts=2 v=f2
 del k=f ts=3
 put k=g ts=2 v=g2
-put_rangekey k=g end=i ts=3
+del_range_ts k=g end=i ts=3
 del k=g ts=4
-put_rangekey k=c end=h ts=5
+del_range_ts k=c end=h ts=5
 put k=f ts=6 v=f6
 put k=i ts=3 v=i3
 del k=i ts=4
 put k=k ts=5 v=k5
-put_rangekey k=m end=n ts=3 localTs=2
+del_range_ts k=m end=n ts=3 localTs=2
 ----
 del: "a": found key true
 del: "b": found key false
@@ -262,25 +262,25 @@ stats:
 
 # Clear individual keys a-n for times 3-6.
 run ok
-put_rangekey k=a end=k ts=1
+del_range_ts k=a end=k ts=1
 put k=a ts=2 v=a2
 del k=a ts=4
 put k=d ts=2 v=d2
-put_rangekey k=b end=d ts=3
+del_range_ts k=b end=d ts=3
 del k=b ts=4
 put k=d ts=4 v=d4
 put k=e ts=3 v=e3
 put k=f ts=2 v=f2
 del k=f ts=3
 put k=g ts=2 v=g2
-put_rangekey k=g end=i ts=3
+del_range_ts k=g end=i ts=3
 del k=g ts=4
-put_rangekey k=c end=h ts=5
+del_range_ts k=c end=h ts=5
 put k=f ts=6 v=f6
 put k=i ts=3 v=i3
 del k=i ts=4
 put k=k ts=5 v=k5
-put_rangekey k=m end=n ts=3 localTs=2
+del_range_ts k=m end=n ts=3 localTs=2
 ----
 del: "a": found key true
 del: "b": found key false
@@ -830,25 +830,25 @@ stats:
 
 # Clear a few arbitrary keys and arbitrary timestamps.
 run ok
-put_rangekey k=a end=k ts=1
+del_range_ts k=a end=k ts=1
 put k=a ts=2 v=a2
 del k=a ts=4
 put k=d ts=2 v=d2
-put_rangekey k=b end=d ts=3
+del_range_ts k=b end=d ts=3
 del k=b ts=4
 put k=d ts=4 v=d4
 put k=e ts=3 v=e3
 put k=f ts=2 v=f2
 del k=f ts=3
 put k=g ts=2 v=g2
-put_rangekey k=g end=i ts=3
+del_range_ts k=g end=i ts=3
 del k=g ts=4
-put_rangekey k=c end=h ts=5
+del_range_ts k=c end=h ts=5
 put k=f ts=6 v=f6
 put k=i ts=3 v=i3
 del k=i ts=4
 put k=k ts=5 v=k5
-put_rangekey k=m end=n ts=3 localTs=2
+del_range_ts k=m end=n ts=3 localTs=2
 ----
 del: "a": found key true
 del: "b": found key false
