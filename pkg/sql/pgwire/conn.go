@@ -958,6 +958,13 @@ func (c *conn) handleParse(
 				sqlTypeHints[i] = nil
 				continue
 			}
+			if t == oid.T_json {
+				// This special case is here so we can support decoding parameters
+				// with oid=json without adding full support for the JSON type.
+				// TODO(sql-exp): Remove this if we support JSON.
+				sqlTypeHints[i] = types.Json
+				continue
+			}
 			v, ok := types.OidToType[t]
 			if !ok {
 				err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)

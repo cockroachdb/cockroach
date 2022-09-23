@@ -3,9 +3,9 @@ set -euo pipefail
 
 if ! which benchstat > /dev/null; then
   cat 1>&2 <<EOF
-Requires github.com/cockroachdb/benchstat
+Requires golang.org/x/perf/cmd/benchstat
 Run:
-  go get github.com/cockroachdb/benchstat
+  go install golang.org/x/perf/cmd/benchstat@latest
 EOF
   exit 1
 fi

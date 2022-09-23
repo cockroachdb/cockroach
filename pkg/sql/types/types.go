@@ -88,7 +88,7 @@ import (
 // | INET              | INET           | T_inet        | 0         | 0     |
 // | TIME              | TIME           | T_time        | 0         | 0     |
 // | TIMETZ            | TIMETZ         | T_timetz      | 0         | 0     |
-// | JSON              | JSONB          | T_jsonb       | 0         | 0     |
+// | JSON              | JSONB          | T_json        | 0         | 0     |
 // | JSONB             | JSONB          | T_jsonb       | 0         | 0     |
 // |                   |                |               |           |       |
 // | BYTES             | BYTES          | T_bytea       | 0         | 0     |
@@ -420,6 +420,11 @@ var (
 	// stored in a decomposed binary format (hence the "b" in jsonb).
 	Jsonb = &T{InternalType: InternalType{
 		Family: JsonFamily, Oid: oid.T_jsonb, Locale: &emptyLocale}}
+
+	// Json is the type of a JavaScript Object Notation (JSON) value. At the time
+	// of writing, these are stored the same as Jsonb types.
+	Json = &T{InternalType: InternalType{
+		Family: JsonFamily, Oid: oid.T_json, Locale: &emptyLocale}}
 
 	// Uuid is the type of a universally unique identifier (UUID), which is a
 	// 128-bit quantity that is very unlikely to ever be generated again, and so
@@ -1316,11 +1321,17 @@ func (t *T) WithoutTypeModifiers() *T {
 		return &newT
 	}
 
-	t, ok := OidToType[t.Oid()]
+	typ, ok := OidToType[t.Oid()]
 	if !ok {
+		if t.Oid() == oid.T_json {
+			// This special case is here so we can support decoding parameters
+			// with oid=json without adding full support for the JSON type.
+			// TODO(sql-exp): Remove this if we support JSON.
+			return Jsonb
+		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 	}
-	return t
+	return typ
 }
 
 // Scale is an alias method for Width, used for clarity for types in
@@ -2763,11 +2774,12 @@ var unreservedTypeTokens = map[string]*T{
 	"int8":       Int,
 	"int64":      Int,
 	"int2vector": Int2Vector,
-	"json":       Jsonb,
-	"jsonb":      Jsonb,
-	"name":       Name,
-	"oid":        Oid,
-	"oidvector":  OidVector,
+	// NOTE(sql-exp): Change the line below to Json if we support the JSON type.
+	"json":      Jsonb,
+	"jsonb":     Jsonb,
+	"name":      Name,
+	"oid":       Oid,
+	"oidvector": OidVector,
 	// Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
 	"regclass":     RegClass,
 	"regnamespace": RegNamespace,
