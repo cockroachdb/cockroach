@@ -25,12 +25,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ErrCannotReuseClientConn is returned when a failed connection is
+// ErrConnectionInterrupted is returned when a failed connection is
 // being reused. We require that new connections be created with
 // pkg/rpc.GRPCDial instead.
-var ErrCannotReuseClientConn = errors.New(errCannotReuseClientConnMsg)
+var ErrConnectionInterrupted = errors.New(errConnectionInterruptedMsg)
 
-const errCannotReuseClientConnMsg = "cannot reuse client connection"
+const errConnectionInterruptedMsg = "connection interrupted (did the remote node shut down or are there networking issues?)"
 
 type localRequestKey struct{}
 
@@ -69,7 +69,7 @@ func IsContextCanceled(err error) bool {
 // IsClosedConnection returns true if err's Cause is an error produced by gRPC
 // on closed connections.
 func IsClosedConnection(err error) bool {
-	if errors.Is(err, ErrCannotReuseClientConn) {
+	if errors.Is(err, ErrConnectionInterrupted) {
 		return true
 	}
 	err = errors.Cause(err)

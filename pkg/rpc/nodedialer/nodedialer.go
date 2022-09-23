@@ -206,7 +206,7 @@ func (n *Dialer) dial(
 	}
 	// Check to see if the connection is in the transient failure state. This can
 	// happen if the connection already existed, but a recent heartbeat has
-	// failed and we haven't yet torn down the connection.
+	// failed, and we haven't yet torn down the connection.
 	if err := grpcutil.ConnectionReady(conn); err != nil {
 		err = errors.Wrapf(err, "failed to check for ready connection to n%d at %v", nodeID, addr)
 		if breaker != nil {
