@@ -128,7 +128,7 @@ func newDistinct(
 		}); err != nil {
 		return nil, err
 	}
-	d.lastGroupKey = d.OutputHelper.RowAlloc.AllocRow(len(d.types))
+	d.lastGroupKey = make(rowenc.EncDatumRow, len(d.types))
 	d.haveLastGroupKey = false
 	// If we set up the arena when d is created, the pointer to the memAcc
 	// will be changed because the sortedDistinct case makes a copy of d.
