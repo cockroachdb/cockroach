@@ -11,6 +11,8 @@
 package clisqlshell
 
 import (
+	"bufio"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clicfg"
@@ -155,7 +157,7 @@ func setupTestCliState() *cliState {
 	}
 	sqlCtx := &Context{}
 	c := NewShell(cliCtx, sqlConnCtx, sqlExecCtx, sqlCtx, nil).(*cliState)
-	c.ins = noLineEditor
+	c.ins = &bufioReader{wout: os.Stdout, buf: bufio.NewReader(os.Stdin)}
 	return c
 }
 

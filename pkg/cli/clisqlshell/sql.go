@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
-	readline "github.com/knz/go-libedit"
 )
 
 const (
@@ -137,10 +136,8 @@ type cliState struct {
 	iCtx       *internalContext
 
 	conn clisqlclient.Conn
-	// ins is used to read lines if isInteractive is true.
-	ins readline.EditLine
-	// buf is used to read lines if isInteractive is false.
-	buf *bufio.Reader
+	// ins is used to read lines.
+	ins editor
 	// singleStatement is set to true when this state level
 	// is currently processing for runString(). In that mode:
 	// - a missing semicolon at the end of input is ignored:
@@ -269,21 +266,13 @@ func (c *cliState) printCliHelp() {
 	fmt.Fprintln(c.iCtx.stdout)
 }
 
-const noLineEditor readline.EditLine = -1
-
-func (c *cliState) hasEditor() bool {
-	return c.ins != noLineEditor
-}
-
 // addHistory persists a line of input to the readline history file.
 func (c *cliState) addHistory(line string) {
-	if !c.hasEditor() || len(line) == 0 {
+	if len(line) == 0 {
 		return
 	}
 
-	// ins.AddHistory will push command into memory. err can
-	// be not nil only if it got a memory error.
-	if err := c.ins.AddHistory(line); err != nil {
+	if err := c.ins.addHistory(line); err != nil {
 		fmt.Fprintf(c.iCtx.stderr, "warning: cannot add entry to history: %v\n", err)
 	}
 }
@@ -798,7 +787,7 @@ const unknownTxnStatus = " ?"
 // doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
 func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
-	if !c.iCtx.displayPrompt {
+	if !c.ins.canPrompt() {
 		return nextState
 	}
 
@@ -812,9 +801,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 			c.continuePrompt = strings.Repeat(" ", len(c.fullPrompt)-3) + "-> "
 		}
 
-		if c.hasEditor() {
-			c.ins.SetLeftPrompt(c.continuePrompt)
-		}
+		c.ins.setPrompt(c.continuePrompt)
 		return nextState
 	}
 
@@ -880,9 +867,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 	c.currentPrompt = c.fullPrompt
 
 	// Configure the editor to use the new prompt.
-	if c.hasEditor() {
-		c.ins.SetLeftPrompt(c.currentPrompt)
-	}
+	c.ins.setPrompt(c.currentPrompt)
 
 	return nextState
 }
@@ -953,49 +938,14 @@ func (c *cliState) refreshDatabaseName() string {
 
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachsql_history")
 
-// GetCompletions implements the readline.CompletionGenerator interface.
-func (c *cliState) GetCompletions(s string) []string {
-	sql, _ := c.ins.GetLineInfo()
-
-	// In COPY mode, just add a tab character.
-	if c.inCopy() {
-		return []string{s + "\t"}
-	}
-
-	if !strings.HasSuffix(sql, "??") {
-		query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, len(sql), lexbase.EscapeSQLString(sql))
-		var rows [][]string
+func (c *cliState) runShowCompletions(sql string, offset int) (rows [][]string, err error) {
+	query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, offset, lexbase.EscapeSQLString(sql))
+	err = c.runWithInterruptableCtx(func(ctx context.Context) error {
 		var err error
-		err = c.runWithInterruptableCtx(func(ctx context.Context) error {
-			_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query), true /* showMoreChars */)
-			return err
-		})
-
-		if err != nil {
-			clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
-		}
-
-		var completions []string
-		for _, row := range rows {
-			completions = append(completions, row[0])
-		}
-
-		return completions
-	}
-
-	helpText, err := c.serverSideParse(sql)
-	if helpText != "" {
-		// We have a completion suggestion. Use that.
-		fmt.Fprintf(c.iCtx.stdout, "\nSuggestion:\n%s\n", helpText)
-	} else if err != nil {
-		// Some other error. Display it.
-		fmt.Fprintln(c.iCtx.stdout)
-		clierror.OutputError(c.iCtx.stdout, err, true /*showSeverity*/, false /*verbose*/)
-	}
-
-	// After the suggestion or error, re-display the prompt and current entry.
-	fmt.Fprint(c.iCtx.stdout, c.currentPrompt, sql)
-	return nil
+		_, rows, err = c.sqlExecCtx.RunQuery(ctx, c.conn, clisqlclient.MakeQuery(query), true /* showMoreChars */)
+		return err
+	})
+	return rows, err
 }
 
 func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
@@ -1040,42 +990,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
-	var l string
-	var err error
-	if c.buf == nil {
-		l, err = c.ins.GetLine()
-		if len(l) > 0 && l[len(l)-1] == '\n' {
-			// Strip the final newline.
-			l = l[:len(l)-1]
-		} else {
-			// There was no newline at the end of the input
-			// (e.g. Ctrl+C was entered). Force one.
-			fmt.Fprintln(c.iCtx.stdout)
-		}
-	} else {
-		if c.iCtx.displayPrompt {
-			prompt := c.currentPrompt
-			if c.useContinuePrompt {
-				prompt = c.continuePrompt
-			}
-			fmt.Fprint(c.iCtx.stdout, prompt)
-		}
-		l, err = c.buf.ReadString('\n')
-		// bufio.ReadString() differs from readline.Readline in the handling of
-		// EOF. Readline only returns EOF when there is nothing left to read and
-		// there is no partial line while bufio.ReadString() returns EOF when the
-		// end of input has been reached but will return the non-empty partial line
-		// as well. We workaround this by converting the bufio behavior to match
-		// the Readline behavior.
-		if err == io.EOF && len(l) != 0 {
-			err = nil
-		} else if err == nil {
-			// From the bufio.ReadString docs: ReadString returns err != nil if and
-			// only if the returned data does not end in delim. To match the behavior
-			// of readline.Readline, we strip off the trailing delimiter.
-			l = l[:len(l)-1]
-		}
-	}
+	l, err := c.ins.getLine()
 
 	switch {
 	case err == nil:
@@ -1089,7 +1004,7 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 		}
 		// In any case, process one line.
 
-	case errors.Is(err, readline.ErrInterrupted):
+	case errors.Is(err, c.ins.errInterrupted()):
 		if !c.cliCtx.IsInteractive {
 			// Ctrl+C terminates non-interactive shells in all cases.
 			c.exitErr = err
@@ -1727,11 +1642,9 @@ func (c *cliState) runIncludeInternal(
 		sqlExecCtx: c.sqlExecCtx,
 		sqlCtx:     c.sqlCtx,
 		iCtx:       c.iCtx,
-
+		ins:        &bufioReader{wout: c.iCtx.stdout, buf: input},
 		conn:       c.conn,
 		includeDir: filepath.Dir(filename),
-		ins:        noLineEditor,
-		buf:        input,
 		levels:     level,
 
 		singleStatement: singleStatement,
@@ -2144,94 +2057,41 @@ func (c *cliState) configurePreShellDefaults(
 	// there is also a terminal on stdout.
 	canUseEditor := c.cliCtx.IsInteractive && c.sqlExecCtx.TerminalOutput
 	useEditor := canUseEditor && !c.sqlCtx.DisableLineEditor
-	c.iCtx.displayPrompt = canUseEditor
-	if useEditor {
-		// The readline initialization is not placed in
-		// the doStart() method because of the defer.
-		c.ins, c.exitErr = readline.InitFiles("cockroach",
-			true, /* wideChars */
-			cmdIn, c.iCtx.stdout, c.iCtx.stderr)
-		if errors.Is(c.exitErr, readline.ErrWidecharNotSupported) {
-			fmt.Fprintln(c.iCtx.stderr, "warning: wide character support disabled")
-			c.ins, c.exitErr = readline.InitFiles("cockroach",
-				false, cmdIn, c.iCtx.stdout, c.iCtx.stderr)
-		}
-		if c.exitErr != nil {
-			return cleanupFn, c.exitErr
-		}
-		// The readline library may have a custom file descriptor for stdout.
-		// Use that for further output.
-		c.iCtx.stdout = c.ins.Stdout()
-		c.iCtx.queryOutputFile = c.ins.Stdout()
+	c.ins = getEditor(useEditor, canUseEditor)
 
-		// If the user has used bind -v or bind -l in their ~/.editrc,
-		// this will reset the standard bindings. However we really
-		// want in this shell that Ctrl+C, tab, Ctrl+Z and Ctrl+R
-		// always have the same meaning.  So reload these bindings
-		// explicitly no matter what ~/.editrc may have changed.
-		c.ins.RebindControlKeys()
-		cleanupFn = func() { c.ins.Close() }
-	} else {
-		c.ins = noLineEditor
-		c.buf = bufio.NewReader(cmdIn)
-		cleanupFn = func() {}
+	// maxHistEntries is the maximum number of entries to
+	// preserve. Note that libedit de-duplicates entries under the
+	// hood. We expect that folk entering SQL in a shell will often
+	// reuse the same queries over time, so we don't expect this limit
+	// to ever be reached in practice, or to be an annoyance to
+	// anyone. We do prefer a limit however (as opposed to no limit at
+	// all), to prevent abnormal situation where a history runs into
+	// megabytes and starts slowing down the shell.
+	const maxHistEntries = 10000
+	var histFile string
+	if useEditor {
+		homeDir, err := envutil.HomeDir()
+		if err != nil {
+			fmt.Fprintf(c.iCtx.stderr, "warning: cannot retrieve user information: %v\nwarning: history will not be saved\n", err)
+		} else {
+			histFile = filepath.Join(homeDir, cmdHistFile)
+		}
 	}
 
-	if c.iCtx.displayPrompt {
+	cleanupFn, c.exitErr = c.ins.init(cmdIn, c.iCtx.stdout, c.iCtx.stderr, c, maxHistEntries, histFile)
+	if c.exitErr != nil {
+		return cleanupFn, c.exitErr
+	}
+	// The readline library may have a custom file descriptor for stdout.
+	// Use that for further output.
+	c.iCtx.stdout = c.ins.getOutputStream()
+	c.iCtx.queryOutputFile = c.ins.getOutputStream()
+
+	if canUseEditor {
 		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
 		c.iCtx.customPromptPattern = defaultPromptPattern
 		if c.sqlConnCtx.DebugMode {
 			c.iCtx.customPromptPattern = debugPromptPattern
-		}
-	}
-
-	if c.hasEditor() {
-		// We only enable prompt and history management when the
-		// interactive input prompter is enabled. This saves on churn and
-		// memory when e.g. piping a large SQL script through the
-		// command-line client.
-
-		// maxHistEntries is the maximum number of entries to
-		// preserve. Note that libedit de-duplicates entries under the
-		// hood. We expect that folk entering SQL in a shell will often
-		// reuse the same queries over time, so we don't expect this limit
-		// to ever be reached in practice, or to be an annoyance to
-		// anyone. We do prefer a limit however (as opposed to no limit at
-		// all), to prevent abnormal situation where a history runs into
-		// megabytes and starts slowing down the shell.
-		const maxHistEntries = 10000
-
-		c.ins.SetCompleter(c)
-		if err := c.ins.UseHistory(maxHistEntries, true /*dedup*/); err != nil {
-			fmt.Fprintf(c.iCtx.stderr, "warning: cannot enable history: %v\n ", err)
-		} else {
-			homeDir, err := envutil.HomeDir()
-			if err != nil {
-				fmt.Fprintf(c.iCtx.stderr, "warning: cannot retrieve user information: %v\nwarning: history will not be saved\n", err)
-			} else {
-				histFile := filepath.Join(homeDir, cmdHistFile)
-				err = c.ins.LoadHistory(histFile)
-				if err != nil {
-					fmt.Fprintf(c.iCtx.stderr, "warning: cannot load the command-line history (file corrupted?): %v\n", err)
-					fmt.Fprintf(c.iCtx.stderr, "note: the history file will be cleared upon first entry\n")
-				}
-				// SetAutoSaveHistory() does two things:
-				// - it preserves the name of the history file, for use
-				//   by the final SaveHistory() call.
-				// - it decides whether to save the history to file upon
-				//   every new command.
-				// We disable the latter, since a history file can grow somewhat
-				// large and we don't want the excess I/O latency to be interleaved
-				// in-between every command.
-				c.ins.SetAutoSaveHistory(histFile, false)
-				prevCleanup := cleanupFn
-				cleanupFn = func() {
-					if err := c.ins.SaveHistory(); err != nil {
-						fmt.Fprintf(c.iCtx.stderr, "warning: cannot save command-line history: %v\n", err)
-					}
-					prevCleanup()
-				}
-			}
 		}
 	}
 
@@ -2380,8 +2240,8 @@ func (c *cliState) maybeHandleInterrupt() func() {
 				c.iCtx.mu.Unlock()
 				if cancelFn == nil {
 					// No query currently executing.
-					// Do we have a line editor? If so, do nothing.
-					if c.ins != noLineEditor {
+					// Are we doing interactive input? If so, do nothing.
+					if c.cliCtx.IsInteractive {
 						continue
 					}
 					// Otherwise, ctrl+c interrupts the shell. We do this
