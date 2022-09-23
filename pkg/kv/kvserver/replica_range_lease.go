@@ -48,12 +48,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -64,6 +66,13 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
+)
+
+var transferExpirationLeasesFirstEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.transfer_expiration_leases_first.enabled",
+	"controls whether we transfer expiration-based leases that are later upgraded to epoch-based ones",
+	true,
 )
 
 var leaseStatusLogLimiter = func() *log.EveryN {
@@ -247,7 +256,10 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		ProposedTS: &status.Now,
 	}
 
-	if p.repl.requiresExpiringLeaseRLocked() || transfer {
+	if p.repl.requiresExpiringLeaseRLocked() ||
+		(transfer &&
+			transferExpirationLeasesFirstEnabled.Get(&p.repl.store.ClusterSettings().SV) &&
+			p.repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.EnableLeaseUpgrade)) {
 		// In addition to ranges that unconditionally require expiration-based
 		// leases (node liveness and earlier), we also use them during lease
 		// transfers for all other ranges. After acquiring these expiration
