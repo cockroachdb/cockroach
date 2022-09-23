@@ -1,3 +1,19 @@
 drop_func_stmt ::=
-	'DROP' 'FUNCTION' function_with_argtypes_list opt_drop_behavior
-	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' function_with_argtypes_list opt_drop_behavior
+	'DROP' 'FUNCTION' func_name '(' func_args_list ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' func_name '(' func_args_list ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' func_name '(' func_args_list ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' func_name '(' ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' func_name '(' ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' func_name '(' ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' func_name ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' func_name ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' func_name ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' func_args_list ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' func_args_list ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' func_args_list ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name '(' ')' ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'CASCADE'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 'RESTRICT'
+	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' func_name ( ( ',' ( func_name ( '(' func_args_list ')' | '(' ')' ) | func_name ) ) )* 
