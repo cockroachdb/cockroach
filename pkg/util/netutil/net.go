@@ -196,7 +196,7 @@ type InitialHeartbeatFailedError struct {
 
 var _ error = (*InitialHeartbeatFailedError)(nil)
 var _ fmt.Formatter = (*InitialHeartbeatFailedError)(nil)
-var _ errors.Formatter = (*InitialHeartbeatFailedError)(nil)
+var _ errors.SafeFormatter = (*InitialHeartbeatFailedError)(nil)
 
 // Error implements error.
 func (e *InitialHeartbeatFailedError) Error() string { return fmt.Sprintf("%v", e) }
@@ -204,12 +204,12 @@ func (e *InitialHeartbeatFailedError) Error() string { return fmt.Sprintf("%v", 
 // Cause implements causer.
 func (e *InitialHeartbeatFailedError) Cause() error { return e.WrappedErr }
 
-// Format implements fmt.Formatter.
+// Format formats the error.
 func (e *InitialHeartbeatFailedError) Format(s fmt.State, verb rune) { errors.FormatError(e, s, verb) }
 
-// FormatError implements errors.FormatError.
-func (e *InitialHeartbeatFailedError) FormatError(p errors.Printer) error {
-	p.Print("initial connection heartbeat failed")
+// SafeFormatError implements errors.SafeFormatter.
+func (e *InitialHeartbeatFailedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("initial connection heartbeat failed")
 	return e.WrappedErr
 }
 

@@ -183,11 +183,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// attempt. That would increase number of replicas on system ranges to 5 and we
 	// would not be able to upreplicate properly. So we need to decommission old nodes
 	// first before proceeding.
-	grpcConn, err := tcAfter.Server(0).RPCContext().GRPCDialNode(
-		tcAfter.Server(0).ServingRPCAddr(),
-		tcAfter.Server(0).NodeID(),
-		rpc.DefaultClass,
-	).Connect(ctx)
+	grpcConn, err := tcAfter.Server(0).RPCContext().GRPCDialNode(tcAfter.Server(0).ServingRPCAddr(), tcAfter.Server(0).NodeID(), rpc.DefaultClass).Connect(ctx)
 	require.NoError(t, err, "Failed to create test cluster after recovery")
 	adminClient := serverpb.NewAdminClient(grpcConn)
 

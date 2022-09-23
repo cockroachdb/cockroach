@@ -226,11 +226,11 @@ func TestClusterFlow(t *testing.T) {
 			},
 		}
 
+		ctx := context.Background()
 		var clients []execinfrapb.DistSQLClient
 		for i := 0; i < numNodes; i++ {
 			s := tc.Server(i)
-			conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
-				rpc.DefaultClass).Connect(ctx)
+			conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(), rpc.DefaultClass).Connect(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1070,10 +1070,10 @@ func BenchmarkInfrastructure(b *testing.B) {
 					reqs[0].Flow.Processors = append(reqs[0].Flow.Processors, lastProc)
 
 					var clients []execinfrapb.DistSQLClient
+					ctx := context.Background()
 					for i := 0; i < numNodes; i++ {
 						s := tc.Server(i)
-						conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
-							rpc.DefaultClass).Connect(context.Background())
+						conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(), rpc.DefaultClass).Connect(ctx)
 						if err != nil {
 							b.Fatal(err)
 						}
