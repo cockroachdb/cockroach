@@ -425,7 +425,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
 	log.Infof(ctx, "creating load generator...")
-	const prepareTimeout = 60 * time.Minute
+	const prepareTimeout = 90 * time.Minute
 	prepareCtx, cancel := context.WithTimeout(ctx, prepareTimeout)
 	defer cancel()
 	if prepareErr := func(ctx context.Context) error {
