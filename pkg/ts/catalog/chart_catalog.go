@@ -805,6 +805,12 @@ var charts = []sectionDescription{
 					"kv.prober.write.latency",
 				},
 			},
+			{
+				Title: "Duration",
+				Metrics: []string{
+					"kv.prober.write.quarantine.oldest_duration",
+				},
+			},
 		},
 	},
 	{
