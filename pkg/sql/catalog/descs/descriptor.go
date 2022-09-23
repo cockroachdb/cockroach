@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -73,11 +74,12 @@ func (tc *Collection) GetImmutableDescriptorsByID(
 func (tc *Collection) GetImmutableDescriptorByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags,
 ) (catalog.Descriptor, error) {
-	descs, err := tc.GetImmutableDescriptorsByID(ctx, txn, flags, id)
-	if err != nil {
+	var arr [1]catalog.Descriptor
+	flags.RequireMutable = false
+	if err := tc.getDescriptorsByIDWithSlice(ctx, txn, flags, arr[:], id); err != nil {
 		return nil, err
 	}
-	return descs[0], nil
+	return arr[0], nil
 }
 
 // getDescriptorsByID returns a slice of descriptors by ID according to the
@@ -86,12 +88,34 @@ func (tc *Collection) GetImmutableDescriptorByID(
 // The Required flag is ignored and always overridden.
 func (tc *Collection) getDescriptorsByID(
 	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, ids ...descpb.ID,
-) (descs []catalog.Descriptor, err error) {
+) ([]catalog.Descriptor, error) {
+	descs := make([]catalog.Descriptor, len(ids))
+	if err := tc.getDescriptorsByIDWithSlice(ctx, txn, flags, descs, ids...); err != nil {
+		return nil, err
+	}
+	return descs, nil
+}
+
+// getDescriptorsByIDWithSlice is like getDescriptorsByID but takes the slice
+// into which the retreived descriptors will be stored. That slice must be the
+// same length as the ids. This allows callers seeking to get just one
+// descriptor to avoid an allocation by using a fixed-size array.
+func (tc *Collection) getDescriptorsByIDWithSlice(
+	ctx context.Context,
+	txn *kv.Txn,
+	flags tree.CommonLookupFlags,
+	descs []catalog.Descriptor,
+	ids ...descpb.ID,
+) (err error) {
 	// Override flags.
 	flags.Required = true
-	log.VEventf(ctx, 2, "looking up descriptors for ids %v", ids)
-	descs = make([]catalog.Descriptor, len(ids))
-	vls := make([]catalog.ValidationLevel, len(ids))
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		// Copy the ids to a new slice to prevent the backing array from
+		// escaping and forcing IDs to escape on this hot path.
+		idsForLog := append(make([]descpb.ID, 0, len(ids)), ids...)
+		log.VEventf(ctx, 2, "looking up descriptors for ids %v", idsForLog)
+	}
+	var vls validationLevelMap
 	{
 		// Look up the descriptors in all layers except the storage layer on a
 		// best-effort basis.
@@ -115,13 +139,13 @@ func (tc *Collection) getDescriptorsByID(
 				}
 				desc, vl, err := fn(id)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				if desc == nil {
 					continue
 				}
 				descs[i] = desc
-				vls[i] = vl
+				vls.set(i, vl)
 			}
 		}
 	}
@@ -135,29 +159,29 @@ func (tc *Collection) getDescriptorsByID(
 	}
 	if !readIDs.Empty() {
 		if err = tc.stored.EnsureFromStorageByIDs(ctx, txn, readIDs, catalog.Any); err != nil {
-			return nil, err
+			return err
 		}
 		for i, id := range ids {
 			if descs[i] == nil {
 				descs[i] = tc.stored.GetCachedByID(id)
-				vls[i] = tc.stored.GetValidationLevelByID(id)
+				vls.set(i, tc.stored.GetValidationLevelByID(id))
 			}
 		}
 	}
 
 	// At this point, all descriptors are in the slice, finalize and hydrate them.
-	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, vls); err != nil {
-		return nil, err
+	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, &vls); err != nil {
+		return err
 	}
 	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
-		return nil, err
+		return err
 	}
 	for _, desc := range descs {
 		if err := catalog.FilterDescriptorState(desc, flags); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return descs, nil
+	return nil
 }
 
 // byIDLookupContext is a helper struct for getDescriptorsByID which contains
@@ -277,8 +301,8 @@ func (tc *Collection) getDescriptorByName(
 	// When looking up descriptors by name, then descriptors in the adding state
 	// must be uncommitted to be visible (among other things).
 	flags.AvoidCommittedAdding = true
-	descs, err := tc.getDescriptorsByID(ctx, txn, flags, id)
-	if err != nil {
+	var arr [1]catalog.Descriptor
+	if err := tc.getDescriptorsByIDWithSlice(ctx, txn, flags, arr[:], id); err != nil {
 		// Swallow error if the descriptor is dropped.
 		if errors.Is(err, catalog.ErrDescriptorDropped) {
 			return nil, nil
@@ -294,7 +318,7 @@ func (tc *Collection) getDescriptorByName(
 		}
 		return nil, err
 	}
-	desc := descs[0]
+	desc := arr[0]
 	if desc.GetName() != name && !(desc.DescriptorType() == catalog.Schema && isTemporarySchema(name)) {
 		// TODO(postamar): make Collection aware of name ops
 		//
@@ -484,13 +508,8 @@ func (tc *Collection) finalizeDescriptors(
 	txn *kv.Txn,
 	flags tree.CommonLookupFlags,
 	descs []catalog.Descriptor,
-	validationLevels []catalog.ValidationLevel,
+	validationLevels *validationLevelMap,
 ) error {
-	if len(validationLevels) != len(descs) {
-		return errors.AssertionFailedf(
-			"len(validationLevels) = %d should be equal to len(descs) = %d",
-			len(validationLevels), len(descs))
-	}
 	// Add the descriptors to the uncommitted layer if we want them to be mutable.
 	if flags.RequireMutable {
 		for i, desc := range descs {
@@ -507,8 +526,8 @@ func (tc *Collection) finalizeDescriptors(
 		requiredLevel = validate.ImmutableRead
 	}
 	var toValidate []catalog.Descriptor
-	for i, vl := range validationLevels {
-		if vl < requiredLevel {
+	for i := range descs {
+		if validationLevels.get(i) < requiredLevel {
 			toValidate = append(toValidate, descs[i])
 		}
 	}
@@ -532,4 +551,19 @@ func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {
 
 func isTemporarySchema(name string) bool {
 	return strings.HasPrefix(name, catconstants.PgTempSchemaName)
+}
+
+// validationLevelMap is used to map indexes in a slice to their required
+// validation level. This avoids any heap allocations as compared to a
+// slice containing the correspondence between an index to a validation level.
+type validationLevelMap struct {
+	m util.FastIntMap
+}
+
+func (vlm *validationLevelMap) get(idx int) catalog.ValidationLevel {
+	return catalog.ValidationLevel(vlm.m.GetDefault(idx))
+}
+
+func (vlm *validationLevelMap) set(idx int, l catalog.ValidationLevel) {
+	vlm.m.Set(idx, int(l))
 }
