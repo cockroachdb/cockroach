@@ -6359,28 +6359,28 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 		`initial scan only with csv`: {
 			changefeedStmt: `CREATE CHANGEFEED FOR foo WITH initial_scan_only, format = csv`,
 			expectedPayload: []string{
-				`1,'Alice'`,
-				`2,'Bob'`,
-				`3,'Carol'`,
+				`1,Alice`,
+				`2,Bob`,
+				`3,Carol`,
 			},
 		},
 		`initial backfill only with csv`: {
 			changefeedStmt: `CREATE CHANGEFEED FOR foo WITH initial_scan = 'only', format = csv`,
 			expectedPayload: []string{
-				`1,'Alice'`,
-				`2,'Bob'`,
-				`3,'Carol'`,
+				`1,Alice`,
+				`2,Bob`,
+				`3,Carol`,
 			},
 		},
 		`initial backfill only with csv multiple tables`: {
 			changefeedStmt: `CREATE CHANGEFEED FOR foo, bar WITH initial_scan = 'only', format = csv`,
 			expectedPayload: []string{
-				`1,'a'`,
-				`2,'b'`,
-				`3,'c'`,
-				`1,'Alice'`,
-				`2,'Bob'`,
-				`3,'Carol'`,
+				`1,a`,
+				`2,b`,
+				`3,c`,
+				`1,Alice`,
+				`2,Bob`,
+				`3,Carol`,
 			},
 		},
 	}
@@ -6458,9 +6458,9 @@ func TestChangefeedOnlyInitialScanCSVSinkless(t *testing.T) {
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (4, 'Doug'), (5, 'Elaine'), (6, 'Fred')")
 
 				expectedMessages := []string{
-					`1,'Alice'`,
-					`2,'Bob'`,
-					`3,'Carol'`,
+					`1,Alice`,
+					`2,Bob`,
+					`3,Carol`,
 				}
 				var actualMessages []string
 
