@@ -1488,7 +1488,7 @@ func (expr *Tuple) TypeCheck(
 }
 
 var errAmbiguousArrayType = pgerror.Newf(pgcode.IndeterminateDatatype, "cannot determine type of empty array. "+
-	"Consider annotating with the desired type, for example ARRAY[]:::int[]")
+	"Consider casting to the desired type, for example ARRAY[]::int[]")
 
 // TypeCheck implements the Expr interface.
 func (expr *Array) TypeCheck(
