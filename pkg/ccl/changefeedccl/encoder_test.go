@@ -901,7 +901,7 @@ func BenchmarkEncoders(b *testing.B) {
 	bench := func(b *testing.B, fn encodeFn, opts changefeedbase.EncodingOptions, updatedRows, prevRows []cdcevent.Row) {
 		b.ReportAllocs()
 		b.StopTimer()
-		encoder, err := getEncoder(opts, targets)
+		encoder, err := getEncoder(opts, targets, nil, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
