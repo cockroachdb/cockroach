@@ -29,7 +29,7 @@ at or near "EOF": syntax error
 DETAIL: source SQL:
 ALTER FUNCTION f()
                   ^
-HINT: try \h ALTER
+HINT: try \h ALTER FUNCTION
 
 parse
 ALTER FUNCTION f(int) RENAME TO g
