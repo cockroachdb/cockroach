@@ -194,7 +194,7 @@ func (p *scanRequestScanner) exportSpan(
 func getSpansToProcess(
 	ctx context.Context, ds *kvcoord.DistSender, targetSpans []roachpb.Span,
 ) ([]roachpb.Span, error) {
-	ranges, err := allRangeSpans(ctx, ds, targetSpans)
+	ranges, err := AllRangeSpans(ctx, ds, targetSpans)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +261,8 @@ func slurpScanResponse(
 	return nil
 }
 
-func allRangeSpans(
+// AllRangeSpans returns the list of all ranges that for the specified list of spans.
+func AllRangeSpans(
 	ctx context.Context, ds *kvcoord.DistSender, spans []roachpb.Span,
 ) ([]roachpb.Span, error) {
 
