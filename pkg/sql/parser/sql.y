@@ -13502,6 +13502,13 @@ d_expr:
   {
     $$.val = tree.NewBytesStrVal($1)
   }
+| bit_with_length SCONST
+  {
+    d, err := tree.ParseDBitArray($2)
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = &tree.CastExpr{Expr: d, Type: $1.colType(), SyntaxMode: tree.CastPrepend}
+
+  }
 | BITCONST
   {
     d, err := tree.ParseDBitArray($1)

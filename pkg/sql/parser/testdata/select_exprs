@@ -603,20 +603,20 @@ SELECT BOOL '_', '_'::BOOL -- literals removed
 SELECT BOOL 'foo', 'foo'::BOOL -- identifiers removed
 
 parse
-SELECT BIT '10', '10'::BIT
+SELECT BIT '10', '10'::BIT, BIT(2) '10'
 ----
-SELECT BIT '10', '10'::BIT
-SELECT (BIT ('10')), (('10')::BIT) -- fully parenthesized
-SELECT BIT '_', '_'::BIT -- literals removed
-SELECT BIT '10', '10'::BIT -- identifiers removed
+SELECT BIT '10', '10'::BIT, B'10'::BIT(2) -- normalized!
+SELECT (BIT ('10')), (('10')::BIT), ((B'10')::BIT(2)) -- fully parenthesized
+SELECT BIT '_', '_'::BIT, _::BIT(2) -- literals removed
+SELECT BIT '10', '10'::BIT, B'10'::BIT(2) -- identifiers removed
 
 parse
-SELECT VARBIT '1', '1'::VARBIT
+SELECT VARBIT '1', '1'::VARBIT, VARBIT(2) '01'
 ----
-SELECT VARBIT '1', '1'::VARBIT
-SELECT (VARBIT ('1')), (('1')::VARBIT) -- fully parenthesized
-SELECT VARBIT '_', '_'::VARBIT -- literals removed
-SELECT VARBIT '1', '1'::VARBIT -- identifiers removed
+SELECT VARBIT '1', '1'::VARBIT, B'01'::VARBIT(2) -- normalized!
+SELECT (VARBIT ('1')), (('1')::VARBIT), ((B'01')::VARBIT(2)) -- fully parenthesized
+SELECT VARBIT '_', '_'::VARBIT, _::VARBIT(2) -- literals removed
+SELECT VARBIT '1', '1'::VARBIT, B'01'::VARBIT(2) -- identifiers removed
 
 parse
 SELECT INT2 'foo', 'foo'::INT2
