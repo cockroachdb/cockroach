@@ -21,7 +21,12 @@ import {
   hoverStateSelector,
   HoverState,
 } from "src/redux/hover";
-import { NodesSummary, nodesSummarySelector } from "src/redux/nodes";
+import {
+  nodeDisplayNameByIDSelector,
+  nodeIDsStringifiedSelector,
+  selectStoreIDsByNodeID,
+  nodeIDsSelector,
+} from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { nodeIDAttr } from "src/util/constants";
@@ -49,10 +54,18 @@ interface NodeGraphsOwnProps {
   hoverOff: typeof hoverOffAction;
   nodesQueryValid: boolean;
   livenessQueryValid: boolean;
-  nodesSummary: NodesSummary;
+  nodeDropdownOptions: ReturnType<
+    typeof nodeDropdownOptionsSelector.resultFunc
+  >;
+  storeIDsByNodeID: ReturnType<typeof selectStoreIDsByNodeID.resultFunc>;
   hoverState: HoverState;
   setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
+
+  nodeIds: string[];
+  nodeDisplayNameByID: ReturnType<
+    typeof nodeDisplayNameByIDSelector.resultFunc
+  >;
 }
 
 type RaftMessagesProps = NodeGraphsOwnProps & RouteComponentProps;
@@ -62,21 +75,6 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
    * Selector to compute node dropdown options from the current node summary
    * collection.
    */
-  private nodeDropdownOptions = createSelector(
-    (summary: NodesSummary) => summary.nodeStatuses,
-    (summary: NodesSummary) => summary.nodeDisplayNameByID,
-    (nodeStatuses, nodeDisplayNameByID): DropdownOption[] => {
-      const base = [{ value: "", label: "Cluster" }];
-      return base.concat(
-        _.map(nodeStatuses, ns => {
-          return {
-            value: ns.desc.node_id.toString(),
-            label: nodeDisplayNameByID[ns.desc.node_id],
-          };
-        }),
-      );
-    },
-  );
 
   refresh(props = this.props) {
     if (!props.nodesQueryValid) {
@@ -109,7 +107,15 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
   }
 
   render() {
-    const { match, nodesSummary, hoverState, hoverOn, hoverOff } = this.props;
+    const {
+      match,
+      hoverState,
+      hoverOn,
+      hoverOff,
+      storeIDsByNodeID,
+      nodeIds,
+      nodeDisplayNameByID,
+    } = this.props;
 
     const selectedNode = getMatchParamByName(match, nodeIDAttr) || "";
     const nodeSources = selectedNode !== "" ? [selectedNode] : null;
@@ -118,13 +124,13 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
     // node in the cluster using the nodeIDs collection. However, if a specific
     // node is already selected, these per-node graphs should only display data
     // only for the selected node.
-    const nodeIDs = nodeSources ? nodeSources : nodesSummary.nodeIDs;
+    const nodeIDs = nodeSources ? nodeSources : nodeIds;
 
     // If a single node is selected, we need to restrict the set of stores
     // queried for per-store metrics (only stores that belong to that node will
     // be queried).
     const storeSources = nodeSources
-      ? storeIDsForNode(nodesSummary, nodeSources[0])
+      ? storeIDsForNode(storeIDsByNodeID, nodeSources[0])
       : null;
 
     // tooltipSelection is a string used in tooltips to reference the currently
@@ -137,10 +143,11 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
 
     const dashboardProps: GraphDashboardProps = {
       nodeIDs,
-      nodesSummary,
       nodeSources,
       storeSources,
       tooltipSelection,
+      nodeDisplayNameByID,
+      storeIDsByNodeID,
     };
 
     // Generate graphs for the current dashboard, wrapping each one in a
@@ -169,7 +176,7 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
           <PageConfigItem>
             <Dropdown
               title="Graph"
-              options={this.nodeDropdownOptions(this.props.nodesSummary)}
+              options={this.props.nodeDropdownOptions}
               selected={selectedNode}
               onChange={this.nodeChange}
             />
@@ -186,12 +193,30 @@ export class RaftMessages extends React.Component<RaftMessagesProps> {
   }
 }
 
+const nodeDropdownOptionsSelector = createSelector(
+  nodeIDsSelector,
+  nodeDisplayNameByIDSelector,
+  (nodeIds, nodeDisplayNameByID): DropdownOption[] => {
+    const base = [{ value: "", label: "Cluster" }];
+    return base.concat(
+      _.map(nodeIds, id => {
+        return {
+          value: id.toString(),
+          label: nodeDisplayNameByID[id],
+        };
+      }),
+    );
+  },
+);
+
 const mapStateToProps = (state: AdminUIState) => ({
-  // RootState contains declaration for whole state
-  nodesSummary: nodesSummarySelector(state),
   nodesQueryValid: state.cachedData.nodes.valid,
   livenessQueryValid: state.cachedData.nodes.valid,
   hoverState: hoverStateSelector(state),
+  nodeIds: nodeIDsStringifiedSelector(state),
+  storeIDsByNodeID: selectStoreIDsByNodeID(state),
+  nodeDropdownOptions: nodeDropdownOptionsSelector(state),
+  nodeDisplayNameByID: nodeDisplayNameByIDSelector(state),
 });
 
 const mapDispatchToProps = {
