@@ -243,6 +243,10 @@ type Refresher struct {
 
 	// numTablesEnsured is an internal counter for testing ensureAllTables.
 	numTablesEnsured int
+
+	// refreshingAllTables is true on the initial stats collection pass at
+	// cluster startup time.
+	refreshingAllTables bool
 }
 
 // mutation contains metadata about a SQL mutation and is the message passed to
@@ -396,6 +400,8 @@ func (r *Refresher) Start(
 
 			case <-timer.C:
 				mutationCounts := r.mutationCounts
+				refreshingAllTables := r.refreshingAllTables
+				r.refreshingAllTables = false
 
 				var settingOverrides map[descpb.ID]catpb.AutoStatsSettings
 				// For each mutation count, look up auto stats setting overrides using
@@ -436,7 +442,7 @@ func (r *Refresher) Start(
 							// processing the current table longer than the refresh
 							// interval, look up the table descriptor to ensure we don't
 							// have stale table settings.
-							if elapsed > DefaultRefreshInterval {
+							if elapsed > DefaultRefreshInterval || refreshingAllTables {
 								desc = r.getTableDescriptor(ctx, tableID)
 								if desc != nil {
 									if !r.autoStatsEnabled(desc) {
@@ -564,6 +570,9 @@ func (r *Refresher) getApplicableTables(
 				}
 			}
 		}
+	}
+	if len(r.mutationCounts) > 0 {
+		r.refreshingAllTables = true
 	}
 	if err != nil {
 		// Note that it is ok if the iterator returned partial results before
