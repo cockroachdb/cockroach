@@ -63,8 +63,25 @@ type NodeStatusState = Pick<AdminUIState, "cachedData", "nodes">;
 export const nodeStatusesSelector = (state: NodeStatusState) =>
   state.cachedData.nodes.data;
 
-export const selectNodesLastError = (state: AdminUIState) =>
-  state.cachedData.nodes.lastError;
+// partialNodeStatusesSelector returns NodeStatus items without fields that constantly change
+// and causes selectors to recompute.
+const partialNodeStatusesSelector = createSelector(
+  nodeStatusesSelector,
+  (nodeStatuses: INodeStatus[]) => {
+    return nodeStatuses?.map((ns: INodeStatus) => {
+      const { metrics, store_statuses, updated_at, activity, ...rest } = ns;
+      return {
+        ...rest,
+        store_statuses: store_statuses?.map(ss => ({ desc: ss.desc })),
+      };
+    });
+  },
+);
+
+export const selectNodesLastError = createSelector(
+  (state: AdminUIState) => state.cachedData.nodes,
+  nodes => nodes.lastError,
+);
 
 /*
  * clusterSelector returns information about cluster.
@@ -139,16 +156,21 @@ export const selectCommissionedNodeStatuses = createSelector(
  * nodeIDsSelector returns the NodeID of all nodes currently on the cluster.
  */
 export const nodeIDsSelector = createSelector(
-  nodeStatusesSelector,
-  nodeStatuses => {
-    return _.map(nodeStatuses, ns => ns.desc.node_id.toString());
-  },
+  partialNodeStatusesSelector,
+  nodeStatuses => _.map(nodeStatuses, ns => ns.desc.node_id),
+);
+
+/**
+ * nodeIDsStringifiedSelector returns available node IDs on cluster as list of strings.
+ */
+export const nodeIDsStringifiedSelector = createSelector(nodeIDsSelector, ids =>
+  ids.map(id => id.toString()),
 );
 
 /**
  * nodeStatusByIDSelector returns a map from NodeID to a current INodeStatus.
  */
-const nodeStatusByIDSelector = createSelector(
+export const nodeStatusByIDSelector = createSelector(
   nodeStatusesSelector,
   nodeStatuses => {
     const statuses: { [s: string]: INodeStatus } = {};
@@ -310,7 +332,7 @@ function isNoConnection(
 // This function will never be passed decommissioned nodes because
 // #56529 removed a node's status entry once it's decommissioned.
 export const nodeDisplayNameByIDSelector = createSelector(
-  nodeStatusesSelector,
+  partialNodeStatusesSelector,
   livenessStatusByNodeIDSelector,
   (nodeStatuses, livenessStatusByNodeID) => {
     const result: { [key: string]: string } = {};
@@ -359,7 +381,7 @@ export const selectIsMoreThanOneNode = createSelector(
 // selectStoreIDsByNodeID returns a map from node ID to a list of store IDs for
 // that node. Like nodeIDsSelector, the store ids are converted to strings.
 export const selectStoreIDsByNodeID = createSelector(
-  nodeStatusesSelector,
+  partialNodeStatusesSelector,
   nodeStatuses => {
     const result: { [key: string]: string[] } = {};
     _.each(
@@ -380,9 +402,8 @@ export const selectStoreIDsByNodeID = createSelector(
  */
 export const nodesSummarySelector = createSelector(
   nodeStatusesSelector,
-  nodeIDsSelector,
+  nodeIDsStringifiedSelector,
   nodeStatusByIDSelector,
-  nodeSumsSelector,
   nodeDisplayNameByIDSelector,
   livenessStatusByNodeIDSelector,
   livenessByNodeIDSelector,
@@ -392,7 +413,6 @@ export const nodesSummarySelector = createSelector(
     nodeStatuses,
     nodeIDs,
     nodeStatusByID,
-    nodeSums,
     nodeDisplayNameByID,
     livenessStatusByNodeID,
     livenessByNodeID,
@@ -403,7 +423,6 @@ export const nodesSummarySelector = createSelector(
       nodeStatuses,
       nodeIDs,
       nodeStatusByID,
-      nodeSums,
       nodeDisplayNameByID,
       livenessStatusByNodeID,
       livenessByNodeID,

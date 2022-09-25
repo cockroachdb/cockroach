@@ -37,9 +37,12 @@ import {
   hoverOff,
 } from "src/redux/hover";
 import {
-  nodesSummarySelector,
-  NodesSummary,
   LivenessStatus,
+  nodeDisplayNameByIDSelector,
+  livenessStatusByNodeIDSelector,
+  nodeIDsSelector,
+  nodeIDsStringifiedSelector,
+  selectStoreIDsByNodeID,
 } from "src/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
@@ -109,11 +112,18 @@ const dashboardDropdownOptions = _.map(dashboards, (dashboard, key) => {
 });
 
 type MapStateToProps = {
-  nodesSummary: NodesSummary;
   hoverState: HoverState;
   resolution10sStorageTTL: moment.Duration;
   resolution30mStorageTTL: moment.Duration;
   timeScale: TimeScale;
+  nodeDropdownOptions: ReturnType<
+    typeof nodeDropdownOptionsSelector.resultFunc
+  >;
+  nodeIds: string[];
+  storeIDsByNodeID: ReturnType<typeof selectStoreIDsByNodeID.resultFunc>;
+  nodeDisplayNameByID: ReturnType<
+    typeof nodeDisplayNameByIDSelector.resultFunc
+  >;
 };
 
 type MapDispatchToProps = {
@@ -142,36 +152,6 @@ export class NodeGraphs extends React.Component<
   NodeGraphsProps,
   NodeGraphsState
 > {
-  /**
-   * Selector to compute node dropdown options from the current node summary
-   * collection.
-   */
-  private nodeDropdownOptions = createSelector(
-    (summary: NodesSummary) => summary.nodeStatuses,
-    (summary: NodesSummary) => summary.nodeDisplayNameByID,
-    (summary: NodesSummary) => summary.livenessStatusByNodeID,
-    (
-      nodeStatuses,
-      nodeDisplayNameByID,
-      livenessStatusByNodeID,
-    ): DropdownOption[] => {
-      const base = [{ value: "", label: "Cluster" }];
-      return base.concat(
-        _.chain(nodeStatuses)
-          .filter(
-            ns =>
-              livenessStatusByNodeID[ns.desc.node_id] !==
-              LivenessStatus.NODE_STATUS_DECOMMISSIONED,
-          )
-          .map(ns => ({
-            value: ns.desc.node_id.toString(),
-            label: nodeDisplayNameByID[ns.desc.node_id],
-          }))
-          .value(),
-      );
-    },
-  );
-
   constructor(props: NodeGraphsProps) {
     super(props);
     this.state = {
@@ -254,7 +234,13 @@ export class NodeGraphs extends React.Component<
   };
 
   render() {
-    const { match, nodesSummary } = this.props;
+    const {
+      match,
+      nodeDropdownOptions,
+      storeIDsByNodeID,
+      nodeDisplayNameByID,
+      nodeIds,
+    } = this.props;
     const { showLowResolutionAlert, showDeletedDataAlert } = this.state;
     const selectedDashboard = getMatchParamByName(match, dashboardNameAttr);
     const dashboard = _.has(dashboards, selectedDashboard)
@@ -268,13 +254,13 @@ export class NodeGraphs extends React.Component<
     // node in the cluster using the nodeIDs collection. However, if a specific
     // node is already selected, these per-node graphs should only display data
     // only for the selected node.
-    const nodeIDs = nodeSources ? nodeSources : nodesSummary.nodeIDs;
+    const nodeIDs = nodeSources ? nodeSources : nodeIds;
 
     // If a single node is selected, we need to restrict the set of stores
     // queried for per-store metrics (only stores that belong to that node will
     // be queried).
     const storeSources = nodeSources
-      ? storeIDsForNode(nodesSummary, nodeSources[0])
+      ? storeIDsForNode(storeIDsByNodeID, nodeSources[0])
       : null;
 
     // tooltipSelection is a string used in tooltips to reference the currently
@@ -287,10 +273,11 @@ export class NodeGraphs extends React.Component<
 
     const dashboardProps: GraphDashboardProps = {
       nodeIDs,
-      nodesSummary,
       nodeSources,
       storeSources,
       tooltipSelection,
+      nodeDisplayNameByID,
+      storeIDsByNodeID,
     };
 
     const forwardParams = {
@@ -335,7 +322,7 @@ export class NodeGraphs extends React.Component<
           <PageConfigItem>
             <Dropdown
               title="Graph"
-              options={this.nodeDropdownOptions(this.props.nodesSummary)}
+              options={nodeDropdownOptions}
               selected={selectedNode}
               onChange={this.nodeChange}
             />
@@ -406,10 +393,7 @@ export class NodeGraphs extends React.Component<
             <div className="chart-group l-columns__left">{graphComponents}</div>
             <div className="l-columns__right">
               <Alerts />
-              <ClusterSummaryBar
-                nodesSummary={this.props.nodesSummary}
-                nodeSources={nodeSources}
-              />
+              <ClusterSummaryBar nodeSources={nodeSources} />
             </div>
           </div>
         </section>
@@ -418,12 +402,41 @@ export class NodeGraphs extends React.Component<
   }
 }
 
+/**
+ * Selector to compute node dropdown options from the current node summary
+ * collection.
+ */
+const nodeDropdownOptionsSelector = createSelector(
+  nodeIDsSelector,
+  nodeDisplayNameByIDSelector,
+  livenessStatusByNodeIDSelector,
+  (nodeIds, nodeDisplayNameByID, livenessStatusByNodeID): DropdownOption[] => {
+    const base = [{ value: "", label: "Cluster" }];
+    return base.concat(
+      _.chain(nodeIds)
+        .filter(
+          id =>
+            livenessStatusByNodeID[id] !==
+            LivenessStatus.NODE_STATUS_DECOMMISSIONED,
+        )
+        .map(id => ({
+          value: id.toString(),
+          label: nodeDisplayNameByID[id],
+        }))
+        .value(),
+    );
+  },
+);
+
 const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
-  nodesSummary: nodesSummarySelector(state),
   hoverState: hoverStateSelector(state),
   resolution10sStorageTTL: selectResolution10sStorageTTL(state),
   resolution30mStorageTTL: selectResolution30mStorageTTL(state),
   timeScale: selectTimeScale(state),
+  nodeIds: nodeIDsStringifiedSelector(state),
+  storeIDsByNodeID: selectStoreIDsByNodeID(state),
+  nodeDropdownOptions: nodeDropdownOptionsSelector(state),
+  nodeDisplayNameByID: nodeDisplayNameByIDSelector(state),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
