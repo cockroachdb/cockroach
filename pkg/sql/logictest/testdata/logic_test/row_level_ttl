@@ -1,22 +1,46 @@
-subtest todo_add_subtests
+subtest ttl_expire_after_must_be_interval
 
 statement error value of "ttl_expire_after" must be an interval
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expire_after = ' xx invalid interval xx')
 
+subtest end
+
+subtest ttl_expire_after_must_be_at_least_zero
+
 statement error value of "ttl_expire_after" must be at least zero
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expire_after = '-10 minutes')
+
+subtest end
+
+subtest ttl_expiration_expression_must_be_string
 
 statement error parameter "ttl_expiration_expression" requires a string value
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression = 0)
 
+subtest end
+
+subtest ttl_expiration_expression_must_be_valid_expression
+
 statement error ttl_expiration_expression "; DROP DATABASE defaultdb" must be a valid expression: at or near "EOF": syntax error
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression = '; DROP DATABASE defaultdb')
+
+subtest end
+
+subtest ttl_expiration_expression_must_be_timestamptz
 
 statement error expected ttl_expiration_expression expression to have type timestamptz, but 'text' has type string
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expiration_expression = 'text')
 
+subtest end
+
+subtest ttl_expire_after_or_ttl_expiration_expression_must_be_set
+
 statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl = 'on')
+
+subtest end
+
+subtest todo_add_subtests
 
 query T noticetrace
 CREATE TABLE tbl_ttl_automatic_column (id INT PRIMARY KEY, text TEXT) WITH (ttl_automatic_column = 'on')
@@ -875,21 +899,35 @@ statement ok
 ROLLBACK
 
 statement ok
-ALTER TABLE tbl SET (ttl_expire_after = '10 minutes', ttl_select_batch_size = 200)
+DROP TABLE tbl
+
+subtest end
+
+subtest create_table_no_ttl_set_ttl_expire_after
+
+statement ok
+CREATE TABLE create_table_no_ttl_set_ttl_expire_after (
+   id INT PRIMARY KEY,
+   text TEXT,
+   FAMILY (id, text)
+)
+
+statement ok
+ALTER TABLE create_table_no_ttl_set_ttl_expire_after SET (ttl_expire_after = '10 minutes')
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+SELECT create_statement FROM [SHOW CREATE TABLE create_table_no_ttl_set_ttl_expire_after]
 ----
-CREATE TABLE public.tbl (
-                                                                                                                                                   id INT8 NOT NULL,
-                                                                                                                                                   text STRING NULL,
-                                                                                                                                                   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-                                                                                                                                                   CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-                                                                                                                                                   FAMILY fam_0_id_text (id, text, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_select_batch_size = 200)
+CREATE TABLE public.create_table_no_ttl_set_ttl_expire_after (
+                                                                                         id INT8 NOT NULL,
+                                                                                         text STRING NULL,
+                                                                                         crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+                                                                                         CONSTRAINT create_table_no_ttl_set_ttl_expire_after_pkey PRIMARY KEY (id ASC),
+                                                                                         FAMILY fam_0_id_text (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
 
 let $table_id
-SELECT oid FROM pg_class WHERE relname = 'tbl'
+SELECT oid FROM pg_class WHERE relname = 'create_table_no_ttl_set_ttl_expire_after'
 
 query TTT
 SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
@@ -898,9 +936,60 @@ WHERE label = 'row-level-ttl-$table_id'
 ACTIVE  @hourly  root
 
 statement ok
-DROP TABLE tbl
+ALTER TABLE create_table_no_ttl_set_ttl_expire_after RESET (ttl)
 
-# Special table name.
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+
+subtest end
+
+subtest create_table_no_ttl_set_ttl_expiration_expression
+
+statement ok
+CREATE TABLE create_table_no_ttl_set_ttl_expiration_expression (
+   id INT PRIMARY KEY,
+   text TEXT,
+   expire_at TIMESTAMPTZ,
+   FAMILY (id, text)
+)
+
+statement ok
+ALTER TABLE create_table_no_ttl_set_ttl_expiration_expression SET (ttl_expiration_expression = 'expire_at')
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE create_table_no_ttl_set_ttl_expiration_expression]
+----
+CREATE TABLE public.create_table_no_ttl_set_ttl_expiration_expression (
+                                                                                        id INT8 NOT NULL,
+                                                                                        text STRING NULL,
+                                                                                        expire_at TIMESTAMPTZ NULL,
+                                                                                        CONSTRAINT create_table_no_ttl_set_ttl_expiration_expression_pkey PRIMARY KEY (id ASC),
+                                                                                        FAMILY fam_0_id_text_expire_at (id, text, expire_at)
+) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'create_table_no_ttl_set_ttl_expiration_expression'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+ACTIVE  @hourly  root
+
+statement ok
+ALTER TABLE create_table_no_ttl_set_ttl_expiration_expression RESET (ttl)
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+
+subtest end
+
+subtest special_table_name
+
 statement ok
 CREATE TABLE "Table-Name" (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 hours')
 
