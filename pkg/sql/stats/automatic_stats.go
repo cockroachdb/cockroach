@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -518,7 +518,7 @@ FROM
 		AS OF SYSTEM TIME '-%s'
 WHERE
 	tbl.database_name IS NOT NULL
-	AND tbl.database_name <> '%s'
+	AND tbl.table_id NOT IN (%d, %d, %d, %d)  -- excluded system tables
 	AND tbl.drop_time IS NULL
 	AND (
 			crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor, false)->'table'->>'viewQuery'
@@ -588,7 +588,7 @@ func (r *Refresher) ensureAllTables(
 		getTablesWithAutoStatsExplicitlyEnabledQuery := fmt.Sprintf(
 			getAllTablesTemplateSQL,
 			initialTableCollectionDelay,
-			systemschema.SystemDatabaseName,
+			keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
 			explicitlyEnabledTablesPredicate,
 		)
 		r.getApplicableTables(ctx, getTablesWithAutoStatsExplicitlyEnabledQuery,
@@ -602,7 +602,7 @@ func (r *Refresher) ensureAllTables(
 	getAllTablesQuery := fmt.Sprintf(
 		getAllTablesTemplateSQL,
 		initialTableCollectionDelay,
-		systemschema.SystemDatabaseName,
+		keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
 		autoStatsEnabledOrNotSpecifiedPredicate,
 	)
 	r.getApplicableTables(ctx, getAllTablesQuery,
