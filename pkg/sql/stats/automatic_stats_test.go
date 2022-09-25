@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -205,7 +204,8 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
-	if err := checkAllTablesCount(ctx, 2, r); err != nil {
+	// This now includes 36 system tables as well as the 2 created above.
+	if err := checkAllTablesCount(ctx, 38, r); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkExplicitlyEnabledTablesCount(ctx, 0, r); err != nil {
@@ -213,7 +213,7 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 	}
 	sqlRun.Exec(t,
 		`ALTER TABLE t.a SET (sql_stats_automatic_collection_enabled = true)`)
-	if err := checkAllTablesCount(ctx, 2, r); err != nil {
+	if err := checkAllTablesCount(ctx, 38, r); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkExplicitlyEnabledTablesCount(ctx, 1, r); err != nil {
@@ -221,7 +221,7 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 	}
 	sqlRun.Exec(t,
 		`ALTER TABLE t.b SET (sql_stats_automatic_collection_enabled = false)`)
-	if err := checkAllTablesCount(ctx, 1, r); err != nil {
+	if err := checkAllTablesCount(ctx, 37, r); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkExplicitlyEnabledTablesCount(ctx, 1, r); err != nil {
@@ -229,7 +229,7 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 	}
 	sqlRun.Exec(t,
 		`ALTER TABLE t.a SET (sql_stats_automatic_collection_enabled = false)`)
-	if err := checkAllTablesCount(ctx, 0, r); err != nil {
+	if err := checkAllTablesCount(ctx, 36, r); err != nil {
 		t.Fatal(err)
 	}
 	if err := checkExplicitlyEnabledTablesCount(ctx, 0, r); err != nil {
@@ -242,7 +242,7 @@ func checkAllTablesCount(ctx context.Context, expected int, r *Refresher) error 
 	getAllTablesQuery := fmt.Sprintf(
 		getAllTablesTemplateSQL,
 		collectionDelay,
-		systemschema.SystemDatabaseName,
+		keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
 		autoStatsEnabledOrNotSpecifiedPredicate,
 	)
 	r.getApplicableTables(ctx, getAllTablesQuery,
@@ -259,7 +259,7 @@ func checkExplicitlyEnabledTablesCount(ctx context.Context, expected int, r *Ref
 	getTablesWithAutoStatsExplicitlyEnabledQuery := fmt.Sprintf(
 		getAllTablesTemplateSQL,
 		collectionDelay,
-		systemschema.SystemDatabaseName,
+		keys.TableStatisticsTableID, keys.LeaseTableID, keys.JobsTableID, keys.ScheduledJobsTableID,
 		explicitlyEnabledTablesPredicate,
 	)
 	r.getApplicableTables(ctx, getTablesWithAutoStatsExplicitlyEnabledQuery,
