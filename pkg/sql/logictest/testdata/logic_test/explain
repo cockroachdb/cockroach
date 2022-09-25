@@ -22,3 +22,36 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUF9L6zAUf7-fI
 # needed to make the physical plan is rejected. See #40677.
 statement error running EXPLAIN \(DISTSQL\) on this query is unsupported because of the presence of subqueries
 EXPLAIN (DISTSQL) SELECT avg(a) OVER (ROWS (SELECT count(*) FROM t) PRECEDING) FROM t
+
+# Regression test for #88037 - don't require an ordering on non-output columns
+# from the enclosed expression of an EXPLAIN.
+statement ok
+CREATE TABLE t88037 AS
+SELECT g, g % 2 = 1 AS _bool, '0.0.0.0'::INET + g AS _inet
+FROM generate_series(1, 5) AS g;
+
+query T
+SELECT info FROM [
+  EXPLAIN
+  SELECT NULL AS col_1372
+  FROM t88037@[0] AS tab_489
+  WHERE tab_489._bool
+  ORDER BY tab_489._inet, tab_489._bool ASC
+  LIMIT 92:::INT8
+] WHERE info NOT LIKE 'vectorized%'
+----
+distribution: local
+·
+• render
+│
+└── • top-k
+    │ order: +_inet
+    │ k: 92
+    │
+    └── • filter
+        │ filter: _bool
+        │
+        └── • scan
+              missing stats
+              table: t88037@t88037_pkey
+              spans: FULL SCAN
