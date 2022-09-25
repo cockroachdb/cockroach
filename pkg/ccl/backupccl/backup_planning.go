@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/redact"
 	"strconv"
 	"strings"
 	"time"
@@ -750,6 +751,15 @@ func backupPlanHook(
 		}
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
+
+		backupPlanDestinations := append(to, incrementalFrom...)
+		for _, dest := range backupPlanDestinations {
+			clean, err := cloud.SanitizeExternalStorageURI(dest, nil)
+			if err != nil {
+				return errors.Wrap(err, "sanitizing external storage URI for logging")
+			}
+			log.Infof(ctx, "backup planning to connect to destination %v", redact.Safe(clean))
+		}
 
 		description, err := backupJobDescription(p,
 			backupStmt.Backup, to, incrementalFrom,
