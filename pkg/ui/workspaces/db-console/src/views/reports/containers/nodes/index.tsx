@@ -21,9 +21,11 @@ import { InlineAlert } from "src/components";
 import * as protos from "src/js/protos";
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import {
-  nodesSummarySelector,
-  NodesSummary,
   LivenessStatus,
+  nodeIDsStringifiedSelector,
+  selectNodesLastError,
+  nodeStatusByIDSelector,
+  livenessStatusByNodeIDSelector,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { util } from "@cockroachlabs/cluster-ui";
@@ -38,8 +40,14 @@ import {
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+
 interface NodesOwnProps {
-  nodesSummary: NodesSummary;
+  nodeIds: ReturnType<typeof nodeIDsStringifiedSelector.resultFunc>;
+  nodeLastError: ReturnType<typeof selectNodesLastError.resultFunc>;
+  nodeStatusByID: ReturnType<typeof nodeStatusByIDSelector.resultFunc>;
+  livenessStatusByNodeID: ReturnType<
+    typeof livenessStatusByNodeIDSelector.resultFunc
+  >;
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
 }
@@ -333,7 +341,7 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
     const inconsistent =
       !_.isNil(equality) &&
       _.chain(orderedNodeIDs)
-        .map(nodeID => this.props.nodesSummary.nodeStatusByID[nodeID])
+        .map(nodeID => this.props.nodeStatusByID[nodeID])
         .map(status => equality(status))
         .uniq()
         .value().length > 1;
@@ -347,7 +355,7 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
       <tr className="nodes-table__row" key={key}>
         <th className={headerClassName}>{title}</th>
         {_.map(orderedNodeIDs, nodeID => {
-          const status = this.props.nodesSummary.nodeStatusByID[nodeID];
+          const status = this.props.nodeStatusByID[nodeID];
           return (
             <NodeTableCell
               key={nodeID}
@@ -361,29 +369,27 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
   }
 
   requiresAdmin() {
-    const {
-      nodesSummary: { nodeLastError },
-    } = this.props;
-
-    return nodeLastError?.message === "this operation requires admin privilege";
+    return (
+      this.props.nodeLastError?.message ===
+      "this operation requires admin privilege"
+    );
   }
 
   render() {
-    const { nodesSummary } = this.props;
-    const { nodeStatusByID, livenessStatusByNodeID } = nodesSummary;
+    const { nodeStatusByID, livenessStatusByNodeID, nodeIds } = this.props;
     if (this.requiresAdmin()) {
       return (
         <InlineAlert title="" message="This page requires admin privileges." />
       );
     }
 
-    if (_.isEmpty(nodesSummary.nodeIDs)) {
+    if (_.isEmpty(nodeIds)) {
       return loading;
     }
 
     const filters = getFilters(this.props.location);
 
-    let nodeIDsContext = _.chain(nodesSummary.nodeIDs).map((nodeID: string) =>
+    let nodeIDsContext = _.chain(nodeIds).map((nodeID: string) =>
       Number.parseInt(nodeID, 10),
     );
     if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
@@ -495,7 +501,10 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
 }
 
 const mapStateToProps = (state: AdminUIState) => ({
-  nodesSummary: nodesSummarySelector(state),
+  nodeIds: nodeIDsStringifiedSelector(state),
+  nodeLastError: selectNodesLastError(state),
+  nodeStatusByID: nodeStatusByIDSelector(state),
+  livenessStatusByNodeID: livenessStatusByNodeIDSelector(state),
 });
 
 const mapDispatchToProps = {

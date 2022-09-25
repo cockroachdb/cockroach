@@ -22,7 +22,7 @@ import {
 } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
+  const { nodeIDs, nodeSources, tooltipSelection, nodeDisplayNameByID } = props;
 
   return [
     <LineGraph
@@ -35,7 +35,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.conns"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -152,7 +152,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.full.scan.count"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -169,7 +169,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.distsql.flows.active"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
           />
         ))}
@@ -185,7 +185,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.conn.latency-p99"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -202,7 +202,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.conn.latency-p90"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -228,7 +228,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.service.latency-p99"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -254,7 +254,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.service.latency-p90"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -272,7 +272,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.exec.latency-p99"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -290,7 +290,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.exec.latency-p90"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -397,7 +397,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.txn.latency-p99"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -423,7 +423,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.txn.latency-p90"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -441,7 +441,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.mem.root.current"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
