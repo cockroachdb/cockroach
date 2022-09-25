@@ -318,6 +318,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.SqllivenessTable)
 	target.AddDescriptor(systemschema.MigrationsTable)
 
+
 	// Tables introduced in 21.1.
 
 	target.AddDescriptor(systemschema.JoinTokensTable)
@@ -343,7 +344,11 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
+	// If adding a call to AddDescriptor or AddDescriptorForSystemTenant , please
+	// bump the setting of NumSystemTablesForSystemTenant below.
 }
+
+const NumSystemTablesForSystemTenant = 40
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.
