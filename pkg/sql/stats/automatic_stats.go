@@ -388,14 +388,20 @@ func (r *Refresher) Start(
 		// once on startup.
 		const initialTableCollectionDelay = time.Second
 		initialTableCollection := time.After(initialTableCollectionDelay)
+		var ensuringAllTables bool
 
 		for {
 			select {
 			case <-initialTableCollection:
 				r.ensureAllTables(ctx, &r.st.SV, initialTableCollectionDelay)
+				if len(r.mutationCounts) > 0 {
+					ensuringAllTables = true
+				}
 
 			case <-timer.C:
 				mutationCounts := r.mutationCounts
+				refreshingAllTables := ensuringAllTables
+				ensuringAllTables = false
 
 				var settingOverrides map[descpb.ID]catpb.AutoStatsSettings
 				// For each mutation count, look up auto stats setting overrides using
@@ -436,7 +442,7 @@ func (r *Refresher) Start(
 							// processing the current table longer than the refresh
 							// interval, look up the table descriptor to ensure we don't
 							// have stale table settings.
-							if elapsed > DefaultRefreshInterval {
+							if elapsed > DefaultRefreshInterval || refreshingAllTables {
 								desc = r.getTableDescriptor(ctx, tableID)
 								if desc != nil {
 									if !r.autoStatsEnabled(desc) {
