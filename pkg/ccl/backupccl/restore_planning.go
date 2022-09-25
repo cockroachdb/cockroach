@@ -65,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -834,7 +835,12 @@ func maybeUpgradeDescriptorsInBackupManifests(
 // them to be suitable for displaying in the jobs' description.
 // This includes redacting secrets from external storage URIs.
 func resolveOptionsForRestoreJobDescription(
-	opts tree.RestoreOptions, intoDB string, newDBName string, kmsURIs []string, incFrom []string,
+	ctx context.Context,
+	opts tree.RestoreOptions,
+	intoDB string,
+	newDBName string,
+	kmsURIs []string,
+	incFrom []string,
 ) (tree.RestoreOptions, error) {
 	if opts.IsDefault() {
 		return opts, nil
@@ -868,11 +874,15 @@ func resolveOptionsForRestoreJobDescription(
 			return tree.RestoreOptions{}, err
 		}
 		newOpts.DecryptionKMSURI = append(newOpts.DecryptionKMSURI, tree.NewDString(redactedURI))
+		logSanitizedKmsURI(ctx, redactedURI)
 	}
 
 	if opts.IncrementalStorage != nil {
 		var err error
 		newOpts.IncrementalStorage, err = sanitizeURIList(incFrom)
+		for _, uri := range newOpts.IncrementalStorage {
+			logSanitizedRestoreDestination(ctx, uri.String())
+		}
 		if err != nil {
 			return tree.RestoreOptions{}, err
 		}
@@ -882,6 +892,7 @@ func resolveOptionsForRestoreJobDescription(
 }
 
 func restoreJobDescription(
+	ctx context.Context,
 	p sql.PlanHookState,
 	restore *tree.Restore,
 	from [][]string,
@@ -900,7 +911,7 @@ func restoreJobDescription(
 
 	var options tree.RestoreOptions
 	var err error
-	if options, err = resolveOptionsForRestoreJobDescription(opts, intoDB, newDBName,
+	if options, err = resolveOptionsForRestoreJobDescription(ctx, opts, intoDB, newDBName,
 		kmsURIs, incFrom); err != nil {
 		return "", err
 	}
@@ -909,6 +920,9 @@ func restoreJobDescription(
 	for i, backup := range from {
 		r.From[i] = make(tree.StringOrPlaceholderOptList, len(backup))
 		r.From[i], err = sanitizeURIList(backup)
+		for _, uri := range r.From[i] {
+			logSanitizedRestoreDestination(ctx, uri.String())
+		}
 		if err != nil {
 			return "", err
 		}
@@ -949,6 +963,14 @@ func restoreTypeCheck(
 		header = jobs.BulkJobExecutionResultHeader
 	}
 	return true, header, nil
+}
+
+func logSanitizedKmsURI(ctx context.Context, kmsDestination string) {
+	log.Ops.Infof(ctx, "restore planning to connect to KMS destination %v", redact.Safe(kmsDestination))
+}
+
+func logSanitizedRestoreDestination(ctx context.Context, restoreDestinations string) {
+	log.Ops.Infof(ctx, "restore planning to connect to destination %v", redact.Safe(restoreDestinations))
 }
 
 // restorePlanHook implements sql.PlanHookFn.
@@ -1732,6 +1754,7 @@ func doRestorePlan(
 		fromDescription = from
 	}
 	description, err := restoreJobDescription(
+		ctx,
 		p,
 		restoreStmt,
 		fromDescription,

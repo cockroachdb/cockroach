@@ -455,11 +455,11 @@ func TestExportFeatureFlag(t *testing.T) {
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = FALSE`)
 	sqlDB.Exec(t, `CREATE TABLE feature_flags (a INT PRIMARY KEY)`)
 	sqlDB.ExpectErr(t, `feature EXPORT was disabled by the database administrator`,
-		`EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flags`)
+		`EXPORT INTO CSV 'nodelocal://0/foo/' FROM TABLE feature_flags`)
 
 	// Feature flag is on — test that EXPORT does not error.
 	sqlDB.Exec(t, `SET CLUSTER SETTING feature.export.enabled = TRUE`)
-	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/%s/' FROM TABLE feature_flags`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://0/foo/' FROM TABLE feature_flags`)
 }
 
 func TestExportPrivileges(t *testing.T) {
