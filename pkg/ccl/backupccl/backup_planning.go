@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/redact"
 	"strconv"
 	"strings"
 	"time"
@@ -618,6 +619,9 @@ func backupPlanHook(
 			return nil, nil, nil, false, err
 		}
 		encryptionParams.Mode = jobspb.EncryptionMode_KMS
+		if err = logAndSanitizeKmsURIs(ctx, kms...); err != nil {
+			return nil, nil, nil, false, err
+		}
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -758,6 +762,10 @@ func backupPlanHook(
 
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 
+		if err := logAndSanitizeBackupDestinations(ctx, append(to, incrementalFrom...)...); err != nil {
+			return errors.Wrap(err, "logging backup destinations")
+		}
+
 		description, err := backupJobDescription(p,
 			backupStmt.Backup, to, incrementalFrom,
 			encryptionParams.RawKmsUris,
@@ -827,6 +835,28 @@ func backupPlanHook(
 		return fn, jobs.DetachedJobExecutionResultHeader, nil, false, nil
 	}
 	return fn, jobs.BulkJobExecutionResultHeader, nil, false, nil
+}
+
+func logAndSanitizeKmsURIs(ctx context.Context, kmsURIs... string) error {
+	for _, dest := range kmsURIs {
+		clean, err := cloud.RedactKMSURI(dest)
+		if err != nil {
+			return err
+		}
+		log.Ops.Infof(ctx, "backup planning to connect to KMS destination %v", redact.Safe(clean))
+	}
+	return nil
+}
+
+func logAndSanitizeBackupDestinations(ctx context.Context, backupDestinations... string) error {
+	for _, dest := range backupDestinations {
+		clean, err := cloud.SanitizeExternalStorageURI(dest, nil)
+		if err != nil {
+			return err
+		}
+		log.Ops.Infof(ctx, "backup planning to connect to destination %v", redact.Safe(clean))
+	}
+	return nil
 }
 
 func collectTelemetry(
