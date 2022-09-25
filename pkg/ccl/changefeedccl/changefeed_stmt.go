@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/redact"
 	"net/url"
 	"sort"
 	"strings"
@@ -319,7 +320,7 @@ func createChangefeedJobRecord(
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 	}
 
-	jobDescription, err := changefeedJobDescription(changefeedStmt.CreateChangefeed, sinkURI, opts)
+	jobDescription, err := changefeedJobDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -796,7 +797,7 @@ func validateSink(
 }
 
 func changefeedJobDescription(
-	changefeed *tree.CreateChangefeed, sinkURI string, opts changefeedbase.StatementOptions,
+	ctx context.Context, changefeed *tree.CreateChangefeed, sinkURI string, opts changefeedbase.StatementOptions,
 ) (string, error) {
 	cleanedSinkURI, err := cloud.SanitizeExternalStorageURI(sinkURI, []string{
 		changefeedbase.SinkParamSASLPassword,
@@ -811,6 +812,8 @@ func changefeedJobDescription(
 	if err != nil {
 		return "", err
 	}
+
+	logSanitizedChangefeedDestination(ctx, cleanedSinkURI)
 
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
@@ -828,6 +831,10 @@ func changefeedJobDescription(
 	}
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
 	return tree.AsString(c), nil
+}
+
+func logSanitizedChangefeedDestination(ctx context.Context, destination string){
+	log.Infof(ctx, "changefeed planning to connect to destination %v", redact.Safe(destination))
 }
 
 func validateDetailsAndOptions(

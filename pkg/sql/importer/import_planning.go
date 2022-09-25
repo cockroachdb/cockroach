@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/redact"
 	"math"
 	"net/url"
 	"path"
@@ -222,7 +223,7 @@ func validateFormatOptions(
 }
 
 func importJobDescription(
-	p sql.PlanHookState, orig *tree.Import, files []string, opts map[string]string,
+	ctx context.Context, p sql.PlanHookState, orig *tree.Import, files []string, opts map[string]string,
 ) (string, error) {
 	stmt := *orig
 	stmt.Files = nil
@@ -231,6 +232,7 @@ func importJobDescription(
 		if err != nil {
 			return "", err
 		}
+		logSanitizedImportDestination(ctx, clean)
 		stmt.Files = append(stmt.Files, tree.NewDString(clean))
 	}
 	stmt.Options = nil
@@ -246,6 +248,10 @@ func importJobDescription(
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(&stmt, ann), nil
+}
+
+func logSanitizedImportDestination(ctx context.Context, destination string){
+	log.Infof(ctx, "import planning to connect to destination %v", redact.Safe(destination))
 }
 
 func ensureRequiredPrivileges(
@@ -776,7 +782,7 @@ func importPlanHook(
 
 		var tableDetails []jobspb.ImportDetails_Table
 		var typeDetails []jobspb.ImportDetails_Type
-		jobDesc, err := importJobDescription(p, importStmt, filenamePatterns, opts)
+		jobDesc, err := importJobDescription(ctx, p, importStmt, filenamePatterns, opts)
 		if err != nil {
 			return err
 		}

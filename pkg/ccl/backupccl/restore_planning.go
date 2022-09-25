@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/redact"
 	"sort"
 	"strconv"
 	"strings"
@@ -830,7 +831,7 @@ func maybeUpgradeDescriptorsInBackupManifests(
 // them to be suitable for displaying in the jobs' description.
 // This includes redacting secrets from external storage URIs.
 func resolveOptionsForRestoreJobDescription(
-	opts tree.RestoreOptions, intoDB string, newDBName string, kmsURIs []string, incFrom []string,
+	ctx context.Context, opts tree.RestoreOptions, intoDB string, newDBName string, kmsURIs []string, incFrom []string,
 ) (tree.RestoreOptions, error) {
 	if opts.IsDefault() {
 		return opts, nil
@@ -869,6 +870,9 @@ func resolveOptionsForRestoreJobDescription(
 	if opts.IncrementalStorage != nil {
 		var err error
 		newOpts.IncrementalStorage, err = sanitizeURIList(incFrom)
+		for _, uri := range newOpts.IncrementalStorage {
+			logSanitizedRestoreDestination(ctx, uri.String())
+		}
 		if err != nil {
 			return tree.RestoreOptions{}, err
 		}
@@ -878,6 +882,7 @@ func resolveOptionsForRestoreJobDescription(
 }
 
 func restoreJobDescription(
+	ctx context.Context,
 	p sql.PlanHookState,
 	restore *tree.Restore,
 	from [][]string,
@@ -896,7 +901,7 @@ func restoreJobDescription(
 
 	var options tree.RestoreOptions
 	var err error
-	if options, err = resolveOptionsForRestoreJobDescription(opts, intoDB, newDBName,
+	if options, err = resolveOptionsForRestoreJobDescription(ctx, opts, intoDB, newDBName,
 		kmsURIs, incFrom); err != nil {
 		return "", err
 	}
@@ -905,6 +910,9 @@ func restoreJobDescription(
 	for i, backup := range from {
 		r.From[i] = make(tree.StringOrPlaceholderOptList, len(backup))
 		r.From[i], err = sanitizeURIList(backup)
+		for _, uri := range r.From[i] {
+			logSanitizedRestoreDestination(ctx, uri.String())
+		}
 		if err != nil {
 			return "", err
 		}
@@ -912,6 +920,12 @@ func restoreJobDescription(
 
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(r, ann), nil
+}
+
+func logSanitizedRestoreDestination(ctx context.Context, restoreDestinations string) {
+	for _, uri := range restoreDestinations {
+		log.Infof(ctx, "restore planning to connect to destination %v", redact.Safe(uri))
+	}
 }
 
 // restorePlanHook implements sql.PlanHookFn.
@@ -1754,6 +1768,7 @@ func doRestorePlan(
 		fromDescription = from
 	}
 	description, err := restoreJobDescription(
+		ctx,
 		p,
 		restoreStmt,
 		fromDescription,
