@@ -18,7 +18,7 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
+  const { nodeIDs, nodeSources, tooltipSelection, nodeDisplayNameByID } = props;
 
   return [
     <LineGraph
@@ -85,7 +85,7 @@ export default function (props: GraphDashboardProps) {
         {nodeIDs.map(nid => (
           <Metric
             name="cr.node.sys.runnable.goroutines.per.cpu"
-            title={nodeDisplayName(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
           />
         ))}
@@ -150,7 +150,7 @@ export default function (props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.node.clock-offset.meannanos"
-            title={nodeDisplayName(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
           />
         ))}
