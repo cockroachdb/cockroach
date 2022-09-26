@@ -260,9 +260,12 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 		case <-t.C:
 			t.Read = true
 			s, _ := l.getSessionOrBlockCh()
+			// TODO(aaditya): consider combining `DefaultTTL` and `DefaultHeartBeat` into a single knob to make these
+			//  timeouts less fragile
+			timeout := l.ttl()/2 + l.hb()
 			if s == nil {
 				var newSession *session
-				if err := contextutil.RunWithTimeout(ctx, "sqlliveness create session", l.hb(), func(ctx context.Context) error {
+				if err := contextutil.RunWithTimeout(ctx, "sqlliveness create session", timeout, func(ctx context.Context) error {
 					var err error
 					newSession, err = l.createSession(ctx)
 					return err
@@ -284,7 +287,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 				continue
 			}
 			var found bool
-			err := contextutil.RunWithTimeout(ctx, "sqlliveness extend session", l.hb(), func(ctx context.Context) error {
+			err := contextutil.RunWithTimeout(ctx, "sqlliveness extend session", timeout, func(ctx context.Context) error {
 				var err error
 				found, err = l.extendSession(ctx, s)
 				return err
