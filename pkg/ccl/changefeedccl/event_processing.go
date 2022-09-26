@@ -78,13 +78,13 @@ func newEventConsumer(
 	cfg := flowCtx.Cfg
 	evalCtx := flowCtx.EvalCtx
 
-	makeConsumer := func(s EventSink, frontier frontier, optionalKeyCache *safeUnorderedCache, optionalValueCache *safeUnorderedCache) (eventConsumer, error) {
+	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error
 		encodingOpts, err := feed.Opts.GetEncodingOptions()
 		if err != nil {
 			return nil, err
 		}
-		encoder, err := getEncoder(encodingOpts, feed.Targets, optionalKeyCache, optionalValueCache)
+		encoder, err := getEncoder(encodingOpts, feed.Targets)
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +104,7 @@ func newEventConsumer(
 	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
 	if numWorkers <= 1 || isSinkless {
-		c, err := makeConsumer(sink, spanFrontier, nil, nil)
+		c, err := makeConsumer(sink, spanFrontier)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -124,13 +124,8 @@ func newEventConsumer(
 		spanFrontier: spanFrontier,
 	}
 	ss := &safeSink{wrapped: sink, beforeFlush: c.Flush}
-
-	// If an avro encoding scheme is used, the encoder cache must be shared
-	// across the encoders created by each worker.
-	optionalKeyCache := makeSafeUnorderedCache()
-	optionalValueCache := makeSafeUnorderedCache()
 	c.makeConsumer = func() (eventConsumer, error) {
-		return makeConsumer(ss, c, optionalKeyCache, optionalValueCache)
+		return makeConsumer(ss, c)
 	}
 
 	if err := c.startWorkers(); err != nil {

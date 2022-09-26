@@ -41,21 +41,14 @@ type Encoder interface {
 	EncodeResolvedTimestamp(context.Context, string, hlc.Timestamp) ([]byte, error)
 }
 
-// getEncoder returns an encoder based on the options and targets. If
-// optionalAvroKeyCache or optionalAvroValueCache are non-nil, they will be used by
-// the returned avro encoder. This is useful in case there are multiple, parallel
-// avro encoders being used.
 func getEncoder(
-	opts changefeedbase.EncodingOptions,
-	targets changefeedbase.Targets,
-	optionalAvroKeyCache *safeUnorderedCache,
-	optionalAvroValueCache *safeUnorderedCache,
+	opts changefeedbase.EncodingOptions, targets changefeedbase.Targets,
 ) (Encoder, error) {
 	switch opts.Format {
 	case changefeedbase.OptFormatJSON:
 		return makeJSONEncoder(opts)
 	case changefeedbase.OptFormatAvro, changefeedbase.DeprecatedOptFormatAvro:
-		return newConfluentAvroEncoder(opts, targets, optionalAvroKeyCache, optionalAvroValueCache)
+		return newConfluentAvroEncoder(opts, targets)
 	case changefeedbase.OptFormatCSV:
 		return newCSVEncoder(opts), nil
 	default:

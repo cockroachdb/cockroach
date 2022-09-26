@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,42 +38,12 @@ type confluentAvroEncoder struct {
 	targets                   changefeedbase.Targets
 	envelopeType              changefeedbase.EnvelopeType
 
-	keyCache   registryCache // [tableIDAndVersion]confluentRegisteredKeySchema
-	valueCache registryCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
+	keyCache   *cache.UnorderedCache // [tableIDAndVersion]confluentRegisteredKeySchema
+	valueCache *cache.UnorderedCache // [tableIDAndVersionPair]confluentRegisteredEnvelopeSchema
 
 	// resolvedCache doesn't need to be bounded like the other caches because the number of topics
 	// is fixed per changefeed.
 	resolvedCache map[string]confluentRegisteredEnvelopeSchema
-}
-
-type registryCache interface {
-	Get(key interface{}) (value interface{}, ok bool)
-	Add(key, value interface{})
-}
-
-type safeUnorderedCache struct {
-	syncutil.Mutex
-	cache *cache.UnorderedCache
-}
-
-func makeSafeUnorderedCache() *safeUnorderedCache {
-	return &safeUnorderedCache{
-		cache: cache.NewUnorderedCache(encoderCacheConfig),
-	}
-}
-
-func (c *safeUnorderedCache) Get(key interface{}) (value interface{}, ok bool) {
-	c.Lock()
-	defer c.Unlock()
-
-	return c.cache.Get(key)
-}
-
-func (c *safeUnorderedCache) Add(key, value interface{}) {
-	c.Lock()
-	defer c.Unlock()
-
-	c.cache.Add(key, value)
 }
 
 type tableIDAndVersion struct {
@@ -105,10 +74,7 @@ var encoderCacheConfig = cache.Config{
 }
 
 func newConfluentAvroEncoder(
-	opts changefeedbase.EncodingOptions,
-	targets changefeedbase.Targets,
-	optionalKeyCache *safeUnorderedCache,
-	optionalValueCache *safeUnorderedCache,
+	opts changefeedbase.EncodingOptions, targets changefeedbase.Targets,
 ) (*confluentAvroEncoder, error) {
 	e := &confluentAvroEncoder{
 		schemaPrefix:            opts.AvroSchemaPrefix,
@@ -142,18 +108,8 @@ func newConfluentAvroEncoder(
 	}
 
 	e.schemaRegistry = reg
-
-	if optionalKeyCache != nil {
-		e.keyCache = optionalKeyCache
-	} else {
-		e.keyCache = cache.NewUnorderedCache(encoderCacheConfig)
-	}
-	if optionalValueCache != nil {
-		e.valueCache = optionalValueCache
-	} else {
-		e.valueCache = cache.NewUnorderedCache(encoderCacheConfig)
-	}
-
+	e.keyCache = cache.NewUnorderedCache(encoderCacheConfig)
+	e.valueCache = cache.NewUnorderedCache(encoderCacheConfig)
 	e.resolvedCache = make(map[string]confluentRegisteredEnvelopeSchema)
 	return e, nil
 }

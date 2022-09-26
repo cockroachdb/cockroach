@@ -485,7 +485,7 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, err
 	}
-	if _, err := getEncoder(encodingOpts, AllTargets(details), nil, nil); err != nil {
+	if _, err := getEncoder(encodingOpts, AllTargets(details)); err != nil {
 		return nil, err
 	}
 
