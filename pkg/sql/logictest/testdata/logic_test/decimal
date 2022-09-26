@@ -584,3 +584,27 @@ SELECT attname, atttypmod FROM pg_attribute WHERE attrelid = 't71926'::regclass:
 no_typmod            -1
 precision            327684
 precision_and_width  327687
+
+# Regression test for #86790
+statement ok
+CREATE TABLE t86790 (x INT8 NOT NULL)
+
+statement ok
+INSERT INTO t86790 VALUES (-4429772553778622992)
+
+query R
+SELECT (x / 1)::DECIMAL FROM t86790
+----
+-4429772553778622992
+
+statement ok
+SET testing_optimizer_disable_rule_probability = 1
+
+# The results should be the same as the previous SELECT.
+query R
+SELECT (x / 1)::DECIMAL FROM t86790
+----
+-4429772553778622992
+
+statement ok
+RESET testing_optimizer_disable_rule_probability
