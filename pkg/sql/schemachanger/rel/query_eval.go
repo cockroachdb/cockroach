@@ -38,9 +38,30 @@ func newEvalContext(q *Query) *evalContext {
 	return &evalContext{
 		q:     q,
 		depth: queryDepth(len(q.entities)),
-		slots: append(make([]slot, 0, len(q.slots)), q.slots...),
+		slots: cloneSlots(q.slots),
 		facts: q.facts,
 	}
+}
+
+// cloneSlots clones the slots of a query for use in an evalContext.
+func cloneSlots(slots []slot) []slot {
+	clone := append(make([]slot, 0, len(slots)), slots...)
+	for i := range clone {
+		// If there are any slots which map to a set of allowed values, we need
+		// to clone those values because during query evaluation, we'll fill in
+		// inline values in the context of the current entity set. This matters
+		// in particular for constraints related to entities or strings; their
+		// inline values depend on the entitySet.
+		if clone[i].any != nil {
+			vals := clone[i].any
+			clone[i].any = append(make([]typedValue, 0, len(vals)), vals...)
+		}
+		if clone[i].not != nil {
+			cloned := *clone[i].not
+			clone[i].not = &cloned
+		}
+	}
+	return clone
 }
 
 type evalResult evalContext
@@ -135,9 +156,7 @@ func (ec *evalContext) visit(e entity) error {
 	// evaluation and then unset them when we pop out of this stack frame.
 	var slotsFilled util.FastIntSet
 	defer func() {
-		slotsFilled.ForEach(func(i int) {
-			ec.slots[i].typedValue = typedValue{}
-		})
+		slotsFilled.ForEach(func(i int) { ec.slots[i].reset() })
 	}()
 
 	// Fill in the slot corresponding to this entity. It should not be filled
@@ -408,7 +427,7 @@ func (ec *evalContext) visitSubquery(query int) (done bool, _ error) {
 	defer sub.query.putEvalContext(sec)
 	defer func() { // reset the slots populated to run the subquery
 		sub.inputSlotMappings.ForEach(func(_, subSlot int) {
-			sec.slots[subSlot].typedValue = typedValue{}
+			sec.slots[subSlot].reset()
 		})
 	}()
 	if err := ec.bindSubQuerySlots(sub.inputSlotMappings, sec); err != nil {

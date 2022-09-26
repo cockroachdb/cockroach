@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -51,6 +52,21 @@ func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB) Engine {
 		context.Background(),
 		InMemory(),
 		CacheSize(testCacheSize))
+	if err != nil {
+		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
+	}
+	return peb
+}
+
+func setupPebbleInMemPebbleForLatestRelease(b testing.TB, _ string) Engine {
+	ctx := context.Background()
+	s := cluster.MakeClusterSettings()
+	if err := clusterversion.Initialize(ctx, clusterversion.TestingBinaryVersion,
+		&s.SV); err != nil {
+		b.Fatalf("failed to set current cluster version: %+v", err)
+	}
+
+	peb, err := Open(ctx, InMemory(), CacheSize(testCacheSize), Settings(s))
 	if err != nil {
 		b.Fatalf("could not create new in-mem pebble instance: %+v", err)
 	}
