@@ -72,6 +72,10 @@ type Index struct {
 	// attribute existence from the query itself and to free the query-writer
 	// from needing to define a bogus Var.
 	Exists []Attr
+
+	// Inverted is true if the index is an inverted index over slice membership.
+	// If true, the attributes may only refer to a slice membership type.
+	Inverted bool
 }
 
 // NewDatabase constructs a new Database with the specified indexes.
@@ -82,8 +86,12 @@ func NewDatabase(sc *Schema, indexes ...Index) (*Database, error) {
 			hash:    map[interface{}]int{},
 			strings: map[string]int{},
 		},
-		indexes: make([]index, len(indexes)),
 	}
+	indexes, err := maybeExpandInvertedIndexes(sc, indexes)
+	if err != nil {
+		return nil, err
+	}
+	t.indexes = make([]index, len(indexes))
 	for i, di := range indexes {
 		var set, exists ordinalSet
 		ords := make([]ordinal, len(di.Attrs))
@@ -135,14 +143,82 @@ func NewDatabase(sc *Schema, indexes ...Index) (*Database, error) {
 				)
 			}
 		}
-
-		spec := indexSpec{mask: set, attrs: ords, s: &t.entitySet, exists: exists, where: predicate}
+		spec := indexSpec{
+			mask:       set,
+			attrs:      ords,
+			s:          &t.entitySet,
+			exists:     exists,
+			where:      predicate,
+			isInverted: di.Inverted,
+		}
 		t.indexes[i] = index{
 			indexSpec: spec,
 			tree:      btree.New(32),
 		}
 	}
 	return t, nil
+}
+
+// maybeExpandInvertedIndexes will replace inverted indexes defined by the
+// user with two new indexes corresponding to the inverted attribute in
+// order to enable efficient lookup by either source or value. This is
+// done because generally in rel it is safe to assume that it is efficient
+// to go from an entity to its attribute and that it is also efficient to go
+// from an attribute to the set of entities so long as the attribute is
+// indexed. Because the slice members are not directly a part of the entity
+// in the rel model, we need to index from the entity to the slice member to
+// make that expansion cheap.
+func maybeExpandInvertedIndexes(sc *Schema, indexes []Index) ([]Index, error) {
+	var expanded []Index
+	for _, idx := range indexes {
+		if !idx.Inverted {
+			expanded = append(expanded, idx)
+			continue
+		}
+		if err := validatedInvertedIndexProperties(sc, idx); err != nil {
+			return nil, err
+		}
+		// We validated above that there is just one inverted attribute.
+		attr := idx.Attrs[0]
+		expanded = append(expanded, Index{
+			Attrs:    []Attr{attr, sliceSource, sliceIndex},
+			Exists:   []Attr{attr},
+			Inverted: true,
+		}, Index{
+			Attrs:    []Attr{sliceSource, attr, sliceIndex},
+			Exists:   []Attr{attr},
+			Inverted: true,
+		})
+	}
+	return expanded, nil
+}
+
+// validateInvertedIndexProperties ensures that a user-requested inverted
+// index conforms to the supported properties. Namely, it has one attribute
+// that is a slice attribute and no use of Where or Exists clauses.
+func validatedInvertedIndexProperties(sc *Schema, idx Index) error {
+	if len(idx.Attrs) > 1 {
+		return errors.Errorf("inverted indexes may only reference a single slice attribute, got %v", idx.Attrs)
+	}
+	ord, err := sc.getOrdinal(idx.Attrs[0])
+	switch {
+	case err != nil:
+		return errors.Wrap(err, "invalid index attribute")
+	case !sc.sliceOrdinals.contains(ord):
+		return errors.Errorf(
+			"invalid non-slice index attribute %v for inverted index", idx.Attrs[0],
+		)
+	case len(idx.Where) > 0:
+		return errors.Errorf(
+			"inverted indexes are implicitly partial and cannot be further constrained",
+		)
+	case len(idx.Exists) > 0:
+		return errors.Errorf(
+			"inverted indexes may not have existence constraints",
+		)
+	default:
+		return nil
+	}
 }
 
 // entityStore is an abstraction to permit the relevant recursion of interning
@@ -157,17 +233,29 @@ type entityStore interface {
 
 // insert implements entityStore.
 func (t *Database) insert(v interface{}, es entityStore) (id int, err error) {
+	if existing, ok := t.entitySet.hash[v]; ok {
+		return existing, nil
+	}
 	id, err = t.entitySet.insert(v, es)
 	if err != nil {
 		return 0, err
 	}
 	e := (*values)(&t.entitySet.entities[id])
+	typIdx, ok := e.get(t.schema.typeOrdinal)
+	if !ok {
+		return 0, errors.AssertionFailedf("unknown type for entity %T: %v", v, v)
+	}
+	typ := t.schema.entityTypes[typIdx]
 	for i := range t.indexes {
 		idx := &t.indexes[i]
 		if !idx.matchesPredicate(e) {
 			continue
 		}
 		if idx.exists != 0 && !idx.exists.isContainedIn(e.attrs) {
+			continue
+		}
+		// If this entity is a slice membership entity, it should not go
+		if typ.isSliceMemberType && !idx.isInverted {
 			continue
 		}
 		idx.tree.ReplaceOrInsert(&valuesItem{values: *e, idx: &idx.indexSpec})
@@ -196,11 +284,12 @@ type index struct {
 }
 
 type indexSpec struct {
-	s      *entitySet
-	mask   ordinalSet
-	attrs  []ordinal
-	exists ordinalSet
-	where  values
+	s          *entitySet
+	mask       ordinalSet
+	attrs      []ordinal
+	exists     ordinalSet
+	where      values
+	isInverted bool
 }
 
 // entityIterator is used to iterate Entities.
@@ -266,14 +355,22 @@ func (t *Database) chooseIndex(
 		}
 		// Only allow queries to proceed with no index overlap if this is the
 		// zero-attribute index, which implies the database creator accepts bad
-		// query plans.
-		if overlap == 0 && len(dims[i].attrs) > 0 {
+		// query plans. We'll also permit it in the rare case that this is
+		// an inverted index join and we have some overlap in the attributes.
+		hasSliceAttrs := !hasAttrs.intersection(t.schema.sliceOrdinals).empty()
+		if overlap == 0 && len(dims[i].attrs) > 0 &&
+			(!hasSliceAttrs || dims[i].mask.intersection(hasAttrs).empty()) {
 			continue
 		}
 		if !dims[i].exists.isContainedIn(m.union(hasAttrs)) {
 			continue
 		}
 		if !dims[i].matchesPredicate(&where) {
+			continue
+		}
+		// Only inverted indexes can contain data which references slice ordinals.
+		// If the query is for such an ordinal, it must search an inverted index.
+		if hasSliceAttrs && !dims[i].isInverted {
 			continue
 		}
 		best, bestOverlap = i, overlap

@@ -10,11 +10,13 @@ func _() {
 	var x [1]struct{}
 	_ = x[Type-1]
 	_ = x[Self-2]
+	_ = x[sliceSource-3]
+	_ = x[sliceIndex-4]
 }
 
-const _systemAttribute_name = "TypeSelf"
+const _systemAttribute_name = "TypeSelfsliceSourcesliceIndex"
 
-var _systemAttribute_index = [...]uint8{0, 4, 8}
+var _systemAttribute_index = [...]uint8{0, 4, 8, 19, 29}
 
 func (i systemAttribute) String() string {
 	i -= 1

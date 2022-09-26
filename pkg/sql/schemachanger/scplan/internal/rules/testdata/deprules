@@ -1401,12 +1401,12 @@ deprules
   to: column-node
   query:
     - $column-type[Type] = '*scpb.ColumnType'
+    - descriptorIsNotBeingDropped($column-type)
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($column-type, $column, $table-id, $col-id)
     - toAbsent($column-type-target, $column-target)
     - $column-type-node[CurrentStatus] = ABSENT
     - $column-node[CurrentStatus] = ABSENT
-    - relationIsNotBeingDropped(*scpb.ColumnType)($column-type)
     - joinTargetNode($column-type, $column-type-target, $column-type-node)
     - joinTargetNode($column, $column-target, $column-node)
 - name: constraint dependent absent right before constraint
@@ -1691,17 +1691,19 @@ deprules
     - $referencing-via-attr-node[CurrentStatus] = ABSENT
     - joinTargetNode($referenced-descriptor, $referenced-descriptor-target, $referenced-descriptor-node)
     - joinTargetNode($referencing-via-attr, $referencing-via-attr-target, $referencing-via-attr-node)
-- name: descriptor drop right before removing dependent with expr ref
+- name: descriptor drop right before removing dependent with expr ref to sequence
   from: referenced-descriptor-node
   kind: SameStagePrecedence
   to: referencing-via-expr-node
   query:
-    - $referenced-descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+    - $referenced-descriptor[Type] = '*scpb.Sequence'
+    - joinTargetNode($referenced-descriptor, $referenced-descriptor-target, $referenced-descriptor-node)
+    - $referenced-descriptor[DescID] = $seqID
+    - $referencing-via-expr[ReferencedSequenceIDs] CONTAINS $seqID
     - $referencing-via-expr[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SecondaryIndexPartial']
     - toAbsent($referenced-descriptor-target, $referencing-via-expr-target)
     - $referenced-descriptor-node[CurrentStatus] = DROPPED
     - $referencing-via-expr-node[CurrentStatus] = ABSENT
-    - RefByExpression(scpb.Element, scpb.Element)($referenced-descriptor, $referencing-via-expr)
     - joinTargetNode($referenced-descriptor, $referenced-descriptor-target, $referenced-descriptor-node)
     - joinTargetNode($referencing-via-expr, $referencing-via-expr-target, $referencing-via-expr-node)
 - name: descriptor drop right before removing dependent with type ref
@@ -1709,12 +1711,14 @@ deprules
   kind: SameStagePrecedence
   to: referencing-via-type-node
   query:
-    - $referenced-descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
-    - $referencing-via-type[Type] = '*scpb.ColumnType'
+    - $referenced-descriptor[Type] IN ['*scpb.EnumType', '*scpb.AliasType']
+    - joinTargetNode($referenced-descriptor, $referenced-descriptor-target, $referenced-descriptor-node)
+    - $referenced-descriptor[DescID] = $fromDescID
+    - $referencing-via-type[ReferencedTypeIDs] CONTAINS $fromDescID
+    - $referencing-via-type[Type] IN ['*scpb.CheckConstraint', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SecondaryIndexPartial']
     - toAbsent($referenced-descriptor-target, $referencing-via-type-target)
     - $referenced-descriptor-node[CurrentStatus] = DROPPED
     - $referencing-via-type-node[CurrentStatus] = ABSENT
-    - RefByTypeT(scpb.Element, scpb.Element)($referenced-descriptor, $referencing-via-type)
     - joinTargetNode($referenced-descriptor, $referenced-descriptor-target, $referenced-descriptor-node)
     - joinTargetNode($referencing-via-type, $referencing-via-type-target, $referencing-via-type-node)
 - name: descriptor removal right before dependent element removal
@@ -1960,9 +1964,9 @@ deprules
   to: index-node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
+    - descriptorIsNotBeingDropped($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
-    - relationIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
     - transient($partial-predicate-target, $index-target)
     - $partial-predicate-node[CurrentStatus] = TRANSIENT_ABSENT
     - $index-node[CurrentStatus] = TRANSIENT_ABSENT
@@ -1974,9 +1978,9 @@ deprules
   to: index-node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
+    - descriptorIsNotBeingDropped($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
-    - relationIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
     - toAbsent($partial-predicate-target, $index-target)
     - $partial-predicate-node[CurrentStatus] = ABSENT
     - $index-node[CurrentStatus] = ABSENT
@@ -1988,9 +1992,9 @@ deprules
   to: index-node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
+    - descriptorIsNotBeingDropped($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
-    - relationIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
     - $partial-predicate-target[TargetStatus] = TRANSIENT_ABSENT
     - $partial-predicate-node[CurrentStatus] = TRANSIENT_ABSENT
     - $index-target[TargetStatus] = ABSENT
@@ -2003,9 +2007,9 @@ deprules
   to: index-node
   query:
     - $partial-predicate[Type] = '*scpb.SecondaryIndexPartial'
+    - descriptorIsNotBeingDropped($partial-predicate)
     - $index[Type] = '*scpb.SecondaryIndex'
     - joinOnIndexID($partial-predicate, $index, $table-id, $index-id)
-    - relationIsNotBeingDropped(*scpb.SecondaryIndexPartial)($partial-predicate)
     - $partial-predicate-target[TargetStatus] = ABSENT
     - $partial-predicate-node[CurrentStatus] = ABSENT
     - $index-target[TargetStatus] = TRANSIENT_ABSENT

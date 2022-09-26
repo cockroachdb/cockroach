@@ -164,7 +164,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   └── • skip PUBLIC → ABSENT operations
 │       │   │         rule: "skip column dependents removal ops on relation drop"
 │       │   │
-│       │   ├── • ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}
+│       │   ├── • ColumnType:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnFamilyID: 0, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Table:{DescID: 108}
@@ -173,10 +173,10 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
 │       │   │   │     rule: "column no longer public before dependents"
 │       │   │   │
-│       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ColumnID: 2}
+│       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnID: 2}
 │       │   │         rule: "column type dependents removed right before column type"
 │       │   │
-│       │   ├── • ColumnDefaultExpression:{DescID: 108, ColumnID: 2}
+│       │   ├── • ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   ├── • SameStagePrecedence dependency from DROPPED Table:{DescID: 108}
@@ -402,10 +402,10 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
         │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: crdb_region, ColumnID: 2}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}
+        │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnFamilyID: 0, ColumnID: 2}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ColumnID: 2}
+        │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [105 107], ColumnID: 2}
         │   │   │     rule: "dependents removed before column"
         │   │   │
         │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}
