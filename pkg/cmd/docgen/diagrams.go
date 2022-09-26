@@ -765,9 +765,10 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_func_stmt",
-		inline: []string{"opt_or_replace", "opt_func_arg_with_default_list", "opt_return_set", "func_return_type", "opt_create_func_opt_list", "create_func_opt_list", "common_func_opt_item", "create_func_opt_item", "routine_return_stmt", "func_arg_with_default_list", "func_arg_with_default"},
-		unlink: []string{"opt_or_replace", "opt_func_arg_with_default_list", "opt_return_set", "func_return_type", "opt_create_func_opt_list", "create_func_opt_list", "create_func_opt_item", "common_func_opt_item", "routine_return_stmt", "non_reserved_word_or_sconst", "func_arg_with_default_list", "func_arg_with_default", "a_expr"},
+		inline: []string{"opt_or_replace", "opt_func_arg_with_default_list", "opt_return_set", "func_return_type", "opt_create_func_opt_list", "create_func_opt_list", "common_func_opt_item", "create_func_opt_item", "routine_return_stmt", "func_arg_with_default_list", "func_arg_with_default", "func_as"},
+		unlink: []string{"opt_or_replace", "opt_func_arg_with_default_list", "opt_return_set", "func_return_type", "opt_create_func_opt_list", "create_func_opt_list", "create_func_opt_item", "common_func_opt_item", "routine_return_stmt", "non_reserved_word_or_sconst", "func_arg_with_default_list", "func_arg_with_default", "a_expr", "func_as"},
 		replace: map[string]string{
+			"func_as":                     "'SCONST'",
 			"non_reserved_word_or_sconst": "'SQL'",
 			"'DEFAULT'":                   "",
 			"'SETOF'":                     "",
