@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -64,6 +65,15 @@ var gcsChunkingEnabled = settings.RegisterBoolSetting(
 	"cloudstorage.gs.chunking.enabled",
 	"enable chunking of file upload to Google Cloud Storage",
 	true, /* default */
+)
+
+// gcsChunkRetryTimeout is used to configure the per-chunk retry deadline when
+// uploading chunks to Google Cloud Storage.
+var gcsChunkRetryTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"cloudstorage.gs.chunking.retry_timeout",
+	"per-chunk retry deadline when chunking of file upload to Google Cloud Storage",
+	60*time.Second,
 )
 
 func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
@@ -253,6 +263,7 @@ func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteClose
 	if !gcsChunkingEnabled.Get(&g.settings.SV) {
 		w.ChunkSize = 0
 	}
+	w.ChunkRetryDeadline = gcsChunkRetryTimeout.Get(&g.settings.SV)
 	return w, nil
 }
 
