@@ -15,13 +15,17 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -48,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1428,12 +1433,12 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		return err
 	}
 
+	// FIXME: Need arotected timestmap hook :(
 	if fn := sc.testingKnobs.RunBeforeIndexValidation; fn != nil {
 		if err := fn(); err != nil {
 			return err
 		}
 	}
-
 	readAsOf := sc.clock.Now()
 	var tableDesc catalog.TableDescriptor
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
@@ -1476,12 +1481,14 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		grp.GoCtx(func(ctx context.Context) error {
 			return ValidateForwardIndexes(
 				ctx,
+				sc.job.ID(),
 				tableDesc,
 				forwardIndexes,
 				runHistoricalTxn,
 				true,  /* withFirstMutationPubic */
 				false, /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
+				sc.execCfg.ProtectedTimestampProvider,
 			)
 		})
 	}
@@ -1489,6 +1496,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		grp.GoCtx(func(ctx context.Context) error {
 			return ValidateInvertedIndexes(
 				ctx,
+				sc.job.ID(),
 				sc.execCfg.Codec,
 				tableDesc,
 				invertedIndexes,
@@ -1496,6 +1504,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 				true,  /* withFirstMutationPublic */
 				false, /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
+				sc.execCfg.ProtectedTimestampProvider,
 			)
 		})
 	}
@@ -1515,6 +1524,8 @@ func (e InvalidIndexesError) Error() string {
 	return fmt.Sprintf("found %d invalid indexes", len(e.Indexes))
 }
 
+const indexValidationProtectTimeStampDuration = time.Second * 1000
+
 // ValidateInvertedIndexes checks that the indexes have entries for
 // all the items of data in rows.
 //
@@ -1524,6 +1535,7 @@ func (e InvalidIndexesError) Error() string {
 // at the historical fixed timestamp for checks.
 func ValidateInvertedIndexes(
 	ctx context.Context,
+	jobID jobspb.JobID,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
@@ -1531,12 +1543,37 @@ func ValidateInvertedIndexes(
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
+	protectedTSProvider protectedts.Provider,
 ) error {
+	protectedTSAdded := sync.Once{}
 	grp := ctxgroup.WithContext(ctx)
 	invalid := make(chan descpb.IndexID, len(indexes))
 
 	expectedCount := make([]int64, len(indexes))
 	countReady := make([]chan struct{}, len(indexes))
+
+	var addProtectedTS = func() error {
+		var err error
+		protectedTSAdded.Do(func() {
+			protectedtsID := uuid.MakeV4()
+			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
+			ts := hlc.Timestamp{}
+			err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				ts = txn.ReadTimestamp()
+				return nil
+			})
+			if err != nil {
+				panic(err)
+			}
+			rec := jobsprotectedts.MakeRecord(protectedtsID,
+				int64(jobID), ts, nil, jobsprotectedts.Jobs, target)
+			err = protectedTSProvider.Protect(ctx, nil, rec)
+			if err != nil {
+				return
+			}
+		})
+		return err
+	}
 
 	for i, idx := range indexes {
 		// Shadow i and idx to prevent the values from changing within each
@@ -1571,24 +1608,31 @@ func ValidateInvertedIndexes(
 			}
 			log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
 				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
-			select {
-			case <-countReady[i]:
-				if idxLen != expectedCount[i] {
-					if gatherAllInvalid {
-						invalid <- idx.GetID()
-						return nil
+			for {
+				select {
+				case <-countReady[i]:
+					if idxLen != expectedCount[i] {
+						if gatherAllInvalid {
+							invalid <- idx.GetID()
+							return nil
+						}
+						// JSON columns cannot have unique indexes, so if the expected and
+						// actual counts do not match, it's always a bug rather than a
+						// uniqueness violation.
+						return errors.AssertionFailedf(
+							"validation of index %s failed: expected %d rows, found %d",
+							idx.GetName(), errors.Safe(expectedCount[i]), errors.Safe(idxLen))
 					}
-					// JSON columns cannot have unique indexes, so if the expected and
-					// actual counts do not match, it's always a bug rather than a
-					// uniqueness violation.
-					return errors.AssertionFailedf(
-						"validation of index %s failed: expected %d rows, found %d",
-						idx.GetName(), errors.Safe(expectedCount[i]), errors.Safe(idxLen))
+					return nil
+				case <-time.After(indexValidationProtectTimeStampDuration):
+					err := addProtectedTS()
+					if err != nil {
+						return err
+					}
+				case <-ctx.Done():
+					return ctx.Err()
 				}
-			case <-ctx.Done():
-				return ctx.Err()
 			}
-			return nil
 		})
 
 		grp.GoCtx(func(ctx context.Context) error {
@@ -1712,13 +1756,16 @@ func countExpectedRowsForInvertedIndex(
 // change after a backfill.
 func ValidateForwardIndexes(
 	ctx context.Context,
+	jobID jobspb.JobID,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
+	protectedTSProvider protectedts.Provider,
 ) error {
+	protectedTSAdded := sync.Once{}
 	grp := ctxgroup.WithContext(ctx)
 
 	invalid := make(chan descpb.IndexID, len(indexes))
@@ -1727,6 +1774,29 @@ func ValidateForwardIndexes(
 
 	// Close when table count is ready.
 	tableCountsReady := make(chan struct{})
+
+	var addProtectedTS = func() error {
+		var err error
+		protectedTSAdded.Do(func() {
+			protectedtsID := uuid.MakeV4()
+			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
+			ts := hlc.Timestamp{}
+			err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				ts = txn.ReadTimestamp()
+				return nil
+			})
+			if err != nil {
+				panic(err)
+			}
+			rec := jobsprotectedts.MakeRecord(protectedtsID,
+				int64(jobID), ts, nil, jobsprotectedts.Jobs, target)
+			err = protectedTSProvider.Protect(ctx, nil, rec)
+			if err != nil {
+				return
+			}
+		})
+		return err
+	}
 
 	// Compute the size of each index.
 	for _, idx := range indexes {
@@ -1743,40 +1813,47 @@ func ValidateForwardIndexes(
 				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
 
 			// Now compare with the row count in the table.
-			select {
-			case <-tableCountsReady:
-				expectedCount := tableRowCount
-				// If the index is a partial index, the expected number of rows
-				// is different than the total number of rows in the table.
-				if idx.IsPartial() {
-					expectedCount = partialIndexExpectedCounts[idx.GetID()]
-				}
-
-				if idxLen != expectedCount {
-					if gatherAllInvalid {
-						invalid <- idx.GetID()
-						return nil
+			for {
+				select {
+				case <-tableCountsReady:
+					expectedCount := tableRowCount
+					// If the index is a partial index, the expected number of rows
+					// is different than the total number of rows in the table.
+					if idx.IsPartial() {
+						expectedCount = partialIndexExpectedCounts[idx.GetID()]
 					}
-					// Resolve the table index descriptor name.
-					indexName, err := tableDesc.GetIndexNameByID(idx.GetID())
+
+					if idxLen != expectedCount {
+						if gatherAllInvalid {
+							invalid <- idx.GetID()
+							return nil
+						}
+						// Resolve the table index descriptor name.
+						indexName, err := tableDesc.GetIndexNameByID(idx.GetID())
+						if err != nil {
+							log.Warningf(ctx,
+								"unable to find index by ID for ValidateForwardIndexes: %d",
+								idx.GetID())
+							indexName = idx.GetName()
+						}
+						// TODO(vivek): find the offending row and include it in the error.
+						return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
+							"duplicate key value violates unique constraint %q",
+							indexName),
+							indexName)
+
+					}
+					return nil
+					// FIXME: This should be in the select...
+				case <-time.After(indexValidationProtectTimeStampDuration):
+					err := addProtectedTS()
 					if err != nil {
-						log.Warningf(ctx,
-							"unable to find index by ID for ValidateForwardIndexes: %d",
-							idx.GetID())
-						indexName = idx.GetName()
+						return err
 					}
-					// TODO(vivek): find the offending row and include it in the error.
-					return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
-						"duplicate key value violates unique constraint %q",
-						indexName),
-						indexName)
-
+				case <-ctx.Done():
+					return ctx.Err()
 				}
-			case <-ctx.Done():
-				return ctx.Err()
 			}
-
-			return nil
 		})
 	}
 

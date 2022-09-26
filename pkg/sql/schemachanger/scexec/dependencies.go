@@ -200,6 +200,7 @@ type Merger interface {
 type IndexValidator interface {
 	ValidateForwardIndexes(
 		ctx context.Context,
+		jobID jobspb.JobID,
 		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
 		override sessiondata.InternalExecutorOverride,
@@ -207,6 +208,7 @@ type IndexValidator interface {
 
 	ValidateInvertedIndexes(
 		ctx context.Context,
+		jobID jobspb.JobID,
 		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
 		override sessiondata.InternalExecutorOverride,

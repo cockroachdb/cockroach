@@ -1804,12 +1804,14 @@ func revalidateIndexes(
 		if len(forward) > 0 {
 			if err := sql.ValidateForwardIndexes(
 				ctx,
+				job.ID(),
 				tableDesc.MakePublic(),
 				forward,
 				runner,
 				false, /* withFirstMutationPublic */
 				true,  /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
+				execCfg.ProtectedTimestampProvider,
 			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
 					invalidIndexes[tableDesc.ID] = invalid.Indexes
@@ -1821,6 +1823,7 @@ func revalidateIndexes(
 		if len(inverted) > 0 {
 			if err := sql.ValidateInvertedIndexes(
 				ctx,
+				job.ID(),
 				execCfg.Codec,
 				tableDesc.MakePublic(),
 				inverted,
@@ -1828,6 +1831,7 @@ func revalidateIndexes(
 				false, /* withFirstMutationPublic */
 				true,  /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
+				execCfg.ProtectedTimestampProvider,
 			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
 					invalidIndexes[tableDesc.ID] = append(invalidIndexes[tableDesc.ID], invalid.Indexes...)

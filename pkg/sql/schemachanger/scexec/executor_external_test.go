@@ -465,6 +465,7 @@ var _ scexec.IndexValidator = noopIndexValidator{}
 
 func (noopIndexValidator) ValidateForwardIndexes(
 	ctx context.Context,
+	_ jobspb.JobID,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	override sessiondata.InternalExecutorOverride,
@@ -474,6 +475,7 @@ func (noopIndexValidator) ValidateForwardIndexes(
 
 func (noopIndexValidator) ValidateInvertedIndexes(
 	ctx context.Context,
+	_ jobspb.JobID,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	override sessiondata.InternalExecutorOverride,

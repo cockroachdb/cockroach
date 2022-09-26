@@ -959,6 +959,7 @@ func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err 
 // ValidateForwardIndexes implements the index validator interface.
 func (s *TestState) ValidateForwardIndexes(
 	_ context.Context,
+	_ jobspb.JobID,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	_ sessiondata.InternalExecutorOverride,
@@ -974,6 +975,7 @@ func (s *TestState) ValidateForwardIndexes(
 // ValidateInvertedIndexes implements the index validator interface.
 func (s *TestState) ValidateInvertedIndexes(
 	_ context.Context,
+	_ jobspb.JobID,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	_ sessiondata.InternalExecutorOverride,
