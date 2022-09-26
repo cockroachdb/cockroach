@@ -539,7 +539,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/kevinburke/go-bindata/com_github_kevinburke_go_bindata-v3.13.0+incompatible.zip": "f087b3a77624a113883bac519ebd1a4de07b70ab2ebe73e61e52325ac30777e0",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/kisielk/errcheck/com_github_kisielk_errcheck-v1.6.1-0.20210625163953-8ddee489636a.zip": "99d3220891162cb684f8e05d54f3d0dc58abdd496a2f0cfda7fd4a28917a719e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/kisielk/gotool/com_github_kisielk_gotool-v1.0.0.zip": "089dbba6e3aa09944fdb40d72acc86694e8bdde01cfc0f40fe0248309eb80a3f",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.14.2.zip": "25990a3b573b4568fa9c98c880e82abe5fe4dc6a3c784935923643ef28791acd",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.15.11.zip": "5f85779b0a96cf9a66f6cee4a91382e03a71919121ebe8f6a90936300eb683c1",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/cpuid/com_github_klauspost_cpuid-v1.3.1.zip": "f61266e43d5c247fdb55d843e2d93974717c1052cba9f331b181f60c4cf687d9",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/cpuid/v2/com_github_klauspost_cpuid_v2-v2.0.9.zip": "52c716413296dce2b1698c6cdbc4c53927ce4aee2a60980daf9672e6b6a3b4cb",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/crc32/com_github_klauspost_crc32-v0.0.0-20161016154125-cb6bfca970f6.zip": "6b632853a19f039138f251f94dbbdfdb72809adc3a02da08e4301d3d48275b06",
