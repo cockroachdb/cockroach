@@ -1040,14 +1040,15 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tracer := tracing.NewTracer()
-	ctx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+	ctx, getRecording, cancel := tracing.ContextWithRecordingSpan(
 		context.Background(), tracer, "test",
 	)
+	defer cancel()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
 	g := makeGossip(t, stopper, rpcContext)
 	for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
 		require.NoError(t, g.AddInfoProto(
@@ -1135,7 +1136,7 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 	require.Regexp(
 		t,
 		"backing off due to .* stale info",
-		finishAndGetRecording().String(),
+		getRecording().String(),
 	)
 }
 
