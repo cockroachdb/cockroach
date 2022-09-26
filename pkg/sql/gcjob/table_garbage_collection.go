@@ -254,6 +254,7 @@ func deleteAllSpanData(
 					EndKey: endKey.AsRawKey(),
 				},
 				UseRangeTombstone:       true,
+				IdempotentTombstone:     true,
 				UpdateRangeDeleteGCHint: true,
 			})
 			log.VEventf(ctx, 2, "delete range %s - %s", lastKey, endKey)
