@@ -208,9 +208,13 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 
 		shouldInit := !c.useStartSingleNode()
 		if shouldInit {
-			if err := c.Init(ctx, l); err != nil {
+			if err := c.initializeCluster(ctx, l, node); err != nil {
 				return nil, errors.Wrap(err, "failed to initialize cluster")
 			}
+		}
+
+		if err := c.setClusterSettings(ctx, l, node); err != nil {
+			return nil, errors.Wrap(err, "failed to set cluster settings")
 		}
 		return nil, nil
 	})
@@ -619,38 +623,45 @@ func (c *SyncedCluster) maybeScaleMem(val int) int {
 	return val
 }
 
-func (c *SyncedCluster) initializeCluster(ctx context.Context, node Node) (string, error) {
+func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger, node Node) error {
+	l.Printf("%s: initializing cluster\n", c.Name)
 	initCmd := c.generateInitCmd(node)
 
 	sess, err := c.newSession(node)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer sess.Close()
 
 	out, err := sess.CombinedOutput(ctx, initCmd)
 	if err != nil {
-		return "", errors.Wrapf(err, "~ %s\n%s", initCmd, out)
+		return errors.Wrapf(err, "~ %s\n%s", initCmd, out)
 	}
-	return strings.TrimSpace(string(out)), nil
+
+	if out := strings.TrimSpace(string(out)); out != "" {
+		l.Printf(out)
+	}
+	return nil
 }
 
-func (c *SyncedCluster) setClusterSettings(
-	ctx context.Context, l *logger.Logger, node Node,
-) (string, error) {
+func (c *SyncedCluster) setClusterSettings(ctx context.Context, l *logger.Logger, node Node) error {
+	l.Printf("%s: setting cluster settings", c.Name)
 	clusterSettingCmd := c.generateClusterSettingCmd(l, node)
 
 	sess, err := c.newSession(node)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer sess.Close()
 
 	out, err := sess.CombinedOutput(ctx, clusterSettingCmd)
 	if err != nil {
-		return "", errors.Wrapf(err, "~ %s\n%s", clusterSettingCmd, out)
+		return errors.Wrapf(err, "~ %s\n%s", clusterSettingCmd, out)
 	}
-	return strings.TrimSpace(string(out)), nil
+	if out := strings.TrimSpace(string(out)); out != "" {
+		l.Printf(out)
+	}
+	return nil
 }
 
 func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) string {
