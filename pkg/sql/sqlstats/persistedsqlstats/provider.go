@@ -93,6 +93,9 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 		scanInterval: defaultScanInterval,
 		jitterFn:     p.jitterInterval,
 	}
+	if cfg.Knobs != nil {
+		p.jobMonitor.testingKnobs.updateCheckInterval = cfg.Knobs.JobMonitorUpdateCheckInterval
+	}
 
 	return p
 }
