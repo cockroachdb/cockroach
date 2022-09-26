@@ -5043,10 +5043,10 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sha256 = "25990a3b573b4568fa9c98c880e82abe5fe4dc6a3c784935923643ef28791acd",
-        strip_prefix = "github.com/klauspost/compress@v1.14.2",
+        sha256 = "5f85779b0a96cf9a66f6cee4a91382e03a71919121ebe8f6a90936300eb683c1",
+        strip_prefix = "github.com/klauspost/compress@v1.15.11",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.14.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.15.11.zip",
         ],
     )
     go_repository(
