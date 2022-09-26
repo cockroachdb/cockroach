@@ -323,6 +323,7 @@ DO NOTHING
 	}
 	statistics := tree.NewDJSON(statisticsJSON)
 
+	nodeID := s.GetEnabledSQLInstanceID()
 	rowsAffected, err = s.cfg.InternalExecutor.ExecEx(
 		ctx,
 		"insert-txn-stats",
@@ -331,13 +332,13 @@ DO NOTHING
 			User: security.NodeUserName(),
 		},
 		insertStmt,
-		aggregatedTs,                         // aggregated_ts
-		serializedFingerprintID,              // fingerprint_id
-		stats.App,                            // app_name
-		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
-		aggInterval,                          // agg_interval
-		metadata,                             // metadata
-		statistics,                           // statistics
+		aggregatedTs,            // aggregated_ts
+		serializedFingerprintID, // fingerprint_id
+		stats.App,               // app_name
+		nodeID,                  // node_id
+		aggInterval,             // agg_interval
+		metadata,                // metadata
+		statistics,              // statistics
 	)
 
 	return rowsAffected, err
@@ -364,6 +365,7 @@ WHERE fingerprint_id = $2
 	}
 	statistics := tree.NewDJSON(statisticsJSON)
 
+	nodeID := s.GetEnabledSQLInstanceID()
 	rowsAffected, err := s.cfg.InternalExecutor.ExecEx(
 		ctx,
 		"update-stmt-stats",
@@ -372,11 +374,11 @@ WHERE fingerprint_id = $2
 			User: security.NodeUserName(),
 		},
 		updateStmt,
-		statistics,                           // statistics
-		serializedFingerprintID,              // fingerprint_id
-		aggregatedTs,                         // aggregated_ts
-		stats.App,                            // app_name
-		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
+		statistics,              // statistics
+		serializedFingerprintID, // fingerprint_id
+		aggregatedTs,            // aggregated_ts
+		stats.App,               // app_name
+		nodeID,                  // node_id
 	)
 
 	if err != nil {
@@ -385,8 +387,7 @@ WHERE fingerprint_id = $2
 
 	if rowsAffected == 0 {
 		return errors.AssertionFailedf("failed to update transaction statistics for  fingerprint_id: %s, app: %s, aggregated_ts: %s, node_id: %d",
-			serializedFingerprintID, stats.App, aggregatedTs,
-			s.cfg.SQLIDContainer.SQLInstanceID())
+			serializedFingerprintID, stats.App, aggregatedTs, nodeID)
 	}
 
 	return nil
@@ -411,13 +412,13 @@ WHERE fingerprint_id = $2
   AND plan_hash = $6
   AND node_id = $7
 `
-
 	statisticsJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&stats.Stats)
 	if err != nil {
 		return err
 	}
 	statistics := tree.NewDJSON(statisticsJSON)
 
+	nodeID := s.GetEnabledSQLInstanceID()
 	rowsAffected, err := s.cfg.InternalExecutor.ExecEx(
 		ctx,
 		"update-stmt-stats",
@@ -426,13 +427,13 @@ WHERE fingerprint_id = $2
 			User: security.NodeUserName(),
 		},
 		updateStmt,
-		statistics,                           // statistics
-		serializedFingerprintID,              // fingerprint_id
-		serializedTransactionFingerprintID,   // transaction_fingerprint_id
-		aggregatedTs,                         // aggregated_ts
-		stats.Key.App,                        // app_name
-		serializedPlanHash,                   // plan_hash
-		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
+		statistics,                         // statistics
+		serializedFingerprintID,            // fingerprint_id
+		serializedTransactionFingerprintID, // transaction_fingerprint_id
+		aggregatedTs,                       // aggregated_ts
+		stats.Key.App,                      // app_name
+		serializedPlanHash,                 // plan_hash
+		nodeID,                             // node_id
 	)
 
 	if err != nil {
@@ -448,7 +449,7 @@ WHERE fingerprint_id = $2
 			"plan_hash: %d, "+
 			"node_id: %d",
 			serializedFingerprintID, serializedTransactionFingerprintID, stats.Key.App,
-			aggregatedTs, serializedPlanHash, s.cfg.SQLIDContainer.SQLInstanceID())
+			aggregatedTs, serializedPlanHash, nodeID)
 	}
 
 	return nil
@@ -486,6 +487,7 @@ DO NOTHING
 	statistics := tree.NewDJSON(statisticsJSON)
 
 	plan := tree.NewDJSON(sqlstatsutil.ExplainTreePlanNodeToJSON(&stats.Stats.SensitiveInfo.MostRecentPlanDescription))
+	nodeID := s.GetEnabledSQLInstanceID()
 
 	rowsAffected, err = s.cfg.InternalExecutor.ExecEx(
 		ctx,
@@ -495,16 +497,16 @@ DO NOTHING
 			User: security.NodeUserName(),
 		},
 		insertStmt,
-		aggregatedTs,                         // aggregated_ts
-		serializedFingerprintID,              // fingerprint_id
-		serializedTransactionFingerprintID,   // transaction_fingerprint_id
-		serializedPlanHash,                   // plan_hash
-		stats.Key.App,                        // app_name
-		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
-		aggInterval,                          // agg_interval
-		metadata,                             // metadata
-		statistics,                           // statistics
-		plan,                                 // plan
+		aggregatedTs,                       // aggregated_ts
+		serializedFingerprintID,            // fingerprint_id
+		serializedTransactionFingerprintID, // transaction_fingerprint_id
+		serializedPlanHash,                 // plan_hash
+		stats.Key.App,                      // app_name
+		nodeID,                             // node_id
+		aggInterval,                        // agg_interval
+		metadata,                           // metadata
+		statistics,                         // statistics
+		plan,                               // plan
 	)
 
 	return rowsAffected, err
@@ -532,6 +534,7 @@ WHERE fingerprint_id = $1
 FOR UPDATE
 `
 
+	nodeID := s.GetEnabledSQLInstanceID()
 	row, err := s.cfg.InternalExecutor.QueryRowEx(
 		ctx,
 		"fetch-txn-stats",
@@ -539,11 +542,11 @@ FOR UPDATE
 		sessiondata.InternalExecutorOverride{
 			User: security.NodeUserName(),
 		},
-		readStmt,                             // stmt
-		serializedFingerprintID,              // fingerprint_id
-		appName,                              // app_name
-		aggregatedTs,                         // aggregated_ts
-		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
+		readStmt,                // stmt
+		serializedFingerprintID, // fingerprint_id
+		appName,                 // app_name
+		aggregatedTs,            // aggregated_ts
+		nodeID,                  // node_id
 	)
 
 	if err != nil {
@@ -553,13 +556,13 @@ FOR UPDATE
 	if row == nil {
 		return errors.AssertionFailedf("transaction statistics not found for fingerprint_id: %s, app: %s, aggregated_ts: %s, node_id: %d",
 			serializedFingerprintID, appName, aggregatedTs,
-			s.cfg.SQLIDContainer.SQLInstanceID())
+			nodeID)
 	}
 
 	if len(row) != 1 {
 		return errors.AssertionFailedf("unexpectedly found %d returning columns for fingerprint_id: %s, app: %s, aggregated_ts: %s, node_id: %d",
 			len(row), serializedFingerprintID, appName, aggregatedTs,
-			s.cfg.SQLIDContainer.SQLInstanceID())
+			nodeID)
 	}
 
 	statistics := tree.MustBeDJSON(row[0])
@@ -589,6 +592,7 @@ WHERE fingerprint_id = $1
     AND node_id = $6
 FOR UPDATE
 `
+	nodeID := s.GetEnabledSQLInstanceID()
 	row, err := s.cfg.InternalExecutor.QueryRowEx(
 		ctx,
 		"fetch-stmt-stats",
@@ -596,13 +600,13 @@ FOR UPDATE
 		sessiondata.InternalExecutorOverride{
 			User: security.NodeUserName(),
 		},
-		readStmt,                             // stmt
-		serializedFingerprintID,              // fingerprint_id
-		serializedTransactionFingerprintID,   // transaction_fingerprint_id
-		key.App,                              // app_name
-		aggregatedTs,                         // aggregated_ts
-		serializedPlanHash,                   // plan_hash
-		s.cfg.SQLIDContainer.SQLInstanceID(), // node_id
+		readStmt,                           // stmt
+		serializedFingerprintID,            // fingerprint_id
+		serializedTransactionFingerprintID, // transaction_fingerprint_id
+		key.App,                            // app_name
+		aggregatedTs,                       // aggregated_ts
+		serializedPlanHash,                 // plan_hash
+		nodeID,                             // node_id
 	)
 
 	if err != nil {
@@ -612,13 +616,12 @@ FOR UPDATE
 	if row == nil {
 		return errors.AssertionFailedf(
 			"statement statistics not found fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash: %d, node_id: %d",
-			serializedFingerprintID, key.App, aggregatedTs, serializedPlanHash, s.cfg.SQLIDContainer.SQLInstanceID())
+			serializedFingerprintID, key.App, aggregatedTs, serializedPlanHash, nodeID)
 	}
 
 	if len(row) != 1 {
 		return errors.AssertionFailedf("unexpectedly found %d returning columns for fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash %d, node_id: %d",
-			len(row), serializedFingerprintID, key.App, aggregatedTs, serializedPlanHash,
-			s.cfg.SQLIDContainer.SQLInstanceID())
+			len(row), serializedFingerprintID, key.App, aggregatedTs, serializedPlanHash, nodeID)
 	}
 
 	statistics := tree.MustBeDJSON(row[0])
