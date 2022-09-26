@@ -1736,7 +1736,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP STORED
 //   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
-//   ALTER TABLE ... ALTER PRIMARY KEY USING INDEX <name>
+//   ALTER TABLE ... ALTER PRIMARY KEY USING COLUMNS ( <colnames...> )
 //   ALTER TABLE ... RENAME TO <newname>
 //   ALTER TABLE ... RENAME [COLUMN] <colname> TO <newname>
 //   ALTER TABLE ... VALIDATE CONSTRAINT <constraintname>
@@ -2672,8 +2672,7 @@ alter_table_cmd:
     /* SKIP DOC */
     return unimplementedWithIssueDetail(sqllex, 22456, "alter table no inherits")
   }
-  // ALTER TABLE <name> VALIDATE CONSTRAINT ...
-  // ALTER TABLE <name> ALTER PRIMARY KEY USING INDEX <name>
+  // ALTER TABLE <name> ALTER PRIMARY KEY USING COLUMNS ( <colnames...> )
 | ALTER PRIMARY KEY USING COLUMNS '(' index_params ')' opt_hash_sharded opt_with_storage_parameter_list
   {
     $$.val = &tree.AlterTableAlterPrimaryKey{
@@ -2682,6 +2681,7 @@ alter_table_cmd:
       StorageParams: $10.storageParams(),
     }
   }
+  // ALTER TABLE <name> VALIDATE CONSTRAINT ...
 | VALIDATE CONSTRAINT constraint_name
   {
     $$.val = &tree.AlterTableValidateConstraint{
