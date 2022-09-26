@@ -501,7 +501,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
-			colDroppedViews, err := dropColumnImpl(params, tn, n.tableDesc, t)
+			colDroppedViews, err := dropColumnImpl(params, tn, n.tableDesc, n.tableDesc.GetRowLevelTTL(), t)
 			if err != nil {
 				return err
 			}
@@ -735,51 +735,45 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableSetStorageParams:
-			var ttlBefore *catpb.RowLevelTTL
-			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
-				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
-			}
+			setter := tablestorageparam.NewSetter(n.tableDesc)
 			if err := storageparam.Set(
 				params.p.SemaCtx(),
 				params.EvalContext(),
 				t.StorageParams,
-				tablestorageparam.NewSetter(n.tableDesc),
+				setter,
 			); err != nil {
 				return err
 			}
-			descriptorChanged = true
 
-			if err := handleTTLStorageParamChange(
+			var err error
+			descriptorChanged, err = handleTTLStorageParamChange(
 				params,
 				tn,
-				n.tableDesc,
-				ttlBefore,
-				n.tableDesc.GetRowLevelTTL(),
-			); err != nil {
+				setter.TableDesc,
+				setter.UpdatedRowLevelTTL,
+			)
+			if err != nil {
 				return err
 			}
 
 		case *tree.AlterTableResetStorageParams:
-			var ttlBefore *catpb.RowLevelTTL
-			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
-				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
-			}
+			setter := tablestorageparam.NewSetter(n.tableDesc)
 			if err := storageparam.Reset(
 				params.EvalContext(),
 				t.Params,
-				tablestorageparam.NewSetter(n.tableDesc),
+				setter,
 			); err != nil {
 				return err
 			}
-			descriptorChanged = true
 
-			if err := handleTTLStorageParamChange(
+			var err error
+			descriptorChanged, err = handleTTLStorageParamChange(
 				params,
 				tn,
-				n.tableDesc,
-				ttlBefore,
-				n.tableDesc.GetRowLevelTTL(),
-			); err != nil {
+				setter.TableDesc,
+				setter.UpdatedRowLevelTTL,
+			)
+			if err != nil {
 				return err
 			}
 
@@ -1550,7 +1544,11 @@ func (p *planner) updateFKBackReferenceName(
 }
 
 func dropColumnImpl(
-	params runParams, tn *tree.TableName, tableDesc *tabledesc.Mutable, t *tree.AlterTableDropColumn,
+	params runParams,
+	tn *tree.TableName,
+	tableDesc *tabledesc.Mutable,
+	rowLevelTTL *catpb.RowLevelTTL,
+	t *tree.AlterTableDropColumn,
 ) (droppedViews []string, err error) {
 	if tableDesc.IsLocalityRegionalByRow() {
 		rbrColName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
@@ -1658,7 +1656,7 @@ func dropColumnImpl(
 	if err := schemaexpr.ValidateColumnHasNoDependents(tableDesc, colToDrop); err != nil {
 		return nil, err
 	}
-	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, colToDrop); err != nil {
+	if err := schemaexpr.ValidateTTLExpressionDoesNotDependOnColumn(tableDesc, rowLevelTTL, colToDrop); err != nil {
 		return nil, err
 	}
 
@@ -1845,12 +1843,12 @@ func dropColumnImpl(
 }
 
 func handleTTLStorageParamChange(
-	params runParams,
-	tn *tree.TableName,
-	tableDesc *tabledesc.Mutable,
-	before, after *catpb.RowLevelTTL,
-) error {
-	// update existing config
+	params runParams, tn *tree.TableName, tableDesc *tabledesc.Mutable, after *catpb.RowLevelTTL,
+) (descriptorChanged bool, err error) {
+
+	before := tableDesc.GetRowLevelTTL()
+
+	// Update existing config.
 	if before != nil && after != nil {
 
 		// Update cron schedule if required.
@@ -1864,13 +1862,13 @@ func handleTTLStorageParamChange(
 				params.p.txn,
 			)
 			if err != nil {
-				return err
+				return false, err
 			}
 			if err := s.SetSchedule(after.DeletionCronOrDefault()); err != nil {
-				return err
+				return false, err
 			}
 			if err := s.Update(params.ctx, params.ExecCfg().InternalExecutor, params.p.txn); err != nil {
-				return err
+				return false, err
 			}
 		}
 
@@ -1878,11 +1876,11 @@ func handleTTLStorageParamChange(
 		if before.HasDurationExpr() && after.HasDurationExpr() && before.DurationExpr != after.DurationExpr {
 			col, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
 			if err != nil {
-				return err
+				return false, err
 			}
 			intervalExpr, err := parser.ParseExpr(string(after.DurationExpr))
 			if err != nil {
-				return errors.Wrapf(err, "unexpected expression for TTL duration")
+				return false, errors.Wrapf(err, "unexpected expression for TTL duration")
 			}
 			newExpr := rowLevelTTLAutomaticColumnExpr(intervalExpr)
 
@@ -1894,7 +1892,7 @@ func handleTTLStorageParamChange(
 				&col.ColumnDesc().DefaultExpr,
 				"TTL DEFAULT",
 			); err != nil {
-				return err
+				return false, err
 			}
 
 			if err := updateNonComputedColExpr(
@@ -1905,18 +1903,21 @@ func handleTTLStorageParamChange(
 				&col.ColumnDesc().OnUpdateExpr,
 				"TTL UPDATE",
 			); err != nil {
-				return err
+				return false, err
 			}
 		}
 	}
 
-	// create new column
+	// Add TTL mutation if TTL is newly SET.
+	addTTLMutation := before == nil && after != nil
+
+	// Create new column.
 	if (before == nil || !before.HasDurationExpr()) && (after != nil && after.HasDurationExpr()) {
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
-		tableDesc.RowLevelTTL = nil
+		addTTLMutation = true
 		if _, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err == nil {
-			return pgerror.Newf(
+			return false, pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot add TTL to table with the %s column already defined",
 				colinfo.TTLDefaultExpirationColumnName,
@@ -1924,7 +1925,7 @@ func handleTTLStorageParamChange(
 		}
 		col, err := rowLevelTTLAutomaticColumnDef(after)
 		if err != nil {
-			return err
+			return false, err
 		}
 		addCol := &tree.AlterTableAddColumn{
 			ColumnDef: col,
@@ -1941,52 +1942,61 @@ func handleTTLStorageParamChange(
 			tableDesc,
 			addCol,
 		); err != nil {
-			return err
+			return false, err
 		}
+		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+		if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
+			return false, err
+		}
+	}
+
+	// Add TTL mutation so that job is scheduled in SchemaChanger.
+	if addTTLMutation {
 		tableDesc.AddModifyRowLevelTTLMutation(
 			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
 			descpb.DescriptorMutation_ADD,
 		)
-		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-		if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
-			return err
+	}
+
+	dropTTLMutation := before != nil && after == nil
+
+	// Remove existing column.
+	if (before != nil && before.HasDurationExpr()) && (after == nil || !after.HasDurationExpr()) {
+		telemetry.Inc(sqltelemetry.RowLevelTTLDropped)
+		// Create the DROP COLUMN job and the associated mutation.
+		dropTTLMutation = true
+		droppedViews, err := dropColumnImpl(params, tn, tableDesc, after, &tree.AlterTableDropColumn{
+			Column: colinfo.TTLDefaultExpirationColumnName,
+		})
+		if err != nil {
+			return false, err
+		}
+		// This should never happen as we do not CASCADE, but error again just in case.
+		if len(droppedViews) > 0 {
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop TTL automatic column if it is depended on by a view")
 		}
 	}
 
-	// remove existing column
-	if (before != nil && before.HasDurationExpr()) && (after == nil || !after.HasDurationExpr()) {
-		telemetry.Inc(sqltelemetry.RowLevelTTLDropped)
-
-		if before.HasDurationExpr() {
-			// Keep the TTL from beforehand, but create the DROP COLUMN job and the
-			// associated mutation.
-			droppedViews, err := dropColumnImpl(params, tn, tableDesc, &tree.AlterTableDropColumn{
-				Column: colinfo.TTLDefaultExpirationColumnName,
-			})
-			if err != nil {
-				return err
-			}
-			// This should never happen as we do not CASCADE, but error again just in case.
-			if len(droppedViews) > 0 {
-				return pgerror.Newf(pgcode.InvalidParameterValue, "cannot drop TTL automatic column if it is depended on by a view")
-			}
-			tableDesc.RowLevelTTL = before
-
-			tableDesc.AddModifyRowLevelTTLMutation(
-				&descpb.ModifyRowLevelTTL{RowLevelTTL: before},
-				descpb.DescriptorMutation_DROP,
-			)
-		}
+	if dropTTLMutation {
+		tableDesc.AddModifyRowLevelTTLMutation(
+			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
+			descpb.DescriptorMutation_DROP,
+		)
 	}
 
 	// Validate the type and volatility of ttl_expiration_expression.
-	if after != nil && after.HasExpirationExpr() {
-		if err := schemaexpr.ValidateTTLExpirationExpression(params.ctx, tableDesc, params.p.SemaCtx(), tn); err != nil {
-			return err
+	if after != nil {
+		if err := schemaexpr.ValidateTTLExpirationExpression(params.ctx, tableDesc, params.p.SemaCtx(), tn, after); err != nil {
+			return false, err
 		}
 	}
 
-	return nil
+	descriptorChanged = !addTTLMutation && !dropTTLMutation
+	if descriptorChanged {
+		tableDesc.RowLevelTTL = after
+	}
+
+	return descriptorChanged, nil
 }
 
 // tryRemoveFKBackReferences determines whether the provided unique constraint
