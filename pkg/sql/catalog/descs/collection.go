@@ -616,7 +616,44 @@ func MakeTestCollection(ctx context.Context, leaseManager *lease.Manager) Collec
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, descriptors *Collection) error
 
+// HistoricalInternalExecTxnRunnerFn callback for executing with the internal executor
+// at a fixed timestamp.
+type HistoricalInternalExecTxnRunnerFn = func(ctx context.Context, fn InternalExecFn) error
+
 // HistoricalInternalExecTxnRunner is like historicalTxnRunner except it only
-// passes the fn the exported InternalExecutor and *Collection, instead of
-// the whole unexported extendedEvalContenxt, so it can be implemented outside pkg/sql.
-type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+// passes the fn the exported InternalExecutor instead of the whole unexported
+// extendedEvalContext, so it can be implemented outside pkg/sql.
+type HistoricalInternalExecTxnRunner interface {
+	// Exec executes the callback at a given timestamp.
+	Exec(ctx context.Context, fn InternalExecFn) error
+	// ReadAsOf returns the timestamp that the historical txn executor is running
+	// at.
+	ReadAsOf() hlc.Timestamp
+}
+
+// historicalInternalExecTxnRunner implements HistoricalInternalExecTxnRunner.
+type historicalInternalExecTxnRunner struct {
+	execHistoricalTxn HistoricalInternalExecTxnRunnerFn
+	readAsOf          hlc.Timestamp
+}
+
+// Exec implements HistoricalInternalExecTxnRunner.Exec.
+func (ht *historicalInternalExecTxnRunner) Exec(ctx context.Context, fn InternalExecFn) error {
+	return ht.execHistoricalTxn(ctx, fn)
+}
+
+// ReadAsOf implements HistoricalInternalExecTxnRunner.ReadAsOf.
+func (ht *historicalInternalExecTxnRunner) ReadAsOf() hlc.Timestamp {
+	return ht.readAsOf
+}
+
+// NewHistoricalInternalExecTxnRunner constructs a new historical internal
+// executor.
+func NewHistoricalInternalExecTxnRunner(
+	readAsOf hlc.Timestamp, fn HistoricalInternalExecTxnRunnerFn,
+) HistoricalInternalExecTxnRunner {
+	return &historicalInternalExecTxnRunner{
+		execHistoricalTxn: fn,
+		readAsOf:          readAsOf,
+	}
+}
