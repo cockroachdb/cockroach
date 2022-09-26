@@ -366,7 +366,8 @@ CREATE TABLE crdb_internal.cluster_queries (
    application_name STRING NULL,
    distributed BOOL NULL,
    phase STRING NULL,
-   full_scan BOOL NULL
+   full_scan BOOL NULL,
+   plan_gist STRING NULL
 )  CREATE TABLE crdb_internal.cluster_queries (
    query_id STRING NULL,
    txn_id UUID NULL,
@@ -379,7 +380,8 @@ CREATE TABLE crdb_internal.cluster_queries (
    application_name STRING NULL,
    distributed BOOL NULL,
    phase STRING NULL,
-   full_scan BOOL NULL
+   full_scan BOOL NULL,
+   plan_gist STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_sessions (
    node_id INT8 NOT NULL,
@@ -1058,7 +1060,8 @@ CREATE TABLE crdb_internal.node_queries (
    application_name STRING NULL,
    distributed BOOL NULL,
    phase STRING NULL,
-   full_scan BOOL NULL
+   full_scan BOOL NULL,
+   plan_gist STRING NULL
 )  CREATE TABLE crdb_internal.node_queries (
    query_id STRING NULL,
    txn_id UUID NULL,
@@ -1071,7 +1074,8 @@ CREATE TABLE crdb_internal.node_queries (
    application_name STRING NULL,
    distributed BOOL NULL,
    phase STRING NULL,
-   full_scan BOOL NULL
+   full_scan BOOL NULL,
+   plan_gist STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_runtime_info (
    node_id INT8 NOT NULL,
