@@ -550,6 +550,67 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		})
 }
 
+func TestAutoStatsOnStartupClusterSettingOff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer sqlDB.Close()
+	defer s.Stopper().Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	evalCtx := tree.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY);
+		ALTER TABLE t.a SET (sql_stats_automatic_collection_enabled = true);
+		CREATE TABLE t.b (k INT PRIMARY KEY);
+		ALTER TABLE t.b SET (sql_stats_automatic_collection_enabled = false);
+		CREATE TABLE t.c (k INT PRIMARY KEY);`)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	cache := NewTableStatisticsCache(
+		ctx,
+		10, /* cacheSize */
+		kvDB,
+		executor,
+		keys.SystemSQLCodec,
+		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
+	)
+	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
+
+	// Refresher start should trigger stats collection on t.a.
+	if err := refresher.Start(
+		ctx, s.Stopper(), time.Millisecond, /* refreshInterval */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// There should be one stat for table t.a.
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t.a]`,
+		[][]string{
+			{"__auto__", "{k}", "0"},
+		})
+
+	// There should be no stats for table t.b.
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t.b]`,
+		[][]string{})
+
+	// There should be no stats for table t.c.
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT statistics_name, column_names, row_count FROM [SHOW STATISTICS FOR TABLE t.c]`,
+		[][]string{})
+}
+
 func TestNoRetryOnFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
