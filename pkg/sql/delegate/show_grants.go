@@ -13,6 +13,7 @@ package delegate
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // delegateShowGrants implements SHOW GRANTS which returns grant details for the
@@ -99,6 +101,33 @@ SELECT *
                  WHERE path ~* '^/externalconn/'
                ) AS a
        )
+`
+	//
+	const udfQuery = `
+WITH fn_grants AS (
+  SELECT routine_catalog as database_name,
+         routine_schema as schema_name,
+         reverse(split_part(reverse(specific_name), '_', 1))::OID as function_id,
+         routine_name as function_name,
+         grantee,
+         privilege_type,
+         is_grantable::boolean
+  FROM "".information_schema.role_routine_grants
+  WHERE reverse(split_part(reverse(specific_name), '_', 1))::INT > 100000
+)
+SELECT database_name,
+       schema_name,
+       function_id,
+       concat(
+				 function_name,
+         '(',
+				 pg_get_function_identity_arguments(function_id),
+         ')'
+			 ) as function_signature,
+       grantee,
+       privilege_type,
+       is_grantable
+  FROM fn_grants
 `
 
 	var source bytes.Buffer
@@ -217,6 +246,31 @@ SELECT *
 				strings.Join(params, ","),
 			)
 		}
+	} else if n.Targets != nil && len(n.Targets.Functions) > 0 {
+		fmt.Fprint(&source, udfQuery)
+		orderBy = "1,2,3,4,5,6"
+		fnResolved := util.MakeFastIntSet()
+		for _, fn := range n.Targets.Functions {
+			un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
+			fd, err := d.catalog.ResolveFunction(d.ctx, un, &d.evalCtx.SessionData().SearchPath)
+			if err != nil {
+				return nil, err
+			}
+			argTypes, err := fn.InputArgTypes(d.ctx, d.catalog)
+			if err != nil {
+				return nil, err
+			}
+			ol, err := fd.MatchOverload(argTypes, fn.FuncName.Schema(), &d.evalCtx.SessionData().SearchPath)
+			if err != nil {
+				return nil, err
+			}
+			fnResolved.Add(int(ol.Oid))
+		}
+		params = make([]string, fnResolved.Len())
+		for i, fnID := range fnResolved.Ordered() {
+			params[i] = strconv.Itoa(fnID)
+		}
+		fmt.Fprintf(&cond, `WHERE function_id IN (%s)`, strings.Join(params, ","))
 	} else if n.Targets != nil && n.Targets.System {
 		orderBy = "1,2,3"
 		fmt.Fprint(&source, systemPrivilegeQuery)
@@ -283,6 +337,10 @@ SELECT *
 			source.WriteString(` UNION ALL ` +
 				`SELECT database_name, schema_name, type_name AS relation_name, grantee, privilege_type, is_grantable FROM (`)
 			source.WriteString(typePrivQuery)
+			source.WriteByte(')')
+			source.WriteString(` UNION ALL ` +
+				`SELECT database_name, schema_name, function_signature AS relation_name, grantee, privilege_type, is_grantable FROM (`)
+			source.WriteString(udfQuery)
 			source.WriteByte(')')
 			// If the current database is set, restrict the command to it.
 			if currDB := d.evalCtx.SessionData().Database; currDB != "" {
