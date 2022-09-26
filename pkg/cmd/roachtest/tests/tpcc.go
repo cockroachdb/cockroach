@@ -746,6 +746,7 @@ func registerTPCC(r registry.Registry) {
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:        9,
 		CPUs:         4,
+		HighMem:      true, // can OOM otherwise: https://github.com/cockroachdb/cockroach/issues/73376
 		Distribution: multiRegion,
 		LoadConfig:   multiLoadgen,
 
@@ -829,6 +830,7 @@ func (l tpccBenchLoadConfig) numLoadNodes(d tpccBenchDistribution) int {
 type tpccBenchSpec struct {
 	Nodes                    int
 	CPUs                     int
+	HighMem                  bool
 	Chaos                    bool
 	AdmissionControlDisabled bool
 	Distribution             tpccBenchDistribution
@@ -891,7 +893,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		nameParts = append(nameParts, "no-admission")
 	}
 
-	opts := []spec.Option{spec.CPU(b.CPUs)}
+	opts := []spec.Option{spec.CPU(b.CPUs), spec.HighMem(b.HighMem)}
 	switch b.Distribution {
 	case singleZone:
 		// No specifier.

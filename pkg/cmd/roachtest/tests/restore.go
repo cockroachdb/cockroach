@@ -443,6 +443,8 @@ func registerRestore(r registry.Registry) {
 			clusterOpts = append(clusterOpts, spec.VolumeSize(largeVolumeSize))
 			testName += fmt.Sprintf("/pd-volume=%dGB", largeVolumeSize)
 		}
+		// Has been seen to OOM: https://github.com/cockroachdb/cockroach/issues/71805
+		clusterOpts = append(clusterOpts, spec.HighMem(true))
 
 		r.Add(registry.TestSpec{
 			Name:              testName,
