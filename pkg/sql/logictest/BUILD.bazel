@@ -27,6 +27,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/backupccl",
         "//pkg/cloud/externalconn/providers",
         "//pkg/clusterversion",
         "//pkg/col/coldata",
@@ -52,6 +53,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlstats",
         "//pkg/sql/stats",
+        "//pkg/startupmigrations",
         "//pkg/testutils",
         "//pkg/testutils/floatcmp",
         "//pkg/testutils/physicalplanutils",

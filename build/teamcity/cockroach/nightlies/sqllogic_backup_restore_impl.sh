@@ -21,12 +21,12 @@ configs=(
 local
 multiregion-9node-3region-3azs
 5node
-multiregion-9node-3region-3azs-no-los
-multiregion-9node-3region-3azs-tenant
-multiregion-9node-3region-3azs-vec-off
+#multiregion-9node-3region-3azs-no-los
+#multiregion-9node-3region-3azs-tenant
+#multiregion-9node-3region-3azs-vec-off
 multiregion-15node-5region-3azs
-3node-tenant
-3node-tenant-multiregion
+#3node-tenant
+#3node-tenant-multiregion
 )
 
 for config in "${configs[@]}"; do

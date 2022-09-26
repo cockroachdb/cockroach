@@ -560,6 +560,9 @@ func canDoServersideRetry(
 	g *concurrency.Guard,
 	deadline hlc.Timestamp,
 ) bool {
+	if pErr != nil {
+		log.Warningf(ctx, "this is the error %v", pErr.GoError())
+	}
 	if ba.Txn != nil {
 		if !ba.CanForwardReadTimestamp {
 			return false
