@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -45,7 +46,14 @@ const (
 )
 
 func awsdmsVerString(v *version.Version) string {
-	return fmt.Sprintf("-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
+	if ciBranch := os.Getenv("TC_BUILD_BRANCH"); ciBranch != "" {
+		return fmt.Sprintf("-ci-%s", ciBranch)
+	}
+	ret := fmt.Sprintf("-local-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
+	if v.PreRelease() != "" {
+		ret += "-" + v.PreRelease()
+	}
+	return ret
 }
 
 func awsdmsRoachtestRDSClusterName(v *version.Version) string {

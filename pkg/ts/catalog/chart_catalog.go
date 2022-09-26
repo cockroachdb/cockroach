@@ -1442,6 +1442,24 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Nprocs Consume Event Nanos",
+				Metrics: []string{
+					"changefeed.nprocs_consume_event_nanos",
+				},
+			},
+			{
+				Title: "Nprocs Flush Nanos",
+				Metrics: []string{
+					"changefeed.nprocs_flush_nanos",
+				},
+			},
+			{
+				Title: "Nprocs In Flight Count",
+				Metrics: []string{
+					"changefeed.nprocs_in_flight_count",
+				},
+			},
+			{
 				Title: "Flushed Bytes",
 				Metrics: []string{
 					"changefeed.flushed_bytes",

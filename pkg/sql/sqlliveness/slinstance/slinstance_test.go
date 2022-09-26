@@ -192,7 +192,7 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 	}
 	defer cleanUpFunc()
 	// advance manual clock so that session expires
-	mt.Advance(20 * time.Millisecond)
+	mt.Advance(slinstance.DefaultTTL.Get(&settings.SV))
 
 	// expect session to expire
 	require.Eventually(
