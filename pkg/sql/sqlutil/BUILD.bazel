@@ -12,6 +12,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/util/hlc",
     ],
 )
 
