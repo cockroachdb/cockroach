@@ -15,13 +15,17 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -48,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -166,16 +171,17 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 	readAsOf hlc.Timestamp,
 ) sqlutil.HistoricalInternalExecTxnRunner {
-	runner := func(ctx context.Context, retryable sqlutil.InternalExecFn) error {
-		return sc.fixedTimestampTxn(ctx, readAsOf, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-		) error {
-			// We need to re-create the evalCtx since the txn may retry.
-			ie := sc.ieFactory.NewInternalExecutor(NewFakeSessionData(sc.execCfg.SV()))
-			return retryable(ctx, txn, ie)
-		})
-	}
-	return runner
+	return sqlutil.NewHistoricalInternalExecTxnRunner(
+		func(ctx context.Context, retryable sqlutil.InternalExecFn) error {
+			return sc.fixedTimestampTxn(ctx, readAsOf, func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			) error {
+				// We need to re-create the evalCtx since the txn may retry.
+				ie := sc.ieFactory.NewInternalExecutor(NewFakeSessionData(sc.execCfg.SV()))
+				return retryable(ctx, txn, ie)
+			})
+		},
+		readAsOf)
 }
 
 func (sc *SchemaChanger) fixedTimestampTxn(
@@ -1433,7 +1439,6 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 			return err
 		}
 	}
-
 	readAsOf := sc.clock.Now()
 	var tableDesc catalog.TableDescriptor
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
@@ -1476,12 +1481,16 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		grp.GoCtx(func(ctx context.Context) error {
 			return ValidateForwardIndexes(
 				ctx,
+				sc.job.ID(),
+				sc.execCfg.Codec,
+				sc.db,
 				tableDesc,
 				forwardIndexes,
 				runHistoricalTxn,
 				true,  /* withFirstMutationPubic */
 				false, /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
+				sc.execCfg.ProtectedTimestampProvider,
 			)
 		})
 	}
@@ -1489,13 +1498,16 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		grp.GoCtx(func(ctx context.Context) error {
 			return ValidateInvertedIndexes(
 				ctx,
+				sc.job.ID(),
 				sc.execCfg.Codec,
+				sc.db,
 				tableDesc,
 				invertedIndexes,
 				runHistoricalTxn,
 				true,  /* withFirstMutationPublic */
 				false, /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
+				sc.execCfg.ProtectedTimestampProvider,
 			)
 		})
 	}
@@ -1515,6 +1527,10 @@ func (e InvalidIndexesError) Error() string {
 	return fmt.Sprintf("found %d invalid indexes", len(e.Indexes))
 }
 
+// indexValidationProtectTimeStampGCPct wait a percentage of the GC time before
+// creating a protected timestamp record.
+const indexValidationProtectTimeStampGCPct = 80
+
 // ValidateInvertedIndexes checks that the indexes have entries for
 // all the items of data in rows.
 //
@@ -1524,19 +1540,69 @@ func (e InvalidIndexesError) Error() string {
 // at the historical fixed timestamp for checks.
 func ValidateInvertedIndexes(
 	ctx context.Context,
+	jobID jobspb.JobID,
 	codec keys.SQLCodec,
+	db *kv.DB,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
-) error {
+	protectedTSProvider protectedts.Provider,
+) (err error) {
+	protectedTSAdded := sync.Once{}
 	grp := ctxgroup.WithContext(ctx)
 	invalid := make(chan descpb.IndexID, len(indexes))
 
 	expectedCount := make([]int64, len(indexes))
 	countReady := make([]chan struct{}, len(indexes))
+
+	// Removes the protected timestamp, if one was added when this
+	// function returns.
+	var removeProtectedTS func(ctx context.Context) error
+	defer func() {
+		if removeProtectedTS != nil {
+			removeErr := removeProtectedTS(ctx)
+			if removeErr != nil {
+				if err != nil {
+					err = errors.WithSecondaryError(err, removeErr)
+				} else {
+					err = removeErr
+				}
+			}
+		}
+	}()
+
+	// Adds a protected timestamp only for historical queries.
+	var addProtectedTS = func() error {
+		var err error
+		protectedTSAdded.Do(func() {
+			// If we are not running a historical query, nothing to do here.
+			if runHistoricalTxn.ReadAsOf().IsEmpty() {
+				return
+			}
+			protectedtsID := uuid.MakeV4()
+			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
+			if err != nil {
+				return
+			}
+			rec := jobsprotectedts.MakeRecord(protectedtsID,
+				int64(jobID), runHistoricalTxn.ReadAsOf(), nil, jobsprotectedts.Jobs, target)
+			err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return protectedTSProvider.Protect(ctx, txn, rec)
+			})
+			if err != nil {
+				return
+			}
+			removeProtectedTS = func(ctx context.Context) error {
+				return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return protectedTSProvider.Release(ctx, txn, protectedtsID)
+				})
+			}
+		})
+		return err
+	}
 
 	for i, idx := range indexes {
 		// Shadow i and idx to prevent the values from changing within each
@@ -1545,50 +1611,96 @@ func ValidateInvertedIndexes(
 		countReady[i] = make(chan struct{})
 
 		grp.GoCtx(func(ctx context.Context) error {
-			// KV scan can be used to get the index length.
-			// TODO (lucy): Switch to using DistSQL to get the count, so that we get
-			// distributed execution and avoid bypassing the SQL decoding
+
+			// Determine what the GC interval is on the table, which will help us
+			// figure out when to apply a protected timestamp, as a percentage of this
+			// time.
+			var waitBeforeProtectedTS time.Duration
 			start := timeutil.Now()
-			var idxLen int64
-			span := tableDesc.IndexSpan(codec, idx.GetID())
-			key := span.Key
-			endKey := span.EndKey
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
-				for {
-					kvs, err := txn.Scan(ctx, key, endKey, 1000000)
-					if err != nil {
-						return err
-					}
-					if len(kvs) == 0 {
-						break
-					}
-					idxLen += int64(len(kvs))
-					key = kvs[len(kvs)-1].Key.PrefixEnd()
+			if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
+				_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, codec, tableDesc.GetID(), nil, "", true)
+				if err != nil {
+					return err
 				}
+				waitBeforeProtectedTS = ((time.Duration(zoneCfg.GC.TTLSeconds) * time.Second) *
+					indexValidationProtectTimeStampGCPct) / 100
 				return nil
 			}); err != nil {
 				return err
 			}
-			log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
-				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
-			select {
-			case <-countReady[i]:
-				if idxLen != expectedCount[i] {
-					if gatherAllInvalid {
-						invalid <- idx.GetID()
-						return nil
+
+			var indexCountReady = make(chan error)
+			var idxLenErr error
+			var idxLen int64
+			go func() {
+				// KV scan can be used to get the index length.
+				// TODO (lucy): Switch to using DistSQL to get the count, so that we get
+				// distributed execution and avoid bypassing the SQL decoding
+				defer close(indexCountReady)
+				span := tableDesc.IndexSpan(codec, idx.GetID())
+				key := span.Key
+				endKey := span.EndKey
+				if idxLenErr = runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
+					for {
+						kvs, err := txn.Scan(ctx, key, endKey, 1000000)
+						if err != nil {
+							return err
+						}
+						if len(kvs) == 0 {
+							break
+						}
+						idxLen += int64(len(kvs))
+						key = kvs[len(kvs)-1].Key.PrefixEnd()
 					}
-					// JSON columns cannot have unique indexes, so if the expected and
-					// actual counts do not match, it's always a bug rather than a
-					// uniqueness violation.
-					return errors.AssertionFailedf(
-						"validation of index %s failed: expected %d rows, found %d",
-						idx.GetName(), errors.Safe(expectedCount[i]), errors.Safe(idxLen))
+					return nil
+				}); idxLenErr != nil {
+					return
 				}
-			case <-ctx.Done():
-				return ctx.Err()
+				log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
+					tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
+			}()
+
+			protectedTSTimer := time.After(waitBeforeProtectedTS)
+			waitingForCount := true
+			for waitingForCount {
+				select {
+				case <-indexCountReady:
+					waitingForCount = false
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-protectedTSTimer:
+					err := addProtectedTS()
+					if err != nil {
+						return err
+					}
+				}
 			}
-			return nil
+
+			for {
+				select {
+				case <-countReady[i]:
+					if idxLen != expectedCount[i] {
+						if gatherAllInvalid {
+							invalid <- idx.GetID()
+							return nil
+						}
+						// JSON columns cannot have unique indexes, so if the expected and
+						// actual counts do not match, it's always a bug rather than a
+						// uniqueness violation.
+						return errors.AssertionFailedf(
+							"validation of index %s failed: expected %d rows, found %d",
+							idx.GetName(), errors.Safe(expectedCount[i]), errors.Safe(idxLen))
+					}
+					return nil
+				case <-protectedTSTimer:
+					err := addProtectedTS()
+					if err != nil {
+						return err
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
 		})
 
 		grp.GoCtx(func(ctx context.Context) error {
@@ -1659,7 +1771,7 @@ func countExpectedRowsForInvertedIndex(
 	}
 
 	var expectedCount int64
-	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		var stmt string
 		geoConfig := idx.GetGeoConfig()
 		if geoConfig.IsEmpty() {
@@ -1712,13 +1824,18 @@ func countExpectedRowsForInvertedIndex(
 // change after a backfill.
 func ValidateForwardIndexes(
 	ctx context.Context,
+	jobID jobspb.JobID,
+	codec keys.SQLCodec,
+	db *kv.DB,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
-) error {
+	protectedTSProvider protectedts.Provider,
+) (err error) {
+	protectedTSAdded := sync.Once{}
 	grp := ctxgroup.WithContext(ctx)
 
 	invalid := make(chan descpb.IndexID, len(indexes))
@@ -1728,55 +1845,146 @@ func ValidateForwardIndexes(
 	// Close when table count is ready.
 	tableCountsReady := make(chan struct{})
 
+	// Removes the protected timestamp, if one was added when this
+	// function returns.
+	var removeProtectedTS func(ctx context.Context) error
+	defer func() {
+		if removeProtectedTS != nil {
+			removeErr := removeProtectedTS(ctx)
+			if removeErr != nil {
+				if err != nil {
+					err = errors.WithSecondaryError(err, removeErr)
+				} else {
+					err = removeErr
+				}
+			}
+		}
+	}()
+	// Adds a protected timestamp only for historical queries.
+	var addProtectedTS = func() error {
+		var err error
+		protectedTSAdded.Do(func() {
+			// If we are not running a historical query, nothing to do here.
+			if runHistoricalTxn.ReadAsOf().IsEmpty() {
+				return
+			}
+			protectedtsID := uuid.MakeV4()
+			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
+			if err != nil {
+				return
+			}
+			rec := jobsprotectedts.MakeRecord(protectedtsID,
+				int64(jobID), runHistoricalTxn.ReadAsOf(), nil, jobsprotectedts.Jobs, target)
+			err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return protectedTSProvider.Protect(ctx, txn, rec)
+			})
+			if err != nil {
+				return
+			}
+			removeProtectedTS = func(ctx context.Context) error {
+				return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return protectedTSProvider.Release(ctx, txn, protectedtsID)
+				})
+			}
+		})
+		return err
+	}
+
 	// Compute the size of each index.
 	for _, idx := range indexes {
 		// Shadow idx to prevent its value from changing within each gorountine.
 		idx := idx
-
 		grp.GoCtx(func(ctx context.Context) error {
-			start := timeutil.Now()
-			idxLen, err := countIndexRowsAndMaybeCheckUniqueness(ctx, tableDesc, idx, withFirstMutationPublic, runHistoricalTxn, execOverride)
-			if err != nil {
+			// Determine what the GC interval is on the table, which will help us
+			// figure out when to apply a protected timestamp, as a percentage of this
+			// time.
+			var waitBeforeProtectedTS time.Duration
+			if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
+				_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, codec, tableDesc.GetID(), nil, "", true)
+				if err != nil {
+					return err
+				}
+				waitBeforeProtectedTS = ((time.Duration(zoneCfg.GC.TTLSeconds) * time.Second) *
+					indexValidationProtectTimeStampGCPct) / 100
+				return nil
+			}); err != nil {
 				return err
 			}
-			log.Infof(ctx, "validation: index %s/%s row count = %d, time so far %s",
-				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
+
+			var indexCountReady = make(chan error)
+			var idxLenErr error
+			var idxLen int64
+			go func() {
+				defer close(indexCountReady)
+				start := timeutil.Now()
+				idxLen, idxLenErr = countIndexRowsAndMaybeCheckUniqueness(ctx, tableDesc, idx, withFirstMutationPublic, runHistoricalTxn, execOverride)
+				if idxLenErr != nil {
+					return
+				}
+				log.Infof(ctx, "validation: index %s/%s row count = %d, time so far %s",
+					tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
+			}()
 
 			// Now compare with the row count in the table.
-			select {
-			case <-tableCountsReady:
-				expectedCount := tableRowCount
-				// If the index is a partial index, the expected number of rows
-				// is different than the total number of rows in the table.
-				if idx.IsPartial() {
-					expectedCount = partialIndexExpectedCounts[idx.GetID()]
-				}
-
-				if idxLen != expectedCount {
-					if gatherAllInvalid {
-						invalid <- idx.GetID()
-						return nil
+			waitTimer := time.After(waitBeforeProtectedTS)
+			waitingForCount := true
+			for waitingForCount {
+				select {
+				case <-indexCountReady:
+					if idxLenErr != nil {
+						return idxLenErr
 					}
-					// Resolve the table index descriptor name.
-					indexName, err := tableDesc.GetIndexNameByID(idx.GetID())
+					waitingForCount = false
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-waitTimer:
+					err := addProtectedTS()
 					if err != nil {
-						log.Warningf(ctx,
-							"unable to find index by ID for ValidateForwardIndexes: %d",
-							idx.GetID())
-						indexName = idx.GetName()
+						return err
 					}
-					// TODO(vivek): find the offending row and include it in the error.
-					return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
-						"duplicate key value violates unique constraint %q",
-						indexName),
-						indexName)
-
 				}
-			case <-ctx.Done():
-				return ctx.Err()
 			}
+			for {
+				select {
+				case <-tableCountsReady:
+					// Both counts are ready.
+					expectedCount := tableRowCount
+					// If the index is a partial index, the expected number of rows
+					// is different than the total number of rows in the table.
+					if idx.IsPartial() {
+						expectedCount = partialIndexExpectedCounts[idx.GetID()]
+					}
 
-			return nil
+					if idxLen != expectedCount {
+						if gatherAllInvalid {
+							invalid <- idx.GetID()
+							return nil
+						}
+						// Resolve the table index descriptor name.
+						indexName, err := tableDesc.GetIndexNameByID(idx.GetID())
+						if err != nil {
+							log.Warningf(ctx,
+								"unable to find index by ID for ValidateForwardIndexes: %d",
+								idx.GetID())
+							indexName = idx.GetName()
+						}
+						// TODO(vivek): find the offending row and include it in the error.
+						return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
+							"duplicate key value violates unique constraint %q",
+							indexName),
+							indexName)
+
+					}
+					return nil
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-waitTimer:
+					err := addProtectedTS()
+					if err != nil {
+						return err
+					}
+				}
+			}
 		})
 	}
 
@@ -1834,7 +2042,7 @@ func populateExpectedCounts(
 		desc = fakeDesc
 	}
 	var tableRowCount int64
-	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		var s strings.Builder
 		for _, idx := range indexes {
 			// For partial indexes, count the number of rows in the table
@@ -1945,7 +2153,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 
 	// Retrieve the row count in the index.
 	var idxLen int64
-	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.GetID())
 		// If the index is a partial index the predicate must be added
 		// as a filter to the query to force scanning the index.
