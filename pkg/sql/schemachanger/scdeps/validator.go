@@ -13,8 +13,11 @@ package scdeps
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -28,24 +31,33 @@ import (
 // ValidateForwardIndexesFn callback function for validating forward indexes.
 type ValidateForwardIndexesFn func(
 	ctx context.Context,
+	jobID jobspb.JobID,
+	codec keys.SQLCodec,
+	db *kv.DB,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
+	protectedTSProvider protectedts.Provider,
+	systemConfigProvider config.SystemConfigProvider,
 ) error
 
 // ValidateInvertedIndexesFn callback function for validating inverted indexes.
 type ValidateInvertedIndexesFn func(
 	ctx context.Context,
+	jobID jobspb.JobID,
 	codec keys.SQLCodec,
+	db *kv.DB,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
+	protectedTSProvider protectedts.Provider,
+	systemConfigProvider config.SystemConfigProvider,
 ) error
 
 // ValidateCheckConstraintFn callback function for validting check constraints.
@@ -63,35 +75,39 @@ type ValidateCheckConstraintFn func(
 type NewFakeSessionDataFn func(sv *settings.Values) *sessiondata.SessionData
 
 type validator struct {
-	db                      *kv.DB
-	codec                   keys.SQLCodec
-	settings                *cluster.Settings
-	ieFactory               sqlutil.InternalExecutorFactory
-	validateForwardIndexes  ValidateForwardIndexesFn
-	validateInvertedIndexes ValidateInvertedIndexesFn
-	validateCheckConstraint ValidateCheckConstraintFn
-	newFakeSessionData      NewFakeSessionDataFn
+	db                         *kv.DB
+	codec                      keys.SQLCodec
+	settings                   *cluster.Settings
+	ieFactory                  sqlutil.InternalExecutorFactory
+	validateForwardIndexes     ValidateForwardIndexesFn
+	validateInvertedIndexes    ValidateInvertedIndexesFn
+	validateCheckConstraint    ValidateCheckConstraintFn
+	newFakeSessionData         NewFakeSessionDataFn
+	protectedTimestampProvider protectedts.Provider
+	systemConfig               config.SystemConfigProvider
 }
 
 // ValidateForwardIndexes checks that the indexes have entries for all the rows.
 func (vd validator) ValidateForwardIndexes(
 	ctx context.Context,
+	jobID jobspb.JobID,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	override sessiondata.InternalExecutorOverride,
 ) error {
-
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
 	return vd.validateForwardIndexes(
-		ctx, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
-		withFirstMutationPublic, gatherAllInvalid, override,
+		ctx, jobID, vd.codec, vd.db, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
+		withFirstMutationPublic, gatherAllInvalid, override, vd.protectedTimestampProvider,
+		vd.systemConfig,
 	)
 }
 
 // ValidateInvertedIndexes checks that the indexes have entries for all the rows.
 func (vd validator) ValidateInvertedIndexes(
 	ctx context.Context,
+	jobID jobspb.JobID,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	override sessiondata.InternalExecutorOverride,
@@ -100,8 +116,9 @@ func (vd validator) ValidateInvertedIndexes(
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
 	return vd.validateInvertedIndexes(
-		ctx, vd.codec, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
-		withFirstMutationPublic, gatherAllInvalid, override,
+		ctx, jobID, vd.codec, vd.db, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
+		withFirstMutationPublic, gatherAllInvalid, override, vd.protectedTimestampProvider,
+		vd.systemConfig,
 	)
 }
 
@@ -120,7 +137,7 @@ func (vd validator) ValidateCheckConstraint(
 // this constructor was called.
 func (vd validator) makeHistoricalInternalExecTxnRunner() descs.HistoricalInternalExecTxnRunner {
 	now := vd.db.Clock().Now()
-	return func(ctx context.Context, fn descs.InternalExecFn) error {
+	return descs.NewHistoricalInternalExecTxnRunner(now, func(ctx context.Context, fn descs.InternalExecFn) error {
 		return vd.ieFactory.(descs.TxnManager).DescsTxnWithExecutor(ctx, vd.db, vd.newFakeSessionData(&vd.settings.SV), func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) error {
@@ -129,7 +146,7 @@ func (vd validator) makeHistoricalInternalExecTxnRunner() descs.HistoricalIntern
 			}
 			return fn(ctx, txn, ie, descriptors)
 		})
-	}
+	})
 }
 
 // NewValidator creates a Validator interface
@@ -139,19 +156,23 @@ func NewValidator(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	ieFactory sqlutil.InternalExecutorFactory,
+	protectedTimestampProvider protectedts.Provider,
+	systemConfig config.SystemConfigProvider,
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
 	validateCheckConstraint ValidateCheckConstraintFn,
 	newFakeSessionData NewFakeSessionDataFn,
 ) scexec.Validator {
 	return validator{
-		db:                      db,
-		codec:                   codec,
-		settings:                settings,
-		ieFactory:               ieFactory,
-		validateForwardIndexes:  validateForwardIndexes,
-		validateInvertedIndexes: validateInvertedIndexes,
-		validateCheckConstraint: validateCheckConstraint,
-		newFakeSessionData:      newFakeSessionData,
+		db:                         db,
+		codec:                      codec,
+		settings:                   settings,
+		ieFactory:                  ieFactory,
+		validateForwardIndexes:     validateForwardIndexes,
+		validateInvertedIndexes:    validateInvertedIndexes,
+		validateCheckConstraint:    validateCheckConstraint,
+		newFakeSessionData:         newFakeSessionData,
+		protectedTimestampProvider: protectedTimestampProvider,
+		systemConfig:               systemConfig,
 	}
 }
