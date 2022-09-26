@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -21,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -37,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -422,137 +418,6 @@ func selectTargets(
 
 // EntryFiles is a group of sst files of a backup table range
 type EntryFiles []execinfrapb.RestoreFileSpec
-
-// BackupTableEntry wraps information of a table retrieved
-// from backup manifests.
-// exported to cliccl for exporting data directly from backup sst.
-type BackupTableEntry struct {
-	Desc                 catalog.TableDescriptor
-	Span                 roachpb.Span
-	Files                []EntryFiles
-	LastSchemaChangeTime hlc.Timestamp
-}
-
-// MakeBackupTableEntry looks up the descriptor of fullyQualifiedTableName
-// from backupManifests and returns a BackupTableEntry, which contains
-// the table descriptor, the primary index span, and the sst files.
-func MakeBackupTableEntry(
-	ctx context.Context,
-	fullyQualifiedTableName string,
-	backupManifests []backuppb.BackupManifest,
-	endTime hlc.Timestamp,
-	user username.SQLUsername,
-	backupCodec keys.SQLCodec,
-) (BackupTableEntry, error) {
-	var descName []string
-	if descName = strings.Split(fullyQualifiedTableName, "."); len(descName) != 3 {
-		return BackupTableEntry{}, errors.Newf("table name should be specified in format databaseName.schemaName.tableName")
-	}
-
-	if !endTime.IsEmpty() {
-		ind := -1
-		for i, b := range backupManifests {
-			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
-				if endTime != b.EndTime && b.MVCCFilter != backuppb.MVCCFilter_All {
-					errorHints := "reading data for requested time requires that BACKUP was created with %q" +
-						" or should specify the time to be an exact backup time, nearest backup time is %s"
-					return BackupTableEntry{}, errors.WithHintf(
-						errors.Newf("unknown read time: %s", timeutil.Unix(0, endTime.WallTime).UTC()),
-						errorHints, backupOptRevisionHistory, timeutil.Unix(0, b.EndTime.WallTime).UTC(),
-					)
-				}
-				ind = i
-				break
-			}
-		}
-		if ind == -1 {
-			return BackupTableEntry{}, errors.Newf("supplied backups do not cover requested time %s", timeutil.Unix(0, endTime.WallTime).UTC())
-		}
-		backupManifests = backupManifests[:ind+1]
-	}
-
-	allDescs, _ := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, endTime)
-	resolver, err := backupresolver.NewDescriptorResolver(allDescs)
-	if err != nil {
-		return BackupTableEntry{}, errors.Wrapf(err, "creating a new resolver for all descriptors")
-	}
-
-	found, _, desc, err := resolver.LookupObject(ctx, tree.ObjectLookupFlags{}, descName[0], descName[1], descName[2])
-	if err != nil {
-		return BackupTableEntry{}, errors.Wrapf(err, "looking up table %s", fullyQualifiedTableName)
-	}
-	if !found {
-		return BackupTableEntry{}, errors.Newf("table %s not found", fullyQualifiedTableName)
-	}
-	tbMutable, ok := desc.(*tabledesc.Mutable)
-	if !ok {
-		return BackupTableEntry{}, errors.Newf("object %s not mutable", fullyQualifiedTableName)
-	}
-	tbDesc, err := catalog.AsTableDescriptor(tbMutable)
-	if err != nil {
-		return BackupTableEntry{}, errors.Wrapf(err, "fetching table %s descriptor", fullyQualifiedTableName)
-	}
-
-	tablePrimaryIndexSpan := tbDesc.PrimaryIndexSpan(backupCodec)
-
-	if err := checkCoverage(ctx, []roachpb.Span{tablePrimaryIndexSpan}, backupManifests); err != nil {
-		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
-	}
-
-	introducedSpanFrontier, err := createIntroducedSpanFrontier(backupManifests, hlc.Timestamp{})
-	if err != nil {
-		return BackupTableEntry{}, err
-	}
-
-	entry := makeSimpleImportSpans(
-		[]roachpb.Span{tablePrimaryIndexSpan},
-		backupManifests,
-		nil, /*backupLocalityInfo*/
-		introducedSpanFrontier,
-		roachpb.Key{}, /*lowWaterMark*/
-		0,             /* disable merging */
-	)
-	lastSchemaChangeTime := findLastSchemaChangeTime(backupManifests, tbDesc, endTime)
-
-	backupTableEntry := BackupTableEntry{
-		tbDesc,
-		tablePrimaryIndexSpan,
-		make([]EntryFiles, 0),
-		lastSchemaChangeTime,
-	}
-
-	for _, e := range entry {
-		backupTableEntry.Files = append(backupTableEntry.Files, e.Files)
-	}
-
-	return backupTableEntry, nil
-}
-
-func findLastSchemaChangeTime(
-	backupManifests []backuppb.BackupManifest, tbDesc catalog.TableDescriptor, endTime hlc.Timestamp,
-) hlc.Timestamp {
-	lastSchemaChangeTime := endTime
-	for i := len(backupManifests) - 1; i >= 0; i-- {
-		manifest := backupManifests[i]
-		for j := len(manifest.DescriptorChanges) - 1; j >= 0; j-- {
-			rev := manifest.DescriptorChanges[j]
-
-			if endTime.LessEq(rev.Time) {
-				continue
-			}
-
-			if rev.ID == tbDesc.GetID() {
-				d := descbuilder.NewBuilder(rev.Desc).BuildExistingMutable()
-				revDesc, _ := catalog.AsTableDescriptor(d)
-				if !reflect.DeepEqual(revDesc.PublicColumns(), tbDesc.PublicColumns()) {
-					return lastSchemaChangeTime
-				}
-				lastSchemaChangeTime = rev.Time
-			}
-		}
-	}
-	return lastSchemaChangeTime
-}
 
 // checkMultiRegionCompatible checks if the given table is compatible to be
 // restored into the given database according to its multi-region locality.
