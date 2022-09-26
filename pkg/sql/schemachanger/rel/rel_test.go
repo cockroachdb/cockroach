@@ -12,6 +12,7 @@ package rel_test
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -20,7 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel/internal/cyclegraphtest"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel/internal/entitynodetest"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel/reltest"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestRel(t *testing.T) {
@@ -337,12 +341,12 @@ func TestTooManyAttributesInValues(t *testing.T) {
 }
 
 func TestRuleValidation(t *testing.T) {
-	type tooManyAttrs struct {
+	type entity struct {
 		F1, F2 *uint32
 	}
 	a1, a2 := stringAttr("a1"), stringAttr("a2")
 	sc := rel.MustSchema("rules",
-		rel.EntityMapping(reflect.TypeOf((*tooManyAttrs)(nil)),
+		rel.EntityMapping(reflect.TypeOf((*entity)(nil)),
 			rel.EntityAttr(a1, "F1"),
 			rel.EntityAttr(a2, "F2"),
 		),
@@ -438,4 +442,102 @@ func TestEmbeddedFieldsWork(t *testing.T) {
 			"failed to construct schema: *rel_test.outerOuter.A references an "+
 				"embedded pointer outer")
 	})
+}
+
+// TestConcurrentQueryInDifferentDatabases stresses some logic of the
+// evalContext pooling to ensure that the state is properly reset between
+// queries. An important property of this test is that it uses an any
+// clause over entity pointers. When these pointers are inlined in the
+// context of different databases, they will have different values. By
+// randomizing the insertion order, we ensure that the inline values for
+// the different entities differ.
+//
+// This test exercises the code which resets the inline values of slots in
+// in the evalContext corresponding to the "not" and "any" constraints on that
+// slot. These fields are pointers and need to be reset explicitly. The bug
+// which motivated this test was that the slots were only being reset by value.
+func TestConcurrentQueryInDifferentDatabases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type entity struct {
+		Str   string
+		Other *entity
+	}
+	var str, other stringAttr = "str", "other"
+	schema := rel.MustSchema("test",
+		rel.EntityMapping(
+			reflect.TypeOf((*entity)(nil)),
+			rel.EntityAttr(str, "Str"),
+			rel.EntityAttr(other, "Other"),
+		),
+	)
+	newDB := func() *rel.Database {
+		db, err := rel.NewDatabase(schema, rel.Index{Attrs: []rel.Attr{other}})
+		require.NoError(t, err)
+		return db
+	}
+	const (
+		numDBs          = 3
+		numEntities     = 5
+		numContainsVals = 3
+	)
+	makeEntities := func() (ret []*entity) {
+		for i := 0; i < numEntities; i++ {
+			ret = append(ret, &entity{Str: fmt.Sprintf("s%d", i)})
+		}
+		for i := 0; i < numEntities; i++ {
+			ret[i].Other = ret[(i+1)%numEntities]
+		}
+		return ret
+	}
+	makeDBs := func() (ret []*rel.Database) {
+		for i := 0; i < numDBs; i++ {
+			ret = append(ret, newDB())
+		}
+		return ret
+	}
+	addEntitiesToDB := func(db *rel.Database, entities []*entity) {
+		for _, i := range rand.Perm(len(entities)) {
+			require.NoError(t, db.Insert(entities[i]))
+		}
+	}
+	addEntitiesToDBs := func(dbs []*rel.Database, entities []*entity) {
+		for _, db := range dbs {
+			addEntitiesToDB(db, entities)
+		}
+	}
+
+	dbs, entities := makeDBs(), makeEntities()
+	addEntitiesToDBs(dbs, entities)
+	assert.Less(t, numContainsVals, numEntities)
+	makeContainsVals := func(entities []*entity) (ret []interface{}) {
+		for i := 0; i < numContainsVals; i++ {
+			ret = append(ret, entities[i+1])
+		}
+		return ret
+	}
+	type v = rel.Var
+	q, err := rel.NewQuery(schema,
+		v("e").AttrIn(other, makeContainsVals(entities)...),
+		v("e").AttrNeq(rel.Self, entities[0]), // exclude the first entity
+	)
+	require.NoError(t, err)
+	var N = 8
+	exp := entities[1:numContainsVals] // the first entity is excluded
+	run := func(i int) func() error {
+		return func() error {
+			var got []*entity
+			assert.NoError(t, q.Iterate(dbs[i%len(dbs)], func(r rel.Result) error {
+				got = append(got, r.Var("e").(*entity))
+				return nil
+			}))
+			assert.EqualValues(t, exp, got)
+			return nil
+		}
+	}
+	var g errgroup.Group
+	for i := 0; i < N; i++ {
+		g.Go(run(i))
+	}
+	require.NoError(t, g.Wait())
 }
