@@ -8,7 +8,7 @@ DROP TYPE defaultdb.typ
 StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[EnumType:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
-    [[AliasType:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 104
@@ -29,7 +29,7 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC] -> ABSENT
-    [[AliasType:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
@@ -70,7 +70,7 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
 PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[EnumType:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
-    [[AliasType:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
+    [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -128,36 +128,36 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
 deps
 DROP TYPE defaultdb.typ
 ----
-- from: [AliasType:{DescID: 105}, DROPPED]
-  to:   [AliasType:{DescID: 105}, ABSENT]
+- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
+  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor DROPPED in transaction before removal
-- from: [AliasType:{DescID: 105}, DROPPED]
+- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
-- from: [AliasType:{DescID: 105}, DROPPED]
+- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
-- from: [AliasType:{DescID: 105}, DROPPED]
+- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [Owner:{DescID: 105}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
-- from: [AliasType:{DescID: 105}, DROPPED]
+- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
-- from: [AliasType:{DescID: 105}, DROPPED]
+- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Name: public}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
-- from: [AliasType:{DescID: 105}, DROPPED]
+- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor drop right before dependent element removal
-- from: [AliasType:{DescID: 105}, TXN_DROPPED]
-  to:   [AliasType:{DescID: 105}, DROPPED]
+- from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, TXN_DROPPED]
+  to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
 - from: [EnumType:{DescID: 104}, DROPPED]

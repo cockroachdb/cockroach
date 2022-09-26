@@ -95,8 +95,8 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
@@ -186,13 +186,13 @@ deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 - from: [Sequence:{DescID: 104}, DROPPED]
-  to:   [ColumnDefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT]
+  to:   [ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT]
   kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with expr ref
+  rule: descriptor drop right before removing dependent with expr ref to sequence
 - from: [Sequence:{DescID: 104}, DROPPED]
-  to:   [ColumnDefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT]
+  to:   [ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT]
   kind: SameStagePrecedence
-  rule: descriptor drop right before removing dependent with expr ref
+  rule: descriptor drop right before removing dependent with expr ref to sequence
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT]
   kind: SameStagePrecedence

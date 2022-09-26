@@ -33,16 +33,16 @@ func TestGetAttribute(t *testing.T) {
 	// and inequality.
 	expectedStr := `ColumnName:{DescID: 1, Name: foo, ColumnID: 2}`
 	require.Equal(t, expectedStr, ElementString(cn), "Attribute string conversion is broken.")
-	require.True(t, EqualElements(cn, cn))
-	require.False(t, EqualElements(cn, cnDiff))
+	require.True(t, EqualElementKeys(cn, cn))
+	require.False(t, EqualElementKeys(cn, cnDiff))
 
 	// Sanity: Validate type references, then check if type comparisons
 	// work.
 	so := &scpb.SequenceOwner{TableID: 1, ColumnID: 2, SequenceID: 3}
 	expectedStr = `SequenceOwner:{DescID: 1, ColumnID: 2, ReferencedDescID: 3}`
 	require.Equal(t, expectedStr, ElementString(so), "Attribute string conversion is broken.")
-	require.False(t, EqualElements(so, cn))
-	require.False(t, EqualElements(so, cnDiff))
+	require.False(t, EqualElementKeys(so, cn))
+	require.False(t, EqualElementKeys(so, cnDiff))
 }
 
 func BenchmarkCompareElements(b *testing.B) {
@@ -58,7 +58,7 @@ func BenchmarkCompareElements(b *testing.B) {
 	for i := 0; i < int(float64(b.N)/float64(len(elements)*len(elements))); i++ {
 		for _, a := range elements {
 			for _, b := range elements {
-				CompareElements(a, b)
+				Schema.CompareOn(equalityAttrs, a, b)
 			}
 		}
 	}

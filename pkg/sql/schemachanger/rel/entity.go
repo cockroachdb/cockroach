@@ -56,6 +56,9 @@ func (sc *Schema) CompareOn(attrs []Attr, a, b interface{}) (less, eq bool) {
 			if err != nil {
 				panic(err)
 			}
+			if sc.sliceOrdinals.contains(ord) {
+				continue
+			}
 			aav = getAttrValue(at, ord, av)
 			bav = getAttrValue(bt, ord, bv)
 		}

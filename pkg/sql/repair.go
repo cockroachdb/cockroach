@@ -792,6 +792,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 		b.AddRawRequest(&roachpb.DeleteRangeRequest{
 			RequestHeader:           requestHeader,
 			UseRangeTombstone:       true,
+			IdempotentTombstone:     true,
 			UpdateRangeDeleteGCHint: true,
 		})
 	} else {

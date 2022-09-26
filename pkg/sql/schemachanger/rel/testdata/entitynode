@@ -1,13 +1,14 @@
 name: entitynode
 data:
-    a: {i8: 1, i16: 1, pi8: 1}
+    a: {i8: 1, i16: 1, i16refs: [1], pi8: 1}
     b: {i8: 2, i16: 2}
     c: {i8: 2, i16: 1}
+    d: {i8: 4, i16: 4, i16refs: [1, 2], pi8: 4}
     na: {value: a}
     nb: {value: b, left: na}
     nc: {value: c, right: nb}
 attributes:
-    a: {i16: 1, i8: 1, pi8: 1}
+    a: {i16: 1, i16ref: [1], i8: 1, pi8: 1}
     b: {i16: 2, i8: 2}
     c: {i16: 1, i8: 2}
     na: {value: a}
@@ -41,7 +42,7 @@ rules:
         - $right[left] = $right-left
         - $right[Type] = '*entitynodetest.node'
         - $right-left[value] = $v
-        - '$v = {i8: 1, pi8: 1, i16: 1}'
+        - '$v = {i8: 1, pi8: 1, i16: 1, i16refs: [1]}'
         - noop(*entitynodetest.node)($na)
     - passThrough($a, $b, $c, $d):
         - rightLeft($a, $b, $c, $d)
@@ -72,7 +73,10 @@ queries:
             - {attrs: [], where: {Type: '*entitynodetest.node'}}
             - {attrs: [left], exists: [left]}
             - {attrs: [right], exists: [right]}
-      data: [a, b, c, na, nb, nc]
+        8:
+            - {attrs: []}
+            - {attrs: [i16ref]}
+      data: [a, b, c, d, na, nb, nc]
       queries:
         a fields:
             query:
@@ -122,7 +126,19 @@ queries:
                 - [a, 1]
                 - [b, 2]
                 - [c, 2]
+                - [d, 4]
             unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
+        list all the entities:
+            query:
+                - $entity[Type] = '*entitynodetest.entity'
+            entities: [$entity]
+            result-vars: [$entity]
+            results:
+                - [a]
+                - [b]
+                - [c]
+                - [d]
+            unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         list all the values with type constraint:
             query:
                 - $value[i8] = $i8
@@ -133,6 +149,7 @@ queries:
                 - [a, 1]
                 - [b, 2]
                 - [c, 2]
+                - [d, 4]
             unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         nodes with elements where i8=2:
             query:
@@ -166,6 +183,7 @@ queries:
                 - [1]
                 - [2]
                 - [2]
+                - [4]
             unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         use a filter:
             query:
@@ -185,6 +203,7 @@ queries:
                 - [a, '*entitynodetest.entity']
                 - [b, '*entitynodetest.entity']
                 - [c, '*entitynodetest.entity']
+                - [d, '*entitynodetest.entity']
                 - [na, '*entitynodetest.node']
                 - [nb, '*entitynodetest.node']
                 - [nc, '*entitynodetest.node']
@@ -227,20 +246,21 @@ queries:
                 - [a]
                 - [b]
                 - [c]
+                - [d]
                 - [na]
                 - [nb]
                 - [nc]
             unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         self eq value:
             query:
-                - '$entity[Self] = {i8: 2, pi8: null, i16: 1}'
+                - '$entity[Self] = {i8: 2, pi8: null, i16: 1, i16refs: []}'
             entities: [$entity]
             result-vars: [$entity]
             results:
                 - [c]
         contradiction due to missing attribute:
             query:
-                - '$entity[Self] = {i8: 2, pi8: null, i16: 1}'
+                - '$entity[Self] = {i8: 2, pi8: null, i16: 1, i16refs: []}'
                 - $entity[pi8] = $pi8
             entities: [$entity]
             result-vars: [$entity, $pi8]
@@ -254,6 +274,7 @@ queries:
                 - [a]
                 - [b]
                 - [c]
+                - [d]
                 - [na]
                 - [nb]
                 - [nc]
@@ -328,7 +349,7 @@ queries:
             error: 'failed to process invalid clause \$e\[i8\] = null: invalid nil \*int8'
         no match in any expr:
             query:
-                - $e[i8] IN [4, 5]
+                - $e[i8] IN [42, 43]
             entities: [$e]
             result-vars: [$e]
             results: []
@@ -336,7 +357,7 @@ queries:
         any clause no match on variable eq:
             query:
                 - $e[i8] = $i8
-                - $i8 IN [3, 4]
+                - $i8 IN [33, 42]
             entities: [$e]
             result-vars: [$e, $i8]
             results: []
@@ -350,6 +371,7 @@ queries:
                 - [a]
                 - [b]
                 - [c]
+                - [d]
             unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         using blank, bind non-nil pointer:
             query:
@@ -358,6 +380,7 @@ queries:
             result-vars: [$e]
             results:
                 - [a]
+                - [d]
             unsatisfiableIndexes: [1, 2, 3, 4, 5, 6, 7]
         e[i8] != 1:
             query:
@@ -368,16 +391,18 @@ queries:
             results:
                 - [b]
                 - [c]
+                - [d]
             unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         e != a:
             query:
                 - $e[Type] = '*entitynodetest.entity'
-                - '$e != {i8: 1, pi8: 1, i16: 1}'
+                - '$e != {i8: 1, pi8: 1, i16: 1, i16refs: [1]}'
             entities: [$e]
             result-vars: [$e]
             results:
                 - [b]
                 - [c]
+                - [d]
             unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         e[i8] = v; v != 1:
             query:
@@ -389,6 +414,7 @@ queries:
             results:
                 - [b, 2]
                 - [c, 2]
+                - [d, 4]
             unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         e[i8] = v; v != 2:
             query:
@@ -399,6 +425,7 @@ queries:
             result-vars: [$e, $v]
             results:
                 - [a, 1]
+                - [d, 4]
             unsatisfiableIndexes: [1, 2, 3, 5, 6, 7]
         e[i8] = v; v != int16(2):
             query:
@@ -449,4 +476,56 @@ queries:
                 - [na, 2]
                 - [nc, 2]
             unsatisfiableIndexes: [1, 2, 3, 5, 6]
+        containment by entity:
+            query:
+                - $n[Type] = '*entitynodetest.node'
+                - $n[value] = $entity
+                - $entity[i16ref] CONTAINS $otheri16
+                - $otherEntity[i16] = $otheri16
+            entities: [$n, $entity, $otherEntity]
+            result-vars: [$n, $entity, $otheri16, $otherEntity]
+            results:
+                - [na, a, 1, c]
+                - [na, a, 1, a]
+            unsatisfiableIndexes: [0, 1, 2, 3, 4, 5, 6, 7]
+        containment by value:
+            query:
+                - $i16 = 1
+                - $entity[i16ref] CONTAINS $i16
+            entities: [$entity]
+            result-vars: [$i16, $entity]
+            results:
+                - [1, a]
+                - [1, d]
+            unsatisfiableIndexes: [0, 1, 2, 3, 4, 5, 6, 7]
+        containment by value with any:
+            query:
+                - $i16 IN [2, 3]
+                - $entity[i16ref] CONTAINS $i16
+            entities: [$entity]
+            result-vars: [$i16, $entity]
+            results:
+                - [2, d]
+            unsatisfiableIndexes: [0, 1, 2, 3, 4, 5, 6, 7]
+        containment by value (fails):
+            query:
+                - $i16 = 3
+                - $entity[i16ref] CONTAINS $i16
+            entities: [$entity]
+            result-vars: [$i16, $entity]
+            results: []
+            unsatisfiableIndexes: [0, 1, 2, 3, 4, 5, 6, 7]
+        join with containment:
+            query:
+                - $inverted_source[i16ref] CONTAINS $i16
+                - $referenced_entity[i16] = $i16
+            entities: [$inverted_source, $referenced_entity]
+            result-vars: [$inverted_source, $i16, $referenced_entity]
+            results:
+                - [a, 1, a]
+                - [a, 1, c]
+                - [d, 1, a]
+                - [d, 1, c]
+                - [d, 2, b]
+            unsatisfiableIndexes: [0, 1, 2, 3, 4, 5, 6, 7]
 comparisons: []

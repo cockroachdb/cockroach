@@ -209,7 +209,7 @@ func verifyMidSchemaChange(
 	expNumSchemaChangeJobs := expectedSCJobCount(scName, majorVer)
 
 	synthesizedSchemaChangeJobs := sqlDB.QueryStr(t,
-		"SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND description LIKE '%RESTORING%'")
+		`SELECT description FROM "".crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND description LIKE '%RESTORING%'`)
 	require.Equal(t, expNumSchemaChangeJobs, len(synthesizedSchemaChangeJobs),
 		"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, synthesizedSchemaChangeJobs)
 
