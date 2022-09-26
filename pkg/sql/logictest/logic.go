@@ -38,6 +38,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"                // imported to run Backup and Restore in logictests
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -1162,7 +1163,7 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	}
 	t.clients[user] = db
 	t.db = db
-	t.user = pgUser
+	t.user = user
 
 	return cleanupFunc
 }
@@ -1186,33 +1187,75 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 	return gosql.OpenDB(connector)
 }
 
-// newCluster creates a new cluster. It should be called after the logic tests's
-// server args are configured. That is, either during setup() when creating the
-// initial cluster to be used in a test, or when creating additional test
-// clusters, after logicTest.setup() has been called.
-func (t *logicTest) newCluster(
+// newClusterForRestore creates a new cluster just like `newCluster` but does
+// not initialize the cluster with a test tenant. This is because the caller is
+// expected to run a cluster restore that will restore the test tenants from the
+// backup.
+func (t *logicTest) newClusterForRestore(
 	serverArgs TestServerArgs,
 	clusterOpts []clusterOpt,
 	knobOpts []knobOpt,
 	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
 ) {
-	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
-	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
-		corpusCollectionCallback = t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t())
+	// We don't want a default test tenant to be created and initialized when
+	// creating the cluster we will restore into. If the backed up cluster
+	// contained a tenant then it will be brought back as part of the restore.
+	t.cfg.DisableDefaultTestTenant = true
+	t.newClusterImpl(serverArgs, clusterOpts, knobOpts, tenantClusterSettingOverrideOpts,
+		true /* skipTenantInit */)
+}
+
+func (t *logicTest) makeTenantArgsForNode(
+	nodeID int,
+	cfg logictestbase.TestClusterConfig,
+	params base.TestClusterArgs,
+	paramsPerNode map[int]base.TestServerArgs,
+	knobOpts []knobOpt,
+) base.TestTenantArgs {
+	tenantArgs := base.TestTenantArgs{
+		TenantID:                    serverutils.TestTenantID(),
+		AllowSettingClusterSettings: true,
+		TestingKnobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				DeterministicExplain:            true,
+				UseTransactionalDescIDGenerator: true,
+			},
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				AOSTClause: "AS OF SYSTEM TIME '-1us'",
+			},
+			TenantTestingKnobs: &sql.TenantTestingKnobs{
+				AllowSplitAndScatter: cfg.AllowSplitAndScatter,
+			},
+			RangeFeed: paramsPerNode[nodeID].Knobs.RangeFeed,
+		},
+		MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
+		TempStorageConfig: &params.ServerArgs.TempStorageConfig,
+		Locality:          paramsPerNode[nodeID].Locality,
+		TracingDefault:    params.ServerArgs.TracingDefault,
+		UseDatabase:       "test",
+		// Give every tenant its own ExternalIO directory.
+		ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(nodeID)),
 	}
-	// TODO(andrei): if createTestServerParams() is used here, the command filter
-	// it installs detects a transaction that doesn't have
-	// modifiedSystemConfigSpan set even though it should, for
-	// "testdata/rename_table". Figure out what's up with that.
-	if serverArgs.MaxSQLMemoryLimit == 0 {
-		// Specify a fixed memory limit (some test cases verify OOM conditions;
-		// we don't want those to take long on large machines).
-		serverArgs.MaxSQLMemoryLimit = 192 * 1024 * 1024
+
+	for _, opt := range knobOpts {
+		t.rootT.Logf("apply knob opt %T to tenant", opt)
+		opt.apply(&tenantArgs.TestingKnobs)
 	}
+
+	return tenantArgs
+}
+
+func (t *logicTest) makeTestClusterArgs(
+	cfg logictestbase.TestClusterConfig,
+	serverArgs TestServerArgs,
+	clusterOpts []clusterOpt,
+	knobOpts []knobOpt,
+) (base.TestClusterArgs, map[int]base.TestServerArgs) {
 	// We have some queries that bump into 100MB default temp storage limit
 	// when run with fakedist-disk config, so we'll use a larger limit here.
 	// There isn't really a downside to doing so.
 	tempStorageDiskLimit := int64(512 << 20) /* 512 MiB */
+
 	// MVCC range tombstones are only available in 22.2 or newer.
 	supportsMVCCRangeTombstones := (t.cfg.BootstrapVersion.Equal(roachpb.Version{}) ||
 		!t.cfg.BootstrapVersion.Less(clusterversion.ByKey(clusterversion.SetSystemUsersUserIDColumnNotNull))) &&
@@ -1220,6 +1263,11 @@ func (t *logicTest) newCluster(
 			!t.cfg.BinaryVersion.Less(clusterversion.ByKey(clusterversion.SetSystemUsersUserIDColumnNotNull)))
 	ignoreMVCCRangeTombstoneErrors := supportsMVCCRangeTombstones &&
 		(globalMVCCRangeTombstone || useMVCCRangeTombstonesForPointDeletes)
+
+	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
+	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
+		corpusCollectionCallback = t.declarativeCorpusCollector.GetBeforeStage(t.rootT.Name(), t.t())
+	}
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -1269,7 +1317,6 @@ func (t *logicTest) newCluster(
 		ReplicationMode: base.ReplicationManual,
 	}
 
-	cfg := t.cfg
 	if cfg.UseTenant {
 		// In the tenant case we need to enable replication in order to split and
 		// relocate ranges correctly.
@@ -1349,6 +1396,43 @@ func (t *logicTest) newCluster(
 	}
 	params.ServerArgsPerNode = paramsPerNode
 
+	return params, paramsPerNode
+}
+
+// newCluster creates a new cluster. It should be called after the logic tests's
+// server args are configured. That is, either during setup() when creating the
+// initial cluster to be used in a test, or when creating additional test
+// clusters, after logicTest.setup() has been called.
+func (t *logicTest) newCluster(
+	serverArgs TestServerArgs,
+	clusterOpts []clusterOpt,
+	knobOpts []knobOpt,
+	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+) {
+	t.newClusterImpl(serverArgs, clusterOpts, knobOpts, tenantClusterSettingOverrideOpts,
+		false /* skipTenantInit */)
+}
+
+func (t *logicTest) newClusterImpl(
+	serverArgs TestServerArgs,
+	clusterOpts []clusterOpt,
+	knobOpts []knobOpt,
+	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+	skipTenantInit bool,
+) {
+	// TODO(andrei): if createTestServerParams() is used here, the command filter
+	// it installs detects a transaction that doesn't have
+	// modifiedSystemConfigSpan set even though it should, for
+	// "testdata/rename_table". Figure out what's up with that.
+	if serverArgs.MaxSQLMemoryLimit == 0 {
+		// Specify a fixed memory limit (some test cases verify OOM conditions;
+		// we don't want those to take long on large machines).
+		serverArgs.MaxSQLMemoryLimit = 192 * 1024 * 1024
+	}
+
+	cfg := t.cfg
+	params, paramsPerNode := t.makeTestClusterArgs(cfg, serverArgs, clusterOpts, knobOpts)
+
 	// Update the defaults for automatic statistics to avoid delays in testing.
 	// Avoid making the DefaultAsOfTime too small to avoid interacting with
 	// schema changes and causing transaction retries.
@@ -1362,39 +1446,12 @@ func (t *logicTest) newCluster(
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 
+	// Create SQL pods for the test tenant, if required.
 	connsForClusterSettingChanges := []*gosql.DB{t.cluster.ServerConn(0)}
-	if cfg.UseTenant {
+	if cfg.UseTenant && !skipTenantInit {
 		t.tenantAddrs = make([]string, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
-			tenantArgs := base.TestTenantArgs{
-				TenantID:                    serverutils.TestTenantID(),
-				AllowSettingClusterSettings: true,
-				TestingKnobs: base.TestingKnobs{
-					SQLExecutor: &sql.ExecutorTestingKnobs{
-						DeterministicExplain:            true,
-						UseTransactionalDescIDGenerator: true,
-					},
-					SQLStatsKnobs: &sqlstats.TestingKnobs{
-						AOSTClause: "AS OF SYSTEM TIME '-1us'",
-					},
-					TenantTestingKnobs: &sql.TenantTestingKnobs{
-						AllowSplitAndScatter: cfg.AllowSplitAndScatter,
-					},
-					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
-				},
-				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
-				TempStorageConfig: &params.ServerArgs.TempStorageConfig,
-				Locality:          paramsPerNode[i].Locality,
-				TracingDefault:    params.ServerArgs.TracingDefault,
-				// Give every tenant its own ExternalIO directory.
-				ExternalIODir: path.Join(t.sharedIODir, strconv.Itoa(i)),
-			}
-
-			for _, opt := range knobOpts {
-				t.rootT.Logf("apply knob opt %T to tenant", opt)
-				opt.apply(&tenantArgs.TestingKnobs)
-			}
-
+			tenantArgs := t.makeTenantArgsForNode(i, cfg, params, paramsPerNode, knobOpts)
 			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)
@@ -1434,7 +1491,7 @@ func (t *logicTest) newCluster(
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
 	clusterSettingOverrideArgs := &tenantClusterSettingOverrideArgs{}
-	if cfg.UseTenant || t.cluster.StartedDefaultTestTenant() {
+	if (cfg.UseTenant || t.cluster.StartedDefaultTestTenant()) && !skipTenantInit {
 		for _, opt := range tenantClusterSettingOverrideOpts {
 			opt.apply(clusterSettingOverrideArgs)
 		}
@@ -1480,7 +1537,6 @@ func (t *logicTest) newCluster(
 			}
 		}
 	}
-
 	var randomWorkmem int
 	if t.rng.Float64() < 0.5 && !serverArgs.DisableWorkmemRandomization {
 		// Randomize sql.distsql.temp_storage.workmem cluster setting in
@@ -1668,11 +1724,13 @@ func (t *logicTest) shutdownCluster() {
 		}
 		t.clients = nil
 	}
+	t.tenantAddrs = nil
 	t.db = nil
 }
 
-// resetCluster cleans up the current cluster, and creates a fresh one.
-func (t *logicTest) resetCluster() {
+// resetClusterForRestore cleans up the current cluster, and creates a fresh
+// one.
+func (t *logicTest) resetClusterForRestore() {
 	t.traceStop()
 	t.shutdownCluster()
 	if t.serverArgs == nil {
@@ -1681,7 +1739,7 @@ func (t *logicTest) resetCluster() {
 		t.Fatal("resetting the cluster before server args were set")
 	}
 	serverArgs := *t.serverArgs
-	t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.tenantClusterSettingOverrideOpts)
+	t.newClusterForRestore(serverArgs, t.clusterOpts, t.knobOpts, t.tenantClusterSettingOverrideOpts)
 }
 
 // setup creates the initial cluster for the logic test and populates the
@@ -2145,8 +2203,8 @@ func (t *logicTest) maybeBackupRestore(
 	backupLocation := fmt.Sprintf("gs://cockroachdb-backup-testing/logic-test-backup-restore-nightly/%s?AUTH=implicit",
 		strconv.FormatInt(timeutil.Now().UnixNano(), 10))
 
-	// Perform the backup and restore as root.
-	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
+	// Run the backup as root in the host cluster.
+	t.setUser("host-cluster-root", 0 /* nodeIdxOverride */)
 
 	if _, err := t.db.Exec(fmt.Sprintf("BACKUP INTO '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "backing up cluster")
@@ -2154,22 +2212,60 @@ func (t *logicTest) maybeBackupRestore(
 
 	// Create a new cluster. Perhaps this can be updated to just wipe the exiting
 	// cluster once we have the ability to easily wipe a cluster through SQL.
-	t.resetCluster()
+	t.resetClusterForRestore()
 
-	// Run the restore as root.
-	t.setUser(username.RootUser, 0 /* nodeIdxOverride */)
+	// Run the restore as root in the host cluster.
+	t.setUser("host-cluster-root", 0 /* nodeIdxOverride */)
 	if _, err := t.db.Exec(fmt.Sprintf("RESTORE FROM LATEST IN '%s'", backupLocation)); err != nil {
 		return errors.Wrap(err, "restoring cluster")
 	}
 
-	// Restore the session state that was in the old cluster.
+	// If the backup being restored contains an active tenant record for the test
+	// tenant `TenantID 10` this means that the backed up test cluster was either
+	// running a multi-tenant config or was probabilistically initialized with a
+	// default test tenant.
+	//
+	// In both cases the restore will bring back the active tenant record but will
+	// not start the tenant SQL pods. We must do this explicitly post restore.
+	cfg := t.cfg
+	row := t.db.QueryRow(`SELECT count(*) FROM system.tenants WHERE id = $1 AND active=true`,
+		serverutils.TestTenantID().ToUint64())
+	var count int
+	require.NoError(t.rootT, row.Scan(&count))
+	if count != 0 {
+		params, paramsPerNode := t.makeTestClusterArgs(cfg, *t.serverArgs, t.clusterOpts, t.knobOpts)
+		t.tenantAddrs = make([]string, t.cluster.NumServers())
+		for i := 0; i < t.cluster.NumServers(); i++ {
+			tenantArgs := t.makeTenantArgsForNode(i, t.cfg, params, paramsPerNode, t.knobOpts)
+			// The tenant record has already been created by restore.
+			tenantArgs.DisableCreateTenant = true
+			tenant, err := t.cluster.Server(i).StartTenant(context.Background(), tenantArgs)
+			if err != nil {
+				t.rootT.Fatalf("%+v", err)
+			}
+			t.tenantAddrs[i] = tenant.SQLAddr()
+		}
+	}
 
-	// Create new connections for the existing users, and restore the session
-	// variables that we collected.
+	// If the backup had secondary tenants, we have started their SQL pods above,
+	// and so we must re-establish clients to these pods.
+	//
+	// Close the clients that were established when the test cluster was started.
+	for _, c := range t.clients {
+		err := c.Close()
+		if err != nil {
+			log.Warningf(context.Background(), "failed to close client: %+v", err)
+		}
+	}
+	t.clients = nil
+
+	// Establish clients for all users that were recorded in the cluster before we
+	// reset the cluster for restore.
 	for _, user := range users {
 		// Call setUser for every user to create the connection for that user.
 		t.setUser(user, 0 /* nodeIdxOverride */)
 
+		// Restore the session state that was in the old cluster.
 		if userSession, ok := userToHexSession[user]; ok {
 			if _, err := t.db.Exec(fmt.Sprintf(`SELECT crdb_internal.deserialize_session(decode('%s', 'hex'))`, userSession)); err != nil {
 				return errors.Wrapf(err, "deserializing session")
@@ -3168,10 +3264,11 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	var closeDB func()
 	if query.nodeIdx != 0 {
 		addr := t.cluster.Server(query.nodeIdx).ServingSQLAddr()
-		if len(t.tenantAddrs) > 0 {
+		if len(t.tenantAddrs) > 0 && !strings.HasPrefix(t.user, "host-cluster-") {
 			addr = t.tenantAddrs[query.nodeIdx]
 		}
-		pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(t.user))
+		pgUser := strings.TrimPrefix(t.user, "host-cluster-")
+		pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
 		defer cleanupFunc()
 		pgURL.Path = "test"
 

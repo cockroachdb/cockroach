@@ -18,15 +18,15 @@ GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 exit_status=0
 
 configs=(
-local
-multiregion-9node-3region-3azs
-5node
-multiregion-9node-3region-3azs-no-los
-multiregion-9node-3region-3azs-tenant
-multiregion-9node-3region-3azs-vec-off
-multiregion-15node-5region-3azs
+#local
+#multiregion-9node-3region-3azs
+#5node
+#multiregion-9node-3region-3azs-no-los
+#multiregion-9node-3region-3azs-tenant
+#multiregion-9node-3region-3azs-vec-off
+#multiregion-15node-5region-3azs
 3node-tenant
-3node-tenant-multiregion
+#3node-tenant-multiregion
 )
 
 for config in "${configs[@]}"; do

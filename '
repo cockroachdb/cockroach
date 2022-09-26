@@ -1,0 +1,28 @@
+# This is a combination of 2 commits.
+# This is the 1st commit message:
+
+logictest: add `force-backup-restore` directive
+
+This directive can be added to a logictest to force
+a cluster backup/restore before the execution of the next SQL
+statement. This is independent of the `COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY`
+environment variable that can be set to randomly inject backup/restore
+in a logictest.
+
+Release note: None
+
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+#
+# Date:      Tue Sep 27 18:11:58 2022 -0400
+#
+# interactive rebase in progress; onto 471f9b61cf
+# Last commands done (2 commands done):
+#    pick 5280828209 logictest: add `force-backup-restore` directive
+#    squash 9163e3ddc7 wip
+# No commands remaining.
+# You are currently rebasing branch 'force-backup-restore' on '471f9b61cf'.
+#
+# Changes to be committed:
+#	modified:   pkg/sql/logictest/logic.go
+#
