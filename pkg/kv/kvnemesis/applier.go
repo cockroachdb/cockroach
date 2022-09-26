@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,7 +85,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*BatchOperation,
 		*DeleteOperation,
 		*DeleteRangeOperation:
-		applyClientOp(ctx, db, op, false /* inTxn */)
+		applyClientOp(ctx, db, op, false)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
 		o.Result = resultInit(ctx, err)
@@ -94,7 +95,6 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	case *ChangeReplicasOperation:
 		desc := getRangeDesc(ctx, o.Key, db)
 		_, err := db.AdminChangeReplicas(ctx, o.Key, desc, o.Changes)
-		// TODO(dan): Save returned desc?
 		o.Result = resultInit(ctx, err)
 	case *TransferLeaseOperation:
 		err := db.AdminTransferLease(ctx, o.Key, o.Target)
@@ -120,7 +120,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			for i := range o.Ops {
 				op := &o.Ops[i]
 				op.Result().Reset() // in case we're a retry
-				applyClientOp(ctx, txn, op, true /* inTxn */)
+				applyClientOp(ctx, txn, op, true)
 				// The KV api disallows use of a txn after an operation on it errors.
 				if r := op.Result(); r.Type == ResultType_Error {
 					return errors.DecodeError(ctx, *r.Err)
@@ -128,7 +128,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			}
 			if o.CommitInBatch != nil {
 				b := txn.NewBatch()
-				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch, true)
+				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch)
 				// The KV api disallows use of a txn after an operation on it errors.
 				if r := o.CommitInBatch.Result; r.Type == ResultType_Error {
 					return errors.DecodeError(ctx, *r.Err)
@@ -221,7 +221,8 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		}
 	case *PutOperation:
 		_, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
-			b.Put(o.Key, o.Value)
+			b.Put(o.Key, o.Value())
+			setLastReqSeq(b, o.Seq)
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -250,13 +251,14 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		o.Result.Values = make([]KeyValue, len(kvs))
 		for i, kv := range kvs {
 			o.Result.Values[i] = KeyValue{
-				Key:   []byte(kv.Key),
+				Key:   kv.Key,
 				Value: kv.Value.RawBytes,
 			}
 		}
 	case *DeleteOperation:
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			b.Del(o.Key)
+			setLastReqSeq(b, o.Seq)
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -270,11 +272,9 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			o.Result.Keys[i] = deletedKey
 		}
 	case *DeleteRangeOperation:
-		if !inTxn {
-			panic(errors.AssertionFailedf(`non-transactional DelRange operations currently unsupported`))
-		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			b.DelRange(o.Key, o.EndKey, true /* returnKeys */)
+			setLastReqSeq(b, o.Seq)
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -289,18 +289,22 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		}
 	case *BatchOperation:
 		b := &kv.Batch{}
-		applyBatchOp(ctx, b, db.Run, o, inTxn)
+		applyBatchOp(ctx, b, db.Run, o)
 	default:
 		panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, o, o))
 	}
 }
 
+func setLastReqSeq(b *kv.Batch, seq kvnemesisutil.Seq) {
+	sl := b.Requests()
+	req := sl[len(sl)-1].GetInner()
+	h := req.Header()
+	h.Seq = int32(seq)
+	req.SetHeader(h)
+}
+
 func applyBatchOp(
-	ctx context.Context,
-	b *kv.Batch,
-	run func(context.Context, *kv.Batch) error,
-	o *BatchOperation,
-	inTxn bool,
+	ctx context.Context, b *kv.Batch, run func(context.Context, *kv.Batch) error, o *BatchOperation,
 ) {
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
@@ -311,7 +315,8 @@ func applyBatchOp(
 				b.Get(subO.Key)
 			}
 		case *PutOperation:
-			b.Put(subO.Key, subO.Value)
+			b.Put(subO.Key, subO.Value())
+			setLastReqSeq(b, subO.Seq)
 		case *ScanOperation:
 			if subO.Reverse && subO.ForUpdate {
 				b.ReverseScanForUpdate(subO.Key, subO.EndKey)
@@ -324,11 +329,10 @@ func applyBatchOp(
 			}
 		case *DeleteOperation:
 			b.Del(subO.Key)
+			setLastReqSeq(b, subO.Seq)
 		case *DeleteRangeOperation:
-			if !inTxn {
-				panic(errors.AssertionFailedf(`non-transactional batch DelRange operations currently unsupported`))
-			}
 			b.DelRange(subO.Key, subO.EndKey, true /* returnKeys */)
+			setLastReqSeq(b, subO.Seq)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

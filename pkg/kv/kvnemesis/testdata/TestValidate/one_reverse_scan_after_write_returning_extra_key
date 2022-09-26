@@ -1,0 +1,8 @@
+echo
+----
+db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
+db0.Put(ctx, "b", v2) // @0.000000003,0 <nil>
+db0.ReverseScan(ctx, "a", "c", 0) // @0.000000004,0 (b:v2, a2:v3, a:v1, <nil>)
+"a"/0.000000002,0 @ s1 v1
+"b"/0.000000003,0 @ s2 v2
+committed reverse scan non-atomic timestamps: [rs]{a-c}:{0:[0.000000003,0, <max>), 1:[0,0, 0,0), 2:[0.000000002,0, <max>), gap:[<min>, <max>)}->["b":v2, "a2":v3, "a":v1]

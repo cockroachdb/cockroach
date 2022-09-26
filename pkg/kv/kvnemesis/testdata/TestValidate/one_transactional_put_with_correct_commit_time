@@ -1,0 +1,7 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Put(ctx, "a", v1) // <nil>
+  return nil
+}) // @0.000000002,0 <nil>
+"a"/0.000000002,0 @ s1 v1

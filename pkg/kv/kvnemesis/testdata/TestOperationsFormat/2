@@ -1,0 +1,9 @@
+echo
+----
+···{
+···  b := &Batch{}
+···  b.Get(ctx, "b")
+···  b.ReverseScanForUpdate(ctx, "c", "e")
+···  b.Get(ctx, "f")
+···  db0.Run(ctx, b)
+···}

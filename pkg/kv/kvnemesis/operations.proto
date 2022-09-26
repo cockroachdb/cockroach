@@ -54,19 +54,21 @@ message ScanOperation {
 
 message PutOperation {
   bytes key = 1;
-  bytes value = 2;
+  uint32 Seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
 message DeleteOperation {
   bytes key = 1;
-  Result result = 2 [(gogoproto.nullable) = false];
+  uint32 Seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  Result result = 3 [(gogoproto.nullable) = false];
 }
 
 message DeleteRangeOperation {
   bytes key = 1;
   bytes end_key = 2;
-  Result result = 3 [(gogoproto.nullable) = false];
+  uint32 Seq = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  Result result = 4 [(gogoproto.nullable) = false];
 }
 
 message SplitOperation {

@@ -1,0 +1,4 @@
+echo
+----
+db0.Del(ctx, "a" /* @s1 */) // @0.000000002,0 <nil>
+committed delete missing write at seq s1: [d]"a":missing-><nil>@s1

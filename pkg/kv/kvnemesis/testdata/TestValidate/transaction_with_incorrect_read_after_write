@@ -1,0 +1,10 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Get(ctx, "a") // (<nil>, <nil>)
+  txn.Put(ctx, "a", v1) // <nil>
+  txn.Get(ctx, "a") // (<nil>, <nil>)
+  return nil
+}) // @0.000000002,0 <nil>
+"a"/0.000000002,0 @ s1 v1
+committed txn non-atomic timestamps: [r]"a":[<min>, <max>)-><nil> [w]"a":0.000000002,0->v1@s1 [r]"a":[<min>, 0.000000002,0)-><nil>

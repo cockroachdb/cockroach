@@ -1,0 +1,5 @@
+echo
+----
+db0.Del(ctx, "a" /* @s1 */) // TransactionRetryWithProtoRefreshError:
+"a"/0.000000002,0 @ s1 <nil>
+uncommitted delete had writes: [d]"a":0.000000002,0-><nil>@s1

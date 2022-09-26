@@ -1,0 +1,8 @@
+echo
+----
+{
+  b := &Batch{}
+  b.Put(ctx, "a", v1) // <nil>
+  db0.Run(ctx, b) // @0.000000002,0 <nil>
+}
+"a"/0.000000002,0 @ s1 v1

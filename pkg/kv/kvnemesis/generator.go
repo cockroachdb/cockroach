@@ -12,9 +12,9 @@ package kvnemesis
 
 import (
 	"math/rand"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -227,9 +227,6 @@ func newAllOperationsConfig() GeneratorConfig {
 // operations/make some operations more likely.
 func NewDefaultConfig() GeneratorConfig {
 	config := newAllOperationsConfig()
-	// TODO(sarkesian): Enable non-transactional DelRange once #69642 is fixed.
-	config.Ops.DB.DeleteRange = 0
-	config.Ops.Batch.Ops.DeleteRange = 0
 	// TODO(sarkesian): Enable DeleteRange in comingled batches once #71236 is fixed.
 	config.Ops.ClosureTxn.CommitBatchOps.DeleteRange = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRange = 0
@@ -247,6 +244,7 @@ func NewDefaultConfig() GeneratorConfig {
 	// TODO(dan): Remove when #45586 is addressed.
 	config.Ops.ClosureTxn.CommitBatchOps.GetExisting = 0
 	config.Ops.ClosureTxn.CommitBatchOps.GetMissing = 0
+
 	return config
 }
 
@@ -331,7 +329,7 @@ type generator struct {
 	Config     GeneratorConfig
 	replicasFn GetReplicasFn
 
-	nextValue int
+	seqGen kvnemesisutil.Seq
 
 	// keys is the set of every key that has been written to, including those
 	// deleted or in rolled back transactions.
@@ -388,6 +386,11 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
 
 	return step(g.selectOp(rng, allowed))
+}
+
+func (g *generator) nextSeq() kvnemesisutil.Seq {
+	g.seqGen++
+	return g.seqGen
 }
 
 type opGenFunc func(*generator, *rand.Rand) Operation
@@ -462,16 +465,16 @@ func randGetExistingForUpdate(g *generator, rng *rand.Rand) Operation {
 }
 
 func randPutMissing(g *generator, rng *rand.Rand) Operation {
-	value := g.getNextValue()
+	seq := g.nextSeq()
 	key := randKey(rng)
 	g.keys[key] = struct{}{}
-	return put(key, value)
+	return put(key, seq)
 }
 
 func randPutExisting(g *generator, rng *rand.Rand) Operation {
-	value := g.getNextValue()
+	seq := g.nextSeq()
 	key := randMapKey(rng, g.keys)
-	return put(key, value)
+	return put(key, seq)
 }
 
 func randScan(g *generator, rng *rand.Rand) Operation {
@@ -500,19 +503,22 @@ func randReverseScanForUpdate(g *generator, rng *rand.Rand) Operation {
 func randDelMissing(g *generator, rng *rand.Rand) Operation {
 	key := randKey(rng)
 	g.keys[key] = struct{}{}
-	return del(key)
+	seq := g.nextSeq()
+	return del(key, seq)
 }
 
 func randDelExisting(g *generator, rng *rand.Rand) Operation {
 	key := randMapKey(rng, g.keys)
-	return del(key)
+	seq := g.nextSeq()
+	return del(key, seq)
 }
 
 func randDelRange(g *generator, rng *rand.Rand) Operation {
 	// We don't write any new keys to `g.keys` on a DeleteRange operation,
 	// because DelRange(..) only deletes existing keys.
 	key, endKey := randSpan(rng)
-	return delRange(key, endKey)
+	seq := g.nextSeq()
+	return delRange(key, endKey, seq)
 }
 
 func randSplitNew(g *generator, rng *rand.Rand) Operation {
@@ -595,7 +601,6 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var allowed []opGen
 		g.registerClientOps(&allowed, c)
-
 		numOps := rng.Intn(4)
 		ops := make([]Operation, numOps)
 		for i := range ops {
@@ -640,12 +645,6 @@ func makeClosureTxn(
 	}
 }
 
-func (g *generator) getNextValue() string {
-	value := `v-` + strconv.Itoa(g.nextValue)
-	g.nextValue++
-	return value
-}
-
 func randKey(rng *rand.Rand) string {
 	u, err := uuid.NewGenWithReader(rng).NewV4()
 	if err != nil {
@@ -682,7 +681,9 @@ func step(op Operation) Step {
 }
 
 func batch(ops ...Operation) Operation {
-	return Operation{Batch: &BatchOperation{Ops: ops}}
+	return Operation{Batch: &BatchOperation{
+		Ops: ops,
+	}}
 }
 
 func opSlice(ops ...Operation) []Operation {
@@ -709,8 +710,8 @@ func getForUpdate(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key), ForUpdate: true}}
 }
 
-func put(key, value string) Operation {
-	return Operation{Put: &PutOperation{Key: []byte(key), Value: []byte(value)}}
+func put(key string, seq kvnemesisutil.Seq) Operation {
+	return Operation{Put: &PutOperation{Key: []byte(key), Seq: seq}}
 }
 
 func scan(key, endKey string) Operation {
@@ -729,12 +730,15 @@ func reverseScanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true}}
 }
 
-func del(key string) Operation {
-	return Operation{Delete: &DeleteOperation{Key: []byte(key)}}
+func del(key string, seq kvnemesisutil.Seq) Operation {
+	return Operation{Delete: &DeleteOperation{
+		Key: []byte(key),
+		Seq: seq,
+	}}
 }
 
-func delRange(key, endKey string) Operation {
-	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey)}}
+func delRange(key, endKey string, seq kvnemesisutil.Seq) Operation {
+	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey), Seq: seq}}
 }
 
 func split(key string) Operation {

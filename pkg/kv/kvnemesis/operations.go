@@ -13,6 +13,7 @@ package kvnemesis
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -182,22 +183,18 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 		methodName = `GetForUpdate`
 	}
 	fmt.Fprintf(w, `%s.%s(ctx, %s)`, fctx.receiver, methodName, roachpb.Key(op.Key))
-	switch op.Result.Type {
-	case ResultType_Error:
-		err := errors.DecodeError(context.TODO(), *op.Result.Err)
-		fmt.Fprintf(w, ` // (nil, %s)`, err.Error())
-	case ResultType_Value:
-		v := `nil`
-		if len(op.Result.Value) > 0 {
-			v = `"` + mustGetStringValue(op.Result.Value) + `"`
-		}
-		fmt.Fprintf(w, ` // (%s, nil)`, v)
-	}
+	op.Result.format(w)
 }
 
 func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Put(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), op.Value)
+	fmt.Fprintf(w, `%s.Put(ctx, %s, %s)`, fctx.receiver, roachpb.Key(op.Key), op.Value())
 	op.Result.format(w)
+}
+
+// Value returns the value written by this put. This is a function of the
+// sequence number.
+func (op PutOperation) Value() string {
+	return `v` + strconv.Itoa(int(op.Seq))
 }
 
 func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
@@ -214,49 +211,17 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 		maxRowsArg = ``
 	}
 	fmt.Fprintf(w, `%s.%s(ctx, %s, %s%s)`, fctx.receiver, methodName, roachpb.Key(op.Key), roachpb.Key(op.EndKey), maxRowsArg)
-	switch op.Result.Type {
-	case ResultType_Error:
-		err := errors.DecodeError(context.TODO(), *op.Result.Err)
-		fmt.Fprintf(w, ` // (nil, %s)`, err.Error())
-	case ResultType_Values:
-		var kvs strings.Builder
-		for i, kv := range op.Result.Values {
-			if i > 0 {
-				kvs.WriteString(`, `)
-			}
-			kvs.WriteByte('"')
-			kvs.WriteString(string(kv.Key))
-			kvs.WriteString(`":"`)
-			kvs.WriteString(mustGetStringValue(kv.Value))
-			kvs.WriteByte('"')
-		}
-		fmt.Fprintf(w, ` // ([%s], nil)`, kvs.String())
-	}
+	op.Result.format(w)
 }
 
 func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Del(ctx, %s)`, fctx.receiver, roachpb.Key(op.Key))
+	fmt.Fprintf(w, `%s.Del(ctx, %s /* @%s */)`, fctx.receiver, roachpb.Key(op.Key), op.Seq)
 	op.Result.format(w)
 }
 
 func (op DeleteRangeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.DelRange(ctx, %s, %s, true)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey))
-	switch op.Result.Type {
-	case ResultType_Error:
-		err := errors.DecodeError(context.TODO(), *op.Result.Err)
-		fmt.Fprintf(w, ` // (nil, %s)`, err.Error())
-	case ResultType_Keys:
-		var keysW strings.Builder
-		for i, key := range op.Result.Keys {
-			if i > 0 {
-				keysW.WriteString(`, `)
-			}
-			keysW.WriteByte('"')
-			keysW.WriteString(string(key))
-			keysW.WriteString(`"`)
-		}
-		fmt.Fprintf(w, ` // ([%s], nil)`, keysW.String())
-	}
+	fmt.Fprintf(w, `%s.DelRange(ctx, %s, %s, true /* @%s */)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey), op.Seq)
+	op.Result.format(w)
 }
 
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {
@@ -292,11 +257,44 @@ func (op ChangeZoneOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (r Result) format(w *strings.Builder) {
+	if r.Type == ResultType_Unknown {
+		return
+	}
+	fmt.Fprintf(w, ` //`)
+	if r.OptionalTimestamp.IsSet() {
+		fmt.Fprintf(w, ` @%s`, r.OptionalTimestamp)
+	}
+
+	var sl []string
+	errString := "<nil>"
 	switch r.Type {
 	case ResultType_NoError:
-		fmt.Fprintf(w, ` // nil`)
 	case ResultType_Error:
 		err := errors.DecodeError(context.TODO(), *r.Err)
-		fmt.Fprintf(w, ` // %s`, err.Error())
+		errString = fmt.Sprint(err)
+	case ResultType_Keys:
+		for _, k := range r.Keys {
+			sl = append(sl, string(k))
+		}
+	case ResultType_Value:
+		sl = append(sl, mustGetStringValue(r.Value))
+	case ResultType_Values:
+		for _, kv := range r.Values {
+			sl = append(sl, fmt.Sprintf(`%s:%s`, kv.Key, mustGetStringValue(kv.Value)))
+		}
+	default:
+		panic("unhandled ResultType")
 	}
+
+	w.WriteString(" ")
+
+	sl = append(sl, errString)
+	if len(sl) > 1 {
+		w.WriteString("(")
+	}
+	w.WriteString(strings.Join(sl, ", "))
+	if len(sl) > 1 {
+		w.WriteString(")")
+	}
+
 }

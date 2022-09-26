@@ -1,0 +1,12 @@
+echo
+----
+{
+  b := &Batch{}
+  b.Put(ctx, "b", v2) // <nil>
+  b.Get(ctx, "a") // (<nil>, <nil>)
+  b.Del(ctx, "b" /* @s1 */) // <nil>
+  b.Del(ctx, "c" /* @s1 */) // <nil>
+  b.Scan(ctx, "a", "c") // <nil>
+  b.ReverseScanForUpdate(ctx, "a", "e") // <nil>
+  db1.Run(ctx, b) // @<ts> <nil>
+}

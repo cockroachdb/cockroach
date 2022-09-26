@@ -1,0 +1,6 @@
+echo
+----
+db0.Scan(ctx, "a", "c", 0) // @0.000000002,0 (a:v2, <nil>)
+db0.Put(ctx, "a", v1) // @0.000000003,0 <nil>
+"a"/0.000000003,0 @ s1 v1
+committed scan non-atomic timestamps: [s]{a-c}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["a":v2]

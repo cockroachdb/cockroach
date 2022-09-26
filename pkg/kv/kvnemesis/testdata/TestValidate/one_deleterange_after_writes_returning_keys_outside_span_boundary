@@ -1,0 +1,12 @@
+echo
+----
+db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
+db0.Put(ctx, "d", v2) // @0.000000003,0 <nil>
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.DelRange(ctx, "a", "c", true /* @s3 */) // (a, d, <nil>)
+  return nil
+}) // @0.000000004,0 <nil>
+"a"/0.000000002,0 @ s1 v1
+"a"/0.000000004,0 @ s3 <nil>
+"d"/0.000000003,0 @ s2 v2
+committed txn missing write at seq s3: [dr.d]"a":0.000000004,0-><nil>@s3 [dr.d]"d":missing-><nil>@s3 [s]{a-c}:{gap:[<min>, 0.000000002,0),[0.000000004,0, <max>)}->[]

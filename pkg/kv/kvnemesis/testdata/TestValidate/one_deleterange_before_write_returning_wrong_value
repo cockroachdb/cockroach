@@ -1,0 +1,6 @@
+echo
+----
+db0.DelRange(ctx, "a", "c", true /* @s1 */) // @0.000000002,0 (a, <nil>)
+db0.Put(ctx, "a", v2) // @0.000000003,0 <nil>
+"a"/0.000000003,0 @ s2 v2
+committed deleteRange missing write at seq s1: [dr.d]"a":missing-><nil>@s1 [s]{a-c}:{gap:[<min>, 0.000000003,0),[<min>, <max>)}->[]

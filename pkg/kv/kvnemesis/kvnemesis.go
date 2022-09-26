@@ -22,6 +22,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type loggerKey struct{}
+
+func l(ctx context.Context, debug bool, format string, args ...interface{}) {
+	if logger := ctx.Value(loggerKey{}); logger != nil && !debug {
+		if t, ok := logger.(interface {
+			Helper()
+		}); ok {
+			t.Helper()
+		}
+		logger.(Logger).Logf(format, args...)
+	}
+	log.InfofDepth(ctx, 2, format, args...)
+}
+
 // RunNemesis generates and applies a series of Operations to exercise the KV
 // api. It returns a slice of the logical failures encountered.
 func RunNemesis(
@@ -32,6 +46,9 @@ func RunNemesis(
 	numSteps int,
 	dbs ...*kv.DB,
 ) ([]error, error) {
+	if env.L != nil {
+		ctx = context.WithValue(ctx, loggerKey{}, env.L)
+	}
 	const concurrency = 5
 	if numSteps <= 0 {
 		return nil, fmt.Errorf("numSteps must be >0, got %v", numSteps)
@@ -68,14 +85,14 @@ func RunNemesis(
 			if err != nil {
 				buf.Reset()
 				step.format(&buf, formatCtx{indent: `  ` + workerName + ` ERR `})
-				log.Infof(ctx, "error: %+v\n\n%s", err, buf.String())
+				l(ctx, false, "error: %+v\n\n%s", err, buf.String())
 				return err
 			}
 			buf.Reset()
 			fmt.Fprintf(&buf, "\n  before: %s", step.Before)
 			step.format(&buf, formatCtx{indent: `  ` + workerName + ` OP  `})
 			fmt.Fprintf(&buf, "\n  after: %s", step.After)
-			log.Infof(ctx, "%v", buf.String())
+			l(ctx, true, "%v", buf.String())
 			stepsByWorker[workerIdx] = append(stepsByWorker[workerIdx], step)
 		}
 		return nil
@@ -96,15 +113,16 @@ func RunNemesis(
 	}
 	kvs := w.Finish()
 	defer kvs.Close()
-	failures := Validate(allSteps, kvs)
+
+	failures := Validate(allSteps, kvs, env.Tracker)
 
 	// Run consistency checks across the data span, primarily to check the
 	// accuracy of evaluated MVCC stats.
 	failures = append(failures, env.CheckConsistency(ctx, dataSpan)...)
 
 	if len(failures) > 0 {
-		log.Infof(ctx, "reproduction steps:\n%s", printRepro(stepsByWorker))
-		log.Infof(ctx, "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
+		l(ctx, false, "reproduction steps:\n%s", printRepro(stepsByWorker))
+		l(ctx, false, "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
 
 		scanKVs, err := dbs[0].Scan(ctx, dataSpan.Key, dataSpan.EndKey, -1)
 		if err != nil {
@@ -114,7 +132,7 @@ func RunNemesis(
 			for _, kv := range scanKVs {
 				fmt.Fprintf(&kvsBuf, "  %s %s -> %s\n", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 			}
-			log.Infof(ctx, "kvs (scan of latest values according to crdb):\n%s", kvsBuf.String())
+			l(ctx, false, "kvs (scan of latest values according to crdb):\n%s", kvsBuf.String())
 		}
 	}
 

@@ -1,0 +1,18 @@
+echo
+----
+db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
+db0.Put(ctx, "b", v2) // @0.000000003,0 <nil>
+db0.Del(ctx, "a" /* @s3 */) // @0.000000005,0 <nil>
+db0.Put(ctx, "a", v4) // @0.000000006,0 <nil>
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.DelRange(ctx, "a", "c", true /* @s5 */) // (a, b, <nil>)
+  return nil
+}) // @0.000000004,0 <nil>
+"a"/0.000000002,0 @ s1 v1
+"b"/0.000000003,0 @ s2 v2
+"a"/0.000000004,0 @ s5 <nil>
+"b"/0.000000004,0 @ s5 <nil>
+"a"/0.000000005,0 @ s3 <nil>
+"b"/0.000000006,0 @ s4 v4
+committed put missing write at seq s4: [w]"a":missing->v4@s4
+unclaimed writes: [w]"b":0.000000006,0->v4@s4

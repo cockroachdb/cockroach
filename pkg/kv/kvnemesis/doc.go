@@ -8,34 +8,42 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// Package kvnemesis exercises the KV api with random traffic and then validates
-// that the observed behaviors are consistent with our guarantees.
+// Package kvnemesis exercises the KV API with random concurrent traffic (as
+// well as splits, merges, etc) and then validates that the observed behaviors
+// are serializable.
 //
-// A set of Operations are generated which represent usage of the public KV api.
-// These include both "workload" operations like Gets and Puts as well as
-// "admin" operations like rebalances. These Operations can be handed to an
-// Applier, which runs them against the KV api and records the results.
+// It does so in polynomial time based on the techniques used by [Elle] (see in
+// particular section 4.2.3), using the after-the-fact MVCC history as a record
+// of truth. It ensures that all write operations embed a unique identifier that
+// is stored in MVCC history, and can thus identify which of its operations'
+// mutations are reflected in the database ("recoverability" in Elle parlance).
 //
-// Operations do allow for concurrency (this testing is much less interesting
-// otherwise), which means that the state of the KV map is not recoverable from
-// _only_ the input. TODO(dan): We can use RangeFeed to recover the exact KV
-// history. This plus some Kyle magic can be used to check our transactional
-// guarantees.
+// A run of kvnemesis proceeds as follows.
 //
-// TODO
-//   - CPut/InitPut/Increment
-//   - ClearRange/RevertRange
-//   - AdminRelocateRange
-//   - AdminUnsplit
-//   - AdminScatter
-//   - CheckConsistency
-//   - ExportRequest
-//   - AddSSTable
-//   - Root and leaf transactions
-//   - GCRequest
-//   - Protected timestamps
-//   - Transactions being abandoned by their coordinator
-//   - Continuing txns after CPut and WriteIntent errors (generally continuing
-//     after errors is not allowed, but it is allowed after ConditionFailedError and
-//     WriteIntentError as a special case)
+// First, the generator creates a random slice of operations, each with a unique
+// sequence number. These are distributed across a number of concurrent worker
+// threads and are executed against the database. Some of these operations may
+// succeed, some may fail, and for some of them an ambiguous result may be
+// encountered. A rangefeed consumes the entire MVCC history.
+//
+// Second, the activity thus generated is validated. An unambiguously failed
+// operation is verified for not having left any writes in the MVCC history[^1].
+// For an ambiguously failed operation, we check whether any writes materialized
+// and if so, treat it as committed, otherwise as failed. A committed operation
+// is translated into an atomic sequence of read (`observedRead` and
+// `observedScan`) and write (`observedWrite`) operations (based on its
+// result[^2]). Each write operation checks whether a write with a matching
+// sequence number is present on the affected key and if so, marks itself as
+// "materialized", i.e. fills in the timestamp field from the MVCC write. For
+// read/scan operation, we compute the range of timestamps at which the
+// read/write was valid[^3]. Within an atomic unit, the timestamps thus obtained
+// must be compatible with each other if the history is serializable. Also, all
+// MVCC writes must be reflected by exactly one observedWrite.
+//
+// [Elle]: https://arxiv.org/pdf/2003.10554.pdf
+// [^1]: this happens indirectly: at the end of validation, any unclaimed writes
+// fail validation.
+// [^2]: the absence of a result can cause issues, for instance for a DeleteRange that
+// was batched with a transaction commit, we don't know which keys were touched.
+// [^3]: txns always read their own write, so this requires more work than may be obvious.
 package kvnemesis

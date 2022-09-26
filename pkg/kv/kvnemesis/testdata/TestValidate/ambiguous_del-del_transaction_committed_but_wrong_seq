@@ -1,0 +1,9 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Del(ctx, "a" /* @s1 */) // <nil>
+  txn.Del(ctx, "a" /* @s2 */) // <nil>
+  return nil
+}) // result is ambiguous: boom
+"a"/0.000000002,0 @ s1 <nil>
+committed txn overwritten key had write: [d]"a":0.000000002,0-><nil>@s1 [d]"a":missing-><nil>@s2

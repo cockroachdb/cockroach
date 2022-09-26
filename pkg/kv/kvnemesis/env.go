@@ -23,16 +23,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Logger allows kvnemesis to log certain.
+type Logger interface {
+	Logf(string, ...interface{})
+}
+
 // Env manipulates the environment (cluster settings, zone configurations) that
 // the Applier operates in.
 type Env struct {
-	sqlDBs []*gosql.DB
+	SQLDBs  []*gosql.DB
+	Tracker *SeqTracker
+	L       Logger
 }
 
 func (e *Env) anyNode() *gosql.DB {
 	// NOTE: There is currently no need to round-robin through the sql gateways,
 	// so we always just return the first DB.
-	return e.sqlDBs[0]
+	return e.SQLDBs[0]
 }
 
 // CheckConsistency runs a consistency check on all ranges in the given span,

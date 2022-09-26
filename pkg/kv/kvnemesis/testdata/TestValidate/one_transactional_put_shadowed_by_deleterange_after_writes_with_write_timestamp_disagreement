@@ -1,0 +1,12 @@
+echo
+----
+db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Put(ctx, "b", v2) // <nil>
+  txn.DelRange(ctx, "a", "c", true /* @s3 */) // (a, b, <nil>)
+  return nil
+}) // @0.000000003,0 <nil>
+"a"/0.000000002,0 @ s1 v1
+"a"/0.000000003,0 @ s3 <nil>
+"b"/0.000000004,0 @ s3 <nil>
+committed txn non-atomic timestamps: [w]"b":missing->v2@s2 [dr.d]"a":0.000000003,0-><nil>@s3 [dr.d]"b":0.000000004,0-><nil>@s3 [s]{a-c}:{gap:[<min>, 0.000000002,0),[0.000000003,0, 0.000000004,0),[0.000000004,0, <max>)}->[]

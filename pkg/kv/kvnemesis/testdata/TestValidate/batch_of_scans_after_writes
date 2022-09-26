@@ -1,0 +1,13 @@
+echo
+----
+db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
+db0.Put(ctx, "b", v2) // @0.000000003,0 <nil>
+{
+  b := &Batch{}
+  b.Scan(ctx, "a", "c") // (a:v1, b:v2, <nil>)
+  b.Scan(ctx, "b", "d") // (b:v2, <nil>)
+  b.Scan(ctx, "c", "e") // <nil>
+  db0.Run(ctx, b) // @0.000000004,0 <nil>
+}
+"a"/0.000000002,0 @ s1 v1
+"b"/0.000000003,0 @ s2 v2

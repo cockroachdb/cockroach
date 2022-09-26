@@ -1,0 +1,11 @@
+echo
+----
+db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Get(ctx, "a") // (<nil>, <nil>)
+  txn.Put(ctx, "a", v1) // <nil>
+  txn.Get(ctx, "a") // (v1, <nil>)
+  txn.Del(ctx, "a" /* @s2 */) // <nil>
+  txn.Get(ctx, "a") // (<nil>, <nil>)
+  return nil
+}) // @0.000000002,0 <nil>
+"a"/0.000000002,0 @ s2 <nil>

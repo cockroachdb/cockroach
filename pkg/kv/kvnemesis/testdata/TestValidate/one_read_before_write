@@ -1,0 +1,6 @@
+echo
+----
+db0.Get(ctx, "a") // @0.000000002,0 (<nil>, <nil>)
+db0.Put(ctx, "a", v1) // @0.000000003,0 <nil>
+"a"/0.000000002,0 @ s1 v1
+mismatched write timestamp 0.000000003,0: [w]"a":0.000000002,0->v1@s1

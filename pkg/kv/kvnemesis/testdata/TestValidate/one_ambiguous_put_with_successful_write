@@ -1,0 +1,4 @@
+echo
+----
+db0.Put(ctx, "a", v1) // @0.000000002,0 result is ambiguous: boom
+"a"/0.000000002,0 @ s1 v1

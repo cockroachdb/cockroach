@@ -1,0 +1,19 @@
+echo
+----
+db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
+db0.Put(ctx, "b", v2) // @0.000000003,0 <nil>
+db0.Del(ctx, "a" /* @s3 */) // @0.000000004,0 <nil>
+db0.Del(ctx, "b" /* @s3 */) // @0.000000005,0 <nil>
+{
+  b := &Batch{}
+  b.Get(ctx, "a") // (<nil>, <nil>)
+  b.Get(ctx, "b") // (<nil>, <nil>)
+  b.Get(ctx, "c") // (<nil>, <nil>)
+  db0.Run(ctx, b) // @0.000000006,0 <nil>
+}
+"a"/0.000000002,0 @ s1 v1
+"b"/0.000000003,0 @ s2 v2
+"a"/0.000000004,0 @ s3 <nil>
+"b"/0.000000005,0 @ s4 <nil>
+committed delete missing write at seq s3: [d]"b":missing-><nil>@s3
+unclaimed writes: [d]"b":0.000000005,0-><nil>@s4
