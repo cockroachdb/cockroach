@@ -1104,8 +1104,10 @@ func runDebugSyncBench(cmd *cobra.Command, args []string) error {
 
 var debugUnsafeRemoveDeadReplicasCmd = &cobra.Command{
 	Use:   "unsafe-remove-dead-replicas --dead-store-ids=[store ID,...] [path]",
-	Short: "Unsafely attempt to recover a range that has lost quorum",
+	Short: "Unsafely attempt to recover a range that has lost quorum (deprecated)",
 	Long: `
+DEPRECATED: use 'debug recover' instead. unsafe-remove-dead-replicas will be
+removed in CockroachDB v23.1.
 
 This command is UNSAFE and should only be used with the supervision of
 a Cockroach Labs engineer. It is a last-resort option to recover data
