@@ -605,6 +605,7 @@ subtest grant_revoke
 
 statement ok
 CREATE SCHEMA test_priv_sc1;
+SET search_path = public,test_priv_sc1;
 CREATE FUNCTION test_priv_f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE FUNCTION test_priv_f2(int) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE FUNCTION test_priv_sc1.test_priv_f3() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
@@ -619,6 +620,22 @@ grantor  grantee  specific_catalog  specific_schema  specific_name        routin
 NULL     root     test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
 NULL     root     test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
+----
+database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
+test           public         100137       test_priv_f1()      root     EXECUTE         true
+test           public         100138       test_priv_f2(int8)  root     EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      root     EXECUTE         true
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1(), test_priv_f2(INT), test_priv_f3()
+----
+database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
+test           public         100137       test_priv_f1()      root     EXECUTE         true
+test           public         100138       test_priv_f2(int8)  root     EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      root     EXECUTE         true
 
 statement ok
 GRANT EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 TO udf_test_user WITH GRANT OPTION;
@@ -635,6 +652,17 @@ NULL     root           test              test_priv_sc1    test_priv_f3_100139  
 NULL     udf_test_user  test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
 NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
+----
+database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
+test           public         100137       test_priv_f1()      root           EXECUTE         true
+test           public         100137       test_priv_f1()      udf_test_user  EXECUTE         true
+test           public         100138       test_priv_f2(int8)  root           EXECUTE         true
+test           public         100138       test_priv_f2(int8)  udf_test_user  EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      root           EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      udf_test_user  EXECUTE         true
 
 statement error pq: cannot drop role/user udf_test_user: grants still exist on.*
 DROP USER udf_test_user;
@@ -655,6 +683,17 @@ NULL     udf_test_user  test              public           test_priv_f1_100137  
 NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         NO
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
 
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
+----
+database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
+test           public         100137       test_priv_f1()      root           EXECUTE         true
+test           public         100137       test_priv_f1()      udf_test_user  EXECUTE         false
+test           public         100138       test_priv_f2(int8)  root           EXECUTE         true
+test           public         100138       test_priv_f2(int8)  udf_test_user  EXECUTE         false
+test           test_priv_sc1  100139       test_priv_f3()      root           EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      udf_test_user  EXECUTE         false
+
 statement ok
 REVOKE EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 FROM udf_test_user;
 
@@ -667,6 +706,14 @@ grantor  grantee  specific_catalog  specific_schema  specific_name        routin
 NULL     root     test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
 NULL     root     test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
+----
+database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
+test           public         100137       test_priv_f1()      root     EXECUTE         true
+test           public         100138       test_priv_f2(int8)  root     EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      root     EXECUTE         true
 
 statement ok
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 TO udf_test_user WITH GRANT OPTION;
@@ -684,6 +731,17 @@ NULL     udf_test_user  test              public           test_priv_f1_100137  
 NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
+----
+database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
+test           public         100137       test_priv_f1()      root           EXECUTE         true
+test           public         100137       test_priv_f1()      udf_test_user  EXECUTE         true
+test           public         100138       test_priv_f2(int8)  root           EXECUTE         true
+test           public         100138       test_priv_f2(int8)  udf_test_user  EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      root           EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      udf_test_user  EXECUTE         true
+
 statement ok
 REVOKE GRANT OPTION FOR EXECUTE ON ALL FUNCTIONS in schema public, test_priv_sc1 FROM udf_test_user;
 
@@ -700,6 +758,17 @@ NULL     udf_test_user  test              public           test_priv_f1_100137  
 NULL     udf_test_user  test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         NO
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         NO
 
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
+----
+database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
+test           public         100137       test_priv_f1()      root           EXECUTE         true
+test           public         100137       test_priv_f1()      udf_test_user  EXECUTE         false
+test           public         100138       test_priv_f2(int8)  root           EXECUTE         true
+test           public         100138       test_priv_f2(int8)  udf_test_user  EXECUTE         false
+test           test_priv_sc1  100139       test_priv_f3()      root           EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      udf_test_user  EXECUTE         false
+
 statement ok
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public, test_priv_sc1 FROM udf_test_user;
 
@@ -712,6 +781,14 @@ grantor  grantee  specific_catalog  specific_schema  specific_name        routin
 NULL     root     test              public           test_priv_f1_100137  test             public          test_priv_f1  EXECUTE         YES
 NULL     root     test              public           test_priv_f2_100138  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100139  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
+----
+database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
+test           public         100137       test_priv_f1()      root     EXECUTE         true
+test           public         100138       test_priv_f2(int8)  root     EXECUTE         true
+test           test_priv_sc1  100139       test_priv_f3()      root     EXECUTE         true
 
 statement ok
 DROP FUNCTION test_priv_f1;
@@ -733,6 +810,12 @@ ORDER BY grantee, routine_name;
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 NULL     root     test              public           test_priv_f1_100140  test             public          test_priv_f1  EXECUTE         YES
 
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1
+----
+database_name  schema_name  function_id  function_signature  grantee  privilege_type  is_grantable
+test           public       100140       test_priv_f1()      root     EXECUTE         true
+
 # Add default privilege and make sure new function
 statement ok
 ALTER DEFAULT PRIVILEGES IN SCHEMA public, test_priv_sc1 GRANT EXECUTE ON FUNCTIONS TO udf_test_user WITH GRANT OPTION;
@@ -753,6 +836,16 @@ NULL     root           test              test_priv_sc1    test_priv_f3_100142  
 NULL     udf_test_user  test              public           test_priv_f2_100141  test             public          test_priv_f2  EXECUTE         YES
 NULL     udf_test_user  test              test_priv_sc1    test_priv_f3_100142  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
 
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
+----
+database_name  schema_name    function_id  function_signature  grantee        privilege_type  is_grantable
+test           public         100140       test_priv_f1()      root           EXECUTE         true
+test           public         100141       test_priv_f2(int8)  root           EXECUTE         true
+test           public         100141       test_priv_f2(int8)  udf_test_user  EXECUTE         true
+test           test_priv_sc1  100142       test_priv_f3()      root           EXECUTE         true
+test           test_priv_sc1  100142       test_priv_f3()      udf_test_user  EXECUTE         true
+
 statement ok
 DROP FUNCTION test_priv_f2;
 DROP FUNCTION test_priv_sc1.test_priv_f3;
@@ -764,6 +857,12 @@ ORDER BY grantee, routine_name;
 ----
 grantor  grantee  specific_catalog  specific_schema  specific_name        routine_catalog  routine_schema  routine_name  privilege_type  is_grantable
 NULL     root     test              public           test_priv_f1_100140  test             public          test_priv_f1  EXECUTE         YES
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1
+----
+database_name  schema_name  function_id  function_signature  grantee  privilege_type  is_grantable
+test           public       100140       test_priv_f1()      root     EXECUTE         true
 
 statement ok
 ALTER DEFAULT PRIVILEGES IN SCHEMA public, test_priv_sc1 REVOKE EXECUTE ON FUNCTIONS FROM udf_test_user;
@@ -781,6 +880,17 @@ grantor  grantee  specific_catalog  specific_schema  specific_name        routin
 NULL     root     test              public           test_priv_f1_100140  test             public          test_priv_f1  EXECUTE         YES
 NULL     root     test              public           test_priv_f2_100143  test             public          test_priv_f2  EXECUTE         YES
 NULL     root     test              test_priv_sc1    test_priv_f3_100144  test             test_priv_sc1   test_priv_f3  EXECUTE         YES
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION test_priv_f1, test_priv_f2, test_priv_f3
+----
+database_name  schema_name    function_id  function_signature  grantee  privilege_type  is_grantable
+test           public         100140       test_priv_f1()      root     EXECUTE         true
+test           public         100143       test_priv_f2(int8)  root     EXECUTE         true
+test           test_priv_sc1  100144       test_priv_f3()      root     EXECUTE         true
+
+statement ok
+SET search_path = public;
 
 subtest alter_function_options
 
@@ -1600,6 +1710,65 @@ WITH tmp AS (
 SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'Statement' FROM tmp;
 ----
 drop_function  203  "test.public.f_test_log"  "DROP FUNCTION \"\".\"\".f_test_log"
+
+subtest show_grants
+
+statement ok
+CREATE SCHEMA sc_test_show_grants;
+SET search_path = sc_test_show_grants;
+CREATE FUNCTION f_test_show_grants(INT) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE FUNCTION f_test_show_grants(INT, string, OID) RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE USER u_test_show_grants;
+GRANT EXECUTE ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) TO u_test_show_grants;
+
+statement error pq: function name "f_test_show_grants" is not unique
+SHOW GRANTS ON FUNCTION f_test_show_grants;
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID);
+----
+database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100205       f_test_show_grants(int8)             root                EXECUTE         true
+test           sc_test_show_grants  100205       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  root                EXECUTE         true
+test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+
+statement error pq: function f_test_show_grants\(string\) does not exist: function undefined
+SHOW GRANTS ON FUNCTION f_test_show_grants(string);
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION f_test_show_grants(INT)
+----
+database_name  schema_name          function_id  function_signature        grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100205       f_test_show_grants(int8)  root                EXECUTE         true
+test           sc_test_show_grants  100205       f_test_show_grants(int8)  u_test_show_grants  EXECUTE         false
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION f_test_show_grants(INT, string, OID);
+----
+database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  root                EXECUTE         true
+test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+
+statement error pq: unknown function: f_not_existing\(\): function undefined
+SHOW GRANTS ON FUNCTION f_not_existing;
+
+query TTTTTTB colnames
+SHOW GRANTS ON FUNCTION f_test_show_grants(INT), f_test_show_grants(INT, string, OID) FOR u_test_show_grants;
+----
+database_name  schema_name          function_id  function_signature                   grantee             privilege_type  is_grantable
+test           sc_test_show_grants  100205       f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  100206       f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+
+query TTTTTB colnames
+SHOW GRANTS FOR u_test_show_grants;
+----
+database_name  schema_name          relation_name                        grantee             privilege_type  is_grantable
+test           sc_test_show_grants  f_test_show_grants(int8)             u_test_show_grants  EXECUTE         false
+test           sc_test_show_grants  f_test_show_grants(int8, text, oid)  u_test_show_grants  EXECUTE         false
+
+statement ok
+SET search_path = public;
 
 subtest execution
 
