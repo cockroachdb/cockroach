@@ -13,7 +13,6 @@ package kvnemesis
 import (
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -64,12 +63,6 @@ func TestApplier(t *testing.T) {
 		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(actual))
 	}
 
-	checkPanics := func(t *testing.T, s Step, expectedPanic string) {
-		t.Helper()
-		_ /* trace */, err := a.Apply(ctx, &s)
-		require.EqualError(t, err, fmt.Sprintf("panic applying step %s: %v", s, expectedPanic))
-	}
-
 	// Basic operations
 	check(t, step(get(`a`)), `db0.Get(ctx, "a") // (nil, nil)`)
 	check(t, step(scan(`a`, `c`)), `db1.Scan(ctx, "a", "c", 0) // ([], nil)`)
@@ -118,8 +111,9 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 }) // context canceled
 		`)
 
-	checkPanics(t, step(delRange(`b`, `d`)), `non-transactional DelRange operations currently unsupported`)
-	checkPanics(t, step(batch(delRange(`b`, `d`))), `non-transactional batch DelRange operations currently unsupported`)
+	// TODO add proper test for this now that it works
+	// checkPanics(t, step(delRange(`b`, `d`)), `non-transactional DelRange operations currently unsupported`)
+	// checkPanics(t, step(batch(delRange(`b`, `d`))), `non-transactional batch DelRange operations currently unsupported`)
 
 	// Batch
 	check(t, step(batch(put(`b`, `2`), get(`a`), del(`b`), del(`c`), scan(`a`, `c`), reverseScanForUpdate(`a`, `e`))), `

@@ -227,9 +227,8 @@ func newAllOperationsConfig() GeneratorConfig {
 // operations/make some operations more likely.
 func NewDefaultConfig() GeneratorConfig {
 	config := newAllOperationsConfig()
-	// TODO(sarkesian): Enable non-transactional DelRange once #69642 is fixed.
-	config.Ops.DB.DeleteRange = 0
-	config.Ops.Batch.Ops.DeleteRange = 0
+	config.Ops.DB.DeleteRange = 1
+	config.Ops.Batch.Ops.DeleteRange = 1
 	// TODO(sarkesian): Enable DeleteRange in comingled batches once #71236 is fixed.
 	config.Ops.ClosureTxn.CommitBatchOps.DeleteRange = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRange = 0

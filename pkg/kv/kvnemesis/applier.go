@@ -270,9 +270,6 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			o.Result.Keys[i] = deletedKey
 		}
 	case *DeleteRangeOperation:
-		if !inTxn {
-			panic(errors.AssertionFailedf(`non-transactional DelRange operations currently unsupported`))
-		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
 			b.DelRange(o.Key, o.EndKey, true /* returnKeys */)
 		})
