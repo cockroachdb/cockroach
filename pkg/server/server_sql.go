@@ -973,6 +973,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.Codec,
 		execCfg.Settings,
 		ieFactory,
+		execCfg.ProtectedTimestampProvider,
+		execCfg.SystemConfig,
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
 		sql.ValidateCheckConstraint,
