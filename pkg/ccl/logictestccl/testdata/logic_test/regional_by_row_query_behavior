@@ -3095,3 +3095,69 @@ vectorized: true
             │
             └── • scan buffer
                   label: buffer 1
+
+# Regression test for #88047
+statement ok
+CREATE TABLE t88047 (
+  json_col JSONB NULL,
+  notes STRING,
+  region public.crdb_internal_region NOT NULL AS
+  (CASE WHEN ((json_col->'loc':::STRING)->>'state':::STRING) IN ('AZ':::STRING, 'CA':::STRING, 'NV':::STRING) THEN 'ap-southeast-2':::public.crdb_internal_region
+        WHEN ((json_col->'loc':::STRING)->>'state':::STRING) IN ('MI':::STRING, 'MN':::STRING, 'MO':::STRING) THEN 'ca-central-1':::public.crdb_internal_region
+        WHEN ((json_col->'loc':::STRING)->>'state':::STRING) IN ('PA':::STRING, 'VT':::STRING, 'NY':::STRING) THEN 'us-east-1':::public.crdb_internal_region END) STORED,
+  INVERTED INDEX t88047_inv_idx (json_col)
+) LOCALITY REGIONAL BY ROW AS region
+
+statement ok
+INSERT INTO t88047(json_col, notes)
+  VALUES ('{"loc": {"state": "PA"}}':::JSONB, 'Liberty Bell'),
+         ('{"loc": {"state": "PA"}}':::JSONB, 'Rocky Balboa'),
+         ('{"loc": {"state": "VT"}}':::JSONB, 'Maple Syrup'),
+         ('{"loc": {"state": "NY"}}':::JSONB, 'Big Apple'),
+         ('{"loc": {"state": "NY"}}':::JSONB, 'Statue of Liberty'),
+         ('{"loc": {"state": "CA"}}':::JSONB, 'Golden Gate Bridge'),
+         ('{"loc": {"state": "CA"}}':::JSONB, 'Yosemite'),
+         ('{"loc": {"state": "MI"}}':::JSONB, 'Go Blue!');
+
+# Expect to pick locality-optimized search from the inverted RBR index.
+query T
+EXPLAIN(OPT)
+  SELECT * FROM t88047
+WHERE json_col->'loc' @> '{"state":"NY"}'
+  LIMIT 2
+----
+index-join t88047
+ └── locality-optimized-search
+      ├── scan t88047@t88047_inv_idx
+      │    ├── constraint: /11: [/'ap-southeast-2' - /'ap-southeast-2']
+      │    ├── inverted constraint: /15/12
+      │    │    └── spans: ["7loc\x00\x02state\x00\x01\x12NY\x00\x01", "7loc\x00\x02state\x00\x01\x12NY\x00\x01"]
+      │    └── limit: 2
+      └── scan t88047@t88047_inv_idx
+           ├── constraint: /18
+           │    ├── [/'ca-central-1' - /'ca-central-1']
+           │    └── [/'us-east-1' - /'us-east-1']
+           ├── inverted constraint: /22/19
+           │    └── spans: ["7loc\x00\x02state\x00\x01\x12NY\x00\x01", "7loc\x00\x02state\x00\x01\x12NY\x00\x01"]
+           └── limit: 2
+
+# Expect to see only rows from "state":"NY".
+query TTT
+SELECT * FROM t88047
+WHERE json_col->'loc' @> '{"state":"NY"}'
+  LIMIT 2
+----
+{"loc": {"state": "NY"}}  Big Apple          us-east-1
+{"loc": {"state": "NY"}}  Statue of Liberty  us-east-1
+
+statement ok
+DROP INDEX t88047_inv_idx
+
+# Expect to see only rows from "state":"NY" after inverted index is dropped.
+query TTT
+SELECT * FROM t88047
+WHERE json_col->'loc' @> '{"state":"NY"}'
+  LIMIT 2
+----
+{"loc": {"state": "NY"}}  Big Apple          us-east-1
+{"loc": {"state": "NY"}}  Statue of Liberty  us-east-1

@@ -161,55 +161,10 @@ var enabledDjangoTests = []string{
 	"view_tests",
 }
 
-var djangoBlocklists = blocklistsForVersion{
-	{"v20.2", "djangoBlocklist20_2", djangoBlocklist20_2, "djangoIgnoreList20_2", djangoIgnoreList20_2},
-	{"v21.1", "djangoBlocklist21_1", djangoBlocklist21_1, "djangoIgnoreList21_1", djangoIgnoreList21_1},
-	{"v21.2", "djangoBlocklist21_2", djangoBlocklist21_2, "djangoIgnoreList21_2", djangoIgnoreList21_2},
-	{"v22.1", "djangoBlocklist22_1", djangoBlocklist22_1, "djangoIgnoreList22_1", djangoIgnoreList22_1},
-}
-
 // Maintain that this list is alphabetized.
-var djangoBlocklist22_1 = djangoBlocklist21_2
+var djangoBlocklist = blocklist{}
 
-var djangoBlocklist21_2 = djangoBlocklist21_1
-
-var djangoBlocklist21_1 = djangoBlocklist20_2
-
-var djangoBlocklist20_2 = blocklist{}
-
-var djangoIgnoreList22_1 = djangoIgnoreList21_2
-
-var djangoIgnoreList21_2 = blocklist{
-	"migrations.test_operations.OperationTests.test_alter_fk_non_fk":  "will be fixed in django-cockroachdb v3.2.2",
-	"schema.tests.SchemaTests.test_alter_field_db_collation":          "will be fixed in django-cockroachdb v3.2.2",
-	"schema.tests.SchemaTests.test_alter_field_type_and_db_collation": "will be fixed in django-cockroachdb v3.2.2",
-}
-
-var djangoIgnoreList21_1 = blocklist{
-	"schema.tests.SchemaTests.test_alter_field_db_collation":          "will be fixed in django-cockroachdb v3.2.2",
-	"schema.tests.SchemaTests.test_alter_field_type_and_db_collation": "will be fixed in django-cockroachdb v3.2.2",
-}
-
-var djangoIgnoreList20_2 = blocklist{
-	"expressions.tests.BasicExpressionsTests.test_boolean_expression_combined":   "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_attribute_name_not_python_keyword":   "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_digits_column_name_introspection":    "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_field_types":                         "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_managed_models":                      "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_number_field_types":                  "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_special_column_name_introspection":   "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_stealth_table_name_filter_option":    "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_table_name_introspection":            "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_table_option":                        "unknown",
-	"inspectdb.tests.InspectDBTestCase.test_unique_together_meta":                "unknown",
-	"introspection.tests.IntrospectionTests.test_get_constraints_indexes_orders": "unknown",
-	"introspection.tests.IntrospectionTests.test_get_table_description_types":    "unknown",
-	"schema.tests.SchemaTests.test_add_field_temp_default":                       "unknown",
-	"schema.tests.SchemaTests.test_alter":                                        "unknown",
-	"schema.tests.SchemaTests.test_alter_field_fk_keeps_index":                   "unknown",
-	"schema.tests.SchemaTests.test_alter_field_fk_to_o2o":                        "unknown",
-	"schema.tests.SchemaTests.test_alter_numeric_field_keep_null_status":         "unknown",
-	"schema.tests.SchemaTests.test_alter_smallint_pk_to_smallautofield_pk":       "unknown",
-	"schema.tests.SchemaTests.test_db_table":                                     "unknown",
-	"schema.tests.SchemaTests.test_foreign_key_index_long_names_regression":      "unknown",
+var djangoIgnoreList = blocklist{
+	"schema.tests.SchemaTests.test_add_auto_field":   "unneeded once django-cockroachdb 4.1.1 is released",
+	"schema.tests.SchemaTests.test_autofield_to_o2o": "unneeded once django-cockroachdb 4.1.1 is released",
 }

@@ -214,7 +214,24 @@ message BackupDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
 
-  // NEXT ID: 20;
+  // RequestedTargets contains descriptors resolved from any explicit targets
+  // (and is empty for full-cluster backups, which have no explicit targets).
+  // This is different from ResolvedTargets in that it contains exactly one
+  // entry per target from the original backup statement. For targets that
+  // specify exactly one table or database, the entry is just the descriptor of
+  // the table or database. For targets that specify all tables in a database or
+  // schema with a wildcard, the descriptor is that of the database or schema.
+  repeated sqlbase.Descriptor requested_targets = 20 [(gogoproto.nullable) = false];
+
+  // Detached is true if the backup is running DETACHED mode.
+  bool detached = 21;
+
+  // AsOfInterval is the time interval in nanoseconds between the statement
+  // timestamp and the timestamp resolved by the AS OF SYSTEM TIME expression.
+  // The interval is expressed in nanoseconds.
+  int64 as_of_interval = 22;
+
+  // NEXT ID: 23;
 }
 
 message BackupProgress {

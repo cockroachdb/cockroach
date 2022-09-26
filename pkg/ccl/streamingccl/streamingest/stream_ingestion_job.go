@@ -178,7 +178,7 @@ func (s *streamIngestionResumer) revertToCutoverTimestamp(
 // TODO(adityamaru): Add ClearRange logic once we have introduced
 // synchronization between the flow tearing down and the job transitioning to a
 // failed/canceled state.
-func (s *streamIngestionResumer) OnFailOrCancel(_ context.Context, _ interface{}) error {
+func (s *streamIngestionResumer) OnFailOrCancel(_ context.Context, _ interface{}, _ error) error {
 	return nil
 }
 

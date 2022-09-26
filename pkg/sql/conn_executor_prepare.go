@@ -200,11 +200,7 @@ func (ex *connExecutor) prepare(
 			for i := range placeholderHints {
 				if placeholderHints[i] == nil {
 					if i >= len(rawTypeHints) {
-						return pgwirebase.NewProtocolViolationErrorf(
-							"expected %d arguments, got %d",
-							len(placeholderHints),
-							len(rawTypeHints),
-						)
+						break
 					}
 					if types.IsOIDUserDefinedType(rawTypeHints[i]) {
 						var err error
@@ -272,12 +268,8 @@ func (ex *connExecutor) populatePrepared(
 		}
 	}
 	stmt := &p.stmt
-	var fromSQL bool
-	if origin == PreparedStatementOriginSQL {
-		fromSQL = true
-	}
 
-	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints, fromSQL); err != nil {
+	if err := p.semaCtx.Placeholders.Init(stmt.NumPlaceholders, placeholderHints); err != nil {
 		return 0, err
 	}
 	p.extendedEvalCtx.PrepareOnly = true
@@ -337,7 +329,7 @@ func (ex *connExecutor) execBind(
 			return retErr(pgerror.Newf(
 				pgcode.DuplicateCursor, "portal %q already exists", portalName))
 		}
-		if cursor := ex.getCursorAccessor().getCursor(portalName); cursor != nil {
+		if cursor := ex.getCursorAccessor().getCursor(tree.Name(portalName)); cursor != nil {
 			return retErr(pgerror.Newf(
 				pgcode.DuplicateCursor, "portal %q already exists as cursor", portalName))
 		}
@@ -493,7 +485,7 @@ func (ex *connExecutor) addPortal(
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
 		panic(errors.AssertionFailedf("portal already exists: %q", portalName))
 	}
-	if cursor := ex.getCursorAccessor().getCursor(portalName); cursor != nil {
+	if cursor := ex.getCursorAccessor().getCursor(tree.Name(portalName)); cursor != nil {
 		panic(errors.AssertionFailedf("portal already exists as cursor: %q", portalName))
 	}
 
@@ -572,7 +564,7 @@ func (ex *connExecutor) execDescribe(
 
 	switch descCmd.Type {
 	case pgwirebase.PrepareStatement:
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[descCmd.Name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(descCmd.Name)]
 		if !ok {
 			return retErr(pgerror.Newf(
 				pgcode.InvalidSQLStatementName,
@@ -602,7 +594,9 @@ func (ex *connExecutor) execDescribe(
 			res.SetPrepStmtOutput(ctx, ps.Columns)
 		}
 	case pgwirebase.PreparePortal:
-		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[descCmd.Name]
+		// TODO(rimadeodhar): prepStmtsNamespace should also be updated to use tree.Name instead of string
+		// for indexing internal maps.
+		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[string(descCmd.Name)]
 		if !ok {
 			// Check SQL-level cursors.
 			cursor := ex.getCursorAccessor().getCursor(descCmd.Name)

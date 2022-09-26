@@ -19,6 +19,7 @@ import {
   Count,
   TimestampToNumber,
   TimestampToMoment,
+  unset,
 } from "src/util";
 import { DATE_FORMAT } from "src/util/format";
 import {
@@ -101,6 +102,15 @@ function makeCommonColumns(
       className: cx("statements-table__col-database"),
       cell: (stmt: AggregateStatistics) => stmt.database,
       sort: (stmt: AggregateStatistics) => stmt.database,
+      showByDefault: false,
+    },
+    {
+      name: "applicationName",
+      title: statisticsTableTitles.applicationName(statType),
+      className: cx("statements-table__col-app-name"),
+      cell: (stmt: AggregateStatistics) =>
+        stmt.applicationName?.length > 0 ? stmt.applicationName : unset,
+      sort: (stmt: AggregateStatistics) => stmt.applicationName,
       showByDefault: false,
     },
     {
@@ -214,6 +224,7 @@ export interface AggregateStatistics {
   implicitTxn: boolean;
   fullScan: boolean;
   database: string;
+  applicationName: string;
   stats: StatementStatistics;
   drawer?: boolean;
   firstCellBordered?: boolean;

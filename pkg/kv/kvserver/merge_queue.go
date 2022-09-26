@@ -110,7 +110,7 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 			// hard to determine ahead of time. An alternative would be to calculate
 			// the timeout with a function that additionally considers the replication
 			// factor.
-			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
+			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate, recoverySnapshotRate),
 			needsLease:           true,
 			needsSystemConfig:    true,
 			acceptsUnsplitRanges: false,

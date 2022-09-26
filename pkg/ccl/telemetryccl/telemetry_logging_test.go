@@ -53,6 +53,10 @@ func TestTelemetryLogRegions(t *testing.T) {
 	sqlDB.Exec(t, `ALTER TABLE three_regions SPLIT AT SELECT generate_series(1, 3)`)
 	sqlDB.Exec(t, "ALTER TABLE three_regions EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3)")
 
+	// Enable the sampling of all statements so that execution statistics
+	// (including the regions information) is collected.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 1.0`)
+
 	// Enable the telemetry logging and increase the sampling frequency so that
 	// all statements are captured.
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)

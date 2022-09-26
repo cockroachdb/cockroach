@@ -739,7 +739,9 @@ func keyToDatums(
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (t rowLevelTTLResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (t rowLevelTTLResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, _ error,
+) error {
 	return nil
 }
 

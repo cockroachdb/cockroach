@@ -92,3 +92,6 @@ func (m *CommonJobEventDetails) CommonJobDetails() *CommonJobEventDetails { retu
 
 var _ EventWithCommonJobPayload = (*Import)(nil)
 var _ EventWithCommonJobPayload = (*Restore)(nil)
+
+// RecoveryEventType describes the type of recovery for a RecoveryEvent.
+type RecoveryEventType string

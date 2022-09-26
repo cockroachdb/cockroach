@@ -439,6 +439,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 				inputProjections = append(inputProjections, projection)
 				lookupJoin.KeyCols = append(lookupJoin.KeyCols, compEqCol)
 				rightSideCols = append(rightSideCols, idxCol)
+				lookupJoin.DerivedEquivCols.Add(compEqCol)
+				lookupJoin.DerivedEquivCols.Add(idxCol)
 				continue
 			}
 

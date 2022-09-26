@@ -181,6 +181,7 @@ func splitTxnAttempt(
 	splitKey roachpb.RKey,
 	expiration hlc.Timestamp,
 	oldDesc *roachpb.RangeDescriptor,
+	reason string,
 ) error {
 	txn.SetDebugName(splitTxnName)
 
@@ -219,7 +220,7 @@ func splitTxnAttempt(
 	}
 
 	// Log the split into the range event log.
-	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc); err != nil {
+	if err := store.logSplit(ctx, txn, *leftDesc, *rightDesc, reason); err != nil {
 		return err
 	}
 
@@ -421,7 +422,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		splitKey.StringWithDirs(nil /* valDirs */, 50 /* maxLen */), rightRangeID, reason, extra)
 
 	if err := r.store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc)
+		return splitTxnAttempt(ctx, r.store, txn, rightRangeID, splitKey, args.ExpirationTime, desc, reason)
 	}); err != nil {
 		// The ConditionFailedError can occur because the descriptors acting
 		// as expected values in the CPuts used to update the left or right
@@ -533,6 +534,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 	// that suggested this.
 	retryOpts.RandomizationFactor = 0.5
 	var lastErr error
+	splitRetryLogLimiter := log.Every(10 * time.Second)
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
 		// The replica may have been destroyed since the start of the retry loop.
 		// We need to explicitly check this condition. Having a valid lease, as we
@@ -559,6 +561,9 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 		if !errors.HasType(lastErr, (*roachpb.ConditionFailedError)(nil)) &&
 			!errors.HasType(lastErr, (*roachpb.AmbiguousResultError)(nil)) {
 			break
+		}
+		if splitRetryLogLimiter.ShouldLog() {
+			log.Warningf(ctx, "retrying split after err: %v", lastErr)
 		}
 	}
 	return roachpb.NewError(lastErr)

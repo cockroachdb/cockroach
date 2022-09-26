@@ -112,7 +112,8 @@ const (
 // some amount of RAM for its buffer. This is determined by
 // maxNumberPartitions variable.
 type externalSorter struct {
-	colexecop.OneInputHelper
+	colexecop.OneInputNode
+	colexecop.InitHelper
 	colexecop.NonExplainable
 	colexecop.CloserHelper
 
@@ -126,6 +127,8 @@ type externalSorter struct {
 	// operation. This will be roughly a half of the total limit and is used by
 	// the dequeued batches and the output batch.
 	mergeMemoryLimit int64
+
+	cancelChecker colexecutils.CancelChecker
 
 	state      externalSorterState
 	inputTypes []*types.T
@@ -289,7 +292,7 @@ func NewExternalSorter(
 		partitionedDiskQueueSemaphore = nil
 	}
 	es := &externalSorter{
-		OneInputHelper:           colexecop.MakeOneInputHelper(inMemSorter),
+		OneInputNode:             colexecop.NewOneInputNode(inMemSorter),
 		mergeUnlimitedAllocator:  mergeUnlimitedAllocator,
 		outputUnlimitedAllocator: outputUnlimitedAllocator,
 		mergeMemoryLimit:         mergeMemoryLimit,
@@ -340,8 +343,17 @@ func (s *externalSorter) resetPartitionsInfo(i int) {
 	s.partitionsInfo.maxBatchMemSize[i] = 0
 }
 
+func (s *externalSorter) Init(ctx context.Context) {
+	if !s.InitHelper.Init(ctx) {
+		return
+	}
+	s.Input.Init(s.Ctx)
+	s.cancelChecker.Init(s.Ctx)
+}
+
 func (s *externalSorter) Next() coldata.Batch {
 	for {
+		s.cancelChecker.CheckEveryCall()
 		switch s.state {
 		case externalSorterNewPartition:
 			b := s.Input.Next()

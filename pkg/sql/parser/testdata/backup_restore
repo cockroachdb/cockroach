@@ -67,7 +67,7 @@ BACKUP TABLE foo INTO $1 IN $2
 ----
 BACKUP TABLE foo INTO $1 IN $2
 BACKUP TABLE (foo) INTO ($1) IN ($2) -- fully parenthesized
-BACKUP TABLE foo INTO $1 IN $2 -- literals removed
+BACKUP TABLE foo INTO $1 IN $1 -- literals removed
 BACKUP TABLE _ INTO $1 IN $2 -- identifiers removed
 
 parse
@@ -171,7 +171,7 @@ SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
 ----
 SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
 SHOW BACKUP FROM ($1) IN ($2) WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP FROM $1 IN $2 WITH foo = '_' -- literals removed
+SHOW BACKUP FROM $1 IN $1 WITH foo = '_' -- literals removed
 SHOW BACKUP FROM $1 IN $2 WITH _ = 'bar' -- identifiers removed
 
 parse
@@ -203,7 +203,7 @@ SHOW BACKUP $1 IN $2 WITH foo = 'bar'
 ----
 SHOW BACKUP $1 IN $2 WITH foo = 'bar'
 SHOW BACKUP ($1) IN ($2) WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP $1 IN $2 WITH foo = '_' -- literals removed
+SHOW BACKUP $1 IN $1 WITH foo = '_' -- literals removed
 SHOW BACKUP $1 IN $2 WITH _ = 'bar' -- identifiers removed
 
 parse
@@ -227,7 +227,7 @@ BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
 ----
 BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
 BACKUP TABLE (foo) TO ($1) INCREMENTAL FROM ('bar'), ($2), ('baz') -- fully parenthesized
-BACKUP TABLE foo TO $1 INCREMENTAL FROM '_', $2, '_' -- literals removed
+BACKUP TABLE foo TO $1 INCREMENTAL FROM '_', $1, '_' -- literals removed
 BACKUP TABLE _ TO $1 INCREMENTAL FROM 'bar', $2, 'baz' -- identifiers removed
 
 parse
@@ -235,7 +235,7 @@ BACKUP foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'
 ----
 BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz' -- normalized!
 BACKUP TABLE (foo) TO ($1) INCREMENTAL FROM ('bar'), ($2), ('baz') -- fully parenthesized
-BACKUP TABLE foo TO $1 INCREMENTAL FROM '_', $2, '_' -- literals removed
+BACKUP TABLE foo TO $1 INCREMENTAL FROM '_', $1, '_' -- literals removed
 BACKUP TABLE _ TO $1 INCREMENTAL FROM 'bar', $2, 'baz' -- identifiers removed
 
 parse
@@ -301,7 +301,7 @@ BACKUP DATABASE foo TO ($1, $2)
 ----
 BACKUP DATABASE foo TO ($1, $2)
 BACKUP DATABASE foo TO (($1), ($2)) -- fully parenthesized
-BACKUP DATABASE foo TO ($1, $2) -- literals removed
+BACKUP DATABASE foo TO ($1, $1) -- literals removed
 BACKUP DATABASE _ TO ($1, $2) -- identifiers removed
 
 parse
@@ -309,7 +309,7 @@ BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz'
 ----
 BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM 'baz'
 BACKUP DATABASE foo TO (($1), ($2)) INCREMENTAL FROM ('baz') -- fully parenthesized
-BACKUP DATABASE foo TO ($1, $2) INCREMENTAL FROM '_' -- literals removed
+BACKUP DATABASE foo TO ($1, $1) INCREMENTAL FROM '_' -- literals removed
 BACKUP DATABASE _ TO ($1, $2) INCREMENTAL FROM 'baz' -- identifiers removed
 
 parse
@@ -400,7 +400,7 @@ RESTORE TABLE foo FROM $2 IN $1
 ----
 RESTORE TABLE foo FROM $2 IN $1
 RESTORE TABLE (foo) FROM ($2) IN ($1) -- fully parenthesized
-RESTORE TABLE foo FROM $2 IN $1 -- literals removed
+RESTORE TABLE foo FROM $1 IN $1 -- literals removed
 RESTORE TABLE _ FROM $2 IN $1 -- identifiers removed
 
 parse
@@ -408,7 +408,7 @@ RESTORE TABLE foo FROM $1, $2, 'bar'
 ----
 RESTORE TABLE foo FROM $1, $2, 'bar'
 RESTORE TABLE (foo) FROM ($1), ($2), ('bar') -- fully parenthesized
-RESTORE TABLE foo FROM $1, $2, '_' -- literals removed
+RESTORE TABLE foo FROM $1, $1, '_' -- literals removed
 RESTORE TABLE _ FROM $1, $2, 'bar' -- identifiers removed
 
 parse
@@ -416,7 +416,7 @@ RESTORE foo FROM $1, $2, 'bar'
 ----
 RESTORE TABLE foo FROM $1, $2, 'bar' -- normalized!
 RESTORE TABLE (foo) FROM ($1), ($2), ('bar') -- fully parenthesized
-RESTORE TABLE foo FROM $1, $2, '_' -- literals removed
+RESTORE TABLE foo FROM $1, $1, '_' -- literals removed
 RESTORE TABLE _ FROM $1, $2, 'bar' -- identifiers removed
 
 parse
@@ -424,7 +424,7 @@ RESTORE TABLE foo FROM 'abc' IN $1, $2, 'bar'
 ----
 RESTORE TABLE foo FROM 'abc' IN $1, $2, 'bar'
 RESTORE TABLE (foo) FROM ('abc') IN ($1), ($2), ('bar') -- fully parenthesized
-RESTORE TABLE foo FROM '_' IN $1, $2, '_' -- literals removed
+RESTORE TABLE foo FROM '_' IN $1, $1, '_' -- literals removed
 RESTORE TABLE _ FROM 'abc' IN $1, $2, 'bar' -- identifiers removed
 
 parse
@@ -432,7 +432,7 @@ RESTORE TABLE foo FROM $4 IN $1, $2, 'bar'
 ----
 RESTORE TABLE foo FROM $4 IN $1, $2, 'bar'
 RESTORE TABLE (foo) FROM ($4) IN ($1), ($2), ('bar') -- fully parenthesized
-RESTORE TABLE foo FROM $4 IN $1, $2, '_' -- literals removed
+RESTORE TABLE foo FROM $1 IN $1, $1, '_' -- literals removed
 RESTORE TABLE _ FROM $4 IN $1, $2, 'bar' -- identifiers removed
 
 parse
@@ -539,7 +539,7 @@ RESTORE DATABASE foo FROM ($1, $2)
 ----
 RESTORE DATABASE foo FROM ($1, $2)
 RESTORE DATABASE foo FROM (($1), ($2)) -- fully parenthesized
-RESTORE DATABASE foo FROM ($1, $2) -- literals removed
+RESTORE DATABASE foo FROM ($1, $1) -- literals removed
 RESTORE DATABASE _ FROM ($1, $2) -- identifiers removed
 
 parse
@@ -547,7 +547,7 @@ RESTORE DATABASE foo FROM ($1), ($2)
 ----
 RESTORE DATABASE foo FROM $1, $2 -- normalized!
 RESTORE DATABASE foo FROM ($1), ($2) -- fully parenthesized
-RESTORE DATABASE foo FROM $1, $2 -- literals removed
+RESTORE DATABASE foo FROM $1, $1 -- literals removed
 RESTORE DATABASE _ FROM $1, $2 -- identifiers removed
 
 parse
@@ -555,7 +555,7 @@ RESTORE DATABASE foo FROM ($1), ($2, $3)
 ----
 RESTORE DATABASE foo FROM $1, ($2, $3) -- normalized!
 RESTORE DATABASE foo FROM ($1), (($2), ($3)) -- fully parenthesized
-RESTORE DATABASE foo FROM $1, ($2, $3) -- literals removed
+RESTORE DATABASE foo FROM $1, ($1, $1) -- literals removed
 RESTORE DATABASE _ FROM $1, ($2, $3) -- identifiers removed
 
 parse
@@ -563,7 +563,7 @@ RESTORE DATABASE foo FROM ($1, $2), $3
 ----
 RESTORE DATABASE foo FROM ($1, $2), $3
 RESTORE DATABASE foo FROM (($1), ($2)), ($3) -- fully parenthesized
-RESTORE DATABASE foo FROM ($1, $2), $3 -- literals removed
+RESTORE DATABASE foo FROM ($1, $1), $1 -- literals removed
 RESTORE DATABASE _ FROM ($1, $2), $3 -- identifiers removed
 
 parse
@@ -571,7 +571,7 @@ RESTORE DATABASE foo FROM $1, ($2, $3)
 ----
 RESTORE DATABASE foo FROM $1, ($2, $3)
 RESTORE DATABASE foo FROM ($1), (($2), ($3)) -- fully parenthesized
-RESTORE DATABASE foo FROM $1, ($2, $3) -- literals removed
+RESTORE DATABASE foo FROM $1, ($1, $1) -- literals removed
 RESTORE DATABASE _ FROM $1, ($2, $3) -- identifiers removed
 
 parse
@@ -579,7 +579,7 @@ RESTORE DATABASE foo FROM ($1, $2), ($3, $4)
 ----
 RESTORE DATABASE foo FROM ($1, $2), ($3, $4)
 RESTORE DATABASE foo FROM (($1), ($2)), (($3), ($4)) -- fully parenthesized
-RESTORE DATABASE foo FROM ($1, $2), ($3, $4) -- literals removed
+RESTORE DATABASE foo FROM ($1, $1), ($1, $1) -- literals removed
 RESTORE DATABASE _ FROM ($1, $2), ($3, $4) -- identifiers removed
 
 parse
@@ -587,7 +587,7 @@ RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
 ----
 RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
 RESTORE DATABASE foo FROM (($1), ($2)), (($3), ($4)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE DATABASE foo FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '_' -- literals removed
+RESTORE DATABASE foo FROM ($1, $1), ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
 RESTORE DATABASE _ FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- identifiers removed
 
 parse
@@ -595,7 +595,7 @@ RESTORE FROM ($1, $2)
 ----
 RESTORE FROM ($1, $2)
 RESTORE FROM (($1), ($2)) -- fully parenthesized
-RESTORE FROM ($1, $2) -- literals removed
+RESTORE FROM ($1, $1) -- literals removed
 RESTORE FROM ($1, $2) -- identifiers removed
 
 parse
@@ -603,7 +603,7 @@ RESTORE FROM ($1, $2), $3
 ----
 RESTORE FROM ($1, $2), $3
 RESTORE FROM (($1), ($2)), ($3) -- fully parenthesized
-RESTORE FROM ($1, $2), $3 -- literals removed
+RESTORE FROM ($1, $1), $1 -- literals removed
 RESTORE FROM ($1, $2), $3 -- identifiers removed
 
 parse
@@ -611,7 +611,7 @@ RESTORE FROM $1, ($2, $3)
 ----
 RESTORE FROM $1, ($2, $3)
 RESTORE FROM ($1), (($2), ($3)) -- fully parenthesized
-RESTORE FROM $1, ($2, $3) -- literals removed
+RESTORE FROM $1, ($1, $1) -- literals removed
 RESTORE FROM $1, ($2, $3) -- identifiers removed
 
 parse
@@ -619,7 +619,7 @@ RESTORE FROM ($1, $2), ($3, $4)
 ----
 RESTORE FROM ($1, $2), ($3, $4)
 RESTORE FROM (($1), ($2)), (($3), ($4)) -- fully parenthesized
-RESTORE FROM ($1, $2), ($3, $4) -- literals removed
+RESTORE FROM ($1, $1), ($1, $1) -- literals removed
 RESTORE FROM ($1, $2), ($3, $4) -- identifiers removed
 
 parse
@@ -627,7 +627,7 @@ RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
 ----
 RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1'
 RESTORE FROM (($1), ($2)), (($3), ($4)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '_' -- literals removed
+RESTORE FROM ($1, $1), ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
 RESTORE FROM ($1, $2), ($3, $4) AS OF SYSTEM TIME '1' -- identifiers removed
 
 parse
@@ -635,7 +635,7 @@ RESTORE FROM $1, $2, 'bar'
 ----
 RESTORE FROM $1, $2, 'bar'
 RESTORE FROM ($1), ($2), ('bar') -- fully parenthesized
-RESTORE FROM $1, $2, '_' -- literals removed
+RESTORE FROM $1, $1, '_' -- literals removed
 RESTORE FROM $1, $2, 'bar' -- identifiers removed
 
 parse
@@ -643,7 +643,7 @@ RESTORE FROM $4 IN $1, $2, 'bar'
 ----
 RESTORE FROM $4 IN $1, $2, 'bar'
 RESTORE FROM ($4) IN ($1), ($2), ('bar') -- fully parenthesized
-RESTORE FROM $4 IN $1, $2, '_' -- literals removed
+RESTORE FROM $1 IN $1, $1, '_' -- literals removed
 RESTORE FROM $4 IN $1, $2, 'bar' -- identifiers removed
 
 parse
@@ -651,7 +651,7 @@ RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH skip_missing_foreign
 ----
 RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH skip_missing_foreign_keys
 RESTORE FROM ($4) IN ($1), ($2), ('bar') AS OF SYSTEM TIME ('1') WITH skip_missing_foreign_keys -- fully parenthesized
-RESTORE FROM $4 IN $1, $2, '_' AS OF SYSTEM TIME '_' WITH skip_missing_foreign_keys -- literals removed
+RESTORE FROM $1 IN $1, $1, '_' AS OF SYSTEM TIME '_' WITH skip_missing_foreign_keys -- literals removed
 RESTORE FROM $4 IN $1, $2, 'bar' AS OF SYSTEM TIME '1' WITH skip_missing_foreign_keys -- identifiers removed
 
 parse
@@ -694,7 +694,7 @@ RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
 ----
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
 RESTORE TENANT 36 FROM (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $2) AS OF SYSTEM TIME '_' -- literals removed
+RESTORE TENANT _ FROM ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
 
 parse
@@ -702,7 +702,7 @@ RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'
 ----
 RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'
 RESTORE TENANT 36 FROM (($1), ($2)) WITH tenant = ('5') -- fully parenthesized
-RESTORE TENANT _ FROM ($1, $2) WITH tenant = '_' -- literals removed
+RESTORE TENANT _ FROM ($1, $1) WITH tenant = '_' -- literals removed
 RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5' -- identifiers removed
 
 parse

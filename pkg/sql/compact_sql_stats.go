@@ -87,7 +87,9 @@ func (r *sqlStatsCompactionResumer) Resume(ctx context.Context, execCtx interfac
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (r *sqlStatsCompactionResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+func (r *sqlStatsCompactionResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, _ error,
+) error {
 	p := execCtx.(JobExecContext)
 	execCfg := p.ExecCfg()
 	ie := execCfg.InternalExecutor

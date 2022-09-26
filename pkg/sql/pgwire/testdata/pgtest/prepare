@@ -1,0 +1,92 @@
+send
+Parse {"Name": "s0", "Query": "select $1", "ParameterOIDs":[1043, 1043, 1043]}
+Bind {"DestinationPortal": "p0", "PreparedStatement": "s0", "ParameterFormatCodes": [0], "Parameters": [{"text":"whitebear"}, {"text":"blackbear"}, {"text":"brownbear"}]}
+Execute {"Portal": "p0"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"whitebear"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Bind {"DestinationPortal": "p0", "PreparedStatement": "s0", "ParameterFormatCodes": [0], "Parameters": [{"text":"whitebear"}]}
+Execute {"Portal": "p0"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s1", "Query": "SELECT 3", "ParameterOIDs":[1043, 1043, 1043]}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"whitebear"}, {"text":"blackbear"}, {"text":"brownbear"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Parse {"Name": "s2", "Query": "select $1, $2::int", "ParameterOIDs":[1043]}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [0], "Parameters": [{"text":"winnie"}, {"text":"123"}]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"winnie"},{"text":"123"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2", "ParameterFormatCodes": [0], "Parameters": [{"text":"winnie"}]}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Parse {"Name": "s", "Query": "select 3"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s", "ParameterFormatCodes": [0], "Parameters": [{"text":"foo"}]}
+Describe {"ObjectType": "P", "Name": "p"}
+Execute {"Portal": "p"}
+Sync
+----
+
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"08P01"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

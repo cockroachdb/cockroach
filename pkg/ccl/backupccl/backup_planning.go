@@ -172,6 +172,19 @@ func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID
 func getPublicIndexTableSpans(
 	table catalog.TableDescriptor, added map[tableAndIndex]bool, codec keys.SQLCodec,
 ) ([]roachpb.Span, error) {
+	// We do not backup spans for views here as they do not contain data.
+	//
+	// Additionally, because we do not split ranges at view boundaries, it is
+	// possible that the range the view span belongs to is shared by another
+	// object in the cluster (that we may or may not be backing up) that might
+	// have its own bespoke zone configurations, namely one with a short GC TTL.
+	// This could lead to a situation where the short GC TTL on the range we are
+	// not backing up causes our protectedts verification to fail when attempting
+	// to backup the view span.
+	if !table.IsPhysicalTable() {
+		return nil, nil
+	}
+
 	publicIndexSpans := make([]roachpb.Span, 0)
 	if err := catalog.ForEachActiveIndex(table, func(idx catalog.Index) error {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
@@ -717,6 +730,7 @@ func backupPlanHook(
 				" aware URIs as the full backup destination")
 		}
 
+		var asOfInterval int64
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {
 			asOf, err := p.EvalAsOfTimestamp(ctx, backupStmt.AsOf)
@@ -724,6 +738,7 @@ func backupPlanHook(
 				return err
 			}
 			endTime = asOf.Timestamp
+			asOfInterval = asOf.Timestamp.WallTime - p.ExtendedEvalContext().StmtTimestamp.UnixNano()
 		}
 
 		switch encryptionParams.Mode {
@@ -756,11 +771,13 @@ func backupPlanHook(
 
 		var targetDescs []catalog.Descriptor
 		var completeDBs []descpb.ID
+		var requestedDBs []catalog.DatabaseDescriptor
+		var descsByTablePattern map[tree.TablePattern]catalog.Descriptor
 
 		switch backupStmt.Coverage() {
 		case tree.RequestedDescriptors:
 			var err error
-			targetDescs, completeDBs, _, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+			targetDescs, completeDBs, requestedDBs, descsByTablePattern, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
 			if err != nil {
 				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 			}
@@ -788,6 +805,8 @@ func backupPlanHook(
 			FullCluster:         backupStmt.Coverage() == tree.AllDescriptors,
 			ResolvedCompleteDbs: completeDBs,
 			EncryptionOptions:   &encryptionParams,
+			AsOfInterval:        asOfInterval,
+			Detached:            backupStmt.Options.Detached,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID
@@ -802,6 +821,14 @@ func backupPlanHook(
 				descriptorProtos = append(descriptorProtos, *desc.DescriptorProto())
 			}
 			initialDetails.ResolvedTargets = descriptorProtos
+
+			for _, desc := range descsByTablePattern {
+				initialDetails.RequestedTargets = append(initialDetails.RequestedTargets, *desc.DescriptorProto())
+			}
+
+			for _, desc := range requestedDBs {
+				initialDetails.RequestedTargets = append(initialDetails.RequestedTargets, *desc.DescriptorProto())
+			}
 		}
 
 		if backupStmt.Nested {
@@ -1018,7 +1045,7 @@ func backupPlanHook(
 			}
 
 			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
-			collectTelemetry(backupManifest, initialDetails, backupDetails, lic)
+			collectTelemetry(ctx, backupManifest, initialDetails, backupDetails, lic, jobID)
 			return nil
 		}
 
@@ -1057,7 +1084,7 @@ func backupPlanHook(
 			return err
 		}
 
-		collectTelemetry(backupManifest, initialDetails, backupDetails, lic)
+		collectTelemetry(ctx, backupManifest, initialDetails, backupDetails, lic, jobID)
 		if err := sj.Start(ctx); err != nil {
 			return err
 		}
@@ -1074,7 +1101,11 @@ func backupPlanHook(
 }
 
 func collectTelemetry(
-	backupManifest BackupManifest, initialDetails, backupDetails jobspb.BackupDetails, licensed bool,
+	ctx context.Context,
+	backupManifest BackupManifest,
+	initialDetails, backupDetails jobspb.BackupDetails,
+	licensed bool,
+	jobID jobspb.JobID,
 ) {
 	// sourceSuffix specifies if this schedule was created by a schedule.
 	sourceSuffix := ".manual"
@@ -1152,6 +1183,8 @@ func collectTelemetry(
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
 		countSource("backup.targets.full_cluster")
 	}
+
+	logBackupTelemetry(ctx, initialDetails, jobID)
 }
 
 func getScheduledBackupExecutionArgsFromSchedule(

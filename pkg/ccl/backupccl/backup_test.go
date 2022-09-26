@@ -86,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -96,6 +97,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/kr/pretty"
@@ -8260,7 +8262,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 		&unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, "restore",
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, `"EventType":"restore"`,
 		"RESTORE")
 
 	sqlDB.Exec(t, `DROP DATABASE r1`)
@@ -8278,7 +8280,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 		string(jobs.StatusRunning),
 	}
 	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondRestore.UnixNano(), jobID,
-		"restore", "RESTORE")
+		`"EventType":"restore"`, "RESTORE")
 }
 
 func TestBackupOnlyPublicIndexes(t *testing.T) {
@@ -9951,4 +9953,260 @@ func TestBackupLatestInBaseDirectory(t *testing.T) {
 	// written by the old version in the base directory.
 	query = fmt.Sprintf("BACKUP INTO LATEST IN %s", userfile)
 	sqlDB.Exec(t, query)
+
+}
+
+// TestBackupRestoreTelemetryEvents tests that BACKUP and RESTORE correctly
+// publishes telemetry events.
+func TestBackupRestoreTelemetryEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.ScopeWithoutShowLogs(t).Close(t)
+
+	defer jobs.TestingSetProgressThresholds()()
+
+	baseDir := "testdata"
+	args := base.TestServerArgs{ExternalIODir: baseDir, Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	params := base.TestClusterArgs{ServerArgs: args}
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
+		InitManualReplication, params)
+	defer cleanupFn()
+
+	var forceFailure bool
+	for i := range tc.Servers {
+		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*restoreResumer)
+				r.testingKnobs.beforePublishingDescriptors = func() error {
+					if forceFailure {
+						return errors.Newf("testing injected failure: %s", "sensitive text")
+					}
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDB.Exec(t, `CREATE DATABASE r1`)
+	sqlDB.Exec(t, `CREATE TABLE r1.foo (id INT)`)
+	sqlDB.Exec(t, `CREATE DATABASE r2`)
+
+	// Execute a BACKUP and verify that the parameters in the statement were
+	// correctly logged in a telemetry event.
+	beforeBackup := timeutil.Now()
+	loc1 := "userfile:///eventlogging?COCKROACH_LOCALITY=default"
+	loc2 := "nodelocal://0/us-west-bucket?COCKROACH_LOCALITY=region%3Dus-west"
+	sqlDB.Exec(t, `BACKUP DATABASE r1, r2 INTO  ($1, $2) AS OF SYSTEM TIME '-1ms' WITH revision_history`, loc1, loc2)
+
+	expectedBackupEvent := eventpb.RecoveryEvent{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			EventType: "recovery_event",
+		},
+		RecoveryType:            backupEventType,
+		TargetScope:             databaseScope.String(),
+		TargetCount:             2,
+		DestinationSubdirType:   standardSubdirType,
+		DestinationStorageTypes: []string{"nodelocal", "userfile"},
+		DestinationAuthTypes:    []string{"specified"},
+		IsLocalityAware:         true,
+		AsOfInterval:            -1 * time.Millisecond.Nanoseconds(),
+		WithRevisionHistory:     true,
+	}
+
+	// Also verify that there's a telemetry event corresponding to the completion
+	// of the job.
+	expectedBackupJobEvent := eventpb.RecoveryEvent{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			EventType: "recovery_event",
+		},
+		RecoveryType: backupJobEventType,
+		ResultStatus: string(jobs.StatusSucceeded),
+	}
+
+	requireRecoveryEvent(t, beforeBackup.UnixNano(), backupEventType, expectedBackupEvent)
+	requireRecoveryEvent(t, beforeBackup.UnixNano(), backupJobEventType, expectedBackupJobEvent)
+
+	// Execute a RESTORE and verify that the parameters in the statement were
+	// correctly logged in a telemetry event.
+	beforeRestore := timeutil.Now()
+	restoreQuery := `RESTORE TABLE r1.foo FROM LATEST IN ($1, $2) WITH into_db = $3, skip_missing_foreign_keys`
+	sqlDB.Exec(t, restoreQuery, loc1, loc2, "r2")
+
+	expectedRestoreEvent := eventpb.RecoveryEvent{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			EventType: "recovery_event",
+		},
+		RecoveryType:            restoreEventType,
+		TargetScope:             tableScope.String(),
+		TargetCount:             1,
+		DestinationSubdirType:   latestSubdirType,
+		DestinationStorageTypes: []string{"nodelocal", "userfile"},
+		DestinationAuthTypes:    []string{"specified"},
+		IsLocalityAware:         true,
+		AsOfInterval:            0,
+		Options:                 []string{telemetryOptionIntoDB, telemetryOptionSkipMissingFK},
+	}
+
+	// Also verify that there's a telemetry event corresponding to the completion
+	// of the job.
+	expectedRestoreJobEvent := eventpb.RecoveryEvent{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			EventType: "recovery_event",
+		},
+		RecoveryType: restoreJobEventType,
+		ResultStatus: string(jobs.StatusSucceeded),
+	}
+
+	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreEventType, expectedRestoreEvent)
+	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreJobEventType, expectedRestoreJobEvent)
+
+	sqlDB.Exec(t, `DROP TABLE r2.foo`)
+
+	// Run RESTORE again but force it to fail. Verify that there is a telemetry
+	// event about the job failure.
+	forceFailure = true
+	beforeRestore = timeutil.Now()
+	sqlDB.ExpectErrSucceedsSoon(t, "testing injected failure", restoreQuery, loc1, loc2, "r2")
+	expectedRestoreFailEvent := eventpb.RecoveryEvent{
+		CommonEventDetails: eventpb.CommonEventDetails{
+			EventType: "recovery_event",
+		},
+		RecoveryType: restoreJobEventType,
+		ResultStatus: string(jobs.StatusFailed),
+		ErrorText:    redact.Sprintf("testing injected failure: %s", "sensitive text"),
+	}
+	requireRecoveryEvent(t, beforeRestore.UnixNano(), restoreJobEventType, expectedRestoreFailEvent)
+}
+
+// This is a regression test ensuring that the spans represented by views are
+// not included in backups when their descriptors are included in descriptor
+// revisions.
+func TestViewRevisions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, _, cleanup := backupRestoreTestSetup(t, singleNode, 10, InitManualReplication)
+	defer cleanup()
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE test;
+		USE test;
+		CREATE VIEW v AS SELECT 1;
+	`)
+	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/foo' WITH revision_history;`)
+	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/foo' WITH revision_history;`)
+	sqlDB.Exec(t, `
+		USE test;
+		ALTER VIEW v RENAME TO v2;
+  `)
+	sqlDB.Exec(t, `BACKUP TO 'nodelocal://1/foo' WITH revision_history;`)
+}
+
+// This tests checks that backups do not contain spans of views, but do contain
+// view descriptors.
+func TestBackupDoNotIncludeViewSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+	kvDB := tc.Server(0).DB()
+
+	// Generate some testdata and back it up.
+	sqlDB.Exec(t, "CREATE DATABASE d")
+	sqlDB.Exec(t, "CREATE TABLE d.t (k INT, a INT, b INT)")
+	sqlDB.Exec(t, "INSERT INTO d.t VALUES(1, 100, 101), (2, 200, 202)")
+	sqlDB.Exec(t, "CREATE VIEW d.tview AS SELECT k, b FROM d.t")
+	sqlDB.Exec(t, `BACKUP DATABASE d INTO $1`, localFoo)
+
+	res := sqlDB.QueryStr(t, `SHOW BACKUPS IN $1`, localFoo)
+	if len(res) != 1 {
+		t.Fatal("expected 1 backup")
+	}
+
+	// Read the backup manifest.
+	var backupManifest BackupManifest
+	{
+		backupManifestBytes, err := ioutil.ReadFile(filepath.Join(dir, "foo", res[0][0], backupManifestName))
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if isGZipped(backupManifestBytes) {
+			backupManifestBytes, err = decompressData(context.Background(), nil, backupManifestBytes)
+			require.NoError(t, err)
+		}
+		if err := protoutil.Unmarshal(backupManifestBytes, &backupManifest); err != nil {
+			t.Fatalf("%+v", err)
+		}
+	}
+
+	// Verify that the manifest doesn't contain any spans that intersect the span
+	// for the view.
+	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "tview")
+	viewSpan := tbDesc.TableSpan(keys.SystemSQLCodec)
+
+	for _, sp := range backupManifest.Spans {
+		if sp.Overlaps(viewSpan) {
+			t.Fatalf("backup span %v overlaps view span %v", sp, viewSpan)
+		}
+	}
+
+	sqlDB.Exec(t, "DROP DATABASE d")
+	sqlDB.Exec(t, "RESTORE DATABASE d FROM LATEST IN $1", localFoo)
+	sqlDB.CheckQueryResults(t, "SHOW CREATE VIEW d.tview", [][]string{{"d.public.tview", "CREATE VIEW public.tview (\n\tk,\n\tb\n) AS SELECT k, b FROM d.public.t"}})
+	sqlDB.CheckQueryResults(t, "SELECT * from d.tview", [][]string{{"1", "101"}, {"2", "202"}})
+}
+
+// Because we do not split ranges at view boundaries, it is possible that the
+// range the view span belongs to is shared by another object in the cluster
+// (that we may or may not be backing up) that might have its own bespoke zone
+// configurations, namely one with a short GC TTL. This could lead to a
+// situation where the short GC TTL on the range we are not backing up causes
+// our protectedts verification to fail when attempting to backup the view span.
+//
+// This test verifies that backups succeed on a database with a view that's on
+// another database's range because we are no longer backing up that view's
+// span.
+func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+	s0 := tc.Servers[0]
+
+	// Speeds up the test.
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+
+	// Create two databases da and db, and tables in such a way that the view
+	// db.dbview is on the same range as db.t2. Set da to have a short GC TTL of 1
+	// second.
+	sqlDB.Exec(t, `
+		CREATE DATABASE da;
+		CREATE TABLE da.t1 (k INT PRIMARY KEY, v INT);
+		CREATE DATABASE db;
+		CREATE TABLE db.t2 (k INT PRIMARY KEY, v INT);
+		CREATE TABLE da.t2 (k INT PRIMARY KEY, v INT);
+		CREATE VIEW db.dbview AS SELECT k, v FROM db.t2;
+		ALTER DATABASE da CONFIGURE ZONE USING gc.ttlseconds=1;
+
+		INSERT INTO da.t2 VALUES (1, 100), (2, 200), (3, 300);
+		UPDATE da.t2 SET v = 101 WHERE k = 1;
+	`)
+
+	// Wait for splits to be created on the new tables.
+	waitForTableSplit(t, tc.Conns[0], "t2", "da")
+
+	sqlDB.Exec(t, `BACKUP DATABASE db INTO 'userfile:///a' WITH revision_history;`)
+
+	time.Sleep(5 * time.Second)
+
+	// Force GC on da.t2 to advance its GC threshold.
+	err := s0.ForceTableGC(context.Background(), "da", "t2", s0.Clock().Now().Add(-int64(1*time.Second), 0))
+	require.NoError(t, err)
+
+	// This statement should succeed as we are not backing up the span for dbview,
+	// but would fail if it was backed up.
+	sqlDB.Exec(t, `BACKUP database db into latest in 'userfile:///a' with revision_history;`)
 }
