@@ -119,7 +119,7 @@ func prettyPrintKey(key roachpb.Key) string {
 	if err != nil {
 		// Not a valid timeseries key, fall back to doing the best we can to display
 		// it.
-		return encoding.PrettyPrintValue(nil /* dirs */, key, "/")
+		return encoding.PrettyPrintValue(nil /* dirs */, key, "/").StripMarkers()
 	}
 	return fmt.Sprintf("/%s/%s/%s/%s", name, resolution,
 		timeutil.Unix(0, timestamp).Format(time.RFC3339Nano), source)
