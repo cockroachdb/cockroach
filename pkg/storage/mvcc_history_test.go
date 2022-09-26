@@ -52,8 +52,9 @@ var (
 		"mvcc-histories-clear-range-using-iterator", false)
 	cmdDeleteRangeTombstoneKnownStats = util.ConstantWithMetamorphicTestBool(
 		"mvcc-histories-deleterange-tombstome-known-stats", false)
-	iterReader = util.ConstantWithMetamorphicTestChoice("mvcc-histories-iter-reader",
+	mvccHistoriesReader = util.ConstantWithMetamorphicTestChoice("mvcc-histories-reader",
 		"engine", "readonly", "batch", "snapshot").(string)
+	mvccHistoriesUseBatch   = util.ConstantWithMetamorphicTestBool("mvcc-histories-use-batch", false)
 	sstIterVerify           = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
 	metamorphicIteratorSeed = util.ConstantWithMetamorphicTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
 	separateEngineBlocks    = util.ConstantWithMetamorphicTestBool("mvcc-histories-separate-engine-blocks", false)
@@ -868,7 +869,9 @@ func cmdResolveIntent(e *evalCtx) error {
 	key := e.getKey()
 	status := e.getTxnStatus()
 	clockWhilePending := hlc.ClockTimestamp(e.getTsWithName("clockWhilePending"))
-	return e.resolveIntent(e.tryWrapForIntentPrinting(e.engine), key, txn, status, clockWhilePending)
+	return e.withWriter("resolve_intent", func(rw ReadWriter) error {
+		return e.resolveIntent(rw, key, txn, status, clockWhilePending)
+	})
 }
 
 func cmdResolveIntentRange(e *evalCtx) error {
@@ -878,8 +881,11 @@ func cmdResolveIntentRange(e *evalCtx) error {
 
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: start, EndKey: end})
 	intent.Status = status
-	_, _, err := MVCCResolveWriteIntentRange(e.ctx, e.tryWrapForIntentPrinting(e.engine), e.ms, intent, 0)
-	return err
+
+	return e.withWriter("resolve_intent_range", func(rw ReadWriter) error {
+		_, _, err := MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent, 0)
+		return err
+	})
 }
 
 func (e *evalCtx) resolveIntent(
@@ -903,30 +909,32 @@ func cmdCheckIntent(e *evalCtx) error {
 		wantIntent = false
 	}
 
-	var meta enginepb.MVCCMetadata
-	iter := e.engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
-	defer iter.Close()
-	iter.SeekGE(MVCCKey{Key: key})
-	ok, err := iter.Valid()
-	if err != nil {
-		return err
-	}
-	ok = ok && iter.UnsafeKey().Timestamp.IsEmpty()
-	if ok {
-		if err = iter.ValueProto(&meta); err != nil {
+	return e.withReader(func(r Reader) error {
+		var meta enginepb.MVCCMetadata
+		iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{Prefix: true})
+		defer iter.Close()
+		iter.SeekGE(MVCCKey{Key: key})
+		ok, err := iter.Valid()
+		if err != nil {
 			return err
 		}
-	}
-	if !ok && wantIntent {
-		return errors.Newf("meta: %v -> expected intent, found none", key)
-	}
-	if ok {
-		e.results.buf.Printf("meta: %v -> %+v\n", key, &meta)
-		if !wantIntent {
-			return errors.Newf("meta: %v -> expected no intent, found one", key)
+		ok = ok && iter.UnsafeKey().Timestamp.IsEmpty()
+		if ok {
+			if err = iter.ValueProto(&meta); err != nil {
+				return err
+			}
 		}
-	}
-	return nil
+		if !ok && wantIntent {
+			return errors.Newf("meta: %v -> expected intent, found none", key)
+		}
+		if ok {
+			e.results.buf.Printf("meta: %v -> %+v\n", key, &meta)
+			if !wantIntent {
+				return errors.Newf("meta: %v -> expected no intent, found one", key)
+			}
+		}
+		return nil
+	})
 }
 
 func cmdAddLock(e *evalCtx) error {
@@ -939,23 +947,29 @@ func cmdAddLock(e *evalCtx) error {
 func cmdClear(e *evalCtx) error {
 	key := e.getKey()
 	ts := e.getTs(nil)
-	return e.engine.ClearMVCC(MVCCKey{Key: key, Timestamp: ts})
+	return e.withWriter("clear", func(rw ReadWriter) error {
+		return rw.ClearMVCC(MVCCKey{Key: key, Timestamp: ts})
+	})
 }
 
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
-	// NB: We can't test ClearRawRange or ClearRangeUsingHeuristic here, because
-	// it does not handle separated intents.
-	if clearRangeUsingIter {
-		return e.engine.ClearMVCCIteratorRange(key, endKey, true, true)
-	}
-	return e.engine.ClearMVCCRange(key, endKey, true, true)
+	return e.withWriter("clear_range", func(rw ReadWriter) error {
+		// NB: We can't test ClearRawRange or ClearRangeUsingHeuristic here, because
+		// it does not handle separated intents.
+		if clearRangeUsingIter {
+			return rw.ClearMVCCIteratorRange(key, endKey, true, true)
+		}
+		return rw.ClearMVCCRange(key, endKey, true, true)
+	})
 }
 
 func cmdClearRangeKey(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	ts := e.getTs(nil)
-	return e.engine.ClearMVCCRangeKey(MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts})
+	return e.withWriter("clear_rangekey", func(rw ReadWriter) error {
+		return rw.ClearMVCCRangeKey(MVCCRangeKey{StartKey: key, EndKey: endKey, Timestamp: ts})
+	})
 }
 
 func cmdClearTimeRange(e *evalCtx) error {
@@ -973,6 +987,7 @@ func cmdClearTimeRange(e *evalCtx) error {
 		e.scanArg("maxBatchByteSize", &maxBatchByteSize)
 	}
 
+	// NB: Must use a batch, since it requires consistent iterators.
 	batch := e.engine.NewBatch()
 	defer batch.Close()
 
@@ -1191,19 +1206,22 @@ func cmdGet(e *evalCtx) error {
 		}
 		opts.Uncertainty.GlobalLimit = txn.GlobalUncertaintyLimit
 	}
-	val, intent, err := MVCCGet(e.ctx, e.engine, key, ts, opts)
-	// NB: the error is returned below. This ensures the test can
-	// ascertain no result is populated in the intent when an error
-	// occurs.
-	if intent != nil {
-		e.results.buf.Printf("get: %v -> intent {%s}\n", key, intent.Txn)
-	}
-	if val != nil {
-		e.results.buf.Printf("get: %v -> %v @%v\n", key, val.PrettyPrint(), val.Timestamp)
-	} else {
-		e.results.buf.Printf("get: %v -> <no data>\n", key)
-	}
-	return err
+
+	return e.withReader(func(r Reader) error {
+		val, intent, err := MVCCGet(e.ctx, r, key, ts, opts)
+		// NB: the error is returned below. This ensures the test can
+		// ascertain no result is populated in the intent when an error
+		// occurs.
+		if intent != nil {
+			e.results.buf.Printf("get: %v -> intent {%s}\n", key, intent.Txn)
+		}
+		if val != nil {
+			e.results.buf.Printf("get: %v -> %v @%v\n", key, val.PrettyPrint(), val.Timestamp)
+		} else {
+			e.results.buf.Printf("get: %v -> <no data>\n", key)
+		}
+		return err
+	})
 }
 
 func cmdIncrement(e *evalCtx) error {
@@ -1265,18 +1283,20 @@ func cmdPut(e *evalCtx) error {
 }
 
 func cmdIsSpanEmpty(e *evalCtx) error {
-	key, endKey := e.getKeyRange()
-	isEmpty, err := MVCCIsSpanEmpty(e.ctx, e.engine, MVCCIsSpanEmptyOptions{
-		StartKey: key,
-		EndKey:   endKey,
-		StartTS:  e.getTsWithName("startTs"),
-		EndTS:    e.getTs(nil),
+	return e.withReader(func(r Reader) error {
+		key, endKey := e.getKeyRange()
+		isEmpty, err := MVCCIsSpanEmpty(e.ctx, r, MVCCIsSpanEmptyOptions{
+			StartKey: key,
+			EndKey:   endKey,
+			StartTS:  e.getTsWithName("startTs"),
+			EndTS:    e.getTs(nil),
+		})
+		if err != nil {
+			return err
+		}
+		e.results.buf.Printf("%t\n", isEmpty)
+		return nil
 	})
-	if err != nil {
-		return err
-	}
-	e.results.buf.Printf("%t\n", isEmpty)
-	return nil
 }
 
 func cmdExport(e *evalCtx) error {
@@ -1299,8 +1319,11 @@ func cmdExport(e *evalCtx) error {
 		e.scanArg("maxSize", &opts.MaxSize)
 	}
 
+	r := e.newReader()
+	defer r.Close()
+
 	sstFile := &MemFile{}
-	summary, resume, err := MVCCExportToSST(e.ctx, e.st, e.engine, opts, sstFile)
+	summary, resume, err := MVCCExportToSST(e.ctx, e.st, r, opts, sstFile)
 	if err != nil {
 		return err
 	}
@@ -1407,26 +1430,28 @@ func cmdScan(e *evalCtx) error {
 	if e.hasArg("wholeRows") {
 		opts.WholeRowsOfSize = 10 // arbitrary, must be greater than largest column family in tests
 	}
-	res, err := MVCCScan(e.ctx, e.engine, key, endKey, ts, opts)
-	// NB: the error is returned below. This ensures the test can
-	// ascertain no result is populated in the intents when an error
-	// occurs.
-	for _, intent := range res.Intents {
-		e.results.buf.Printf("scan: intent %v {%s}\n", intent.Intent_SingleKeySpan.Key, intent.Txn)
-	}
-	for _, val := range res.KVs {
-		e.results.buf.Printf("scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)
-	}
-	if res.ResumeSpan != nil {
-		e.results.buf.Printf("scan: resume span [%s,%s) %s nextBytes=%d\n", res.ResumeSpan.Key, res.ResumeSpan.EndKey, res.ResumeReason, res.ResumeNextBytes)
-	}
-	if opts.TargetBytes > 0 {
-		e.results.buf.Printf("scan: %d bytes (target %d)\n", res.NumBytes, opts.TargetBytes)
-	}
-	if len(res.KVs) == 0 {
-		e.results.buf.Printf("scan: %v-%v -> <no data>\n", key, endKey)
-	}
-	return err
+	return e.withReader(func(r Reader) error {
+		res, err := MVCCScan(e.ctx, r, key, endKey, ts, opts)
+		// NB: the error is returned below. This ensures the test can
+		// ascertain no result is populated in the intents when an error
+		// occurs.
+		for _, intent := range res.Intents {
+			e.results.buf.Printf("scan: intent %v {%s}\n", intent.Intent_SingleKeySpan.Key, intent.Txn)
+		}
+		for _, val := range res.KVs {
+			e.results.buf.Printf("scan: %v -> %v @%v\n", val.Key, val.Value.PrettyPrint(), val.Value.Timestamp)
+		}
+		if res.ResumeSpan != nil {
+			e.results.buf.Printf("scan: resume span [%s,%s) %s nextBytes=%d\n", res.ResumeSpan.Key, res.ResumeSpan.EndKey, res.ResumeReason, res.ResumeNextBytes)
+		}
+		if opts.TargetBytes > 0 {
+			e.results.buf.Printf("scan: %d bytes (target %d)\n", res.NumBytes, opts.TargetBytes)
+		}
+		if len(res.KVs) == 0 {
+			e.results.buf.Printf("scan: %v-%v -> <no data>\n", key, endKey)
+		}
+		return err
+	})
 }
 
 func cmdPutRangeKey(e *evalCtx) error {
@@ -1485,7 +1510,7 @@ func cmdIterNew(e *evalCtx) error {
 		e.iter.Close()
 	}
 
-	r, closer := metamorphicReader(e)
+	r := e.newReader()
 	iter := r.NewMVCCIterator(kind, opts)
 	if e.hasArg("pointSynthesis") {
 		iter = newPointSynthesizingIter(iter)
@@ -1495,7 +1520,7 @@ func cmdIterNew(e *evalCtx) error {
 		return errors.Errorf("prefix iterator returned IsPrefix=false")
 	}
 
-	e.iter = &iterWithCloser{iter, closer}
+	e.iter = &iterWithCloser{iter, r.Close}
 	e.iterRangeKeys.Clear()
 	return nil
 }
@@ -1552,14 +1577,14 @@ func cmdIterNewIncremental(e *evalCtx) error {
 		e.iter.Close()
 	}
 
-	r, closer := metamorphicReader(e)
+	r := e.newReader()
 	it := SimpleMVCCIterator(NewMVCCIncrementalIterator(r, opts))
 	// Can't metamorphically move the iterator around since when intents get aggregated
 	// or emitted we can't undo that later at the level of the metamorphic iterator.
 	if opts.IntentPolicy == MVCCIncrementalIterIntentPolicyError {
 		it = newMetamorphicIterator(e.t, e.metamorphicIterSeed(), it)
 	}
-	e.iter = &iterWithCloser{it, closer}
+	e.iter = &iterWithCloser{it, r.Close}
 	e.iterRangeKeys.Clear()
 	return nil
 }
@@ -1581,9 +1606,9 @@ func cmdIterNewReadAsOf(e *evalCtx) error {
 	if len(opts.UpperBound) == 0 {
 		opts.UpperBound = keys.MaxKey
 	}
-	r, closer := metamorphicReader(e)
+	r := e.newReader()
 	innerIter := newMetamorphicIterator(e.t, e.metamorphicIterSeed(), r.NewMVCCIterator(MVCCKeyIterKind, opts))
-	iter := &iterWithCloser{innerIter, closer}
+	iter := &iterWithCloser{innerIter, r.Close}
 	e.iter = NewReadAsOfIterator(iter, asOf)
 	e.iterRangeKeys.Clear()
 	return nil
@@ -2057,31 +2082,62 @@ func (e *evalCtx) getTxn(opt optArg) *roachpb.Transaction {
 	return txn
 }
 
+// newReader returns a new (metamorphic) reader for use by a single command. The
+// caller must call Close on the reader when done.
+func (e *evalCtx) newReader() Reader {
+	switch mvccHistoriesReader {
+	case "engine":
+		return noopCloseReader{e.engine}
+	case "readonly":
+		return e.engine.NewReadOnly(StandardDurability)
+	case "batch":
+		return e.engine.NewBatch()
+	case "snapshot":
+		return e.engine.NewSnapshot()
+	default:
+		e.t.Fatalf("unknown reader type %q", mvccHistoriesReader)
+		return nil
+	}
+}
+
+// withReader calls the given closure with a new reader, closing it when done.
+func (e *evalCtx) withReader(fn func(Reader) error) error {
+	r := e.newReader()
+	defer r.Close()
+	return fn(r)
+}
+
+// withWriter calls the given closure with a writer. The writer is
+// metamorphically chosen to be a batch, which will be committed and closed when
+// done.
 func (e *evalCtx) withWriter(cmd string, fn func(_ ReadWriter) error) error {
 	var rw ReadWriter
 	rw = e.engine
 	var batch Batch
-	if e.hasArg("batched") {
+	if e.hasArg("batched") || mvccHistoriesUseBatch {
 		batch = e.engine.NewBatch()
 		defer batch.Close()
 		rw = batch
 	}
 	rw = e.tryWrapForIntentPrinting(rw)
-	origErr := fn(rw)
-	if batch != nil {
+	err := fn(rw)
+	if e.hasArg("batched") {
 		batchStatus := "non-empty"
 		if batch.Empty() {
 			batchStatus = "empty"
 		}
 		e.results.buf.Printf("%s: batch after write is %s\n", cmd, batchStatus)
 	}
-	if origErr != nil {
-		return origErr
-	}
 	if batch != nil {
-		return batch.Commit(true)
+		// WriteTooOldError is sometimes expected to leave behind a provisional
+		// value at a higher timestamp. We commit this for parity with the engine.
+		if err == nil || errors.HasType(err, &roachpb.WriteTooOldError{}) {
+			if err := batch.Commit(true); err != nil {
+				return err
+			}
+		}
 	}
-	return nil
+	return err
 }
 
 func (e *evalCtx) getVal() roachpb.Value { return e.getValInternal("v") }
@@ -2335,27 +2391,6 @@ func toKey(s string) roachpb.Key {
 	}
 }
 
-// metamorphicReader returns a random storage.Reader for the Engine, and a
-// closer function if the reader must be closed when done (nil otherwise).
-func metamorphicReader(e *evalCtx) (r Reader, closer func()) {
-	switch iterReader {
-	case "engine":
-		return e.engine, nil
-	case "readonly":
-		readOnly := e.engine.NewReadOnly(StandardDurability)
-		return readOnly, readOnly.Close
-	case "batch":
-		batch := e.engine.NewBatch()
-		return batch, batch.Close
-	case "snapshot":
-		snapshot := e.engine.NewSnapshot()
-		return snapshot, snapshot.Close
-	default:
-		e.t.Fatalf("unknown reader type %q", iterReader)
-	}
-	return nil, nil
-}
-
 // iterWithCloser will call the given closer when the iterator
 // is closed.
 type iterWithCloser struct {
@@ -2369,3 +2404,10 @@ func (i *iterWithCloser) Close() {
 		i.closer()
 	}
 }
+
+// noopCloseReader overrides Reader.Close() with a noop.
+type noopCloseReader struct {
+	Reader
+}
+
+func (noopCloseReader) Close() {}
