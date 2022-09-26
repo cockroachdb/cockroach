@@ -912,7 +912,7 @@ func TestPrettyPrintValue(t *testing.T) {
 			dirStr = "Desc"
 		}
 		t.Run(test.exp[1:]+"/"+dirStr, func(t *testing.T) {
-			got := PrettyPrintValue([]Direction{test.dir}, test.key, "/")
+			got := PrettyPrintValue([]Direction{test.dir}, test.key, "/").StripMarkers()
 			if got != test.exp {
 				t.Errorf("expected %q, got %q", test.exp, got)
 			}

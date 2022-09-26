@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -1879,7 +1880,8 @@ func PeekLength(b []byte) (int, error) {
 // separator.
 // The directions each value is encoded may be provided. If valDirs is nil,
 // all values are decoded and printed with the default direction (ascending).
-func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
+func PrettyPrintValue(valDirs []Direction, b []byte, sep string) redact.RedactableString {
+	fmt.Printf("%s", b)
 	s1, allDecoded := prettyPrintValueImpl(valDirs, b, sep)
 	if allDecoded {
 		return s1
@@ -1897,7 +1899,10 @@ func PrettyPrintValue(valDirs []Direction, b []byte, sep string) string {
 		}
 		for i := 0; i < cap; i++ {
 			if s2, allDecoded := prettyPrintValueImpl(valDirs, undoPrefixEnd, sep); allDecoded {
-				return s2 + sep + "PrefixEnd"
+				buf := redact.StringBuilder{}
+				buf.Print(s2)
+				buf.Print(sep + "PrefixEnd")
+				return buf.RedactableString()
 			}
 			undoPrefixEnd = append(undoPrefixEnd, 0xFF)
 		}
@@ -1965,9 +1970,11 @@ func prettyPrintValuesWithTypesImpl(
 	return vals, types, allDecoded
 }
 
-func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bool) {
+func prettyPrintValueImpl(
+	valDirs []Direction, b []byte, sep string,
+) (redact.RedactableString, bool) {
 	allDecoded := true
-	var buf strings.Builder
+	buf := redact.StringBuilder{}
 	for len(b) > 0 {
 		// If there are more values than encoding directions specified,
 		// valDir will contain the 0 value of Direction.
@@ -1986,18 +1993,19 @@ func prettyPrintValueImpl(valDirs []Direction, b []byte, sep string) (string, bo
 			// remainder of the key bytes.
 			allDecoded = false
 			// Mark the separator as safe
-			buf.WriteString(sep)
-			buf.WriteByte('?')
-			buf.WriteByte('?')
-			buf.WriteByte('?')
+			buf.Print(redact.Safe(sep))
+			buf.Print(redact.Safe('?'))
+			buf.Print(redact.Safe('?'))
+			buf.Print(redact.Safe('?'))
 		} else {
 			// Mark the separator as safe
-			buf.WriteString(sep)
-			buf.WriteString(s)
+			buf.Print(redact.Safe(sep))
+			buf.Print(redact.Safe(s))
 		}
 		b = bb
 	}
-	return buf.String(), allDecoded
+	fmt.Println(buf.RedactableString())
+	return buf.RedactableString(), allDecoded
 }
 
 // prettyPrintFirstValue returns a string representation of the first decodable
