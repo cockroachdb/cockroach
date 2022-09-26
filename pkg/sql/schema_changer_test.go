@@ -7673,6 +7673,15 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	expire_at TIMESTAMPTZ NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
 ) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')`
+
+		createTTLExpireAfterTTLExpirationExpressionTable = `CREATE DATABASE t;
+CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration');`
+		expectTTLExpireAfterTTLExpirationExpressionTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	expire_at TIMESTAMPTZ NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration', ttl_job_cron = '@hourly')`
 	)
 
 	testCases := []struct {
@@ -7683,15 +7692,17 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 		runBeforeModifyRowLevelTTL func() error
 		expectedShowCreateTable    string
 		expectSchedule             bool
+		validateIntermediateSchema bool
 	}{
 		// ttl_expire_after
 		{
-			desc:                    "error during ALTER TABLE x SET ttl_expire_after x during add mutation",
-			setup:                   createNonTTLTable,
-			schemaChange:            `ALTER TABLE t.test SET (ttl_expire_after = '10 hours')`,
-			runBeforeBackfill:       createFailOnceFunc(),
-			expectedShowCreateTable: expectNonTTLTable,
-			expectSchedule:          false,
+			desc:                       "error during ALTER TABLE x SET ttl_expire_after x during add mutation",
+			setup:                      createNonTTLTable,
+			schemaChange:               `ALTER TABLE t.test SET (ttl_expire_after = '10 hours')`,
+			runBeforeBackfill:          createFailOnceFunc(),
+			expectedShowCreateTable:    expectNonTTLTable,
+			expectSchedule:             false,
+			validateIntermediateSchema: true,
 		},
 		{
 			desc:                       "error during ALTER TABLE x SET ttl_expire_after x during modify row-level-ttl mutation",
@@ -7700,6 +7711,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 			runBeforeModifyRowLevelTTL: createFailOnceFunc(),
 			expectedShowCreateTable:    expectNonTTLTable,
 			expectSchedule:             false,
+			validateIntermediateSchema: true,
 		},
 		{
 			desc:                    "error during ALTER TABLE x RESET ttl_expire_after during delete column mutation",
@@ -7717,14 +7729,26 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 			expectedShowCreateTable:    expectTTLExpireAfterTable,
 			expectSchedule:             true,
 		},
+		{
+			desc:  "error during multiple ALTER TABLE x SET ttl_expire_after x during modify row-level-ttl mutation",
+			setup: createNonTTLTable,
+			schemaChange: `
+ALTER TABLE t.test SET (ttl_cron = '@daily');
+ALTER TABLE t.test SET (ttl_expire_after = '10 hours');
+`,
+			runBeforeModifyRowLevelTTL: createFailOnceFunc(),
+			expectedShowCreateTable:    expectNonTTLTable,
+			expectSchedule:             false,
+		},
 		// ttl_expiration_expression
 		{
-			desc:                    "error during ALTER TABLE x SET ttl_expiration_expression x during add mutation",
-			setup:                   createNonTTLTable,
-			schemaChange:            `ALTER TABLE t.test SET (ttl_expiration_expression = 'expire_at')`,
-			runBeforeBackfill:       createFailOnceFunc(),
-			expectedShowCreateTable: expectNonTTLTable,
-			expectSchedule:          false,
+			desc:                       "error during ALTER TABLE x SET ttl_expiration_expression x during add mutation",
+			setup:                      createNonTTLTable,
+			schemaChange:               `ALTER TABLE t.test SET (ttl_expiration_expression = 'expire_at')`,
+			runBeforeBackfill:          createFailOnceFunc(),
+			expectedShowCreateTable:    expectNonTTLTable,
+			expectSchedule:             false,
+			validateIntermediateSchema: true,
 		},
 		{
 			desc:                       "error during ALTER TABLE x SET ttl_expiration_expression x during modify row-level-ttl mutation",
@@ -7733,14 +7757,16 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 			runBeforeModifyRowLevelTTL: createFailOnceFunc(),
 			expectedShowCreateTable:    expectNonTTLTable,
 			expectSchedule:             false,
+			validateIntermediateSchema: true,
 		},
 		{
-			desc:                    "error during ALTER TABLE x RESET ttl_expiration_expression during delete column mutation",
-			setup:                   createTTLExpirationExpressionTable,
-			schemaChange:            `ALTER TABLE t.test RESET (ttl)`,
-			runBeforeBackfill:       createFailOnceFunc(),
-			expectedShowCreateTable: expectTTLExpirationExpressionTable,
-			expectSchedule:          true,
+			desc:                       "error during ALTER TABLE x RESET ttl_expiration_expression during delete column mutation",
+			setup:                      createTTLExpirationExpressionTable,
+			schemaChange:               `ALTER TABLE t.test RESET (ttl)`,
+			runBeforeBackfill:          createFailOnceFunc(),
+			expectedShowCreateTable:    expectTTLExpirationExpressionTable,
+			expectSchedule:             true,
+			validateIntermediateSchema: true,
 		},
 		{
 			desc:                       "error during ALTER TABLE x RESET ttl_expiration_expression during modify row-level-ttl mutation",
@@ -7748,6 +7774,42 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 			schemaChange:               `ALTER TABLE t.test RESET (ttl)`,
 			runBeforeModifyRowLevelTTL: createFailOnceFunc(),
 			expectedShowCreateTable:    expectTTLExpirationExpressionTable,
+			expectSchedule:             true,
+			validateIntermediateSchema: true,
+		},
+		// ttl_expire_after & ttl_expiration_expression
+		{
+			desc:                       "error during ALTER TABLE x SET ttl_expire_after and ttl_expiration_expression x during add mutation",
+			setup:                      createNonTTLTable,
+			schemaChange:               `ALTER TABLE t.test SET (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration')`,
+			runBeforeBackfill:          createFailOnceFunc(),
+			expectedShowCreateTable:    expectNonTTLTable,
+			expectSchedule:             false,
+			validateIntermediateSchema: true,
+		},
+		{
+			desc:                       "error during ALTER TABLE x SET ttl_expire_after and ttl_expiration_expression x during modify row-level-ttl mutation",
+			setup:                      createNonTTLTable,
+			schemaChange:               `ALTER TABLE t.test SET (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration')`,
+			runBeforeModifyRowLevelTTL: createFailOnceFunc(),
+			expectedShowCreateTable:    expectNonTTLTable,
+			expectSchedule:             false,
+			validateIntermediateSchema: true,
+		},
+		{
+			desc:                    "error during ALTER TABLE x RESET ttl_expire_after and ttl_expiration_expression during delete column mutation",
+			setup:                   createTTLExpireAfterTTLExpirationExpressionTable,
+			schemaChange:            `ALTER TABLE t.test RESET (ttl)`,
+			runBeforeBackfill:       createFailOnceFunc(),
+			expectedShowCreateTable: expectTTLExpireAfterTTLExpirationExpressionTable,
+			expectSchedule:          true,
+		},
+		{
+			desc:                       "error during ALTER TABLE x RESET ttl_expire_after and ttl_expiration_expression during modify row-level-ttl mutation",
+			setup:                      createTTLExpireAfterTTLExpirationExpressionTable,
+			schemaChange:               `ALTER TABLE t.test RESET (ttl)`,
+			runBeforeModifyRowLevelTTL: createFailOnceFunc(),
+			expectedShowCreateTable:    expectTTLExpireAfterTTLExpirationExpressionTable,
 			expectSchedule:             true,
 		},
 	}
@@ -7767,16 +7829,18 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 
 			// Set test knobs before schema change
 			knobs.RunBeforeBackfill = func() error {
-				// TODO(ewall): uncomment during https://github.com/cockroachdb/cockroach/issues/88560 resolution
-				// verifyTableSchema(t, sqlDB, tc.expectedShowCreateTable)
+				if tc.validateIntermediateSchema {
+					verifyTableSchema(t, sqlDB, tc.expectedShowCreateTable)
+				}
 				if tc.runBeforeBackfill != nil {
 					return tc.runBeforeBackfill()
 				}
 				return nil
 			}
 			knobs.RunBeforeModifyRowLevelTTL = func() error {
-				// TODO(ewall): uncomment during https://github.com/cockroachdb/cockroach/issues/88560 resolution
-				// verifyTableSchema(t, sqlDB, tc.expectedShowCreateTable)
+				if tc.validateIntermediateSchema {
+					verifyTableSchema(t, sqlDB, tc.expectedShowCreateTable)
+				}
 				if tc.runBeforeModifyRowLevelTTL != nil {
 					return tc.runBeforeModifyRowLevelTTL()
 				}
@@ -7796,21 +7860,22 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 				"t",
 				"test",
 			)
+			rowLevelTTL := desc.GetRowLevelTTL()
 			if tc.expectSchedule {
-				require.NotNil(t, desc.GetRowLevelTTL())
-				require.Greater(t, desc.GetRowLevelTTL().ScheduleID, int64(0))
+				require.NotNil(t, rowLevelTTL)
+				require.Greater(t, rowLevelTTL.ScheduleID, int64(0))
 
 				// Ensure there is only one schedule and that it belongs to the table.
 				var numSchedules int
 				require.NoError(t, sqlDB.QueryRow(
 					`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE $1`,
-					fmt.Sprintf("row-level-ttl-%d", desc.GetRowLevelTTL().ScheduleID),
+					fmt.Sprintf("row-level-ttl-%d", rowLevelTTL.ScheduleID),
 				).Scan(&numSchedules))
 				require.Equal(t, 0, numSchedules)
 				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'`).Scan(&numSchedules))
 				require.Equal(t, 1, numSchedules)
 			} else {
-				require.Nil(t, desc.GetRowLevelTTL())
+				require.Nil(t, rowLevelTTL)
 
 				// Ensure there are no schedules.
 				var numSchedules int
