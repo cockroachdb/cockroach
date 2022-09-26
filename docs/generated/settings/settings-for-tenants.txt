@@ -87,7 +87,7 @@ server.user_login.password_hashes.default_cost.scram_sha_256	integer	119680	the 
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
 server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256
 server.web_session.auto_logout.timeout	duration	168h0m0s	the duration that web sessions will survive before being periodically purged, since they were last used
-server.web_session.purge.max_deletions_per_cycle	integer	10	the maximum number of old sessions to delete for each purge
+server.web_session.purge.max_deletions_per_cycle	integer	1000	the maximum number of old sessions to delete for each purge
 server.web_session.purge.period	duration	1h0m0s	the time until old sessions are deleted
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged
 server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
