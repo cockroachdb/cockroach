@@ -179,10 +179,10 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 	)
 
 	// register a callback for verification that this session expired
-	var sessionExpired atomic.Bool
+	var sessionExpired int32
 	s, _ := sqlInstance.Session(ctx)
 	s.RegisterCallbackForSessionExpiry(func(ctx context.Context) {
-		sessionExpired.Store(true)
+		atomic.StoreInt32(&sessionExpired, 1)
 	})
 
 	// block the fake storage
@@ -198,7 +198,7 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 	require.Eventually(
 		t,
 		func() bool {
-			return sessionExpired.Load()
+			return atomic.LoadInt32(&sessionExpired) == 1
 		},
 		testutils.DefaultSucceedsSoonDuration, 10*time.Millisecond,
 	)
