@@ -2139,6 +2139,7 @@ ActiveQuery represents a query in flight on some Session.
 | sql_summary | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | A summarized version of the sql query. | [reserved](#support-status) |
 | is_full_scan | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if the query contains a full table or index scan. Note that this field is only valid if the query is in the EXECUTING phase. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this query started execution. | [reserved](#support-status) |
+| plan_gist | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The compressed plan that can be converted back into the statement's logical plan. Empty if the statement is in the PREPARING state. | [reserved](#support-status) |
 
 
 
@@ -2281,6 +2282,7 @@ ActiveQuery represents a query in flight on some Session.
 | sql_summary | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | A summarized version of the sql query. | [reserved](#support-status) |
 | is_full_scan | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if the query contains a full table or index scan. Note that this field is only valid if the query is in the EXECUTING phase. | [reserved](#support-status) |
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this query started execution. | [reserved](#support-status) |
+| plan_gist | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The compressed plan that can be converted back into the statement's logical plan. Empty if the statement is in the PREPARING state. | [reserved](#support-status) |
 
 
 

@@ -3194,6 +3194,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
 			Progress:       float32(progress),
 			IsFullScan:     query.isFullScan,
+			PlanGist:       query.planGist,
 		})
 	}
 	lastActiveQuery := ""
