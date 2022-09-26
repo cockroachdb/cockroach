@@ -423,7 +423,7 @@ var specs = []stmtSpec{
 		stmt:   "alter_onetable_stmt",
 		inline: []string{"alter_table_cmds", "alter_table_cmd", "storage_parameter_list", "storage_parameter"},
 		regreplace: map[string]string{
-			`var_value.*`: `var_value ) ) )* ')'`,
+			`var_value.*`: `var_value ')'`,
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("relation_expr 'SET")},
 		replace: map[string]string{
