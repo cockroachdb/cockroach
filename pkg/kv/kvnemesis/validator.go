@@ -63,10 +63,6 @@ func Validate(steps []Step, kvs *Engine) []error {
 	// by `After` timestamp is sufficient to get us the necessary ordering. This
 	// is because txns cannot be used concurrently, so none of the (Begin,After)
 	// timespans for a given transaction can overlap.
-	//
-	// TODO(tbg): if, as we should, we order all operations by the timestamp at
-	// which they executed (at least for MVCC-aware operations), then we would
-	// sort here by that timestamp.
 	sort.Slice(steps, func(i, j int) bool { return steps[i].After.Less(steps[j].After) })
 	for _, s := range steps {
 		v.processOp(notBuffering, s.Op)
@@ -75,25 +71,28 @@ func Validate(steps []Step, kvs *Engine) []error {
 	var extraKVs []observedOp
 	for _, kv := range v.kvByValue {
 		kv := &observedWrite{
-			Key:          kv.Key.Key,
-			Value:        roachpb.Value{RawBytes: kv.Value},
-			Timestamp:    kv.Key.Timestamp,
-			Materialized: true,
+			Key:       kv.Key.Key,
+			Value:     roachpb.Value{RawBytes: kv.Value},
+			Timestamp: kv.Key.Timestamp,
 		}
 		extraKVs = append(extraKVs, kv)
 	}
-	for key, tombstones := range v.tombstonesForKey {
-		numExtraWrites := len(tombstones) - v.committedDeletesForKey[key]
-		for i := 0; i < numExtraWrites; i++ {
+	for key, tsToMatched := range v.tombstonesByKey {
+		for ts, matched := range tsToMatched {
+			if matched {
+				continue
+			}
 			kv := &observedWrite{
-				Key:   []byte(key),
-				Value: roachpb.Value{},
-				// NB: As it's unclear which are "extra", timestamp is left missing.
-				Materialized: true,
+				Key:       roachpb.Key(key),
+				Value:     roachpb.Value{},
+				Timestamp: ts,
 			}
 			extraKVs = append(extraKVs, kv)
 		}
 	}
+
+	// These are writes that we saw in MVCC, but they weren't matched up to any
+	// operation kvnemesis ran.
 	if len(extraKVs) > 0 {
 		err := errors.Errorf(`extra writes: %s`, printObserved(extraKVs...))
 		v.failures = append(v.failures, err)
@@ -212,9 +211,8 @@ type observedOp interface {
 type observedWrite struct {
 	Key   roachpb.Key
 	Value roachpb.Value
-	// Timestamp will only be filled if Materialized is true.
+	// A write is materialized if it has a timestamp.
 	Timestamp     hlc.Timestamp
-	Materialized  bool
 	IsDeleteRange bool
 }
 
@@ -265,7 +263,7 @@ type validator struct {
 	// any "missing" or "extra" writes at the end.
 	// Each key has a map of all the tombstone timestamps, stored with a boolean
 	// flag indicating if it has been matched to a transactional delete or not.
-	tombstonesForKey       map[string]map[hlc.Timestamp]bool
+	tombstonesByKey        map[string]map[hlc.Timestamp]bool // map[key]map[ts]->used
 	committedDeletesForKey map[string]int
 
 	failures []error
@@ -313,22 +311,18 @@ func makeValidator(kvs *Engine) (*validator, error) {
 	return &validator{
 		kvs:                    kvs,
 		kvByValue:              kvByValue,
-		tombstonesForKey:       tombstonesForKey,
+		tombstonesByKey:        tombstonesForKey,
 		committedDeletesForKey: make(map[string]int),
 	}, nil
 }
 
 // getDeleteForKey looks up a stored tombstone for a given key (if it
-// exists) from tombstonesForKey, returning the tombstone (i.e. MVCCKey) along
+// exists) from tombstonesByKey, returning the tombstone (i.e. MVCCKey) along
 // with a `true` boolean value if found, or the empty key and `false` if not.
-func (v *validator) getDeleteForKey(key string, optOpTS hlc.Timestamp) (storage.MVCCKey, bool) {
-	if optOpTS.IsEmpty() {
-		panic(errors.AssertionFailedf(`transaction required to look up delete for key: %v`, key))
-	}
-
-	if used, ok := v.tombstonesForKey[key][optOpTS]; !used && ok {
-		v.tombstonesForKey[key][optOpTS] = true
-		return storage.MVCCKey{Key: []byte(key), Timestamp: optOpTS}, true
+func (v *validator) getDeleteForKey(key string, ts hlc.Timestamp) (storage.MVCCKey, bool) {
+	if used, ok := v.tombstonesByKey[key][ts]; !used && ok {
+		v.tombstonesByKey[key][ts] = true
+		return storage.MVCCKey{Key: []byte(key), Timestamp: ts}, true
 	}
 
 	return storage.MVCCKey{}, false
@@ -372,11 +366,10 @@ func (v *validator) processOp(buffering bool, op Operation) {
 			kv, ok := v.kvByValue[string(t.Value)]
 			delete(v.kvByValue, string(t.Value))
 			write := &observedWrite{
-				Key:          t.Key,
-				Value:        roachpb.MakeValueFromBytes(t.Value),
-				Materialized: ok,
+				Key:   t.Key,
+				Value: roachpb.MakeValueFromBytes(t.Value),
 			}
-			if write.Materialized {
+			if ok {
 				write.Timestamp = kv.Key.Timestamp
 			}
 			v.curObservations = append(v.curObservations, write)
@@ -589,17 +582,26 @@ func (v *validator) checkAtomic(atomicType string, result Result, ops ...Operati
 	observations := v.curObservations
 	v.curObservations = nil
 
+	// Only known-uncommitted results may come without a timestamp. Whenever we
+	// actually tried to commit, there is a timestamp.
 	if result.Type != ResultType_Error {
 		// The timestamp is not optional in this case. Note however that at the time
 		// of writing, checkAtomicCommitted doesn't capitalize on this unconditional
 		// presence yet, and most unit tests don't specify it for reads.
-		if result.OptionalTimestamp.IsEmpty() {
+		if !result.OptionalTimestamp.IsSet() {
 			err := errors.AssertionFailedf("operation has no execution timestamp: %s", result)
 			v.failures = append(v.failures, err)
 		}
 		v.checkAtomicCommitted(`committed `+atomicType, observations, result.OptionalTimestamp)
-	} else if resultIsAmbiguous(result) {
-		v.checkAtomicAmbiguous(`ambiguous `+atomicType, observations)
+	} else if ambWriteTS, err := resultIsAmbiguous(result); err != nil {
+		v.failures = append(v.failures, err)
+	} else if ambWriteTS.IsSet() {
+		if result.OptionalTimestamp.IsSet() {
+			err := errors.AssertionFailedf("OptionalTimestamp set for ambiguous result: %s", result)
+			v.failures = append(v.failures, err)
+		}
+		result.OptionalTimestamp.Forward(ambWriteTS)
+		v.checkAtomicAmbiguous(`ambiguous `+atomicType, observations, result.OptionalTimestamp)
 	} else {
 		v.checkAtomicUncommitted(`uncommitted `+atomicType, observations)
 	}
@@ -613,8 +615,9 @@ func (v *validator) checkAtomic(atomicType string, result Result, ops ...Operati
 // succeeded in a "normal" way. However, for ambiguous results, it is not always
 // present. This limitation could be lifted, see checkAtomicAmbiguous.
 func (v *validator) checkAtomicCommitted(
-	atomicType string, txnObservations []observedOp, optOpsTimestamp hlc.Timestamp,
+	atomicType string, txnObservations []observedOp, execTimestamp hlc.Timestamp,
 ) {
+
 	// The following works by verifying that there is at least one time at which
 	// it was valid to see all the reads and writes that we saw in this
 	// transaction.
@@ -701,31 +704,14 @@ func (v *validator) checkAtomicCommitted(
 				// but must be the final write in a txn for that key.
 				if o.isDelete() {
 					key := string(o.Key)
-					v.committedDeletesForKey[key]++
-					if optOpsTimestamp.IsEmpty() {
-						// Special case: our operation doesn't know at which timestamp
-						// it wrote and so we're unable to match it to a particular tombstone
-						// and can only check the cardinality - if there was a tombstone left,
-						// we assume it's ours.
-						//
-						// We leave the Timestamp field empty as a result (if there are
-						// multiple tombstones left, how do we know which one is ours?) and
-						// everyone else needs to be able to handle this special case.
-						//
-						// TODO(tbg): see checkAtomicAmbiguous about letting ambiguously
-						// committed operations learn their commit timestamp.
-						o.Materialized = v.committedDeletesForKey[key] <= len(v.tombstonesForKey[key])
-					} else if storedDelete, ok := v.getDeleteForKey(key, optOpsTimestamp); ok {
-						o.Materialized = true
+					if storedDelete, ok := v.getDeleteForKey(key, execTimestamp); ok {
 						o.Timestamp = storedDelete.Timestamp
 					}
 				}
 			}
-			if !o.Timestamp.IsEmpty() {
-				mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
-				if err := batch.Delete(storage.EncodeMVCCKey(mvccKey), nil); err != nil {
-					panic(err)
-				}
+			mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
+			if err := batch.Delete(storage.EncodeMVCCKey(mvccKey), nil); err != nil {
+				panic(err)
 			}
 		}
 	}
@@ -746,7 +732,7 @@ func (v *validator) checkAtomicCommitted(
 				// to kv.
 				mvccKey = storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
 			} else {
-				if o.Materialized {
+				if o.Timestamp.IsSet() {
 					failure = `committed txn overwritten key had write`
 				}
 				// This write was never materialized in KV because the key got
@@ -801,7 +787,7 @@ func (v *validator) checkAtomicCommitted(
 			if !isLastWriteForKey {
 				continue
 			}
-			if !o.Materialized {
+			if o.Timestamp.IsEmpty() {
 				failure = atomicType + ` missing write`
 				continue
 			}
@@ -835,8 +821,8 @@ func (v *validator) checkAtomicCommitted(
 		}
 		switch o := observation.(type) {
 		case *observedWrite:
-			if optOpsTimestamp.IsSet() && o.Materialized && optOpsTimestamp != o.Timestamp {
-				failure = fmt.Sprintf(`mismatched write timestamp %s`, optOpsTimestamp)
+			if o.Timestamp.IsSet() && o.Timestamp != execTimestamp {
+				failure = fmt.Sprintf(`mismatched write timestamp %s`, execTimestamp)
 			}
 		}
 	}
@@ -847,59 +833,31 @@ func (v *validator) checkAtomicCommitted(
 	}
 }
 
-func (v *validator) checkAtomicAmbiguous(atomicType string, txnObservations []observedOp) {
-	var somethingCommitted bool
-	deletedKeysInTxn := make(map[string]int)
-	var hadWrite bool
-	var maybeExecTS hlc.Timestamp
+func (v *validator) checkAtomicAmbiguous(
+	atomicType string, txnObservations []observedOp, writeTimestamp hlc.Timestamp,
+) {
+	var committed bool
+	var isRW bool
 	for _, observation := range txnObservations {
 		switch o := observation.(type) {
 		case *observedWrite:
-			hadWrite = true
-			if o.Materialized {
-				somethingCommitted = true
-				maybeExecTS.Forward(o.Timestamp) // use Forward() just in case o.Timestamp is zero
-				break
-			}
-			if o.isDelete() && len(v.tombstonesForKey[string(o.Key)]) > v.committedDeletesForKey[string(o.Key)] {
-				deletedKeysInTxn[string(o.Key)]++
+			isRW = true
+			if o.Timestamp.IsSet() {
+				committed = true
 				break
 			}
 		}
 	}
 
-	if len(deletedKeysInTxn) > 0 {
-		// TODO(sarkesian): Since we can't rely on the transaction write timestamp
-		// in an ambiguous transaction, and therefore cannot identify the tombstone
-		// resulting from a delete operation, it is impossible to validate if the
-		// transaction was actually atomic. For now, we have chosen to fail loudly,
-		// though if we are able to validate properly, this should be removed.
-		//
-		// TODO(tbg): this might be addressable. For an ambiguous transaction we
-		// should still be able to salvage the timestamp at which the transaction
-		// would have committed if it did, because kvnemesis always has a local
-		// TxnCoordSender which always knows the one possible commit timestamp
-		// and so it's simply a matter of making sure this information is
-		// guaranteed to flow back with the AmbiguousResultError.
-		err := errors.Errorf(
-			`unable to validate delete operations in ambiguous transactions: %s`,
-			printObserved(txnObservations...),
-		)
-		v.failures = append(v.failures, err)
-
-		for key := range deletedKeysInTxn {
-			// NB: We don't know for sure if these delete committed, but we know we
-			// still have tombstones for the keys. If we are incorrect in assuming it
-			// committed, it will affect delete counting in subsequent transactions;
-			// note that when dealing with ambiguous deletes that fail to commit,
-			// later deletes may show "committed delete missing write" errors.
-			v.committedDeletesForKey[key]++
-		}
-	} else if !hadWrite || somethingCommitted {
-		v.checkAtomicCommitted(atomicType, txnObservations, maybeExecTS)
+	if !isRW || committed {
+		v.checkAtomicCommitted(atomicType, txnObservations, writeTimestamp)
 	} else {
 		// This is a writing transaction but not a single one of its writes
 		// showed up in KV, so verify that it is uncommitted.
+		//
+		// NB: if there's ever a way for a writing transaction to not leave
+		// a trace on the rangefeed (DeleteRange comes to mind) then it's
+		// fine to treat that transaction as uncommitted as well.
 		v.checkAtomicUncommitted(atomicType, txnObservations)
 	}
 }
@@ -912,7 +870,7 @@ func (v *validator) checkAtomicUncommitted(atomicType string, txnObservations []
 		}
 		switch o := observed.(type) {
 		case *observedWrite:
-			if o.Materialized {
+			if o.Timestamp.IsSet() {
 				failure = atomicType + ` had writes`
 			}
 			// NB: While we don't check deletes here, as we cannot uniquely identify
@@ -966,8 +924,24 @@ func resultIsRetryable(r Result) bool {
 	return errors.HasInterface(errorFromResult(r), (*roachpb.ClientVisibleRetryError)(nil))
 }
 
-func resultIsAmbiguous(r Result) bool {
-	return errors.HasInterface(errorFromResult(r), (*roachpb.ClientVisibleAmbiguousError)(nil))
+func resultIsAmbiguous(r Result) (writeTS hlc.Timestamp, _ error) {
+	resErr := errorFromResult(r)
+	hasClientVisibleAE := errors.HasInterface(resErr, (*roachpb.ClientVisibleAmbiguousError)(nil))
+	var ae *roachpb.AmbiguousResultError
+	hasAE := errors.As(resErr, &ae)
+	if hasClientVisibleAE != hasAE {
+		return hlc.Timestamp{}, errors.AssertionFailedf(
+			"client visible ambiguous result and AmbiguousResultError differ: %t != %t",
+			hasClientVisibleAE, ae,
+		)
+	}
+	if !hasAE {
+		return hlc.Timestamp{}, nil
+	}
+	if ae.WriteTimestamp.IsEmpty() {
+		return hlc.Timestamp{}, errors.AssertionFailedf("AmbiguousResultError without WriteTimestamp: %+v", ae)
+	}
+	return ae.WriteTimestamp, nil
 }
 
 // TODO(dan): Checking errors using string containment is fragile at best and a
@@ -1116,12 +1090,8 @@ func printObserved(observedOps ...observedOp) string {
 				}
 			}
 			ts := `missing`
-			if o.Materialized {
-				if o.isDelete() && o.Timestamp.IsEmpty() {
-					ts = `uncertain`
-				} else {
-					ts = o.Timestamp.String()
-				}
+			if o.Timestamp.IsSet() {
+				ts = o.Timestamp.String()
 			}
 			fmt.Fprintf(&buf, "[%s]%s:%s->%s",
 				opCode, o.Key, ts, mustGetStringValue(o.Value.RawBytes))

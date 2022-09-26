@@ -45,6 +45,14 @@ func withResult(op Operation) Operation {
 	return withResultErr(op, nil /* err */)
 }
 
+func withAmbResultTS(op Operation, ts int64) Operation {
+	err := roachpb.NewAmbiguousResultErrorf("boom")
+	err.WriteTimestamp = hlc.Timestamp{WallTime: ts}
+	op = withResultErr(op, err)
+	op.Result().OptionalTimestamp = hlc.Timestamp{} // TODO remove this when hack in withResultErr is gone
+	return op
+}
+
 func withResultErr(op Operation, err error) Operation {
 	*op.Result() = resultInit(context.Background(), err)
 	// Most operations in tests use timestamp 1, so use that and any test cases
@@ -135,7 +143,7 @@ func TestValidate(t *testing.T) {
 			name:     "no ops with unexpected delete",
 			steps:    nil,
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":0.000000001,0-><nil>`},
 		},
 		{
 			name:     "one put with expected write",
@@ -163,38 +171,36 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:     "one ambiguous put with successful write",
-			steps:    []Step{step(withResultErr(put(`a`, `v1`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
+			steps:    []Step{step(withAmbResultTS(put(`a`, `v1`), 1))},
 			kvs:      kvs(kv(`a`, 1, `v1`)),
 			expected: nil,
 		},
 		{
 			name:     "one ambiguous delete with successful write",
-			steps:    []Step{step(withResultErr(del(`a`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
+			steps:    []Step{step(withAmbResultTS(del(`a`), 1))},
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`unable to validate delete operations in ambiguous transactions: [d]"a":missing-><nil>`},
+			expected: []string{`extra writes: [d]"a":0.000000001,0-><nil>`},
 		},
 		{
 			name:     "one ambiguous put with failed write",
-			steps:    []Step{step(withResultErr(put(`a`, `v1`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
+			steps:    []Step{step(withAmbResultTS(put(`a`, `v1`), 1))},
 			kvs:      nil,
 			expected: nil,
 		},
 		{
 			name:     "one ambiguous delete with failed write",
-			steps:    []Step{step(withResultErr(del(`a`), roachpb.NewAmbiguousResultError(errors.New("boom"))))},
+			steps:    []Step{step(withAmbResultTS(del(`a`), 1))},
 			kvs:      nil,
 			expected: nil,
 		},
 		{
 			name: "one ambiguous delete with failed write before a later committed delete",
 			steps: []Step{
-				step(withResultErr(del(`a`), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				step(withAmbResultTS(del(`a`), 1)),
 				step(withResultTS(del(`a`), 2)),
 			},
-			kvs: kvs(tombstone(`a`, 2)),
-			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [d]"a":missing-><nil>`,
-			},
+			kvs:      kvs(tombstone(`a`, 2)),
+			expected: nil,
 		},
 		{
 			name:     "one retryable put with write (correctly) missing",
@@ -220,7 +226,7 @@ func TestValidate(t *testing.T) {
 			kvs:   kvs(tombstone(`a`, 1)),
 			// NB: Error messages are different because we can't match an uncommitted
 			// delete op to a stored kv like above.
-			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":0.000000001,0-><nil>`},
 		},
 		{
 			name: "one delete with expected write after write transaction with shadowed delete",
@@ -355,6 +361,7 @@ func TestValidate(t *testing.T) {
 			// delete op to a stored kv like above.
 			expected: []string{
 				`committed txn missing write: [d]"a":0.000000001,0-><nil> [d]"b":missing-><nil>`,
+				`extra writes: [d]"b":0.000000002,0-><nil>`,
 			},
 		},
 		{
@@ -395,7 +402,7 @@ func TestValidate(t *testing.T) {
 				), errors.New(`rollback`))),
 			},
 			kvs:      kvs(tombstone(`a`, 1)),
-			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":0.000000001,0-><nil>`},
 		},
 		{
 			name: "one transactionally rolled back batch put with write (correctly) missing",
@@ -491,7 +498,7 @@ func TestValidate(t *testing.T) {
 			// HACK: These should be the same timestamp. See the TODO in
 			// watcher.processEvents.
 			kvs:      kvs(tombstone(`a`, 1), tombstone(`a`, 2)),
-			expected: []string{`extra writes: [d]"a":uncertain-><nil>`},
+			expected: []string{`extra writes: [d]"a":0.000000002,0-><nil>`},
 		},
 		{
 			name: "two transactionally committed writes (put, delete) of the same key with extra write",
@@ -508,15 +515,16 @@ func TestValidate(t *testing.T) {
 				// NB: the deletion is marked as "missing" because we are using timestamp 1 for the
 				// txn and the tombstone is at 2; so it isn't marked as materialized in the verifier.
 				`committed txn overwritten key had write: [w]"a":0.000000001,0->v1 [d]"a":missing-><nil>`,
+				`extra writes: [d]"a":0.000000002,0-><nil>`,
 			},
 		},
 		{
 			name: "ambiguous transaction committed",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
+				step(withAmbResultTS(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`)),
 					withResult(put(`b`, `v2`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				), 1)),
 			},
 			kvs:      kvs(kv(`a`, 1, `v1`), kv(`b`, 1, `v2`)),
 			expected: nil,
@@ -524,26 +532,21 @@ func TestValidate(t *testing.T) {
 		{
 			name: "ambiguous transaction with delete committed",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
+				step(withAmbResultTS(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`)),
 					withResult(del(`b`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				), 1)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`b`, 1)),
-			// TODO(sarkesian): If able to determine the tombstone resulting from a
-			// delete in an ambiguous txn, this should pass without error.
-			// For now we fail validation on all ambiguous transactions with deletes.
-			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [d]"b":missing-><nil>`,
-			},
+			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`b`, 1)),
+			expected: nil,
 		},
 		{
 			name: "ambiguous transaction did not commit",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
+				step(withAmbResultTS(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`)),
 					withResult(put(`b`, `v2`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				), 123)),
 			},
 			kvs:      nil,
 			expected: nil,
@@ -551,10 +554,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "ambiguous transaction with delete did not commit",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
+				step(withAmbResultTS(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`)),
 					withResult(del(`b`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				), 123)),
 			},
 			kvs:      nil,
 			expected: nil,
@@ -562,10 +565,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "ambiguous transaction committed but has validation error",
 			steps: []Step{
-				step(withResultErr(closureTxn(ClosureTxnType_Commit,
+				step(withAmbResultTS(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`)),
 					withResult(put(`b`, `v2`)),
-				), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				), 2)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), kv(`b`, 2, `v2`)),
 			expected: []string{
@@ -575,10 +578,10 @@ func TestValidate(t *testing.T) {
 		{
 			name: "ambiguous transaction with delete committed but has validation error",
 			steps: []Step{
-				step(withResultErr(withTimestamp(closureTxn(ClosureTxnType_Commit,
+				step(withAmbResultTS(withTimestamp(closureTxn(ClosureTxnType_Commit,
 					withResult(put(`a`, `v1`)),
 					withResult(del(`b`)),
-				), 2), roachpb.NewAmbiguousResultError(errors.New("boom")))),
+				), 2), 2)),
 			},
 			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`b`, 2)),
 			// TODO(sarkesian): If able to determine the tombstone resulting from a
@@ -586,7 +589,7 @@ func TestValidate(t *testing.T) {
 			// `ambiguous txn non-atomic timestamps: [w]"a":0.000000001,0->v1 [w]"b":0.000000002,0->v2`
 			// For now we fail validation on all ambiguous transactions with deletes.
 			expected: []string{
-				`unable to validate delete operations in ambiguous transactions: [w]"a":0.000000001,0->v1 [d]"b":missing-><nil>`,
+				`ambiguous txn non-atomic timestamps: [w]"a":0.000000001,0->v1 [d]"b":0.000000002,0-><nil>`,
 			},
 		},
 		{
@@ -1708,10 +1711,8 @@ func TestValidate(t *testing.T) {
 					withDeleteRangeResult(delRange(`a`, `c`)),
 				), 2)),
 			},
-			kvs: kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
-			expected: []string{
-				`extra writes: [d]"a":uncertain-><nil>`,
-			},
+			kvs:      kvs(kv(`a`, 1, `v1`), tombstone(`a`, 2)),
+			expected: []string{`extra writes: [d]"a":0.000000002,0-><nil>`},
 		},
 		{
 			name: "one deleterange after write missing write",
@@ -1758,6 +1759,7 @@ func TestValidate(t *testing.T) {
 				`committed txn missing write: ` +
 					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0.000000002,0, 0.000000005,0), gap:[<min>, <max>)}->["a", "b"] ` +
 					`[dr.d]"a":0.000000004,0-><nil> [dr.d]"b":missing-><nil>`,
+				`extra writes: [d]"b":0.000000005,0-><nil>`,
 			},
 		},
 		{
@@ -1848,6 +1850,7 @@ func TestValidate(t *testing.T) {
 					`[w]"b":missing->v2 ` +
 					`[dr.s]{a-c}:{0:[0.000000001,0, <max>), 1:[0,0, <max>), gap:[<min>, <max>)}->["a", "b"] ` +
 					`[dr.d]"a":0.000000002,0-><nil> [dr.d]"b":missing-><nil>`,
+				`extra writes: [d]"b":0.000000003,0-><nil>`,
 			},
 		},
 		{
