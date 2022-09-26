@@ -33,6 +33,7 @@ const (
 	nodeCapacityAvailableRatioRuleName    = "node:capacity_available:ratio"
 	clusterCapacityAvailableRatioRuleName = "cluster:capacity_available:ratio"
 	nodeCapacityLowRuleName               = "NodeCapacityLow"
+	protectedTimeStampAgeRuleName         = "ChangeFeedProtectedTimeStampAge"
 )
 
 // CreateAndAddRules initializes all KV metric rules and adds them
@@ -52,6 +53,7 @@ func CreateAndAddRules(ctx context.Context, ruleRegistry *metric.RuleRegistry) {
 	createAndRegisterNodeCapacityAvailableRatioRule(ctx, ruleRegistry)
 	createAndRegisterClusterCapacityAvailableRatioRule(ctx, ruleRegistry)
 	createAndRegisterNodeCapacityLowRule(ctx, ruleRegistry)
+	createAndRegisterProtectedTimeStampAgeRule(ctx, ruleRegistry)
 }
 
 func createAndRegisterUnavailableRangesRule(
@@ -289,6 +291,30 @@ func createAndRegisterNodeCapacityLowRule(ctx context.Context, ruleRegistry *met
 	}}
 	nodeCapacityLowRule, err := metric.NewAlertingRule(nodeCapacityLowRuleName, expr, annotations, nil, time.Duration(0), help, true)
 	MaybeAddRuleToRegistry(ctx, err, nodeCapacityLowRuleName, nodeCapacityLowRule, ruleRegistry)
+}
+
+func createAndRegisterProtectedTimeStampAgeRule(
+	ctx context.Context, ruleRegistry *metric.RuleRegistry,
+) {
+	expr := "metric_name > threshold" // TODO: PromQL expression needs to be configured with the metric name and the threshold (ns) to trigger above.
+	var annotations []metric.LabelPair
+	annotations = append(annotations, metric.LabelPair{
+		Name:  proto.String("summary"),
+		Value: proto.String("A change feed on {{ $labels.instance }} has not updated for {{ $value }} ns. Data might be stale."),
+	})
+	recommendedHoldDuration := 10 * time.Minute
+	help := "This check detects when a change feed has not updated for a period of time. This could be indicative of stale data in the tables."
+
+	protectedTimeStampAge, err := metric.NewAlertingRule(
+		protectedTimeStampAgeRuleName,
+		expr,
+		annotations,
+		nil,
+		recommendedHoldDuration,
+		help,
+		true,
+	)
+	MaybeAddRuleToRegistry(ctx, err, protectedTimeStampAgeRuleName, protectedTimeStampAge, ruleRegistry)
 }
 
 // MaybeAddRuleToRegistry validates a rule and adds it to the rule registry.
