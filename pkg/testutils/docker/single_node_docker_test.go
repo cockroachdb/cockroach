@@ -177,15 +177,15 @@ func TestSingleNodeDocker(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := contextutil.RunWithTimeout(
-		ctx,
-		"remove all containers using current image",
-		defaultTimeout,
-		func(ctx context.Context) error {
-			return dn.removeAllContainers(ctx)
-		}); err != nil {
-		t.Errorf("%v", err)
-	}
+	//if err := contextutil.RunWithTimeout(
+	//	ctx,
+	//	"remove all containers using current image",
+	//	defaultTimeout,
+	//	func(ctx context.Context) error {
+	//		return dn.removeAllContainers(ctx)
+	//	}); err != nil {
+	//	t.Errorf("%v", err)
+	//}
 
 	for _, test := range dockerTests {
 		t.Run(test.testName, func(t *testing.T) {
@@ -217,6 +217,8 @@ func TestSingleNodeDocker(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
+
+			panic("jojooooo!")
 
 			if err := contextutil.RunWithTimeout(
 				ctx,
