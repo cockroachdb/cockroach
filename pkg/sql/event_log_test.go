@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,6 +49,18 @@ func TestStructuredEventLogging(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	testStartTs := timeutil.Now()
+
+	// Change the user with SET ROLE to make sure the original logged-in user
+	// appears in the logs.
+	if _, err := conn.ExecContext(ctx, "CREATE USER other_user"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, "GRANT SYSTEM MODIFYCLUSTERSETTING TO other_user"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, "SET ROLE other_user"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Make a prepared statement that changes a cluster setting:
 	// - we want a prepared statement to verify that the reporting of
@@ -94,6 +107,9 @@ func TestStructuredEventLogging(t *testing.T) {
 		}
 		if ev.Statement != expectedStmt {
 			t.Errorf("wrong statement: expected %q, got %q", expectedStmt, ev.Statement)
+		}
+		if ev.User != username.RootUser {
+			t.Errorf("wrong user: expected %q, got %q", username.RootUser, ev.User)
 		}
 		if expected := []string{string(redact.Sprint("8"))}; !reflect.DeepEqual(expected, ev.PlaceholderValues) {
 			t.Errorf("wrong placeholders: expected %+v, got %+v", expected, ev.PlaceholderValues)
