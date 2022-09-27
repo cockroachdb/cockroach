@@ -58,7 +58,7 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{})
 
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
@@ -168,6 +168,55 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	_, err = secondServerSQLConn.Exec("EXPLAIN SELECT k, a FROM t WHERE a = 0")
 	require.NoError(t, err)
 
+	// Run some queries on the fourth node.
+	fourthServer := testCluster.Server(3 /* idx */)
+	fourthLocalStatsReader := fourthServer.SQLServer().(*sql.Server).GetLocalIndexStatistics()
+
+	fourthPgURL, fourthServerConnCleanup := sqlutils.PGUrl(
+		t, fourthServer.ServingSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
+	defer fourthServerConnCleanup()
+
+	fourthServerSQLConn, err := gosql.Open("postgres", fourthPgURL.String())
+	require.NoError(t, err)
+
+	defer func() {
+		err := fourthServerSQLConn.Close()
+		require.NoError(t, err)
+	}()
+
+	// Test that total_reads / last_read was not populated by an explicit CREATE INDEX query.
+	_, err = fourthServerSQLConn.Exec("CREATE TABLE test(num INT PRIMARY KEY, letter CHAR)")
+	require.NoError(t, err)
+
+	_, err = fourthServerSQLConn.Exec("CREATE INDEX ON test(letter)")
+	require.NoError(t, err)
+
+	// We fetch the table ID of the testing table.
+	fourthNodeRows, err := fourthServerSQLConn.Query("SELECT table_id FROM crdb_internal.tables WHERE name = 'test'")
+	require.NoError(t, err)
+	require.NotNil(t, fourthNodeRows)
+
+	defer func() {
+		err := fourthNodeRows.Close()
+		require.NoError(t, err)
+	}()
+
+	var testTableID int
+	require.True(t, fourthNodeRows.Next())
+	err = fourthNodeRows.Scan(&testTableID)
+	require.NoError(t, err)
+	require.False(t, fourthNodeRows.Next())
+
+	fourthNodeIndexKeyPrimary := roachpb.IndexUsageKey{
+		TableID: roachpb.TableID(testTableID),
+		IndexID: 1, // test pkey
+	}
+
+	fourthNodeindexKeyA := roachpb.IndexUsageKey{
+		TableID: roachpb.TableID(testTableID),
+		IndexID: 2, // secondary index
+	}
+
 	// Check local node stats.
 	// Fetch stats reader from each individual
 	thirdServer := testCluster.Server(2 /* idx */)
@@ -191,7 +240,14 @@ func TestStatusAPIIndexUsage(t *testing.T) {
 	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 3, but found %v", stats)
 
 	stats = thirdLocalStatsReader.Get(indexKeyB.TableID, indexKeyB.IndexID)
-	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 1, but found %v", stats)
+	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 3, but found %v", stats)
+
+	// Fourth node should have nothing - total_reads and last_read columns should not be populated.
+	stats = fourthLocalStatsReader.Get(fourthNodeIndexKeyPrimary.TableID, fourthNodeIndexKeyPrimary.IndexID)
+	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 4, but found %v", stats)
+
+	stats = fourthLocalStatsReader.Get(fourthNodeindexKeyA.TableID, fourthNodeindexKeyA.IndexID)
+	require.Equal(t, roachpb.IndexUsageStatistics{}, stats, "expecting empty stats on node 4, but found %v", stats)
 
 	// Second server should have nonempty local storage.
 	stats = secondLocalStatsReader.Get(indexKeyPrimary.TableID, indexKeyPrimary.IndexID)

@@ -156,3 +156,12 @@ key cols:
   y = b
 input projections:
   lookup_join_const_col_@7 = 1
+
+lookup-constraints left=(a int) right=(x int, y int, z int) index=(x, z)
+a = z AND (x = 0 OR y IN (0) AND y > 0)
+----
+key cols:
+  x = lookup_join_const_col_@5
+  z = a
+input projections:
+  lookup_join_const_col_@5 = 0

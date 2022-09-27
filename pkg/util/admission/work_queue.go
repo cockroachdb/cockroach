@@ -13,6 +13,7 @@ package admission
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -245,7 +246,7 @@ type WorkQueue struct {
 		maxQueueDelayToSwitchToLifo time.Duration
 	}
 	logThreshold log.EveryN
-	metrics      WorkQueueMetrics
+	metrics      *WorkQueueMetrics
 	stopCh       chan struct{}
 
 	timeSource timeutil.TimeSource
@@ -256,9 +257,6 @@ var _ requester = &WorkQueue{}
 type workQueueOptions struct {
 	usesTokens  bool
 	tiedToRange bool
-	// If non-nil, the WorkQueue should use the supplied metrics instead of
-	// creating its own.
-	metrics *WorkQueueMetrics
 
 	// timeSource can be set to non-nil for tests. If nil,
 	// the timeutil.DefaultTimeSource will be used.
@@ -288,10 +286,11 @@ func makeWorkQueue(
 	workKind WorkKind,
 	granter granter,
 	settings *cluster.Settings,
+	metrics *WorkQueueMetrics,
 	opts workQueueOptions,
 ) requester {
 	q := &WorkQueue{}
-	initWorkQueue(q, ambientCtx, workKind, granter, settings, opts)
+	initWorkQueue(q, ambientCtx, workKind, granter, settings, metrics, opts)
 	return q
 }
 
@@ -301,15 +300,11 @@ func initWorkQueue(
 	workKind WorkKind,
 	granter granter,
 	settings *cluster.Settings,
+	metrics *WorkQueueMetrics,
 	opts workQueueOptions,
 ) {
 	stopCh := make(chan struct{})
-	var metrics WorkQueueMetrics
-	if opts.metrics == nil {
-		metrics = makeWorkQueueMetrics(string(workKindString(workKind)))
-	} else {
-		metrics = *opts.metrics
-	}
+
 	timeSource := opts.timeSource
 	if timeSource == nil {
 		timeSource = timeutil.DefaultTimeSource{}
@@ -458,7 +453,7 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 			// specifically all the store WorkQueues share the same metric. We
 			// should eliminate that sharing and make those per store metrics.
 			log.Infof(q.ambientCtx, "%s: FIFO threshold for tenant %d %s %d",
-				string(workKindString(q.workKind)), tenant.id, logVerb, tenant.fifoPriorityThreshold)
+				workKindString(q.workKind), tenant.id, logVerb, tenant.fifoPriorityThreshold)
 		}
 		// Note that we are ignoring the new priority threshold and only
 		// dequeueing the ones that are in the closed epoch. It is possible to
@@ -495,7 +490,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	if !q.usesTokens && info.requestedCount != 1 {
 		panic(errors.AssertionFailedf("unexpected requestedCount: %d", info.requestedCount))
 	}
-	q.metrics.Requested.Inc(1)
+	q.metrics.incRequested(info.Priority)
 	tenantID := info.TenantID.ToUint64()
 
 	// The code in this method does not use defer to unlock the mutexes because
@@ -517,7 +512,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.mu.Unlock()
 		q.admitMu.Unlock()
 		q.granter.tookWithoutPermission(info.requestedCount)
-		q.metrics.Admitted.Inc(1)
+		q.metrics.incAdmitted(info.Priority)
 		return true, nil
 	}
 	// Work is subject to admission control.
@@ -534,7 +529,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.mu.Unlock()
 		if q.granter.tryGet(info.requestedCount) {
 			q.admitMu.Unlock()
-			q.metrics.Admitted.Inc(1)
+			q.metrics.incAdmitted(info.Priority)
 			return true, nil
 		}
 		// Did not get token/slot.
@@ -586,7 +581,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// causing entering into the work queue to be delayed.
 		q.mu.Unlock()
 		q.admitMu.Unlock()
-		q.metrics.Errored.Inc(1)
+		q.metrics.incErrored(info.Priority)
 		deadline, _ := ctx.Deadline()
 		return true,
 			errors.Newf("work %s deadline already expired: deadline: %v, now: %v",
@@ -613,7 +608,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	q.mu.Unlock()
 	q.admitMu.Unlock()
 
-	q.metrics.WaitQueueLength.Inc(1)
+	q.metrics.recordStartWait(info.Priority)
 	defer releaseWaitingWork(work)
 	select {
 	case <-ctx.Done():
@@ -656,10 +651,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			}
 			q.mu.Unlock()
 		}
-		q.metrics.Errored.Inc(1)
-		q.metrics.WaitDurationSum.Inc(waitDur.Microseconds())
-		q.metrics.WaitDurations.RecordValue(waitDur.Nanoseconds())
-		q.metrics.WaitQueueLength.Dec(1)
+		q.metrics.incErrored(info.Priority)
+		q.metrics.recordFinishWait(info.Priority, waitDur)
 		deadline, _ := ctx.Deadline()
 		log.Eventf(ctx, "deadline expired, waited in %s queue for %v",
 			workKindString(q.workKind), waitDur)
@@ -670,11 +663,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
 		}
-		q.metrics.Admitted.Inc(1)
+		q.metrics.incAdmitted(info.Priority)
 		waitDur := q.timeNow().Sub(startTime)
-		q.metrics.WaitDurationSum.Inc(waitDur.Microseconds())
-		q.metrics.WaitDurations.RecordValue(waitDur.Nanoseconds())
-		q.metrics.WaitQueueLength.Dec(1)
+		q.metrics.recordFinishWait(info.Priority, waitDur)
 		if work.heapIndex != -1 {
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
@@ -791,7 +782,7 @@ func (q *WorkQueue) String() string {
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (q *WorkQueue) SafeFormat(s redact.SafePrinter, verb rune) {
+func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	s.Printf("closed epoch: %d ", q.mu.closedEpochThreshold)
@@ -1523,23 +1514,100 @@ func addName(name string, meta metric.Metadata) metric.Metadata {
 // shared across WorkQueues, so Gauges should only be updated using deltas
 // instead of by setting values.
 type WorkQueueMetrics struct {
+	name       string
+	total      workQueueMetricsSingle
+	byPriority sync.Map
+	registry   *metric.Registry
+}
+
+// getOrCreate will return the metric if it exists or create it and then return
+// it if it didn't previously exist.
+// TODO(abaptist): Until https://github.com/cockroachdb/cockroach/issues/88846
+// is fixed, this code is not useful since late registered metrics are not
+// visible.
+func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) workQueueMetricsSingle {
+	// Try loading from the map first.
+	val, ok := m.byPriority.Load(priority)
+	if !ok {
+		// This will only happen the first time it is requested. Doing this lazily
+		// prevents unnecessary creation of unused priorities. Note that it is
+		// necessary to call LoadOrStore here as this could be called concurrently.
+		// It is not called the first Load so that we don't have to unnecessarily
+		// create the metrics.
+		statPrefix := fmt.Sprintf("%v.%v", m.name, admissionpb.WorkPriorityDict[priority])
+		val, ok = m.byPriority.LoadOrStore(priority, makeWorkQueueMetricsSingle(statPrefix))
+		if !ok {
+			m.registry.AddMetricStruct(val)
+		}
+	}
+	return val.(workQueueMetricsSingle)
+}
+
+type workQueueMetricsSingle struct {
 	Requested       *metric.Counter
 	Admitted        *metric.Counter
 	Errored         *metric.Counter
-	WaitDurationSum *metric.Counter
 	WaitDurations   *metric.Histogram
 	WaitQueueLength *metric.Gauge
 }
 
-// MetricStruct implements the metric.Struct interface.
-func (WorkQueueMetrics) MetricStruct() {}
+func (m *WorkQueueMetrics) incRequested(priority admissionpb.WorkPriority) {
+	m.total.Requested.Inc(1)
+	m.getOrCreate(priority).Requested.Inc(1)
+}
 
-func makeWorkQueueMetrics(name string) WorkQueueMetrics {
-	return WorkQueueMetrics{
-		Requested:       metric.NewCounter(addName(name, requestedMeta)),
-		Admitted:        metric.NewCounter(addName(name, admittedMeta)),
-		Errored:         metric.NewCounter(addName(name, erroredMeta)),
-		WaitDurationSum: metric.NewCounter(addName(name, waitDurationSumMeta)),
+func (m *WorkQueueMetrics) incAdmitted(priority admissionpb.WorkPriority) {
+	m.total.Admitted.Inc(1)
+	m.getOrCreate(priority).Admitted.Inc(1)
+}
+
+func (m *WorkQueueMetrics) incErrored(priority admissionpb.WorkPriority) {
+	m.total.Errored.Inc(1)
+	m.getOrCreate(priority).Errored.Inc(1)
+}
+
+func (m *WorkQueueMetrics) recordStartWait(priority admissionpb.WorkPriority) {
+	m.total.WaitQueueLength.Inc(1)
+	m.getOrCreate(priority).WaitQueueLength.Inc(1)
+}
+
+func (m *WorkQueueMetrics) recordFinishWait(priority admissionpb.WorkPriority, dur time.Duration) {
+	m.total.WaitQueueLength.Dec(1)
+	m.total.WaitDurations.RecordValue(dur.Nanoseconds())
+
+	priorityStats := m.getOrCreate(priority)
+	priorityStats.WaitQueueLength.Dec(1)
+	priorityStats.WaitDurations.RecordValue(dur.Nanoseconds())
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (*WorkQueueMetrics) MetricStruct() {}
+
+func makeWorkQueueMetrics(
+	name string, registry *metric.Registry, applicablePriorities ...admissionpb.WorkPriority,
+) *WorkQueueMetrics {
+	totalMetric := makeWorkQueueMetricsSingle(name)
+	registry.AddMetricStruct(totalMetric)
+	wqm := &WorkQueueMetrics{
+		name:     name,
+		total:    totalMetric,
+		registry: registry,
+	}
+	// TODO(abaptist): This is done to pre-register stats. Need to check that we
+	// getOrCreate "enough" of the priorities to be useful. See
+	// https://github.com/cockroachdb/cockroach/issues/88846.
+	for _, pri := range applicablePriorities {
+		wqm.getOrCreate(pri)
+	}
+
+	return wqm
+}
+
+func makeWorkQueueMetricsSingle(name string) workQueueMetricsSingle {
+	return workQueueMetricsSingle{
+		Requested: metric.NewCounter(addName(name, requestedMeta)),
+		Admitted:  metric.NewCounter(addName(name, admittedMeta)),
+		Errored:   metric.NewCounter(addName(name, erroredMeta)),
 		WaitDurations: metric.NewHistogram(
 			addName(name, waitDurationsMeta), base.DefaultHistogramWindowInterval(), metric.IOLatencyBuckets,
 		),
@@ -1715,13 +1783,14 @@ func makeStoreWorkQueue(
 	ambientCtx log.AmbientContext,
 	granters [numWorkClasses]granterWithStoreWriteDone,
 	settings *cluster.Settings,
+	metrics *WorkQueueMetrics,
 	opts workQueueOptions,
 ) storeRequester {
 	q := &StoreWorkQueue{
 		granters: granters,
 	}
 	for i := range q.q {
-		initWorkQueue(&q.q[i], ambientCtx, KVWork, granters[i], settings, opts)
+		initWorkQueue(&q.q[i], ambientCtx, KVWork, granters[i], settings, metrics, opts)
 	}
 	// Arbitrary initial value. This will be replaced before any meaningful
 	// token constraints are enforced.

@@ -51,7 +51,7 @@ type pubsubClient interface {
 	flushTopics()
 	sendMessage(content []byte, topic string, key string) error
 	sendMessageToAllTopics(content []byte) error
-	connectivityError() error
+	connectivityErrorLocked() error
 }
 
 type jsonPayload struct {
@@ -76,7 +76,6 @@ type pubsubMessage struct {
 
 type gcpPubsubClient struct {
 	client     *pubsub.Client
-	topics     map[string]*pubsub.Topic
 	ctx        context.Context
 	projectID  string
 	region     string
@@ -87,6 +86,7 @@ type gcpPubsubClient struct {
 		syncutil.Mutex
 		autocreateError error
 		publishError    error
+		topics          map[string]*pubsub.Topic
 	}
 }
 
@@ -270,7 +270,7 @@ func (p *pubsubSink) EmitRow(
 	case <-p.workerCtx.Done():
 		// check again for error in case it triggered since last check
 		// will return more verbose error instead of "context canceled"
-		return errors.CombineErrors(p.workerCtx.Err(), p.sinkError())
+		return errors.CombineErrors(p.workerCtx.Err(), p.sinkErrorLocked())
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-p.errChan:
@@ -295,7 +295,7 @@ func (p *pubsubSink) EmitResolvedTimestamp(
 // Flush blocks until all messages in the event channels are sent
 func (p *pubsubSink) Flush(ctx context.Context) error {
 	if err := p.flush(ctx); err != nil {
-		return errors.CombineErrors(p.client.connectivityError(), err)
+		return errors.CombineErrors(p.client.connectivityErrorLocked(), err)
 	}
 	return nil
 }
@@ -319,7 +319,7 @@ func (p *pubsubSink) flush(ctx context.Context) error {
 	case err := <-p.errChan:
 		return err
 	case <-p.flushDone:
-		return p.sinkError()
+		return p.sinkErrorLocked()
 	}
 
 }
@@ -349,19 +349,30 @@ func (p *pubsubSink) Topics() []string {
 	return p.topicNamer.DisplayNamesSlice()
 }
 
-func (p *gcpPubsubClient) getTopicClient(name string) (*pubsub.Topic, error) {
+func (p *gcpPubsubClient) cacheTopicLocked(name string, topic *pubsub.Topic) {
 	//TODO (zinger): Investigate whether changing topics to a sync.Map would be
 	//faster here, I think it would.
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if topic, ok := p.topics[name]; ok {
+	p.mu.topics[name] = topic
+}
+
+func (p *gcpPubsubClient) getTopicLocked(name string) (t *pubsub.Topic, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	t, ok = p.mu.topics[name]
+	return t, ok
+}
+
+func (p *gcpPubsubClient) getTopicClient(name string) (*pubsub.Topic, error) {
+	if topic, ok := p.getTopicLocked(name); ok {
 		return topic, nil
 	}
 	topic, err := p.openTopic(name)
 	if err != nil {
 		return nil, err
 	}
-	p.topics[name] = topic
+	p.cacheTopicLocked(name, topic)
 	return topic, nil
 }
 
@@ -437,7 +448,7 @@ func (p *pubsubSink) exitWorkersWithError(err error) {
 }
 
 // sinkError checks if there is an error in the error channel
-func (p *pubsubSink) sinkError() error {
+func (p *pubsubSink) sinkErrorLocked() error {
 	select {
 	case err := <-p.errChan:
 		return err
@@ -498,7 +509,7 @@ func (p *gcpPubsubClient) init() error {
 		return errors.Wrap(err, "opening client")
 	}
 	p.client = client
-	p.topics = make(map[string]*pubsub.Topic)
+	p.mu.topics = make(map[string]*pubsub.Topic)
 
 	return nil
 
@@ -514,10 +525,10 @@ func (p *gcpPubsubClient) openTopic(topicName string) (*pubsub.Topic, error) {
 		case codes.PermissionDenied:
 			// PermissionDenied may not be fatal if the topic already exists,
 			// but record it in case it turns out not to.
-			p.recordAutocreateError(err)
+			p.recordAutocreateErrorLocked(err)
 			t = p.client.Topic(topicName)
 		default:
-			p.recordAutocreateError(err)
+			p.recordAutocreateErrorLocked(err)
 			return nil, err
 		}
 	}
@@ -547,7 +558,7 @@ func (p *gcpPubsubClient) sendMessage(m []byte, topic string, key string) error 
 	// an error is returned for the published message.
 	_, err = res.Get(p.ctx)
 	if err != nil {
-		p.recordPublishError(err)
+		p.recordPublishErrorLocked(err)
 		return err
 	}
 
@@ -584,20 +595,20 @@ func (p *gcpPubsubClient) forEachTopic(f func(name string, topicClient *pubsub.T
 	})
 }
 
-func (p *gcpPubsubClient) recordAutocreateError(e error) {
+func (p *gcpPubsubClient) recordAutocreateErrorLocked(e error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mu.autocreateError = e
 }
 
-func (p *gcpPubsubClient) recordPublishError(e error) {
+func (p *gcpPubsubClient) recordPublishErrorLocked(e error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.mu.publishError = e
 }
 
 // connectivityError returns any errors encountered while writing to gcp.
-func (p *gcpPubsubClient) connectivityError() error {
+func (p *gcpPubsubClient) connectivityErrorLocked() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if status.Code(p.mu.publishError) == codes.NotFound && p.mu.autocreateError != nil {
