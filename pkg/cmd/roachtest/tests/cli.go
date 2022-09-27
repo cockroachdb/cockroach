@@ -109,7 +109,7 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
 	waitUntil([]string{
 		"is_available is_live",
-		"false true",
+		"false false",
 		"false false",
 		"false false",
 	})

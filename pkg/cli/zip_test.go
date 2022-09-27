@@ -76,6 +76,7 @@ table_name NOT IN (
 	'cross_db_references',
 	'databases',
 	'forward_dependencies',
+	'gossip_network',
 	'index_columns',
 	'lost_descriptors_with_data',
 	'table_columns',

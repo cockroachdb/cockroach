@@ -1071,8 +1071,6 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, drainingInfo))
-		} else if strings.HasPrefix(key, gossip.KeyGossipClientsPrefix) {
-			output = append(output, fmt.Sprintf("%q: %v", key, string(bytes)))
 		}
 	}
 
