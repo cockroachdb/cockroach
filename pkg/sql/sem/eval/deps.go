@@ -344,8 +344,7 @@ type Planner interface {
 	// from system.privileges.
 	SynthesizePrivilegeDescriptor(
 		ctx context.Context,
-		privilegeObjectName string,
-		privilegeObjectPath string,
+		path string,
 		privilegeObjectType privilege.ObjectType,
 	) (*catpb.PrivilegeDescriptor, error)
 

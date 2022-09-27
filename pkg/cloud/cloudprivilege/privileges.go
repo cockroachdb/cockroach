@@ -44,8 +44,13 @@ func CheckDestinationPrivileges(ctx context.Context, p sql.PlanHookState, to []s
 		// Check if the destination requires the user to be an admin or have the
 		// `EXTERNALIOIMPLICITACCESS` privilege.
 		requiresImplicitAccess := !conf.AccessIsWithExplicitAuth()
+		privDesc, err := p.SynthesizePrivilegeDescriptor(ctx, "", privilege.Global)
+		if err != nil {
+			return err
+		}
+		globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
 		hasImplicitAccessPrivilege :=
-			p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS) == nil
+			p.CheckPrivilege(ctx, globalPrivilege, privilege.EXTERNALIOIMPLICITACCESS) == nil
 		if requiresImplicitAccess && !(p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound || hasImplicitAccessPrivilege) {
 			return pgerror.Newf(
 				pgcode.InsufficientPrivilege,
@@ -61,9 +66,11 @@ func CheckDestinationPrivileges(ctx context.Context, p sql.PlanHookState, to []s
 					"version %v must be finalized to backup to an External Connection",
 					clusterversion.ByKey(clusterversion.SystemExternalConnectionsTable))
 			}
-			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
-				ConnectionName: conf.ExternalConnectionConfig.Name,
+			privDesc, err := p.SynthesizePrivilegeDescriptor(ctx, conf.ExternalConnectionConfig.Name, privilege.ExternalConnection)
+			if err != nil {
+				return err
 			}
+			ecPrivilege := syntheticprivilege.InitExternalConnectionPrivilege(conf.ExternalConnectionConfig.Name, privDesc)
 			if err := p.CheckPrivilege(ctx, ecPrivilege, privilege.USAGE); err != nil {
 				return err
 			}

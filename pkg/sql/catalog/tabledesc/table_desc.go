@@ -12,20 +12,16 @@
 package tabledesc
 
 import (
-	"context"
-
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
 
@@ -629,32 +625,6 @@ func (desc *wrapper) GetIndexNameByID(indexID descpb.IndexID) (string, error) {
 	return index.GetName(), err
 }
 
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (desc *wrapper) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	if desc.IsVirtualTable() {
-		// Virtual tables are somewhat of a weird case in that they
-		// have descriptors.
-		// For virtual tables, we don't store privileges on the
-		// descriptor as we don't allow the privilege descriptor to
-		// change.
-		// It is also problematic that virtual table descriptors
-		// do not store a database id, so the descriptors are not
-		// "per database" even though regular tables are per database.
-		vs, found := schemadesc.GetVirtualSchemaByID(desc.GetParentSchemaID())
-		if !found {
-			return nil, errors.AssertionFailedf("no virtual schema found for virtual table %s", desc.GetName())
-		}
-		vDesc := &syntheticprivilege.VirtualTablePrivilege{
-			SchemaName: vs.GetName(),
-			TableName:  desc.GetName(),
-		}
-		return vDesc.GetPrivilegeDescriptor(ctx, planner)
-	}
-	return desc.GetPrivileges(), nil
-}
-
 // IsRefreshViewRequired implements the TableDescriptor interface.
 func (desc *wrapper) IsRefreshViewRequired() bool {
 	return desc.IsMaterializedView && desc.RefreshViewRequired
@@ -673,4 +643,13 @@ func (desc *wrapper) GetObjectType() privilege.ObjectType {
 // GetInProgressImportStartTime returns the start wall time of the import if there's one in progress
 func (desc *wrapper) GetInProgressImportStartTime() int64 {
 	return desc.ImportStartWallTime
+}
+
+func (desc *wrapper) GetPrivileges() *catpb.PrivilegeDescriptor {
+	if desc.IsVirtualTable() && desc.TableDesc().Privileges == nil {
+		return catpb.NewPrivilegeDescriptor(
+			username.PublicRoleName(), privilege.List{privilege.USAGE},
+			privilege.List{}, username.NodeUserName())
+	}
+	return desc.TableDesc().GetPrivileges()
 }
