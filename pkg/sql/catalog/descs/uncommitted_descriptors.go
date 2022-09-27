@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -186,7 +187,16 @@ func (ud *uncommittedDescriptors) upsert(
 		newBytes += mut.ByteSize()
 	}
 	ud.mutable.Upsert(mut)
-	uncommitted := mut.ImmutableCopy()
+	// Upsert an immutable copy of `mut` with its raw bytes in storage
+	// updated to itself. The raw bytes serves as the expected bytes to
+	// `CPut` when `WriteDescToBatch` updates this descriptor again
+	// in the future.
+	var val roachpb.Value
+	val.SetProto(mut.DescriptorProto())
+	rawBytesInStorage := val.TagAndDataBytes()
+	uncommittedBuilder := mut.NewBuilder()
+	uncommittedBuilder.SetRawBytesInDescriptor(rawBytesInStorage)
+	uncommitted := uncommittedBuilder.BuildImmutable()
 	newBytes += uncommitted.ByteSize()
 	ud.uncommitted.Upsert(uncommitted, uncommitted.SkipNamespace())
 	if err = ud.memAcc.Grow(ctx, newBytes); err != nil {

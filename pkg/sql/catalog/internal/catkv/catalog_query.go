@@ -140,6 +140,7 @@ func build(
 			return nil, err
 		}
 		b = descbuilder.NewBuilderWithMVCCTimestamp(&descProto, rowValue.Timestamp)
+		b.SetRawBytesInDescriptor(rowValue.TagAndDataBytes())
 	}
 	if b == nil {
 		if isRequired {
