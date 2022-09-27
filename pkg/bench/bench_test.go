@@ -376,6 +376,34 @@ func runBenchmarkInsertSecondaryIndex(b *testing.B, db *sqlutils.SQLRunner, coun
 	b.StopTimer()
 }
 
+// runBenchmarkInsertReturning benchmarks inserting count rows into a table
+// while performing rendering for the RETURNING clause.
+func runBenchmarkInsertReturning(b *testing.B, db *sqlutils.SQLRunner, count int) {
+	defer func() {
+		db.Exec(b, `DROP TABLE IF EXISTS bench.insert`)
+	}()
+
+	db.Exec(b, `CREATE TABLE bench.insert (k INT PRIMARY KEY)`)
+
+	b.ResetTimer()
+	var buf bytes.Buffer
+	val := 0
+	for i := 0; i < b.N; i++ {
+		buf.Reset()
+		buf.WriteString(`INSERT INTO bench.insert VALUES `)
+		for j := 0; j < count; j++ {
+			if j > 0 {
+				buf.WriteString(", ")
+			}
+			fmt.Fprintf(&buf, "(%d)", val)
+			val++
+		}
+		buf.WriteString(` RETURNING k + 1, k - 1, k * 2, k / 2`)
+		db.Exec(b, buf.String())
+	}
+	b.StopTimer()
+}
+
 func BenchmarkSQL(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
@@ -386,6 +414,7 @@ func BenchmarkSQL(b *testing.B) {
 			runBenchmarkInsertDistinct,
 			runBenchmarkInsertFK,
 			runBenchmarkInsertSecondaryIndex,
+			runBenchmarkInsertReturning,
 			runBenchmarkTrackChoices,
 			runBenchmarkUpdate,
 			runBenchmarkUpdateWithAssignmentCast,
