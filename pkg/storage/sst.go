@@ -444,9 +444,12 @@ func CheckSSTConflicts(
 		if sstRangeKeysChanged {
 			if extHasRange && extRangeKeys.Bounds.Overlaps(sstRangeKeys.Bounds) {
 				mergedIntoExisting := false
+				overlappingSection := sstRangeKeys.Bounds
 				switch sstRangeKeys.Bounds.Key.Compare(extRangeKeys.Bounds.Key) {
 				case -1:
 					// sstRangeKey starts earlier than extRangeKey. Add a fragment
+					overlappingSection.Key = extRangeKeys.Bounds.Key
+					statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 					statsDiff.RangeKeyBytes += int64(EncodedMVCCKeyPrefixLength(extRangeKeys.Bounds.Key))
 					addedFragment := MVCCRangeKeyStack{
 						Bounds:   roachpb.Span{Key: sstRangeKeys.Bounds.Key, EndKey: extRangeKeys.Bounds.Key},
@@ -460,12 +463,24 @@ func CheckSSTConflicts(
 					} else {
 						// Add the sst range key versions again, to account for the overlap
 						// with extRangeKeys.
-						for _, v := range sstRangeKeys.Versions {
-							statsDiff.Add(updateStatsOnRangeKeyPutVersion(extRangeKeys, v))
+						updatedStack := extRangeKeys
+						updatedStack.Versions = extRangeKeys.Versions.Clone()
+						for i, v := range sstRangeKeys.Versions {
+							if i == 0 {
+								// We do this dance to make updatedStack.Versions.Newest() == v. This
+								// is necessary to keep GCBytesAge calculations correct, we don't
+								// want updateStatsOnRangeKeyPutVersion to "lift" the GCBytesAge
+								// contribution of extRangeKeys' bounds. We will do that later.
+								// We only want it to add the version.
+								oldVersions := updatedStack.Versions
+								updatedStack.Versions = append(MVCCRangeKeyVersions{v}, oldVersions...)
+							}
+							statsDiff.Add(updateStatsOnRangeKeyPutVersion(updatedStack, v))
 						}
 					}
 				case 0:
 					// Same start key. No need to encode the start key again.
+					statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 					statsDiff.RangeKeyCount--
 					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.Key))
 				case 1:
@@ -476,9 +491,24 @@ func CheckSSTConflicts(
 					}
 					// No need to re-encode the start key, as UpdateStatsOnRangeKeySplit has already
 					// done that for us.
+					statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 					statsDiff.RangeKeyCount--
 					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.Key))
 				}
+				if extRangeKeys.Bounds.EndKey.Compare(sstRangeKeys.Bounds.EndKey) < 0 {
+					overlappingSection.EndKey = extRangeKeys.Bounds.EndKey
+				}
+				// Move up the GCBytesAge contribution of the overlapping section from
+				// extRangeKeys.Newest up to sstRangeKeys.Newest.
+				{
+					keyBytes := int64(EncodedMVCCKeyPrefixLength(overlappingSection.Key)) +
+						int64(EncodedMVCCKeyPrefixLength(overlappingSection.EndKey))
+					statsDiff.AgeTo(extRangeKeys.Newest().WallTime)
+					statsDiff.RangeKeyBytes -= keyBytes
+					statsDiff.AgeTo(sstRangeKeys.Newest().WallTime)
+					statsDiff.RangeKeyBytes += keyBytes
+				}
+
 				// Check if the overlapping part of sstRangeKeys and extRangeKeys has
 				// idempotent versions. We already know this isn't a conflict, as that
 				// check happened earlier.
@@ -490,21 +520,28 @@ func CheckSSTConflicts(
 						}
 						// Subtract stats for this version, as it already exists in the
 						// engine.
-						statsDiff.Subtract(updateStatsOnRangeKeyPutVersion(sstRangeKeys, v))
+						overlappingStack := MVCCRangeKeyStack{
+							Bounds:   overlappingSection,
+							Versions: sstRangeKeys.Versions,
+						}
+						statsDiff.Subtract(updateStatsOnRangeKeyPutVersion(overlappingStack, v))
 						idempotentIdx++
 					}
 					switch extRangeKeys.Bounds.EndKey.Compare(sstRangeKeys.Bounds.EndKey) {
 					case +1:
 						statsDiff.Add(UpdateStatsOnRangeKeySplit(sstRangeKeys.Bounds.EndKey, extRangeKeys.Versions))
 						// Remove the contribution for the end key.
+						statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 						statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.EndKey))
 					case 0:
 						// Remove the contribution for the end key.
+						statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 						statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.EndKey))
 					case -1:
 						statsDiff.Add(UpdateStatsOnRangeKeySplit(extRangeKeys.Bounds.EndKey, sstRangeKeys.Versions))
 						// Remove the contribution for the end key.
-						statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.EndKey))
+						statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
+						statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(extRangeKeys.Bounds.EndKey))
 					}
 				}
 			}
@@ -534,8 +571,16 @@ func CheckSSTConflicts(
 				// it is possible that we missed an overlap between extRangeKeys and
 				// sstPrevRangeKeys. Account for that here by adding the version stats
 				// for sstPrevRangeKeys.
-				for _, v := range sstPrevRangeKeys.Versions {
-					statsDiff.Add(updateStatsOnRangeKeyPutVersion(extRangeKeys, v))
+				updatedStack := extRangeKeys
+				updatedStack.Versions = extRangeKeys.Versions.Clone()
+				for i, v := range sstPrevRangeKeys.Versions {
+					statsDiff.Add(updateStatsOnRangeKeyPutVersion(updatedStack, v))
+					if i == 0 {
+						// We do this dance to make updatedStack.Versions.Newest() == v. This
+						// is necessary to keep GCBytesAge calculations correct.
+						oldVersions := updatedStack.Versions
+						updatedStack.Versions = append(MVCCRangeKeyVersions{v}, oldVersions...)
+					}
 				}
 			}
 			sstPrevRangeKeys = sstRangeKeys.Clone()
@@ -566,29 +611,58 @@ func CheckSSTConflicts(
 			// sstRangeKeysChanged conditional above.
 			if sstHasRange && sstRangeKeys.Bounds.Overlaps(extRangeKeys.Bounds) && !sstRangeKeysChanged {
 				idempotentIdx := 0
-				for _, v := range sstRangeKeys.Versions {
+				updatedStack := extRangeKeys
+				if sstRangeKeys.Bounds.EndKey.Compare(extRangeKeys.Bounds.EndKey) < 0 {
+					updatedStack.Bounds.EndKey = sstRangeKeys.Bounds.EndKey
+				}
+				updatedStack.Versions = extRangeKeys.Versions.Clone()
+				for i, v := range sstRangeKeys.Versions {
 					if len(extRangeKeys.Versions) > idempotentIdx && v.Timestamp.Equal(extRangeKeys.Versions[idempotentIdx].Timestamp) {
 						// Skip this version, as it already exists in the engine.
 						idempotentIdx++
 						continue
 					}
-					statsDiff.Add(updateStatsOnRangeKeyPutVersion(extRangeKeys, v))
+					statsDiff.Add(updateStatsOnRangeKeyPutVersion(updatedStack, v))
+					if i == idempotentIdx {
+						// We do this dance to make updatedStack.Versions.Newest() == v. This
+						// is necessary to keep GCBytesAge calculations correct.
+						oldVersions := updatedStack.Versions
+						updatedStack.Versions = append(MVCCRangeKeyVersions{v}, oldVersions...)
+					}
 				}
 				// Check if this ext range key is going to fragment the SST range key.
 				if sstRangeKeys.Bounds.Key.Compare(extRangeKeys.Bounds.Key) < 0 && !extRangeKeys.Versions.Equal(sstRangeKeys.Versions) &&
 					(extPrevRangeKeys.IsEmpty() || !extPrevRangeKeys.Bounds.EndKey.Equal(extRangeKeys.Bounds.Key)) {
 					statsDiff.Add(UpdateStatsOnRangeKeySplit(extRangeKeys.Bounds.Key, sstRangeKeys.Versions))
+					updatedStack := extRangeKeys
+					updatedStack.Versions = extRangeKeys.Versions.Clone()
 					// Remove the contribution for versions, as that's already been added.
-					for _, v := range sstRangeKeys.Versions {
-						statsDiff.Subtract(updateStatsOnRangeKeyPutVersion(extRangeKeys, v))
+					for i, v := range sstRangeKeys.Versions {
+						if i == 0 {
+							// We do this dance to make updatedStack.Versions.Newest() == v. This
+							// is necessary to keep GCBytesAge calculations correct.
+							oldVersions := updatedStack.Versions
+							updatedStack.Versions = append(MVCCRangeKeyVersions{v}, oldVersions...)
+						}
+						statsDiff.Subtract(updateStatsOnRangeKeyPutVersion(updatedStack, v))
 					}
+					statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(extRangeKeys.Bounds.Key))
 					statsDiff.RangeKeyCount--
 				} else if !extPrevRangeKeys.IsEmpty() && extPrevRangeKeys.Bounds.EndKey.Equal(extRangeKeys.Bounds.Key) {
+					updatedStack := extRangeKeys
+					updatedStack.Versions = extRangeKeys.Versions.Clone()
 					// Remove the contribution for versions, as that's already been added.
-					for _, v := range sstRangeKeys.Versions {
-						statsDiff.Subtract(updateStatsOnRangeKeyPutVersion(extRangeKeys, v))
+					for i, v := range sstRangeKeys.Versions {
+						if i == 0 {
+							// We do this dance to make updatedStack.Versions.Newest() == v. This
+							// is necessary to keep GCBytesAge calculations correct.
+							oldVersions := updatedStack.Versions
+							updatedStack.Versions = append(MVCCRangeKeyVersions{v}, oldVersions...)
+						}
+						statsDiff.Subtract(updateStatsOnRangeKeyPutVersion(updatedStack, v))
 					}
+					statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(extRangeKeys.Bounds.Key))
 					statsDiff.RangeKeyCount--
 				}
@@ -601,14 +675,17 @@ func CheckSSTConflicts(
 						statsDiff.Add(UpdateStatsOnRangeKeySplit(sstRangeKeys.Bounds.EndKey, extRangeKeys.Versions))
 					}
 					// Remove the contribution for the end key.
+					statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.EndKey))
 				case 0:
 					// Remove the contribution for the end key.
+					statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 					statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(sstRangeKeys.Bounds.EndKey))
 				case -1:
 					if !extRangeKeys.Versions.Equal(sstRangeKeys.Versions) {
 						// This ext range key's end will fragment this sst range key.
 						statsDiff.Add(UpdateStatsOnRangeKeySplit(extRangeKeys.Bounds.EndKey, sstRangeKeys.Versions))
+						statsDiff.AgeTo(sstRangeKeys.Versions.Newest().WallTime)
 						statsDiff.RangeKeyBytes -= int64(EncodedMVCCKeyPrefixLength(extRangeKeys.Bounds.EndKey))
 					}
 				}
@@ -648,6 +725,8 @@ func CheckSSTConflicts(
 			}
 		} else if extValueDeletedByRange {
 			// Don't double-count the current key.
+			version, _ := extRangeKeys.Versions.FirstAtOrAbove(extKey.Timestamp)
+			statsDiff.AgeTo(version.Timestamp.WallTime)
 			statsDiff.KeyCount--
 			statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
 		}
