@@ -125,3 +125,53 @@ DELETE FROM a WHERE a = b -- normalized!
 DELETE FROM a WHERE ((a) = (b)) -- fully parenthesized
 DELETE FROM a WHERE a = b -- literals removed
 DELETE FROM _ WHERE _ = _ -- identifiers removed
+
+parse
+DELETE FROM a USING b
+----
+DELETE FROM a USING b
+DELETE FROM a USING b -- fully parenthesized
+DELETE FROM a USING b -- literals removed
+DELETE FROM _ USING _ -- identifiers removed
+
+parse
+DELETE FROM a USING b WHERE c = d
+----
+DELETE FROM a USING b WHERE c = d
+DELETE FROM a USING b WHERE ((c) = (d)) -- fully parenthesized
+DELETE FROM a USING b WHERE c = d -- literals removed
+DELETE FROM _ USING _ WHERE _ = _ -- identifiers removed
+
+parse
+DELETE FROM a USING b WHERE c = d AND e = f
+----
+DELETE FROM a USING b WHERE (c = d) AND (e = f) -- normalized!
+DELETE FROM a USING b WHERE ((((c) = (d))) AND (((e) = (f)))) -- fully parenthesized
+DELETE FROM a USING b WHERE (c = d) AND (e = f) -- literals removed
+DELETE FROM _ USING _ WHERE (_ = _) AND (_ = _) -- identifiers removed
+
+parse
+DELETE FROM a USING b, c WHERE d > e AND e < f
+----
+DELETE FROM a USING b, c WHERE (d > e) AND (e < f) -- normalized!
+DELETE FROM a USING b, c WHERE ((((d) > (e))) AND (((e) < (f)))) -- fully parenthesized
+DELETE FROM a USING b, c WHERE (d > e) AND (e < f) -- literals removed
+DELETE FROM _ USING _, _ WHERE (_ > _) AND (_ < _) -- identifiers removed
+
+parse
+DELETE FROM a USING b, c, d AS other WHERE e = f AND g = h OR i = j
+----
+DELETE FROM a USING b, c, d AS other WHERE ((e = f) AND (g = h)) OR (i = j) -- normalized!
+DELETE FROM a USING b, c, d AS other WHERE ((((((e) = (f))) AND (((g) = (h))))) OR (((i) = (j)))) -- fully parenthesized
+DELETE FROM a USING b, c, d AS other WHERE ((e = f) AND (g = h)) OR (i = j) -- literals removed
+DELETE FROM _ USING _, _, _ AS _ WHERE ((_ = _) AND (_ = _)) OR (_ = _) -- identifiers removed
+
+parse
+DELETE FROM a USING b AS one, c AS two, d AS three, e AS four WHERE f != g AND g = h RETURNING e
+----
+DELETE FROM a USING b AS one, c AS two, d AS three, e AS four WHERE (f != g) AND (g = h) RETURNING e -- normalized!
+DELETE FROM a USING b AS one, c AS two, d AS three, e AS four WHERE ((((f) != (g))) AND (((g) = (h)))) RETURNING (e) -- fully parenthesized
+DELETE FROM a USING b AS one, c AS two, d AS three, e AS four WHERE (f != g) AND (g = h) RETURNING e -- literals removed
+DELETE FROM _ USING _ AS _, _ AS _, _ AS _, _ AS _ WHERE (_ != _) AND (_ = _) RETURNING _ -- identifiers removed
+
+
