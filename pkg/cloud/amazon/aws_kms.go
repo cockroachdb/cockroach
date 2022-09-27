@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -104,6 +105,11 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		Credentials: credentials.NewStaticCredentials(kmsURIParams.accessKey,
 			kmsURIParams.secret, kmsURIParams.tempToken),
 	}
+	awsConfig.Logger = newLogAdapter(ctx)
+	if log.V(2) {
+		awsConfig.LogLevel = awsVerboseLogging
+	}
+
 	if kmsURIParams.endpoint != "" {
 		if env.KMSConfig().DisableHTTP {
 			return nil, errors.New(
