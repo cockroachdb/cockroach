@@ -77,6 +77,7 @@ func RegisterTests(r registry.Registry) {
 	registerLibPQ(r)
 	registerLiquibase(r)
 	registerLoadSplits(r)
+	registerMVCCGC(r)
 	registerMultiTenantFairness(r)
 	registerMultiTenantTPCH(r)
 	registerMultiTenantUpgrade(r)
