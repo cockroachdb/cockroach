@@ -1500,7 +1500,7 @@ func (r *Replica) maybeExtendLeaseAsyncLocked(ctx context.Context, st kvserverpb
 // error or no preferences defined then it will return false and consider that
 // to be in-conformance.
 func (r *Replica) leaseViolatesPreferences(ctx context.Context) bool {
-	storeDesc, err := r.store.Descriptor(ctx, false /* useCached */)
+	storeDesc, err := r.store.Descriptor(ctx, true /* useCached */)
 	if err != nil {
 		log.Infof(ctx, "Unable to load the descriptor %v: cannot check if lease violates preference", err)
 		return false
