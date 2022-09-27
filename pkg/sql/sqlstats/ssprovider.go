@@ -37,9 +37,11 @@ type Writer interface {
 	// This is sampled and not recorded for every single statement.
 	RecordStatementExecStats(key roachpb.StatementStatisticsKey, stats execstats.QueryLevelStats) error
 
-	// ShouldSaveLogicalPlanDesc returns whether we should save the logical plan
-	// description for a given combination of statement metadata.
-	ShouldSaveLogicalPlanDesc(fingerprint string, implicitTxn bool, database string) bool
+	// ShouldSample returns two booleans, the first one indicates whether we
+	// ever sampled (i.e. collected statistics for) the given combination of
+	// statement metadata, and the second one whether we should save the logical
+	// plan description for it.
+	ShouldSample(fingerprint string, implicitTxn bool, database string) (previouslySampled, savePlanForStats bool)
 
 	// RecordTransaction records statistics for a transaction.
 	RecordTransaction(ctx context.Context, key roachpb.TransactionFingerprintID, value RecordedTxnStats) error
