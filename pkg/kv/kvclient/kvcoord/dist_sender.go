@@ -461,6 +461,8 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
 	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
+	// TODO(arul): The rpcRetryOptions passed in here from server/tenant don't
+	// set a max retries limit. Should they?
 	if cfg.RPCRetryOptions != nil {
 		ds.rpcRetryOptions = *cfg.RPCRetryOptions
 	}
@@ -1392,11 +1394,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		// If we can reserve one of the limited goroutines available for parallel
 		// batch RPCs, send asynchronously.
 		if canParallelize && !lastRange && !ds.disableParallelBatches &&
-			ds.sendPartialBatchAsync(ctx, curRangeBatch, rs, isReverse, withCommit, batchIdx, ri.Token(), responseCh, positions) {
+			ds.sendPartialBatchAsync(ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), responseCh, positions) {
 			// Sent the batch asynchronously.
 		} else {
 			resp := ds.sendPartialBatch(
-				ctx, curRangeBatch, rs, isReverse, withCommit, batchIdx, ri.Token(), positions,
+				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), positions,
 			)
 			responseCh <- resp
 			if resp.pErr != nil {
@@ -1530,21 +1532,26 @@ func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, at
 	s.Printf("slow RPC finished after %.2fs (%d attempts)", dur.Seconds(), attempts)
 }
 
-// sendPartialBatch sends the supplied batch to the range specified by desc.
+// sendPartialBatch sends the supplied batch to the range specified by the
+// routing token.
 //
-// The batch request is supposed to be truncated already so that it contains
-// only requests which intersect the range descriptor and keys for each request
-// are limited to the range's key span. positions argument describes how the
-// given BatchRequest corresponds to the original, un-truncated one, and allows
-// us to combine the response later via BatchResponse.Combine. (nil positions
-// argument should be used when the original batch request is fully contained
-// within a single range.)
+// The batch request is supposed to be truncated already so that it only
+// contains requests which intersect the range descriptor and keys for each
+// request are limited to the range's key span. The rs argument corresponds to
+// the span encompassing the key ranges of all requests in the truncated batch.
+// It should be entirely contained within the range descriptor of the supplied
+// routing token. The positions argument describes how the given batch request
+// corresponds to the original, un-truncated one, and allows us to combine the
+// response later via BatchResponse.Combine. (nil positions argument should be
+// used when the original batch request is fully contained within a single
+// range.)
 //
 // The send occurs in a retry loop to handle send failures. On failure to send
 // to any replicas, we backoff and retry by refetching the range descriptor. If
-// the underlying range seems to have split, we recursively invoke
-// divideAndSendBatchToRanges to re-enumerate the ranges in the span and resend
-// to each.
+// the underlying range seems to have split (determined by checking if the
+// supplied rs is no longer entirely contained within the refreshed range
+// descriptor) we recursively invoke divideAndSendBatchToRanges to re-enumerate
+// the ranges in the span and resend to each.
 func (ds *DistSender) sendPartialBatch(
 	ctx context.Context,
 	ba roachpb.BatchRequest,

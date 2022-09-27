@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useMemo, useContext } from "react";
+import React, { useMemo } from "react";
 import classNames from "classnames/bind";
 import {
   ActiveStatementFilters,
@@ -30,7 +30,6 @@ import {
 } from "./activeTransactionsTable";
 import { TransactionViewType } from "src/transactionsPage/transactionsPageTypes";
 import { calculateActiveFilters } from "src/queryFilter/filter";
-import { CockroachCloudContext } from "src/contexts";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { SortedTable } from "src/sortedtable";
 
@@ -38,6 +37,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 
 type ActiveTransactionsSectionProps = {
   filters: ActiveStatementFilters;
+  isTenant?: boolean;
   pagination: ISortedTablePagination;
   search: string;
   transactions: ActiveTransaction[];
@@ -52,6 +52,7 @@ export const ActiveTransactionsSection: React.FC<
   ActiveTransactionsSectionProps
 > = ({
   filters,
+  isTenant,
   pagination,
   search,
   transactions,
@@ -61,11 +62,9 @@ export const ActiveTransactionsSection: React.FC<
   onClearFilters,
   onColumnsSelect,
 }) => {
-  const isCockroachCloud = useContext(CockroachCloudContext);
-
   const columns = useMemo(
-    () => makeActiveTransactionsColumns(isCockroachCloud),
-    [isCockroachCloud],
+    () => makeActiveTransactionsColumns(isTenant),
+    [isTenant],
   );
   const shownColumns = columns.filter(col =>
     isSelectedColumn(selectedColumns, col),

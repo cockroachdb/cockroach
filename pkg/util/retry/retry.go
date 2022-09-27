@@ -22,10 +22,11 @@ import (
 
 // Options provides reusable configuration of Retry objects.
 type Options struct {
-	InitialBackoff      time.Duration   // Default retry backoff interval
-	MaxBackoff          time.Duration   // Maximum retry backoff interval
-	Multiplier          float64         // Default backoff constant
-	MaxRetries          int             // Maximum number of attempts (0 for infinite)
+	InitialBackoff time.Duration // Default retry backoff interval
+	MaxBackoff     time.Duration // Maximum retry backoff interval
+	Multiplier     float64       // Default backoff constant
+	// Maximum number of retries; attempts = MaxRetries + 1. (0 for infinite)
+	MaxRetries          int
 	RandomizationFactor float64         // Randomize the backoff interval by constant
 	Closer              <-chan struct{} // Optionally end retry loop channel close
 }

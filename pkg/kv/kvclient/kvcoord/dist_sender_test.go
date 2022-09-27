@@ -4553,6 +4553,90 @@ func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 	}
 }
 
+// TestRequestSubdivisionAfterDescriptorChangeWithUnavailableReplicasTerminates
+// acts as a regression test for #87167. It essentially guards against infinite
+// recursion which could happen in a very rare cases. Specifically, where a
+// batch request spanned multiple ranges, but one or more of these ranges did
+// not return a result and the DistSender exhausted the entire transport on
+// each attempt. We simulate this by returning a sendError.
+func TestRequestSubdivisionAfterDescriptorChangeWithUnavailableReplicasTerminates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+	splitKey := keys.MustAddr(keyB)
+
+	get := func(k roachpb.Key) roachpb.Request {
+		return roachpb.NewGet(k, false /* forUpdate */)
+	}
+
+	ctx := context.Background()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	repls := []roachpb.ReplicaDescriptor{{
+		NodeID:  1,
+		StoreID: 1,
+	}}
+	splitDescs := []roachpb.RangeDescriptor{{
+		RangeID:          roachpb.RangeID(1),
+		Generation:       2,
+		StartKey:         roachpb.RKeyMin,
+		EndKey:           splitKey,
+		InternalReplicas: repls,
+	}, {
+		RangeID:          roachpb.RangeID(2),
+		Generation:       2,
+		StartKey:         splitKey,
+		EndKey:           roachpb.RKeyMax,
+		InternalReplicas: repls,
+	}}
+
+	splitRDB := mockRangeDescriptorDBForDescs(splitDescs...)
+
+	var numAttempts int32
+	transportFn := func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		atomic.AddInt32(&numAttempts, 1)
+		require.Equal(t, 1, len(ba.Requests))
+		return nil, newSendError("boom")
+	}
+	rpcRetryOptions := &retry.Options{
+		MaxRetries: 5, // maxAttempts = 6
+	}
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.AmbientContext{Tracer: tr},
+		Clock:             clock,
+		NodeDescs:         g,
+		RPCRetryOptions:   rpcRetryOptions,
+		RPCContext:        rpcContext,
+		RangeDescriptorDB: splitRDB,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(transportFn),
+		},
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
+
+	ds := NewDistSender(cfg)
+
+	var ba roachpb.BatchRequest
+	ba.Add(get(keyA), get(keyC))
+	// Inconsistent read because otherwise the batch will ask to be re-sent in a
+	// txn when split.
+	ba.ReadConsistency = roachpb.INCONSISTENT
+	_, pErr := ds.Send(ctx, ba)
+	require.NotNil(t, pErr)
+	require.True(t, testutils.IsError(pErr.GoError(), "boom"))
+	// 6 attempts each for the two partial batches.
+	require.Equal(t, int32(12), atomic.LoadInt32(&numAttempts))
+}
+
 // TestDescriptorChangeAfterRequestSubdivision is similar to
 // TestRequestSubdivisionAfterDescriptorChange, but it exercises a scenario
 // where the request is subdivided before observing a descriptor change. After

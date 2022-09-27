@@ -23,6 +23,7 @@ import {
 } from "src/selectors/activeExecutions.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
+import { selectIsTenant } from "src/store/uiConfig";
 import { localStorageSelector } from "../store/utils/selectors";
 
 export const selectSortSetting = (state: AppState): SortSetting =>
@@ -54,6 +55,7 @@ export const mapStateToActiveStatementsPageProps = (
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
   internalAppNamePrefix: selectAppName(state),
+  isTenant: selectIsTenant(state),
 });
 
 export const mapDispatchToActiveStatementsPageProps = (
