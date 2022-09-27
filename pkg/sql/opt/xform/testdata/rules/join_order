@@ -2610,3 +2610,81 @@ project
       │         └── t2.a:5 = 123456 [outer=(5), constraints=(/5: [/123456 - /123456]; tight), fd=()-->(5)]
       └── filters
            └── t1.a:1 = 123456 [outer=(1), constraints=(/1: [/123456 - /123456]; tight), fd=()-->(1)]
+
+# Regression test for #88659 - don't add reordered joins to existing groups when
+# filters haven't been pushed down. The c:3 = c:9 filter shouldn't be dropped.
+exec-ddl
+CREATE TABLE t88659 (
+  a INT PRIMARY KEY,
+  b INT NOT NULL,
+  c DECIMAL,
+  INDEX idx (b DESC),
+  UNIQUE INDEX uniq ((b + a) ASC) STORING (b),
+  FAMILY (a, b)
+);
+----
+
+exec-ddl
+ALTER TABLE t88659 INJECT STATISTICS '[
+  {
+    "columns": ["b"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 999999999,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 999999999999}
+]':::JSONB;
+----
+
+opt set=testing_optimizer_random_seed=2758112374651167630 set=testing_optimizer_cost_perturbation=1.0
+SELECT *
+FROM t88659 AS t0
+JOIN t88659 AS t2 ON (t0.b) = (t2.a)
+JOIN t88659 AS t3 ON (t2.c) = (t3.c) AND (t0.c) = (t3.c)
+JOIN t88659 AS t4 ON (t3.a) = (t4.b) AND (t2.b) = (t4.a) AND (t2.a) = (t4.a);
+----
+inner-join (lookup t88659)
+ ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null a:19!null b:20!null c:21
+ ├── key columns: [20] = [13]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19), (8)==(2,7,19), (2)==(7,8,19), (13)-->(14,15), (3)==(9,15), (9)==(3,15), (15)==(3,9), (19)-->(20,21), (13)==(20), (20)==(13), (19)==(2,7,8)
+ ├── inner-join (lookup t88659)
+ │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:19!null b:20!null c:21
+ │    ├── key columns: [7] = [19]
+ │    ├── lookup columns are key
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8,19), (8)==(2,7,19), (19)-->(20,21), (19)==(2,7,8), (2)==(7,8,19), (3)==(9), (9)==(3)
+ │    ├── inner-join (lookup t88659)
+ │    │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null
+ │    │    ├── key columns: [1] = [1]
+ │    │    ├── lookup columns are key
+ │    │    ├── immutable
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,3), (7)-->(9), (7)==(2,8), (8)==(2,7), (2)==(7,8), (3)==(9), (9)==(3)
+ │    │    ├── inner-join (lookup t88659@idx)
+ │    │    │    ├── columns: a:1!null b:2!null a:7!null b:8!null c:9
+ │    │    │    ├── key columns: [7] = [2]
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (7)-->(9), (7)==(2,8), (8)==(2,7), (1)-->(2), (2)==(7,8)
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: a:7!null b:8!null c:9
+ │    │    │    │    ├── key: (7)
+ │    │    │    │    ├── fd: (7)-->(9), (7)==(8), (8)==(7)
+ │    │    │    │    ├── scan t88659
+ │    │    │    │    │    ├── columns: a:7!null b:8!null c:9
+ │    │    │    │    │    ├── computed column expressions
+ │    │    │    │    │    │    └── crdb_internal_idx_expr:12
+ │    │    │    │    │    │         └── b:8 + a:7
+ │    │    │    │    │    ├── key: (7)
+ │    │    │    │    │    └── fd: (7)-->(8,9)
+ │    │    │    │    └── filters
+ │    │    │    │         └── a:7 = b:8 [outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
+ │    │    │    └── filters (true)
+ │    │    └── filters
+ │    │         └── c:3 = c:9 [outer=(3,9), immutable, constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
+ │    └── filters (true)
+ └── filters
+      └── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
