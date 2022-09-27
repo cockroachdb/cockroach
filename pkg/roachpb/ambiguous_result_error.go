@@ -28,14 +28,13 @@ func NewAmbiguousResultErrorf(format string, args ...interface{}) *AmbiguousResu
 // errors.Wrapper) the supplied error.
 func NewAmbiguousResultError(err error) *AmbiguousResultError {
 	return &AmbiguousResultError{
-		EncodedError:      errors.EncodeError(context.Background(), err),
-		DeprecatedMessage: err.Error(),
+		EncodedError: errors.EncodeError(context.Background(), err),
 	}
 }
 
 var _ errors.SafeFormatter = (*AmbiguousResultError)(nil)
 var _ fmt.Formatter = (*AmbiguousResultError)(nil)
-var _ errors.Wrapper = func() errors.Wrapper {
+var _ = func() errors.Wrapper {
 	aErr := (*AmbiguousResultError)(nil)
 	typeKey := errors.GetTypeKey(aErr)
 	errors.RegisterWrapperEncoder(typeKey, func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message) {
