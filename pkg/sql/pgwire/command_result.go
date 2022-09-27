@@ -352,7 +352,7 @@ func (c *conn) newCommandResult(
 	conv sessiondatapb.DataConversionConfig,
 	location *time.Location,
 	limit int,
-	portalName string,
+	portalName tree.Name,
 	implicitTxn bool,
 ) sql.CommandResult {
 	r := c.allocCommandResult()
@@ -410,7 +410,7 @@ func (c *conn) newMiscResult(pos sql.CmdPos, typ completionMsgType) *commandResu
 // per statement instead of once per portal.
 type limitedCommandResult struct {
 	*commandResult
-	portalName  string
+	portalName  tree.Name
 	implicitTxn bool
 
 	seenTuples int
@@ -537,8 +537,8 @@ func (r *limitedCommandResult) isCommit() (bool, error) {
 		}
 	}
 
-	commitStmtName := ""
-	commitPortalName := ""
+	commitStmtName := tree.Name("")
+	commitPortalName := tree.Name("")
 	// Case 2a: Check if cmd is a prepared COMMIT statement.
 	if prepareStmt, ok := cmd.(sql.PrepareStmt); ok {
 		if _, isCommit := prepareStmt.AST.(*tree.CommitTransaction); isCommit {

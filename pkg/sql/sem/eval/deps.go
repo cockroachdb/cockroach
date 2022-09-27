@@ -426,7 +426,7 @@ type PreparedStatementState interface {
 	// MigratablePreparedStatements returns a mapping of all prepared statements.
 	MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement
 	// HasPortal returns true if there exists a given named portal in the session.
-	HasPortal(s string) bool
+	HasPortal(s tree.Name) bool
 }
 
 // ClientNoticeSender is a limited interface to send notices to the

@@ -26,7 +26,7 @@ import (
 // the referenced prepared statement and correctly updated placeholder info.
 // See https://www.postgresql.org/docs/current/static/sql-execute.html for details.
 func (p *planner) fillInPlaceholders(
-	ctx context.Context, ps *PreparedStatement, name string, params tree.Exprs,
+	ctx context.Context, ps *PreparedStatement, name tree.Name, params tree.Exprs,
 ) (*tree.PlaceholderInfo, error) {
 	if len(ps.Types) != len(params) {
 		return nil, pgerror.Newf(pgcode.Syntax,

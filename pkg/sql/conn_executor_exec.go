@@ -189,7 +189,7 @@ func (ex *connExecutor) recordFailure() {
 func (ex *connExecutor) execPortal(
 	ctx context.Context,
 	portal PreparedPortal,
-	portalName string,
+	portalName tree.Name,
 	stmtRes CommandResult,
 	pinfo *tree.PlaceholderInfo,
 	canAutoCommit bool,
@@ -424,17 +424,16 @@ func (ex *connExecutor) execStmtInOpenState(
 	if e, ok := ast.(*tree.Execute); ok {
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution.
-		name := e.Name.String()
-		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[e.Name]
 		if !ok {
 			err := pgerror.Newf(
 				pgcode.InvalidSQLStatementName,
-				"prepared statement %q does not exist", name,
+				"prepared statement %q does not exist", e.Name,
 			)
 			return makeErrEvent(err)
 		}
 		var err error
-		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, name, e.Params)
+		pinfo, err = ex.planner.fillInPlaceholders(ctx, ps, e.Name, e.Params)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -554,11 +553,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	case *tree.Prepare:
 		// This is handling the SQL statement "PREPARE". See execPrepare for
 		// handling of the protocol-level command for preparing statements.
-		name := s.Name.String()
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[s.Name]; ok {
 			err := pgerror.Newf(
 				pgcode.DuplicatePreparedStatement,
-				"prepared statement %q already exists", name,
+				"prepared statement %q already exists", s.Name,
 			)
 			return makeErrEvent(err)
 		}
@@ -593,7 +591,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		)
 		var rawTypeHints []oid.Oid
 		if _, err := ex.addPreparedStmt(
-			ctx, name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
+			ctx, s.Name, prepStmt, typeHints, rawTypeHints, PreparedStatementOriginSQL,
 		); err != nil {
 			return makeErrEvent(err)
 		}

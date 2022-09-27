@@ -88,15 +88,14 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		// This statement is going to execute a prepared statement. To prepare it,
 		// we need to set the expected output columns to the output columns of the
 		// prepared statement that the user is trying to execute.
-		name := string(t.Name)
-		prepared, ok := p.preparedStatements.Get(name)
+		prepared, ok := p.preparedStatements.Get(t.Name)
 		if !ok {
 			// We're trying to prepare an EXECUTE of a statement that doesn't exist.
 			// Let's just give up at this point.
 			// Postgres doesn't fail here, instead it produces an EXECUTE that returns
 			// no columns. This seems like dubious behavior at best.
 			return opc.flags, pgerror.Newf(pgcode.UndefinedPreparedStatement,
-				"no such prepared statement %s", name)
+				"no such prepared statement %s", t.Name)
 		}
 		stmt.Prepared.Columns = prepared.Columns
 		return opc.flags, nil

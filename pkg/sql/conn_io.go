@@ -160,7 +160,7 @@ var _ Command = ExecStmt{}
 
 // ExecPortal is the Command for executing a portal.
 type ExecPortal struct {
-	Name string
+	Name tree.Name
 	// limit is a feature of pgwire that we don't really support. We accept it and
 	// don't complain as long as the statement produces fewer results than this.
 	Limit int
@@ -184,7 +184,7 @@ var _ Command = ExecPortal{}
 // PrepareStmt is the command for creating a prepared statement.
 type PrepareStmt struct {
 	// Name of the prepared statement (optional).
-	Name string
+	Name tree.Name
 
 	// Information returned from parsing: AST, SQL, NumPlaceholders.
 	// Note that AST can be nil, in which case executing it should produce an
@@ -233,8 +233,8 @@ var _ Command = DescribeStmt{}
 
 // BindStmt is the Command for creating a portal from a prepared statement.
 type BindStmt struct {
-	PreparedStatementName string
-	PortalName            string
+	PreparedStatementName tree.Name
+	PortalName            tree.Name
 	// OutFormats contains the requested formats for the output columns.
 	// It either contains a bunch of format codes, in which case the number will
 	// need to match the number of output columns of the portal, or contains a single
@@ -273,7 +273,7 @@ var _ Command = BindStmt{}
 
 // DeletePreparedStmt is the Command for freeing a prepared statement.
 type DeletePreparedStmt struct {
-	Name string
+	Name tree.Name
 	Type pgwirebase.PrepareType
 }
 
@@ -620,7 +620,7 @@ type ClientComm interface {
 		conv sessiondatapb.DataConversionConfig,
 		location *time.Location,
 		limit int,
-		portalName string,
+		portalName tree.Name,
 		implicitTxn bool,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.

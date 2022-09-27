@@ -24,7 +24,7 @@ func (p *planner) Deallocate(ctx context.Context, s *tree.Deallocate) (planNode,
 	if s.Name == "" {
 		p.preparedStatements.DeleteAll(ctx)
 	} else {
-		if found := p.preparedStatements.Delete(ctx, string(s.Name)); !found {
+		if found := p.preparedStatements.Delete(ctx, s.Name); !found {
 			return nil, pgerror.Newf(pgcode.InvalidSQLStatementName,
 				"prepared statement %q does not exist", s.Name)
 		}

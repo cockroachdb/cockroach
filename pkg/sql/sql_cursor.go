@@ -53,7 +53,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", s.Name)
 			}
 
-			if p.extendedEvalCtx.PreparedStatementState.HasPortal(string(s.Name)) {
+			if p.extendedEvalCtx.PreparedStatementState.HasPortal(s.Name) {
 				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists as portal", s.Name)
 			}
 

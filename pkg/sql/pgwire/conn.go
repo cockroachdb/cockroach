@@ -992,7 +992,7 @@ func (c *conn) handleParse(
 	return c.stmtBuf.Push(
 		ctx,
 		sql.PrepareStmt{
-			Name:         name,
+			Name:         tree.Name(name),
 			Statement:    stmt,
 			TypeHints:    sqlTypeHints,
 			RawTypeHints: inTypeHints,
@@ -1036,7 +1036,7 @@ func (c *conn) handleClose(ctx context.Context, buf *pgwirebase.ReadBuffer) erro
 	return c.stmtBuf.Push(
 		ctx,
 		sql.DeletePreparedStmt{
-			Name: name,
+			Name: tree.Name(name),
 			Type: typ,
 		})
 }
@@ -1163,8 +1163,8 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	return c.stmtBuf.Push(
 		ctx,
 		sql.BindStmt{
-			PreparedStatementName: statementName,
-			PortalName:            portalName,
+			PreparedStatementName: tree.Name(statementName),
+			PortalName:            tree.Name(portalName),
 			Args:                  qargs,
 			ArgFormatCodes:        qArgFormatCodes,
 			OutFormats:            columnFormatCodes,
@@ -1186,7 +1186,7 @@ func (c *conn) handleExecute(
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	return c.stmtBuf.Push(ctx, sql.ExecPortal{
-		Name:           portalName,
+		Name:           tree.Name(portalName),
 		TimeReceived:   timeReceived,
 		Limit:          int(limit),
 		FollowedBySync: followedBySync,
@@ -1692,7 +1692,7 @@ func (c *conn) CreateStatementResult(
 	conv sessiondatapb.DataConversionConfig,
 	location *time.Location,
 	limit int,
-	portalName string,
+	portalName tree.Name,
 	implicitTxn bool,
 ) sql.CommandResult {
 	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, limit, portalName, implicitTxn)
