@@ -817,7 +817,7 @@ func TestGossipPropagation(t *testing.T) {
 	getInfo := func(g *Gossip, key string) *Info {
 		g.mu.RLock()
 		defer g.mu.RUnlock()
-		return g.mu.is.Infos[key]
+		return g.mu.is.getInfo(key)
 	}
 
 	var localInfo *Info
