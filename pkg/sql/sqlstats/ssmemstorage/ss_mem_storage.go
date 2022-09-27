@@ -692,7 +692,7 @@ func (s *Container) MergeApplicationStatementStats(
 			defer stmtStats.mu.Unlock()
 
 			stmtStats.mergeStatsLocked(statistics)
-			planLastSampled := s.getLogicalPlanLastSampled(key.sampledPlanKey)
+			planLastSampled, _ := s.getLogicalPlanLastSampled(key.sampledPlanKey)
 			if planLastSampled.Before(stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp) {
 				s.setLogicalPlanLastSampled(key.sampledPlanKey, stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 			}
@@ -922,16 +922,13 @@ func (s *transactionCounts) recordTransactionCounts(
 	}
 }
 
-func (s *Container) getLogicalPlanLastSampled(key sampledPlanKey) time.Time {
+func (s *Container) getLogicalPlanLastSampled(
+	key sampledPlanKey,
+) (lastSampled time.Time, found bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	lastSampled, found := s.mu.sampledPlanMetadataCache[key]
-	if !found {
-		return time.Time{}
-	}
-
-	return lastSampled
+	lastSampled, found = s.mu.sampledPlanMetadataCache[key]
+	return lastSampled, found
 }
 
 func (s *Container) setLogicalPlanLastSampled(key sampledPlanKey, time time.Time) {
