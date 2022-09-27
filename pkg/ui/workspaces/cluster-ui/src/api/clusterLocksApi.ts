@@ -13,6 +13,7 @@ import {
   executeInternalSql,
   LONG_TIMEOUT,
   SqlExecutionRequest,
+  sqlResultsAreEmpty,
 } from "./sqlApi";
 
 export type ClusterLockState = {
@@ -73,10 +74,7 @@ WHERE
   };
 
   return executeInternalSql<ClusterLockColumns>(request).then(result => {
-    if (
-      result.execution.txn_results.length === 0 ||
-      !result.execution.txn_results[0].rows
-    ) {
+    if (sqlResultsAreEmpty(result)) {
       // No data.
       return [];
     }

@@ -13,6 +13,7 @@ import {
   SqlTxnResult,
   executeInternalSql,
   LONG_TIMEOUT,
+  sqlResultsAreEmpty,
 } from "./sqlApi";
 import {
   InsightRecommendation,
@@ -186,7 +187,7 @@ export function getSchemaInsights(): Promise<InsightRecommendation[]> {
   };
   return executeInternalSql<SchemaInsightResponse>(request).then(result => {
     const results: InsightRecommendation[] = [];
-    if (result.execution.txn_results.length === 0) {
+    if (sqlResultsAreEmpty(result)) {
       // No data.
       return results;
     }
