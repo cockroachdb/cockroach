@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -27,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -86,15 +87,17 @@ func findNextTableToUpgrade(
 			return false, 0, errors.Wrapf(err,
 				"failed to convert MVCC timestamp decimal to HLC for ID %d", id)
 		}
-		var desc descpb.Descriptor
-		if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(row[1])), &desc); err != nil {
+		b, err := descbuilder.FromBytesAndMVCCTimestamp([]byte(tree.MustBeDBytes(row[1])), ts)
+		if err != nil {
 			return false, 0, errors.Wrapf(err,
 				"failed to unmarshal descriptor with ID %d", id)
 		}
 		// Return this descriptor if it's a non-dropped table or view.
-		tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, ts)
-		if tableDesc != nil && !tableDesc.Dropped() && tableSelector(tableDesc) {
-			return false, id, nil
+		if b != nil && b.DescriptorType() == catalog.Table {
+			tableDesc := b.BuildImmutable().(catalog.TableDescriptor)
+			if tableDesc != nil && !tableDesc.Dropped() && tableSelector(tableDesc.TableDesc()) {
+				return false, id, nil
+			}
 		}
 	}
 

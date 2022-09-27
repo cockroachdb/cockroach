@@ -56,8 +56,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -2168,14 +2169,16 @@ func fetchDescVersionModificationTime(
 			if unsafeValue == nil {
 				t.Fatal(errors.New(`value was dropped or truncated`))
 			}
-			value := roachpb.Value{RawBytes: unsafeValue}
-			var desc descpb.Descriptor
-			if err := value.GetProto(&desc); err != nil {
+			value := roachpb.Value{RawBytes: unsafeValue, Timestamp: k.Timestamp}
+			b, err := descbuilder.FromSerializedValue(&value)
+			if err != nil {
 				t.Fatal(err)
 			}
-			if tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, k.Timestamp); tableDesc != nil {
-				if int(tableDesc.Version) == version {
-					return tableDesc.ModificationTime
+			require.NotNil(t, b)
+			if b.DescriptorType() == catalog.Table {
+				tbl := b.BuildImmutable().(catalog.TableDescriptor)
+				if int(tbl.GetVersion()) == version {
+					return tbl.GetModificationTime()
 				}
 			}
 		}

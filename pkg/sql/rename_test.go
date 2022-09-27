@@ -112,7 +112,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 		func(descriptor *descpb.Descriptor) {
 			mu.Lock()
 			defer mu.Unlock()
-			id, version, name, _, _, err := descpb.GetDescriptorMetadata(descriptor)
+			id, version, name, _, err := descpb.GetDescriptorMetadata(descriptor)
 			if err != nil {
 				t.Fatal(err)
 			}

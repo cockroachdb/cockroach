@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -456,23 +458,22 @@ func visitAncestors(
 
 	// TODO(ajwerner): Reconsider how this zone config picking apart happens. This
 	// isn't how we want to be retreiving table descriptors in general.
-	var desc descpb.Descriptor
-	if err := descVal.GetProto(&desc); err != nil {
+	b, err := descbuilder.FromSerializedValue(descVal)
+	if err != nil {
 		return false, err
 	}
-	tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
 	// If it's a database, the parent is the default zone.
-	if tableDesc == nil {
+	if b == nil || b.DescriptorType() != catalog.Table {
 		return visitDefaultZone(ctx, cfg, visitor), nil
 	}
-
+	tableDesc := b.BuildImmutable()
 	// If it's a table, the parent is a database.
-	zone, err := getZoneByID(config.ObjectID(tableDesc.ParentID), cfg)
+	zone, err := getZoneByID(config.ObjectID(tableDesc.GetParentID()), cfg)
 	if err != nil {
 		return false, err
 	}
 	if zone != nil {
-		if visitor(ctx, zone, MakeZoneKey(config.ObjectID(tableDesc.ParentID), NoSubzone)) {
+		if visitor(ctx, zone, MakeZoneKey(config.ObjectID(tableDesc.GetParentID()), NoSubzone)) {
 			return true, nil
 		}
 	}
