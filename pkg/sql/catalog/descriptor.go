@@ -88,6 +88,8 @@ type DescriptorBuilder interface {
 	// upgrade migrations
 	RunRestoreChanges(descLookupFn func(id descpb.ID) Descriptor) error
 
+	SetRawBytesInDescriptor(rawBytes []byte)
+
 	// BuildImmutable returns an immutable Descriptor.
 	BuildImmutable() Descriptor
 
@@ -225,6 +227,8 @@ type Descriptor interface {
 
 	// SkipNamespace is true when a descriptor should not have a namespace record.
 	SkipNamespace() bool
+
+	GetRawBytesInStorage() []byte
 }
 
 // HydratableDescriptor represent a Descriptor which needs user-define type

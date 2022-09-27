@@ -42,6 +42,10 @@ type public struct {
 	synthetic
 }
 
+func (p public) GetRawBytesInStorage() []byte {
+	return nil
+}
+
 var _ catalog.SchemaDescriptor = public{}
 var _ catalog.PrivilegeObject = public{}
 

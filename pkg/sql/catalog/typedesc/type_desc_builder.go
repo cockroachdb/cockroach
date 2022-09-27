@@ -35,6 +35,8 @@ type typeDescriptorBuilder struct {
 	mvccTimestamp        hlc.Timestamp
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
+	// This is the raw bytes (tag + data) of the type descriptor in storage.
+	rawBytesInStorage []byte
 }
 
 var _ TypeDescriptorBuilder = &typeDescriptorBuilder{}
@@ -118,6 +120,10 @@ func (tdb *typeDescriptorBuilder) RunRestoreChanges(_ func(id descpb.ID) catalog
 	return nil
 }
 
+func (tdb *typeDescriptorBuilder) SetRawBytesInDescriptor(rawBytes []byte) {
+	tdb.rawBytesInStorage = rawBytes
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (tdb *typeDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return tdb.BuildImmutableType()
@@ -130,6 +136,7 @@ func (tdb *typeDescriptorBuilder) BuildImmutableType() catalog.TypeDescriptor {
 		desc = tdb.original
 	}
 	imm := makeImmutable(desc, tdb.isUncommittedVersion, tdb.changes)
+	imm.rawBytesInStorage = tdb.rawBytesInStorage
 	return &imm
 }
 
@@ -144,10 +151,12 @@ func (tdb *typeDescriptorBuilder) BuildExistingMutableType() *Mutable {
 	if tdb.maybeModified == nil {
 		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
 	}
+	mutableType := makeImmutable(tdb.maybeModified, false /* isUncommitedVersion */, tdb.changes)
+	mutableType.rawBytesInStorage = tdb.rawBytesInStorage
 	clusterVersion := makeImmutable(tdb.original, false, /* isUncommitedVersion */
 		catalog.PostDeserializationChanges{})
 	return &Mutable{
-		immutable:      makeImmutable(tdb.maybeModified, false /* isUncommitedVersion */, tdb.changes),
+		immutable:      mutableType,
 		ClusterVersion: &clusterVersion,
 	}
 }
@@ -164,8 +173,10 @@ func (tdb *typeDescriptorBuilder) BuildCreatedMutableType() *Mutable {
 	if desc == nil {
 		desc = tdb.original
 	}
+	createdType := makeImmutable(desc, tdb.isUncommittedVersion, tdb.changes)
+	createdType.rawBytesInStorage = tdb.rawBytesInStorage
 	return &Mutable{
-		immutable: makeImmutable(desc, tdb.isUncommittedVersion, tdb.changes),
+		immutable: createdType,
 	}
 }
 

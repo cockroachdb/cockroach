@@ -35,6 +35,8 @@ type schemaDescriptorBuilder struct {
 	mvccTimestamp        hlc.Timestamp
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
+	// This is the raw bytes (tag + data) of the schema descriptor in storage.
+	rawBytesInStorage []byte
 }
 
 var _ SchemaDescriptorBuilder = &schemaDescriptorBuilder{}
@@ -119,6 +121,10 @@ func (sdb *schemaDescriptorBuilder) RunRestoreChanges(
 	return nil
 }
 
+func (sdb *schemaDescriptorBuilder) SetRawBytesInDescriptor(rawBytes []byte) {
+	sdb.rawBytesInStorage = rawBytes
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (sdb *schemaDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return sdb.BuildImmutableSchema()
@@ -134,6 +140,7 @@ func (sdb *schemaDescriptorBuilder) BuildImmutableSchema() catalog.SchemaDescrip
 		SchemaDescriptor:     *desc,
 		changes:              sdb.changes,
 		isUncommittedVersion: sdb.isUncommittedVersion,
+		rawBytesInStorage:    sdb.rawBytesInStorage,
 	}
 }
 
@@ -153,6 +160,7 @@ func (sdb *schemaDescriptorBuilder) BuildExistingMutableSchema() *Mutable {
 			SchemaDescriptor:     *sdb.maybeModified,
 			changes:              sdb.changes,
 			isUncommittedVersion: sdb.isUncommittedVersion,
+			rawBytesInStorage:    sdb.rawBytesInStorage,
 		},
 		ClusterVersion: &immutable{SchemaDescriptor: *sdb.original},
 	}
@@ -175,6 +183,7 @@ func (sdb *schemaDescriptorBuilder) BuildCreatedMutableSchema() *Mutable {
 			SchemaDescriptor:     *desc,
 			isUncommittedVersion: sdb.isUncommittedVersion,
 			changes:              sdb.changes,
+			rawBytesInStorage:    sdb.rawBytesInStorage,
 		},
 	}
 }

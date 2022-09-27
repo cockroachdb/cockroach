@@ -55,6 +55,10 @@ type virtual struct {
 	name string
 }
 
+func (p virtual) GetRawBytesInStorage() []byte {
+	return nil
+}
+
 var _ catalog.SchemaDescriptor = virtual{}
 var _ catalog.PrivilegeObject = virtual{}
 

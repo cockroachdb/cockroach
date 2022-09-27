@@ -1011,6 +1011,14 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	return desc.ClusterVersion().Version
 }
 
+// GetRawBytesInStorage implements the MutableDescriptor interface.
+func (desc *Mutable) GetRawBytesInStorage() []byte {
+	if desc == nil {
+		return nil
+	}
+	return desc.rawBytesInStorage
+}
+
 // ClusterVersion returns the version of the table descriptor read from the
 // store, if any.
 //

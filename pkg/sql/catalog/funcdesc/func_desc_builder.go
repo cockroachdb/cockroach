@@ -71,6 +71,8 @@ type functionDescriptorBuilder struct {
 	mvccTimestamp        hlc.Timestamp
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
+	// This is the raw bytes (tag + data) of the function descriptor in storage.
+	rawBytesInStorage []byte
 }
 
 // DescriptorType implements the catalog.DescriptorBuilder interface.
@@ -107,6 +109,10 @@ func (fdb *functionDescriptorBuilder) RunRestoreChanges(
 	return nil
 }
 
+func (fdb *functionDescriptorBuilder) SetRawBytesInDescriptor(rawBytes []byte) {
+	fdb.rawBytesInStorage = rawBytes
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (fdb *functionDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return fdb.BuildImmutableFunction()
@@ -132,6 +138,7 @@ func (fdb *functionDescriptorBuilder) BuildImmutableFunction() catalog.FunctionD
 		FunctionDescriptor:   *desc,
 		isUncommittedVersion: fdb.isUncommittedVersion,
 		changes:              fdb.changes,
+		rawBytesInStorage:    fdb.rawBytesInStorage,
 	}
 }
 
@@ -145,6 +152,7 @@ func (fdb *functionDescriptorBuilder) BuildExistingMutableFunction() *Mutable {
 			FunctionDescriptor:   *fdb.maybeModified,
 			isUncommittedVersion: fdb.isUncommittedVersion,
 			changes:              fdb.changes,
+			rawBytesInStorage:    fdb.rawBytesInStorage,
 		},
 		clusterVersion: &immutable{FunctionDescriptor: *fdb.original},
 	}
@@ -161,6 +169,7 @@ func (fdb *functionDescriptorBuilder) BuildCreatedMutableFunction() *Mutable {
 			FunctionDescriptor:   *desc,
 			isUncommittedVersion: fdb.isUncommittedVersion,
 			changes:              fdb.changes,
+			rawBytesInStorage:    fdb.rawBytesInStorage,
 		},
 	}
 }

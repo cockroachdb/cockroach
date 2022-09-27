@@ -46,6 +46,16 @@ type immutable struct {
 	isUncommittedVersion bool
 
 	changes catalog.PostDeserializationChanges
+
+	// This is the raw bytes (tag + data) of the function descriptor in storage.
+	rawBytesInStorage []byte
+}
+
+func (desc *immutable) GetRawBytesInStorage() []byte {
+	if desc == nil {
+		return nil
+	}
+	return desc.rawBytesInStorage
 }
 
 // Mutable represents a mutable function descriptor.
@@ -147,12 +157,16 @@ func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState 
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(&desc.FunctionDescriptor, hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b := newBuilder(&desc.FunctionDescriptor, hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b.SetRawBytesInDescriptor(desc.GetRawBytesInStorage())
+	return b
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(&desc.FunctionDescriptor, hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b := newBuilder(&desc.FunctionDescriptor, hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b.SetRawBytesInDescriptor(desc.GetRawBytesInStorage())
+	return b
 }
 
 // GetReferencedDescIDs implements the catalog.Descriptor interface.
@@ -400,6 +414,14 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 		return 0
 	}
 	return desc.clusterVersion.Version
+}
+
+// GetRawBytesInStorage implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) GetRawBytesInStorage() []byte {
+	if desc == nil {
+		return nil
+	}
+	return desc.rawBytesInStorage
 }
 
 // ImmutableCopy implements the catalog.MutableDescriptor interface.
