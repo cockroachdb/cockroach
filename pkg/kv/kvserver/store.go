@@ -744,7 +744,6 @@ type Store struct {
 	scanner            *replicaScanner             // Replica scanner
 	consistencyQueue   *consistencyQueue           // Replica consistency check queue
 	consistencyLimiter *quotapool.RateLimiter      // Rate limits consistency checks
-	consistencySem     *quotapool.IntPool          // Limit concurrent consistency checks
 	metrics            *StoreMetrics
 	intentResolver     *intentresolver.IntentResolver
 	recoveryMgr        txnrecovery.Manager
@@ -2090,9 +2089,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		rate := consistencyCheckRate.Get(&s.ClusterSettings().SV)
 		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
 	})
-	s.consistencySem = quotapool.NewIntPool("concurrent async consistency checks",
-		consistencyCheckAsyncConcurrency)
-	s.stopper.AddCloser(s.consistencySem.Closer("stopper"))
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
