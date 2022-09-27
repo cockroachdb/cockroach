@@ -115,18 +115,22 @@ func (s *StatsCollector) EndTransaction(
 	s.flushTarget = nil
 }
 
-// ShouldSaveLogicalPlanDesc implements sqlstats.StatsCollector interface.
-func (s *StatsCollector) ShouldSaveLogicalPlanDesc(
+// ShouldSample implements sqlstats.StatsCollector interface.
+func (s *StatsCollector) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
-) bool {
-	foundInFlushTarget := true
+) (everSampled bool, savePlanForStats bool) {
+	sampledInFlushTarget := false
+	savePlanForStatsInFlushTarget := true
 
 	if s.flushTarget != nil {
-		foundInFlushTarget = s.flushTarget.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database)
+		sampledInFlushTarget, savePlanForStatsInFlushTarget = s.flushTarget.ShouldSample(fingerprint, implicitTxn, database)
 	}
 
-	return foundInFlushTarget &&
-		s.ApplicationStats.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database)
+	// TODO: this might need to be thought through a bit more.
+	sampledInAppStats, savePlanForStatsInAppStats := s.ApplicationStats.ShouldSample(fingerprint, implicitTxn, database)
+	everSampled = sampledInFlushTarget || sampledInAppStats
+	savePlanForStats = savePlanForStatsInFlushTarget && savePlanForStatsInAppStats
+	return everSampled, savePlanForStats
 }
 
 // UpgradeImplicitTxn implements sqlstats.StatsCollector interface.
