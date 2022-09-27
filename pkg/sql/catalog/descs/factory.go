@@ -41,6 +41,16 @@ type CollectionFactory struct {
 	ieFactoryWithTxn   InternalExecutorFactoryWithTxn
 }
 
+// GetLeaseMgr returns the lease manager of the collection factory.
+func (cf *CollectionFactory) GetLeaseMgr() *lease.Manager {
+	return cf.leaseMgr
+}
+
+// GetClusterSettings returns the cluster setting from the collection factory.
+func (cf *CollectionFactory) GetClusterSettings() *cluster.Settings {
+	return cf.settings
+}
+
 // InternalExecutorFactoryWithTxn is used to create an internal executor
 // with associated extra txn state information.
 // It should only be used as a field hanging off CollectionFactory.

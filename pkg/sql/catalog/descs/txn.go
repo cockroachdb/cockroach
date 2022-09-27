@@ -89,6 +89,66 @@ type TxnWithExecutorFunc = func(
 	ie sqlutil.InternalExecutor,
 ) error
 
+// TxnDB include methods to run transactions with a *Collection.
+type TxnDB interface {
+	DescsTxnWithExecutor(
+		ctx context.Context,
+		db *kv.DB,
+		sd *sessiondata.SessionData,
+		f TxnWithExecutorFunc,
+		opts ...sqlutil.TxnOption,
+	) error
+	DescsTxn(
+		ctx context.Context,
+		db *kv.DB,
+		sd *sessiondata.SessionData,
+		f func(context.Context, *kv.Txn, *Collection) error,
+		opts ...sqlutil.TxnOption,
+	) error
+}
+
+// WaitForModifiedDescsFunc is a function type that waits for modified descriptors.
+type WaitForModifiedDescsFunc func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error
+
+// WaitForDescriptorsFunc return a function that waits for descriptors that
+// were modified, skipping over ones that had their descriptor wiped.
+func (cf *CollectionFactory) WaitForDescriptorsFunc(
+	ctx context.Context,
+) WaitForModifiedDescsFunc {
+	return func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
+		// Wait for a single version on leased descriptors.
+		for _, ld := range modifiedDescriptors {
+			waitForNoVersion := deletedDescs.Contains(ld.ID)
+			retryOpts := retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     1.5,
+				MaxBackoff:     time.Second,
+			}
+			// Detect unpublished ones.
+			if waitForNoVersion {
+				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				if err != nil {
+					return err
+				}
+			} else {
+				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
+				// If the descriptor has been deleted, just wait for leases to drain.
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					err = cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				}
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+}
+
+// And then we can implement the logic in descs/txn.go on top of a slightly
+// more generic version of this which also includes the descs.Collection
+// and by that I mean, just define the interface in descs so existing users can use it
+
 // TxnWithExecutor enables callers to run transactions with a *Collection such that all
 // retrieved immutable descriptors are properly leased and all mutable
 // descriptors are handled. The function deals with verifying the two version
