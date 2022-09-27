@@ -299,6 +299,10 @@ const (
 	// don't know to upgrade them to efficient epoch-based ones.
 	EnableLeaseUpgrade
 
+	// FixUserfileRelatedDescriptorCorruption adds a migration which uses
+	// heuristics to identify invalid table descriptors for userfile-related
+	// descriptors.
+	FixUserfileRelatedDescriptorCorruption
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -481,7 +485,10 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     EnableLeaseUpgrade,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 72},
 	},
-
+	{
+		Key:     FixUserfileRelatedDescriptorCorruption,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 74},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
