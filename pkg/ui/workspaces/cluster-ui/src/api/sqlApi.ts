@@ -102,3 +102,12 @@ export function executeInternalSql<RowType>(
 
   return executeSql(req);
 }
+
+export function sqlResultsAreEmpty(
+  result: SqlExecutionResponse<unknown>,
+): boolean {
+  return (
+    !result.execution?.txn_results?.length ||
+    result.execution.txn_results.every(txn => !txn.rows)
+  );
+}
