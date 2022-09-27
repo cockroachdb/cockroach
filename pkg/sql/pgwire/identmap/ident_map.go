@@ -135,13 +135,15 @@ func (c *Conf) Empty() bool {
 // are rules which generate identical mappings, only the first one will
 // be returned. That is, the returned list will be deduplicated,
 // preferring the first instance of any given username.
-func (c *Conf) Map(mapName, systemIdentity string) ([]username.SQLUsername, error) {
+// A boolean will be returned which indicates if there are any rows that
+// correspond to the given mapName.
+func (c *Conf) Map(mapName, systemIdentity string) ([]username.SQLUsername, bool, error) {
 	if c.data == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	elts := c.data[mapName]
 	if elts == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	var names []username.SQLUsername
 	seen := make(map[string]bool)
@@ -152,13 +154,13 @@ func (c *Conf) Map(mapName, systemIdentity string) ([]username.SQLUsername, erro
 			// being incorporated into the input.
 			u, err := username.MakeSQLUsernameFromUserInput(n, username.PurposeValidation)
 			if err != nil {
-				return nil, err
+				return nil, true, err
 			}
 			names = append(names, u)
 			seen[n] = true
 		}
 	}
-	return names, nil
+	return names, true, nil
 }
 
 func (c *Conf) String() string {

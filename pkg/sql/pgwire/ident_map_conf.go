@@ -24,7 +24,8 @@ import (
 // holds the pg_ident configuration.
 const serverIdentityMapSetting = "server.identity_map.configuration"
 
-var connIdentityMapConf = func() *settings.StringSetting {
+// ConnIdentityMapConf maps system-identities to database-usernames using the pg_ident.conf format.
+var ConnIdentityMapConf = func() *settings.StringSetting {
 	s := settings.RegisterValidatedStringSetting(
 		settings.TenantWritable,
 		serverIdentityMapSetting,
@@ -45,7 +46,7 @@ var connIdentityMapConf = func() *settings.StringSetting {
 func loadLocalIdentityMapUponRemoteSettingChange(
 	ctx context.Context, server *Server, st *cluster.Settings,
 ) {
-	val := connIdentityMapConf.Get(&st.SV)
+	val := ConnIdentityMapConf.Get(&st.SV)
 	idMap, err := identmap.From(strings.NewReader(val))
 	if err != nil {
 		log.Ops.Warningf(ctx, "invalid %s: %v", serverIdentityMapSetting, err)
