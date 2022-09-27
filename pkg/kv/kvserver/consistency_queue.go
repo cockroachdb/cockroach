@@ -55,12 +55,6 @@ const consistencyCheckRateBurstFactor = 8
 // churn on timers.
 const consistencyCheckRateMinWait = 100 * time.Millisecond
 
-// consistencyCheckAsyncTimeout is a below-Raft timeout for asynchronous
-// consistency check calculations. These are loosely tied to the caller's
-// context, and will be canceled when the caller has given up on them, but we
-// give them an upper timeout to prevent them from running forever anyway.
-const consistencyCheckAsyncTimeout = time.Hour
-
 // consistencyCheckSyncTimeout is the max amount of time the consistency check
 // computation and the checksum collection request will wait for each other
 // before giving up.

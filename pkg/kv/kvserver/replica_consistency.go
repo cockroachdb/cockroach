@@ -788,22 +788,17 @@ func (r *Replica) computeChecksumPostApply(
 			},
 		); err != nil {
 			log.Errorf(ctx, "checksum collection did not join: %v", err)
-		} else if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckAsyncTimeout,
-			func(ctx context.Context) error {
-				var snapshot *roachpb.RaftSnapshotData
-				if cc.SaveSnapshot {
-					snapshot = &roachpb.RaftSnapshotData{}
-				}
-
-				result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, r.store.consistencyLimiter)
-				if err != nil {
-					result = nil
-				}
-				r.computeChecksumDone(c, result, snapshot)
-				return err
-			},
-		); err != nil {
-			log.Errorf(ctx, "checksum computation failed: %v", err)
+		} else {
+			var snapshot *roachpb.RaftSnapshotData
+			if cc.SaveSnapshot {
+				snapshot = &roachpb.RaftSnapshotData{}
+			}
+			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, r.store.consistencyLimiter)
+			if err != nil {
+				log.Errorf(ctx, "checksum computation failed: %v", err)
+				result = nil
+			}
+			r.computeChecksumDone(c, result, snapshot)
 		}
 
 		var shouldFatal bool
