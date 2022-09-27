@@ -74,13 +74,13 @@ type functionDescriptorBuilder struct {
 }
 
 // DescriptorType implements the catalog.DescriptorBuilder interface.
-func (fdb functionDescriptorBuilder) DescriptorType() catalog.DescriptorType {
+func (fdb *functionDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 	return catalog.Function
 }
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (fdb functionDescriptorBuilder) RunPostDeserializationChanges() (err error) {
+func (fdb *functionDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 	defer func() {
 		err = errors.Wrapf(err, "function %q (%d)", fdb.original.Name, fdb.original.ID)
 	}()
@@ -101,29 +101,29 @@ func (fdb functionDescriptorBuilder) RunPostDeserializationChanges() (err error)
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
-func (fdb functionDescriptorBuilder) RunRestoreChanges(
+func (fdb *functionDescriptorBuilder) RunRestoreChanges(
 	descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	return nil
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
-func (fdb functionDescriptorBuilder) BuildImmutable() catalog.Descriptor {
+func (fdb *functionDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return fdb.BuildImmutableFunction()
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
-func (fdb functionDescriptorBuilder) BuildExistingMutable() catalog.MutableDescriptor {
+func (fdb *functionDescriptorBuilder) BuildExistingMutable() catalog.MutableDescriptor {
 	return fdb.BuildExistingMutableFunction()
 }
 
 // BuildCreatedMutable implements the catalog.DescriptorBuilder interface.
-func (fdb functionDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescriptor {
+func (fdb *functionDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescriptor {
 	return fdb.BuildCreatedMutableFunction()
 }
 
 // BuildImmutableFunction implements the FunctionDescriptorBuilder interface.
-func (fdb functionDescriptorBuilder) BuildImmutableFunction() catalog.FunctionDescriptor {
+func (fdb *functionDescriptorBuilder) BuildImmutableFunction() catalog.FunctionDescriptor {
 	desc := fdb.maybeModified
 	if desc == nil {
 		desc = fdb.original
@@ -136,7 +136,7 @@ func (fdb functionDescriptorBuilder) BuildImmutableFunction() catalog.FunctionDe
 }
 
 // BuildExistingMutableFunction implements the FunctionDescriptorBuilder interface.
-func (fdb functionDescriptorBuilder) BuildExistingMutableFunction() *Mutable {
+func (fdb *functionDescriptorBuilder) BuildExistingMutableFunction() *Mutable {
 	if fdb.maybeModified == nil {
 		fdb.maybeModified = protoutil.Clone(fdb.original).(*descpb.FunctionDescriptor)
 	}
@@ -151,7 +151,7 @@ func (fdb functionDescriptorBuilder) BuildExistingMutableFunction() *Mutable {
 }
 
 // BuildCreatedMutableFunction implements the FunctionDescriptorBuilder interface.
-func (fdb functionDescriptorBuilder) BuildCreatedMutableFunction() *Mutable {
+func (fdb *functionDescriptorBuilder) BuildCreatedMutableFunction() *Mutable {
 	desc := fdb.maybeModified
 	if desc == nil {
 		desc = fdb.original
