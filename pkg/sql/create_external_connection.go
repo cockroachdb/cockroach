@@ -73,7 +73,14 @@ func (p *planner) createExternalConnection(
 			clusterversion.ByKey(clusterversion.SystemExternalConnectionsTable))
 	}
 
-	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject,
+	privDesc, err := p.SynthesizePrivilegeDescriptor(
+		params.ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+	)
+	if err != nil {
+		return err
+	}
+	globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+	if err := params.p.CheckPrivilege(params.ctx, globalPrivilege,
 		privilege.EXTERNALCONNECTION); err != nil {
 		return pgerror.New(
 			pgcode.InsufficientPrivilege,

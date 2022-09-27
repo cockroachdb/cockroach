@@ -78,9 +78,13 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 	}
 
 	// Check that the user has DROP privileges on the External Connection object.
-	ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
-		ConnectionName: name,
+	privDesc, err := p.SynthesizePrivilegeDescriptor(
+		params.ctx, syntheticprivilege.CreateExternalConnectionPrivilegePath(name), privilege.ExternalConnection,
+	)
+	if err != nil {
+		return err
 	}
+	ecPrivilege := syntheticprivilege.InitExternalConnectionPrivilege(name, privDesc)
 	if err := p.CheckPrivilege(params.ctx, ecPrivilege, privilege.DROP); err != nil {
 		return err
 	}

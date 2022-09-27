@@ -113,6 +113,12 @@ type AuthorizationAccessor interface {
 	// the role options table. Example: CREATEROLE instead of NOCREATEROLE.
 	// NOLOGIN instead of LOGIN.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
+
+	SynthesizePrivilegeDescriptor(
+		ctx context.Context,
+		name string,
+		privilegeObjectType privilege.ObjectType,
+	) (*catpb.PrivilegeDescriptor, error)
 }
 
 var _ AuthorizationAccessor = &planner{}
@@ -132,13 +138,15 @@ func (p *planner) CheckPrivilegeForUser(
 		return errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
 	}
 
-	// root, admin and node user should always have privileges.
-	// However, this allows us to short-circuit privilege checks for
-	// virtual object such that we don't have to query the system.privileges
-	// table. This is especially import for internal executor queries.
-	// Right now we only short-circuit non-descriptor backed objects.
-	// There are certain descriptor backed objects that we can't
-	// short-circuit, ie system tables.
+	// Test whether the object is being audited, and if so, record an
+	// audit event. We place this check here to increase the likelihood
+	// it will not be forgotten if features are added that access
+	// descriptors (since every use of descriptors presumably need a
+	// permission check).
+	p.maybeAudit(privilegeObject, privilegeKind)
+
+	// root, admin and node user should always have privileges on non-system
+	// database objects.
 	if (user.IsRootUser() || user.IsAdminRole() || user.IsNodeUser()) &&
 		!privilegeObject.GetObjectType().IsDescriptorBacked() {
 		if privilege.GetValidPrivilegesForObject(
@@ -149,17 +157,7 @@ func (p *planner) CheckPrivilegeForUser(
 		return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
 	}
 
-	// Test whether the object is being audited, and if so, record an
-	// audit event. We place this check here to increase the likelihood
-	// it will not be forgotten if features are added that access
-	// descriptors (since every use of descriptors presumably need a
-	// permission check).
-	p.maybeAudit(privilegeObject, privilegeKind)
-
-	privs, err := privilegeObject.GetPrivilegeDescriptor(ctx, p)
-	if err != nil {
-		return err
-	}
+	privs := privilegeObject.GetPrivileges()
 
 	// Check if the 'public' pseudo-role has privileges.
 	if privs.CheckPrivilege(username.PublicRoleName(), privilegeKind) {
@@ -240,10 +238,7 @@ func (p *planner) CheckGrantOptionsForUser(
 func getOwnerOfPrivilegeObject(
 	ctx context.Context, p eval.Planner, privilegeObject catalog.PrivilegeObject,
 ) (username.SQLUsername, error) {
-	privDesc, err := privilegeObject.GetPrivilegeDescriptor(ctx, p)
-	if err != nil {
-		return username.SQLUsername{}, err
-	}
+	privDesc := privilegeObject.GetPrivileges()
 	// Descriptors created prior to 20.2 do not have owners set.
 	owner := privDesc.Owner()
 	if owner.Undefined() {
@@ -338,11 +333,7 @@ func (p *planner) CheckAnyPrivilege(
 		return nil
 	}
 
-	privs, err := privilegeObject.GetPrivilegeDescriptor(ctx, p)
-	if err != nil {
-		return err
-	}
-
+	privs := privilegeObject.GetPrivileges()
 	// Check if 'user' itself has privileges.
 	if privs.AnyPrivilege(user) {
 		return nil
@@ -891,8 +882,15 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context)
 		hasView := false
 		hasViewRedacted := false
 		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-			hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
-			hasViewRedacted = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
+			privDesc, err := p.SynthesizePrivilegeDescriptor(
+				ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+			)
+			if err != nil {
+				return false, err
+			}
+			globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+			hasView = p.CheckPrivilege(ctx, globalPrivilege, privilege.VIEWACTIVITY) == nil
+			hasViewRedacted = p.CheckPrivilege(ctx, globalPrivilege, privilege.VIEWACTIVITYREDACTED) == nil
 		}
 		if !hasView && !hasViewRedacted {
 			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)

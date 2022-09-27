@@ -954,7 +954,10 @@ func (s *Server) newConnExecutor(
 			execTestingKnobs: s.GetExecutorConfig().TestingKnobs,
 		},
 		memMetrics: memMetrics,
-		planner:    planner{execCfg: s.cfg},
+		planner: planner{
+			execCfg:              s.cfg,
+			privilegeSynthesizer: NewPrivilegeSynthesizer(s.cfg.SyntheticPrivilegeCache, s.cfg.InternalExecutorFactory),
+		},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
@@ -2491,7 +2494,10 @@ func (ex *connExecutor) execCopyIn(
 		cm, copyErr = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg, ex.state.mon)
 	} else {
 		// The planner will be prepared before use.
-		p := planner{execCfg: ex.server.cfg}
+		p := planner{
+			execCfg:              ex.server.cfg,
+			privilegeSynthesizer: NewPrivilegeSynthesizer(ex.server.cfg.SyntheticPrivilegeCache, ex.server.cfg.InternalExecutorFactory),
+		}
 		cm, copyErr = newCopyMachine(
 			ctx, cmd.Conn, cmd.Stmt, &p, txnOpt, ex.state.mon,
 			// execInsertPlan

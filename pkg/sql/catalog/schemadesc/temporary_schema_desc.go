@@ -11,13 +11,10 @@
 package schemadesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 // NewTemporarySchema returns a temporary schema with a given name, id, and
@@ -55,13 +52,6 @@ func (p temporary) GetPrivileges() *catpb.PrivilegeDescriptor {
 	return catpb.NewTemporarySchemaPrivilegeDescriptor()
 }
 func (p temporary) GetRawBytesInStorage() []byte { return nil }
-
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (p temporary) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	return p.GetPrivileges(), nil
-}
 
 // GetObjectType implements the PrivilegeObject interface.
 func (p temporary) GetObjectType() privilege.ObjectType {

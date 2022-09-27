@@ -2915,9 +2915,9 @@ CREATE TABLE t1(val int);
 			// Start a transaction that will lease out a table,
 			// and let the lease duration expire.
 			_, err := conn.ExecContext(ctx, `
-BEGIN;
-SELECT * FROM t1;
-	`)
+			BEGIN;
+			SELECT * FROM t1;
+				`)
 			if err != nil {
 				waitChan <- err
 				return
@@ -2957,6 +2957,8 @@ COMMIT;`,
 		// need a lease.
 		descModConn.Exec(t, `
 SELECT * FROM T1;`)
+		descModConn.Exec(t, `
+SELECT * FROM system.privileges;`)
 		resumeChan <- struct{}{}
 		blockTxn <- struct{}{}
 		err = <-waitChan

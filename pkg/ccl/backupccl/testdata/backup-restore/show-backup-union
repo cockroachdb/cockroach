@@ -1,0 +1,11 @@
+new-server name=s1
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://0/test/'
+----
+
+# Just verify that this does not panic.
+exec-sql
+SELECT * FROM [SHOW BACKUPS IN 'nodelocal://0/test'] UNION SELECT * FROM [SHOW BACKUPS IN 'nodelocal://0/test'];
+----

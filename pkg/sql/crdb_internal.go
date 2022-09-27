@@ -1582,8 +1582,15 @@ CREATE TABLE crdb_internal.cluster_settings (
 			hasModify := false
 			hasView := false
 			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-				hasModify = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
-				hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING) == nil
+				privDesc, err := p.SynthesizePrivilegeDescriptor(
+					ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+				)
+				if err != nil {
+					return err
+				}
+				globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+				hasModify = p.CheckPrivilege(ctx, globalPrivilege, privilege.MODIFYCLUSTERSETTING) == nil
+				hasView = p.CheckPrivilege(ctx, globalPrivilege, privilege.VIEWCLUSTERSETTING) == nil
 			}
 
 			if !hasModify && !hasView {

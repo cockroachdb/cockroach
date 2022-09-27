@@ -45,6 +45,7 @@ func NewCache(account mon.BoundAccount, stopper *stop.Stopper, numSystemTables i
 		tableVersions: tableVersions,
 		boundAccount:  account,
 		stopper:       stopper,
+		cache:         make(map[interface{}]interface{}),
 	}
 }
 

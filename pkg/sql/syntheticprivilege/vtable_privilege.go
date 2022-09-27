@@ -11,42 +11,53 @@
 package syntheticprivilege
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 // VirtualTablePrivilege represents privileges on virtual tables such as
 // crdb_internal or pg_catalog tables.
 type VirtualTablePrivilege struct {
-	SchemaName string `priv:"SchemaName"`
-	TableName  string `priv:"TableName"`
+	SchemaName          string `priv:"SchemaName"`
+	TableName           string `priv:"TableName"`
+	PrivilegeDescriptor *catpb.PrivilegeDescriptor
 }
+
+var _ catalog.PrivilegeObject = &VirtualTablePrivilege{}
+var _ Object = &VirtualTablePrivilege{}
 
 // VirtualTablePrivilegeType represents the object type for
 // VirtualTablePrivilege.
 const VirtualTablePrivilegeType = "VirtualTable"
 
-// GetPath implements the Object interface.
-func (p *VirtualTablePrivilege) GetPath() string {
-	return fmt.Sprintf("/vtable/%s/%s", p.SchemaName, p.TableName)
+// InitVirtualTablePrivilege creates a new VirtualTablePrivilege.
+func InitVirtualTablePrivilege(
+	schemaName, tableName string, privDesc *catpb.PrivilegeDescriptor,
+) *VirtualTablePrivilege {
+	return &VirtualTablePrivilege{
+		SchemaName:          schemaName,
+		TableName:           tableName,
+		PrivilegeDescriptor: privDesc,
+	}
 }
 
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (p *VirtualTablePrivilege) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	if planner.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-		return planner.SynthesizePrivilegeDescriptor(ctx, p.GetPath(), p.GetObjectType())
-	}
-	return catpb.NewPrivilegeDescriptor(
-		username.PublicRoleName(), privilege.List{privilege.SELECT}, privilege.List{}, username.NodeUserName(),
-	), nil
+// CreateVirtualTablePrivilegePath creates a privilege path for a virtual table
+// given the schema and table name.
+func CreateVirtualTablePrivilegePath(schemaName, tableName string) string {
+	return fmt.Sprintf("/vtable/%s/%s", schemaName, tableName)
+}
+
+// GetPath implements the Object interface.
+func (p *VirtualTablePrivilege) GetPath() string {
+	return CreateVirtualTablePrivilegePath(p.SchemaName, p.TableName)
+}
+
+// GetPrivileges implements the PrivilegeObject interface.
+func (p *VirtualTablePrivilege) GetPrivileges() *catpb.PrivilegeDescriptor {
+	return p.PrivilegeDescriptor
 }
 
 // GetObjectType implements the PrivilegeObject interface.
@@ -57,4 +68,16 @@ func (p *VirtualTablePrivilege) GetObjectType() privilege.ObjectType {
 // GetName implements the PrivilegeObject interface.
 func (p *VirtualTablePrivilege) GetName() string {
 	return fmt.Sprintf("%s.%s", p.SchemaName, p.TableName)
+}
+
+// EqualExcludingPrivilegeDescriptor implements the Object interface.
+func (p *VirtualTablePrivilege) EqualExcludingPrivilegeDescriptor(other Object) bool {
+	if p.GetObjectType() != other.GetObjectType() {
+		return false
+	}
+
+	otherVtablePrivilege := other.(*VirtualTablePrivilege)
+	return p.SchemaName == otherVtablePrivilege.SchemaName &&
+		p.TableName == otherVtablePrivilege.TableName &&
+		p.GetPath() == otherVtablePrivilege.GetPath()
 }

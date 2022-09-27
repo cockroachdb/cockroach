@@ -11,8 +11,6 @@
 package catprivilege
 
 import (
-	"reflect"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -58,15 +56,14 @@ func allowedSuperuserPrivileges(objectNameKey catalog.NameKey) privilege.List {
 }
 
 // ValidateSyntheticPrivilegeObject validates a Object.
-func ValidateSyntheticPrivilegeObject(systemPrivilegeObject syntheticprivilege.Object) error {
-	out, err := syntheticprivilege.Parse(systemPrivilegeObject.GetPath())
+func ValidateSyntheticPrivilegeObject(syntheticPrivilegeObject syntheticprivilege.Object) error {
+	out, err := syntheticprivilege.Parse(syntheticPrivilegeObject.GetPath())
 	if err != nil {
 		return err
 	}
 
-	if !reflect.DeepEqual(out, systemPrivilegeObject) {
-		return errors.Newf("system privilege object is invalid, expected %v, got %v", out, systemPrivilegeObject)
+	if !syntheticPrivilegeObject.EqualExcludingPrivilegeDescriptor(out) {
+		return errors.Newf("synthetic privilege object is invalid, expected %v, got %v", out, syntheticPrivilegeObject)
 	}
-
 	return nil
 }

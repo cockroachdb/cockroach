@@ -23,20 +23,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // CollectionFactory is used to construct a new Collection.
 type CollectionFactory struct {
-	settings           *cluster.Settings
-	codec              keys.SQLCodec
-	leaseMgr           *lease.Manager
-	virtualSchemas     catalog.VirtualSchemas
-	hydrated           *hydrateddesc.Cache
-	systemDatabase     *catkv.SystemDatabaseCache
-	spanConfigSplitter spanconfig.Splitter
-	spanConfigLimiter  spanconfig.Limiter
-	defaultMonitor     *mon.BytesMonitor
+	settings             *cluster.Settings
+	codec                keys.SQLCodec
+	leaseMgr             *lease.Manager
+	virtualSchemas       catalog.VirtualSchemas
+	hydrated             *hydrateddesc.Cache
+	systemDatabase       *catkv.SystemDatabaseCache
+	spanConfigSplitter   spanconfig.Splitter
+	spanConfigLimiter    spanconfig.Limiter
+	defaultMonitor       *mon.BytesMonitor
+	privilegeSynthesizer syntheticprivilege.PrivilegeSynthesizer
 }
 
 // GetClusterSettings returns the cluster setting from the collection factory.
@@ -89,6 +91,7 @@ func NewCollectionFactory(
 	hydrated *hydrateddesc.Cache,
 	spanConfigSplitter spanconfig.Splitter,
 	spanConfigLimiter spanconfig.Limiter,
+	privilegeSynthesizer syntheticprivilege.PrivilegeSynthesizer,
 ) *CollectionFactory {
 	return &CollectionFactory{
 		settings:           settings,
@@ -102,6 +105,7 @@ func NewCollectionFactory(
 		defaultMonitor: mon.NewUnlimitedMonitor(ctx, "CollectionFactoryDefaultUnlimitedMonitor",
 			mon.MemoryResource, nil /* curCount */, nil, /* maxHist */
 			0 /* noteworthy */, settings),
+		privilegeSynthesizer: privilegeSynthesizer,
 	}
 }
 
@@ -126,5 +130,5 @@ func (cf *CollectionFactory) NewCollection(
 		monitor = cf.defaultMonitor
 	}
 	return newCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydrated, cf.systemDatabase,
-		cf.virtualSchemas, temporarySchemaProvider, monitor)
+		cf.virtualSchemas, temporarySchemaProvider, monitor, cf.privilegeSynthesizer)
 }

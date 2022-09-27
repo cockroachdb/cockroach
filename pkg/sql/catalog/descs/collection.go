@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,18 +50,20 @@ func newCollection(
 	virtualSchemas catalog.VirtualSchemas,
 	temporarySchemaProvider TemporarySchemaProvider,
 	monitor *mon.BytesMonitor,
+	privilegeSynthesizer syntheticprivilege.PrivilegeSynthesizer,
 ) *Collection {
 	v := settings.Version.ActiveVersion(ctx)
 	cr := catkv.NewCatalogReader(codec, v, systemDatabase)
 	return &Collection{
-		settings:    settings,
-		version:     v,
-		hydrated:    hydrated,
-		virtual:     makeVirtualDescriptors(virtualSchemas),
-		leased:      makeLeasedDescriptors(leaseMgr),
-		uncommitted: makeUncommittedDescriptors(monitor),
-		stored:      catkv.MakeStoredCatalog(cr, monitor),
-		temporary:   makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
+		settings:             settings,
+		version:              v,
+		hydrated:             hydrated,
+		virtual:              makeVirtualDescriptors(virtualSchemas),
+		leased:               makeLeasedDescriptors(leaseMgr),
+		uncommitted:          makeUncommittedDescriptors(monitor),
+		stored:               catkv.MakeStoredCatalog(cr, monitor),
+		temporary:            makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
+		privilegeSynthesizer: privilegeSynthesizer,
 	}
 }
 
@@ -134,6 +137,13 @@ type Collection struct {
 	// It must be set in the multi-tenant environment for ephemeral
 	// SQL pods. It should not be set otherwise.
 	sqlLivenessSession sqlliveness.Session
+
+	// privilegeSynthesizer is used to create PrivilegeDescriptors for
+	// virtual tables. The privilegeSynthesizer contains a cache for
+	// the PrivilegeDescriptors, if the descriptor is not found in the
+	// cache or the cache is invalid, we query system.privileges to create
+	// the descriptor.
+	privilegeSynthesizer syntheticprivilege.PrivilegeSynthesizer
 }
 
 var _ catalog.Accessor = (*Collection)(nil)

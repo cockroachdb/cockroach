@@ -11,14 +11,11 @@
 package schemadesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 // GetVirtualSchemaByID returns a virtual schema with a given ID if it exists.
@@ -65,13 +62,6 @@ func (p virtual) GetPrivileges() *catpb.PrivilegeDescriptor {
 	return catpb.NewVirtualSchemaPrivilegeDescriptor()
 }
 func (p virtual) GetRawBytesInStorage() []byte { return nil }
-
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (p virtual) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	return p.GetPrivileges(), nil
-}
 
 // GetObjectType implements the PrivilegeObject interface.
 func (p virtual) GetObjectType() privilege.ObjectType {

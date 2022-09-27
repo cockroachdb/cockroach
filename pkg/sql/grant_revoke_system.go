@@ -56,11 +56,12 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 		if err := catprivilege.ValidateSyntheticPrivilegeObject(systemPrivilegeObject); err != nil {
 			return err
 		}
-		syntheticPrivDesc, err := systemPrivilegeObject.GetPrivilegeDescriptor(params.ctx, params.p)
-		if err != nil {
-			return err
+		syntheticPrivDesc := systemPrivilegeObject.GetPrivileges()
+		if syntheticPrivDesc == nil {
+			fmt.Println(systemPrivilegeObject.GetName(), systemPrivilegeObject.GetPath())
+			panic("p")
 		}
-
+		fmt.Println(syntheticPrivDesc == nil)
 		err = params.p.CheckGrantOptionsForUser(params.ctx, syntheticPrivDesc, systemPrivilegeObject, n.desiredprivs, params.p.User(), n.isGrant)
 		if err != nil {
 			return err
@@ -187,7 +188,14 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 ) ([]syntheticprivilege.Object, error) {
 	switch n.grantOn {
 	case privilege.Global:
-		return []syntheticprivilege.Object{syntheticprivilege.GlobalPrivilegeObject}, nil
+		privDesc, err := p.SynthesizePrivilegeDescriptor(
+			ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+		)
+		if err != nil {
+			return nil, err
+		}
+		globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+		return []syntheticprivilege.Object{globalPrivilege}, nil
 	case privilege.VirtualTable:
 		var ret []syntheticprivilege.Object
 		for _, tableTarget := range n.targets.Tables.TablePatterns {
@@ -208,10 +216,11 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 				if name.ExplicitCatalog {
 					p.BufferClientNotice(ctx, pgnotice.Newf("virtual table privileges are not database specific"))
 				}
-				ret = append(ret, &syntheticprivilege.VirtualTablePrivilege{
-					SchemaName: name.Schema(),
-					TableName:  name.Table(),
-				})
+				_, desc, err := p.Descriptors().GetObjectByName(ctx, p.Txn(), name.Catalog(), name.Schema(), name.Table(), tree.ObjectLookupFlags{})
+				if err != nil {
+					return nil, err
+				}
+				ret = append(ret, syntheticprivilege.InitVirtualTablePrivilege(name.Schema(), name.Table(), desc.GetPrivileges()))
 			}
 		}
 		return ret, nil
@@ -229,9 +238,17 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 				return nil, errors.Wrap(err, "failed to resolve External Connection")
 			}
 
-			ret = append(ret, &syntheticprivilege.ExternalConnectionPrivilege{
-				ConnectionName: string(externalConnectionName),
-			})
+			privDesc, err := p.SynthesizePrivilegeDescriptor(
+				ctx,
+				syntheticprivilege.CreateExternalConnectionPrivilegePath(string(externalConnectionName)),
+				privilege.ExternalConnection,
+			)
+			if err != nil {
+				return nil, err
+			}
+			ecPrivilege := syntheticprivilege.InitExternalConnectionPrivilege(string(externalConnectionName), privDesc)
+
+			ret = append(ret, ecPrivilege)
 		}
 		return ret, nil
 
@@ -367,7 +384,8 @@ func (p *planner) synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 	// table into system.privileges, we assume that if there is
 	// NO entry for public in the PrivilegeDescriptor, Public has
 	// grant. If there is an empty row for Public, then public
-	// does not have grant.
+	// does not have grant
+	//.
 	if privilegeObjectType == privilege.VirtualTable {
 		if _, found := privileges.FindUser(username.PublicRoleName()); !found {
 			privileges.Grant(username.PublicRoleName(), privilege.List{privilege.SELECT}, false)

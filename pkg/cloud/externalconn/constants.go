@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package syntheticprivilege
+package externalconn
 
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-// SystemPrivilegesTableName represents system.privileges.
-var SystemPrivilegesTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "privileges")
+// SystemExternalConnectionsTableName represents system.external_connections.
+var SystemExternalConnectionsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "external_connections")
