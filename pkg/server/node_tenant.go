@@ -13,11 +13,7 @@ package server
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/redact"
 )
-
-// TraceRedactedMarker is used to replace logs that weren't redacted.
-const TraceRedactedMarker = redact.RedactableString("verbose trace message redacted")
 
 // redactRecordingForTenant redacts the sensitive parts of log messages in the
 // recording if the tenant to which this recording is intended is not the system
