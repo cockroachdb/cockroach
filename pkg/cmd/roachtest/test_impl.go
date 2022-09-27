@@ -88,9 +88,6 @@ type testImpl struct {
 		// test is being marked as failed (i.e. when the failed field above is also
 		// set). This is used to cancel the context passed to t.spec.Run(), so async
 		// test goroutines can be notified.
-		//
-		// TODO(test-eng): use a structured error instead.
-		timeout bool
 
 		// status is a map from goroutine id to status set by that goroutine. A
 		// special goroutine is indicated by runnerID; that one provides the test's
@@ -257,6 +254,8 @@ func (t *testImpl) Skipf(format string, args ...interface{}) {
 	panic(errTestFatal)
 }
 
+// This creates an error from the first arg, and adds each subsequent arg
+// as error detail
 func argsToErr(depth int, args ...interface{}) error {
 	// NB: we'd probably not allow multiple arguments here and we'd want
 	// the one remaining arg to be an `error`, but we are trying to be
@@ -287,7 +286,7 @@ func (t *testImpl) Fatal(args ...interface{}) {
 
 // Fatalf is like Fatal, but takes a format string.
 func (t *testImpl) Fatalf(format string, args ...interface{}) {
-	t.addFailure(argsToErr(1, args...))
+	t.addFailure(errors.Newf(format, args...))
 	panic(errTestFatal)
 }
 
@@ -297,9 +296,13 @@ func (t *testImpl) FailNow() {
 	panic(errTestFatal)
 }
 
+func (t *testImpl) Error(args ...interface{}) {
+	t.addFailure(argsToErr(1, args...))
+}
+
 // Errorf implements the TestingT interface.
 func (t *testImpl) Errorf(format string, args ...interface{}) {
-	t.addFailure(errors.NewWithDepthf(1, format, args...))
+	t.addFailure(errors.Newf(format, args...))
 }
 
 func formatFailure(b *strings.Builder, errs ...error) {

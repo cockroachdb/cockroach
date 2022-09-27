@@ -818,9 +818,7 @@ func (r *testRunner) runTest(
 
 		durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 		if t.Failed() {
-			t.mu.Lock()
-			output := fmt.Sprintf("test artifacts and logs in: %s\n", t.ArtifactsDir()) + string(t.mu.output)
-			t.mu.Unlock()
+			output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.FailureMsg())
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
