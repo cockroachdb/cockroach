@@ -128,6 +128,14 @@ func (c *Conf) Empty() bool {
 	return c.data == nil || len(c.data) == 0
 }
 
+// HasMap returns true if there are entries for the given map name.
+func (c *Conf) HasMap(mapName string) bool {
+	if c.data == nil {
+		return false
+	}
+	return c.data[mapName] != nil
+}
+
 // Map returns the database usernames that a system identity maps to
 // within the named mapping. If there are no matching usernames, or if
 // mapName is unknown, nil will be returned. The returned list will be
