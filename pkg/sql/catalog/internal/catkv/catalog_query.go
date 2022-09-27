@@ -149,6 +149,7 @@ func build(
 	if err := b.RunPostDeserializationChanges(); err != nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
 	}
+	b.SetRawBytesInStorage(rowValue.TagAndDataBytes())
 	desc := b.BuildImmutable()
 	if id != desc.GetID() {
 		return nil, errors.AssertionFailedf("unexpected ID %d in descriptor", desc.GetID())

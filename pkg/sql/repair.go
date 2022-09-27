@@ -659,6 +659,7 @@ func unsafeReadDescriptor(
 	if err != nil || b == nil {
 		return nil, notice, err
 	}
+	b.SetRawBytesInStorage(descRow.Value.TagAndDataBytes())
 	return b.BuildExistingMutable(), notice, nil
 }
 
