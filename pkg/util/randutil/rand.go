@@ -106,6 +106,23 @@ func RandInt63InRange(r *rand.Rand, min, max int64) int64 {
 	return min + r.Int63n(max-min)
 }
 
+// RandUint64n generates a 64-bit random number in [0, n) range.
+// Note: n == 0 means n is math.MaxUint64 + 1
+func RandUint64n(r *rand.Rand, n uint64) uint64 {
+	if n == 0 {
+		return r.Uint64()
+	}
+	// If n is less than 64 bits, delegate to 63 bit version.
+	if n < (1 << 63) {
+		return uint64(r.Int63n(int64(n)))
+	}
+	v := r.Uint64()
+	for v > n {
+		v = r.Uint64()
+	}
+	return v
+}
+
 var randLetters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 // RandBytes returns a byte slice of the given length with random
