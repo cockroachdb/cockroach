@@ -368,7 +368,7 @@ func MakeServer(
 		loadLocalHBAConfigUponRemoteSettingChange(
 			ambientCtx.AnnotateCtx(context.Background()), server, st)
 	})
-	connIdentityMapConf.SetOnChange(&st.SV, func(ctx context.Context) {
+	ConnIdentityMapConf.SetOnChange(&st.SV, func(ctx context.Context) {
 		loadLocalIdentityMapUponRemoteSettingChange(
 			ambientCtx.AnnotateCtx(context.Background()), server, st)
 	})

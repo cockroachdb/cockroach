@@ -56,7 +56,7 @@ func HbaMapper(hbaEntry *hba.Entry, identMap *identmap.Conf) RoleMapper {
 		return UseProvidedIdentity
 	}
 	return func(_ context.Context, id username.SQLUsername) ([]username.SQLUsername, error) {
-		users, err := identMap.Map(mapName, id.Normalized())
+		users, _, err := identMap.Map(mapName, id.Normalized())
 		if err != nil {
 			return nil, err
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -60,7 +61,7 @@ type jwtAuthenticator struct {
 // jwtAuthenticatorConf contains all the values to configure JWT authentication. These values are copied from
 // the matching cluster settings.
 type jwtAuthenticatorConf struct {
-	audience string
+	audience []string
 	enabled  bool
 	issuers  []string
 	jwks     jwk.Set
@@ -78,9 +79,9 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 	ctx context.Context, st *cluster.Settings,
 ) {
 	conf := jwtAuthenticatorConf{
-		audience: JWTAuthAudience.Get(&st.SV),
+		audience: mustParseValueOrArray(JWTAuthAudience.Get(&st.SV)),
 		enabled:  JWTAuthEnabled.Get(&st.SV),
-		issuers:  mustParseIssuers(JWTAuthIssuers.Get(&st.SV)),
+		issuers:  mustParseValueOrArray(JWTAuthIssuers.Get(&st.SV)),
 		jwks:     mustParseJWKS(JWTAuthJWKS.Get(&st.SV)),
 	}
 
@@ -94,6 +95,19 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 	log.Infof(ctx, "initialized JWT authenticator")
 }
 
+// mapUsername takes maps the tokenUsername using the identMap corresponding to the issuer.
+func (authenticator *jwtAuthenticator) mapUsername(
+	tokenUsername string, issuer string, identMap *identmap.Conf,
+) ([]username.SQLUsername, error) {
+	users, mapFound, err := identMap.Map(issuer, tokenUsername)
+	if !mapFound {
+		// Despite the purpose being set to validation, it does no validation that the user string is a valid username.
+		u, err := username.MakeSQLUsernameFromUserInput(tokenUsername, username.PurposeValidation)
+		return []username.SQLUsername{u}, err
+	}
+	return users, err
+}
+
 // ValidateJWTLogin checks that a given token is a valid credential for the given user.
 // In particular, it checks that:
 // * JWT authentication is enabled.
@@ -105,7 +119,7 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 // * the issuer field is one of the values in the issuer cluster setting.
 // * the cluster has an enterprise license.
 func (authenticator *jwtAuthenticator) ValidateJWTLogin(
-	st *cluster.Settings, user username.SQLUsername, tokenBytes []byte,
+	st *cluster.Settings, user username.SQLUsername, tokenBytes []byte, identMap *identmap.Conf,
 ) error {
 	authenticator.mu.Lock()
 	defer authenticator.mu.Unlock()
@@ -120,23 +134,6 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	if err != nil {
 		return errors.Newf("JWT authentication: invalid token")
 	}
-	if parsedToken.Subject() != user.Normalized() {
-		return errors.WithDetailf(
-			errors.Newf("JWT authentication: invalid subject"),
-			"token issued for %s but login was for %s", parsedToken.Subject(), user.Normalized())
-	}
-	audienceMatch := false
-	for _, audience := range parsedToken.Audience() {
-		if audience == authenticator.mu.conf.audience {
-			audienceMatch = true
-			break
-		}
-	}
-	if !audienceMatch {
-		return errors.WithDetailf(
-			errors.Newf("JWT authentication: invalid audience"),
-			"token issued with an audience of %s", parsedToken.Audience())
-	}
 
 	issuerMatch := false
 	for _, issuer := range authenticator.mu.conf.issuers {
@@ -149,6 +146,44 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 		return errors.WithDetailf(
 			errors.Newf("JWT authentication: invalid issuer"),
 			"token issued by %s", parsedToken.Issuer())
+	}
+
+	users, err := authenticator.mapUsername(parsedToken.Subject(), parsedToken.Issuer(), identMap)
+	if err != nil || len(users) == 0 {
+		return errors.WithDetailf(
+			errors.Newf("JWT authentication: invalid subject"),
+			"the subject %s for the issuer %s is invalid", parsedToken.Subject(), parsedToken.Issuer())
+	}
+	subjectMatch := false
+	for _, subject := range users {
+		if subject.Normalized() == user.Normalized() {
+			subjectMatch = true
+			break
+		}
+	}
+	if !subjectMatch {
+		return errors.WithDetailf(
+			errors.Newf("JWT authentication: invalid subject"),
+			"token issued for %s and login was for %s", parsedToken.Subject(), user.Normalized())
+	}
+	if user.IsRootUser() || user.IsReserved() {
+		return errors.WithDetailf(
+			errors.Newf("JWT authentication: invalid identity"),
+			"cannot use JWT auth to login to a reserved user %s", user.Normalized())
+	}
+	audienceMatch := false
+	for _, tokenAudience := range parsedToken.Audience() {
+		for _, crdbAudience := range authenticator.mu.conf.audience {
+			if crdbAudience == tokenAudience {
+				audienceMatch = true
+				break
+			}
+		}
+	}
+	if !audienceMatch {
+		return errors.WithDetailf(
+			errors.Newf("JWT authentication: invalid audience"),
+			"token issued with an audience of %s", parsedToken.Audience())
 	}
 
 	org := sql.ClusterOrganization.Get(&st.SV)

@@ -103,10 +103,35 @@ foo      carl@cockroachlabs.com       carl        # Duplicate behavior
 		a.Equal("database-username", elts[0].substitute("system-username"))
 	}
 
-	if elts, err := m.Map("foo", "carl@cockroachlabs.com"); a.NoError(err) && a.Len(elts, 2) {
+	if elts, _, err := m.Map("foo", "carl@cockroachlabs.com"); a.NoError(err) && a.Len(elts, 2) {
 		a.Equal("carl", elts[0].Normalized())
 		a.Equal("also_carl", elts[1].Normalized())
 	}
 
 	a.Nil(m.Map("foo", "carl@example.com"))
+}
+
+func TestIdentityMapExists(t *testing.T) {
+	a := assert.New(t)
+	data := `
+# This is a comment
+map-name system-username              database-username
+foo      /^(.*)@cockroachlabs.com$    \1
+bar      carl@cockroachlabs.com       also_carl   # Trailing comment
+bar      carl@cockroachlabs.com       carl        # Duplicate behavior
+`
+
+	m, err := From(strings.NewReader(data))
+	if !a.NoError(err) {
+		return
+	}
+	t.Log(m.String())
+	_, mapFound, _ := m.Map("asdf", "carl@cockroachlabs.com")
+	a.False(mapFound)
+	_, mapFound, _ = m.Map("fo", "carl@cockroachlabs.com")
+	a.False(mapFound)
+	_, mapFound, _ = m.Map("foo", "carl@cockroachlabs.com")
+	a.True(mapFound)
+	_, mapFound, _ = m.Map("bar", "something")
+	a.True(mapFound)
 }
