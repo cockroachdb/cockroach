@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -26,7 +25,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// TestMaybeRedactRecording verifies that redactRecordingForTenant strips
+// TestMaybeRedactRecording verifies that redactRecording strips
 // sensitive details for recordings consumed by tenants.
 //
 // See kvccl.TestTenantTracesAreRedacted for an end-to-end test of this.
@@ -56,79 +55,41 @@ func TestRedactRecordingForTenant(t *testing.T) {
 		return rec
 	}
 
-	t.Run("regular-tenant", func(t *testing.T) {
-		rec := mkRec()
-		require.NoError(t, redactRecordingForTenant(roachpb.MakeTenantID(100), rec))
-		require.Zero(t, rec[0].Tags)
-		require.Zero(t, rec[0].TagGroups)
-		require.Len(t, rec[0].Logs, 1)
-		msg := rec[0].Logs[0].Msg().StripMarkers()
-		t.Log(msg)
-		require.NotContains(t, msg, msgSensitive)
-		require.NotContains(t, msg, tagSensitive)
-		require.Contains(t, msg, msgNotSensitive)
-		require.Contains(t, msg, tagNotSensitive)
-	})
+	rec := mkRec()
+	redactRecording(rec)
+	require.Zero(t, rec[0].Tags)
+	require.Zero(t, rec[0].TagGroups)
+	require.Len(t, rec[0].Logs, 1)
+	msg := rec[0].Logs[0].Msg().StripMarkers()
+	t.Log(msg)
+	require.NotContains(t, msg, msgSensitive)
+	require.NotContains(t, msg, tagSensitive)
+	require.Contains(t, msg, msgNotSensitive)
+	require.Contains(t, msg, tagNotSensitive)
+}
 
-	t.Run("system-tenant", func(t *testing.T) {
-		rec := mkRec()
-		require.NoError(t, redactRecordingForTenant(roachpb.SystemTenantID, rec))
-		require.Equal(t, map[string]string{
-			"_verbose":                   "1",
-			"all_span_tags_are_stripped": "because_no_redactability",
-			"tag_not_sensitive":          tagNotSensitive,
-			"tag_sensitive":              tagSensitive,
-		}, rec[0].Tags)
-		require.Equal(t, []tracingpb.Tag{
-			{
-				Key:   "_verbose",
-				Value: "1",
-			},
-			{
-				Key:   "tag_sensitive",
-				Value: tagSensitive,
-			},
-			{
-				Key:   "tag_not_sensitive",
-				Value: tagNotSensitive,
-			},
-			{
-				Key:   "all_span_tags_are_stripped",
-				Value: "because_no_redactability",
-			},
-		}, rec[0].TagGroups[0].Tags)
-		require.Len(t, rec[0].Logs, 1)
-		msg := rec[0].Logs[0].Msg().StripMarkers()
-		t.Log(msg)
-		require.Contains(t, msg, msgSensitive)
-		require.Contains(t, msg, tagSensitive)
-		require.Contains(t, msg, msgNotSensitive)
-		require.Contains(t, msg, tagNotSensitive)
-	})
-
-	t.Run("no-unhandled-fields", func(t *testing.T) {
-		// Guard against a new sensitive field being added to RecordedSpan. If
-		// you're here to see why this test failed to compile, ensure that the
-		// change you're making to RecordedSpan does not include new sensitive data
-		// that may leak from the KV layer to tenants. If it does, update
-		// redactRecordingForTenant appropriately.
-		type calcifiedRecordedSpan struct {
-			TraceID           tracingpb.TraceID
-			SpanID            tracingpb.SpanID
-			ParentSpanID      tracingpb.SpanID
-			Operation         string
-			Tags              map[string]string
-			TagGroups         []tracingpb.TagGroup
-			StartTime         time.Time
-			Duration          time.Duration
-			Logs              []tracingpb.LogRecord
-			Verbose           bool
-			RecordingMode     tracingpb.RecordingMode
-			GoroutineID       uint64
-			Finished          bool
-			StructuredRecords []tracingpb.StructuredRecord
-			ChildrenMetadata  map[string]tracingpb.OperationMetadata
-		}
-		_ = (*calcifiedRecordedSpan)((*tracingpb.RecordedSpan)(nil))
-	})
+// Guard against a new sensitive field being added to RecordedSpan. If you're
+// here to see why this test failed to compile, ensure that the change you're
+// making to RecordedSpan does not include new sensitive data that may leak from
+// the KV layer to tenants. If it does, update redactRecording() appropriately.
+func TestNewSpanFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	type calcifiedRecordedSpan struct {
+		TraceID           tracingpb.TraceID
+		SpanID            tracingpb.SpanID
+		ParentSpanID      tracingpb.SpanID
+		Operation         string
+		Tags              map[string]string
+		TagGroups         []tracingpb.TagGroup
+		StartTime         time.Time
+		Duration          time.Duration
+		Logs              []tracingpb.LogRecord
+		Verbose           bool
+		RecordingMode     tracingpb.RecordingMode
+		GoroutineID       uint64
+		Finished          bool
+		StructuredRecords []tracingpb.StructuredRecord
+		ChildrenMetadata  map[string]tracingpb.OperationMetadata
+	}
+	_ = (*calcifiedRecordedSpan)((*tracingpb.RecordedSpan)(nil))
 }

@@ -1194,10 +1194,7 @@ func (sp *spanForRequest) finish(ctx context.Context, br *roachpb.BatchResponse)
 		needRedaction := sp.tenID != roachpb.SystemTenantID &&
 			redactServerTracesForSecondaryTenants.Get(&sp.settings.SV)
 		if needRedaction {
-			if err := redactRecordingForTenant(sp.tenID, rec); err != nil {
-				log.Errorf(ctx, "error redacting trace recording: %s", err)
-				rec = nil
-			}
+			redactRecording(rec)
 		}
 		br.CollectedSpans = append(br.CollectedSpans, rec...)
 	}
