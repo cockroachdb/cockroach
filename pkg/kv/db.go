@@ -597,8 +597,10 @@ func (db *DB) AdminSplit(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// AdminLoadBasedSplit splits the range at the load based key as determined by the
-// range stats.
+// AdminLoadBasedSplit splits the range at the load based key as determined
+// a 10s snapshot of observed query load.
+//
+// startKey is the start key of the range we want to target for the load split..
 //
 // expirationTime is the timestamp when the split expires and is eligible for
 // automatic merging by the merge queue. To specify that a split should

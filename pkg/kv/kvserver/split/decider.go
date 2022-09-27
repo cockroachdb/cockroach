@@ -95,7 +95,7 @@ func Init(
 
 // ForceSplitDecision forces the Decider to enable tracking of individual keys
 // to split on, which will result in a split happening once enough
-// data is collected. .
+// data is collected.
 func (d *Decider) ForceSplitDecision() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
