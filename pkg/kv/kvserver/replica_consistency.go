@@ -749,32 +749,30 @@ func (r *Replica) computeChecksumPostApply(
 	}
 
 	// Compute SHA asynchronously and store it in a map by UUID. Concurrent checks
-	// share the rate limit in r.store.consistencyLimiter, so we also limit the
-	// number of concurrent checks via r.store.consistencySem.
+	// share the rate limit in r.store.consistencyLimiter, so if too many run at
+	// the same time, chances are they will time out.
 	//
-	// Don't use the proposal's context for this, as it likely to be canceled very
-	// soon.
+	// Each node's consistency queue runs a check for one range at a time, which
+	// it broadcasts to all replicas, so the average number of incoming in-flight
+	// collection requests per node is equal to the replication factor (typ. 3-7).
+	// Abandoned tasks are canceled eagerly within a few seconds, so there is very
+	// limited room for running above this figure. Thus we don't limit the number
+	// of concurrent tasks here.
+	//
+	// NB: CHECK_STATS checks are cheap and the DistSender will parallelize them
+	// across all ranges (notably when calling crdb_internal.check_consistency()).
 	const taskName = "kvserver.Replica: computing checksum"
-	sem := r.store.consistencySem
-	if cc.Mode == roachpb.ChecksumMode_CHECK_STATS {
-		// Stats-only checks are cheap, and the DistSender parallelizes these across
-		// ranges (in particular when calling crdb_internal.check_consistency()), so
-		// they don't count towards the semaphore limit.
-		sem = nil
-	}
 	stopper := r.store.Stopper()
+	// Don't use the proposal's context, as it is likely to be canceled very soon.
 	taskCtx, taskCancel := stopper.WithCancelOnQuiesce(r.AnnotateCtx(context.Background()))
 	if err := stopper.RunAsyncTaskEx(taskCtx, stop.TaskOpts{
-		TaskName:   taskName,
-		Sem:        sem,
-		WaitForSem: false,
+		TaskName: taskName,
 	}, func(ctx context.Context) {
 		defer taskCancel()
 		defer snap.Close()
 		defer r.gcReplicaChecksum(cc.ChecksumID, c)
 		// Wait until the CollectChecksum request handler joins in and learns about
 		// the starting computation, and then start it.
-		// TODO(pavelkalinnikov): Don't consume the pool while waiting.
 		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
 			func(ctx context.Context) error {
 				// There is only one writer to c.started (this task), buf if by mistake
@@ -851,8 +849,8 @@ A file preventing this node from restarting was placed at:
 				log.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, r, auxDir, path)
 			}
 		}
-
-	}); err != nil {
+	},
+	); err != nil {
 		taskCancel()
 		snap.Close()
 		return err
