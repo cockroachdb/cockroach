@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -68,7 +69,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 
 // MakeAWSKMS is the factory method which returns a configured, ready-to-use
 // AWS KMS object.
-func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
+func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	if env.KMSConfig().DisableOutbound {
 		return nil, errors.New("external IO must be enabled to use AWS KMS")
 	}
@@ -84,6 +85,11 @@ func MakeAWSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 		Credentials: credentials.NewStaticCredentials(kmsURIParams.accessKey,
 			kmsURIParams.secret, kmsURIParams.tempToken),
 	}
+	awsConfig.Logger = newLogAdapter(ctx)
+	if log.V(2) {
+		awsConfig.LogLevel = awsVerboseLogging
+	}
+
 	if kmsURIParams.endpoint != "" {
 		if env.KMSConfig().DisableHTTP {
 			return nil, errors.New(

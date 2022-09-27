@@ -10,6 +10,7 @@
 package amazon
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -80,7 +81,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 			params.Add(KMSRegionParam, kmsRegion)
 
 			uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
-			_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
+			_, err := cloud.KMSFromURI(context.Background(), uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
 			require.EqualError(t, err, fmt.Sprintf(
 				`%s is set to '%s', but %s is not set`,
 				cloud.AuthParam,
@@ -158,7 +159,7 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 
 	t.Run("disallow-endpoints", func(t *testing.T) {
 		uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-		_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{
+		_, err := cloud.KMSFromURI(context.Background(), uri, &cloud.TestKMSEnv{
 			Settings:         awsKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{DisableHTTP: true}})
 		require.True(t, testutils.IsError(err, "custom endpoints disallowed"))
@@ -178,7 +179,7 @@ func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN_A env var must be set")
 	}
 	uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
-	_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{
+	_, err := cloud.KMSFromURI(context.Background(), uri, &cloud.TestKMSEnv{
 		Settings:         cluster.NoSettings,
 		ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
 	require.True(t, testutils.IsError(err, "implicit credentials disallowed"))

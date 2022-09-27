@@ -55,7 +55,7 @@ func resolveKMSURIParams(kmsURI url.URL) kmsURIParams {
 
 // MakeGCSKMS is the factory method which returns a configured, ready-to-use
 // GCS KMS object.
-func MakeGCSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
+func MakeGCSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 	if env.KMSConfig().DisableOutbound {
 		return nil, errors.New("external IO must be enabled to use GCS KMS")
 	}
@@ -100,10 +100,7 @@ func MakeGCSKMS(uri string, env cloud.KMSEnv) (cloud.KMS, error) {
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
 
-	ctx := context.Background()
-
 	kmc, err := kms.NewKeyManagementClient(ctx, credentialsOpt...)
-
 	if err != nil {
 		return nil, err
 	}
