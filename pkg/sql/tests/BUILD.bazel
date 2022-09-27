@@ -42,6 +42,7 @@ go_test(
         "rename_column_test.go",
         "repair_test.go",
         "rsg_test.go",
+        "schema_changes_in_parallel_test.go",
         "split_test.go",
         "system_table_test.go",
         "table_split_test.go",
