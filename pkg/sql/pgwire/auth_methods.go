@@ -641,6 +641,7 @@ type JWTVerifier interface {
 	ValidateJWTLogin(_ *cluster.Settings,
 		_ username.SQLUsername,
 		_ []byte,
+		_ *identmap.Conf,
 	) error
 }
 
@@ -649,7 +650,7 @@ var jwtVerifier JWTVerifier
 type noJWTConfigured struct{}
 
 func (c *noJWTConfigured) ValidateJWTLogin(
-	_ *cluster.Settings, _ username.SQLUsername, _ []byte,
+	_ *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
 ) error {
 	return errors.New("JWT token authentication requires CCL features")
 }
@@ -674,13 +675,17 @@ var ConfigureJWTAuth = func(
 // the options parameter as some drivers may insecurely handle options parameters.
 // In contrast, all drivers SHOULD know not to log the password, for example.
 func authJwtToken(
-	_ context.Context,
+	sctx context.Context,
 	c AuthConn,
 	_ tls.ConnectionState,
 	execCfg *sql.ExecutorConfig,
 	_ *hba.Entry,
-	_ *identmap.Conf,
+	identMap *identmap.Conf,
 ) (*AuthBehaviors, error) {
+	// Initialize the jwt verifier if it hasn't been already.
+	if jwtVerifier == nil {
+		jwtVerifier = ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+	}
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
 	b.SetAuthenticator(func(ctx context.Context, user username.SQLUsername, clientConnection bool, pwRetrieveFn PasswordRetrievalFn) error {
@@ -712,11 +717,7 @@ func authJwtToken(
 		if len(token) == 0 {
 			return security.NewErrPasswordUserAuthFailed(user)
 		}
-		// Initialize the jwt verifier if it hasn't been already.
-		if jwtVerifier == nil {
-			jwtVerifier = ConfigureJWTAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
-		}
-		if err = jwtVerifier.ValidateJWTLogin(execCfg.Settings, user, []byte(token)); err != nil {
+		if err = jwtVerifier.ValidateJWTLogin(execCfg.Settings, user, []byte(token), identMap); err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
 			return err
 		}

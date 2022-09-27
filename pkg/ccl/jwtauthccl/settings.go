@@ -28,11 +28,12 @@ const (
 
 // JWTAuthAudience sets accepted audience values for JWT logins over the SQL interface.
 var JWTAuthAudience = func() *settings.StringSetting {
-	s := settings.RegisterStringSetting(
+	s := settings.RegisterValidatedStringSetting(
 		settings.TenantReadOnly,
 		JWTAuthAudienceSettingName,
 		"sets accepted audience values for JWT logins over the SQL interface",
 		"",
+		validateJWTAuthAudiences,
 	)
 	return s
 }()
@@ -92,6 +93,24 @@ func validateJWTAuthIssuers(values *settings.Values, s string) error {
 	return nil
 }
 
+func validateJWTAuthAudiences(values *settings.Values, s string) error {
+	var audiences []string
+
+	var jsonCheck json.RawMessage
+	if json.Unmarshal([]byte(s), &jsonCheck) != nil {
+		// If we know the string is *not* valid JSON, fall back to assuming basic
+		// string to use a single valid issuer
+		return nil
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader([]byte(s)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&audiences); err != nil {
+		return errors.Wrap(err, "JWT authentication audiences JSON not valid")
+	}
+	return nil
+}
+
 func validateJWTAuthJWKS(values *settings.Values, s string) error {
 	if _, err := jwk.Parse([]byte(s)); err != nil {
 		return errors.Wrap(err, "JWT authentication JWKS not a valid JWKS")
@@ -99,21 +118,21 @@ func validateJWTAuthJWKS(values *settings.Values, s string) error {
 	return nil
 }
 
-func mustParseIssuers(issuersJSON string) []string {
-	var issuersConf []string
+func mustParseValueOrArray(rawString string) []string {
+	var array []string
 
 	var jsonCheck json.RawMessage
-	if json.Unmarshal([]byte(issuersJSON), &jsonCheck) != nil {
+	if json.Unmarshal([]byte(rawString), &jsonCheck) != nil {
 		// If we know the string is *not* valid JSON, fall back to assuming basic
-		// string to use a single valid issuer.
-		return []string{issuersJSON}
+		// string to use a single valid.
+		return []string{rawString}
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader([]byte(issuersJSON)))
-	if err := decoder.Decode(&issuersConf); err != nil {
-		return []string{issuersJSON}
+	decoder := json.NewDecoder(bytes.NewReader([]byte(rawString)))
+	if err := decoder.Decode(&array); err != nil {
+		return []string{rawString}
 	}
-	return issuersConf
+	return array
 }
 
 func mustParseJWKS(jwks string) jwk.Set {
