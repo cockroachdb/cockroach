@@ -15,6 +15,13 @@ import (
 	"time"
 )
 
+// TestingFindRequest exports findRequest for testing purposes.
+func (r *Registry) TestingFindRequest(requestID RequestID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.findRequestLocked(requestID)
+}
+
 // InsertRequestInternal exposes the form of insert which returns the request ID
 // as an int64 to tests in this package.
 func (r *Registry) InsertRequestInternal(

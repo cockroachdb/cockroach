@@ -55,31 +55,10 @@ const consistencyCheckRateBurstFactor = 8
 // churn on timers.
 const consistencyCheckRateMinWait = 100 * time.Millisecond
 
-// consistencyCheckAsyncConcurrency is the maximum number of asynchronous
-// consistency checks to run concurrently per store below Raft. The
-// server.consistency_check.max_rate limit is shared among these, so running too
-// many at the same time will cause them to time out. The rate is multiplied by
-// 10 (permittedRangeScanSlowdown) to obtain the per-check timeout. 7 gives
-// reasonable headroom, and also handles clusters with high replication factor
-// and/or many nodes -- recall that each node runs a separate consistency queue
-// which can schedule checks on other nodes, e.g. a 7-node cluster with a
-// replication factor of 7 could run 7 concurrent checks on every node.
-//
-// Note that checksum calculations below Raft are not tied to the caller's
-// context, and may continue to run even after the caller has given up on them,
-// which may cause them to build up. Although we do best effort to cancel the
-// running task on the receiving end when the incoming request is aborted.
-//
-// CHECK_STATS checks do not count towards this limit, as they are cheap and the
-// DistSender will parallelize them across all ranges (notably when calling
-// crdb_internal.check_consistency()).
-const consistencyCheckAsyncConcurrency = 7
-
-// consistencyCheckAsyncTimeout is a below-Raft timeout for asynchronous
-// consistency check calculations. These are not tied to the caller's context,
-// and thus may continue to run even if the caller has given up on them, so we
-// give them an upper timeout to prevent them from running forever.
-const consistencyCheckAsyncTimeout = time.Hour
+// consistencyCheckSyncTimeout is the max amount of time the consistency check
+// computation and the checksum collection request will wait for each other
+// before giving up.
+const consistencyCheckSyncTimeout = 5 * time.Second
 
 var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
 
