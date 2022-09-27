@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -239,6 +240,8 @@ type planner struct {
 
 	// evalCatalogBuiltins is used as part of the eval.Context.
 	evalCatalogBuiltins evalcatalog.Builtins
+
+	privilegeSynthesizer syntheticprivilege.PrivilegeSynthesizer
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
@@ -342,7 +345,10 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	p := &planner{execCfg: execCfg}
+	p := &planner{
+		execCfg:              execCfg,
+		privilegeSynthesizer: NewPrivilegeSynthesizer(execCfg.SyntheticPrivilegeCache, execCfg.InternalExecutorFactory),
+	}
 
 	p.txn = txn
 	p.stmt = Statement{}
@@ -408,6 +414,8 @@ func newInternalPlanner(
 	p.schemaResolver.txn = p.txn
 	p.schemaResolver.authAccessor = p
 	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
+	p.privilegeSynthesizer = NewPrivilegeSynthesizer(
+		p.ExecCfg().SyntheticPrivilegeCache, p.ExecCfg().InternalExecutorFactory)
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

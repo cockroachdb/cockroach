@@ -383,7 +383,14 @@ func checkPrivilegesForBackup(
 
 		var hasBackupSystemPrivilege bool
 		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
+			privDesc, err := p.SynthesizePrivilegeDescriptor(
+				ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+			)
+			if err != nil {
+				return err
+			}
+			globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+			err = p.CheckPrivilegeForUser(ctx, globalPrivilege,
 				privilege.BACKUP, p.User())
 			hasBackupSystemPrivilege = err == nil
 		}

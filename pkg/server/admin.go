@@ -3720,12 +3720,19 @@ func (c *adminPrivilegeChecker) hasRoleOption(
 // CheckPrivilege and returns a true/false based on the returned
 // result.
 func (c *adminPrivilegeChecker) checkHasGlobalPrivilege(
-	ctx context.Context, user username.SQLUsername, privilege privilege.Kind,
+	ctx context.Context, user username.SQLUsername, priv privilege.Kind,
 ) bool {
 	planner, cleanup := c.makePlanner("check-system-privilege")
 	defer cleanup()
 	aa := planner.(sql.AuthorizationAccessor)
-	err := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, user)
+	privDesc, err := aa.SynthesizePrivilegeDescriptor(
+		ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+	)
+	if err != nil {
+		panic(err)
+	}
+	globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+	err = aa.CheckPrivilegeForUser(ctx, globalPrivilege, priv, user)
 	return err == nil
 }
 

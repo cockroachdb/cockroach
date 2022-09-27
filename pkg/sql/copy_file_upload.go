@@ -90,7 +90,10 @@ func newFileUploadMachine(
 	c := &copyMachine{
 		conn: conn,
 		// The planner will be prepared before use.
-		p: &planner{execCfg: execCfg},
+		p: &planner{
+			execCfg:              execCfg,
+			privilegeSynthesizer: NewPrivilegeSynthesizer(execCfg.SyntheticPrivilegeCache, execCfg.InternalExecutorFactory),
+		},
 	}
 	f = &fileUploadMachine{
 		c: c,

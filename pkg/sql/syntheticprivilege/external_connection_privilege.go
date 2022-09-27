@@ -11,41 +11,47 @@
 package syntheticprivilege
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 // ExternalConnectionPrivilege represents privileges on external connection
 // objects stored in `system.external_connections`.
 type ExternalConnectionPrivilege struct {
-	ConnectionName string `priv:"ConnectionName"`
+	ConnectionName      string `priv:"ConnectionName"`
+	PrivilegeDescriptor *catpb.PrivilegeDescriptor
+}
+
+// InitExternalConnectionPrivilege creates a new ExternalConnectionPrivilege.
+func InitExternalConnectionPrivilege(
+	name string, privDesc *catpb.PrivilegeDescriptor,
+) *ExternalConnectionPrivilege {
+	return &ExternalConnectionPrivilege{
+		ConnectionName:      name,
+		PrivilegeDescriptor: privDesc,
+	}
 }
 
 var _ catalog.PrivilegeObject = &ExternalConnectionPrivilege{}
+var _ Object = &ExternalConnectionPrivilege{}
+
+// CreateExternalConnectionPrivilegePath creates an privilege path for an external
+// connection given the name of the external connection.
+func CreateExternalConnectionPrivilegePath(name string) string {
+	return fmt.Sprintf("/externalconn/%s", name)
+}
 
 // GetPath implements the Object interface.
 func (e *ExternalConnectionPrivilege) GetPath() string {
-	return fmt.Sprintf("/externalconn/%s", e.ConnectionName)
+	return CreateExternalConnectionPrivilegePath(e.ConnectionName)
 }
 
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (e *ExternalConnectionPrivilege) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	if planner.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-		return planner.SynthesizePrivilegeDescriptor(ctx, e.GetName(), e.GetPath(),
-			e.GetObjectType())
-	}
-	return catpb.NewPrivilegeDescriptor(
-		username.PublicRoleName(), privilege.List{privilege.USAGE}, privilege.List{}, username.NodeUserName(),
-	), nil
+// GetPrivileges implements the PrivilegeObject interface.
+func (e *ExternalConnectionPrivilege) GetPrivileges() *catpb.PrivilegeDescriptor {
+	return e.PrivilegeDescriptor
 }
 
 // GetObjectType implements the PrivilegeObject interface.
@@ -56,4 +62,14 @@ func (e *ExternalConnectionPrivilege) GetObjectType() privilege.ObjectType {
 // GetName implements the PrivilegeObject interface.
 func (e *ExternalConnectionPrivilege) GetName() string {
 	return e.ConnectionName
+}
+
+// EqualExcludingPrivilegeDescriptor implements the Object interface.
+func (e *ExternalConnectionPrivilege) EqualExcludingPrivilegeDescriptor(other Object) bool {
+	if e.GetObjectType() != other.GetObjectType() {
+		return false
+	}
+
+	otherEcPrivilege := other.(*ExternalConnectionPrivilege)
+	return e.GetPath() == otherEcPrivilege.GetPath() && e.ConnectionName == otherEcPrivilege.ConnectionName
 }

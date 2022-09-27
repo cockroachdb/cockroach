@@ -1220,7 +1220,14 @@ func checkPrivilegesForRestore(
 
 		var hasRestoreSystemPrivilege bool
 		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
+			privDesc, err := p.SynthesizePrivilegeDescriptor(
+				ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+			)
+			if err != nil {
+				return err
+			}
+			globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+			err = p.CheckPrivilegeForUser(ctx, globalPrivilege,
 				privilege.RESTORE, p.User())
 			hasRestoreSystemPrivilege = err == nil
 		}
@@ -1243,7 +1250,14 @@ func checkPrivilegesForRestore(
 	// options.
 	if len(restoreStmt.Targets.Databases) > 0 {
 		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
+			privDesc, err := p.SynthesizePrivilegeDescriptor(
+				ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+			)
+			if err != nil {
+				return err
+			}
+			globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+			err = p.CheckPrivilegeForUser(ctx, globalPrivilege,
 				privilege.RESTORE, p.User())
 			hasRestoreSystemPrivilege = err == nil
 		}

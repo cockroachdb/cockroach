@@ -73,8 +73,15 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 	var hasModifyPrivilegeErr error
 	var hasViewPrivilegeErr error
 	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-		hasModifyPrivilegeErr = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING)
-		hasViewPrivilegeErr = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING)
+		privDesc, err := p.SynthesizePrivilegeDescriptor(
+			ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+		)
+		if err != nil {
+			return err
+		}
+		globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+		hasModifyPrivilegeErr = p.CheckPrivilege(ctx, globalPrivilege, privilege.MODIFYCLUSTERSETTING)
+		hasViewPrivilegeErr = p.CheckPrivilege(ctx, globalPrivilege, privilege.VIEWCLUSTERSETTING)
 	}
 
 	hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)

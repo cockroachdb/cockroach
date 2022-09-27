@@ -14,6 +14,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -21,8 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -266,7 +270,7 @@ func (tc *Collection) getDescriptorByName(
 	flags tree.CommonLookupFlags,
 	requestedType catalog.DescriptorType,
 ) (catalog.Descriptor, error) {
-	mustBeVirtual, vd, err := tc.getVirtualDescriptorByName(sc, name, flags.RequireMutable, requestedType)
+	mustBeVirtual, vd, err := tc.getVirtualDescriptorByName(ctx, txn, sc, name, flags.RequireMutable, requestedType)
 	if mustBeVirtual || vd != nil || err != nil || (db == nil && sc != nil) {
 		return vd, err
 	}
@@ -320,6 +324,8 @@ const (
 // separately from getNonVirtualDescriptorID. Also, validation, type hydration
 // and state filtering are irrelevant here.
 func (tc *Collection) getVirtualDescriptorByName(
+	ctx context.Context,
+	txn *kv.Txn,
 	sc catalog.SchemaDescriptor,
 	name string,
 	isMutableRequired bool,
@@ -341,7 +347,32 @@ func (tc *Collection) getVirtualDescriptorByName(
 	case catalog.Table:
 		isVirtual, vd, err := tc.virtual.getObjectByName(sc.GetName(), name, objFlags)
 		if isVirtual || vd != nil || err != nil {
-			return haltLookups, vd, err
+			if vd == nil || err != nil || !tc.settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+				return haltLookups, vd, err
+			}
+
+			found, desc, err := tc.GetImmutableTableByName(
+				ctx, txn, syntheticprivilege.SystemPrivilegesTableName, tree.ObjectLookupFlags{},
+			)
+			if err != nil {
+				return haltLookups, nil, err
+			}
+			if !found {
+				return haltLookups, nil, errors.AssertionFailedf("failed to find system.privileges table")
+			}
+			privDesc, err := tc.privilegeSynthesizer.SynthesizePrivilegeDescriptor(
+				ctx, syntheticprivilege.CreateVirtualTablePrivilegePath(sc.GetName(), vd.GetName()),
+				privilege.VirtualTable, desc.GetVersion(),
+			)
+			if err != nil {
+				return haltLookups, nil, err
+			}
+			tableDesc, _, _, _, _ := descpb.FromDescriptor(vd.DescriptorProto())
+			tableDesc.Privileges = privDesc
+			if isMutableRequired {
+				return haltLookups, tabledesc.NewBuilder(tableDesc).BuildExistingMutable(), nil
+			}
+			return haltLookups, tabledesc.NewBuilder(tableDesc).BuildImmutable(), err
 		}
 	}
 	return continueLookups, nil, nil
