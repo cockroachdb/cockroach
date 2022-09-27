@@ -805,21 +805,23 @@ func (r *Replica) computeChecksumPostApply(
 		for _, rDesc := range cc.Terminate {
 			if rDesc.StoreID == r.store.StoreID() && rDesc.ReplicaID == r.replicaID {
 				shouldFatal = true
+				break
 			}
 		}
+		if !shouldFatal {
+			return
+		}
 
-		if shouldFatal {
-			// This node should fatal as a result of a previous consistency
-			// check (i.e. this round is carried out only to obtain a diff).
-			// If we fatal too early, the diff won't make it back to the lease-
-			// holder and thus won't be printed to the logs. Since we're already
-			// in a goroutine that's about to end, simply sleep for a few seconds
-			// and then terminate.
-			auxDir := r.store.engine.GetAuxiliaryDir()
-			_ = r.store.engine.MkdirAll(auxDir)
-			path := base.PreventedStartupFile(auxDir)
+		// This node should fatal as a result of a previous consistency check (i.e.
+		// this round is carried out only to obtain a diff). If we fatal too early,
+		// the diff won't make it back to the leaseholder and thus won't be printed
+		// to the logs. Since we're already in a goroutine that's about to end,
+		// simply sleep for a few seconds and then terminate.
+		auxDir := r.store.engine.GetAuxiliaryDir()
+		_ = r.store.engine.MkdirAll(auxDir)
+		path := base.PreventedStartupFile(auxDir)
 
-			const attentionFmt = `ATTENTION:
+		const attentionFmt = `ATTENTION:
 
 this node is terminating because a replica inconsistency was detected between %s
 and its other replicas. Please check your cluster-wide log files for more
@@ -832,20 +834,18 @@ A checkpoints directory to aid (expert) debugging should be present in:
 A file preventing this node from restarting was placed at:
 %s
 `
-			preventStartupMsg := fmt.Sprintf(attentionFmt, r, auxDir, path)
-			if err := fs.WriteFile(r.store.engine, path, []byte(preventStartupMsg)); err != nil {
-				log.Warningf(ctx, "%v", err)
-			}
-
-			if p := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal; p != nil {
-				p(*r.store.Ident)
-			} else {
-				time.Sleep(10 * time.Second)
-				log.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, r, auxDir, path)
-			}
+		preventStartupMsg := fmt.Sprintf(attentionFmt, r, auxDir, path)
+		if err := fs.WriteFile(r.store.engine, path, []byte(preventStartupMsg)); err != nil {
+			log.Warningf(ctx, "%v", err)
 		}
-	},
-	); err != nil {
+
+		if p := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal; p != nil {
+			p(*r.store.Ident)
+		} else {
+			time.Sleep(10 * time.Second)
+			log.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, r, auxDir, path)
+		}
+	}); err != nil {
 		taskCancel()
 		snap.Close()
 		return err
