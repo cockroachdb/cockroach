@@ -3843,7 +3843,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 }
 
 // TestCanSendToFollower tests that the DistSender abides by the result it
-// get from CanSendToFollower.
+// gets from CanSendToFollower.
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
