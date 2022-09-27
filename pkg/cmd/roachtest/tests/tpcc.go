@@ -714,29 +714,29 @@ func registerTPCC(r registry.Registry) {
 		CPUs:  4,
 
 		LoadWarehouses: 1000,
-		EstimatedMax:   gceOrAws(cloud, 650, 800),
+		EstimatedMax:   gceOrAws(cloud, 750, 900),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehouses: gceOrAws(cloud, 3000, 3500),
-		EstimatedMax:   gceOrAws(cloud, 2400, 3000),
+		LoadWarehouses: gceOrAws(cloud, 3500, 3900),
+		EstimatedMax:   gceOrAws(cloud, 3000, 3500),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:                    3,
 		CPUs:                     16,
 		AdmissionControlDisabled: true,
 
-		LoadWarehouses: gceOrAws(cloud, 3000, 3500),
-		EstimatedMax:   gceOrAws(cloud, 2400, 3000),
+		LoadWarehouses: gceOrAws(cloud, 3500, 3900),
+		EstimatedMax:   gceOrAws(cloud, 3000, 3500),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
 		LoadWarehouses: gceOrAws(cloud, 10000, 10000),
-		EstimatedMax:   gceOrAws(cloud, 8000, 8000),
+		EstimatedMax:   gceOrAws(cloud, 8350, 8000),
 
 		Tags: []string{`weekly`},
 	})
