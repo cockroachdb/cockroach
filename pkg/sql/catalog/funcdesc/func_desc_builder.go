@@ -13,7 +13,9 @@ package funcdesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // FunctionDescriptorBuilder is an extension of catalog.DescriptorBuilder
@@ -27,103 +29,138 @@ type FunctionDescriptorBuilder interface {
 
 var _ FunctionDescriptorBuilder = &functionDescriptorBuilder{}
 
-// NewBuilder returns a new FunctionDescriptorBuilder.
+// NewBuilder returns a new FunctionDescriptorBuilder instance by delegating to
+// NewBuilderWithMVCCTimestamp with an empty MVCC timestamp.
+//
+// Callers must assume that the given protobuf has already been treated with the
+// MVCC timestamp beforehand.
 func NewBuilder(desc *descpb.FunctionDescriptor) FunctionDescriptorBuilder {
-	return newBuilder(desc, false /* isUncommittedVersion */, catalog.PostDeserializationChanges{})
+	return NewBuilderWithMVCCTimestamp(desc, hlc.Timestamp{})
+}
+
+// NewBuilderWithMVCCTimestamp creates a new FunctionDescriptorBuilder instance
+// for building function descriptors.
+func NewBuilderWithMVCCTimestamp(
+	desc *descpb.FunctionDescriptor, mvccTimestamp hlc.Timestamp,
+) FunctionDescriptorBuilder {
+	return newBuilder(
+		desc,
+		mvccTimestamp,
+		false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{},
+	)
 }
 
 func newBuilder(
 	desc *descpb.FunctionDescriptor,
+	mvccTimestamp hlc.Timestamp,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
 ) FunctionDescriptorBuilder {
 	return &functionDescriptorBuilder{
 		original:             protoutil.Clone(desc).(*descpb.FunctionDescriptor),
+		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
 	}
 }
 
 type functionDescriptorBuilder struct {
-	original      *descpb.FunctionDescriptor
-	maybeModified *descpb.FunctionDescriptor
-
+	original             *descpb.FunctionDescriptor
+	maybeModified        *descpb.FunctionDescriptor
+	mvccTimestamp        hlc.Timestamp
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
 }
 
 // DescriptorType implements the catalog.DescriptorBuilder interface.
-func (f functionDescriptorBuilder) DescriptorType() catalog.DescriptorType {
+func (fdb functionDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 	return catalog.Function
 }
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (f functionDescriptorBuilder) RunPostDeserializationChanges() error {
+func (fdb functionDescriptorBuilder) RunPostDeserializationChanges() (err error) {
+	defer func() {
+		err = errors.Wrapf(err, "function %q (%d)", fdb.original.Name, fdb.original.ID)
+	}()
+	// Set the ModificationTime field before doing anything else.
+	// Other changes may depend on it.
+	mustSetModTime, err := descpb.MustSetModificationTime(
+		fdb.original.ModificationTime, fdb.mvccTimestamp, fdb.original.Version,
+	)
+	if err != nil {
+		return err
+	}
+	if mustSetModTime {
+		fdb.maybeModified = protoutil.Clone(fdb.original).(*descpb.FunctionDescriptor)
+		fdb.maybeModified.ModificationTime = fdb.mvccTimestamp
+		fdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+	}
 	return nil
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
-func (f functionDescriptorBuilder) RunRestoreChanges(
+func (fdb functionDescriptorBuilder) RunRestoreChanges(
 	descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	return nil
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
-func (f functionDescriptorBuilder) BuildImmutable() catalog.Descriptor {
-	return f.BuildImmutableFunction()
+func (fdb functionDescriptorBuilder) BuildImmutable() catalog.Descriptor {
+	return fdb.BuildImmutableFunction()
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
-func (f functionDescriptorBuilder) BuildExistingMutable() catalog.MutableDescriptor {
-	return f.BuildExistingMutableFunction()
+func (fdb functionDescriptorBuilder) BuildExistingMutable() catalog.MutableDescriptor {
+	return fdb.BuildExistingMutableFunction()
 }
 
 // BuildCreatedMutable implements the catalog.DescriptorBuilder interface.
-func (f functionDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescriptor {
-	return f.BuildCreatedMutableFunction()
+func (fdb functionDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescriptor {
+	return fdb.BuildCreatedMutableFunction()
 }
 
 // BuildImmutableFunction implements the FunctionDescriptorBuilder interface.
-func (f functionDescriptorBuilder) BuildImmutableFunction() catalog.FunctionDescriptor {
-	desc := f.maybeModified
+func (fdb functionDescriptorBuilder) BuildImmutableFunction() catalog.FunctionDescriptor {
+	desc := fdb.maybeModified
 	if desc == nil {
-		desc = f.original
+		desc = fdb.original
 	}
 	return &immutable{
 		FunctionDescriptor:   *desc,
-		isUncommittedVersion: f.isUncommittedVersion,
-		changes:              f.changes,
+		isUncommittedVersion: fdb.isUncommittedVersion,
+		changes:              fdb.changes,
 	}
 }
 
 // BuildExistingMutableFunction implements the FunctionDescriptorBuilder interface.
-func (f functionDescriptorBuilder) BuildExistingMutableFunction() *Mutable {
-	if f.maybeModified == nil {
-		f.maybeModified = protoutil.Clone(f.original).(*descpb.FunctionDescriptor)
+func (fdb functionDescriptorBuilder) BuildExistingMutableFunction() *Mutable {
+	if fdb.maybeModified == nil {
+		fdb.maybeModified = protoutil.Clone(fdb.original).(*descpb.FunctionDescriptor)
 	}
 	return &Mutable{
 		immutable: immutable{
-			FunctionDescriptor:   *f.maybeModified,
-			isUncommittedVersion: f.isUncommittedVersion,
-			changes:              f.changes,
+			FunctionDescriptor:   *fdb.maybeModified,
+			isUncommittedVersion: fdb.isUncommittedVersion,
+			changes:              fdb.changes,
 		},
-		clusterVersion: &immutable{FunctionDescriptor: *f.original},
+		clusterVersion: &immutable{FunctionDescriptor: *fdb.original},
 	}
 }
 
 // BuildCreatedMutableFunction implements the FunctionDescriptorBuilder interface.
-func (f functionDescriptorBuilder) BuildCreatedMutableFunction() *Mutable {
-	desc := f.maybeModified
+func (fdb functionDescriptorBuilder) BuildCreatedMutableFunction() *Mutable {
+	desc := fdb.maybeModified
 	if desc == nil {
-		desc = f.original
+		desc = fdb.original
 	}
 	return &Mutable{
 		immutable: immutable{
 			FunctionDescriptor:   *desc,
-			isUncommittedVersion: f.isUncommittedVersion,
-			changes:              f.changes,
+			isUncommittedVersion: fdb.isUncommittedVersion,
+			changes:              fdb.changes,
 		},
 	}
 }

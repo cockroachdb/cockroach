@@ -90,4 +90,12 @@ const (
 	// UpgradedSequenceReference indicates that the table/view had upgraded
 	// their sequence references, if any, from by-name to by-ID, if not already.
 	UpgradedSequenceReference
+
+	// SetModTimeToMVCCTimestamp indicates that a descriptor's ModificationTime
+	// field was unset and that the MVCC timestamp value was assigned to it.
+	SetModTimeToMVCCTimestamp
+
+	// SetCreateAsOfTimeUsingModTime indicates that a table's CreateAsOfTime field
+	// was unset and the ModificationTime value was assigned to it.
+	SetCreateAsOfTimeUsingModTime
 )

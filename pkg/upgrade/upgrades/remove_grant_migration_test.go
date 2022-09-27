@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -29,8 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -87,35 +85,17 @@ func TestRemoveGrantMigration(t *testing.T) {
 			for _, s := range strings.Split(strings.TrimSpace(descriptorStringsToInject), "\n") {
 				encoded, err := hex.DecodeString(s)
 				require.NoError(t, err)
-				var desc descpb.Descriptor
-				require.NoError(t, protoutil.Unmarshal(encoded, &desc))
-				tableDescriptor, databaseDescriptor, typeDescriptor, schemaDescriptor, fnDescriptor := descpb.FromDescriptorWithMVCCTimestamp(
-					&desc,
-					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
-				)
-				requireGrant := func(privilegeDescriptor *catpb.PrivilegeDescriptor) {
-					for _, user := range privilegeDescriptor.Users {
-						if user.User().Normalized() == "test_user" {
-							require.True(t, privilege.DEPRECATEDGRANT.IsSetIn(user.Privileges))
-						}
+				b, err := descbuilder.FromBytesAndMVCCTimestamp(encoded, hlc.Timestamp{WallTime: 1})
+				require.NoError(t, err)
+				require.NotNil(t, b)
+				desc := b.BuildImmutable()
+				privs := desc.GetPrivileges()
+				for _, user := range privs.Users {
+					if user.User().Normalized() == "test_user" {
+						require.True(t, privilege.DEPRECATEDGRANT.IsSetIn(user.Privileges))
 					}
 				}
-				if databaseDescriptor != nil {
-					requireGrant(databaseDescriptor.Privileges)
-				}
-				if schemaDescriptor != nil {
-					requireGrant(schemaDescriptor.Privileges)
-				}
-				if tableDescriptor != nil {
-					requireGrant(tableDescriptor.Privileges)
-				}
-				if typeDescriptor != nil {
-					requireGrant(typeDescriptor.Privileges)
-				}
-				if fnDescriptor != nil {
-					requireGrant(fnDescriptor.Privileges)
-				}
-				descriptorsToInject = append(descriptorsToInject, &desc)
+				descriptorsToInject = append(descriptorsToInject, desc.DescriptorProto())
 			}
 
 			ctx := context.Background()

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -124,7 +125,7 @@ func (desc *wrapper) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *wrapper) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.TableDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
 }
 
 // GetPrimaryIndexID implements the TableDescriptor interface.
@@ -147,7 +148,7 @@ func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 // It overrides the wrapper's implementation to deal with the fact that
 // mutable has overridden the definition of IsUncommittedVersion.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.TableDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
