@@ -576,6 +576,9 @@ func (r opResult) createAndWrapRowSource(
 				)
 			}
 			r.ColumnTypes = rs.OutputTypes()
+			if releasable, ok := rs.(execreleasable.Releasable); ok {
+				r.Releasables = append(r.Releasables, releasable)
+			}
 			return rs, nil
 		},
 		materializerSafeToRelease,
@@ -593,6 +596,7 @@ func (r opResult) createAndWrapRowSource(
 	r.MetadataSources = append(r.MetadataSources, r.Root.(colexecop.MetadataSource))
 	r.ToClose = append(r.ToClose, r.Root.(colexecop.Closer))
 	r.Releasables = append(r.Releasables, releasables...)
+	r.Releasables = append(r.Releasables, c)
 	return nil
 }
 
