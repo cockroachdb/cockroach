@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -201,10 +202,10 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		if !ev.Value.IsPresent() {
 			// The descriptor was deleted.
 			value = ev.PrevValue
+			value.Timestamp = ev.Value.Timestamp
 		}
-
-		var descriptor descpb.Descriptor
-		if err := value.GetProto(&descriptor); err != nil {
+		b, err := descbuilder.FromSerializedValue(&value)
+		if err != nil {
 			logcrash.ReportOrPanic(
 				ctx,
 				&s.settings.SV,
@@ -214,37 +215,13 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 			)
 			return
 		}
-		if descriptor.Union == nil {
+		if b == nil {
 			return
 		}
-
-		table, database, typ, schema, function := descpb.FromDescriptorWithMVCCTimestamp(&descriptor, ev.Value.Timestamp)
-
-		var id descpb.ID
-		var descType catalog.DescriptorType
-		switch {
-		case table != nil:
-			id = table.GetID()
-			descType = catalog.Table
-		case database != nil:
-			id = database.GetID()
-			descType = catalog.Database
-		case typ != nil:
-			id = typ.GetID()
-			descType = catalog.Type
-		case schema != nil:
-			id = schema.GetID()
-			descType = catalog.Schema
-		case function != nil:
-			id = function.GetID()
-			descType = catalog.Function
-		default:
-			logcrash.ReportOrPanic(ctx, &s.settings.SV, "unknown descriptor unmarshalled %v", descriptor)
-		}
-
+		desc := b.BuildImmutable()
 		rangefeedEvent := event{
 			timestamp: ev.Value.Timestamp,
-			update:    spanconfig.MakeDescriptorSQLUpdate(id, descType),
+			update:    spanconfig.MakeDescriptorSQLUpdate(desc.GetID(), desc.DescriptorType()),
 		}
 		onEvent(ctx, rangefeedEvent)
 	}

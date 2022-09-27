@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,12 +123,13 @@ func decodeTableDescriptorAndInsert(
 	hexEncodedDescriptor string,
 	parentID, parentSchemaID descpb.ID,
 ) {
-	var desc descpb.Descriptor
 	decodedDescriptor, err := hex.DecodeString(hexEncodedDescriptor)
 	require.NoError(t, err)
-	require.NoError(t, protoutil.Unmarshal(decodedDescriptor, &desc))
+	b, err := descbuilder.FromBytesAndMVCCTimestamp(decodedDescriptor, hlc.Timestamp{WallTime: 1})
+	require.NoError(t, err)
+	require.NotNil(t, b)
+	require.Equal(t, catalog.Table, b.DescriptorType())
 	// Run post deserialization changes.
-	b := descbuilder.NewBuilderWithMVCCTimestamp(&desc, hlc.Timestamp{WallTime: 1})
 	require.NoError(t, b.RunPostDeserializationChanges())
 	// Modify this descriptor's parentID and parentSchemaID
 	tableDesc := b.(tabledesc.TableDescriptorBuilder).BuildCreatedMutableTable()

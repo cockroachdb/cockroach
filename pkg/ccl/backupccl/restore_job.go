@@ -434,7 +434,10 @@ func loadBackupSQLDescs(
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
 
-	allDescs, latestBackupManifest := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
+	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
+	if err != nil {
+		return nil, backuppb.BackupManifest{}, nil, 0, err
+	}
 
 	for _, m := range details.DatabaseModifiers {
 		for _, typ := range m.ExtraTypeDescs {
@@ -628,7 +631,7 @@ func spansForAllRestoreTableIndexes(
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		// TODO(pbardea): Consider and test the interaction between revision_history
 		// backups and OFFLINE tables.
-		rawTbl, _, _, _, _ := descpb.FromDescriptor(rev.Desc)
+		rawTbl, _, _, _, _ := descpb.GetDescriptors(rev.Desc)
 		if rawTbl != nil && !rawTbl.Dropped() {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			if skipTableData(tbl) {

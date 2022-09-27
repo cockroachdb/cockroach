@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
@@ -39,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
@@ -802,11 +802,14 @@ func maybeUpgradeDescriptorsInBackupManifests(
 	if len(backupManifests) == 0 {
 		return nil
 	}
+
 	descriptors := make([]catalog.Descriptor, 0, len(backupManifests[0].Descriptors))
-	for _, backupManifest := range backupManifests {
-		for _, pb := range backupManifest.Descriptors {
-			descriptors = append(descriptors, descbuilder.NewBuilder(&pb).BuildExistingMutable())
+	for i := range backupManifests {
+		descs, err := backupinfo.BackupManifestDescriptors(&backupManifests[i])
+		if err != nil {
+			return err
 		}
+		descriptors = append(descriptors, descs...)
 	}
 
 	err := maybeUpgradeDescriptors(descriptors, skipFKsWithNoMatchingTable)
@@ -1556,7 +1559,7 @@ func doRestorePlan(
 	for _, m := range mainBackupManifests {
 		spans := roachpb.Spans(m.Spans)
 		for i := range m.Descriptors {
-			table, _, _, _, _ := descpb.FromDescriptor(&m.Descriptors[i])
+			table, _, _, _, _ := descpb.GetDescriptors(&m.Descriptors[i])
 			if table == nil {
 				continue
 			}

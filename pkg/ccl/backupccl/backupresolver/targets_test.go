@@ -50,9 +50,13 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		type tbDesc = descpb.TableDescriptor
 		type typDesc = descpb.TypeDescriptor
 		ts1 := hlc.Timestamp{WallTime: 1}
-		mkTable := func(descriptor tbDesc) catalog.Descriptor {
-			descProto := tabledesc.NewBuilder(&descriptor).BuildImmutable().DescriptorProto()
-			return descbuilder.NewBuilderWithMVCCTimestamp(descProto, ts1).BuildImmutable()
+		mkTable := func(tableDescProto tbDesc) catalog.Descriptor {
+			pb := tabledesc.NewBuilder(&tableDescProto).BuildCreatedMutable().DescriptorProto()
+			mut, err := descbuilder.BuildMutable(nil /* original */, pb, ts1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return mut.ImmutableCopy()
 		}
 		mkDB := func(id descpb.ID, name string) catalog.Descriptor {
 			return dbdesc.NewInitial(id, name, username.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))

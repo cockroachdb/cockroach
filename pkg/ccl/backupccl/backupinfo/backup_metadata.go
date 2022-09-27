@@ -199,7 +199,7 @@ func writeDescsToMetadata(
 			k := encodeDescSSTKey(i.ID)
 			var b []byte
 			if i.Desc != nil {
-				t, _, _, _, _ := descpb.FromDescriptor(i.Desc)
+				t, _, _, _, _ := descpb.GetDescriptors(i.Desc)
 				if t == nil || !t.Dropped() {
 					bytes, err := protoutil.Marshal(i.Desc)
 					if err != nil {
@@ -340,7 +340,7 @@ func writeNamesToMetadata(
 	for i, rev := range revs {
 		names[i].id = rev.ID
 		names[i].ts = rev.Time
-		tb, db, typ, sc, fn := descpb.FromDescriptor(rev.Desc)
+		tb, db, typ, sc, fn := descpb.GetDescriptors(rev.Desc)
 		if db != nil {
 			names[i].name = db.Name
 			if db.State == descpb.DescriptorState_DROP {
@@ -1089,7 +1089,7 @@ func (di *DescIterator) Next(desc *descpb.Descriptor) bool {
 			return false
 		}
 
-		tbl, db, typ, sc, fn := descpb.FromDescriptor(desc)
+		tbl, db, typ, sc, fn := descpb.GetDescriptors(desc)
 		if tbl != nil || db != nil || typ != nil || sc != nil || fn != nil {
 			return true
 		}

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
@@ -53,20 +52,19 @@ func WithDescriptors(c nstree.Catalog) Option {
 	modifTime := hlc.Timestamp{WallTime: defaultOverriddenCreatedAt.UnixNano()}
 	return optionFunc(func(state *TestState) {
 		_ = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-			pb := desc.DescriptorProto()
-			if table, isTable := desc.(catalog.TableDescriptor); isTable {
-				mut := table.NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
-				for _, idx := range mut.AllIndexes() {
+			mut := desc.NewBuilder().BuildCreatedMutable()
+			switch m := mut.(type) {
+			case *tabledesc.Mutable:
+				for _, idx := range m.AllIndexes() {
 					if !idx.CreatedAt().IsZero() {
-						idx.IndexDesc().CreatedAtNanos = defaultOverriddenCreatedAt.UnixNano()
+						idx.IndexDesc().CreatedAtNanos = modifTime.WallTime
 					}
 				}
-				mut.ModificationTime = modifTime
-				pb = mut.DescriptorProto()
+				m.CreateAsOfTime = modifTime
 			}
-			b := descbuilder.NewBuilderWithMVCCTimestamp(pb, modifTime)
-			state.committed.UpsertDescriptorEntry(b.BuildImmutable())
-			state.uncommitted.UpsertDescriptorEntry(b.BuildExistingMutable())
+			desc = resetModificationTime(mut)
+			state.committed.UpsertDescriptorEntry(desc)
+			state.uncommitted.UpsertDescriptorEntry(desc)
 			return nil
 		})
 	})

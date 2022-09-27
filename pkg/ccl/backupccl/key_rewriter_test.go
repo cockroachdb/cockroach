@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -271,10 +272,13 @@ func TestKeyRewriter(t *testing.T) {
 
 // mustMarshalDesc marshals the provided TableDescriptor.
 func mustMarshalDesc(t *testing.T, tableDesc *descpb.TableDescriptor) []byte {
-	desc := tabledesc.NewBuilder(tableDesc).BuildImmutable().DescriptorProto()
+	pb := tabledesc.NewBuilder(tableDesc).BuildCreatedMutable().DescriptorProto()
 	// Set the timestamp to a non-zero value.
-	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(desc, hlc.Timestamp{WallTime: 1})
-	bytes, err := protoutil.Marshal(desc)
+	mut, err := descbuilder.BuildMutable(nil /* original */, pb, hlc.Timestamp{WallTime: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bytes, err := protoutil.Marshal(mut.DescriptorProto())
 	if err != nil {
 		t.Fatal(err)
 	}

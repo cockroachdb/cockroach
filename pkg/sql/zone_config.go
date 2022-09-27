@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -91,16 +92,16 @@ func getZoneConfig(
 		if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(codec, id)); err != nil {
 			return 0, nil, 0, nil, err
 		} else if descVal != nil {
-			var desc descpb.Descriptor
-			if err := descVal.GetProto(&desc); err != nil {
+			b, err := descbuilder.FromSerializedValue(descVal)
+			if err != nil {
 				return 0, nil, 0, nil, err
 			}
-			tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
-			if tableDesc != nil {
+			if b != nil && b.DescriptorType() == catalog.Table {
+				tableDesc := b.BuildImmutable()
 				// This is a table descriptor. Look up its parent database zone config.
 				dbID, zone, _, _, err := getZoneConfig(
 					codec,
-					tableDesc.ParentID,
+					tableDesc.GetParentID(),
 					getKey,
 					false, /* getInheritedDefault */
 					false /* mayBeTable */)
@@ -150,14 +151,14 @@ func completeZoneConfig(
 	if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(codec, id)); err != nil {
 		return err
 	} else if descVal != nil {
-		var desc descpb.Descriptor
-		if err := descVal.GetProto(&desc); err != nil {
+		b, err := descbuilder.FromSerializedValue(descVal)
+		if err != nil {
 			return err
 		}
-		tableDesc, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, descVal.Timestamp)
-		if tableDesc != nil {
+		if b != nil && b.DescriptorType() == catalog.Table {
+			tableDesc := b.BuildImmutable()
 			_, dbzone, _, _, err := getZoneConfig(
-				codec, tableDesc.ParentID, getKey, false /* getInheritedDefault */, false /* mayBeTable */)
+				codec, tableDesc.GetParentID(), getKey, false /* getInheritedDefault */, false /* mayBeTable */)
 			if err != nil {
 				return err
 			}

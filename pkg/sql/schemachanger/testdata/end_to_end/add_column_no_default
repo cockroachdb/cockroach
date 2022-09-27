@@ -30,9 +30,7 @@ upsert descriptor #106
        name: primary
      formatVersion: 3
      id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
+     modificationTime: {}
   +  mutations:
   +  - column:
   +      id: 2
@@ -89,6 +87,10 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
 create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8"
   descriptor IDs: [106]
 # end PreCommitPhase
@@ -100,14 +102,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 3 MutationType ops
 upsert descriptor #106
-  ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
        direction: ADD
        mutationId: 1
@@ -154,10 +148,8 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
-     formatVersion: 3
      id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
+     modificationTime: {}
   -  mutations:
   -  - column:
   -      id: 2
@@ -171,7 +163,6 @@ upsert descriptor #106
   -    direction: ADD
   -    mutationId: 1
   -    state: WRITE_ONLY
-  +  modificationTime: {}
   +  mutations: []
      name: tbl
      nextColumnId: 3

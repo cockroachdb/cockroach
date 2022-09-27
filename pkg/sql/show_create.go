@@ -221,32 +221,26 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 func (p *planner) ShowCreate(
 	ctx context.Context,
 	dbPrefix string,
-	allDescs []descpb.Descriptor,
+	allHydratedDescs []catalog.Descriptor,
 	desc catalog.TableDescriptor,
 	displayOptions ShowCreateDisplayOptions,
 ) (string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "sql.ShowCreate")
 	defer sp.Finish()
 
-	var stmt string
-	var err error
 	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.GetName()))
 	if desc.IsView() {
-		stmt, err = ShowCreateView(ctx, &p.RunParams(ctx).p.semaCtx, p.RunParams(ctx).p.SessionData(), &tn, desc)
-	} else if desc.IsSequence() {
-		stmt, err = ShowCreateSequence(ctx, &tn, desc)
-	} else {
-		lCtx, lErr := newInternalLookupCtxFromDescriptorProtos(ctx, allDescs)
-		if lErr != nil {
-			return "", lErr
-		}
-		// Overwrite desc with hydrated descriptor.
-		desc, err = lCtx.getTableByID(desc.GetID())
-		if err != nil {
-			return "", err
-		}
-		stmt, err = ShowCreateTable(ctx, p, &tn, dbPrefix, desc, lCtx, displayOptions)
+		return ShowCreateView(ctx, &p.RunParams(ctx).p.semaCtx, p.RunParams(ctx).p.SessionData(), &tn, desc)
 	}
-
-	return stmt, err
+	if desc.IsSequence() {
+		return ShowCreateSequence(ctx, &tn, desc)
+	}
+	lCtx := newInternalLookupCtx(allHydratedDescs, nil /* prefix */)
+	// Overwrite desc with hydrated descriptor.
+	var err error
+	desc, err = lCtx.getTableByID(desc.GetID())
+	if err != nil {
+		return "", err
+	}
+	return ShowCreateTable(ctx, p, &tn, dbPrefix, desc, lCtx, displayOptions)
 }

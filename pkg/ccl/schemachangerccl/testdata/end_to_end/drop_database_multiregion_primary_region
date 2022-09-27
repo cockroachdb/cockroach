@@ -20,12 +20,26 @@ checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
 ## StatementPhase stage 1 of 1 with 5 MutationType ops
 add synthetic descriptor #104:
+   database:
+     id: 104
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: multi_region_test_db
+     privileges:
   ...
        public:
          id: 106
   +  state: DROP
      version: "1"
 add synthetic descriptor #106:
+   schema:
+     id: 106
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: public
+     parentId: 104
   ...
          withGrantOption: 2
        version: 2
@@ -33,17 +47,41 @@ add synthetic descriptor #106:
      version: "1"
 add synthetic descriptor #105:
   ...
+     id: 105
+     kind: MULTIREGION_ENUM
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: crdb_internal_region
+     parentId: 104
+  ...
        primaryRegion: us-east1
        zoneConfigExtensions: {}
   +  state: DROP
      version: "2"
 add synthetic descriptor #107:
   ...
+     id: 107
+     kind: ALIAS
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: _crdb_internal_region
+     parentId: 104
+  ...
          withGrantOption: 2
        version: 2
   +  state: DROP
      version: "1"
 add synthetic descriptor #108:
+  ...
+       regionalByTable:
+         region: us-east2
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: table_regional_by_table
+     nextColumnId: 2
   ...
      replacementOf:
        time: {}
@@ -73,11 +111,7 @@ upsert descriptor #104
   +    targetRanks: <redacted>
   +    targets: <redacted>
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: multi_region_test_db
-     privileges:
+     modificationTime: {}
   ...
        public:
          id: 106
@@ -102,14 +136,6 @@ upsert descriptor #105
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-     id: 105
-     kind: MULTIREGION_ENUM
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: crdb_internal_region
-     parentId: 104
-  ...
        primaryRegion: us-east1
        zoneConfigExtensions: {}
   -  version: "2"
@@ -130,11 +156,7 @@ upsert descriptor #106
   +    targetRanks: <redacted>
   +    targets: <redacted>
      id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: public
-     parentId: 104
+     modificationTime: {}
   ...
          withGrantOption: 2
        version: 2
@@ -159,11 +181,6 @@ upsert descriptor #107
   +    targets: <redacted>
      id: 107
      kind: ALIAS
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: _crdb_internal_region
-     parentId: 104
   ...
          withGrantOption: 2
        version: 2
@@ -189,14 +206,6 @@ upsert descriptor #108
   +  dropTime: <redacted>"
      families:
      - columnIds:
-  ...
-       regionalByTable:
-         region: us-east2
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: table_regional_by_table
-     nextColumnId: 2
   ...
      replacementOf:
        time: {}
@@ -234,14 +243,6 @@ upsert descriptor #108
   -    targets: <redacted>
      dropTime: <redacted>"
      families:
-  ...
-       regionalByTable:
-         region: us-east2
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: table_regional_by_table
-     nextColumnId: 2
   ...
      state: DROP
      unexposedParentSchemaId: 106

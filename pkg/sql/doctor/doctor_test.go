@@ -70,7 +70,7 @@ var validTableDesc = &descpb.Descriptor{
 }
 
 func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
-	table, database, typ, schema, function := descpb.FromDescriptor(desc)
+	table, database, typ, schema, function := descpb.GetDescriptors(desc)
 	if table != nil {
 		parentSchemaID := table.GetUnexposedParentSchemaID()
 		if parentSchemaID == descpb.InvalidID {
@@ -136,7 +136,7 @@ func TestExamineDescriptors(t *testing.T) {
 
 	droppedValidTableDesc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
 	{
-		tbl, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(droppedValidTableDesc, hlc.Timestamp{WallTime: 1})
+		tbl, _, _, _, _ := descpb.GetDescriptors(droppedValidTableDesc)
 		tbl.State = descpb.DescriptorState_DROP
 	}
 
@@ -146,7 +146,7 @@ func TestExamineDescriptors(t *testing.T) {
 	// the privileges returned from the SystemAllowedPrivileges map in privilege.go.
 	validTableDescWithParentSchema := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
 	{
-		tbl, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(validTableDescWithParentSchema, hlc.Timestamp{WallTime: 1})
+		tbl, _, _, _, _ := descpb.GetDescriptors(validTableDescWithParentSchema)
 		tbl.UnexposedParentSchemaID = 53
 	}
 
@@ -178,7 +178,7 @@ func TestExamineDescriptors(t *testing.T) {
 			},
 			expected: `Examining 1 descriptors and 0 namespace entries...
   ParentID   0, ParentSchemaID 29: relation "" (2): different id in descriptor table: 1
-  ParentID   0, ParentSchemaID 29: relation "" (2): empty table name
+  ParentID   0, ParentSchemaID 29: relation "" (2): empty relation name
   ParentID   0, ParentSchemaID 29: relation "" (2): invalid parent ID 0
   ParentID   0, ParentSchemaID 29: relation "" (2): table must contain at least 1 column
 `,
@@ -422,7 +422,7 @@ func TestExamineDescriptors(t *testing.T) {
 			descTable: doctor.DescriptorTable{
 				{ID: 51, DescBytes: toBytes(t, func() *descpb.Descriptor {
 					desc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
-					tbl, _, _, _, _ := descpb.FromDescriptor(desc)
+					tbl, _, _, _, _ := descpb.GetDescriptors(desc)
 					tbl.PrimaryIndex.Disabled = true
 					return desc
 				}())},
@@ -483,7 +483,7 @@ func TestExamineDescriptors(t *testing.T) {
 			descTable: doctor.DescriptorTable{
 				{ID: 51, DescBytes: toBytes(t, func() *descpb.Descriptor {
 					desc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
-					tbl, _, _, _, _ := descpb.FromDescriptor(desc)
+					tbl, _, _, _, _ := descpb.GetDescriptors(desc)
 					tbl.MutationJobs = []descpb.TableDescriptor_MutationJob{{MutationID: 1, JobID: 123}}
 					return desc
 				}())},
@@ -513,6 +513,9 @@ func TestExamineDescriptors(t *testing.T) {
 
 	for i, test := range tests {
 		var buf bytes.Buffer
+		for j := range test.descTable {
+			test.descTable[j].ModTime = hlc.MaxTimestamp
+		}
 		valid, err := doctor.ExamineDescriptors(
 			context.Background(),
 			clusterversion.TestingClusterVersion,

@@ -188,12 +188,12 @@ func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState 
 // It overrides the wrapper's implementation to deal with the fact that
 // mutable has overridden the definition of IsUncommittedVersion.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.TypeDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.TypeDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.TypeDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.TypeDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
 }
 
 // PrimaryRegionName implements the TypeDescriptor interface.
@@ -487,7 +487,7 @@ func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 // ValidateSelf performs validation on the TypeDescriptor.
 func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
-	vea.Report(catalog.ValidateName(desc.Name, "type"))
+	vea.Report(catalog.ValidateName(desc))
 	if desc.GetID() == descpb.InvalidID {
 		vea.Report(errors.AssertionFailedf("invalid ID %d", desc.GetID()))
 	}

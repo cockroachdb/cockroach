@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -279,11 +278,10 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		var desc descpb.Descriptor
-		if err := protoutil.Unmarshal(bytes, &desc); err != nil {
+		b, err := descbuilder.FromBytesAndMVCCTimestamp(bytes, hlc.Timestamp{})
+		if err != nil {
 			return err
 		}
-		b := descbuilder.NewBuilder(&desc)
 		if b == nil || b.DescriptorType() != catalog.Table {
 			return errors.Newf("expected a table descriptor")
 		}

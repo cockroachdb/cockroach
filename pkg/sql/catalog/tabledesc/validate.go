@@ -560,7 +560,7 @@ func validateMutation(m *descpb.DescriptorMutation) error {
 // If version is supplied, the descriptor is checked for version incompatibilities.
 func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
-	vea.Report(catalog.ValidateName(desc.Name, "table"))
+	vea.Report(catalog.ValidateName(desc))
 	if desc.GetID() == descpb.InvalidID {
 		vea.Report(errors.AssertionFailedf("invalid table ID %d", desc.GetID()))
 	}
@@ -572,6 +572,13 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// It is often < ID, except when a table gets moved across databases.
 	if desc.GetParentID() == descpb.InvalidID && !desc.IsVirtualTable() {
 		vea.Report(errors.AssertionFailedf("invalid parent ID %d", desc.GetParentID()))
+	}
+
+	// Check that CreateAsOfTime is set if the table relies on it and is in the
+	// process of being added.
+	if desc.Adding() && desc.IsAs() && desc.GetCreateAsOfTime().IsEmpty() && desc.GetVersion() > 1 {
+		vea.Report(errors.AssertionFailedf("table is in the ADD state and was created with " +
+			"CREATE TABLE ... AS but does not have a CreateAsOfTime set"))
 	}
 
 	// VirtualTables have their privileges stored in system.privileges which
@@ -912,9 +919,8 @@ func (desc *wrapper) validateColumns() error {
 	columnIDs := make(map[descpb.ColumnID]*descpb.ColumnDescriptor, len(desc.Columns))
 	columnNames := make(map[string]descpb.ColumnID, len(desc.Columns))
 	for _, column := range desc.DeletableColumns() {
-
-		if err := catalog.ValidateName(column.GetName(), "column"); err != nil {
-			return err
+		if len(column.GetName()) == 0 {
+			return pgerror.Newf(pgcode.Syntax, "empty column name")
 		}
 		if column.GetID() == 0 {
 			return errors.AssertionFailedf("invalid column ID %d", errors.Safe(column.GetID()))
@@ -1017,8 +1023,8 @@ func (desc *wrapper) validateColumnFamilies(columnsByID map[descpb.ColumnID]cata
 	colIDToFamilyID := map[descpb.ColumnID]descpb.FamilyID{}
 	for i := range desc.Families {
 		family := &desc.Families[i]
-		if err := catalog.ValidateName(family.Name, "family"); err != nil {
-			return err
+		if len(family.Name) == 0 {
+			return pgerror.Newf(pgcode.Syntax, "empty family name")
 		}
 
 		if i != 0 {
@@ -1121,8 +1127,8 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 	columnsByID map[descpb.ColumnID]catalog.Column,
 ) error {
 	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
-		if err := catalog.ValidateName(c.Name, "unique without index constraint"); err != nil {
-			return err
+		if len(c.Name) == 0 {
+			return pgerror.Newf(pgcode.Syntax, "empty unique without index constraint name")
 		}
 
 		// Verify that the table ID is valid.
@@ -1187,8 +1193,8 @@ func (desc *wrapper) validateTableIndexes(
 	indexNames := map[string]struct{}{}
 	indexIDs := map[descpb.IndexID]string{}
 	for _, idx := range desc.NonDropIndexes() {
-		if err := catalog.ValidateName(idx.GetName(), "index"); err != nil {
-			return err
+		if len(idx.GetName()) == 0 {
+			return pgerror.Newf(pgcode.Syntax, "empty index name")
 		}
 		if idx.GetID() == 0 {
 			return errors.Newf("invalid index ID %d", idx.GetID())
