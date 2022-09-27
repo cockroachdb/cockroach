@@ -50,10 +50,6 @@ import { StatementDetailsResponseMessage } from "src/util/api";
 import { getMatchParamByName, queryByName } from "src/util/query";
 
 import { appNamesAttr, statementAttr } from "src/util/constants";
-import {
-  statementDetailsLatestQueryAction,
-  statementDetailsLatestFormattedQueryAction,
-} from "src/redux/sqlActivity";
 import { selectTimeScale } from "src/redux/timeScale";
 
 type IStatementDiagnosticsReport =
@@ -109,20 +105,18 @@ const mapStateToProps = (
     state,
     props,
   );
+  const statementFingerprint = statementDetails?.statement.metadata.query;
   return {
     statementFingerprintID: getMatchParamByName(props.match, statementAttr),
     statementDetails,
     isLoading: isLoading,
-    latestQuery: state.sqlActivity.statementDetailsLatestQuery,
-    latestFormattedQuery:
-      state.sqlActivity.statementDetailsLatestFormattedQuery,
     statementsError: lastError,
     timeScale: selectTimeScale(state),
     nodeNames: nodeDisplayNameByIDSelector(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports: selectDiagnosticsReportsByStatementFingerprint(
       state,
-      state.sqlActivity.statementDetailsLatestQuery,
+      statementFingerprint,
     ),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
   };
@@ -145,9 +139,6 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
       );
     };
   },
-  onStatementDetailsQueryChange: statementDetailsLatestQueryAction,
-  onStatementDetailsFormattedQueryChange:
-    statementDetailsLatestFormattedQueryAction,
   refreshNodes: refreshNodes,
   refreshNodesLiveness: refreshLiveness,
   refreshUserSQLRoles: refreshUserSQLRoles,

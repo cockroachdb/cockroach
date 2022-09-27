@@ -29,14 +29,10 @@ export type SQLDetailsStatsReducerState = {
   cachedData: {
     [id: string]: SQLDetailsStatsState;
   };
-  latestQuery: string;
-  latestFormattedQuery: string;
 };
 
 const initialState: SQLDetailsStatsReducerState = {
   cachedData: {},
-  latestQuery: "",
-  latestFormattedQuery: "",
 };
 
 const sqlDetailsStatsSlice = createSlice({
@@ -102,12 +98,6 @@ const sqlDetailsStatsSlice = createSlice({
         lastError: null,
         inFlight: true,
       };
-    },
-    setLatestQuery: (state, action: PayloadAction<string>) => {
-      state.latestQuery = action.payload;
-    },
-    setLatestFormattedQuery: (state, action: PayloadAction<string>) => {
-      state.latestFormattedQuery = action.payload;
     },
   },
 });

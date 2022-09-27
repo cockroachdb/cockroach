@@ -667,8 +667,6 @@ describe("SQLDetailsStats sagas", () => {
                 inFlight: false,
               },
           },
-          latestQuery: "",
-          latestFormattedQuery: "",
         })
         .run();
     });
@@ -694,8 +692,6 @@ describe("SQLDetailsStats sagas", () => {
                 inFlight: false,
               },
           },
-          latestQuery: "",
-          latestFormattedQuery: "",
         })
         .run();
     });

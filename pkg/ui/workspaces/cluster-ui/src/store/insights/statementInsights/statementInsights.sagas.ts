@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -10,30 +10,30 @@
 
 import { all, call, delay, put, takeLatest } from "redux-saga/effects";
 
-import { actions } from "./transactionInsights.reducer";
-import { getTransactionInsightEventState } from "src/api/insightsApi";
-import { throttleWithReset } from "../utils";
-import { rootActions } from "../reducers";
+import { actions } from "./statementInsights.reducer";
+import { getStatementInsightsApi } from "src/api/insightsApi";
+import { throttleWithReset } from "../../utils";
+import { rootActions } from "../../reducers";
 
-export function* refreshTransactionInsightsSaga() {
+export function* refreshStatementInsightsSaga() {
   yield put(actions.request());
 }
 
-export function* requestTransactionInsightsSaga(): any {
+export function* requestStatementInsightsSaga(): any {
   try {
-    const result = yield call(getTransactionInsightEventState);
+    const result = yield call(getStatementInsightsApi);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));
   }
 }
 
-export function* receivedTransactionInsightsSaga(delayMs: number) {
+export function* receivedStatementInsightsSaga(delayMs: number) {
   yield delay(delayMs);
   yield put(actions.invalidated());
 }
 
-export function* transactionInsightsSaga(
+export function* statementInsightsSaga(
   cacheInvalidationPeriod: number = 10 * 1000,
 ) {
   yield all([
@@ -41,12 +41,12 @@ export function* transactionInsightsSaga(
       cacheInvalidationPeriod,
       actions.refresh,
       [actions.invalidated, rootActions.resetState],
-      refreshTransactionInsightsSaga,
+      refreshStatementInsightsSaga,
     ),
-    takeLatest(actions.request, requestTransactionInsightsSaga),
+    takeLatest(actions.request, requestStatementInsightsSaga),
     takeLatest(
       actions.received,
-      receivedTransactionInsightsSaga,
+      receivedStatementInsightsSaga,
       cacheInvalidationPeriod,
     ),
   ]);

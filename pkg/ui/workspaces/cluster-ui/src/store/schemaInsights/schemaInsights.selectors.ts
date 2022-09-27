@@ -9,14 +9,30 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { adminUISelector } from "../utils/selectors";
+import { adminUISelector, localStorageSelector } from "../utils/selectors";
 import { insightType } from "../../insights";
 
-export const selectSchemaInsights = createSelector(
+const selectSchemaInsightState = createSelector(
   adminUISelector,
   adminUiState => {
-    if (!adminUiState.schemaInsights) return [];
-    return adminUiState.schemaInsights.data;
+    if (!adminUiState.schemaInsights) return null;
+    return adminUiState.schemaInsights;
+  },
+);
+
+export const selectSchemaInsights = createSelector(
+  selectSchemaInsightState,
+  schemaInsightState => {
+    if (!schemaInsightState.data) return null;
+    return schemaInsightState.data;
+  },
+);
+
+export const selectSchemaInsightsError = createSelector(
+  selectSchemaInsightState,
+  schemaInsightState => {
+    if (!schemaInsightState) return null;
+    return schemaInsightState.lastError;
   },
 );
 
@@ -40,4 +56,14 @@ export const selectSchemaInsightsTypes = createSelector(
       ),
     ).sort();
   },
+);
+
+export const selectSortSetting = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["sortSetting/SchemaInsightsPage"],
+);
+
+export const selectFilters = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["filters/SchemaInsightsPage"],
 );

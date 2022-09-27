@@ -9,31 +9,34 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME, noopReducer } from "../utils";
+import { DOMAIN_NAME } from "src/store/utils";
 import moment, { Moment } from "moment";
-import { TransactionInsightEventsResponse } from "src/api/insightsApi";
+import {
+  TransactionInsightEventDetailsRequest,
+  TransactionInsightEventDetailsResponse,
+} from "src/api/insightsApi";
 
-export type InsightsState = {
-  data: TransactionInsightEventsResponse;
-  lastUpdated: Moment;
+export type TransactionInsightDetailsState = {
+  data: TransactionInsightEventDetailsResponse | null;
+  lastUpdated: Moment | null;
   lastError: Error;
   valid: boolean;
 };
 
-const initialState: InsightsState = {
+const initialState: TransactionInsightDetailsState = {
   data: null,
   lastUpdated: null,
   lastError: null,
   valid: true,
 };
 
-const insightsSlice = createSlice({
-  name: `${DOMAIN_NAME}/insightsSlice`,
+const transactionInsightDetailsSlice = createSlice({
+  name: `${DOMAIN_NAME}/transactionInsightDetailsSlice`,
   initialState,
   reducers: {
     received: (
       state,
-      action: PayloadAction<TransactionInsightEventsResponse>,
+      action: PayloadAction<TransactionInsightEventDetailsResponse>,
     ) => {
       state.data = action.payload;
       state.valid = true;
@@ -47,10 +50,15 @@ const insightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    // Define actions that don't change state.
-    refresh: noopReducer,
-    request: noopReducer,
+    refresh: (
+      _,
+      action: PayloadAction<TransactionInsightEventDetailsRequest>,
+    ) => {},
+    request: (
+      _,
+      action: PayloadAction<TransactionInsightEventDetailsRequest>,
+    ) => {},
   },
 });
 
-export const { reducer, actions } = insightsSlice;
+export const { reducer, actions } = transactionInsightDetailsSlice;

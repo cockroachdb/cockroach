@@ -91,6 +91,20 @@ export type StatementDetailsProps = StatementDetailsOwnProps &
 
 export interface StatementDetailsState {
   currentTab?: string;
+
+  /**
+   * The latest non-null query text associated with the statement fingerprint in the URL.
+   * We save this to preserve this data when the time frame changes such that there is no
+   * longer data for this statement fingerprint in the selected time frame.
+   */
+  query: string;
+
+  /**
+   * The latest non-null formatted query associated with the statement fingerprint in the URL.
+   * We save this to preserve data when the time frame changes such that there is no longer
+   * data for this statement fingerprint in the selected time frame.
+   */
+  formattedQuery: string;
 }
 
 export type NodesSummary = {
@@ -127,16 +141,12 @@ export interface StatementDetailsDispatchProps {
     ascending: boolean,
   ) => void;
   onBackToStatementsClick?: () => void;
-  onStatementDetailsQueryChange: (query: string) => void;
-  onStatementDetailsFormattedQueryChange: (formattedQuery: string) => void;
 }
 
 export interface StatementDetailsStateProps {
   statementFingerprintID: string;
   statementDetails: StatementDetailsResponse;
   isLoading: boolean;
-  latestQuery: string;
-  latestFormattedQuery: string;
   statementsError: Error | null;
   timeScale: TimeScale;
   nodeNames: { [nodeId: string]: string };
@@ -207,11 +217,15 @@ export class StatementDetails extends React.Component<
   StatementDetailsState
 > {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
+
   constructor(props: StatementDetailsProps) {
     super(props);
     const searchParams = new URLSearchParams(props.history.location.search);
     this.state = {
       currentTab: searchParams.get("tab") || "overview",
+      query: this.props.statementDetails?.statement?.metadata?.query,
+      formattedQuery:
+        this.props.statementDetails?.statement?.metadata?.formatted_query,
     };
     this.activateDiagnosticsRef = React.createRef();
 
@@ -286,30 +300,22 @@ export class StatementDetails extends React.Component<
       }
     }
 
-    // If new, non-empty-string query text is available (derived from the statement details response),
-    // cache the query text.
+    // If a new, non-empty-string query text is available
+    // (derived from the statement details response), save the query text.
+    const newQuery =
+      this.props.statementDetails?.statement?.metadata?.query ||
+      this.state.query;
+    const newFormattedQuery =
+      this.props.statementDetails?.statement?.metadata?.formatted_query ||
+      this.state.formattedQuery;
     if (
-      this.props.statementDetails &&
-      this.props.statementDetails.statement.metadata.query != "" &&
-      this.props.latestQuery !=
-        this.props.statementDetails.statement.metadata.query
+      newQuery !== this.state.query ||
+      newFormattedQuery !== this.state.formattedQuery
     ) {
-      this.props.onStatementDetailsQueryChange(
-        this.props.statementDetails.statement.metadata.query,
-      );
-    }
-
-    // If a new, non-empty-string formatted query text is available (derived from the statement details response),
-    // cache the query text.
-    if (
-      this.props.statementDetails &&
-      this.props.statementDetails.statement.metadata.formatted_query != "" &&
-      this.props.latestFormattedQuery !=
-        this.props.statementDetails.statement.metadata.formatted_query
-    ) {
-      this.props.onStatementDetailsFormattedQueryChange(
-        this.props.statementDetails.statement.metadata.formatted_query,
-      );
+      this.setState({
+        query: newQuery,
+        formattedQuery: newFormattedQuery,
+      });
     }
 
     // If the statementFingerprintID (derived from the URL) changes, invalidate the cached query texts.
@@ -317,8 +323,7 @@ export class StatementDetails extends React.Component<
     // The new query text and the formatted query text would be an empty string, and we need to invalidate the old
     // query text and formatted query text.
     if (this.props.statementFingerprintID != prevProps.statementFingerprintID) {
-      this.props.onStatementDetailsQueryChange("");
-      this.props.onStatementDetailsFormattedQueryChange("");
+      this.setState({ query: null, formattedQuery: null });
     }
   }
 
@@ -466,11 +471,11 @@ export class StatementDetails extends React.Component<
         </PageConfigItem>
       </PageConfig>
       <section className={cx("section")}>
-        {this.props.latestFormattedQuery && (
+        {this.state.formattedQuery && (
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
               <SqlBox
-                value={this.props.latestFormattedQuery}
+                value={this.state.formattedQuery}
                 size={SqlBoxSize.custom}
               />
             </Col>
@@ -614,7 +619,7 @@ export class StatementDetails extends React.Component<
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
               <SqlBox
-                value={this.props.latestFormattedQuery}
+                value={this.state.formattedQuery}
                 size={SqlBoxSize.custom}
               />
             </Col>
@@ -764,7 +769,7 @@ export class StatementDetails extends React.Component<
   };
 
   renderDiagnosticsTabContent = (hasData: boolean): React.ReactElement => {
-    if (!hasData && !this.props.latestQuery) {
+    if (!hasData && !this.state.query) {
       return this.renderNoDataTabContent();
     }
 
@@ -774,7 +779,9 @@ export class StatementDetails extends React.Component<
         diagnosticsReports={this.props.diagnosticsReports}
         dismissAlertMessage={this.props.dismissStatementDiagnosticsAlertMessage}
         hasData={this.hasDiagnosticReports()}
-        statementFingerprint={this.props.latestQuery}
+        statementFingerprint={
+          this.props.statementDetails?.statement?.metadata?.query
+        }
         onDownloadDiagnosticBundleClick={this.props.onDiagnosticBundleDownload}
         onDiagnosticCancelRequestClick={this.props.onDiagnosticCancelRequest}
         showDiagnosticsViewLink={

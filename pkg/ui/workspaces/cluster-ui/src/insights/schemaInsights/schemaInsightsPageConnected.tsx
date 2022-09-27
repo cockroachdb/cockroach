@@ -10,43 +10,52 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshSchemaInsights } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
 import {
-  SchemaInsightEventFilters,
+  actions,
+  selectSchemaInsights,
+  selectSchemaInsightsDatabases,
+  selectSchemaInsightsError,
+  selectSchemaInsightsTypes,
+  selectFilters,
+  selectSortSetting,
+} from "src/store/schemaInsights";
+import { AppState } from "src/store";
+import {
   SchemaInsightsView,
   SchemaInsightsViewDispatchProps,
   SchemaInsightsViewStateProps,
-  SortSetting,
-} from "@cockroachlabs/cluster-ui";
-import {
-  schemaInsightsFiltersLocalSetting,
-  schemaInsightsSortLocalSetting,
-  selectSchemaInsights,
-  selectSchemaInsightsDatabases,
-  selectSchemaInsightsTypes,
-} from "src/views/insights/insightsSelectors";
+} from "./schemaInsightsView";
+import { SchemaInsightEventFilters } from "../types";
+import { SortSetting } from "src/sortedtable";
+import { actions as localStorageActions } from "../../store/localStorage";
 
 const mapStateToProps = (
-  state: AdminUIState,
+  state: AppState,
   _props: RouteComponentProps,
 ): SchemaInsightsViewStateProps => ({
   schemaInsights: selectSchemaInsights(state),
   schemaInsightsDatabases: selectSchemaInsightsDatabases(state),
   schemaInsightsTypes: selectSchemaInsightsTypes(state),
-  schemaInsightsError: state.cachedData?.schemaInsights.lastError,
-  filters: schemaInsightsFiltersLocalSetting.selector(state),
-  sortSetting: schemaInsightsSortLocalSetting.selector(state),
+  schemaInsightsError: selectSchemaInsightsError(state),
+  filters: selectFilters(state),
+  sortSetting: selectSortSetting(state),
 });
 
 const mapDispatchToProps = {
   onFiltersChange: (filters: SchemaInsightEventFilters) =>
-    schemaInsightsFiltersLocalSetting.set(filters),
-  onSortChange: (ss: SortSetting) => schemaInsightsSortLocalSetting.set(ss),
-  refreshSchemaInsights: refreshSchemaInsights,
+    localStorageActions.update({
+      key: "filters/SchemaInsightsPage",
+      value: filters,
+    }),
+  onSortChange: (ss: SortSetting) =>
+    localStorageActions.update({
+      key: "sortSetting/SchemaInsightsPage",
+      value: ss,
+    }),
+  refreshSchemaInsights: actions.refresh,
 };
 
-const SchemaInsightsPageConnected = withRouter(
+export const SchemaInsightsPageConnected = withRouter(
   connect<
     SchemaInsightsViewStateProps,
     SchemaInsightsViewDispatchProps,
@@ -56,5 +65,3 @@ const SchemaInsightsPageConnected = withRouter(
     mapDispatchToProps,
   )(SchemaInsightsView),
 );
-
-export default SchemaInsightsPageConnected;
