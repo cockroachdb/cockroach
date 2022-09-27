@@ -110,6 +110,8 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 					platform = release.PlatformLinuxArm
 				case "crossmacosbase":
 					platform = release.PlatformMacOS
+				case "crossmacosarmbase":
+					platform = release.PlatformMacOSArm
 				case "crosswindowsbase":
 					platform = release.PlatformWindows
 					path += ".exe"
