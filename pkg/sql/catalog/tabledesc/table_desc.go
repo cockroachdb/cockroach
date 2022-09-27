@@ -122,6 +122,13 @@ func (desc *immutable) IsUncommittedVersion() bool {
 	return desc.isUncommittedVersion
 }
 
+// NewBuilder implements the Descriptor interface.
+func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
+	b := newBuilder(desc.TableDesc(), hlc.Timestamp{}, desc.isUncommittedVersion, desc.changes)
+	b.SetRawBytesInDescriptor(desc.GetRawBytesInStorage())
+	return b
+}
+
 // DescriptorProto implements the Descriptor interface.
 func (desc *wrapper) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
