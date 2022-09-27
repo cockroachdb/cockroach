@@ -41,7 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -1024,12 +1026,35 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 	//
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
-	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (exec.Plan, error) {
+	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (_ exec.Plan, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				// This code allows us to propagate internal errors without having to add
+				// error checks everywhere throughout the code. This is only possible
+				// because the code does not update shared state and does not manipulate
+				// locks.
+				//
+				// This is the same panic-catching logic that exists in
+				// o.Optimize() below. It's required here because it's possible
+				// for factory functions to panic below, like
+				// CopyAndReplaceDefault.
+				if ok, e := errorutil.ShouldCatch(r); ok {
+					err = e
+					log.VEventf(ctx, 1, "%v", err)
+				} else {
+					// Other panic objects can't be considered "safe" and thus are
+					// propagated as crashes that terminate the session.
+					panic(r)
+				}
+			}
+		}()
+
 		o.Init(ctx, b.evalCtx, b.catalog)
 		f := o.Factory()
 
 		// Copy the right expression into a new memo, replacing each bound column
 		// with the corresponding value from the left row.
+		addedWithBindings := false
 		var replaceFn norm.ReplaceFunc
 		replaceFn = func(e opt.Expr) opt.Expr {
 			switch t := e.(type) {
@@ -1039,15 +1064,26 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				}
 
 			case *memo.WithScanExpr:
-				// Allow referring to "outer" With expressions. The bound expressions
-				// are not part of this Memo but they are used only for their relational
-				// properties, which should be valid.
-				for i := range withExprs {
-					if withExprs[i].id == t.With {
-						memoExpr := b.mem.Metadata().WithBinding(t.With)
-						f.Metadata().AddWithBinding(t.With, memoExpr)
-						break
+				// Allow referring to "outer" With expressions. The bound
+				// expressions are not part of this Memo, but they are used only
+				// for their relational properties, which should be valid.
+				//
+				// We must add all With expressions to the metadata even if they
+				// aren't referred to directly because they might be referred to
+				// transitively through other With expressions. For example, if
+				// the RHS refers to With expression &1, and &1 refers to With
+				// expression &2, we must include &2 in the metadata so that
+				// its relational properties are available. See #87733.
+				//
+				// We lazily add these With expressions to the metadata here
+				// because the call to Factory.CopyAndReplace below clears With
+				// expressions in the metadata.
+				if !addedWithBindings {
+					for i, n := opt.WithID(1), b.mem.MaxWithID(); i <= n; i++ {
+						memoExpr := b.mem.Metadata().WithBinding(i)
+						f.Metadata().AddWithBinding(i, memoExpr)
 					}
+					addedWithBindings = true
 				}
 				// Fall through.
 			}
