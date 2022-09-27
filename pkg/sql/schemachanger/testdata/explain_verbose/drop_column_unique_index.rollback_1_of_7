@@ -115,7 +115,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     Name: pi
             │     TableID: 106
             │
-            ├── • MakeColumnPublic
+            ├── • MakeWriteOnlyColumnPublic
             │     ColumnID: 3
             │     EventBase:
             │       Authorization:
@@ -130,7 +130,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             ├── • RefreshStats
             │     TableID: 106
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 4
             │     StatementForDropJob:
             │       Rollback: true
@@ -149,7 +149,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     IndexID: 4
             │     TableID: 106
             │
-            ├── • CreateGcJobForIndex
+            ├── • CreateGCJobForIndex
             │     IndexID: 5
             │     TableID: 106
             │

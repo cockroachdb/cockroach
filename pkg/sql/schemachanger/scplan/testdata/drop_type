@@ -11,9 +11,9 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
     [[AliasType:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 104
+      DescriptorID: 104
     *scop.MarkDescriptorAsSyntheticallyDropped
-      DescID: 105
+      DescriptorID: 105
 PreCommitPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -33,9 +33,9 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
     [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 104
+      DescriptorID: 104
     *scop.MarkDescriptorAsDropped
-      DescID: 105
+      DescriptorID: 105
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100

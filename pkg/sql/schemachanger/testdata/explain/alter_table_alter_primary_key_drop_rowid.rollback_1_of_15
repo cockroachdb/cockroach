@@ -22,13 +22,13 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
            │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
            └── 11 Mutation operations
                 ├── SetColumnName {"ColumnID":2,"Name":"rowid","TableID":104}
-                ├── MakeColumnPublic {"ColumnID":2,"TableID":104}
+                ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":104}
                 ├── RefreshStats {"TableID":104}
-                ├── CreateGcJobForIndex {"IndexID":2,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
-                ├── CreateGcJobForIndex {"IndexID":3,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
-                ├── CreateGcJobForIndex {"IndexID":4,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":4,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

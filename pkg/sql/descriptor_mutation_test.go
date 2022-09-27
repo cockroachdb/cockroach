@@ -137,12 +137,12 @@ func (mt mutationTest) writeMutation(ctx context.Context, m descpb.DescriptorMut
 		}
 	}
 	if m.State == descpb.DescriptorMutation_UNKNOWN {
-		// randomly pick DELETE_ONLY/DELETE_AND_WRITE_ONLY state.
+		// randomly pick DELETE_ONLY/WRITE_ONLY state.
 		r := rand.Intn(2)
 		if r == 0 {
 			m.State = descpb.DescriptorMutation_DELETE_ONLY
 		} else {
-			m.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+			m.State = descpb.DescriptorMutation_WRITE_ONLY
 		}
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
@@ -195,7 +195,7 @@ ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 	// Add column "i" as a mutation in delete/write.
-	mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY})
+	mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: descpb.DescriptorMutation_WRITE_ONLY})
 
 	// This row will conflict with the original row, and should insert an `i`
 	// into the new column.
@@ -258,7 +258,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	for _, useUpsert := range []bool{true, false} {
 		// Run the tests for both states.
 		for _, state := range []descpb.DescriptorMutation_State{descpb.DescriptorMutation_DELETE_ONLY,
-			descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY} {
+			descpb.DescriptorMutation_WRITE_ONLY} {
 			t.Run(fmt.Sprintf("useUpsert=%t/state=%v", useUpsert, state),
 				func(t *testing.T) {
 
@@ -292,7 +292,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 					mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z"}})
 
 					// The column backfill uses Put instead of CPut because it depends on
-					// an INSERT of a column in the DELETE_AND_WRITE_ONLY state failing. These two
+					// an INSERT of a column in the WRITE_ONLY state failing. These two
 					// tests guarantee that.
 
 					var err error
@@ -368,7 +368,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 					// Make column "i" live so that it is read.
 					mTest.makeMutationsActive(ctx)
 					// Notice that the default value of "i" is only written when the
-					// descriptor is in the DELETE_AND_WRITE_ONLY state.
+					// descriptor is in the WRITE_ONLY state.
 					mTest.CheckQueryResults(t, starQuery, afterDefaultInsert)
 					// Clean up the all-defaults row
 					mTest.Exec(t, `DELETE FROM t.test WHERE k = 'default'`)
@@ -384,11 +384,11 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 					// Make column "i" live so that it is read.
 					mTest.makeMutationsActive(ctx)
 					// Notice that the default value of "i" is only written when the
-					// descriptor is in the DELETE_AND_WRITE_ONLY state.
+					// descriptor is in the WRITE_ONLY state.
 					mTest.CheckQueryResults(t, starQuery, afterInsert)
 
 					// The column backfill uses Put instead of CPut because it depends on
-					// an UPDATE of a column in the DELETE_AND_WRITE_ONLY state failing. This test
+					// an UPDATE of a column in the WRITE_ONLY state failing. This test
 					// guarantees that.
 
 					// Make column "i" a mutation.
@@ -522,7 +522,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 		// See the effect of the operations depending on the state.
 		for _, state := range []descpb.DescriptorMutation_State{
 			descpb.DescriptorMutation_DELETE_ONLY,
-			descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+			descpb.DescriptorMutation_WRITE_ONLY,
 			descpb.DescriptorMutation_MERGING,
 			descpb.DescriptorMutation_BACKFILLING,
 		} {
@@ -695,17 +695,17 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 		// Run the tests for both states for a column and an index.
 		for _, state := range []descpb.DescriptorMutation_State{
 			descpb.DescriptorMutation_DELETE_ONLY,
-			descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+			descpb.DescriptorMutation_WRITE_ONLY,
 		} {
 			for _, idxState := range []descpb.DescriptorMutation_State{
 				descpb.DescriptorMutation_DELETE_ONLY,
-				descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+				descpb.DescriptorMutation_WRITE_ONLY,
 				descpb.DescriptorMutation_BACKFILLING,
 			} {
 				// Ignore the impossible column in DELETE_ONLY state while index
-				// is in the DELETE_AND_WRITE_ONLY state.
+				// is in the WRITE_ONLY state.
 				if state == descpb.DescriptorMutation_DELETE_ONLY &&
-					idxState == descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+					idxState == descpb.DescriptorMutation_WRITE_ONLY {
 					continue
 				}
 				// Init table to start state.
@@ -1174,10 +1174,10 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 		// Third.
 		{"idx_g", 3, descpb.DescriptorMutation_BACKFILLING},
 		{"test_g_crdb_internal_dpe_key", 3, descpb.DescriptorMutation_DELETE_ONLY},
-		// Drop mutations start off in the DELETE_AND_WRITE_ONLY state.
+		// Drop mutations start off in the WRITE_ONLY state.
 		// UNIQUE column deletion gets split into two mutations with the same ID.
-		{"test_v_key", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
-		{"v", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},
+		{"test_v_key", 4, descpb.DescriptorMutation_WRITE_ONLY},
+		{"v", 4, descpb.DescriptorMutation_WRITE_ONLY},
 	}
 
 	if len(tableDesc.AllMutations()) != len(expected) {
@@ -1201,7 +1201,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 		}
 		actualState := descpb.DescriptorMutation_UNKNOWN
 		if m.WriteAndDeleteOnly() {
-			actualState = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+			actualState = descpb.DescriptorMutation_WRITE_ONLY
 		} else if m.DeleteOnly() {
 			actualState = descpb.DescriptorMutation_DELETE_ONLY
 		} else if m.Backfilling() {

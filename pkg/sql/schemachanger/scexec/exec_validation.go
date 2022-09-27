@@ -23,7 +23,7 @@ import (
 )
 
 func executeValidateUniqueIndex(
-	ctx context.Context, deps Dependencies, op *scop.ValidateUniqueIndex,
+	ctx context.Context, deps Dependencies, op *scop.ValidateIndex,
 ) error {
 	descs, err := deps.Catalog().MustReadImmutableDescriptors(ctx, op.TableID)
 	if err != nil {
@@ -70,7 +70,7 @@ func executeValidationOps(ctx context.Context, deps Dependencies, ops []scop.Op)
 
 func executeValidationOp(ctx context.Context, deps Dependencies, op scop.Op) (err error) {
 	switch op := op.(type) {
-	case *scop.ValidateUniqueIndex:
+	case *scop.ValidateIndex:
 		if err = executeValidateUniqueIndex(ctx, deps, op); err != nil {
 			return errors.Wrapf(err, "%T: %v", op, op)
 		}

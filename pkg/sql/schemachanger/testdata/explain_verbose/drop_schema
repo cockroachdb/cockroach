@@ -19,7 +19,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       └── • 1 Mutation operation
 │           │
 │           └── • MarkDescriptorAsSyntheticallyDropped
-│                 DescID: 106
+│                 DescriptorID: 106
 │
 ├── • PreCommitPhase
 │   │
@@ -75,7 +75,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       └── • 6 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
-│           │     DescID: 106
+│           │     DescriptorID: 106
 │           │
 │           ├── • RemoveSchemaParent
 │           │     Parent:

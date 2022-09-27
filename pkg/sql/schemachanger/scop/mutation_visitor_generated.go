@@ -23,35 +23,35 @@ type MutationOp interface {
 // MutationVisitor is a visitor for MutationOp operations.
 type MutationVisitor interface {
 	NotImplemented(context.Context, NotImplemented) error
-	MakeAddedTempIndexDeleteOnly(context.Context, MakeAddedTempIndexDeleteOnly) error
-	MakeAddedIndexBackfilling(context.Context, MakeAddedIndexBackfilling) error
+	MakeAbsentTempIndexDeleteOnly(context.Context, MakeAbsentTempIndexDeleteOnly) error
+	MakeAbsentIndexBackfilling(context.Context, MakeAbsentIndexBackfilling) error
 	SetAddedIndexPartialPredicate(context.Context, SetAddedIndexPartialPredicate) error
-	MakeAddedIndexDeleteAndWriteOnly(context.Context, MakeAddedIndexDeleteAndWriteOnly) error
+	MakeDeleteOnlyIndexWriteOnly(context.Context, MakeDeleteOnlyIndexWriteOnly) error
 	MakeBackfilledIndexMerging(context.Context, MakeBackfilledIndexMerging) error
 	MakeMergedIndexWriteOnly(context.Context, MakeMergedIndexWriteOnly) error
 	MakeBackfillingIndexDeleteOnly(context.Context, MakeBackfillingIndexDeleteOnly) error
-	MakeAddedSecondaryIndexPublic(context.Context, MakeAddedSecondaryIndexPublic) error
-	MakeAddedPrimaryIndexPublic(context.Context, MakeAddedPrimaryIndexPublic) error
-	MakeDroppedPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedPrimaryIndexDeleteAndWriteOnly) error
-	CreateGcJobForTable(context.Context, CreateGcJobForTable) error
-	CreateGcJobForDatabase(context.Context, CreateGcJobForDatabase) error
-	CreateGcJobForIndex(context.Context, CreateGcJobForIndex) error
+	MakeValidatedSecondaryIndexPublic(context.Context, MakeValidatedSecondaryIndexPublic) error
+	MakeValidatedPrimaryIndexPublic(context.Context, MakeValidatedPrimaryIndexPublic) error
+	MakePublicPrimaryIndexWriteOnly(context.Context, MakePublicPrimaryIndexWriteOnly) error
+	CreateGCJobForTable(context.Context, CreateGCJobForTable) error
+	CreateGCJobForDatabase(context.Context, CreateGCJobForDatabase) error
+	CreateGCJobForIndex(context.Context, CreateGCJobForIndex) error
 	MarkDescriptorAsPublic(context.Context, MarkDescriptorAsPublic) error
 	MarkDescriptorAsSyntheticallyDropped(context.Context, MarkDescriptorAsSyntheticallyDropped) error
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
-	MakeAddedColumnDeleteAndWriteOnly(context.Context, MakeAddedColumnDeleteAndWriteOnly) error
-	MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) error
-	MakeDroppedIndexDeleteOnly(context.Context, MakeDroppedIndexDeleteOnly) error
+	MakeDeleteOnlyColumnWriteOnly(context.Context, MakeDeleteOnlyColumnWriteOnly) error
+	MakePublicSecondaryIndexWriteOnly(context.Context, MakePublicSecondaryIndexWriteOnly) error
+	MakeWriteOnlyIndexDeleteOnly(context.Context, MakeWriteOnlyIndexDeleteOnly) error
 	RemoveDroppedIndexPartialPredicate(context.Context, RemoveDroppedIndexPartialPredicate) error
 	MakeIndexAbsent(context.Context, MakeIndexAbsent) error
-	MakeAddedColumnDeleteOnly(context.Context, MakeAddedColumnDeleteOnly) error
+	MakeAbsentColumnDeleteOnly(context.Context, MakeAbsentColumnDeleteOnly) error
 	SetAddedColumnType(context.Context, SetAddedColumnType) error
-	MakeColumnPublic(context.Context, MakeColumnPublic) error
-	MakeDroppedColumnDeleteAndWriteOnly(context.Context, MakeDroppedColumnDeleteAndWriteOnly) error
-	MakeDroppedColumnDeleteOnly(context.Context, MakeDroppedColumnDeleteOnly) error
+	MakeWriteOnlyColumnPublic(context.Context, MakeWriteOnlyColumnPublic) error
+	MakePublicColumnWriteOnly(context.Context, MakePublicColumnWriteOnly) error
+	MakeWriteOnlyColumnDeleteOnly(context.Context, MakeWriteOnlyColumnDeleteOnly) error
 	RemoveDroppedColumnType(context.Context, RemoveDroppedColumnType) error
-	MakeColumnAbsent(context.Context, MakeColumnAbsent) error
+	MakeDeleteOnlyColumnAbsent(context.Context, MakeDeleteOnlyColumnAbsent) error
 	RemoveOwnerBackReferenceInSequence(context.Context, RemoveOwnerBackReferenceInSequence) error
 	RemoveSequenceOwner(context.Context, RemoveSequenceOwner) error
 	RemoveCheckConstraint(context.Context, RemoveCheckConstraint) error
@@ -103,13 +103,13 @@ func (op NotImplemented) Visit(ctx context.Context, v MutationVisitor) error {
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeAddedTempIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeAddedTempIndexDeleteOnly(ctx, op)
+func (op MakeAbsentTempIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAbsentTempIndexDeleteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeAddedIndexBackfilling) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeAddedIndexBackfilling(ctx, op)
+func (op MakeAbsentIndexBackfilling) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAbsentIndexBackfilling(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -118,8 +118,8 @@ func (op SetAddedIndexPartialPredicate) Visit(ctx context.Context, v MutationVis
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeAddedIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeAddedIndexDeleteAndWriteOnly(ctx, op)
+func (op MakeDeleteOnlyIndexWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeDeleteOnlyIndexWriteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -138,33 +138,33 @@ func (op MakeBackfillingIndexDeleteOnly) Visit(ctx context.Context, v MutationVi
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeAddedSecondaryIndexPublic) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeAddedSecondaryIndexPublic(ctx, op)
+func (op MakeValidatedSecondaryIndexPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeValidatedSecondaryIndexPublic(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeAddedPrimaryIndexPublic) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeAddedPrimaryIndexPublic(ctx, op)
+func (op MakeValidatedPrimaryIndexPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeValidatedPrimaryIndexPublic(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeDroppedPrimaryIndexDeleteAndWriteOnly(ctx, op)
+func (op MakePublicPrimaryIndexWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakePublicPrimaryIndexWriteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op CreateGcJobForTable) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.CreateGcJobForTable(ctx, op)
+func (op CreateGCJobForTable) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateGCJobForTable(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op CreateGcJobForDatabase) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.CreateGcJobForDatabase(ctx, op)
+func (op CreateGCJobForDatabase) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateGCJobForDatabase(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op CreateGcJobForIndex) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.CreateGcJobForIndex(ctx, op)
+func (op CreateGCJobForIndex) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateGCJobForIndex(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -188,18 +188,18 @@ func (op DrainDescriptorName) Visit(ctx context.Context, v MutationVisitor) erro
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeAddedColumnDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeAddedColumnDeleteAndWriteOnly(ctx, op)
+func (op MakeDeleteOnlyColumnWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeDeleteOnlyColumnWriteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(ctx, op)
+func (op MakePublicSecondaryIndexWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakePublicSecondaryIndexWriteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeDroppedIndexDeleteOnly(ctx, op)
+func (op MakeWriteOnlyIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeWriteOnlyIndexDeleteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -213,8 +213,8 @@ func (op MakeIndexAbsent) Visit(ctx context.Context, v MutationVisitor) error {
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeAddedColumnDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeAddedColumnDeleteOnly(ctx, op)
+func (op MakeAbsentColumnDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAbsentColumnDeleteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -223,18 +223,18 @@ func (op SetAddedColumnType) Visit(ctx context.Context, v MutationVisitor) error
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeColumnPublic) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeColumnPublic(ctx, op)
+func (op MakeWriteOnlyColumnPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeWriteOnlyColumnPublic(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedColumnDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeDroppedColumnDeleteAndWriteOnly(ctx, op)
+func (op MakePublicColumnWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakePublicColumnWriteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeDroppedColumnDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeDroppedColumnDeleteOnly(ctx, op)
+func (op MakeWriteOnlyColumnDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeWriteOnlyColumnDeleteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -243,8 +243,8 @@ func (op RemoveDroppedColumnType) Visit(ctx context.Context, v MutationVisitor) 
 }
 
 // Visit is part of the MutationOp interface.
-func (op MakeColumnAbsent) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.MakeColumnAbsent(ctx, op)
+func (op MakeDeleteOnlyColumnAbsent) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeDeleteOnlyColumnAbsent(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

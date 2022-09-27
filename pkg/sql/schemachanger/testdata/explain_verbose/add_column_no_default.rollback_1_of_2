@@ -52,7 +52,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 2;
             │     Kind: 2
             │     TableID: 106
             │
-            ├── • MakeColumnAbsent
+            ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
             │     EventBase:
             │       Authorization:

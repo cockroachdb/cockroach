@@ -22,13 +22,13 @@ type ValidationOp interface {
 
 // ValidationVisitor is a visitor for ValidationOp operations.
 type ValidationVisitor interface {
-	ValidateUniqueIndex(context.Context, ValidateUniqueIndex) error
+	ValidateIndex(context.Context, ValidateIndex) error
 	ValidateCheckConstraint(context.Context, ValidateCheckConstraint) error
 }
 
 // Visit is part of the ValidationOp interface.
-func (op ValidateUniqueIndex) Visit(ctx context.Context, v ValidationVisitor) error {
-	return v.ValidateUniqueIndex(ctx, op)
+func (op ValidateIndex) Visit(ctx context.Context, v ValidationVisitor) error {
+	return v.ValidateIndex(ctx, op)
 }
 
 // Visit is part of the ValidationOp interface.
