@@ -316,6 +316,14 @@ type JoinOrderBuilder struct {
 	// assembling filters.
 	equivs props.EquivSet
 
+	// rebuildAllJoins is true when the filters in the original matched join tree
+	// were not pushed down as far as possible. When this is true, all joins
+	// except the root join need to be re-built, possibly with additional filters
+	// pushed down. While technically it is sufficient to only do this for the
+	// joins that would be changed by a successful push-down, it is simpler to
+	// handle things this way (and the problem is rare).
+	rebuildAllJoins bool
+
 	onReorderFunc OnReorderFunc
 
 	onAddJoinFunc OnAddJoinFunc
@@ -353,6 +361,12 @@ func (jb *JoinOrderBuilder) Reorder(join memo.RelExpr) {
 		// Ensure equivalence closure for the edges. This can be crucial for finding
 		// the best plan.
 		jb.ensureClosure(join)
+
+		// Ensure that the JoinOrderBuilder will not add reordered joins to the
+		// original memo groups (apart from the root) in the case when doing so
+		// would add filters that weren't present in the original joins. See the
+		// validateEdges comment for more information.
+		jb.validateEdges()
 
 		if jb.onReorderFunc != nil {
 			// Hook for testing purposes.
@@ -466,6 +480,72 @@ func (jb *JoinOrderBuilder) ensureClosure(join memo.RelExpr) {
 	}
 }
 
+// validateEdges checks whether each edge applies to its original join. If any
+// do not, normalization rules failed to synthesize and push a filter down as
+// far as possible, and it is not valid to add new reordered joins to the
+// original memo groups. When this is the case, all joins except for the root
+// join need to be removed from the plans map. This prevents cases where a join
+// is added to a memo group that isn't logically equivalent.
+//
+// This is necessary because the JoinOrderBuilder expects each join tree for a
+// given set of relations to contain all filters that apply to those relations.
+// When a new join is constructed, it doesn't contain "degenerate" filters -
+// filters that only refer to one side of the join. So if the original join tree
+// had an implicit filter that could have been synthesized and pushed down the
+// tree, but wasn't, using the original join group that *should* have that
+// filter when building a new join would cause a filter to be dropped.
+//
+// Take the following (simplified) example of a join tree where filter push-down
+// rules have failed:
+//
+//	(xy join ab on true) join uv on x = u and a = u
+//
+// Here, the JoinOrderBuilder will synthesize an 'x = a' filter that will be
+// used to join xy and ab. If it was added to the original group, we would have
+// a memo group that looks like this:
+//
+//	group: (xy join ab on true), (xy join ab on x = a)
+//
+// Later joins that are constructed using this group would expect the 'x = a'
+// filter to be present, and would avoid adding redundant filters. Therefore,
+// a join tree like the following would be added to the memo.
+//
+//	(xy join ab on true) join uv on x = u
+//
+// Notice how the 'a = u' filter has been dropped because it would be redundant
+// when 'x = u' and 'x = a' are already present. We prevent this from happening
+// by not reusing the original memo groups in the case when the JoinOrderBuilder
+// is able to synthesize and/or push down filters that weren't in the original
+// join tree.
+func (jb *JoinOrderBuilder) validateEdges() {
+	for i := range jb.edges {
+		if jb.rebuildAllJoins {
+			break
+		}
+		e := &jb.edges[i]
+		if e.op.joinType == opt.InnerJoinOp {
+			jb.rebuildAllJoins = !e.checkInnerJoin(e.op.leftVertexes, e.op.rightVertexes)
+		} else {
+			jb.rebuildAllJoins = !e.checkNonInnerJoin(e.op.leftVertexes, e.op.rightVertexes)
+		}
+	}
+	if jb.rebuildAllJoins {
+		for vertexes := range jb.plans {
+			if vertexes.isSingleton() || vertexes == jb.allVertexes() {
+				// Do not remove the plan if it is for a base relation (not a join) or
+				// it is the root join. Adding to the root join group is correct because
+				// the JoinOrderBuilder will only consider filters that were present
+				// (even if only implicitly) in the root join tree. It is also necessary
+				// because the purpose of the JoinOrderBuilder is to add equivalent join
+				// plans to the root join group - otherwise, any new joins would be
+				// disconnected from the main query plan.
+				continue
+			}
+			delete(jb.plans, vertexes)
+		}
+	}
+}
+
 // dpSube carries out the DPSube algorithm (citations: [8] figure 4). All
 // disjoint pairs of subsets of base relations are enumerated and checked for
 // validity. If valid, the pair of subsets is used along with the edges
@@ -526,9 +606,10 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 				continue
 			}
 			if !joinIsRedundant {
-				// If this edge was originally part of a join between relation sets s1 and
-				// s2, any other edges that apply will also be part of that original join.
-				joinIsRedundant = e.joinIsRedundant(s1, s2)
+				// If this edge was originally part of a join between relation sets s1
+				// and s2, any other edges that apply will also be part of that original
+				// join.
+				joinIsRedundant = jb.joinIsRedundant(e, s1, s2)
 			}
 			for j := range e.filters {
 				jb.equivs.AddFromFDs(&e.filters[j].ScalarProps().FuncDeps)
@@ -549,7 +630,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			// Construct a non-inner join. If any inner join filters also apply to the
 			// pair of relationSets, construct a select on top of the join with the
 			// inner join filters.
-			jb.addJoin(e.op.joinType, s1, s2, e.filters, innerJoinFilters, e.joinIsRedundant(s1, s2))
+			jb.addJoin(e.op.joinType, s1, s2, e.filters, innerJoinFilters, jb.joinIsRedundant(e, s1, s2))
 			return
 		}
 		if e.checkNonInnerJoin(s2, s1) {
@@ -575,7 +656,7 @@ func (jb *JoinOrderBuilder) addJoins(s1, s2 vertexSet) {
 			// 010 on the right. 101 is larger than 111 / 2, so we will not enumerate
 			// this plan unless we consider a join with s2 on the left and s1 on the
 			// right.
-			jb.addJoin(e.op.joinType, s2, s1, e.filters, innerJoinFilters, e.joinIsRedundant(s2, s1))
+			jb.addJoin(e.op.joinType, s2, s1, e.filters, innerJoinFilters, jb.joinIsRedundant(e, s2, s1))
 			return
 		}
 	}
@@ -640,6 +721,19 @@ func (jb *JoinOrderBuilder) makeTransitiveEdge(col1, col2 opt.ColumnID) {
 		// equivalence comes from within a base relation, in which case filters
 		// would have been pushed down beyond the original join tree.
 		return
+	}
+
+	originalJoin, ok := jb.plans[op.leftVertexes.union(op.rightVertexes)]
+	if !ok {
+		panic(errors.AssertionFailedf("failed to find expected join plan"))
+	}
+	if !originalJoin.Relational().FuncDeps.AreColsEquiv(col1, col2) {
+		// This inferred filter was not pushed down as far as possible. All joins
+		// apart from the root will have to be rebuilt. We have to do this check
+		// here because we set the op for this edge to the join to which the filter
+		// *would* have been pushed down if it existed, so the applicable check will
+		// always succeed for that join.
+		jb.rebuildAllJoins = true
 	}
 
 	// Construct the edge.
@@ -754,12 +848,6 @@ func (jb *JoinOrderBuilder) addToGroup(
 ) {
 	if len(selectFilters) > 0 {
 		joinExpr := jb.memoize(op, left, right, on, nil)
-		if joinExpr.FirstExpr() == grp.FirstExpr() {
-			// In rare cases, the select filters may be redundant. In this case,
-			// adding a select to the group with the redundant filters would create a
-			// memo cycle (see #80901).
-			return
-		}
 		selectExpr := &memo.SelectExpr{
 			Input:   joinExpr,
 			Filters: selectFilters,
@@ -902,6 +990,15 @@ func (jb *JoinOrderBuilder) addBaseRelation(rel memo.RelExpr) {
 	idx := vertexIndex(len(jb.vertexes) - 1)
 	relSet := vertexSet(0).add(idx)
 	jb.plans[relSet] = rel
+}
+
+// joinIsRedundant returns true if a join between the two sets of base relations
+// was already present in the original join tree. If so, enumerating this join
+// would be redundant, so it should be skipped.
+func (jb *JoinOrderBuilder) joinIsRedundant(e *edge, s1, s2 vertexSet) bool {
+	// The join is never redundant when rebuildAllJoins is true, because
+	// rebuildAllJoins indicates we don't want to reuse the original joins.
+	return !jb.rebuildAllJoins && e.op.leftVertexes == s1 && e.op.rightVertexes == s2
 }
 
 // checkSize panics if the number of relations is greater than or equal to
@@ -1351,13 +1448,6 @@ func (e *edge) checkRules(s1, s2 vertexSet) bool {
 		}
 	}
 	return true
-}
-
-// joinIsRedundant returns true if a join between the two sets of base relations
-// was already present in the original join tree. If so, enumerating this join
-// would be redundant, so it should be skipped.
-func (e *edge) joinIsRedundant(s1, s2 vertexSet) bool {
-	return e.op.leftVertexes == s1 && e.op.rightVertexes == s2
 }
 
 // commute returns true if the given join operator type is commutable.
