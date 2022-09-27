@@ -15,7 +15,7 @@ export type SqlExecutionRequest = {
   execute?: boolean;
   timeout?: string; // Default 5s
   application_name?: string; // Defaults to '$ api-v2-sql'
-  database_name?: string; // Defaults to defaultDb
+  database?: string; // Defaults to defaultDb
   max_result_size?: number; // Default 10kib
 };
 
@@ -74,5 +74,42 @@ export function executeSql<RowType>(
   return fetchDataJSON<SqlExecutionResponse<RowType>, SqlExecutionRequest>(
     SQL_API_PATH,
     req,
+  );
+}
+
+export const INTERNAL_SQL_API_APP = "$ internal-console";
+export const LONG_TIMEOUT = "300s";
+export const LARGE_RESULT_SIZE = 50000; // 50 kib
+
+/**
+ * executeInternalSql executes the provided SQL statements with
+ * the app name set to the internal sql api app name above.
+ * Note that technically all SQL executed over this API are
+ * executed as internal, but we make this distinction using the
+ * function name for when we want to execute user queries in the
+ * future, where such queries should not have an internal app name.
+ *
+ * @param req execution request details
+ */
+export function executeInternalSql<RowType>(
+  req: SqlExecutionRequest,
+): Promise<SqlExecutionResponse<RowType>> {
+  if (!req.application_name) {
+    req.application_name = INTERNAL_SQL_API_APP;
+  } else {
+    req.application_name = `$ internal-${req.application_name}`;
+  }
+
+  return executeSql(req);
+}
+
+export function sqlResultsAreEmpty(
+  result: SqlExecutionResponse<unknown>,
+): boolean {
+  return (
+    !result.execution?.txn_results?.length ||
+    result.execution.txn_results.every(
+      txn => !txn.rows || txn.rows.length === 0,
+    )
   );
 }
