@@ -1064,7 +1064,6 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 	var reqSp spanForRequest
-	// Shadow ctx from the outer function. Written like this to pass the linter.
 	ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
 	// NB: wrapped to delay br evaluation to its value when returning.
 	defer func() { reqSp.finish(br) }()
