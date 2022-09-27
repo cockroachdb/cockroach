@@ -88,6 +88,9 @@ type DescriptorBuilder interface {
 	// upgrade migrations
 	RunRestoreChanges(descLookupFn func(id descpb.ID) Descriptor) error
 
+	// SetRawBytesInStorage sets `rawBytesInStorage` field by deep-copying `rawBytes`.
+	SetRawBytesInStorage(rawBytes []byte)
+
 	// BuildImmutable returns an immutable Descriptor.
 	BuildImmutable() Descriptor
 
@@ -225,6 +228,10 @@ type Descriptor interface {
 
 	// SkipNamespace is true when a descriptor should not have a namespace record.
 	SkipNamespace() bool
+
+	// GetRawBytesInStorage returns the raw bytes (tag + data) of the descriptor in storage.
+	// It is exclusively used in the CPut when persisting an updated descriptor to storage.
+	GetRawBytesInStorage() []byte
 }
 
 // HydratableDescriptor represent a Descriptor which needs user-define type

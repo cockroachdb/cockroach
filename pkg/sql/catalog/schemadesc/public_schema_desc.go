@@ -51,6 +51,7 @@ func (p public) GetName() string        { return tree.PublicSchema }
 func (p public) GetPrivileges() *catpb.PrivilegeDescriptor {
 	return catpb.NewPublicSchemaPrivilegeDescriptor()
 }
+func (p public) GetRawBytesInStorage() []byte { return nil }
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
 func (p public) GetPrivilegeDescriptor(

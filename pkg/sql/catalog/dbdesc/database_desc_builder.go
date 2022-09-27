@@ -40,6 +40,8 @@ type databaseDescriptorBuilder struct {
 	mvccTimestamp        hlc.Timestamp
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
+	// This is the raw bytes (tag + data) of the database descriptor in storage.
+	rawBytesInStorage []byte
 }
 
 var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
@@ -144,6 +146,11 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 	return nil
 }
 
+// SetRawBytesInStorage implements the catalog.DescriptorBuilder interface.
+func (ddb *databaseDescriptorBuilder) SetRawBytesInStorage(rawBytes []byte) {
+	ddb.rawBytesInStorage = append([]byte(nil), rawBytes...) // deep-copy
+}
+
 func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
 	privileges *catpb.PrivilegeDescriptor, defaultPrivileges *catpb.DefaultPrivilegeDescriptor,
 ) (hasChanged bool) {
@@ -199,6 +206,7 @@ func (ddb *databaseDescriptorBuilder) BuildImmutableDatabase() catalog.DatabaseD
 		DatabaseDescriptor:   *desc,
 		isUncommittedVersion: ddb.isUncommittedVersion,
 		changes:              ddb.changes,
+		rawBytesInStorage:    append([]byte(nil), ddb.rawBytesInStorage...), // deep-copy
 	}
 }
 
@@ -218,6 +226,7 @@ func (ddb *databaseDescriptorBuilder) BuildExistingMutableDatabase() *Mutable {
 			DatabaseDescriptor:   *ddb.maybeModified,
 			changes:              ddb.changes,
 			isUncommittedVersion: ddb.isUncommittedVersion,
+			rawBytesInStorage:    append([]byte(nil), ddb.rawBytesInStorage...), // deep-copy
 		},
 		ClusterVersion: &immutable{DatabaseDescriptor: *ddb.original},
 	}
@@ -240,6 +249,7 @@ func (ddb *databaseDescriptorBuilder) BuildCreatedMutableDatabase() *Mutable {
 			DatabaseDescriptor:   *desc,
 			changes:              ddb.changes,
 			isUncommittedVersion: ddb.isUncommittedVersion,
+			rawBytesInStorage:    append([]byte(nil), ddb.rawBytesInStorage...), // deep-copy
 		},
 	}
 }
