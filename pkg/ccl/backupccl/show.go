@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -278,6 +280,20 @@ func showBackupPlanHook(
 					"https://www.cockroachlabs.com/docs/stable/show-backup.html"))
 		}
 
+		// Resolve the system.privileges and system.external_connections
+		// tables such that we have leases on those two tables such that
+		// we don't have to resolve them during Privilege checks.
+		// Checking them in the privilege check below causes a race
+		// condition, the collection should not be accessed during
+		// execution time.
+		_, _, err = p.ResolveMutableTableDescriptor(ctx, syntheticprivilege.SystemPrivilegesTableName, true, tree.ResolveRequireTableDesc)
+		if err != nil {
+			return err
+		}
+		_, _, err = p.ResolveMutableTableDescriptor(ctx, externalconn.SystemExternalConnectionsTableName, true, tree.ResolveRequireTableDesc)
+		if err != nil {
+			return err
+		}
 		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, dest); err != nil {
 			return err
 		}
