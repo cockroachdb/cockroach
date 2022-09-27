@@ -421,7 +421,6 @@ crdb_internal       feature_usage
 crdb_internal       forward_dependencies
 crdb_internal       gossip_alerts
 crdb_internal       gossip_liveness
-crdb_internal       gossip_network
 crdb_internal       gossip_nodes
 crdb_internal       index_columns
 crdb_internal       index_usage_statistics
@@ -747,7 +746,6 @@ feature_usage
 forward_dependencies
 gossip_alerts
 gossip_liveness
-gossip_network
 gossip_nodes
 index_columns
 index_usage_statistics
@@ -1112,7 +1110,6 @@ system         crdb_internal       feature_usage                          SYSTEM
 system         crdb_internal       forward_dependencies                   SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_alerts                          SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_liveness                        SYSTEM VIEW  NO                  1
-system         crdb_internal       gossip_network                         SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_nodes                           SYSTEM VIEW  NO                  1
 system         crdb_internal       index_columns                          SYSTEM VIEW  NO                  1
 system         crdb_internal       index_usage_statistics                 SYSTEM VIEW  NO                  1
@@ -2773,7 +2770,6 @@ NULL     public   system         crdb_internal       feature_usage              
 NULL     public   system         crdb_internal       forward_dependencies                   SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_alerts                          SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_liveness                        SELECT          NO            YES
-NULL     public   system         crdb_internal       gossip_network                         SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NO            YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
@@ -3345,7 +3341,6 @@ NULL     public   system         crdb_internal       feature_usage              
 NULL     public   system         crdb_internal       forward_dependencies                   SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_alerts                          SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_liveness                        SELECT          NO            YES
-NULL     public   system         crdb_internal       gossip_network                         SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NO            YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES

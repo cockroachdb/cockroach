@@ -43,7 +43,6 @@ crdb_internal  feature_usage                    table  admin  NULL  NULL
 crdb_internal  forward_dependencies             table  admin  NULL  NULL
 crdb_internal  gossip_alerts                    table  admin  NULL  NULL
 crdb_internal  gossip_liveness                  table  admin  NULL  NULL
-crdb_internal  gossip_network                   table  admin  NULL  NULL
 crdb_internal  gossip_nodes                     table  admin  NULL  NULL
 crdb_internal  index_columns                    table  admin  NULL  NULL
 crdb_internal  index_usage_statistics           table  admin  NULL  NULL

@@ -116,7 +116,7 @@ const (
 	CrdbInternalGossipNodesTableID
 	CrdbInternalGossipAlertsTableID
 	CrdbInternalGossipLivenessTableID
-	CrdbInternalGossipNetworkTableID
+	CrdbInternalGossipNetworkTableID // no longer used
 	CrdbInternalTransactionContentionEvents
 	CrdbInternalIndexColumnsTableID
 	CrdbInternalIndexUsageStatisticsTableID

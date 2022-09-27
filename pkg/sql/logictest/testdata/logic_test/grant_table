@@ -56,7 +56,6 @@ test           crdb_internal       feature_usage                          public
 test           crdb_internal       forward_dependencies                   public   SELECT          false
 test           crdb_internal       gossip_alerts                          public   SELECT          false
 test           crdb_internal       gossip_liveness                        public   SELECT          false
-test           crdb_internal       gossip_network                         public   SELECT          false
 test           crdb_internal       gossip_nodes                           public   SELECT          false
 test           crdb_internal       index_columns                          public   SELECT          false
 test           crdb_internal       index_usage_statistics                 public   SELECT          false

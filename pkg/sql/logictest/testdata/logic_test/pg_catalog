@@ -1961,7 +1961,6 @@ oid         typname                                typnamespace  typowner    typ
 4294967264  index_usage_statistics                 194902141     2310524507  -1      false     c
 4294967265  index_columns                          194902141     2310524507  -1      false     c
 4294967266  transaction_contention_events          194902141     2310524507  -1      false     c
-4294967267  gossip_network                         194902141     2310524507  -1      false     c
 4294967268  gossip_liveness                        194902141     2310524507  -1      false     c
 4294967269  gossip_alerts                          194902141     2310524507  -1      false     c
 4294967270  gossip_nodes                           194902141     2310524507  -1      false     c
@@ -2355,7 +2354,6 @@ oid         typname                                typcategory  typispreferred  
 4294967264  index_usage_statistics                 C            false           true          ,         4294967264  0        0
 4294967265  index_columns                          C            false           true          ,         4294967265  0        0
 4294967266  transaction_contention_events          C            false           true          ,         4294967266  0        0
-4294967267  gossip_network                         C            false           true          ,         4294967267  0        0
 4294967268  gossip_liveness                        C            false           true          ,         4294967268  0        0
 4294967269  gossip_alerts                          C            false           true          ,         4294967269  0        0
 4294967270  gossip_nodes                           C            false           true          ,         4294967270  0        0
@@ -2749,7 +2747,6 @@ oid         typname                                typinput        typoutput    
 4294967264  index_usage_statistics                 record_in       record_out       record_recv       record_send       0         0          0
 4294967265  index_columns                          record_in       record_out       record_recv       record_send       0         0          0
 4294967266  transaction_contention_events          record_in       record_out       record_recv       record_send       0         0          0
-4294967267  gossip_network                         record_in       record_out       record_recv       record_send       0         0          0
 4294967268  gossip_liveness                        record_in       record_out       record_recv       record_send       0         0          0
 4294967269  gossip_alerts                          record_in       record_out       record_recv       record_send       0         0          0
 4294967270  gossip_nodes                           record_in       record_out       record_recv       record_send       0         0          0
@@ -3143,7 +3140,6 @@ oid         typname                                typalign  typstorage  typnotn
 4294967264  index_usage_statistics                 NULL      NULL        false       0            -1
 4294967265  index_columns                          NULL      NULL        false       0            -1
 4294967266  transaction_contention_events          NULL      NULL        false       0            -1
-4294967267  gossip_network                         NULL      NULL        false       0            -1
 4294967268  gossip_liveness                        NULL      NULL        false       0            -1
 4294967269  gossip_alerts                          NULL      NULL        false       0            -1
 4294967270  gossip_nodes                           NULL      NULL        false       0            -1
@@ -3537,7 +3533,6 @@ oid         typname                                typndims  typcollation  typde
 4294967264  index_usage_statistics                 0         0             NULL           NULL        NULL
 4294967265  index_columns                          0         0             NULL           NULL        NULL
 4294967266  transaction_contention_events          0         0             NULL           NULL        NULL
-4294967267  gossip_network                         0         0             NULL           NULL        NULL
 4294967268  gossip_liveness                        0         0             NULL           NULL        NULL
 4294967269  gossip_alerts                          0         0             NULL           NULL        NULL
 4294967270  gossip_nodes                           0         0             NULL           NULL        NULL
@@ -3825,7 +3820,6 @@ objoid      classoid    objsubid  description
 4294967272  4294967123  0         forward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)
 4294967269  4294967123  0         locally known gossiped health alerts (RAM; local node only)
 4294967268  4294967123  0         locally known gossiped node liveness (RAM; local node only)
-4294967267  4294967123  0         locally known edges in the gossip network (RAM; local node only)
 4294967270  4294967123  0         locally known gossiped node details (RAM; local node only)
 4294967265  4294967123  0         index columns for all indexes accessible by current user in current database (KV scan)
 4294967264  4294967123  0         cluster-wide index usage statistics (in-memory, not durable).Querying this table is an expensive operation since it creates acluster-wide RPC fanout.

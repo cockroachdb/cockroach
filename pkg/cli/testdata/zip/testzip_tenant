@@ -109,9 +109,6 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/1/crdb_internal.gossip_liveness.txt...
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness: creating error output: debug/nodes/1/crdb_internal.gossip_liveness.txt.err.txt... done
-[node 1] retrieving SQL data for crdb_internal.gossip_network... writing output: debug/nodes/1/crdb_internal.gossip_network.txt...
-[node 1] retrieving SQL data for crdb_internal.gossip_network: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
-[node 1] retrieving SQL data for crdb_internal.gossip_network: creating error output: debug/nodes/1/crdb_internal.gossip_network.txt.err.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/1/crdb_internal.gossip_nodes.txt...
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes: last request failed: ERROR: unimplemented: operation is unsupported in multi-tenancy mode (SQLSTATE 0A000)
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes: creating error output: debug/nodes/1/crdb_internal.gossip_nodes.txt.err.txt... done

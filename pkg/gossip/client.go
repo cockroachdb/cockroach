@@ -333,7 +333,6 @@ func (c *client) gossip(
 				}
 				if peerID == 0 && c.peerID != 0 {
 					peerID = c.peerID
-					g.updateClients()
 				}
 			}
 		}()

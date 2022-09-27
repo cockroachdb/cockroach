@@ -533,12 +533,6 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"updated_at",
 		},
 	},
-	"crdb_internal.gossip_network": {
-		nonSensitiveCols: NonSensitiveColumns{
-			"source_id",
-			"target_id",
-		},
-	},
 	"crdb_internal.gossip_nodes": {
 		// `cluster_name` is hashed as we only care to see whether values are
 		// identical across nodes.

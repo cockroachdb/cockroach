@@ -687,13 +687,6 @@ CREATE TABLE crdb_internal.gossip_liveness (
    membership STRING NOT NULL,
    updated_at TIMESTAMP NULL
 )  {}  {}
-CREATE TABLE crdb_internal.gossip_network (
-   source_id INT8 NOT NULL,
-   target_id INT8 NOT NULL
-)  CREATE TABLE crdb_internal.gossip_network (
-   source_id INT8 NOT NULL,
-   target_id INT8 NOT NULL
-)  {}  {}
 CREATE TABLE crdb_internal.gossip_nodes (
    node_id INT8 NOT NULL,
    network STRING NOT NULL,
