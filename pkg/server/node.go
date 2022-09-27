@@ -1067,7 +1067,7 @@ func (n *Node) batchInternal(
 	// Shadow ctx from the outer function. Written like this to pass the linter.
 	ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
 	// NB: wrapped to delay br evaluation to its value when returning.
-	defer func() { reqSp.finish(ctx, br) }()
+	defer func() { reqSp.finish(br) }()
 	if log.HasSpanOrEvent(ctx) {
 		log.Eventf(ctx, "node received request: %s", args.Summary())
 	}
@@ -1171,7 +1171,7 @@ type spanForRequest struct {
 
 // finish finishes the span. If the span was recording and br is not nil, the
 // recording is written to br.CollectedSpans.
-func (sp *spanForRequest) finish(ctx context.Context, br *roachpb.BatchResponse) {
+func (sp *spanForRequest) finish(br *roachpb.BatchResponse) {
 	var rec tracingpb.Recording
 	// If we don't have a response, there's nothing to attach a trace to.
 	// Nothing more for us to do.
