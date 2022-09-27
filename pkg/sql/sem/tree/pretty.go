@@ -955,7 +955,7 @@ func (node *OnJoinCond) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.TableRow, 0, 8)
+	items := make([]pretty.TableRow, 0, 9)
 	items = append(items, node.With.docRow(p))
 	kw := "INSERT"
 	if node.OnConflict.IsUpsertAlias() {
@@ -1143,7 +1143,7 @@ func (p *PrettyCfg) exprDocWithParen(e Expr) pretty.Doc {
 }
 
 func (node *Update) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.TableRow, 8)
+	items := make([]pretty.TableRow, 0, 8)
 	items = append(items,
 		node.With.docRow(p),
 		p.row("UPDATE", p.Doc(node.Table)),
@@ -1161,7 +1161,7 @@ func (node *Update) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Delete) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.TableRow, 6)
+	items := make([]pretty.TableRow, 0, 6)
 	items = append(items,
 		node.With.docRow(p),
 		p.row("DELETE FROM", p.Doc(node.Table)),
@@ -1610,7 +1610,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	//    [WHERE ...]
 	//    [NOT VISIBLE]
 	//
-	title := make([]pretty.Doc, 0, 6)
+	title := make([]pretty.Doc, 0, 7)
 	title = append(title, pretty.Keyword("CREATE"))
 	if node.Unique {
 		title = append(title, pretty.Keyword("UNIQUE"))
@@ -1629,7 +1629,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 		title = append(title, p.Doc(&node.Name))
 	}
 
-	clauses := make([]pretty.Doc, 0, 5)
+	clauses := make([]pretty.Doc, 0, 7)
 	clauses = append(clauses, pretty.Fold(pretty.ConcatSpace,
 		pretty.Keyword("ON"),
 		p.Doc(&node.Table),
@@ -1709,7 +1709,7 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	}
 	title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
 
-	clauses := make([]pretty.Doc, 0, 4)
+	clauses := make([]pretty.Doc, 0, 6)
 	if node.Sharded != nil {
 		clauses = append(clauses, p.Doc(node.Sharded))
 	}
@@ -1760,7 +1760,7 @@ func (node *UniqueConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//    [WHERE ...]
 	//    [NOT VISIBLE]
 	//
-	clauses := make([]pretty.Doc, 0, 5)
+	clauses := make([]pretty.Doc, 0, 6)
 	var title pretty.Doc
 	if node.PrimaryKey {
 		title = pretty.Keyword("PRIMARY KEY")
@@ -1874,7 +1874,7 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	//         [ACTIONS ...]
 	//   ]
 	//
-	clauses := make([]pretty.Doc, 0, 7)
+	clauses := make([]pretty.Doc, 0, 14)
 
 	// Column type.
 	// ColumnTableDef node type will not be specified if it represents a CREATE
@@ -2094,7 +2094,7 @@ func (node *ReferenceActions) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.TableRow, 0, 6)
+	items := make([]pretty.TableRow, 0, 7)
 
 	items = append(items, p.row("BACKUP", pretty.Nil))
 	if node.Targets != nil {
@@ -2126,7 +2126,7 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.TableRow, 0, 5)
+	items := make([]pretty.TableRow, 0, 6)
 
 	items = append(items, p.row("RESTORE", pretty.Nil))
 	if node.DescriptorCoverage == RequestedDescriptors {
@@ -2241,7 +2241,7 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Export) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.TableRow, 0, 5)
+	items := make([]pretty.TableRow, 0, 4)
 	items = append(items, p.row("EXPORT", pretty.Nil))
 	items = append(items, p.row("INTO "+node.FileFormat, p.Doc(node.File)))
 	if node.Options != nil {
