@@ -56,6 +56,29 @@ var supportedVolatileBuiltinFunctions = makeStringSet(
 // CDC Specific functions.
 // TODO(yevgeniy): Finalize function naming: e.g. cdc.is_delete() vs cdc_is_delete()
 var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
+	"cdc_get_key": makeCDCBuiltIn(
+		"cdc_get_key",
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(evalCtx *eval.Context, datums tree.Datums) (tree.Datum, error) {
+				rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
+				b := jsonb.NewArrayBuilder(0)
+				if err := rowEvalCtx.updatedRow.ForEachKeyColumn().Datum(func(d tree.Datum, _ cdcevent.ResultColumn) error {
+					j, err := tree.AsJSON(d, sessiondatapb.DataConversionConfig{}, time.UTC)
+					if err != nil {
+						return err
+					}
+					b.Add(j)
+					return nil
+				}); err != nil {
+					return nil, err
+				}
+				return tree.NewDJSON(b.Build()), nil
+			},
+			Info:       "Returns the primary key values for the event as an ordered, unlabeled JSONB array.",
+			Volatility: volatility.Stable,
+		}),
 	"cdc_is_delete": makeCDCBuiltIn(
 		"cdc_is_delete",
 		tree.Overload{
