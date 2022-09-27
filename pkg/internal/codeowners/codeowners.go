@@ -35,6 +35,11 @@ type CodeOwners struct {
 	teams map[team.Alias]team.Team
 }
 
+// GetTeamForAlias returns the team matching the given Alias.
+func (co *CodeOwners) GetTeamForAlias(alias team.Alias) team.Team {
+	return co.teams[alias]
+}
+
 // LoadCodeOwners parses a CODEOWNERS file and returns the CodeOwners struct.
 func LoadCodeOwners(r io.Reader, teams map[team.Alias]team.Team) (*CodeOwners, error) {
 	s := bufio.NewScanner(r)

@@ -364,7 +364,10 @@ func listFailures(
 				failures[parentTest] = append(failures[parentTest], testEvents...)
 				delete(failures, test)
 			} else {
-				log.Printf("failed parent test %q", test)
+				log.Printf("failed parent test %q (no subtests)", test.name)
+				if _, ok := failures[test]; !ok {
+					return errors.AssertionFailedf("expected %q in 'failures'", test.name)
+				}
 			}
 		}
 		// Sort the failed tests to make the unit tests for this script deterministic.
@@ -417,9 +420,25 @@ func listFailures(
 		if len(slowPassEvents) > 0 && slowPassEvents[0].Elapsed > slowest.Elapsed {
 			slowest = slowPassEvents[0]
 		}
-		if timedOutCulprit == scoped(slowest) {
-			// The test that was running when the timeout hit is the one that ran for
-			// the longest time.
+
+		culpritOwner := fmt.Sprintf("%v", getOwner(ctx, timedOutCulprit.pkg, timedOutCulprit.name))
+		slowEvents := append(slowFailEvents, slowPassEvents...)
+		// The predicate determines if the union of the slow events is owned by the _same_ team(s) as timedOutCulprit.
+		hasSameOwner := func() bool {
+			for _, slowEvent := range slowEvents {
+				scopedEvent := scoped(slowEvent)
+				owner := fmt.Sprintf("%v", getOwner(ctx, scopedEvent.pkg, scopedEvent.name))
+
+				if culpritOwner != owner {
+					log.Printf("%v has a different owner: %s;bailing out...\n", scopedEvent, owner)
+					return false
+				}
+			}
+			return true
+		}
+		if timedOutCulprit == scoped(slowest) || hasSameOwner() {
+			// The test that was running when the timeout hit is either the one that ran for
+			// the longest time or all other tests share the same owner.
 			log.Printf("timeout culprit found: %s\n", timedOutCulprit.name)
 			err := fileIssue(ctx, failure{
 				title:       fmt.Sprintf("%s: %s timed out", trimPkg(timedOutCulprit.pkg), timedOutCulprit.name),
@@ -524,18 +543,30 @@ func getFileLine(
 // getOwner looks up the file containing the given test and returns
 // the owning teams. It does not return
 // errors, but instead simply returns what it can.
+// In case no owning team is found, "test-eng" team is returned.
 func getOwner(ctx context.Context, packageName, testName string) (_teams []team.Team) {
 	filename, _, err := getFileLine(ctx, packageName, testName)
 	if err != nil {
-		log.Printf("getting file:line for %s.%s: %s", packageName, testName, err)
-		return nil
+		log.Printf("errror getting file:line for %s.%s: %s", packageName, testName, err)
+		// Let's continue so that we can assign the "catch-all" owner.
 	}
 	co, err := codeowners.DefaultLoadCodeOwners()
 	if err != nil {
 		log.Printf("loading codeowners: %s", err)
 		return nil
 	}
-	return co.Match(filename)
+	match := co.Match(filename)
+
+	if match == nil {
+		// N.B. if no owning team is found, we default to 'test-eng'. This should be a rare exception rather than the rule.
+		testEng := co.GetTeamForAlias("cockroachdb/test-eng")
+		if testEng.Name() == "" {
+			log.Fatalf("test-eng team could not be found in TEAMS.yaml")
+		}
+		log.Printf("assigning %s.%s to 'test-eng' as catch-all", packageName, testName)
+		match = []team.Team{testEng}
+	}
+	return match
 }
 
 func formatPebbleMetamorphicIssue(
