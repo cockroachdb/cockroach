@@ -110,3 +110,25 @@ foo      carl@cockroachlabs.com       carl        # Duplicate behavior
 
 	a.Nil(m.Map("foo", "carl@example.com"))
 }
+
+func TestIdentityMapHasMap(t *testing.T) {
+	a := assert.New(t)
+	data := `
+# This is a comment
+map-name system-username              database-username
+foo      /^(.*)@cockroachlabs.com$    \1
+bar      carl@cockroachlabs.com       also_carl   # Trailing comment
+bar      carl@cockroachlabs.com       carl        # Duplicate behavior
+`
+
+	m, err := From(strings.NewReader(data))
+	if !a.NoError(err) {
+		return
+	}
+	t.Log(m.String())
+	a.False(m.HasMap("asdf"))
+	a.False(m.HasMap("fo"))
+	a.True(m.HasMap("foo"))
+	a.True(m.HasMap("bar"))
+	a.True(m.HasMap("map-name"))
+}
