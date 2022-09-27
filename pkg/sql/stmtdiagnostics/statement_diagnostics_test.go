@@ -45,6 +45,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	require.NoError(t, err)
 
@@ -52,6 +53,14 @@ func TestDiagnosticsRequest(t *testing.T) {
 	isCompleted := func(reqID int64) (completed bool, diagnosticsID gosql.NullInt64) {
 		reqRow := db.QueryRow(completedQuery, reqID)
 		require.NoError(t, reqRow.Scan(&completed, &diagnosticsID))
+		if completed {
+			// Ensure that if the request was completed, the local registry no
+			// longer has the request.
+			require.False(
+				t, registry.FindRequest(reqID), "request was "+
+					"completed and should have been removed from the registry",
+			)
+		}
 		return completed, diagnosticsID
 	}
 	checkNotCompleted := func(reqID int64) {
@@ -76,7 +85,6 @@ func TestDiagnosticsRequest(t *testing.T) {
 		return nil
 	}
 
-	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	var minExecutionLatency, expiresAfter time.Duration
 	var samplingProbability float64
 
@@ -216,26 +224,21 @@ func TestDiagnosticsRequest(t *testing.T) {
 				}
 				for _, expiresAfter := range []time.Duration{0, time.Second} {
 					t.Run(fmt.Sprintf("expiresAfter=%s", expiresAfter), func(t *testing.T) {
-						// TODO(yuzefovich): for some reason occasionally the
-						// bundle for the request is collected, so we use
-						// SucceedsSoon. Figure it out.
-						testutils.SucceedsSoon(t, func() error {
-							reqID, err := registry.InsertRequestInternal(
-								ctx, fprint, samplingProbability, minExecutionLatency, expiresAfter,
-							)
-							require.NoError(t, err)
-							checkNotCompleted(reqID)
+						reqID, err := registry.InsertRequestInternal(
+							ctx, fprint, samplingProbability, minExecutionLatency, expiresAfter,
+						)
+						require.NoError(t, err)
+						checkNotCompleted(reqID)
 
-							err = registry.CancelRequest(ctx, reqID)
-							require.NoError(t, err)
-							checkNotCompleted(reqID)
+						err = registry.CancelRequest(ctx, reqID)
+						require.NoError(t, err)
+						checkNotCompleted(reqID)
 
-							// Run the query that is slow enough to satisfy the
-							// conditional request.
-							_, err = db.Exec("SELECT pg_sleep(0.2)")
-							require.NoError(t, err)
-							return checkMaybeCompleted(reqID, false /* expectedCompleted */)
-						})
+						// Run the query that is slow enough to satisfy the
+						// conditional request.
+						_, err = db.Exec("SELECT pg_sleep(0.2)")
+						require.NoError(t, err)
+						checkNotCompleted(reqID)
 					})
 				}
 			})

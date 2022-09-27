@@ -399,13 +399,13 @@ func (r *Registry) IsExecLatencyConditionMet(
 }
 
 // RemoveOngoing removes the given request from the list of ongoing queries.
+// TODO: consider inlining this method into IsExecLatencyConditionMet.
 func (r *Registry) RemoveOngoing(requestID RequestID, req Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if req.isConditional() {
-		if req.isExpired(timeutil.Now()) {
-			delete(r.mu.requestFingerprints, requestID)
-		}
+		// TODO: do not delete if continuous collection is enabled.
+		delete(r.mu.requestFingerprints, requestID)
 	} else {
 		delete(r.mu.unconditionalOngoing, requestID)
 	}

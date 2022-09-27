@@ -28,5 +28,13 @@ func (r *Registry) InsertRequestInternal(
 	return int64(id), err
 }
 
+// FindRequest returns true if the Registry contains a Request with the given
+// RequestID.
+func (r *Registry) FindRequest(id int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.findRequestLocked(RequestID(id))
+}
+
 // PollingInterval is exposed to override in tests.
 var PollingInterval = pollingInterval
