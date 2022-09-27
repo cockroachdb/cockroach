@@ -222,6 +222,11 @@ func (v TableImplicitRecordType) ValidateTxnCommit(
 ) {
 }
 
+// GetRawBytesInStorage implements the catalog.Descriptor interface.
+func (v TableImplicitRecordType) GetRawBytesInStorage() []byte {
+	return nil
+}
+
 // TypeDesc implements the TypeDescriptor interface.
 func (v TableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
 	v.panicNotSupported("TypeDesc")

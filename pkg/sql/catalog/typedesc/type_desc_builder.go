@@ -35,6 +35,8 @@ type typeDescriptorBuilder struct {
 	mvccTimestamp        hlc.Timestamp
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
+	// This is the raw bytes (tag + data) of the type descriptor in storage.
+	rawBytesInStorage []byte
 }
 
 var _ TypeDescriptorBuilder = &typeDescriptorBuilder{}
@@ -118,6 +120,11 @@ func (tdb *typeDescriptorBuilder) RunRestoreChanges(_ func(id descpb.ID) catalog
 	return nil
 }
 
+// SetRawBytesInStorage implements the catalog.DescriptorBuilder interface.
+func (tdb *typeDescriptorBuilder) SetRawBytesInStorage(rawBytes []byte) {
+	tdb.rawBytesInStorage = append([]byte(nil), rawBytes...) // deep-copy
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (tdb *typeDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return tdb.BuildImmutableType()
@@ -130,6 +137,7 @@ func (tdb *typeDescriptorBuilder) BuildImmutableType() catalog.TypeDescriptor {
 		desc = tdb.original
 	}
 	imm := makeImmutable(desc, tdb.isUncommittedVersion, tdb.changes)
+	imm.rawBytesInStorage = append([]byte(nil), tdb.rawBytesInStorage...) // deep-copy
 	return &imm
 }
 
@@ -144,10 +152,13 @@ func (tdb *typeDescriptorBuilder) BuildExistingMutableType() *Mutable {
 	if tdb.maybeModified == nil {
 		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
 	}
-	clusterVersion := makeImmutable(tdb.original, false, /* isUncommitedVersion */
-		catalog.PostDeserializationChanges{})
+	mutableType := makeImmutable(tdb.maybeModified,
+		false /* isUncommitedVersion */, tdb.changes)
+	mutableType.rawBytesInStorage = append([]byte(nil), tdb.rawBytesInStorage...) // deep-copy
+	clusterVersion := makeImmutable(tdb.original,
+		false /* isUncommitedVersion */, catalog.PostDeserializationChanges{})
 	return &Mutable{
-		immutable:      makeImmutable(tdb.maybeModified, false /* isUncommitedVersion */, tdb.changes),
+		immutable:      mutableType,
 		ClusterVersion: &clusterVersion,
 	}
 }
@@ -164,8 +175,10 @@ func (tdb *typeDescriptorBuilder) BuildCreatedMutableType() *Mutable {
 	if desc == nil {
 		desc = tdb.original
 	}
+	createdType := makeImmutable(desc, tdb.isUncommittedVersion, tdb.changes)
+	createdType.rawBytesInStorage = append([]byte(nil), tdb.rawBytesInStorage...) // deep-copy
 	return &Mutable{
-		immutable: makeImmutable(desc, tdb.isUncommittedVersion, tdb.changes),
+		immutable: createdType,
 	}
 }
 

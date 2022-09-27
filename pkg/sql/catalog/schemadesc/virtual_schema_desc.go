@@ -64,6 +64,7 @@ func (p virtual) GetParentID() descpb.ID { return descpb.InvalidID }
 func (p virtual) GetPrivileges() *catpb.PrivilegeDescriptor {
 	return catpb.NewVirtualSchemaPrivilegeDescriptor()
 }
+func (p virtual) GetRawBytesInStorage() []byte { return nil }
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
 func (p virtual) GetPrivilegeDescriptor(
