@@ -33,11 +33,9 @@ upsert descriptor #104
   +    - crdb_internal_column_2_name_placeholder
        defaultColumnId: 2
        name: primary
-     formatVersion: 3
+  ...
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
+     modificationTime: {}
   +  mutations:
   +  - column:
   +      id: 2
@@ -142,6 +140,10 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t DROP COLUMN j"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -153,14 +155,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 1
@@ -183,14 +177,6 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
          version: 4
        mutationId: 1
   -    state: BACKFILLING
@@ -207,14 +193,6 @@ commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000005"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 1
@@ -236,14 +214,6 @@ commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000006"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 1
@@ -271,14 +241,6 @@ upsert descriptor #104
   -    revertible: true
        targetRanks: <redacted>
        targets: <redacted>
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000008"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
        direction: DROP
        mutationId: 1
@@ -377,14 +339,6 @@ begin transaction #11
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000010"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
      - direction: DROP
        index:
   -      constraintId: 3
@@ -457,10 +411,9 @@ upsert descriptor #104
   -    - crdb_internal_column_2_name_placeholder
        defaultColumnId: 2
        name: primary
-     formatVersion: 3
+  ...
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000011"
+     modificationTime: {}
   -  mutations:
   -  - column:
   -      id: 2
@@ -499,7 +452,6 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
-  +  modificationTime: {}
   +  mutations: []
      name: t
      nextColumnId: 3

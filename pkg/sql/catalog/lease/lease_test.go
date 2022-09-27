@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -629,10 +630,14 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 			TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
 				mu.Lock()
 				defer mu.Unlock()
-				if waitTableID != descpb.GetDescriptorID(descriptor) {
+				id, _, _, state, err := descpb.GetDescriptorMetadata(descriptor)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if waitTableID != id {
 					return
 				}
-				if descpb.GetDescriptorState(descriptor) == descpb.DescriptorState_DROP {
+				if state == descpb.DescriptorState_DROP {
 					close(deleted)
 					waitTableID = 0
 				}
@@ -1725,17 +1730,21 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 
 			// Look up the descriptor.
 			descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descID)
-			dbDesc := &descpb.Descriptor{}
-			ts, err := txn.GetProtoTs(ctx, descKey, dbDesc)
+			res, err := txn.Get(ctx, descKey)
 			if err != nil {
 				t.Fatalf("error while reading proto: %v", err)
 			}
+			b, err := descbuilder.FromSerializedValue(res.Value)
+			if err != nil {
+				t.Fatal(err)
+			}
 			// Look at the descriptor that comes back from the database.
-			dbTable, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(dbDesc, ts)
-
-			if dbTable.Version != table.GetVersion() || dbTable.ModificationTime != table.GetModificationTime() {
-				t.Fatalf("db has version %d at ts %s, expected version %d at ts %s",
-					dbTable.Version, dbTable.ModificationTime, table.GetVersion(), table.GetModificationTime())
+			if b != nil && b.DescriptorType() == catalog.Table {
+				dbTable := b.BuildImmutable()
+				if v, modTime := dbTable.GetVersion(), dbTable.GetModificationTime(); v != table.GetVersion() || modTime != table.GetModificationTime() {
+					t.Fatalf("db has version %d at ts %s, expected version %d at ts %s",
+						v, modTime, table.GetVersion(), table.GetModificationTime())
+				}
 			}
 		}
 		wg.Done()
@@ -2252,8 +2261,11 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 			// Use this testing knob to ensure that we see an update for the desc
 			// in question. We don't care about events to refresh the first version
 			// which can happen under rare stress scenarios.
-			if descpb.GetDescriptorID(descriptor) == interestingTable.Load().(descpb.ID) &&
-				descpb.GetDescriptorVersion(descriptor) >= 2 {
+			id, version, _, _, err := descpb.GetDescriptorMetadata(descriptor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if id == interestingTable.Load().(descpb.ID) && version >= 2 {
 				select {
 				case descUpdateChan <- descriptor:
 				case <-unblockAll:
@@ -2321,7 +2333,9 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	case err := <-selectDone:
 		t.Fatalf("select succeeded before expected: %v", err)
 	case desc := <-descUpdateChan:
-		require.Equal(t, descpb.DescriptorVersion(2), descpb.GetDescriptorVersion(desc))
+		_, version, _, _, err := descpb.GetDescriptorMetadata(desc)
+		require.NoError(t, err)
+		require.Equal(t, descpb.DescriptorVersion(2), version)
 	}
 
 	// Allow the original lease acquisition to proceed.
@@ -2354,7 +2368,7 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	var lmKnobs lease.ManagerTestingKnobs
 	blockDescRefreshed := make(chan struct{}, 1)
 	lmKnobs.TestingDescriptorRefreshedEvent = func(desc *descpb.Descriptor) {
-		tbl, _, _, _, _ := descpb.FromDescriptor(desc)
+		tbl, _, _, _, _ := descpb.GetDescriptors(desc)
 		if tbl != nil && testTableID() == tbl.ID {
 			blockDescRefreshed <- struct{}{}
 		}
@@ -2511,11 +2525,13 @@ func TestHistoricalAcquireDroppedDescriptor(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				SQLLeaseManager: &lease.ManagerTestingKnobs{
 					TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
-						name := descpb.GetDescriptorName(descriptor)
+						_, _, name, state, err := descpb.GetDescriptorMetadata(descriptor)
+						if err != nil {
+							t.Fatal(err)
+						}
 						if name != typeName || seenDrop == nil {
 							return
 						}
-						state := descpb.GetDescriptorState(descriptor)
 						if state == descpb.DescriptorState_DROP {
 							close(seenDrop)
 							seenDrop = nil
@@ -2612,7 +2628,7 @@ func TestDropDescriptorRacesWithAcquisition(t *testing.T) {
 	testingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			TestingDescriptorUpdateEvent: func(descriptor *descpb.Descriptor) error {
-				_, version, name, _, _, err := descpb.GetDescriptorMetadata(descriptor)
+				_, version, name, _, err := descpb.GetDescriptorMetadata(descriptor)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -2629,7 +2645,7 @@ func TestDropDescriptorRacesWithAcquisition(t *testing.T) {
 				return nil
 			},
 			TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
-				_, version, name, _, _, err := descpb.GetDescriptorMetadata(descriptor)
+				_, version, name, _, err := descpb.GetDescriptorMetadata(descriptor)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -25,12 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -587,27 +585,7 @@ func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDesc
 		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading mutable descriptor #%d", id)
 	}
 	c := s.committed.LookupDescriptorEntry(id)
-	if c == nil {
-		return u.NewBuilder().BuildCreatedMutable(), nil
-	}
-	mut := c.NewBuilder().BuildExistingMutable()
-	pb := u.NewBuilder().BuildImmutable().DescriptorProto()
-	tbl, db, typ, sc, fn := descpb.FromDescriptorWithMVCCTimestamp(pb, s.mvccTimestamp())
-	switch m := mut.(type) {
-	case *tabledesc.Mutable:
-		m.TableDescriptor = *tbl
-	case *dbdesc.Mutable:
-		m.DatabaseDescriptor = *db
-	case *typedesc.Mutable:
-		m.TypeDescriptor = *typ
-	case *schemadesc.Mutable:
-		m.SchemaDescriptor = *sc
-	case *funcdesc.Mutable:
-		m.FunctionDescriptor = *fn
-	default:
-		return nil, errors.AssertionFailedf("Unknown mutable descriptor type %T", mut)
-	}
-	return mut, nil
+	return descbuilder.BuildMutable(c, u.DescriptorProto(), s.mvccTimestamp())
 }
 
 var _ scexec.Dependencies = (*TestState)(nil)
@@ -778,6 +756,7 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		b.s.uncommitted.DeleteNamespaceEntry(nameInfo)
 	}
 	for _, desc := range b.descs {
+		desc = resetModificationTime(desc)
 		b.s.LogSideEffectf("upsert descriptor #%d\n%s", desc.GetID(), b.s.descriptorDiff(desc))
 		b.s.uncommitted.UpsertDescriptorEntry(desc)
 	}

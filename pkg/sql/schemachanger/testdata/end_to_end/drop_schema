@@ -17,6 +17,13 @@ increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 add synthetic descriptor #106:
+   schema:
+     id: 106
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: sc
+     parentId: 104
   ...
          withGrantOption: 2
        version: 2
@@ -33,11 +40,7 @@ upsert descriptor #104
   +      userName: root
   +    jobId: "1"
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: db
-     privileges:
+     modificationTime: {}
   ...
        public:
          id: 105
@@ -60,11 +63,7 @@ upsert descriptor #106
   +    targetRanks: <redacted>
   +    targets: <redacted>
      id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: sc
-     parentId: 104
+     modificationTime: {}
   ...
          withGrantOption: 2
        version: 2
@@ -88,11 +87,7 @@ upsert descriptor #104
   -      userName: root
   -    jobId: "1"
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: db
-     privileges:
+     modificationTime: {}
   ...
        public:
          id: 105

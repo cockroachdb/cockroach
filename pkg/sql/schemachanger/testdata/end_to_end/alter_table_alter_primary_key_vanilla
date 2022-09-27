@@ -16,11 +16,8 @@ increment telemetry for sql.schema.alter_table.alter_primary_key
 ## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
+     modificationTime: {}
   +  mutations:
   +  - direction: ADD
   +    index:
@@ -163,6 +160,10 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -174,14 +175,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 4 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     mutations:
-     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -211,14 +204,6 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 4 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
-  +  modificationTime: {}
-     mutations:
-     - direction: ADD
-  ...
          version: 4
        mutationId: 1
   -    state: BACKFILLING
@@ -242,14 +227,6 @@ commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 4 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000005"
-  +  modificationTime: {}
-     mutations:
-     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -278,14 +255,6 @@ commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 4 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000006"
-  +  modificationTime: {}
-     mutations:
-     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -324,8 +293,6 @@ upsert descriptor #104
   ...
      formatVersion: 3
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000008"
   +  indexes:
   +  - constraintId: 4
   +    createdAtNanos: "1640998800000000000"
@@ -348,7 +315,7 @@ upsert descriptor #104
   +    storeColumnNames: []
   +    unique: true
   +    version: 4
-  +  modificationTime: {}
+     modificationTime: {}
      mutations:
   -  - direction: ADD
   +  - direction: DROP
@@ -489,12 +456,6 @@ begin transaction #11
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
 upsert descriptor #104
   ...
-       unique: true
-       version: 4
-  -  modificationTime:
-  -    wallTime: "1640995200000000010"
-  +  modificationTime: {}
-     mutations:
      - direction: DROP
        index:
   -      constraintId: 3
@@ -590,10 +551,8 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-       unique: true
        version: 4
-  -  modificationTime:
-  -    wallTime: "1640995200000000011"
+     modificationTime: {}
   -  mutations:
   -  - direction: DROP
   -    index:
@@ -621,7 +580,6 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
-  +  modificationTime: {}
   +  mutations: []
      name: t
      nextColumnId: 3
