@@ -82,11 +82,10 @@ func processDescriptorTable(
 	m := make(map[int64]catalog.Descriptor, len(descRows))
 	// Build the map first with un-upgraded descriptors.
 	for _, r := range descRows {
-		var d descpb.Descriptor
-		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
+		b, err := descbuilder.FromBytesAndMVCCTimestamp(r.DescBytes, r.ModTime)
+		if err != nil {
 			return nil, errors.Wrapf(err, "failed to unmarshal descriptor %d", r.ID)
 		}
-		b := descbuilder.NewBuilderWithMVCCTimestamp(&d, r.ModTime)
 		if b != nil {
 			if err := b.RunPostDeserializationChanges(); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error during RunPostDeserializationChanges")
@@ -298,11 +297,6 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 		reverseNamespace[row.ID] = append(reverseNamespace[row.ID], row)
 	}
 	for _, descRow := range descTable {
-		// Update the descriptor representation to make it safe to insert:
-		// - set the version to 1,
-		// - unset the descriptor modification time,
-		// - unset the descriptor create-as-of time, for table descriptors.
-		// Also, skip system descriptors.
 		updatedDescBytes, err := descriptorModifiedForInsert(descRow)
 		if err != nil {
 			return err
@@ -337,35 +331,51 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 	return nil
 }
 
+// descriptorModifiedForInsert updates the descriptor representation to make it
+// safe to insert:
+// - set the version to 1,
+// - unset the descriptor modification time,
+// - unset the descriptor create-as-of time, for table descriptors.
+// Also, skip system descriptors.
 func descriptorModifiedForInsert(r DescriptorTableRow) ([]byte, error) {
 	var descProto descpb.Descriptor
 	if err := protoutil.Unmarshal(r.DescBytes, &descProto); err != nil {
 		return nil, errors.Wrapf(err, "failed to unmarshal descriptor %d", r.ID)
 	}
-	b := descbuilder.NewBuilderWithMVCCTimestamp(&descProto, r.ModTime)
-	if b == nil {
-		return nil, nil
-	}
-	mut := b.BuildCreatedMutable()
-	if catalog.IsSystemDescriptor(mut) {
-		return nil, nil
-	}
-	switch d := mut.(type) {
-	case catalog.DatabaseDescriptor:
-		d.DatabaseDesc().ModificationTime = hlc.Timestamp{}
-		d.DatabaseDesc().Version = 1
-	case catalog.SchemaDescriptor:
-		d.SchemaDesc().ModificationTime = hlc.Timestamp{}
-		d.SchemaDesc().Version = 1
-	case catalog.TypeDescriptor:
-		d.TypeDesc().ModificationTime = hlc.Timestamp{}
-		d.TypeDesc().Version = 1
-	case catalog.TableDescriptor:
-		d.TableDesc().ModificationTime = hlc.Timestamp{}
-		d.TableDesc().CreateAsOfTime = hlc.Timestamp{}
-		d.TableDesc().Version = 1
+	switch u := descProto.Union.(type) {
+	case *descpb.Descriptor_Table:
+		if u.Table.ParentID == keys.SystemDatabaseID {
+			return nil, nil
+		}
+		u.Table.CreateAsOfTime.Reset()
+		u.Table.ModificationTime.Reset()
+		u.Table.Version = 1
+	case *descpb.Descriptor_Database:
+		if u.Database.ID == keys.SystemDatabaseID {
+			return nil, nil
+		}
+		u.Database.ModificationTime.Reset()
+		u.Database.Version = 1
+	case *descpb.Descriptor_Schema:
+		if u.Schema.ParentID == keys.SystemDatabaseID {
+			return nil, nil
+		}
+		u.Schema.ModificationTime.Reset()
+		u.Schema.Version = 1
+	case *descpb.Descriptor_Type:
+		if u.Type.ParentID == keys.SystemDatabaseID {
+			return nil, nil
+		}
+		u.Type.ModificationTime.Reset()
+		u.Type.Version = 1
+	case *descpb.Descriptor_Function:
+		if u.Function.ParentID == keys.SystemDatabaseID {
+			return nil, nil
+		}
+		u.Function.ModificationTime.Reset()
+		u.Function.Version = 1
 	default:
 		return nil, nil
 	}
-	return protoutil.Marshal(mut.DescriptorProto())
+	return protoutil.Marshal(&descProto)
 }

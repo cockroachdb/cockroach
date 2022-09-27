@@ -235,15 +235,15 @@ func (vea *validationErrorAccumulator) decorate(err error) error {
 		// This contrived switch case is required to make the linter happy.
 		switch vea.currentDescriptor.DescriptorType() {
 		case catalog.Table:
-			err = errors.Wrapf(err, catalog.Table+" %q (%d)", name, id)
+			err = errors.Wrapf(err, string(catalog.Table)+" %q (%d)", name, id)
 		case catalog.Database:
-			err = errors.Wrapf(err, catalog.Database+" %q (%d)", name, id)
+			err = errors.Wrapf(err, string(catalog.Database)+" %q (%d)", name, id)
 		case catalog.Schema:
-			err = errors.Wrapf(err, catalog.Schema+" %q (%d)", name, id)
+			err = errors.Wrapf(err, string(catalog.Schema)+" %q (%d)", name, id)
 		case catalog.Type:
-			err = errors.Wrapf(err, catalog.Type+" %q (%d)", name, id)
+			err = errors.Wrapf(err, string(catalog.Type)+" %q (%d)", name, id)
 		case catalog.Function:
-			err = errors.Wrapf(err, catalog.Function+" %q (%d)", name, id)
+			err = errors.Wrapf(err, string(catalog.Function)+" %q (%d)", name, id)
 		default:
 			return err
 		}

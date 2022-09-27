@@ -133,13 +133,9 @@ func wrapError(expectedType catalog.DescriptorType, id descpb.ID, err error) err
 func build(
 	expectedType catalog.DescriptorType, id descpb.ID, rowValue *roachpb.Value, isRequired bool,
 ) (catalog.Descriptor, error) {
-	var b catalog.DescriptorBuilder
-	if rowValue != nil {
-		var descProto descpb.Descriptor
-		if err := rowValue.GetProto(&descProto); err != nil {
-			return nil, err
-		}
-		b = descbuilder.NewBuilderWithMVCCTimestamp(&descProto, rowValue.Timestamp)
+	b, err := descbuilder.FromSerializedValue(rowValue)
+	if err != nil {
+		return nil, err
 	}
 	if b == nil {
 		if isRequired {

@@ -21,6 +21,14 @@ increment telemetry for sql.schema.drop_table
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 add synthetic descriptor #108:
   ...
+       regionalByTable:
+         region: us-east2
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: table_regional_by_table
+     nextColumnId: 2
+  ...
      replacementOf:
        time: {}
   +  state: DROP
@@ -39,14 +47,6 @@ upsert descriptor #105
   +    jobId: "1"
      enumMembers:
      - logicalRepresentation: us-east1
-  ...
-     id: 105
-     kind: MULTIREGION_ENUM
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: crdb_internal_region
-     parentId: 104
   ...
          withGrantOption: 2
        version: 2
@@ -79,14 +79,6 @@ upsert descriptor #108
      families:
      - columnIds:
   ...
-       regionalByTable:
-         region: us-east2
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: table_regional_by_table
-     nextColumnId: 2
-  ...
      replacementOf:
        time: {}
   +  state: DROP
@@ -114,14 +106,6 @@ upsert descriptor #105
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-     id: 105
-     kind: MULTIREGION_ENUM
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: crdb_internal_region
-     parentId: 104
-  ...
        primaryRegion: us-east1
        zoneConfigExtensions: {}
   -  version: "3"
@@ -146,14 +130,6 @@ upsert descriptor #108
   -    targets: <redacted>
      dropTime: <redacted>"
      families:
-  ...
-       regionalByTable:
-         region: us-east2
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: table_regional_by_table
-     nextColumnId: 2
   ...
      state: DROP
      unexposedParentSchemaId: 106

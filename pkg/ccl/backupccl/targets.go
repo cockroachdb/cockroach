@@ -158,7 +158,7 @@ func getRelevantDescChanges(
 		if isInterestingID(change.ID) {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
-			desc := descbuilder.NewBuilder(change.Desc).BuildExistingMutable()
+			desc := backupinfo.NewDescriptorForManifest(change.Desc)
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
@@ -204,22 +204,27 @@ func getAllDescChanges(
 		for _, rev := range revs.Values {
 			r := backuppb.BackupManifest_DescriptorRevision{ID: descpb.ID(id), Time: rev.Timestamp}
 			if len(rev.RawBytes) != 0 {
-				var desc descpb.Descriptor
-				if err := rev.GetProto(&desc); err != nil {
-					return nil, err
-				}
-				r.Desc = &desc
-
-				// Collect the prior IDs of table descriptors, as the ID may have been
-				// changed during truncate prior to 20.2.
 				// We update the modification time for the descriptors here with the
 				// timestamp of the KV row so that we can identify the appropriate
 				// descriptors to use during restore.
 				// Note that the modification time of descriptors on disk is usually 0.
-				// See the comment on MaybeSetDescriptorModificationTime... for more.
-				t, _, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(r.Desc, rev.Timestamp)
-				if priorIDs != nil && t != nil && t.ReplacementOf.ID != descpb.InvalidID {
-					priorIDs[t.ID] = t.ReplacementOf.ID
+				// See the comment on descpb.FromSerializedValue for more details.
+				b, err := descbuilder.FromSerializedValue(&rev)
+				if err != nil {
+					return nil, err
+				}
+				if b == nil {
+					continue
+				}
+				desc := b.BuildCreatedMutable()
+				r.Desc = desc.DescriptorProto()
+				// Collect the prior IDs of table descriptors, as the ID may have been
+				// changed during truncate prior to 20.2.
+				switch t := desc.(type) {
+				case *tabledesc.Mutable:
+					if priorIDs != nil && t.ReplacementOf.ID != descpb.InvalidID {
+						priorIDs[t.ID] = t.ReplacementOf.ID
+					}
 				}
 			}
 			res = append(res, r)
@@ -359,7 +364,10 @@ func selectTargets(
 ) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.selectTargets")
 	defer span.Finish()
-	allDescs, lastBackupManifest := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, asOf)
+	allDescs, lastBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, asOf)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 
 	if descriptorCoverage == tree.AllDescriptors {
 		return fullClusterTargetsRestore(ctx, allDescs, lastBackupManifest)
