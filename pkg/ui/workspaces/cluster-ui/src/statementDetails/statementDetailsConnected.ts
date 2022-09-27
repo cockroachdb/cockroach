@@ -61,12 +61,11 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     state,
     props,
   );
+  const statementFingerprint = statementDetails?.statement.metadata.query;
   return {
     statementFingerprintID: getMatchParamByName(props.match, statementAttr),
     statementDetails,
     isLoading: isLoading,
-    latestQuery: state.adminUI.sqlDetailsStats.latestQuery,
-    latestFormattedQuery: state.adminUI.sqlDetailsStats.latestFormattedQuery,
     statementsError: lastError,
     timeScale: selectTimeScale(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
@@ -76,7 +75,7 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
         ? []
         : selectDiagnosticsReportsByStatementFingerprint(
             state,
-            state.adminUI.sqlDetailsStats.latestQuery,
+            statementFingerprint,
           ),
     uiConfig: selectStatementDetailsUiConfig(state),
     isTenant: selectIsTenant(state),
@@ -160,14 +159,6 @@ const mapDispatchToProps = (
         page: "Statement Details",
         action: "Cancelled",
       }),
-    );
-  },
-  onStatementDetailsQueryChange: (latestQuery: string) => {
-    dispatch(sqlDetailsStatsActions.setLatestQuery(latestQuery));
-  },
-  onStatementDetailsFormattedQueryChange: (latestFormattedQuery: string) => {
-    dispatch(
-      sqlDetailsStatsActions.setLatestFormattedQuery(latestFormattedQuery),
     );
   },
   onSortingChange: (tableName, columnName) =>

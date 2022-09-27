@@ -31,22 +31,16 @@ stubComponentInModule(
   "src/views/transactions/activeTransactionDetailsConnected",
   "default",
 );
+stubComponentInModule("src/views/insights/workloadInsightsPage", "default");
 stubComponentInModule(
-  "src/views/insights/workloadInsightsPageConnected",
+  "src/views/insights/transactionInsightDetailsPage",
   "default",
 );
 stubComponentInModule(
-  "src/views/insights/transactionInsightDetailsPageConnected",
+  "src/views/insights/statementInsightDetailsPage",
   "default",
 );
-stubComponentInModule(
-  "src/views/insights/statementInsightDetailsPageConnected",
-  "default",
-);
-stubComponentInModule(
-  "src/views/insights/schemaInsightsPageConnected",
-  "default",
-);
+stubComponentInModule("src/views/insights/schemaInsightsPage", "default");
 stubComponentInModule("src/views/schedules/schedulesPage", "default");
 stubComponentInModule("src/views/schedules/scheduleDetails", "default");
 
@@ -451,23 +445,23 @@ describe("Routing to", () => {
   describe("'/insights' path", () => {
     test("routes to <InsightsOverviewPage> component - workload insights page", () => {
       navigateToPath("/insights");
-      screen.getByTestId("workloadInsightsPageConnected");
+      screen.getByTestId("workloadInsightsPage");
     });
     test("routes to <InsightsOverviewPage> component - schema insights page", () => {
       navigateToPath("/insights?tab=Schema+Insights");
-      screen.getByTestId("schemaInsightsPageConnected");
+      screen.getByTestId("schemaInsightsPage");
     });
   });
   describe("'/insights/transaction/insightID' path", () => {
-    test("routes to <TransactionInsightDetailsPageConnected> component", () => {
+    test("routes to <TransactionInsightDetailsPage> component", () => {
       navigateToPath("/insights/transaction/insightID");
-      screen.getByTestId("transactionInsightDetailsPageConnected");
+      screen.getByTestId("transactionInsightDetailsPage");
     });
   });
   describe("'/insights/statement/insightID' path", () => {
-    test("routes to <StatementInsightDetailsPageConnected> component", () => {
+    test("routes to <StatementInsightDetailsPage> component", () => {
       navigateToPath("/insights/statement/insightID");
-      screen.getByTestId("statementInsightDetailsPageConnected");
+      screen.getByTestId("statementInsightDetailsPage");
     });
   });
   {

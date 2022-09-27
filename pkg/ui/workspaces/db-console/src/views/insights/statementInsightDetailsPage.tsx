@@ -28,10 +28,10 @@ const mapStateToProps = (
   };
 };
 
-const StatementInsightDetailsPageConnected = withRouter(
+const StatementInsightDetailsPage = withRouter(
   connect<StatementInsightDetailsStateProps, RouteComponentProps>(
     mapStateToProps,
   )(StatementInsightDetails),
 );
 
-export default StatementInsightDetailsPageConnected;
+export default StatementInsightDetailsPage;

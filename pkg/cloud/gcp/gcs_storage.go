@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -181,6 +182,10 @@ func makeGCSStorage(
 	if conf.AssumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
+		if !args.Settings.Version.IsActive(ctx, clusterversion.SupportAssumeRoleAuth) {
+			return nil, errors.New("cannot authenticate to cloud storage via assume role until cluster has fully upgraded to 22.2")
+		}
+
 		assumeOpt, err := createImpersonateCredentials(ctx, conf.AssumeRole, conf.AssumeRoleDelegates, []string{scope}, credentialsOpt...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to assume role")

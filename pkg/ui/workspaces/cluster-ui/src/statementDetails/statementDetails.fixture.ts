@@ -784,8 +784,6 @@ export const getStatementDetailsPropsFixture = (
     key: "Custom",
   },
   statementFingerprintID: "4705782015019656142",
-  latestQuery: "SELECT * FROM crdb_internal.node_build_info",
-  latestFormattedQuery: "SELECT * FROM crdb_internal.node_build_info\n",
   statementDetails: withData ? statementDetailsData : statementDetailsNoData,
   statementsError: null,
   nodeNames: {
@@ -809,8 +807,6 @@ export const getStatementDetailsPropsFixture = (
   dismissStatementDiagnosticsAlertMessage: noop,
   onTimeScaleChange: noop,
   createStatementDiagnosticsReport: noop,
-  onStatementDetailsQueryChange: noop,
-  onStatementDetailsFormattedQueryChange: noop,
   uiConfig: {
     showStatementDiagnosticsLink: true,
   },

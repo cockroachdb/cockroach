@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -470,6 +471,10 @@ func newClient(
 	}
 
 	if conf.roleARN != "" {
+		if !settings.Version.IsActive(ctx, clusterversion.SupportAssumeRoleAuth) {
+			return s3Client{}, "", errors.New("cannot authenticate to cloud storage via assume role until cluster has fully upgraded to 22.2")
+		}
+
 		for _, role := range conf.delegateRoleARNs {
 			intermediateCreds := stscreds.NewCredentials(sess, role)
 			opts.Config.Credentials = intermediateCreds

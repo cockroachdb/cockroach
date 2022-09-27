@@ -37,7 +37,7 @@ const mapDispatchToProps = {
   refreshTransactionInsightDetails: refreshTransactionInsightDetails,
 };
 
-const TransactionInsightDetailsPageConnected = withRouter(
+const TransactionInsightDetailsPage = withRouter(
   connect<
     TransactionInsightDetailsStateProps,
     TransactionInsightDetailsDispatchProps,
@@ -48,4 +48,4 @@ const TransactionInsightDetailsPageConnected = withRouter(
   )(TransactionInsightDetails),
 );
 
-export default TransactionInsightDetailsPageConnected;
+export default TransactionInsightDetailsPage;

@@ -414,15 +414,10 @@ func (r *Replica) GetLeaseAppliedIndex() uint64 {
 // Snapshot method.
 func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 	r.mu.AssertHeld()
-	appliedIndex := r.mu.state.RaftAppliedIndex
-	term, err := r.Term(appliedIndex)
-	if err != nil {
-		return raftpb.Snapshot{}, err
-	}
 	return raftpb.Snapshot{
 		Metadata: raftpb.SnapshotMetadata{
-			Index: appliedIndex,
-			Term:  term,
+			Index: r.mu.state.RaftAppliedIndex,
+			Term:  r.mu.state.RaftAppliedIndexTerm,
 		},
 	}, nil
 }
@@ -605,17 +600,6 @@ func snapshot(
 		return OutgoingSnapshot{}, err
 	}
 
-	term, err := term(ctx, rsl, snap, rangeID, eCache, state.RaftAppliedIndex)
-	// If we've migrated to populating RaftAppliedIndexTerm, check that the term
-	// from the two sources are equal.
-	if state.RaftAppliedIndexTerm != 0 && term != state.RaftAppliedIndexTerm {
-		return OutgoingSnapshot{},
-			errors.AssertionFailedf("unequal terms %d != %d", term, state.RaftAppliedIndexTerm)
-	}
-	if err != nil {
-		return OutgoingSnapshot{}, errors.Wrapf(err, "failed to fetch term of %d", state.RaftAppliedIndex)
-	}
-
 	return OutgoingSnapshot{
 		RaftEntryCache: eCache,
 		WithSideloaded: withSideloaded,
@@ -626,7 +610,7 @@ func snapshot(
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
 				Index: state.RaftAppliedIndex,
-				Term:  term,
+				Term:  state.RaftAppliedIndexTerm,
 				// Synthesize our raftpb.ConfState from desc.
 				ConfState: desc.Replicas().ConfState(),
 			},
@@ -979,9 +963,7 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
 			state.RaftAppliedIndex, nonemptySnap.Metadata.Index)
 	}
-	// If we've migrated to populating RaftAppliedIndexTerm, check that the term
-	// from the two sources are equal.
-	if state.RaftAppliedIndexTerm != 0 && state.RaftAppliedIndexTerm != nonemptySnap.Metadata.Term {
+	if state.RaftAppliedIndexTerm != nonemptySnap.Metadata.Term {
 		log.Fatalf(ctx, "snapshot RaftAppliedIndexTerm %d doesn't match its metadata term %d",
 			state.RaftAppliedIndexTerm, nonemptySnap.Metadata.Term)
 	}
