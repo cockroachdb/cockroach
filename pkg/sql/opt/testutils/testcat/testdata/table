@@ -387,6 +387,40 @@ TABLE virtpk
       ├── v int not null as (a + 10) stored
       └── a int not null
 
+# Tables are implicit record types.
+exec-ddl
+CREATE TABLE typ1 (
+  a INT PRIMARY KEY,
+  b STRING
+)
+----
+
+exec-ddl
+CREATE TABLE typ2 (
+  a INT PRIMARY KEY
+)
+----
+
+exec-ddl
+CREATE TABLE tab_with_types (
+  k INT PRIMARY KEY,
+  t1 typ1,
+  t2 typ2
+)
+----
+
+exec-ddl
+SHOW CREATE tab_with_types
+----
+TABLE tab_with_types
+ ├── k int not null
+ ├── t1 tuple{int AS a, string AS b}
+ ├── t2 tuple{int AS a}
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX tab_with_types_pkey
+      └── k int not null
+
 # Regression test for #76994. Only unique constraints with the same columns and
 # predicates should be deduplicated.
 exec-ddl

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -58,11 +59,26 @@ func (tc *Catalog) CreateType(c *tree.CreateType) {
 func (tc *Catalog) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	typ := tc.enumTypes[name.Object()]
-	if typ == nil {
-		return nil, errors.Newf("type %q does not exist", name)
+	// First look for a matching user-defined enum type.
+	if typ := tc.enumTypes[name.Object()]; typ != nil {
+		return typ, nil
 	}
-	return typ, nil
+	// Otherwise look for a matching implicit record type.
+	for _, ds := range tc.testSchema.dataSources {
+		if tab, ok := ds.(*Table); ok && tab.TabName.Object() == name.Object() {
+			contents := make([]*types.T, 0, tab.ColumnCount())
+			labels := make([]string, 0, tab.ColumnCount())
+			for i, n := 0, tab.ColumnCount(); i < n; i++ {
+				col := tab.Column(i)
+				if col.Kind() == cat.Ordinary {
+					contents = append(contents, col.DatumType())
+					labels = append(labels, string(col.ColName()))
+				}
+			}
+			return types.MakeLabeledTuple(contents, labels), nil
+		}
+	}
+	return nil, errors.Newf("type %q does not exist", name)
 }
 
 // ResolveTypeByOID is part of the cat.Catalog interface.
