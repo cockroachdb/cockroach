@@ -2663,7 +2663,6 @@ objoid      classoid    objsubid  description
 4294967260  4294967120  0         cluster-wide index usage statistics (in-memory, not durable).Querying this table is an expensive operation since it creates acluster-wide RPC fanout.
 4294967261  4294967120  0         index columns for all indexes accessible by current user in current database (KV scan)
 4294967262  4294967120  0         cluster-wide transaction contention events. Querying this table is an
-4294967263  4294967120  0         locally known edges in the gossip network (RAM; local node only)
 4294967264  4294967120  0         locally known gossiped node liveness (RAM; local node only)
 4294967265  4294967120  0         locally known gossiped health alerts (RAM; local node only)
 4294967266  4294967120  0         locally known gossiped node details (RAM; local node only)

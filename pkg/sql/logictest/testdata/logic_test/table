@@ -581,7 +581,6 @@ feature_usage                          NULL
 forward_dependencies                   NULL
 gossip_alerts                          NULL
 gossip_liveness                        NULL
-gossip_network                         NULL
 gossip_nodes                           NULL
 index_columns                          NULL
 index_usage_statistics                 NULL
