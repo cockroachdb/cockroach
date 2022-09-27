@@ -49,8 +49,50 @@ func TestValidateAndParseJWTAuthIssuers(t *testing.T) {
 				t.Errorf("validateJWTAuthIssuers() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {
-				parsedIssuers := mustParseIssuers(tt.setting)
+				parsedIssuers := mustParseValueOrArray(tt.setting)
 				require.Equal(t, parsedIssuers, tt.expectedIssuers)
+			}
+		})
+	}
+}
+
+func TestValidateAndParseJWTAuthAudience(t *testing.T) {
+	tests := []struct {
+		name            string
+		setting         string
+		wantErr         bool
+		expectedIssuers []string
+	}{
+		{"empty string",
+			"", false,
+			[]string{""}},
+		{"string constant",
+			"audience1", false,
+			[]string{"audience1"}},
+		{"odd string constant",
+			"audience1{}`[]!@#%#^$&*", false,
+			[]string{"audience1{}`[]!@#%#^$&*"}},
+		{"empty json",
+			"[]", false,
+			[]string{}},
+		{"single element json",
+			"[\"audience 1\"]", false,
+			[]string{"audience 1"}},
+		{"multiple element json",
+			"[\"audience 1\", \"audience 2\", \"audience 3\", \"audience 4\", \"audience 5\"]", false,
+			[]string{"audience 1", "audience 2", "audience 3", "audience 4", "audience 5"}},
+		{"json but invalid in this context",
+			"{\"redirect_urls\": {\"key\":\"http://example.com\"}}", true,
+			nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateJWTAuthAudiences(nil, tt.setting); (err != nil) != tt.wantErr {
+				t.Errorf("validateJWTAuthAudiences() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr {
+				parsedAudiences := mustParseValueOrArray(tt.setting)
+				require.Equal(t, parsedAudiences, tt.expectedIssuers)
 			}
 		})
 	}
