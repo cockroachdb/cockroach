@@ -364,7 +364,10 @@ func listFailures(
 				failures[parentTest] = append(failures[parentTest], testEvents...)
 				delete(failures, test)
 			} else {
-				log.Printf("failed parent test %q", test)
+				log.Printf("failed parent test %q (no subtests)", test.name)
+				if _, ok := failures[test]; !ok {
+					return errors.AssertionFailedf("expected %q in 'failures'", test.name)
+				}
 			}
 		}
 		// Sort the failed tests to make the unit tests for this script deterministic.
@@ -417,7 +420,26 @@ func listFailures(
 		if len(slowPassEvents) > 0 && slowPassEvents[0].Elapsed > slowest.Elapsed {
 			slowest = slowPassEvents[0]
 		}
-		if timedOutCulprit == scoped(slowest) {
+
+		culpritOwner := fmt.Sprintf("%v", getOwner(ctx, timedOutCulprit.pkg, timedOutCulprit.name))
+		slowEvents := append(slowFailEvents, slowPassEvents...)
+		// The predicate determines if the union of the slow events is owned by the _same_ team(s) as timedOutCulprit.
+		hasSameOwner := func() bool {
+			if culpritOwner == "[]" {
+				return false
+			}
+			for _, slowEvent := range slowEvents {
+				scopedEvent := scoped(slowEvent)
+				owner := fmt.Sprintf("%v", getOwner(ctx, scopedEvent.pkg, scopedEvent.name))
+
+				if culpritOwner != owner {
+					log.Printf("%v has a different owner: %s;bailing out...\n", scopedEvent, owner)
+					return false
+				}
+			}
+			return true
+		}
+		if timedOutCulprit == scoped(slowest) || hasSameOwner() {
 			// The test that was running when the timeout hit is the one that ran for
 			// the longest time.
 			log.Printf("timeout culprit found: %s\n", timedOutCulprit.name)
