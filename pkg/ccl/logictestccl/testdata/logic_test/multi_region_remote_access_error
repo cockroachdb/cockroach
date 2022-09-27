@@ -295,12 +295,6 @@ statement error pq: Query has no home region\. Try adding a filter on o\.crdb_re
 SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
   (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
 
-# A join relation with no home region as the left input of lookup join should
-# not be allowed.
-statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\.
-SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_global g2 ON rbr.account_id = g2.account_id
-  INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
-
 # Locality optimized lookup join is allowed.
 query TTTTTTT retry
 SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
@@ -372,7 +366,7 @@ inner-join (lookup messages_rbt [as=rbt])
  │    └── constraint: /4/1: [/'ap-southeast-2' - /'ap-southeast-2']
  └── filters (true)
 
-# A lookup join between with a global table as either input should be allowed.
+# A lookup join with a global table as either input should be allowed.
 query TTTTTT retry
 SELECT * FROM messages_global g1 INNER LOOKUP JOIN messages_global g2 ON g1.account_id = g2.account_id
 ----
