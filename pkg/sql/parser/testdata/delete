@@ -125,3 +125,29 @@ DELETE FROM a WHERE a = b -- normalized!
 DELETE FROM a WHERE ((a) = (b)) -- fully parenthesized
 DELETE FROM a WHERE a = b -- literals removed
 DELETE FROM _ WHERE _ = _ -- identifiers removed
+
+parse
+DELETE FROM a USING b
+----
+DELETE FROM a USING b
+DELETE FROM a USING b -- fully parenthesized
+DELETE FROM a USING b -- literals removed
+DELETE FROM _ USING _ -- identifiers removed
+
+parse
+DELETE FROM a USING b WHERE c = d
+----
+DELETE FROM a USING b WHERE c = d
+DELETE FROM a USING b WHERE ((c) = (d)) -- fully parenthesized
+DELETE FROM a USING b WHERE c = d -- literals removed
+DELETE FROM _ USING _ WHERE _ = _ -- identifiers removed
+
+parse
+DELETE FROM a USING b WHERE c = d AND e = f
+----
+DELETE FROM a USING b WHERE (c = d) AND (e = f) -- normalized!
+DELETE FROM a USING b WHERE ((((c) = (d))) AND (((e) = (f)))) -- fully parenthesized
+DELETE FROM a USING b WHERE (c = d) AND (e = f) -- literals removed
+DELETE FROM _ USING _ WHERE (_ = _) AND (_ = _) -- identifiers removed
+
+
