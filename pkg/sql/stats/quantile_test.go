@@ -16,6 +16,7 @@ import (
 	"math/bits"
 	"math/rand"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"testing"
@@ -1353,7 +1354,16 @@ func TestQuantileOps(t *testing.T) {
 			// This seems like it should run into floating point errors, but it hasn't
 			// yet, so yay?
 			if intSqFixed != intSq {
-				t.Errorf("test case %d incorrect intSqFixed %v expected %v", i, intSqFixed, intSq)
+				if runtime.GOARCH == "arm64" {
+					// Truncate to 10 decimal places.
+					truncatedIntSqFixed := float64(int(intSqFixed*1e10)) / 1e10
+					truncatedIntSq := float64(int(intSq*1e10)) / 1e10
+					if truncatedIntSqFixed != truncatedIntSq {
+						t.Errorf("test case %d incorrect truncatedIntSqFixed %v expected %v", i, truncatedIntSqFixed, truncatedIntSq)
+					}
+				} else {
+					t.Errorf("test case %d incorrect intSqFixed %v expected %v", i, intSqFixed, intSq)
+				}
 			}
 		})
 	}
