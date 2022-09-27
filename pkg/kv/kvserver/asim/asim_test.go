@@ -142,7 +142,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	minRunTime := int64(math.MaxInt64)
 	// TODO(kvoli): Hit perf wall again when running at a lower tick rate on
 	// selected operartions.
-	requiredRunTime := 25 * time.Second.Nanoseconds()
+	requiredRunTime := 30 * time.Second.Nanoseconds()
 	samples := 5
 	for i := 0; i < samples; i++ {
 		if sampledRun := sample(); sampledRun < minRunTime {
