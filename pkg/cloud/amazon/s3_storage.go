@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
 )
 
@@ -404,6 +405,22 @@ func MakeS3Storage(
 	return s, nil
 }
 
+type awsLogAdapter struct {
+	ctx context.Context
+}
+
+func (l *awsLogAdapter) Log(vals ...interface{}) {
+	log.Infof(l.ctx, "s3: %s", fmt.Sprint(vals...))
+}
+
+func newLogAdapter(ctx context.Context) *awsLogAdapter {
+	return &awsLogAdapter{
+		ctx: logtags.AddTags(context.Background(), logtags.FromContext(ctx)),
+	}
+}
+
+var awsVerboseLogging = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
+
 // newClient creates a client from the passed s3ClientConfig and if the passed
 // config's region is empty, used the passed bucket to determine a region and
 // configures the client with it as well as returning it (so the caller can
@@ -411,11 +428,10 @@ func MakeS3Storage(
 func newClient(
 	ctx context.Context, conf s3ClientConfig, settings *cluster.Settings,
 ) (s3Client, string, error) {
-
 	// Open a span if client creation will do IO/RPCs to find creds/bucket region.
 	if conf.region == "" || conf.auth == cloud.AuthParamImplicit {
 		var sp *tracing.Span
-		ctx, sp = tracing.ChildSpan(ctx, "open s3 client")
+		ctx, sp = tracing.ChildSpan(ctx, "s3.newClient")
 		defer sp.Finish()
 	}
 
@@ -441,8 +457,9 @@ func newClient(
 
 	opts.Config.CredentialsChainVerboseErrors = aws.Bool(true)
 
+	opts.Config.Logger = newLogAdapter(ctx)
 	if conf.verbose {
-		opts.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestRetries | aws.LogDebugWithRequestErrors)
+		opts.Config.LogLevel = awsVerboseLogging
 	}
 
 	retryer := &customRetryer{
