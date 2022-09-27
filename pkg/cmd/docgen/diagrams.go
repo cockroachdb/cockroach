@@ -1303,7 +1303,7 @@ var specs = []stmtSpec{
 			"'BACKUP' string_or_placeholder 'IN' string_or_placeholder": "'BACKUP' subdirectory 'IN' location",
 			"'BACKUP' 'SCHEMAS' string_or_placeholder":                  "'BACKUP' 'SCHEMAS' location",
 		},
-		unlink: []string{"location"},
+		unlink: []string{"location", "subdirectory"},
 	},
 	{
 		name:    "show_jobs",
