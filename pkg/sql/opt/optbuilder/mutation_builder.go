@@ -384,7 +384,12 @@ func (mb *mutationBuilder) buildInputForUpdate(
 // All columns from the table to update are added to fetchColList.
 // TODO(andyk): Do needed column analysis to project fewer columns if possible.
 func (mb *mutationBuilder) buildInputForDelete(
-	inScope *scope, texpr tree.TableExpr, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
+	inScope *scope,
+	texpr tree.TableExpr,
+	where *tree.Where,
+	using tree.TableExprs,
+	limit *tree.Limit,
+	orderBy tree.OrderBy,
 ) {
 	var indexFlags *tree.IndexFlags
 	if source, ok := texpr.(*tree.AliasedTableExpr); ok && source.IndexFlags != nil {
@@ -424,6 +429,11 @@ func (mb *mutationBuilder) buildInputForDelete(
 	orderByScope := mb.b.analyzeOrderBy(orderBy, mb.outScope, projectionsScope, tree.RejectGenerators)
 	mb.b.buildOrderBy(mb.outScope, projectionsScope, orderByScope)
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+
+	// USING
+	if using != nil {
+		panic("DELETE USING is unimplemented so should not be used")
+	}
 
 	// LIMIT
 	if limit != nil {
