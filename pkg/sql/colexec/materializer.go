@@ -227,12 +227,7 @@ func newMaterializerInternal(
 		execinfra.ProcStateOpts{
 			// We append drainHelper to inputs to drain below in order to reuse
 			// the same underlying slice from the pooled materializer.
-			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
-				// Note that we delegate draining all of the metadata sources
-				// to drainHelper which is added as an input to drain below.
-				m.close()
-				return nil
-			},
+			TrailingMetaCallback: m.trailingMetaCallback,
 		},
 	)
 	m.AddInputToDrain(&m.drainHelper)
@@ -344,6 +339,13 @@ func (m *Materializer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 	}
 	// Forward any metadata.
 	return nil, m.DrainHelper()
+}
+
+func (m *Materializer) trailingMetaCallback() []execinfrapb.ProducerMetadata {
+	// Note that we delegate draining all of the metadata sources to drainHelper
+	// which is added as an input to drain.
+	m.close()
+	return nil
 }
 
 func (m *Materializer) close() {
