@@ -269,7 +269,7 @@ func putRelease(svc s3I, o opts) {
 		Platform:      o.Platform,
 		VersionStr:    o.VersionStr,
 		ArchivePrefix: "cockroach-sql",
-		Files:         []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath, "cockroach-sql")},
+		Files:         []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")},
 	})
 }
 
