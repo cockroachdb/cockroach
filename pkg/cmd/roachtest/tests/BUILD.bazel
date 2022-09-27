@@ -83,6 +83,7 @@ go_library(
         "multitenant_tpch.go",
         "multitenant_upgrade.go",
         "multitenant_utils.go",
+        "mvcc_gc.go",
         "network.go",
         "nodejs_postgres.go",
         "orm_helpers.go",

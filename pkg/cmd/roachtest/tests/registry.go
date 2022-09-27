@@ -45,6 +45,7 @@ func RegisterTests(r registry.Registry) {
 	registerFixtures(r)
 	registerFlowable(r)
 	registerFollowerReads(r)
+	registerMVCCGC(r)
 	registerGORM(r)
 	registerGopg(r)
 	registerGossip(r)
