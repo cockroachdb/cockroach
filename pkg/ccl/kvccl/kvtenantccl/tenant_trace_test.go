@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -117,7 +116,6 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 
 		require.NotEmpty(t, trace)
 		var found bool
-		var foundRedactedMarker bool
 		for _, rs := range trace {
 			for _, s := range rs.Logs {
 				if strings.Contains(s.Msg().StripMarkers(), sensitiveString) {
@@ -128,9 +126,6 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 				}
 				if strings.Contains(s.Msg().StripMarkers(), visibleString) {
 					found = true
-				}
-				if strings.Contains(s.Msg().StripMarkers(), string(server.TraceRedactedMarker)) {
-					foundRedactedMarker = true
 				}
 			}
 		}
@@ -143,15 +138,11 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 			// trace.
 			require.True(t, found, "did not see expected trace message '%q':\n%s",
 				visibleString, trace)
-			require.False(t, foundRedactedMarker, "unexpectedly found '%q':\n%s",
-				string(server.TraceRedactedMarker), trace)
 		} else {
 			// Otherwise, expect the opposite: not even safe information makes it through,
 			// because it gets replaced with foundRedactedMarker.
 			require.False(t, found, "unexpectedly saw message '%q':\n%s",
 				visibleString, trace)
-			require.False(t, foundRedactedMarker, "unexpectedly found '%q':\n%s",
-				string(server.TraceRedactedMarker), trace)
 		}
 	})
 }
