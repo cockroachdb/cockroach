@@ -12,9 +12,11 @@ package rowexec
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -32,9 +34,16 @@ type noopProcessor struct {
 
 var _ execinfra.Processor = &noopProcessor{}
 var _ execinfra.RowSource = &noopProcessor{}
+var _ execreleasable.Releasable = &noopProcessor{}
 var _ execopnode.OpNode = &noopProcessor{}
 
 const noopProcName = "noop"
+
+var noopPool = sync.Pool{
+	New: func() interface{} {
+		return &noopProcessor{}
+	},
+}
 
 func newNoopProcessor(
 	flowCtx *execinfra.FlowCtx,
@@ -43,7 +52,8 @@ func newNoopProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*noopProcessor, error) {
-	n := &noopProcessor{input: input}
+	n := noopPool.Get().(*noopProcessor)
+	n.input = input
 	if err := n.Init(
 		n,
 		post,
@@ -52,10 +62,13 @@ func newNoopProcessor(
 		processorID,
 		output,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{n.input}},
+		// We append input to inputs to drain below in order to reuse the same
+		// underlying slice from the pooled noopProcessor.
+		execinfra.ProcStateOpts{},
 	); err != nil {
 		return nil, err
 	}
+	n.AddInputToDrain(n.input)
 	ctx := flowCtx.EvalCtx.Ctx()
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		n.input = newInputStatCollector(n.input)
@@ -103,6 +116,13 @@ func (n *noopProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 		Inputs: []execinfrapb.InputStats{is},
 		Output: n.OutputHelper.Stats(),
 	}
+}
+
+// Release releases this noopProcessor back to the pool.
+func (n *noopProcessor) Release() {
+	n.ProcessorBase.Reset()
+	*n = noopProcessor{ProcessorBase: n.ProcessorBase}
+	noopPool.Put(n)
 }
 
 // ChildCount is part of the execopnode.OpNode interface.
