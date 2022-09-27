@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -62,6 +63,8 @@ func TestApplier(t *testing.T) {
 		// the context cancellation was noticed.
 		actual = regexp.MustCompile(` aborted .*: context canceled`).ReplaceAllString(actual, ` context canceled`)
 		assert.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(actual))
+		v := roachpb.Value{}
+		v.VerifyHeader()
 	}
 
 	checkPanics := func(t *testing.T, s Step, expectedPanic string) {

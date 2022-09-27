@@ -60,6 +60,7 @@ message PutOperation {
 
 message DeleteOperation {
   bytes key = 1;
+  uint32 Seq = 3 [(gogoproto.casttype) = "DelSeq"];
   Result result = 2 [(gogoproto.nullable) = false];
 }
 

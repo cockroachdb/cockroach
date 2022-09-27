@@ -94,7 +94,7 @@ func RunNemesis(
 	}
 	kvs := w.Finish()
 	defer kvs.Close()
-	failures := Validate(allSteps, kvs)
+	failures := Validate(allSteps, kvs, env.dt)
 
 	if len(failures) > 0 {
 		log.Infof(ctx, "reproduction steps:\n%s", printRepro(stepsByWorker))

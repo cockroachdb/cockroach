@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -40,6 +42,8 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t)
 
+	dt := &DeletionTracker{}
+
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -48,6 +52,19 @@ func TestKVNemesisSingleNode(t *testing.T) {
 					// Drop the clock MaxOffset to reduce commit-wait time for
 					// transactions that write to global_read ranges.
 					MaxOffset: 10 * time.Millisecond,
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingPostEvalFilter: func(args kvserverbase.FilterArgs) *roachpb.Error {
+							if args.Err != nil {
+								return nil // don't do anything (this does not reset the error)
+							}
+							switch args.Req.(type) {
+							case *roachpb.DeleteRequest:
+								dt.Extract(args.Hdr)
+							default:
+							}
+							return nil
+						},
+					},
 				},
 			},
 		},
@@ -60,7 +77,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	config := NewDefaultConfig()
 	config.NumNodes, config.NumReplicas = 1, 1
 	rng, _ := randutil.NewTestRand()
-	env := &Env{sqlDBs: []*gosql.DB{sqlDB}}
+	env := &Env{sqlDBs: []*gosql.DB{sqlDB}, dt: dt}
 	failures, err := RunNemesis(ctx, rng, env, config, numSteps, db)
 	require.NoError(t, err, `%+v`, err)
 

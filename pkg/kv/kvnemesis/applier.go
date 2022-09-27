@@ -84,7 +84,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*BatchOperation,
 		*DeleteOperation,
 		*DeleteRangeOperation:
-		applyClientOp(ctx, db, op, false /* inTxn */)
+		applyClientOp(ctx, db, env.dt, op, false /* inTxn */)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
 		o.Result = resultInit(ctx, err)
@@ -120,7 +120,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 			for i := range o.Ops {
 				op := &o.Ops[i]
 				op.Result().Reset() // in case we're a retry
-				applyClientOp(ctx, txn, op, true /* inTxn */)
+				applyClientOp(ctx, txn, env.dt, op, true /* inTxn */)
 				// The KV api disallows use of a txn after an operation on it errors.
 				if r := op.Result(); r.Type == ResultType_Error {
 					return errors.DecodeError(ctx, *r.Err)
@@ -197,7 +197,9 @@ func batchRun(
 	return ts, nil
 }
 
-func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
+func applyClientOp(
+	ctx context.Context, db clientI, dt *DeletionTracker, op *Operation, inTxn bool,
+) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation:
 		fn := (*kv.Batch).Get
@@ -250,12 +252,13 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		o.Result.Values = make([]KeyValue, len(kvs))
 		for i, kv := range kvs {
 			o.Result.Values[i] = KeyValue{
-				Key:   []byte(kv.Key),
+				Key:   kv.Key,
 				Value: kv.Value.RawBytes,
 			}
 		}
 	case *DeleteOperation:
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
+			dt.Inject(&b.Header, o.Seq)
 			b.Del(o.Key)
 		})
 		o.Result = resultInit(ctx, err)

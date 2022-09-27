@@ -26,6 +26,7 @@ import (
 // the Applier operates in.
 type Env struct {
 	sqlDBs []*gosql.DB
+	dt     *DeletionTracker
 }
 
 func (e *Env) anyNode() *gosql.DB {

@@ -331,7 +331,8 @@ type generator struct {
 	Config     GeneratorConfig
 	replicasFn GetReplicasFn
 
-	nextValue int
+	nextValue  int
+	nextDelSeq DelSeq
 
 	// keys is the set of every key that has been written to, including those
 	// deleted or in rolled back transactions.
@@ -500,12 +501,14 @@ func randReverseScanForUpdate(g *generator, rng *rand.Rand) Operation {
 func randDelMissing(g *generator, rng *rand.Rand) Operation {
 	key := randKey(rng)
 	g.keys[key] = struct{}{}
-	return del(key)
+	g.nextDelSeq++
+	return delWithID(key, g.nextDelSeq)
 }
 
 func randDelExisting(g *generator, rng *rand.Rand) Operation {
 	key := randMapKey(rng, g.keys)
-	return del(key)
+	g.nextDelSeq++
+	return delWithID(key, g.nextDelSeq)
 }
 
 func randDelRange(g *generator, rng *rand.Rand) Operation {
@@ -729,11 +732,15 @@ func reverseScanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true}}
 }
 
-func del(key string) Operation {
-	return Operation{Delete: &DeleteOperation{Key: []byte(key)}}
+func delWithID(key string, id DelSeq) Operation {
+	return Operation{Delete: &DeleteOperation{
+		Key: []byte(key),
+		Seq: id,
+	}}
 }
 
 func delRange(key, endKey string) Operation {
+	// TODO(tbg): also give this a Seq like Delete.
 	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey)}}
 }
 

@@ -33,6 +33,10 @@ func withTimestamp(op Operation, ts int) Operation {
 	return op
 }
 
+func del(key string) Operation {
+	return delWithID(key, 0)
+}
+
 func withResultTS(op Operation, ts int) Operation {
 	return withTimestamp(withResultOK(op), ts)
 }
@@ -47,7 +51,6 @@ func withResult(op Operation) Operation {
 
 func withAmbResultTS(op Operation, ts int64) Operation {
 	err := roachpb.NewAmbiguousResultErrorf("boom")
-	err.WriteTimestamp = hlc.Timestamp{WallTime: ts}
 	op = withResultErr(op, err)
 	op.Result().OptionalTimestamp = hlc.Timestamp{} // TODO remove this when hack in withResultErr is gone
 	return op
@@ -125,6 +128,7 @@ func TestValidate(t *testing.T) {
 		name     string
 		steps    []Step
 		kvs      []storage.MVCCKeyValue
+		dt       map[DelSeq]int // seq -> ts
 		expected []string
 	}{
 		{
@@ -1896,7 +1900,7 @@ func TestValidate(t *testing.T) {
 				e.Put(kv.Key, kv.Value)
 			}
 			var actual []string
-			if failures := Validate(test.steps, e); len(failures) > 0 {
+			if failures := Validate(test.steps, e, &DeletionTracker{} /* TODO */); len(failures) > 0 {
 				actual = make([]string, len(failures))
 				for i := range failures {
 					actual[i] = failures[i].Error()
