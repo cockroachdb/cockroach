@@ -2652,3 +2652,60 @@ project
       │    └── projections
       │         └── true
       └── filters (true)
+
+# Regression test for #88649 - don't panic when zero-cardinality group drops
+# trivial equivalences.
+exec-ddl
+CREATE TABLE table1_88649 (
+  col1_0 FLOAT4 NOT NULL,
+  col1_1 OID NULL,
+  col1_2 STRING NOT NULL,
+  col1_3 INET NULL,
+  col1_4 INET NOT NULL,
+  col1_5 GEOGRAPHY NULL,
+  col1_6 DATE NULL,
+  col1_7 BOX2D NOT NULL,
+  col1_8 STRING NULL AS (lower(CAST(col1_1 AS STRING))) STORED,
+  col1_9 STRING NOT NULL AS (lower(CAST(col1_4 AS STRING))) STORED,
+  col1_10 FLOAT8 NOT NULL AS (col1_0 + (-2.2259812355041504):::FLOAT8) VIRTUAL,
+  col1_11 STRING NOT NULL AS (lower(CAST(col1_4 AS STRING))) VIRTUAL,
+  UNIQUE (col1_8),
+  UNIQUE (col1_4 ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE table2_88649 (
+  col2_0 CHAR NOT NULL,
+  col2_1 JSONB NULL,
+  col2_2 BOX2D NOT NULL,
+  col2_3 OID NOT NULL,
+  col2_4 STRING NOT NULL AS (lower(CAST(col2_1 AS STRING))) VIRTUAL,
+  PRIMARY KEY (col2_0, col2_4 ASC, col2_2 ASC, col2_3),
+  UNIQUE (col2_3 ASC, col2_4 DESC, col2_0 ASC)
+)
+----
+
+opt
+SELECT
+  CASE WHEN true THEN tab_923.col1_4 ELSE tab_923.col1_3 END AS col_2150
+FROM
+  table2_88649@table2_88649_pkey AS tab_922
+FULL JOIN
+  table1_88649@table1_88649_col1_8_key AS tab_923 ON NULL
+WHERE
+  false
+ORDER BY
+  tab_923.col1_4 ASC, tab_922.crdb_internal_mvcc_timestamp DESC, tab_923.col1_10, tab_923.col1_7
+----
+sort
+ ├── columns: col_2150:23!null  [hidden: tab_922.crdb_internal_mvcc_timestamp:6!null col1_4:12!null]
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ ├── fd: ()-->(6,12,23)
+ ├── ordering: +(12|23),-6 [actual: ]
+ └── values
+      ├── columns: tab_922.crdb_internal_mvcc_timestamp:6!null col1_4:12!null col_2150:23!null
+      ├── cardinality: [0 - 0]
+      ├── key: ()
+      └── fd: ()-->(6,12,23)
