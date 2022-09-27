@@ -32,6 +32,7 @@ type schemaDescriptorBuilder struct {
 	maybeModified        *descpb.SchemaDescriptor
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
+	rawBytesInStorage    []byte
 }
 
 var _ SchemaDescriptorBuilder = &schemaDescriptorBuilder{}
@@ -40,18 +41,20 @@ var _ SchemaDescriptorBuilder = &schemaDescriptorBuilder{}
 // schema descriptors.
 func NewBuilder(desc *descpb.SchemaDescriptor) SchemaDescriptorBuilder {
 	return newBuilder(desc, false, /* isUncommittedVersion */
-		catalog.PostDeserializationChanges{})
+		catalog.PostDeserializationChanges{}, nil)
 }
 
 func newBuilder(
 	desc *descpb.SchemaDescriptor,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
+	rawBytesInStorage []byte,
 ) SchemaDescriptorBuilder {
 	return &schemaDescriptorBuilder{
 		original:             protoutil.Clone(desc).(*descpb.SchemaDescriptor),
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
+		rawBytesInStorage:    rawBytesInStorage,
 	}
 }
 
@@ -84,6 +87,10 @@ func (sdb *schemaDescriptorBuilder) RunRestoreChanges(
 	return nil
 }
 
+func (sdb *schemaDescriptorBuilder) SetRawBytesInDescriptor(rawBytes []byte) {
+	sdb.rawBytesInStorage = rawBytes
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (sdb *schemaDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return sdb.BuildImmutableSchema()
@@ -99,6 +106,7 @@ func (sdb *schemaDescriptorBuilder) BuildImmutableSchema() catalog.SchemaDescrip
 		SchemaDescriptor:     *desc,
 		changes:              sdb.changes,
 		isUncommittedVersion: sdb.isUncommittedVersion,
+		rawBytesInStorage:    sdb.rawBytesInStorage,
 	}
 }
 
@@ -118,6 +126,7 @@ func (sdb *schemaDescriptorBuilder) BuildExistingMutableSchema() *Mutable {
 			SchemaDescriptor:     *sdb.maybeModified,
 			changes:              sdb.changes,
 			isUncommittedVersion: sdb.isUncommittedVersion,
+			rawBytesInStorage:    sdb.rawBytesInStorage,
 		},
 		ClusterVersion: &immutable{SchemaDescriptor: *sdb.original},
 	}

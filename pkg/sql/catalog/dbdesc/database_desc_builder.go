@@ -38,6 +38,7 @@ type databaseDescriptorBuilder struct {
 
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
+	rawBytesInStorage    []byte
 }
 
 var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
@@ -46,18 +47,20 @@ var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
 // database descriptors.
 func NewBuilder(desc *descpb.DatabaseDescriptor) DatabaseDescriptorBuilder {
 	return newBuilder(desc, false, /* isUncommittedVersion */
-		catalog.PostDeserializationChanges{})
+		catalog.PostDeserializationChanges{}, nil)
 }
 
 func newBuilder(
 	desc *descpb.DatabaseDescriptor,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
+	rawBytesInStorage []byte,
 ) DatabaseDescriptorBuilder {
 	return &databaseDescriptorBuilder{
 		original:             protoutil.Clone(desc).(*descpb.DatabaseDescriptor),
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
+		rawBytesInStorage:    rawBytesInStorage,
 	}
 }
 
@@ -108,6 +111,10 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 	_ func(id descpb.ID) catalog.Descriptor,
 ) error {
 	return nil
+}
+
+func (ddb *databaseDescriptorBuilder) SetRawBytesInDescriptor(rawBytes []byte) {
+	ddb.rawBytesInStorage = rawBytes
 }
 
 func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
@@ -165,6 +172,7 @@ func (ddb *databaseDescriptorBuilder) BuildImmutableDatabase() catalog.DatabaseD
 		DatabaseDescriptor:   *desc,
 		isUncommittedVersion: ddb.isUncommittedVersion,
 		changes:              ddb.changes,
+		rawBytesInStorage:    ddb.rawBytesInStorage,
 	}
 }
 
@@ -184,6 +192,7 @@ func (ddb *databaseDescriptorBuilder) BuildExistingMutableDatabase() *Mutable {
 			DatabaseDescriptor:   *ddb.maybeModified,
 			changes:              ddb.changes,
 			isUncommittedVersion: ddb.isUncommittedVersion,
+			rawBytesInStorage:    ddb.rawBytesInStorage,
 		},
 		ClusterVersion: &immutable{DatabaseDescriptor: *ddb.original},
 	}

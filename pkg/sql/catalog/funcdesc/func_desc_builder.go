@@ -29,18 +29,20 @@ var _ FunctionDescriptorBuilder = &functionDescriptorBuilder{}
 
 // NewBuilder returns a new FunctionDescriptorBuilder.
 func NewBuilder(desc *descpb.FunctionDescriptor) FunctionDescriptorBuilder {
-	return newBuilder(desc, false /* isUncommittedVersion */, catalog.PostDeserializationChanges{})
+	return newBuilder(desc, false, catalog.PostDeserializationChanges{}, nil)
 }
 
 func newBuilder(
 	desc *descpb.FunctionDescriptor,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
+	rawBytesInStorage []byte,
 ) FunctionDescriptorBuilder {
 	return &functionDescriptorBuilder{
 		original:             protoutil.Clone(desc).(*descpb.FunctionDescriptor),
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
+		rawBytesInStorage:    rawBytesInStorage,
 	}
 }
 
@@ -50,6 +52,7 @@ type functionDescriptorBuilder struct {
 
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
+	rawBytesInStorage    []byte
 }
 
 // DescriptorType implements the catalog.DescriptorBuilder interface.
@@ -68,6 +71,10 @@ func (f functionDescriptorBuilder) RunRestoreChanges(
 	descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) error {
 	return nil
+}
+
+func (f functionDescriptorBuilder) SetRawBytesInDescriptor(rawBytes []byte) {
+	f.rawBytesInStorage = rawBytes
 }
 
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
@@ -95,6 +102,7 @@ func (f functionDescriptorBuilder) BuildImmutableFunction() catalog.FunctionDesc
 		FunctionDescriptor:   *desc,
 		isUncommittedVersion: f.isUncommittedVersion,
 		changes:              f.changes,
+		rawBytesInStorage:    f.rawBytesInStorage,
 	}
 }
 
@@ -108,6 +116,7 @@ func (f functionDescriptorBuilder) BuildExistingMutableFunction() *Mutable {
 			FunctionDescriptor:   *f.maybeModified,
 			isUncommittedVersion: f.isUncommittedVersion,
 			changes:              f.changes,
+			rawBytesInStorage:    f.rawBytesInStorage,
 		},
 		clusterVersion: &immutable{FunctionDescriptor: *f.original},
 	}

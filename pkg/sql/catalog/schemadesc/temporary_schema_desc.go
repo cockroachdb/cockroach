@@ -45,6 +45,10 @@ type temporary struct {
 	parentID descpb.ID
 }
 
+func (p temporary) GetRawBytesInStorage() []byte {
+	return nil
+}
+
 var _ catalog.SchemaDescriptor = temporary{}
 var _ catalog.PrivilegeObject = temporary{}
 

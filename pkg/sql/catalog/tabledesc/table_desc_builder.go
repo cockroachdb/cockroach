@@ -39,6 +39,7 @@ type tableDescriptorBuilder struct {
 	changes                    catalog.PostDeserializationChanges
 	skipFKsWithNoMatchingTable bool
 	isUncommittedVersion       bool
+	rawBytesInStorage          []byte
 }
 
 var _ TableDescriptorBuilder = &tableDescriptorBuilder{}
@@ -47,7 +48,7 @@ var _ TableDescriptorBuilder = &tableDescriptorBuilder{}
 // table descriptors.
 func NewBuilder(desc *descpb.TableDescriptor) TableDescriptorBuilder {
 	return newBuilder(desc, false, /* isUncommittedVersion */
-		catalog.PostDeserializationChanges{})
+		catalog.PostDeserializationChanges{}, nil)
 }
 
 // NewBuilderForFKUpgrade should be used when attempting to upgrade the
@@ -59,7 +60,7 @@ func NewBuilderForFKUpgrade(
 	desc *descpb.TableDescriptor, skipFKsWithNoMatchingTable bool,
 ) TableDescriptorBuilder {
 	b := newBuilder(desc, false, /* isUncommittedVersion */
-		catalog.PostDeserializationChanges{})
+		catalog.PostDeserializationChanges{}, nil)
 	b.skipFKsWithNoMatchingTable = skipFKsWithNoMatchingTable
 	return b
 }
@@ -82,11 +83,13 @@ func newBuilder(
 	desc *descpb.TableDescriptor,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
+	rawBytesInStorage []byte,
 ) *tableDescriptorBuilder {
 	return &tableDescriptorBuilder{
 		original:             protoutil.Clone(desc).(*descpb.TableDescriptor),
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
+		rawBytesInStorage:    rawBytesInStorage,
 	}
 }
 
@@ -141,6 +144,10 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	return err
 }
 
+func (tdb *tableDescriptorBuilder) SetRawBytesInDescriptor(rawBytes []byte) {
+	tdb.rawBytesInStorage = rawBytes
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (tdb *tableDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return tdb.BuildImmutableTable()
@@ -155,6 +162,7 @@ func (tdb *tableDescriptorBuilder) BuildImmutableTable() catalog.TableDescriptor
 	imm := makeImmutable(desc)
 	imm.changes = tdb.changes
 	imm.isUncommittedVersion = tdb.isUncommittedVersion
+	imm.rawBytesInStorage = tdb.rawBytesInStorage
 	return imm
 }
 

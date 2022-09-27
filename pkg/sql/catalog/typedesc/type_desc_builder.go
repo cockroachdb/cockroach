@@ -33,6 +33,7 @@ type typeDescriptorBuilder struct {
 
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
+	rawBytesInStorage    []byte
 }
 
 var _ TypeDescriptorBuilder = &typeDescriptorBuilder{}
@@ -41,18 +42,20 @@ var _ TypeDescriptorBuilder = &typeDescriptorBuilder{}
 // type descriptors.
 func NewBuilder(desc *descpb.TypeDescriptor) TypeDescriptorBuilder {
 	return newBuilder(desc, false, /* isUncommitedVersion */
-		catalog.PostDeserializationChanges{})
+		catalog.PostDeserializationChanges{}, nil)
 }
 
 func newBuilder(
 	desc *descpb.TypeDescriptor,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
+	rawBytesInStorage []byte,
 ) TypeDescriptorBuilder {
 	b := &typeDescriptorBuilder{
 		original:             protoutil.Clone(desc).(*descpb.TypeDescriptor),
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
+		rawBytesInStorage:    rawBytesInStorage,
 	}
 	return b
 }
@@ -84,6 +87,10 @@ func (tdb *typeDescriptorBuilder) RunRestoreChanges(_ func(id descpb.ID) catalog
 	return nil
 }
 
+func (tdb *typeDescriptorBuilder) SetRawBytesInDescriptor(rawBytes []byte) {
+	tdb.rawBytesInStorage = rawBytes
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (tdb *typeDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return tdb.BuildImmutableType()
@@ -96,6 +103,7 @@ func (tdb *typeDescriptorBuilder) BuildImmutableType() catalog.TypeDescriptor {
 		desc = tdb.original
 	}
 	imm := makeImmutable(desc, tdb.isUncommittedVersion, tdb.changes)
+	imm.rawBytesInStorage = tdb.rawBytesInStorage
 	return &imm
 }
 
@@ -110,10 +118,12 @@ func (tdb *typeDescriptorBuilder) BuildExistingMutableType() *Mutable {
 	if tdb.maybeModified == nil {
 		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
 	}
+	mutableType := makeImmutable(tdb.maybeModified, false /* isUncommitedVersion */, tdb.changes)
+	mutableType.rawBytesInStorage = tdb.rawBytesInStorage
 	clusterVersion := makeImmutable(tdb.original, false, /* isUncommitedVersion */
 		catalog.PostDeserializationChanges{})
 	return &Mutable{
-		immutable:      makeImmutable(tdb.maybeModified, false /* isUncommitedVersion */, tdb.changes),
+		immutable:      mutableType,
 		ClusterVersion: &clusterVersion,
 	}
 }

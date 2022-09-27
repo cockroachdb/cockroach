@@ -49,6 +49,12 @@ type immutable struct {
 	// changed represents how the descriptor was changed after
 	// RunPostDeserializationChanges.
 	changes catalog.PostDeserializationChanges
+
+	rawBytesInStorage []byte
+}
+
+func (desc *immutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
 }
 
 func (desc *immutable) SchemaKind() catalog.ResolvedSchemaKind {
@@ -169,12 +175,12 @@ func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState 
 // It overrides the wrapper's implementation to deal with the fact that
 // mutable has overridden the definition of IsUncommittedVersion.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.SchemaDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.SchemaDesc(), desc.IsUncommittedVersion(), desc.changes, desc.GetRawBytesInStorage())
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.SchemaDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.SchemaDesc(), desc.IsUncommittedVersion(), desc.changes, desc.GetRawBytesInStorage())
 }
 
 // ValidateSelf implements the catalog.Descriptor interface.
@@ -334,6 +340,10 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 		return 0
 	}
 	return desc.ClusterVersion.Version
+}
+
+func (desc *Mutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
 }
 
 // ImmutableCopy implements the MutableDescriptor interface.

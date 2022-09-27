@@ -48,6 +48,12 @@ type wrapper struct {
 	columnCache   *columnCache
 
 	changes catalog.PostDeserializationChanges
+
+	rawBytesInStorage []byte
+}
+
+func (desc *wrapper) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
 }
 
 // IsUncommittedVersion implements the catalog.Descriptor interface.
@@ -99,6 +105,10 @@ type immutable struct {
 	// outboundFKs []*ForeignKeyConstraint
 }
 
+func (desc *immutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
+}
+
 // IsUncommittedVersion implements the Descriptor interface.
 func (desc *immutable) IsUncommittedVersion() bool {
 	return desc.isUncommittedVersion
@@ -124,7 +134,7 @@ func (desc *wrapper) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *wrapper) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes, desc.GetRawBytesInStorage())
 }
 
 // GetPrimaryIndexID implements the TableDescriptor interface.
@@ -147,7 +157,7 @@ func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 // It overrides the wrapper's implementation to deal with the fact that
 // mutable has overridden the definition of IsUncommittedVersion.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes, desc.GetRawBytesInStorage())
 }
 
 // IsUncommittedVersion implements the Descriptor interface.

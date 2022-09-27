@@ -45,6 +45,10 @@ type TableImplicitRecordType struct {
 	privs *catpb.PrivilegeDescriptor
 }
 
+func (v TableImplicitRecordType) GetRawBytesInStorage() []byte {
+	return nil
+}
+
 var _ catalog.TypeDescriptor = (*TableImplicitRecordType)(nil)
 
 // CreateImplicitRecordTypeFromTableDesc creates a TypeDescriptor that represents

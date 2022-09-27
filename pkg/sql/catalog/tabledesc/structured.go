@@ -1011,6 +1011,10 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	return desc.ClusterVersion().Version
 }
 
+func (desc *Mutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
+}
+
 // ClusterVersion returns the version of the table descriptor read from the
 // store, if any.
 //
