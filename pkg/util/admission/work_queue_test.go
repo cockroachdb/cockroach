@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -178,6 +179,8 @@ func TestWorkQueueBasic(t *testing.T) {
 	initialTime := timeutil.FromUnixMicros(int64(100) * int64(time.Millisecond/time.Microsecond))
 	var timeSource *timeutil.ManualTime
 	var st *cluster.Settings
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
 	datadriven.RunTest(t, testutils.TestDataPath(t, "work_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -190,7 +193,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				opts.disableEpochClosingGoroutine = true
 				st = cluster.MakeTestingClusterSettings()
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
-					KVWork, tg, st, opts).(*WorkQueue)
+					KVWork, tg, st, metrics, opts).(*WorkQueue)
 				tg.r = q
 				wrkMap.resetMap()
 				return ""
@@ -328,8 +331,10 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 	var buf builderWithMu
 	tg := &testGranter{buf: &buf}
 	st := cluster.MakeTestingClusterSettings()
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
 	q := makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()), SQLKVResponseWork, tg,
-		st, makeWorkQueueOptions(SQLKVResponseWork)).(*WorkQueue)
+		st, metrics, makeWorkQueueOptions(SQLKVResponseWork)).(*WorkQueue)
 	tg.r = q
 	createTime := int64(0)
 	stopCh := make(chan struct{})
@@ -494,6 +499,8 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 			q.mu.estimates)
 	}
 
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
 	datadriven.RunTest(t, testutils.TestDataPath(t, "store_work_queue"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -508,7 +515,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				st = cluster.MakeTestingClusterSettings()
 				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					[numWorkClasses]granterWithStoreWriteDone{tg[regularWorkClass], tg[elasticWorkClass]},
-					st, opts).(*StoreWorkQueue)
+					st, metrics, opts).(*StoreWorkQueue)
 				tg[regularWorkClass].r = q.getRequesters()[regularWorkClass]
 				tg[elasticWorkClass].r = q.getRequesters()[elasticWorkClass]
 				wrkMap.resetMap()

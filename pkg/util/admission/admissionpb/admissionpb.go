@@ -39,6 +39,19 @@ const (
 	OneAboveHighPri int = int(HighPri) + 1
 )
 
+// WorkPriorityDict is a mapping of the priorities to a short string name. The
+// name is used as the suffix on exported work queue metrics.
+var WorkPriorityDict = map[WorkPriority]string{
+	LowPri:        "min",
+	TTLLowPri:     "ttl",
+	UserLowPri:    "low",
+	BulkNormalPri: "bulk",
+	NormalPri:     "normal",
+	UserHighPri:   "high",
+	LockingPri:    "locking",
+	HighPri:       "max",
+}
+
 // Prevent the linter from emitting unused warnings.
 var _ = LowPri
 var _ = TTLLowPri

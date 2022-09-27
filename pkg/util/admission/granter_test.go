@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
@@ -70,13 +71,13 @@ func TestGranterBasic(t *testing.T) {
 		return str
 	}
 	settings := cluster.MakeTestingClusterSettings()
+	registry := metric.NewRegistry()
 	KVSlotAdjusterOverloadThreshold.Override(context.Background(), &settings.SV, 1)
 	datadriven.RunTest(t, testutils.TestDataPath(t, "granter"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init-grant-coordinator":
 			clearRequesterAndCoord()
 			var opts Options
-			opts.Settings = settings
 			d.ScanArgs(t, "min-cpu", &opts.MinCPUSlots)
 			d.ScanArgs(t, "max-cpu", &opts.MaxCPUSlots)
 			var burstTokens int
@@ -88,7 +89,7 @@ func TestGranterBasic(t *testing.T) {
 			d.ScanArgs(t, "sql-root", &opts.SQLStatementRootStartWorkSlots)
 			opts.makeRequesterFunc = func(
 				_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
-				opts workQueueOptions) requester {
+				metrics *WorkQueueMetrics, opts workQueueOptions) requester {
 				req := &testRequester{
 					workKind:               workKind,
 					granter:                granter,
@@ -101,7 +102,7 @@ func TestGranterBasic(t *testing.T) {
 			}
 			delayForGrantChainTermination = 0
 			opts.RunnableAlphaOverride = 1 // This gives weight to only the most recent sample.
-			coords, _ := NewGrantCoordinators(ambientCtx, opts)
+			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry)
 			defer coords.Close()
 			coord = coords.Regular
 			var err error
@@ -120,11 +121,12 @@ func TestGranterBasic(t *testing.T) {
 		case "init-store-grant-coordinator":
 			clearRequesterAndCoord()
 			metrics := makeGrantCoordinatorMetrics()
+			workQueueMetrics := makeWorkQueueMetrics("", registry)
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
 					ambientCtx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
-					settings *cluster.Settings, opts workQueueOptions) storeRequester {
+					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
 					makeTestRequester := func(wc workClass) *testRequester {
 						req := &testRequester{
 							workKind:               KVWork,
@@ -149,7 +151,7 @@ func TestGranterBasic(t *testing.T) {
 					return req
 				},
 				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
-				workQueueMetrics:            makeWorkQueueMetrics(""),
+				workQueueMetrics:            workQueueMetrics,
 				disableTickerForTesting:     true,
 			}
 			var metricsProvider testMetricsProvider
@@ -288,11 +290,13 @@ func TestStoreCoordinators(t *testing.T) {
 	var ambientCtx log.AmbientContext
 	var buf strings.Builder
 	settings := cluster.MakeTestingClusterSettings()
+	registry := metric.NewRegistry()
 	// All the KVWork requesters. The first one is for all KVWork and the
 	// remaining are the per-store ones.
 	var requesters []*testRequester
 	makeRequesterFunc := func(
 		_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
+		_ *WorkQueueMetrics,
 		opts workQueueOptions) requester {
 		req := &testRequester{
 			workKind:   workKind,
@@ -306,13 +310,12 @@ func TestStoreCoordinators(t *testing.T) {
 		return req
 	}
 	opts := Options{
-		Settings:          settings,
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
 			ctx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
-			settings *cluster.Settings, opts workQueueOptions) storeRequester {
-			reqReg := makeRequesterFunc(ctx, KVWork, granters[regularWorkClass], settings, opts)
-			reqElastic := makeRequesterFunc(ctx, KVWork, granters[elasticWorkClass], settings, opts)
+			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
+			reqReg := makeRequesterFunc(ctx, KVWork, granters[regularWorkClass], settings, metrics, opts)
+			reqElastic := makeRequesterFunc(ctx, KVWork, granters[elasticWorkClass], settings, metrics, opts)
 			str := &storeTestRequester{}
 			str.requesters[regularWorkClass] = reqReg.(*testRequester)
 			str.requesters[regularWorkClass].additionalID = "-regular"
@@ -321,7 +324,7 @@ func TestStoreCoordinators(t *testing.T) {
 			return str
 		},
 	}
-	coords, _ := NewGrantCoordinators(ambientCtx, opts)
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry)
 	// There is only 1 KVWork requester at this point in initialization, for the
 	// Regular GrantCoordinator.
 	require.Equal(t, 1, len(requesters))

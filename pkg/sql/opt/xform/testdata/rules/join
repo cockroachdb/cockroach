@@ -12077,6 +12077,34 @@ project
  └── projections
       └── NULL [as="?column?":11]
 
+# Regression test for #87306. Do not plan a paired join if there are no columns
+# to fetch from the RHS's primary index.
+exec-ddl
+CREATE TABLE t87306 (
+  a INT,
+  b INT,
+  c INT,
+  INDEX (a, c)
+)
+----
+
+opt expect=GenerateLookupJoinsWithFilter
+SELECT m FROM small WHERE m IN (
+  SELECT c FROM t87306 WHERE a = 0 OR b IN (0) AND b > 0
+)
+----
+semi-join (lookup t87306@t87306_a_c_idx)
+ ├── columns: m:1
+ ├── key columns: [12 1] = [6 8]
+ ├── project
+ │    ├── columns: "lookup_join_const_col_@6":12!null m:1
+ │    ├── fd: ()-->(12)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── projections
+ │         └── 0 [as="lookup_join_const_col_@6":12]
+ └── filters (true)
+
 # --------------------------------------------------
 # SplitDisjunctionOfJoinTerms
 # --------------------------------------------------
