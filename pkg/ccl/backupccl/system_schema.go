@@ -586,25 +586,38 @@ func rekeySystemTable(
 			typ = "oid"
 		}
 
-		// We'll build one big UPDATE that moves all the IDs to their intermediate
-		// new values, which is new+offset, or just +offset for IDs which do not
-		// have a remapping, since we will unconditionally slide everything down by
-		// the offset at the end.
+		// We'll build one big UPDATE that moves all remapped the IDs temporary IDs
+		// consisting of new+fixed-offset; later we can slide everything down by
+		// fixed-offset to put them in their correct, final places.
 		q := strings.Builder{}
 		fmt.Fprintf(&q, "UPDATE %s SET %s = (CASE\n", tempTableName, colName)
 		for _, old := range toRekey {
 			fmt.Fprintf(&q, "WHEN %s = %d THEN %d\n", colName, old, rekeys[old].ID+offset)
 		}
-		fmt.Fprintf(&q, "ELSE %s::int + %d END)::%s", colName, offset, typ)
+		fmt.Fprintf(&q, "ELSE %s END)::%s", colName, typ)
 		if _, err := executor.Exec(ctx, fmt.Sprintf("remap-%s", tempTableName), txn, q.String()); err != nil {
 			return errors.Wrapf(err, "remapping IDs %s", tempTableName)
 		}
 
-		// Now slide all the IDs back down by the offset to their intended values.
+		// Now that the rows mentioning remapped IDs are remapped to be shifted to
+		// be above offset, we can clean out anything that did not get remapped and
+		// might be in the way when we shift back down such as a zone config for a
+		// dropped table that isn't being restored and thus has no remapping. Rows
+		// that mention IDs below 50 can stay though: these are mentioning old fixed
+		// ID system tables that we do not restore directly, and thus have no entry
+		// in our remapping, but the configuration of them (comments, zones, etc) is
+		// expected to be restored.
+		if _, err := executor.Exec(ctx, fmt.Sprintf("remap-remove-%s", tempTableName), txn,
+			fmt.Sprintf("DELETE FROM %s WHERE %s >= 50 AND %s < %d", tempTableName, colName, colName, offset),
+		); err != nil {
+			return errors.Wrapf(err, "remapping IDs %s", tempTableName)
+		}
+
+		// Now slide remapped the IDs back down by offset, to their intended values.
 		if _, err := executor.Exec(ctx,
 			fmt.Sprintf("remap-%s-deoffset", tempTableName),
 			txn,
-			fmt.Sprintf("UPDATE %s SET %s = (%s::int - %d)::%s", tempTableName, colName, colName, offset, typ),
+			fmt.Sprintf("UPDATE %s SET %s = (%s::int - %d)::%s WHERE %s::int >= %d", tempTableName, colName, colName, offset, typ, colName, offset),
 		); err != nil {
 			return errors.Wrapf(err, "remapping %s; removing offset", tempTableName)
 		}
