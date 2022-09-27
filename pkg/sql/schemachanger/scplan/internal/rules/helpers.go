@@ -13,7 +13,6 @@ package rules
 import (
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -22,15 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
-
-func idInIDs(objects []descpb.ID, id descpb.ID) bool {
-	for _, other := range objects {
-		if other == id {
-			return true
-		}
-	}
-	return false
-}
 
 func join(a, b nodeVars, attr rel.Attr, eqVarName rel.Var) rel.Clause {
 	return joinOn(a, attr, b, attr, eqVarName)
@@ -309,14 +299,6 @@ func isWithTypeT(element scpb.Element) bool {
 	return err == nil
 }
 
-func getTypeTOrPanic(element scpb.Element) *scpb.TypeT {
-	ret, err := getTypeT(element)
-	if err != nil {
-		panic(err)
-	}
-	return ret
-}
-
 func getExpression(element scpb.Element) (*scpb.Expression, error) {
 	switch e := element.(type) {
 	case *scpb.ColumnType:
@@ -353,12 +335,13 @@ func isWithExpression(element scpb.Element) bool {
 	return err == nil
 }
 
-func getExpressionOrPanic(element scpb.Element) *scpb.Expression {
-	ret, err := getExpression(element)
-	if err != nil {
-		panic(err)
+func isTypeDescriptor(element scpb.Element) bool {
+	switch element.(type) {
+	case *scpb.EnumType, *scpb.AliasType:
+		return true
+	default:
+		return false
 	}
-	return ret
 }
 
 func isColumnDependent(e scpb.Element) bool {
@@ -409,7 +392,20 @@ func isConstraintDependent(e scpb.Element) bool {
 	return false
 }
 
-func not(predicate func(e scpb.Element) bool) func(e scpb.Element) bool {
+type elementTypePredicate = func(e scpb.Element) bool
+
+func or(predicates ...elementTypePredicate) elementTypePredicate {
+	return func(e scpb.Element) bool {
+		for _, p := range predicates {
+			if p(e) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func not(predicate elementTypePredicate) elementTypePredicate {
 	return func(e scpb.Element) bool {
 		return !predicate(e)
 	}
