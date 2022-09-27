@@ -145,13 +145,12 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			// them.
 			fingerprint = strings.Replace(fingerprint, "%", " ", -1)
 
-			return fmt.Sprintf("%t",
-				appStats.ShouldSaveLogicalPlanDesc(
-					fingerprint,
-					implicitTxn,
-					dbName,
-				),
+			previouslySampled, savePlanForStats := appStats.ShouldSample(
+				fingerprint,
+				implicitTxn,
+				dbName,
 			)
+			return fmt.Sprintf("%t, %t", previouslySampled, savePlanForStats)
 		}
 
 		return ""

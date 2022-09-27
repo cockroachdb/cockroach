@@ -16,7 +16,7 @@ set-time time=2021-09-20T15:00:00Z
 # at all.
 should-sample-logical-plan db=defaultdb implicitTxn=true fingerprint=SELECT%_
 ----
-true
+false, true
 
 # Execute the query to trigger a collection of logical plan.
 # (db_name=defaultdb implicitTxn=true fingerprint=SELECT _)
@@ -28,13 +28,13 @@ SELECT 1
 # logical plan sampling.
 should-sample-logical-plan db=defaultdb implicitTxn=true fingerprint=SELECT%_
 ----
-false
+true, false
 
 # However, if we are to execute the same statement but under explicit
 # transaction, the plan will still need to be sampled.
 should-sample-logical-plan db=defaultdb implicitTxn=false fingerprint=SELECT%_
 ----
-true
+false, true
 
 # Execute the statement under explicit transaction.
 # (db_name=defaultdb implicitTxn=false fingerprint=SELECT _)
@@ -48,7 +48,7 @@ COMMIT
 # collection.
 should-sample-logical-plan db=defaultdb implicitTxn=false fingerprint=SELECT%_
 ----
-false
+true, false
 
 # Set the time to the future and ensure we will resample the logical plan.
 set-time time=2021-09-20T15:05:01Z
@@ -58,7 +58,7 @@ set-time time=2021-09-20T15:05:01Z
 
 should-sample-logical-plan db=defaultdb implicitTxn=true fingerprint=SELECT%_
 ----
-true
+true, true
 
 # implicit txn
 exec-sql
@@ -67,11 +67,11 @@ SELECT 1
 
 should-sample-logical-plan db=defaultdb implicitTxn=true fingerprint=SELECT%_
 ----
-false
+true, true
 
 should-sample-logical-plan db=defaultdb implicitTxn=false fingerprint=SELECT%_
 ----
-true
+true, true
 
 # explicit txn
 exec-sql
@@ -82,4 +82,4 @@ COMMIT
 
 should-sample-logical-plan db=defaultdb implicitTxn=false fingerprint=SELECT%_
 ----
-false
+true, true
