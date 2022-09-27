@@ -299,6 +299,10 @@ const (
 	// supported in cloud storage and KMS.
 	SupportAssumeRoleAuth
 
+	// FixUserfileRelatedDescriptorCorruption adds a migration which uses
+	// heuristics to identify invalid table descriptors for userfile-related
+	// descriptors.
+	FixUserfileRelatedDescriptorCorruption
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -485,7 +489,10 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     SupportAssumeRoleAuth,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 74},
 	},
-
+	{
+		Key:     FixUserfileRelatedDescriptorCorruption,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 76},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
