@@ -83,11 +83,6 @@ const (
 	// KeyDistSQLDrainingPrefix is the key prefix for each node's DistSQL
 	// draining state.
 	KeyDistSQLDrainingPrefix = "distsql-draining"
-
-	// KeyGossipClientsPrefix is the prefix for keys that indicate which gossip
-	// client connections a node has open. This is used by other nodes in the
-	// cluster to build a map of the gossip network.
-	KeyGossipClientsPrefix = "gossip-clients"
 )
 
 // MakeKey creates a canonical key under which to gossip a piece of
@@ -128,11 +123,6 @@ func DecodeNodeDescKey(key string, prefix string) (roachpb.NodeID, error) {
 		return 0, errors.Wrapf(err, "failed parsing NodeID from key %q", key)
 	}
 	return roachpb.NodeID(nodeID), nil
-}
-
-// MakeGossipClientsKey returns the gossip client key for the given node.
-func MakeGossipClientsKey(nodeID roachpb.NodeID) string {
-	return MakeKey(KeyGossipClientsPrefix, nodeID.String())
 }
 
 // MakeNodeHealthAlertKey returns the gossip key under which the given node can
