@@ -34,36 +34,29 @@ var provisionalReleasePrefixRE = regexp.MustCompile(`^provisional_[0-9]{12}_`)
 
 func main() {
 	var isReleaseF = flag.Bool("release", false, "build in release mode instead of bleeding-edge mode")
-	var destBucket = flag.String("bucket", "", "override default bucket")
-	var gcsBucket = flag.String("gcs-bucket", "", "override default bucket")
+	var s3Bucket = flag.String("s3-bucket", "", "S3 bucket name")
+	var gcsBucket = flag.String("gcs-bucket", "", "GCS bucket name")
 	var doProvisionalF = flag.Bool("provisional", false, "publish provisional binaries")
 	var doBlessF = flag.Bool("bless", false, "bless provisional binaries")
 
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	var bucketName string
-	if len(*destBucket) > 0 {
-		bucketName = *destBucket
-	} else if *isReleaseF {
-		bucketName = "binaries.cockroachdb.com"
-	} else {
-		bucketName = "cockroach"
-	}
-	log.Printf("Using S3 bucket: %s", bucketName)
-
-	if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
-		log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
-	}
-	if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
-		log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
-	}
 	var providers []release.ObjectPutGetter
-	s3, err := release.NewS3("us-east-1", bucketName)
-	if err != nil {
-		log.Fatalf("Creating AWS S3 session: %s", err)
+	if *s3Bucket != "" {
+		if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
+			log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
+		}
+		if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
+			log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
+		}
+		log.Printf("Using S3 bucket: %s", *s3Bucket)
+		s3, err := release.NewS3("us-east-1", *s3Bucket)
+		if err != nil {
+			log.Fatalf("Creating AWS S3 session: %s", err)
+		}
+		providers = append(providers, s3)
 	}
-	providers = append(providers, s3)
 	if *gcsBucket != "" {
 		if _, ok := os.LookupEnv("GOOGLE_APPLICATION_CREDENTIALS"); !ok {
 			log.Fatal("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
@@ -73,6 +66,10 @@ func main() {
 			log.Fatalf("Creating GCS session: %s", err)
 		}
 		providers = append(providers, gcs)
+		log.Printf("Using GCS bucket: %s", *gcsBucket)
+	}
+	if len(providers) == 0 {
+		log.Fatal("No cloud storage providers specified")
 	}
 
 	branch, ok := os.LookupEnv(teamcityBuildBranchKey)
@@ -154,7 +151,13 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		updateLatest = true
 	}
 
-	platforms := []release.Platform{release.PlatformLinux, release.PlatformMacOS, release.PlatformWindows, release.PlatformLinuxArm}
+	platforms := []release.Platform{
+		release.PlatformLinux,
+		release.PlatformMacOS,
+		release.PlatformMacOSArm,
+		release.PlatformWindows,
+		release.PlatformLinuxArm,
+	}
 	var cockroachBuildOpts []opts
 	for _, platform := range platforms {
 		var o opts

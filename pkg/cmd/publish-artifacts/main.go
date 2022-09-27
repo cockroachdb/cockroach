@@ -29,15 +29,36 @@ const (
 )
 
 func main() {
-	var destBucket = flag.String("bucket", "cockroach", "override default bucket")
-	var gcsBucket = flag.String("gcs-bucket", "", "override default bucket")
+	var s3Bucket = flag.String("s3-bucket", "", "S3 bucket name")
+	var gcsBucket = flag.String("gcs-bucket", "", "GSC bucket name")
 	flag.Parse()
 
-	if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
-		log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
+	var providers []release.ObjectPutGetter
+	if *s3Bucket != "" {
+		if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
+			log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
+		}
+		if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
+			log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
+		}
+		s3, err := release.NewS3("us-east-1", *s3Bucket)
+		if err != nil {
+			log.Fatalf("Creating AWS S3 session: %s", err)
+		}
+		providers = append(providers, s3)
 	}
-	if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
-		log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
+	if *gcsBucket != "" {
+		if _, ok := os.LookupEnv("GOOGLE_APPLICATION_CREDENTIALS"); !ok {
+			log.Fatal("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
+		}
+		gcs, err := release.NewGCS(*gcsBucket)
+		if err != nil {
+			log.Fatalf("Creating GCS session: %s", err)
+		}
+		providers = append(providers, gcs)
+	}
+	if len(providers) == 0 {
+		log.Fatal("No cloud storage providers specified")
 	}
 
 	branch, ok := os.LookupEnv(teamcityBuildBranchKey)
@@ -63,24 +84,6 @@ func main() {
 	}
 	versionStr := string(bytes.TrimSpace(out))
 
-	var providers []release.ObjectPutGetter
-	s3, err := release.NewS3("us-east-1", *destBucket)
-	if err != nil {
-		log.Fatalf("Creating AWS S3 session: %s", err)
-	}
-	providers = append(providers, s3)
-
-	if *gcsBucket != "" {
-		if _, ok := os.LookupEnv("GOOGLE_APPLICATION_CREDENTIALS"); !ok {
-			log.Fatal("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
-		}
-		gcs, err := release.NewGCS(*gcsBucket)
-		if err != nil {
-			log.Fatalf("Creating GCS session: %s", err)
-		}
-		providers = append(providers, gcs)
-	}
-
 	run(providers, runFlags{
 		pkgDir: pkg,
 		branch: branch,
@@ -95,7 +98,13 @@ type runFlags struct {
 }
 
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
-	for _, platform := range []release.Platform{release.PlatformLinux, release.PlatformLinuxArm, release.PlatformMacOS, release.PlatformWindows} {
+	for _, platform := range []release.Platform{
+		release.PlatformLinux,
+		release.PlatformLinuxArm,
+		release.PlatformMacOS,
+		release.PlatformMacOSArm,
+		release.PlatformWindows,
+	} {
 		var o opts
 		o.Platform = platform
 		o.ReleaseVersions = []string{flags.sha}

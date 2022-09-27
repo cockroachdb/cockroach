@@ -24,7 +24,8 @@ fi
 release_branch=$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+')
 
 if [[ -z "${DRY_RUN}" ]] ; then
-  bucket="binaries.cockroachdb.com"
+  src_gcs_bucket="cockroach-release-artifacts-staged-prod"
+  s3_bucket="binaries.cockroachdb.com"
   gcs_bucket="cockroach-release-artifacts-prod"
   google_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
   # export the variable to avoid shell escaping
@@ -37,10 +38,10 @@ if [[ -z "${DRY_RUN}" ]] ; then
   gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
   # Used for docker login for gcloud
   gcr_hostname="us-docker.pkg.dev"
-  s3_download_hostname="${bucket}"
   git_repo_for_tag="cockroachdb/cockroach"
 else
-  bucket="cockroach-builds-test"
+  src_gcs_bucket="cockroach-release-artifacts-staged-dryrun"
+  s3_bucket="cockroach-builds-test"
   gcs_bucket="cockroach-release-artifacts-dryrun"
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
   # export the variable to avoid shell escaping
@@ -48,7 +49,6 @@ else
   dockerhub_repository="docker.io/cockroachdb/cockroach-misc"
   gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
   gcr_hostname="us.gcr.io"
-  s3_download_hostname="${bucket}.s3.amazonaws.com"
   git_repo_for_tag="cockroachlabs/release-staging"
   if [[ -z "$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+\.[0-9]+$')" ]] ; then
     # Using `.` to match how we usually format the pre-release portion of the
@@ -79,41 +79,68 @@ tc_start_block "Tag the release"
 git tag "${build_name}"
 tc_end_block "Tag the release"
 
+# TODO: consider moving this logic to publish-provisional-artifacts. Or even
+# better to move the build logic from publish-provisional-artifacts to Bazel
+# and use publish-provisional-artifacts for uploads only.
+mkdir -p artifacts/upload
+cd artifacts/upload
+for platform in \
+    darwin-10.9-amd64 \
+    linux-amd64 \
+    windows-6.2-amd64 \
+    linux-3.7.10-gnu-aarch64; do
 
-tc_start_block "Make and publish release S3 artifacts"
-# Using publish-provisional-artifacts here is funky. We're directly publishing
-# the official binaries, not provisional ones. Legacy naming. To clean up...
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e bucket=$bucket -e gcs_credentials -e gcs_bucket=$gcs_bucket" run_bazel << 'EOF'
-bazel build --config ci //pkg/cmd/publish-provisional-artifacts
+    # TODO: add darwin-11.0-aarch64 after it's signed
+
+    ext=tgz
+    if [ $platform = "windows-6.2-amd64" ]; then
+        ext=zip
+    fi
+    for f in cockroach-${build_name}.${platform}.${ext} cockroach-sql-${build_name}.${platform}.${ext}; do
+      curl -f -s -S -o "$f" "https://storage.googleapis.com/$src_gcs_bucket/$f"
+      curl -f -s -S -o "$f" "https://storage.googleapis.com/$src_gcs_bucket/$f.sha256sum"
+      sha256sum -c "$f.sha256sum"
+    done
+done
+cd -
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e s3_bucket=$s3_bucket -e gcs_credentials -e gcs_bucket=$gcs_bucket -e build_name=$build_name" run_bazel << 'EOF'
+bazel build --config ci //pkg/cmd/cloudupload
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
 export google_credentials="$gcs_credentials"
 source "build/teamcity-support.sh"  # For log_into_gcloud
 log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release -bucket "$bucket" --gcs-bucket="$gcs_bucket"
-EOF
-tc_end_block "Make and publish release S3 artifacts"
+for platform in \
+    darwin-10.9-amd64 \
+    linux-amd64 \
+    windows-6.2-amd64 \
+    linux-3.7.10-gnu-aarch64; do
 
+    # TODO: add darwin-11.0-aarch64 after it's signed
+
+    ext=tgz
+    if [ $platform = "windows-6.2-amd64" ]; then
+        ext=zip
+    fi
+    for f in cockroach-${build_name}.${platform}.${ext} cockroach-sql-${build_name}.${platform}.${ext}; do
+      $BAZEL_BIN/pkg/cmd/cloudupload/cloudupload_/cloudupload "artifacts/upload/$f" "s3://$s3_bucket/$f"
+      $BAZEL_BIN/pkg/cmd/cloudupload/cloudupload_/cloudupload "artifacts/upload/$f" "gcs://$gcs_bucket/$f"
+    done
+done
+
+EOF
 
 tc_start_block "Make and push docker images"
 configure_docker_creds
 docker_login_with_google
 docker_login
 
-# TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem?
-curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
-cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
-cp -r licenses build/deploy/
-
-docker build \
-  --label version=$version \
-  --no-cache \
-  --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} \
-  --tag=${gcr_repository}:${build_name} \
-  build/deploy
+docker pull "${gcr_repository}:${build_name}"
+docker tag "${gcr_repository}:${build_name}" "${dockerhub_repository}:$build_name"
+docker tag "${gcr_repository}:${build_name}" "${dockerhub_repository}:latest"
+docker tag "${gcr_repository}:${build_name}" "${dockerhub_repository}:latest-${release_branch}"
 
 docker push "${dockerhub_repository}:${build_name}"
-docker push "${gcr_repository}:${build_name}"
 tc_end_block "Make and push docker images"
 
 
@@ -123,25 +150,15 @@ git_wrapped push "ssh://git@github.com/${git_repo_for_tag}.git" "$build_name"
 tc_end_block "Push release tag to GitHub"
 
 
-tc_start_block "Publish S3 binaries and archive as latest-RELEASE_BRANCH"
-# example: v20.1-latest
-if [[ -z "$PRE_RELEASE" ]]; then
-  #TODO: implement me!
-  echo "Pushing latest-RELEASE_BRANCH S3 binaries and archive is not implemented."
-else
-  echo "Pushing latest-RELEASE_BRANCH S3 binaries and archive is not implemented."
-fi
-tc_end_block "Publish S3 binaries and archive as latest-RELEASE_BRANCH"
-
 
 tc_start_block "Publish S3 binaries and archive as latest"
 # Only push the "latest" for our most recent release branch.
 # https://github.com/cockroachdb/cockroach/issues/41067
 if [[ -n "${PUBLISH_LATEST}" && -z "${PRE_RELEASE}" ]]; then
-    BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e bucket -e gcs_credentials -e gcs_bucket" run_bazel << 'EOF'
+    BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e s3_bucket=$s3_bucket -e gcs_credentials -e gcs_bucket=$gcs_bucket" run_bazel << 'EOF'
 bazel build --config ci //pkg/cmd/publish-provisional-artifacts
 BAZEL_BIN=$(bazel info bazel-bin --config ci)
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -bless -release -bucket "$bucket" --gcs-bucket="$gcs_bucket"
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -bless -release --s3-bucket "$s3_bucket" --gcs-bucket="$gcs_bucket"
 EOF
 
 else
