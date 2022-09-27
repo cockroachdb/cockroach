@@ -1344,7 +1344,7 @@ func (r *Replica) checkLeaseRespectsPreferences(ctx context.Context) (bool, erro
 	if len(conf.LeasePreferences) == 0 {
 		return true, nil
 	}
-	storeDesc, err := r.store.Descriptor(ctx, false /* useCached */)
+	storeDesc, err := r.store.Descriptor(ctx, true /* useCached */)
 	if err != nil {
 		return false, err
 	}
