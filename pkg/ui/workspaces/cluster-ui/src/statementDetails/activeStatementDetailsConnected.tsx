@@ -22,6 +22,7 @@ import {
   selectActiveStatement,
   selectContentionDetailsForStatement,
 } from "src/selectors/activeExecutions.selectors";
+import { selectIsTenant } from "src/store/uiConfig";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -33,6 +34,7 @@ const mapStateToProps = (
     contentionDetails: selectContentionDetailsForStatement(state, props),
     statement: selectActiveStatement(state, props),
     match: props.match,
+    isTenant: selectIsTenant(state),
   };
 };
 

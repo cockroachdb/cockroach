@@ -41,6 +41,7 @@ export type ActiveStatement = ActiveExecution &
     user: string;
     clientAddress: string;
     isFullScan: boolean;
+    planGist?: string;
   };
 
 export type ActiveTransaction = ActiveExecution & {
