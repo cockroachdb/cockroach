@@ -600,6 +600,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		)
 	}
 
+	syntheticPrivilegeCache := cacheutil.NewCache(
+		serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper, 1 /* numSystemTables */)
+	privilegeSynthesizer := sql.NewPrivilegeSynthesizer(syntheticPrivilegeCache, nil /* ieFactory */)
 	collectionFactory := descs.NewCollectionFactory(
 		ctx,
 		cfg.Settings,
@@ -608,8 +611,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		hydratedDescCache,
 		spanConfig.splitter,
 		spanConfig.limiter,
+		privilegeSynthesizer,
 	)
-
 	clusterIDForSQL := cfg.rpcContext.LogicalClusterID
 
 	bulkSenderLimiter := bulk.MakeAndRegisterConcurrencyLimiter(&cfg.Settings.SV)
@@ -790,8 +793,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TraceCollector:            traceCollector,
 		TenantUsageServer:         cfg.tenantUsageServer,
 		KVStoresIterator:          cfg.kvStoresIterator,
-		SyntheticPrivilegeCache: cacheutil.NewCache(
-			serverCacheMemoryMonitor.MakeBoundAccount(), cfg.stopper, 1 /* numSystemTables */),
+		SyntheticPrivilegeCache:   syntheticPrivilegeCache,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
@@ -963,6 +965,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		internalMemMetrics,
 		ieFactoryMonitor,
 	)
+
+	privilegeSynthesizer.SetIEFactory(ieFactory)
 
 	distSQLServer.ServerConfig.InternalExecutorFactory = ieFactory
 	jobRegistry.SetInternalExecutorFactory(ieFactory)

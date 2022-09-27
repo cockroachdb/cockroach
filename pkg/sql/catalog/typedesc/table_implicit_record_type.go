@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -382,12 +381,4 @@ func (v TableImplicitRecordType) GetDeclarativeSchemaChangerState() *scpb.Descri
 func (v TableImplicitRecordType) GetObjectType() privilege.ObjectType {
 	v.panicNotSupported("GetObjectType")
 	return ""
-}
-
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (v TableImplicitRecordType) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	v.panicNotSupported("GetPrivilegeDescriptor")
-	return nil, nil
 }

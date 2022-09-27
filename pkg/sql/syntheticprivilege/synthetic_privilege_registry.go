@@ -26,6 +26,9 @@ type Object interface {
 	// GetPath returns the path used to identify the object in
 	// system.privileges.
 	GetPath() string
+	// EqualExcludingPrivilegeDescriptor returns if two Objects are the same
+	// excluding the PrivilegeDescriptor.
+	EqualExcludingPrivilegeDescriptor(other Object) bool
 }
 
 // Metadata for system privileges.

@@ -224,6 +224,7 @@ go_library(
         "sql_cursor.go",
         "statement.go",
         "subquery.go",
+        "synthesize_privileges.go",
         "table.go",
         "tablewriter.go",
         "tablewriter_delete.go",

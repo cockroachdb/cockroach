@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1089,13 +1088,6 @@ func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 // GetObjectType implements the PrivilegeObject interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Type
-}
-
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (desc *immutable) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	return desc.GetPrivileges(), nil
 }
 
 // GetTypeDescriptorClosure returns all type descriptor IDs that are

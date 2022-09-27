@@ -2778,10 +2778,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		// Populating table descriptor dependencies with roles
 		if err = forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
-				privDesc, err := table.GetPrivilegeDescriptor(ctx, p)
-				if err != nil {
-					return err
-				}
+				privDesc := table.GetPrivileges()
 				owner := privDesc.Owner()
 				for _, u := range privDesc.Show(privilege.Table, true /* showImplicitOwnerPrivs */) {
 					if err := addSharedDependency(

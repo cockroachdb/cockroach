@@ -331,7 +331,14 @@ func retrieveAuthInfo(
 	}
 	if !hasAdmin {
 		if settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-			if noSQLLogin := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.NOSQLLOGIN, user) == nil; noSQLLogin {
+			privDesc, err := aa.SynthesizePrivilegeDescriptor(
+				ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+			)
+			if err != nil {
+				return aInfo, err
+			}
+			globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+			if noSQLLogin := aa.CheckPrivilegeForUser(ctx, globalPrivilege, privilege.NOSQLLOGIN, user) == nil; noSQLLogin {
 				aInfo.CanLoginSQL = false
 			}
 		}

@@ -338,6 +338,7 @@ query TTTTTB colnames
 SHOW GRANTS ON pg_catalog.pg_namespace
 ----
 database_name  schema_name  table_name    grantee  privilege_type  is_grantable
+test           pg_catalog   pg_namespace  admin    ALL             true
 test           pg_catalog   pg_namespace  public   SELECT          false
 
 

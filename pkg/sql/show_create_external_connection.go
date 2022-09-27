@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -92,9 +93,13 @@ func (p *planner) ShowCreateExternalConnection(
 		if err != nil {
 			return nil, err
 		}
-		ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
-			ConnectionName: name,
+		privDesc, err := p.SynthesizePrivilegeDescriptor(
+			ctx, syntheticprivilege.CreateExternalConnectionPrivilegePath(name),
+			privilege.ExternalConnection)
+		if err != nil {
+			return nil, err
 		}
+		ecPrivilege := syntheticprivilege.InitExternalConnectionPrivilege(name, privDesc)
 		isOwner, err := IsOwner(ctx, p, ecPrivilege, p.User())
 		if err != nil {
 			return nil, err

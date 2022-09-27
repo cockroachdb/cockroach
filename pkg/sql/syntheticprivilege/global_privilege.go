@@ -11,21 +11,24 @@
 package syntheticprivilege
 
 import (
-	"context"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 // GlobalPrivilege represents privileges granted via
 // GRANT SYSTEM [privilege...] TO [roles...].
 // These privileges are "global", for example, MODIFYCLUSTERSETTING which lets
 // the role modify cluster settings within the cluster.
-type GlobalPrivilege struct{}
+type GlobalPrivilege struct {
+	PrivilegeDescriptor *catpb.PrivilegeDescriptor
+}
+
+var _ catalog.PrivilegeObject = &GlobalPrivilege{}
+var _ Object = &GlobalPrivilege{}
 
 // GlobalPrivilegeObjectType represents the object type for
 // GlobalPrivilege.
@@ -36,15 +39,20 @@ func (p *GlobalPrivilege) GetPath() string {
 	return "/global/"
 }
 
+// InitGlobalPrivilege creates a new GlobalPrivilege.
+func InitGlobalPrivilege(privDesc *catpb.PrivilegeDescriptor) *GlobalPrivilege {
+	return &GlobalPrivilege{
+		PrivilegeDescriptor: privDesc,
+	}
+}
+
 // GlobalPrivilegeObject is one of one since it is global.
 // We can use a const to identify it.
 var GlobalPrivilegeObject = &GlobalPrivilege{}
 
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (p *GlobalPrivilege) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	return planner.SynthesizePrivilegeDescriptor(ctx, p.GetName(), p.GetPath(), p.GetObjectType())
+// GetPrivileges implements the PrivilegeObject interface.
+func (p *GlobalPrivilege) GetPrivileges() *catpb.PrivilegeDescriptor {
+	return p.PrivilegeDescriptor
 }
 
 // GetObjectType implements the PrivilegeObject interface.
@@ -72,4 +80,14 @@ func (p *GlobalPrivilege) PostgresDescriptorID() catid.DescID {
 // Equals implements the cat.Object interface.
 func (p *GlobalPrivilege) Equals(otherObject cat.Object) bool {
 	return p.ID() == otherObject.ID()
+}
+
+// EqualExcludingPrivilegeDescriptor implements the Object interface.
+func (p *GlobalPrivilege) EqualExcludingPrivilegeDescriptor(other Object) bool {
+	if p.GetObjectType() != other.GetObjectType() {
+		return false
+	}
+
+	otherGlobalPrivilege := other.(*GlobalPrivilege)
+	return p.GetPath() == otherGlobalPrivilege.GetPath() && p.GetName() == otherGlobalPrivilege.GetName()
 }

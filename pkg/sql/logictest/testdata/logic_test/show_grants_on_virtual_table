@@ -2,6 +2,7 @@ query TTTTTB colnames
 SHOW GRANTS ON crdb_internal.tables
 ----
 database_name  schema_name    table_name  grantee  privilege_type  is_grantable
+test           crdb_internal  tables      admin    ALL             true
 test           crdb_internal  tables      public   SELECT          false
 
 statement ok
@@ -11,6 +12,7 @@ query TTTTTB colnames
 SHOW GRANTS ON crdb_internal.tables
 ----
 database_name  schema_name    table_name  grantee   privilege_type  is_grantable
+test           crdb_internal  tables      admin     ALL             true
 test           crdb_internal  tables      public    SELECT          false
 test           crdb_internal  tables      testuser  SELECT          false
 
@@ -27,6 +29,7 @@ query TTTTTB colnames
 SHOW GRANTS ON crdb_internal.tables
 ----
 database_name  schema_name    table_name  grantee    privilege_type  is_grantable
+test           crdb_internal  tables      admin      ALL             true
 test           crdb_internal  tables      public     SELECT          false
 test           crdb_internal  tables      testuser   ALL             false
 test           crdb_internal  tables      testuser2  SELECT          true
