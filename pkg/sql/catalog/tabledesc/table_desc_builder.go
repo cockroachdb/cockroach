@@ -170,9 +170,12 @@ func (tdb *tableDescriptorBuilder) BuildExistingMutableTable() *Mutable {
 		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	}
 	return &Mutable{
-		wrapper: wrapper{
-			TableDescriptor: *tdb.maybeModified,
-			changes:         tdb.changes,
+		immutable: immutable{
+			wrapper: wrapper{
+				TableDescriptor:   *tdb.maybeModified,
+				changes:           tdb.changes,
+				rawBytesInStorage: tdb.rawBytesInStorage,
+			},
 		},
 		original: makeImmutable(tdb.original),
 	}
@@ -191,9 +194,11 @@ func (tdb *tableDescriptorBuilder) BuildCreatedMutableTable() *Mutable {
 		desc = tdb.original
 	}
 	return &Mutable{
-		wrapper: wrapper{
-			TableDescriptor: *desc,
-			changes:         tdb.changes,
+		immutable: immutable{
+			wrapper: wrapper{
+				TableDescriptor: *desc,
+				changes:         tdb.changes,
+			},
 		},
 	}
 }

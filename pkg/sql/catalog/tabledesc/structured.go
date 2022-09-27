@@ -49,7 +49,7 @@ import (
 // Mutable is a custom type for TableDescriptors
 // going through schema mutations.
 type Mutable struct {
-	wrapper
+	immutable
 
 	// original represents the version of the table descriptor read from the
 	// store.

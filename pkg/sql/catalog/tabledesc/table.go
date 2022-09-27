@@ -533,18 +533,20 @@ func InitTableDescriptor(
 	persistence tree.Persistence,
 ) Mutable {
 	return Mutable{
-		wrapper: wrapper{
-			TableDescriptor: descpb.TableDescriptor{
-				ID:                      id,
-				Name:                    name,
-				ParentID:                parentID,
-				UnexposedParentSchemaID: parentSchemaID,
-				FormatVersion:           descpb.InterleavedFormatVersion,
-				Version:                 1,
-				ModificationTime:        creationTime,
-				Privileges:              privileges,
-				CreateAsOfTime:          creationTime,
-				Temporary:               persistence.IsTemporary(),
+		immutable: immutable{
+			wrapper: wrapper{
+				TableDescriptor: descpb.TableDescriptor{
+					ID:                      id,
+					Name:                    name,
+					ParentID:                parentID,
+					UnexposedParentSchemaID: parentSchemaID,
+					FormatVersion:           descpb.InterleavedFormatVersion,
+					Version:                 1,
+					ModificationTime:        creationTime,
+					Privileges:              privileges,
+					CreateAsOfTime:          creationTime,
+					Temporary:               persistence.IsTemporary(),
+				},
 			},
 		},
 	}
