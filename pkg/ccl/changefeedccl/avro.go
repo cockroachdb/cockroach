@@ -607,6 +607,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 			},
 			func(d tree.Datum, memo interface{}) (interface{}, error) {
 				datumArr := d.(*tree.DArray)
+
 				var avroArr []interface{}
 				if memo != nil {
 					avroArr = memo.([]interface{})
@@ -616,14 +617,13 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				} else {
 					avroArr = make([]interface{}, 0, datumArr.Len())
 				}
-
 				for i, elt := range datumArr.Array {
 					var encoded interface{}
 					if elt == tree.DNull {
 						encoded = nil
 					} else {
 						var encErr error
-						if i < len(avroArr) {
+						if i < len(avroArr) && avroArr[i] != nil {
 							encoded, encErr = itemSchema.encodeDatum(elt, avroArr[i].(map[string]interface{})[itemUnionKey])
 						} else {
 							encoded, encErr = itemSchema.encodeDatum(elt, nil)
