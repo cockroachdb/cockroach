@@ -138,6 +138,11 @@ type Collection struct {
 
 var _ catalog.Accessor = (*Collection)(nil)
 
+// GetDeletedDescs returns the deleted descriptors of the collection.
+func (tc *Collection) GetDeletedDescs() catalog.DescriptorIDSet {
+	return tc.deletedDescs
+}
+
 // MaybeUpdateDeadline updates the deadline in a given transaction
 // based on the leased descriptors in this collection. This update is
 // only done when a deadline exists.
