@@ -32,11 +32,11 @@
 #   1. $leftRight is an integer, float, decimal, or interval. This restriction
 #      can be lifted for any type that we can construct a zero value of. The
 #      zero value of the right type is required in order to check for
-#      overflow/underflow (see #4).
+#      overflow/underflow (see #5).
 #   2. A Minus overload for the given input types exists and has an appropriate
 #      volatility.
 #   3. The result type of the overload is equivalent to the type of $right. This
-#      is required in order to check for overflow/underflow (see #4).
+#      is required in order to check for overflow/underflow (see #5).
 #   4. The evaluation of the Minus operator causes no error.
 #   5. The evaluation of the Minus operator does not overflow or underflow.
 #
