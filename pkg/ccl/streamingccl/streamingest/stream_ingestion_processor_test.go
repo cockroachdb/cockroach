@@ -602,6 +602,7 @@ func getStreamIngestionProcessor(
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},
 		EvalCtx:     &evalCtx,
+		Mon:         evalCtx.TestingMon,
 		DiskMonitor: testDiskMonitor,
 	}
 

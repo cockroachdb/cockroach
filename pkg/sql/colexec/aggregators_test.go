@@ -1003,7 +1003,7 @@ func benchmarkAggregateFunction(
 	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
-	aggMemAcc := evalCtx.Mon.MakeBoundAccount()
+	aggMemAcc := evalCtx.TestingMon.MakeBoundAccount()
 	defer aggMemAcc.Close(ctx)
 	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
 	const bytesFixedLength = 8

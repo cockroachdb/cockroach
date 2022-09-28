@@ -49,6 +49,7 @@ func TestColumnarizerResetsInternalBatch(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 
 	c := NewBufferingColumnarizerForTests(testAllocator, flowCtx, 0, input)
@@ -80,6 +81,7 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 
 	for _, tc := range []struct {
@@ -139,6 +141,7 @@ func BenchmarkColumnarize(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 
 	b.SetBytes(int64(nRows * nCols * int(memsize.Int64)))

@@ -77,6 +77,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},
 		EvalCtx:     &evalCtx,
+		Mon:         evalCtx.TestingMon,
 		DiskMonitor: testDiskMonitor,
 	}
 

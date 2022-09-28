@@ -50,6 +50,8 @@ type FlowCtx struct {
 	// cores of the processors that need it.
 	EvalCtx *eval.Context
 
+	Mon *mon.BytesMonitor
+
 	// The transaction in which kv operations performed by processors in the flow
 	// must be performed. Processors in the Flow will use this txn concurrently.
 	// This field is generally not nil, except for flows that don't run in a

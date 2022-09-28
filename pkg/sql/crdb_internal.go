@@ -4933,7 +4933,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 		}
 		descs := c.OrderedDescriptors()
 		// Collect all marshaled job metadata and account for its memory usage.
-		acct := p.EvalContext().Mon.MakeBoundAccount()
+		acct := p.Mon().MakeBoundAccount()
 		defer acct.Close(ctx)
 		jmg, err := collectMarshaledJobMetadataMap(ctx, p, &acct, descs)
 		if err != nil {
@@ -5548,7 +5548,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
 		//  RPC handlers. See #69032.
-		acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+		acc := p.Mon().MakeBoundAccount()
 		defer acc.Close(ctx)
 
 		// Perform RPC fanout.
@@ -5779,7 +5779,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
 		//  RPC handlers. See #69032.
-		acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+		acc := p.Mon().MakeBoundAccount()
 		defer acc.Close(ctx)
 
 		// Perform RPC fanout.
@@ -5987,7 +5987,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 		}
 
 		// Account for memory used by the RPC fanout.
-		acc := p.extendedEvalCtx.Mon.MakeBoundAccount()
+		acc := p.Mon().MakeBoundAccount()
 		defer acc.Close(ctx)
 
 		resp, err := p.extendedEvalCtx.SQLStatusServer.TransactionContentionEvents(

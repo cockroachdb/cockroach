@@ -45,6 +45,7 @@ func DefaultProcessorTestConfig() ProcessorTestConfig {
 		FlowCtx: &execinfra.FlowCtx{
 			Cfg:     &execinfra.ServerConfig{Settings: st},
 			EvalCtx: &evalCtx,
+			Mon:     evalCtx.TestingMon,
 		},
 	}
 }

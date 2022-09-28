@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/mon",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
     ],

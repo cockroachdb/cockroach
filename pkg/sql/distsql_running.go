@@ -447,7 +447,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// former has the corresponding writer set.
 		batchReceiver = recv
 	}
-	ctx, flow, opChains, firstErr := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &setupReq, recv, batchReceiver, localState)
+	ctx, flow, opChains, firstErr := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Planner.Mon(), &setupReq, recv, batchReceiver, localState)
 
 	// Now wait for all the flows to be scheduled on remote nodes. Note that we
 	// are not waiting for the flows themselves to complete.
@@ -482,10 +482,6 @@ const clientRejectedMsg string = "client rejected when attempting to run DistSQL
 // mutated.
 // - finishedSetupFn, if non-nil, is called synchronously after all the
 // processors have successfully started up.
-//
-// It returns a non-nil (although it can be a noop when an error is
-// encountered) cleanup function that must be called in order to release the
-// resources.
 func (dsp *DistSQLPlanner) Run(
 	ctx context.Context,
 	planCtx *PlanningCtx,
@@ -494,9 +490,7 @@ func (dsp *DistSQLPlanner) Run(
 	recv *DistSQLReceiver,
 	evalCtx *extendedEvalContext,
 	finishedSetupFn func(),
-) (cleanup func()) {
-	cleanup = func() {}
-
+) {
 	flows := plan.GenerateFlowSpecs()
 	defer func() {
 		for _, flowSpec := range flows {
@@ -505,7 +499,7 @@ func (dsp *DistSQLPlanner) Run(
 	}()
 	if _, ok := flows[dsp.gatewaySQLInstanceID]; !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
-		return cleanup
+		return
 	}
 
 	var (
@@ -584,13 +578,13 @@ func (dsp *DistSQLPlanner) Run(
 			if err != nil {
 				log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
 				recv.SetError(err)
-				return cleanup
+				return
 			}
 			if tis == nil {
 				recv.SetError(errors.AssertionFailedf(
 					"leafInputState is nil when txn is non-nil and we must use the leaf txn",
 				))
-				return cleanup
+				return
 			}
 			leafInputState = tis
 		}
@@ -655,13 +649,13 @@ func (dsp *DistSQLPlanner) Run(
 	)
 	// Make sure that the local flow is always cleaned up if it was created.
 	if flow != nil {
-		cleanup = func() {
+		defer func() {
 			flow.Cleanup(ctx)
-		}
+		}()
 	}
 	if err != nil {
 		recv.SetError(err)
-		return cleanup
+		return
 	}
 
 	if finishedSetupFn != nil {
@@ -675,7 +669,7 @@ func (dsp *DistSQLPlanner) Run(
 	if planCtx.saveFlows != nil {
 		if err := planCtx.saveFlows(flows, opChains); err != nil {
 			recv.SetError(err)
-			return cleanup
+			return
 		}
 	}
 
@@ -688,30 +682,11 @@ func (dsp *DistSQLPlanner) Run(
 	if txn != nil && !localState.MustUseLeafTxn() && flow.ConcurrentTxnUse() {
 		recv.SetError(errors.AssertionFailedf(
 			"unexpected concurrency for a flow that was forced to be planned locally"))
-		return cleanup
+		return
 	}
 
 	// TODO(radu): this should go through the flow scheduler.
 	flow.Run(ctx, func() {})
-
-	// TODO(yuzefovich): it feels like this closing should happen after
-	// PlanAndRun. We should refactor this and get rid off ignoreClose field.
-	if planCtx.planner != nil && !planCtx.ignoreClose {
-		// planCtx can change before the cleanup function is executed, so we make
-		// a copy of the planner and bind it to the function.
-		curPlan := &planCtx.planner.curPlan
-		return func() {
-			// We need to close the planNode tree we translated into a DistSQL plan
-			// before flow.Cleanup, which closes memory accounts that expect to be
-			// emptied.
-			curPlan.close(ctx)
-			flow.Cleanup(ctx)
-		}
-	}
-
-	// ignoreClose is set to true meaning that someone else will handle the
-	// closing of the current plan, so we simply clean up the flow.
-	return cleanup
 }
 
 // DistSQLReceiver is an execinfra.RowReceiver and execinfra.BatchReceiver that
@@ -1313,11 +1288,12 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	recv *DistSQLReceiver,
 	evalCtxFactory func() *extendedEvalContext,
 ) error {
+	defer planner.curPlan.close(ctx)
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
-		subqueryResultMemAcc := planner.EvalContext().Mon.MakeBoundAccount()
+		subqueryResultMemAcc := planner.Mon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		if !dsp.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
@@ -1329,14 +1305,9 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		}
 	}
 	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
-	// We pass in whether or not we wanted to distribute this plan, which tells
-	// the planner whether or not to plan remote table readers.
-	cleanup := dsp.PlanAndRun(
+	dsp.PlanAndRun(
 		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv,
 	)
-	// Note that we're not cleaning up right away because postqueries might
-	// need to have access to the main query tree.
-	defer cleanup()
 	if recv.commErr != nil || recv.resultWriter.Err() != nil {
 		return recv.commErr
 	}
@@ -1418,7 +1389,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		noteworthyMemoryUsageBytes,
 		dsp.distSQLSrv.Settings,
 	)
-	subqueryMonitor.StartNoReserved(ctx, evalCtx.Mon)
+	subqueryMonitor.StartNoReserved(ctx, evalCtx.Planner.Mon())
 	defer subqueryMonitor.Stop(ctx)
 
 	subqueryMemAccount := subqueryMonitor.MakeBoundAccount()
@@ -1440,9 +1411,6 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	}
 	subqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
 	subqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
-	// Don't close the top-level plan from subqueries - someone else will handle
-	// that.
-	subqueryPlanCtx.ignoreClose = true
 	subqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, subqueryPlanCtx, subqueryPlan.plan)
 	defer physPlanCleanup()
 	if err != nil {
@@ -1470,7 +1438,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRowReceiver := NewRowResultWriter(&rows)
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
-	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
 	if err := subqueryRowReceiver.Err(); err != nil {
 		return err
 	}
@@ -1575,16 +1543,6 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 // while using that resultWriter), the error is also stored in
 // DistSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
-//
-// It returns a non-nil (although it can be a noop when an error is
-// encountered) cleanup function that must be called once the planTop AST is no
-// longer needed and can be closed. Note that this function also cleans up the
-// flow which is unfortunate but is caused by the sharing of memory monitors
-// between planning and execution - cleaning up the flow wants to close the
-// monitor, but it cannot do so because the AST needs to live longer and still
-// uses the same monitor. That's why we end up in a situation that in order to
-// clean up the flow, we need to close the AST first, but we can only do that
-// after PlanAndRun returns.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -1592,27 +1550,18 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	txn *kv.Txn,
 	plan planMaybePhysical,
 	recv *DistSQLReceiver,
-) (cleanup func()) {
+) {
 	log.VEventf(ctx, 2, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
 	physPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, planCtx, plan)
+	defer physPlanCleanup()
 	if err != nil {
 		recv.SetError(err)
-		return func() {
-			// Make sure to close the current plan in case of a physical
-			// planning error. Usually, this is done in runCleanup() below, but
-			// we won't get to that point, so we have to do so here.
-			planCtx.planner.curPlan.close(ctx)
-			physPlanCleanup()
-		}
+		return
 	}
 	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
-	runCleanup := dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
-	return func() {
-		runCleanup()
-		physPlanCleanup()
-	}
+	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
 
 // PlanAndRunCascadesAndChecks runs any cascade and check queries.
@@ -1772,7 +1721,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		noteworthyMemoryUsageBytes,
 		dsp.distSQLSrv.Settings,
 	)
-	postqueryMonitor.StartNoReserved(ctx, evalCtx.Mon)
+	postqueryMonitor.StartNoReserved(ctx, evalCtx.Planner.Mon())
 	defer postqueryMonitor.Stop(ctx)
 
 	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()
@@ -1787,7 +1736,6 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	}
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	postqueryPlanCtx.stmtType = tree.Rows
-	postqueryPlanCtx.ignoreClose = true
 	// Postqueries are only executed on the main query path where we skip the
 	// diagram generation.
 	postqueryPlanCtx.skipDistSQLDiagramGeneration = true
@@ -1811,6 +1759,6 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	postqueryResultWriter := &errOnlyResultWriter{}
 	postqueryRecv.resultWriter = postqueryResultWriter
 	postqueryRecv.batchWriter = postqueryResultWriter
-	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
+	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)
 	return postqueryRecv.resultWriter.Err()
 }

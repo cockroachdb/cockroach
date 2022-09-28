@@ -84,6 +84,7 @@ func TestFilterer(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
+				Mon:     evalCtx.TestingMon,
 			}
 			spec := execinfrapb.FiltererSpec{
 				Filter: execinfrapb.Expression{Expr: c.filter},
@@ -126,6 +127,7 @@ func BenchmarkFilterer(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 	post := &execinfrapb.PostProcessSpec{}
 	disposer := &rowDisposer{}

@@ -288,7 +288,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 						// since it's a flow level stat. However, due to the row exec engine infrastructure, it is too
 						// complicated to attach this to a flow level span. If the row exec engine gets removed, getting
 						// maxMemUsage from streamStats should be removed as well.
-						m.stats.FlowStats.MaxMemUsage.Set(uint64(m.flowCtx.EvalCtx.Mon.MaximumBytes()))
+						m.stats.FlowStats.MaxMemUsage.Set(uint64(m.flowCtx.Mon.MaximumBytes()))
 						m.stats.FlowStats.MaxDiskUsage.Set(uint64(m.flowCtx.DiskMonitor.MaximumBytes()))
 					}
 					span.RecordStructured(&m.stats)

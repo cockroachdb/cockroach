@@ -175,7 +175,7 @@ func TestExprString(t *testing.T) {
 		}
 		// Compare the normalized expressions.
 		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer ctx.Mon.Stop(context.Background())
+		defer ctx.TestingMon.Stop(context.Background())
 		normalized, err := normalize.Expr(ctx, typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)

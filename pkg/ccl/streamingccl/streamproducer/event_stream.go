@@ -543,6 +543,6 @@ func streamPartition(
 		spec:            spec,
 		subscribedSpans: subscribedSpans,
 		execCfg:         execCfg,
-		mon:             evalCtx.Mon,
+		mon:             evalCtx.Planner.Mon(),
 	}, nil
 }

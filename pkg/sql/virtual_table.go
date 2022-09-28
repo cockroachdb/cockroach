@@ -258,7 +258,7 @@ var _ rowPusher = &vTableLookupJoinNode{}
 func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	v.run.keyCtx = constraint.KeyContext{EvalCtx: params.EvalContext()}
 	v.run.rows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(),
+		params.p.Mon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(v.columns),
 	)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))

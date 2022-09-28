@@ -154,6 +154,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				defer evalCtx.Stop(ctxLocal)
 				flowCtx := &execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
+					Mon:     evalCtx.TestingMon,
 					Cfg:     &execinfra.ServerConfig{Settings: st},
 				}
 				rng, _ := randutil.NewTestRand()

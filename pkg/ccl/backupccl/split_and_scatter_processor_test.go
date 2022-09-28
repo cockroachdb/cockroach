@@ -237,6 +237,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 					Stopper:  tc.Stopper(),
 				},
 				EvalCtx:     &evalCtx,
+				Mon:         evalCtx.TestingMon,
 				DiskMonitor: testDiskMonitor,
 			}
 

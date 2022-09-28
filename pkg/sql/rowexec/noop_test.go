@@ -36,6 +36,7 @@ func BenchmarkNoop(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 	post := &execinfrapb.PostProcessSpec{}
 	disposer := &rowDisposer{}

@@ -1015,6 +1015,7 @@ func TestHashJoiner(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
@@ -1141,6 +1142,7 @@ func TestHashJoinerProjection(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 		},

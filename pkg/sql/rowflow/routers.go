@@ -272,7 +272,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 		// to take the mutex.
 		evalCtx := flowCtx.NewEvalCtx()
 		rb.outputs[i].memoryMonitor = execinfra.NewLimitedMonitor(
-			ctx, evalCtx.Mon, flowCtx,
+			ctx, flowCtx.Mon, flowCtx,
 			redact.Sprintf("router-limited-%d", rb.outputs[i].streamID),
 		)
 		rb.outputs[i].diskMonitor = execinfra.NewMonitor(
@@ -283,7 +283,7 @@ func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, type
 		// to fallback to disk if a memory budget error is encountered when
 		// we're popping rows from the row container into the row buffer.
 		rb.outputs[i].rowBufToPushFromMon = execinfra.NewMonitor(
-			ctx, evalCtx.Mon, redact.Sprintf("router-unlimited-%d", rb.outputs[i].streamID),
+			ctx, flowCtx.Mon, redact.Sprintf("router-unlimited-%d", rb.outputs[i].streamID),
 		)
 		memAcc := rb.outputs[i].rowBufToPushFromMon.MakeBoundAccount()
 		rb.outputs[i].rowBufToPushFromAcc = &memAcc
