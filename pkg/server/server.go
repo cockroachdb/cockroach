@@ -221,11 +221,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	admissionOptions.Settings = st
 	gcoords, metrics := admission.NewGrantCoordinators(cfg.AmbientCtx, admissionOptions)
-	ssg, err := admission.MakeSoftSlotGranter(gcoords.Regular)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to soft slot granter")
-	}
-	cfg.SoftSlotGranter = ssg
+	cfg.ElasticCPUWorkQueue = gcoords.Elastic.ElasticCPUWorkQueue
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {

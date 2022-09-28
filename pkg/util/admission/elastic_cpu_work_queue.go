@@ -109,6 +109,29 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 	e.metrics.ReturnedNanos.Inc(difference.Nanoseconds())
 }
 
+// TryAdmitWithoutQueueing can be used to request tokens for elastic CPU work.
+// A handle is granted if tokens are available.
+func (e *ElasticCPUWorkQueue) TryAdmitWithoutQueueing(
+	duration time.Duration,
+) *ElasticCPUWorkHandle {
+	if !e.enabled() {
+		return nil
+	}
+	if duration < MinElasticCPUDuration {
+		duration = MinElasticCPUDuration
+	}
+	if duration > MaxElasticCPUDuration {
+		duration = MaxElasticCPUDuration
+	}
+
+	acquired := e.granter.tryGet(duration.Nanoseconds())
+	if !acquired {
+		return nil
+	}
+	e.metrics.AcquiredNanos.Inc(duration.Nanoseconds())
+	return newElasticCPUWorkHandle(duration)
+}
+
 // SetTenantWeights passes through to WorkQueue.SetTenantWeights.
 func (e *ElasticCPUWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
 	e.workQueue.SetTenantWeights(tenantWeights)

@@ -304,9 +304,9 @@ type KVConfig struct {
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
 
-	// SoftSlotGranter can be optionally passed into a store to allow the store
+	// ElasticCPUWorkQueue can be optionally passed into a store to allow the store
 	// to perform additional CPU bound work.
-	SoftSlotGranter *admission.SoftSlotGranter
+	ElasticCPUWorkQueue *admission.ElasticCPUWorkQueue
 
 	// TimeSeriesServerConfig contains configuration specific to the time series
 	// server.
@@ -563,14 +563,18 @@ func (e *Engines) Close() {
 // cpuWorkPermissionGranter implements the pebble.CPUWorkPermissionGranter
 // interface.
 type cpuWorkPermissionGranter struct {
-	*admission.SoftSlotGranter
+	qu *admission.ElasticCPUWorkQueue
 }
 
-func (c *cpuWorkPermissionGranter) TryGetProcs(count int) int {
-	return c.TryGetSlots(count)
+func (c *cpuWorkPermissionGranter) TryGetHandle(duration time.Duration) pebble.CPUWorkHandle {
+	return c.qu.TryAdmitWithoutQueueing(duration)
 }
-func (c *cpuWorkPermissionGranter) ReturnProcs(count int) {
-	c.ReturnSlots(count)
+func (c *cpuWorkPermissionGranter) ReturnHandle(handle pebble.CPUWorkHandle) {
+	h, ok := handle.(*admission.ElasticCPUWorkHandle)
+	if !ok {
+		panic("programming error: invalid handle")
+	}
+	c.qu.AdmittedWorkDone(h)
 }
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
@@ -693,7 +697,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 			pebbleConfig.Opts.Experimental.MaxWriterConcurrency = 2
 			pebbleConfig.Opts.Experimental.CPUWorkPermissionGranter = &cpuWorkPermissionGranter{
-				cfg.SoftSlotGranter,
+				cfg.ElasticCPUWorkQueue,
 			}
 			// If the spec contains Pebble options, set those too.
 			if len(spec.PebbleOptions) > 0 {

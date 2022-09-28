@@ -66,7 +66,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/ttycolor"
 	humanize "github.com/dustin/go-humanize"
@@ -1735,11 +1734,11 @@ func init() {
 	// To be able to read Cockroach-written Pebble manifests/SSTables, comparator
 	// and merger functions must be specified to pebble that match the ones used
 	// to write those files.
-	pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
-		tool.DefaultComparer(storage.EngineComparer),
-		tool.FS(&absoluteFS{pebbleToolFS}),
-	)
-	DebugPebbleCmd.AddCommand(pebbleTool.Commands...)
+	//pebbleTool := tool.New(tool.Mergers(storage.MVCCMerger),
+	//	tool.DefaultComparer(storage.EngineComparer),
+	//	tool.FS(&absoluteFS{pebbleToolFS}),
+	//)
+	//DebugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	initPebbleCmds(DebugPebbleCmd)
 	DebugCmd.AddCommand(DebugPebbleCmd)
 

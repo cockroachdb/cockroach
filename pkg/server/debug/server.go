@@ -30,12 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
-	pebbletool "github.com/cockroachdb/pebble/tool"
-	"github.com/cockroachdb/pebble/vfs"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
-	"github.com/spf13/cobra"
 	"golang.org/x/net/trace"
 )
 
@@ -148,26 +144,21 @@ func NewServer(
 }
 
 func analyzeLSM(dir string, writer io.Writer) error {
-	db, err := pebble.Peek(dir, vfs.Default)
-	if err != nil {
-		return err
-	}
+	//db, err := pebble.Peek(dir, vfs.Default)
+	//if err != nil {
+	//	return err
+	//}
 
-	t := pebbletool.New(pebbletool.Comparers(storage.EngineComparer))
+	//t := pebbletool.New(pebbletool.Comparers(storage.EngineComparer))
 
 	// TODO(yevgeniy): Consider exposing LSM tool directly.
-	var lsm *cobra.Command
-	for _, c := range t.Commands {
-		if c.Name() == "lsm" {
-			lsm = c
-		}
-	}
-	if lsm == nil {
-		return errors.New("no such command")
-	}
-
-	lsm.SetOutput(writer)
-	return lsm.RunE(lsm, []string{db.ManifestFilename})
+	//var lsm *cobra.Command
+	//for _, c := range t.Commands {
+	//	if c.Name() == "lsm" {
+	//		lsm = c
+	//	}
+	//}
+	return errors.New("no such command")
 }
 
 // RegisterEngines setups up debug engine endpoints for the known storage engines.
