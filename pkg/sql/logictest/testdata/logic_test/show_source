@@ -146,6 +146,7 @@ transaction_status                                    NoTxn
 troubleshooting_mode                                  off
 unconstrained_non_covering_index_scan_enabled         off
 use_declarative_schema_changer                        on
+variable_inequality_lookup_join_enabled               on
 vectorize                                             on
 xmloption                                             content
 
