@@ -868,3 +868,5 @@ scalar-group-by
  └── aggregations
       └── sum [as=sum:6, outer=(5)]
            └── n:5
+
+# Empty commit
