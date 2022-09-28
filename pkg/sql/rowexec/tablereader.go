@@ -101,6 +101,7 @@ func newTableReader(
 	}
 
 	tr := trPool.Get().(*tableReader)
+	tr.Closed = false
 
 	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	tr.parallelize = spec.Parallelize

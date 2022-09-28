@@ -429,13 +429,28 @@ func (pb *ProcessorBaseNoHelper) Reset() {
 }
 
 // Reset resets this ProcessorBase, retaining allocated memory in slices.
+// WARNING: Closed will be set to true.
 func (pb *ProcessorBase) Reset() {
+	if pb.InternalClose() {
+		// It is unexpected that the processor is not closed before being reset.
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("unexpectedly ProcessorBase wasn't closed before Reset"))
+		}
+	}
 	pb.ProcessorBaseNoHelper.Reset()
 	pb.OutputHelper.Reset()
 	*pb = ProcessorBase{
 		ProcessorBaseNoHelper: pb.ProcessorBaseNoHelper,
 		OutputHelper:          pb.OutputHelper,
 	}
+	// We mark this ProcessorBase as Closed even after the reset so that in case
+	// ConsumerClosed is called on it later, it becomes a noop. This is needed
+	// due to edge cases where a processor from a subquery can still be
+	// referenced later by the main query (via bufferNode - scanBufferNode
+	// link). Fixing this proper is non-trivial, so for now we have this hack in
+	// place.
+	// TODO(yuzefovich): clean this up.
+	pb.Closed = true
 }
 
 // procState represents the standard states that a processor can be in. These

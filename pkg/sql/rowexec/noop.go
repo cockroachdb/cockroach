@@ -53,6 +53,7 @@ func newNoopProcessor(
 	output execinfra.RowReceiver,
 ) (*noopProcessor, error) {
 	n := noopPool.Get().(*noopProcessor)
+	n.Closed = false
 	n.input = input
 	if err := n.Init(
 		n,
