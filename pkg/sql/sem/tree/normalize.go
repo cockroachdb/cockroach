@@ -13,6 +13,7 @@ package tree
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -247,39 +248,93 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		// We loop attempting to simplify the comparison expression. As a
 		// pre-condition, we know there is at least one variable in the expression
 		// tree or we would not have entered this code path.
-		exprCopied := false
-			if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
-				return DNull
-			}
+		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
+			return DNull
+		}
 
-			if v.isConst(expr.Left) {
-				switch expr.Right.(type) {
-				case *BinaryExpr, VariableExpr:
-					break
-				default:
-					return expr
-				}
-
-				invertedOp, err := invertComparisonOp(expr.Operator)
-				if err != nil {
-					v.err = err
-					return expr
-				}
-
-				// The left side is const and the right side is a binary expression or a
-				// variable. Flip the comparison op so that the right side is const and
-				// the left side is a binary expression or variable.
-				// Create a new ComparisonExpr so the function cache isn't reused.
-				if !exprCopied {
-					exprCopy := *expr
-					expr = &exprCopy
-					exprCopied = true
-				}
-
-				expr = NewTypedComparisonExpr(invertedOp, expr.TypedRight(), expr.TypedLeft())
-			} else if !v.isConst(expr.Right) {
+		if v.isConst(expr.Left) {
+			switch expr.Right.(type) {
+			case *BinaryExpr, VariableExpr:
+				break
+			default:
 				return expr
 			}
+
+			invertedOp, err := invertComparisonOp(expr.Operator)
+			if err != nil {
+				v.err = err
+				return expr
+			}
+
+			// The left side is const and the right side is a binary expression or a
+			// variable. Flip the comparison op so that the right side is const and
+			// the left side is a binary expression or variable.
+			// Create a new ComparisonExpr so the function cache isn't reused.
+			exprCopy := *expr
+			expr = &exprCopy
+
+			expr = NewTypedComparisonExpr(invertedOp, expr.TypedRight(), expr.TypedLeft())
+		} else if !v.isConst(expr.Right) {
+			return expr
+		}
+
+		left, ok := expr.Left.(*BinaryExpr)
+		if !ok {
+			return expr
+		}
+		// The right is const and the left side is a binary expression. Rotate the
+		// comparison combining portions that are const.
+
+		if expr.Operator.Symbol == EQ && left.Operator.Symbol == JSONFetchVal && v.isConst(left.Right) &&
+			v.isConst(expr.Right) {
+			// This is a JSONB inverted index normalization, changing things of the form
+			// x->y=z to x @> {y:z} which can be used to build spans for inverted index
+			// lookups.
+
+			if left.TypedRight().ResolvedType().Family() != types.StringFamily {
+				break
+			}
+
+			str, err := left.TypedRight().Eval(v.ctx)
+			if err != nil {
+				break
+			}
+			// Check that we still have a string after evaluation.
+			if _, ok := str.(*DString); !ok {
+				break
+			}
+
+			rhs, err := expr.TypedRight().Eval(v.ctx)
+			if err != nil {
+				break
+			}
+
+			rjson := rhs.(*DJSON).JSON
+			t := rjson.Type()
+			if t == json.ObjectJSONType || t == json.ArrayJSONType {
+				// We can't make this transformation in cases like
+				//
+				//   a->'b' = '["c"]',
+				//
+				// because containment is not equivalent to equality for non-scalar types.
+				break
+			}
+
+			j := json.NewObjectBuilder(1)
+			j.Add(string(*str.(*DString)), rjson)
+
+			dj, err := MakeDJSON(j.Build())
+			if err != nil {
+				break
+			}
+
+			typedJ, err := dj.TypeCheck(v.ctx.Context, nil, types.Jsonb)
+			if err != nil {
+				break
+			}
+
+			return NewTypedComparisonExpr(MakeComparisonOperator(Contains), left.TypedLeft(), typedJ)
+		}
 
 	case In, NotIn:
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
@@ -487,11 +542,11 @@ func (expr *Tuple) normalize(v *NormalizeVisitor) TypedExpr {
 // unchanged and that resulting expression tree is still well-typed.
 // Example normalizations:
 //
-//   (a)                   -> a
-//   a = 1 + 1             -> a = 2
-//   a + 1 = 2             -> a = 1
-//   a BETWEEN b AND c     -> (a >= b) AND (a <= c)
-//   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
+//	(a)                   -> a
+//	a = 1 + 1             -> a = 2
+//	a + 1 = 2             -> a = 1
+//	a BETWEEN b AND c     -> (a >= b) AND (a <= c)
+//	a NOT BETWEEN b AND c -> (a < b) OR (a > c)
 func (ctx *EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
 	v := MakeNormalizeVisitor(ctx)
 	expr, _ := WalkExpr(&v, typedExpr)
