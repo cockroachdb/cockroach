@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -134,6 +135,12 @@ func TestDataDriven(t *testing.T) {
 				return output
 
 			case "override":
+				if tc.StartedDefaultTestTenant() {
+					// Tests using an override need to run from the system
+					// tenant. Skip the test if running with a default test
+					// tenant.
+					skip.IgnoreLintf(t, "unable to run with a default test tenant")
+				}
 				d.ScanArgs(t, "limit", &limitOverride)
 
 			default:
