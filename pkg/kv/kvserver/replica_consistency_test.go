@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -74,7 +73,7 @@ func TestReplicaChecksumVersion(t *testing.T) {
 func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1000*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
 	tc := testContext{}
@@ -92,7 +91,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 
 	// Checksum computation failed to start.
 	id := uuid.FastMakeV4()
-	c, _ := tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c, _ := tc.repl.trackReplicaChecksum(id)
 	close(c.started)
 	rc, err := tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "checksum task failed to start")
@@ -100,7 +99,7 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 
 	// Checksum computation started, but failed.
 	id = uuid.FastMakeV4()
-	c, _ = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c, _ = tc.repl.trackReplicaChecksum(id)
 	var g errgroup.Group
 	g.Go(func() error {
 		c.started <- func() {}
@@ -118,12 +117,10 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorContains(t, err, "checksum computation did not start")
 	require.Nil(t, rc.Checksum)
-	require.ErrorContains(t, startChecksumTask(context.Background(), id),
-		"checksum collection request gave up")
 
 	// The computation has started, but the request context timed out.
 	id = uuid.FastMakeV4()
-	c, _ = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c, _ = tc.repl.trackReplicaChecksum(id)
 	g.Go(func() error {
 		c.started <- func() {}
 		close(c.started)
@@ -141,20 +138,20 @@ func TestGetChecksumNotSuccessfulExitConditions(t *testing.T) {
 	rc, err = tc.repl.getChecksum(ctx, id)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, rc.Checksum)
-	require.ErrorContains(t, startChecksumTask(context.Background(), id),
-		"checksum collection request gave up")
 
 	// The task failed to start because the checksum collection request did not
-	// join. Later, when it joins, it finds out that the task gave up.
+	// join. Later, when it joins, it doesn't find any trace and times out.
 	id = uuid.FastMakeV4()
-	c, _ = tc.repl.getReplicaChecksum(id, timeutil.Now())
+	c, _ = tc.repl.trackReplicaChecksum(id)
 	require.NoError(t, startChecksumTask(context.Background(), id))
 	// TODO(pavelkalinnikov): Avoid this long wait in the test.
 	time.Sleep(2 * consistencyCheckSyncTimeout) // give the task time to give up
 	_, ok := <-c.started
 	require.False(t, ok) // ensure the task gave up
-	rc, err = tc.repl.getChecksum(context.Background(), id)
-	require.ErrorContains(t, err, "checksum task failed to start")
+	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	rc, err = tc.repl.getChecksum(ctx, id) // blocks for 100ms
+	require.ErrorContains(t, err, "checksum computation did not start")
 }
 
 // TestReplicaChecksumSHA512 checks that a given dataset produces the expected
