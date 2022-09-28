@@ -682,6 +682,8 @@ type Pebble struct {
 	diskSlowCount        int64
 	diskStallCount       int64
 
+	onMetricCallback pebble.MetricCallbacks
+
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
 	unencryptedFS vfs.FS
@@ -929,6 +931,14 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	storeClusterVersion, err := getMinVersion(unencryptedFS, cfg.Dir)
 	if err != nil {
 		return nil, err
+	}
+
+	cfg.Opts.OnMetrics = pebble.MetricCallbacks{
+		LogWriterFsyncLatency: func(duration int64) {
+			if p.onMetricCallback.LogWriterFsyncLatency != nil {
+				p.onMetricCallback.LogWriterFsyncLatency(duration)
+			}
+		},
 	}
 
 	db, err := pebble.Open(cfg.StorageConfig.Dir, cfg.Opts)
@@ -1691,6 +1701,11 @@ func (p *Pebble) RegisterFlushCompletedCallback(cb func()) {
 	p.mu.Lock()
 	p.mu.flushCompletedCallback = cb
 	p.mu.Unlock()
+}
+
+// RegisterMetricCallbacks implements the Engine interface
+func (p *Pebble) RegisterMetricCallbacks(callbacks pebble.MetricCallbacks) {
+	p.onMetricCallback = callbacks
 }
 
 // Remove implements the FS interface.
