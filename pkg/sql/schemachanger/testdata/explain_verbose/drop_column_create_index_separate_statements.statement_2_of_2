@@ -889,6 +889,8 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed

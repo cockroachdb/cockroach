@@ -150,6 +150,9 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  - 106
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed

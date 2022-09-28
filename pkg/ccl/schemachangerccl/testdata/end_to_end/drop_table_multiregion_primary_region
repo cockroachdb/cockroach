@@ -163,6 +163,8 @@ write *eventpb.DropTable to event log: DROP TABLE ‹multi_region_test_db›.‹
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [108]
 update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
 commit transaction #3
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase
