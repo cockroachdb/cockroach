@@ -14,6 +14,7 @@ import (
 	"container/heap"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -145,9 +146,19 @@ func (m *MultiQueue) tryRunNextLocked() {
 // Add returns a Task that must be closed (calling m.Release(..)) to
 // release the Permit. The number of types is expected to
 // be relatively small and not be changing over time.
-func (m *MultiQueue) Add(queueType int, priority float64) *Task {
+func (m *MultiQueue) Add(queueType int, priority float64, maxQueueLength int64) (*Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// If there are remainingRuns we can run immediately, otherwise compute the
+	// queue length one we are added. If the queue is too long, return an error
+	// immediately so the caller doesn't have to wait.
+	if m.remainingRuns == 0 && maxQueueLength >= 0 {
+		currentLen := int64(m.queueLenLocked())
+		if currentLen > maxQueueLength {
+			return nil, errors.Newf("queue is too long %d > %d", currentLen, maxQueueLength)
+		}
+	}
 
 	// The mutex starts locked, unlock it when we are ready to run.
 	pos, ok := m.mapping[queueType]
@@ -169,7 +180,7 @@ func (m *MultiQueue) Add(queueType int, priority float64) *Task {
 	// Once we are done adding a task, attempt to signal the next waiting task.
 	m.tryRunNextLocked()
 
-	return &newTask
+	return &newTask, nil
 }
 
 // Cancel will cancel a Task that may not have started yet. This is useful if it
@@ -221,11 +232,32 @@ func (m *MultiQueue) releaseLocked(permit *Permit) {
 	m.tryRunNextLocked()
 }
 
-// Len returns the number of additional tasks that can be added without
-// queueing. This will return 0 if there is anything queued. This method should
-// only be used for testing.
-func (m *MultiQueue) Len() int {
+// AvailableLen returns the number of additional tasks that can be added without
+// queueing. This will return 0 if there is anything queued.
+func (m *MultiQueue) AvailableLen() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.remainingRuns
+}
+
+// QueueLen returns the length of the queue if one more task is added. If this
+// returns 0 then a task can be added and run without queueing.
+// NB: The value returned is not a guarantee that queueing will not occur when
+// the request is submitted. multiple calls to QueueLen could race.
+func (m *MultiQueue) QueueLen() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.queueLenLocked()
+}
+
+func (m *MultiQueue) queueLenLocked() int {
+	if m.remainingRuns > 0 {
+		return 0
+	}
+	// Start counting from 1 since we will be the first in the queue if it gets added.
+	count := 1
+	for i := 0; i < len(m.outstanding); i++ {
+		count += len(m.outstanding[i])
+	}
+	return count - m.remainingRuns
 }
