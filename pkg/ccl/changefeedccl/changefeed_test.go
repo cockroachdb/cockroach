@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -7568,6 +7569,57 @@ func TestPartitionSpans(t *testing.T) {
 				&echoResolver{result: tc.resolve}, sensitivity, tc.input)
 			require.NoError(t, err)
 			require.Equal(t, tc.expect, sp)
+		})
+	}
+}
+
+// TestPubsubValidationErrors tests error messages during pubsub sink URI validations.
+func TestPubsubValidationErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, stopServer := makeServer(t)
+	defer stopServer()
+
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	enableEnterprise := utilccl.TestingDisableEnterprise()
+	enableEnterprise()
+
+	for _, tc := range []struct {
+		name          string
+		uri           string
+		expectedError string
+	}{
+		{
+			name:          "project name",
+			expectedError: "missing project name",
+			uri:           "gcpubsub://?region={region}",
+		},
+		{
+			name:          "region",
+			expectedError: "region query parameter not found",
+			uri:           "gcpubsub://myproject",
+		},
+		{
+			name:          "credentials for default auth specified",
+			expectedError: "missing credentials parameter",
+			uri:           "gcpubsub://myproject?region={region}&AUTH=specified",
+		},
+		{
+			name:          "base64",
+			expectedError: "illegal base64 data",
+			uri:           "gcpubsub://myproject?region={region}&CREDENTIALS={credentials}",
+		},
+		{
+			name:          "invalid json",
+			expectedError: "creating credentials from json: invalid character",
+			uri: fmt.Sprintf("gcpubsub://myproject?region={region}&CREDENTIALS=%s",
+				base64.StdEncoding.EncodeToString([]byte("invalid json"))),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sqlDB.ExpectErr(t, tc.expectedError, fmt.Sprintf("CREATE CHANGEFEED FOR foo INTO '%s'", tc.uri))
 		})
 	}
 }
