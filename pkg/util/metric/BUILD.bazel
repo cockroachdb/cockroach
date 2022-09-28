@@ -27,6 +27,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
+        "@com_github_hdrhistogram_hdrhistogram_go//:hdrhistogram-go",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_golang//prometheus/graphite",
         "@com_github_prometheus_client_model//go",

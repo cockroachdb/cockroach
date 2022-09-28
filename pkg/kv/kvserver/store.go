@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/HdrHistogram/hdrhistogram-go"
 	"math"
 	"path/filepath"
 	"runtime"
@@ -3359,23 +3360,27 @@ func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err erro
 }
 
 // ComputeMetricsPeriodically computes metrics
-func (s *Store) ComputeMetricsPeriodically(
-	ctx context.Context, prevMetrics *storage.Metrics, tick int,
-) (m storage.Metrics, err error) {
+func (s *Store) ComputeMetricsPeriodically(ctx context.Context, prevMetrics *storage.Metrics, tick int) (m storage.Metrics, err error) {
 	m, err = s.computeMetrics(ctx)
 	if err != nil {
 		return m, err
 	}
 	wt := m.Flush.WriteThroughput
+	logDelta := m.LogWriter
 
 	if prevMetrics != nil {
 		wt.Subtract(prevMetrics.Flush.WriteThroughput)
+		if logDelta.SyncLatencyMicros != nil {
+			logDelta.SyncLatencyMicros = hdrhistogram.Import(logDelta.SyncLatencyMicros.Export())
+			logDelta.Subtract(&prevMetrics.LogWriter)
+		}
 	}
-	flushUtil := 0.0
-	if wt.WorkDuration > 0 {
-		flushUtil = float64(wt.WorkDuration) / float64(wt.WorkDuration+wt.IdleDuration)
+
+	if logDelta.SyncLatencyMicros != nil {
+		s.metrics.PebbleFsyncLatency.UpdateHistogramMetrics(logDelta.SyncLatencyMicros)
 	}
-	s.metrics.FlushUtilization.Update(flushUtil)
+
+	s.metrics.FlushUtilization.Update(float64(wt.WorkDuration) / float64(wt.WorkDuration+wt.IdleDuration))
 
 	// Log this metric infrequently (with current configurations,
 	// every 10 minutes). Trigger on tick 1 instead of tick 0 so that

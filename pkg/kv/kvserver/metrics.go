@@ -1647,6 +1647,12 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaPebbleFsyncLatency = metric.Metadata{
+		Name:        "pebble.fsync.latency",
+		Help:        "TODO",
+		Measurement: "Fsync Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaPebbleFlushUtilization = metric.Metadata{
 		Name:        "pebble.flush.utilization",
 		Help:        "The percentage of time spent flushing in the pebble flush loop",
@@ -1945,7 +1951,8 @@ type StoreMetrics struct {
 	ReplicaReadBatchEvaluationLatency  *metric.Histogram
 	ReplicaWriteBatchEvaluationLatency *metric.Histogram
 
-	FlushUtilization *metric.GaugeFloat64
+	FlushUtilization   *metric.GaugeFloat64
+	PebbleFsyncLatency *metric.LFHistogram
 }
 
 type tenantMetricsRef struct {
@@ -2479,7 +2486,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaWriteBatchEvaluationLatency: metric.NewHistogram(
 			metaReplicaWriteBatchEvaluationLatency, histogramWindow, metric.IOLatencyBuckets,
 		),
-		FlushUtilization: metric.NewGaugeFloat64(metaPebbleFlushUtilization),
+		FlushUtilization:   metric.NewGaugeFloat64(metaPebbleFlushUtilization),
+		PebbleFsyncLatency: metric.NewLFHistogram(metaPebbleFsyncLatency),
+		//PebbleFsyncLatency: metric.NewHistogram(metaPebbleFsyncLatency, histogramWindow, metric.IOLatencyBuckets),
 	}
 
 	{

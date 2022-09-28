@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/HdrHistogram/hdrhistogram-go"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
@@ -200,6 +201,58 @@ func NewHistogram(meta Metadata, windowDuration time.Duration, buckets []float64
 	}
 	h.windowed.tickHelper.onTick()
 	return h
+}
+
+var _ Iterable = &LFHistogram{}
+var _ PrometheusExportable = &LFHistogram{}
+
+func NewLFHistogram(meta Metadata) *LFHistogram {
+	return &LFHistogram{
+		Metadata:  meta,
+		histogram: &hdrhistogram.Histogram{},
+	}
+}
+
+type LFHistogram struct {
+	Metadata
+	histogram *hdrhistogram.Histogram
+}
+
+func (l *LFHistogram) GetMetadata() Metadata {
+	return l.Metadata
+}
+
+func (l *LFHistogram) Inspect(f func(interface{})) {
+	f(l)
+}
+
+func (l *LFHistogram) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_HISTOGRAM.Enum()
+}
+
+func (l *LFHistogram) UpdateHistogramMetrics(histogram *hdrhistogram.Histogram) {
+	l.histogram = histogram
+}
+
+func (l *LFHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	snapshot := l.histogram.Export()
+	sum := uint64(0)
+	buckets := make([]*prometheusgo.Bucket, 0, len(snapshot.Counts))
+	for _, bar := range l.histogram.Distribution() {
+		count, to := uint64(bar.Count), float64(bar.To)
+		sum += count
+		buckets = append(buckets, &prometheusgo.Bucket{
+			CumulativeCount: &count,
+			UpperBound:      &to,
+		})
+	}
+	return &prometheusgo.Metric{
+		Histogram: &prometheusgo.Histogram{
+			Bucket:      buckets,
+			SampleCount: proto.Uint64(uint64(l.histogram.TotalCount())),
+			SampleSum:   proto.Float64(float64(sum)),
+		},
+	}
 }
 
 var _ periodic = (*Histogram)(nil)
