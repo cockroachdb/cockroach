@@ -3072,6 +3072,10 @@ var charts = []sectionDescription{
 					"storage.l6-level-score",
 				},
 			},
+			{
+				Title:   "Flush Utilization",
+				Metrics: []string{"storage.flush.utilization"},
+			},
 		},
 	},
 	{
