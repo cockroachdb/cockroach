@@ -373,13 +373,13 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		// We need a transaction to group the statements together.
 		// We use TxnWithSteppingEnabled here even though we don't
 		// use stepping below, because that buys us admission control.
-		cf := a.admin.server.sqlServer.execCfg.CollectionFactory
+		ief := a.admin.server.sqlServer.execCfg.CollectionFactory.GetInternalExecutorFactory()
 		runner = func(ctx context.Context, fn txnFunc) error {
-			return cf.TxnWithExecutor(ctx, a.admin.server.db, nil, func(
+			return ief.DescsTxnWithExecutor(ctx, a.admin.server.db, nil, func(
 				ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor,
 			) error {
 				return fn(ctx, txn, ie)
-			}, descs.SteppingEnabled())
+			}, sqlutil.SteppingEnabled())
 		}
 	} else {
 		runner = func(ctx context.Context, fn func(context.Context, *kv.Txn, sqlutil.InternalExecutor) error) error {

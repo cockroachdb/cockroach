@@ -245,7 +245,8 @@ func NewFileToTableSystem(
 	if err != nil {
 		return nil, err
 	}
-	if err := e.cf.TxnWithExecutor(ctx, e.db, nil /* SessionData */, func(
+	ief := e.cf.GetInternalExecutorFactory()
+	if err := ief.DescsTxnWithExecutor(ctx, e.db, nil /* SessionData */, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		// TODO(adityamaru): Handle scenario where the user has already created
@@ -366,7 +367,8 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 		return err
 	}
 
-	if err := e.cf.TxnWithExecutor(ctx, e.db, nil, func(
+	ief := e.cf.GetInternalExecutorFactory()
+	if err := ief.DescsTxnWithExecutor(ctx, e.db, nil, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())

@@ -12,17 +12,12 @@ package descs
 
 import (
 	"context"
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -44,9 +39,9 @@ func (cf *CollectionFactory) Txn(
 	ctx context.Context,
 	db *kv.DB,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
-	opts ...TxnOption,
+	opts ...sqlutil.TxnOption,
 ) error {
-	return cf.TxnWithExecutor(ctx, db, nil /* sessionData */, func(
+	return cf.GetInternalExecutorFactory().DescsTxnWithExecutor(ctx, db, nil /* sessionData */, func(
 		ctx context.Context, txn *kv.Txn, descriptors *Collection, _ sqlutil.InternalExecutor,
 	) error {
 		return f(ctx, txn, descriptors)
@@ -88,97 +83,6 @@ type TxnWithExecutorFunc = func(
 	descriptors *Collection,
 	ie sqlutil.InternalExecutor,
 ) error
-
-// TxnWithExecutor enables callers to run transactions with a *Collection such that all
-// retrieved immutable descriptors are properly leased and all mutable
-// descriptors are handled. The function deals with verifying the two version
-// invariant and retrying when it is violated. Callers need not worry that they
-// write mutable descriptors multiple times. The call will explicitly wait for
-// the leases to drain on old versions of descriptors modified or deleted in the
-// transaction; callers do not need to call lease.WaitForOneVersion.
-// It also enables using internal executor to run sql queries in a txn manner.
-//
-// The passed transaction is pre-emptively anchored to the system config key on
-// the system tenant.
-func (cf *CollectionFactory) TxnWithExecutor(
-	ctx context.Context,
-	db *kv.DB,
-	sd *sessiondata.SessionData,
-	f TxnWithExecutorFunc,
-	opts ...TxnOption,
-) error {
-	var config txnConfig
-	for _, opt := range opts {
-		opt.apply(&config)
-	}
-	run := db.Txn
-	if config.steppingEnabled {
-		type kvTxnFunc = func(context.Context, *kv.Txn) error
-		run = func(ctx context.Context, f kvTxnFunc) error {
-			return db.TxnWithSteppingEnabled(ctx, sessiondatapb.Normal, f)
-		}
-	}
-
-	// Waits for descriptors that were modified, skipping
-	// over ones that had their descriptor wiped.
-	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
-		// Wait for a single version on leased descriptors.
-		for _, ld := range modifiedDescriptors {
-			waitForNoVersion := deletedDescs.Contains(ld.ID)
-			retryOpts := retry.Options{
-				InitialBackoff: time.Millisecond,
-				Multiplier:     1.5,
-				MaxBackoff:     time.Second,
-			}
-			// Detect unpublished ones.
-			if waitForNoVersion {
-				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
-				if err != nil {
-					return err
-				}
-			} else {
-				_, err := cf.leaseMgr.WaitForOneVersion(ctx, ld.ID, retryOpts)
-				// If the descriptor has been deleted, just wait for leases to drain.
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
-					err = cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retryOpts)
-				}
-				if err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	for {
-		var withNewVersion []lease.IDVersion
-		var deletedDescs catalog.DescriptorIDSet
-		if err := run(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			withNewVersion, deletedDescs = nil, catalog.DescriptorIDSet{}
-			descsCol := cf.NewCollection(
-				ctx, nil, /* temporarySchemaProvider */
-				cf.ieFactoryWithTxn.MemoryMonitor(),
-			)
-			defer descsCol.ReleaseAll(ctx)
-			ie, commitTxnFn := cf.ieFactoryWithTxn.NewInternalExecutorWithTxn(sd, &cf.settings.SV, txn, descsCol)
-			if err := f(ctx, txn, descsCol, ie); err != nil {
-				return err
-			}
-			deletedDescs = descsCol.deletedDescs
-			withNewVersion, err = descsCol.GetOriginalPreviousIDVersionsForUncommitted()
-			if err != nil {
-				return err
-			}
-			return commitTxnFn(ctx)
-		}); IsTwoVersionInvariantViolationError(err) {
-			continue
-		} else {
-			if err == nil {
-				err = waitForDescriptors(withNewVersion, deletedDescs)
-			}
-			return err
-		}
-	}
-}
 
 // CheckTwoVersionInvariant checks whether any new schema being modified written
 // at a version V has only valid leases at version = V - 1. A transaction retry

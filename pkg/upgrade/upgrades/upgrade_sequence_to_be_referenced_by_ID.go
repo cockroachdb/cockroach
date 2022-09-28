@@ -34,7 +34,8 @@ import (
 func upgradeSequenceToBeReferencedByID(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
 ) error {
-	return d.CollectionFactory.TxnWithExecutor(ctx, d.DB, d.SessionData, func(
+	ief := d.CollectionFactory.GetInternalExecutorFactory()
+	return ief.DescsTxnWithExecutor(ctx, d.DB, d.SessionData, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) (err error) {
 		var lastUpgradedID descpb.ID

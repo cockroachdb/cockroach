@@ -46,6 +46,12 @@ func (cf *CollectionFactory) GetClusterSettings() *cluster.Settings {
 	return cf.settings
 }
 
+// GetInternalExecutorFactory returns the internal executor factory of the
+// collection factory.
+func (cf *CollectionFactory) GetInternalExecutorFactory() InternalExecutorFactoryWithTxn {
+	return cf.ieFactoryWithTxn
+}
+
 // InternalExecutorFactoryWithTxn is used to create an internal executor
 // with associated extra txn state information.
 // It should only be used as a field hanging off CollectionFactory.
