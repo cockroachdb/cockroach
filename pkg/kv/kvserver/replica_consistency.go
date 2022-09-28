@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -146,12 +144,6 @@ func (r *Replica) checkConsistencyImpl(
 					&results[idx].Response.Delta,
 				)
 			}
-			minoritySnap := results[shaToIdxs[minoritySHA][0]].Response.Snapshot
-			curSnap := results[shaToIdxs[sha][0]].Response.Snapshot
-			if sha != minoritySHA && minoritySnap != nil && curSnap != nil {
-				diff := DiffRange(curSnap, minoritySnap)
-				buf.Printf("====== diff(%x, [minority]) ======\n%v", redact.Safe(sha), diff)
-			}
 		}
 
 		if isQueue {
@@ -246,7 +238,7 @@ func (r *Replica) checkConsistencyImpl(
 		return resp, roachpb.NewError(err)
 	}
 
-	if args.Snapshot {
+	if args.Checkpoint {
 		// A diff was already printed. Return because all the code below will do
 		// is request another consistency check, with a diff and with
 		// instructions to terminate the minority nodes.
@@ -257,7 +249,6 @@ func (r *Replica) checkConsistencyImpl(
 	// No diff was printed, so we want to re-run the check with snapshots
 	// requested, to build the diff. Note that this recursive call will be
 	// terminated in the `args.Snapshot` branch above.
-	args.Snapshot = true
 	args.Checkpoint = true
 	for _, idxs := range shaToIdxs[minoritySHA] {
 		args.Terminate = append(args.Terminate, results[idxs].Replica)
@@ -296,7 +287,7 @@ type ConsistencyCheckResult struct {
 }
 
 func (r *Replica) collectChecksumFromReplica(
-	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, withSnap bool,
+	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID,
 ) (CollectChecksumResponse, error) {
 	conn, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID, rpc.DefaultClass)
 	if err != nil {
@@ -308,7 +299,6 @@ func (r *Replica) collectChecksumFromReplica(
 		StoreRequestHeader: StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
 		RangeID:            r.RangeID,
 		ChecksumID:         id,
-		WithSnapshot:       withSnap,
 	}
 	resp, err := client.CollectChecksum(ctx, req)
 	if err != nil {
@@ -350,7 +340,7 @@ func (r *Replica) runConsistencyCheck(
 		if err := r.store.Stopper().RunAsyncTask(ctx, "storage.Replica: checking consistency",
 			func(ctx context.Context) {
 				defer wg.Done()
-				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, req.Snapshot)
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
@@ -467,10 +457,8 @@ func (*Replica) checksumInitialWait(ctx context.Context) time.Duration {
 }
 
 // computeChecksumDone sends the checksum computation result to the receiver.
-func (*Replica) computeChecksumDone(
-	rc *replicaChecksum, result *replicaHash, snapshot *roachpb.RaftSnapshotData,
-) {
-	c := CollectChecksumResponse{Snapshot: snapshot}
+func (*Replica) computeChecksumDone(rc *replicaChecksum, result *replicaHash) {
+	var c CollectChecksumResponse
 	if result != nil {
 		c.Checksum = result.SHA512[:]
 		delta := result.PersistedMS
@@ -491,18 +479,18 @@ type replicaHash struct {
 	PersistedMS, RecomputedMS enginepb.MVCCStats
 }
 
-// LoadRaftSnapshotDataForTesting returns all the KV data of the given range.
-// Only for testing.
-func LoadRaftSnapshotDataForTesting(
-	ctx context.Context, rd roachpb.RangeDescriptor, store storage.Reader,
-) (roachpb.RaftSnapshotData, error) {
-	var r *Replica
-	var snap roachpb.RaftSnapshotData
-	lim := quotapool.NewRateLimiter("test", 1<<20, 1<<20)
-	if _, err := r.sha512(ctx, rd, store, &snap, roachpb.ChecksumMode_CHECK_FULL, lim); err != nil {
-		return roachpb.RaftSnapshotData{}, err
+// ChecksumRangeForTesting returns a checksum over the KV data of the given
+// range. Only for testing.
+func ChecksumRangeForTesting(
+	ctx context.Context, desc roachpb.RangeDescriptor, snap storage.Reader,
+) ([]byte, error) {
+	var r *Replica // TODO(pavelkalinnikov): make this less ugly.
+	lim := quotapool.NewRateLimiter("test", 1<<30, 1<<30)
+	res, err := r.sha512(ctx, desc, snap, roachpb.ChecksumMode_CHECK_FULL, lim)
+	if err != nil {
+		return nil, err
 	}
-	return snap, nil
+	return res.SHA512[:], nil
 }
 
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.
@@ -511,14 +499,12 @@ func (*Replica) sha512(
 	ctx context.Context,
 	desc roachpb.RangeDescriptor,
 	snap storage.Reader,
-	snapshot *roachpb.RaftSnapshotData,
 	mode roachpb.ChecksumMode,
 	limiter *quotapool.RateLimiter,
 ) (*replicaHash, error) {
 	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
 
 	// Iterate over all the data in the range.
-	var alloc bufalloc.ByteAllocator
 	var intBuf [8]byte
 	var legacyTimestamp hlc.LegacyTimestamp
 	var timestampBuf []byte
@@ -529,17 +515,6 @@ func (*Replica) sha512(
 		if err := limiter.WaitN(ctx, int64(len(unsafeKey.Key)+len(unsafeValue))); err != nil {
 			return err
 		}
-
-		if snapshot != nil {
-			// Add (a copy of) the kv pair into the debug message.
-			kv := roachpb.RaftSnapshotData_KeyValue{
-				Timestamp: unsafeKey.Timestamp,
-			}
-			alloc, kv.Key = alloc.Copy(unsafeKey.Key, 0)
-			alloc, kv.Value = alloc.Copy(unsafeValue, 0)
-			snapshot.KV = append(snapshot.KV, kv)
-		}
-
 		// Encode the length of the key and value.
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.Key)))
 		if _, err := hasher.Write(intBuf[:]); err != nil {
@@ -575,18 +550,6 @@ func (*Replica) sha512(
 		if err != nil {
 			return err
 		}
-
-		if snapshot != nil {
-			// Add (a copy of) the range key into the debug message.
-			rkv := roachpb.RaftSnapshotData_RangeKeyValue{
-				Timestamp: rangeKV.RangeKey.Timestamp,
-			}
-			alloc, rkv.StartKey = alloc.Copy(rangeKV.RangeKey.StartKey, 0)
-			alloc, rkv.EndKey = alloc.Copy(rangeKV.RangeKey.EndKey, 0)
-			alloc, rkv.Value = alloc.Copy(rangeKV.Value, 0)
-			snapshot.RangeKV = append(snapshot.RangeKV, rkv)
-		}
-
 		// Encode the length of the start key and end key.
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(rangeKV.RangeKey.StartKey)))
 		if _, err := hasher.Write(intBuf[:]); err != nil {
@@ -647,19 +610,6 @@ func (*Replica) sha512(
 		b, err := protoutil.Marshal(rangeAppliedState)
 		if err != nil {
 			return nil, err
-		}
-		if snapshot != nil {
-			// Add LeaseAppliedState to the diff.
-			kv := roachpb.RaftSnapshotData_KeyValue{
-				Timestamp: hlc.Timestamp{},
-			}
-			kv.Key = keys.RangeAppliedStateKey(desc.RangeID)
-			var v roachpb.Value
-			if err := v.SetProto(rangeAppliedState); err != nil {
-				return nil, err
-			}
-			kv.Value = v.RawBytes
-			snapshot.KV = append(snapshot.KV, kv)
 		}
 		if _, err := hasher.Write(b); err != nil {
 			return nil, err
@@ -734,6 +684,7 @@ func (r *Replica) computeChecksumPostApply(
 		defer taskCancel()
 		defer snap.Close()
 		defer cleanup()
+
 		// Wait until the CollectChecksum request handler joins in and learns about
 		// the starting computation, and then start it.
 		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
@@ -752,16 +703,12 @@ func (r *Replica) computeChecksumPostApply(
 		); err != nil {
 			log.Errorf(ctx, "checksum collection did not join: %v", err)
 		} else {
-			var snapshot *roachpb.RaftSnapshotData
-			if cc.SaveSnapshot {
-				snapshot = &roachpb.RaftSnapshotData{}
-			}
-			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, r.store.consistencyLimiter)
+			result, err := r.sha512(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter)
 			if err != nil {
 				log.Errorf(ctx, "checksum computation failed: %v", err)
 				result = nil
 			}
-			r.computeChecksumDone(c, result, snapshot)
+			r.computeChecksumDone(c, result)
 		}
 
 		var shouldFatal bool

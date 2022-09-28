@@ -34,30 +34,6 @@ message RangeTombstone {
       (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
 }
 
-// RaftSnapshotData is a historical vestige that used to carry snapshot data,
-// but is now only used in CollectChecksumResponse to carry range KV data to
-// generate diffs for checksum mismatches.
-message RaftSnapshotData {
-  message KeyValue {
-    optional bytes key = 1;
-    optional bytes value = 2;
-    optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
-  }
-  repeated KeyValue KV = 2 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "KV"];
-
-  message RangeKeyValue {
-    optional bytes start_key = 1;
-    optional bytes end_key = 2;
-    optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
-    optional bytes value = 4;
-  }
-  repeated RangeKeyValue range_kv = 4 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "RangeKV"];
-
-  reserved 1, 3;
-}
-
 message RaftReplicaID {
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
