@@ -14,6 +14,7 @@ require (
 	github.com/BurntSushi/toml v0.4.1
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
+	github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46
 	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/Shopify/sarama v1.29.0
 	github.com/VividCortex/ewma v1.1.1
