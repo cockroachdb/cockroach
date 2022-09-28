@@ -2884,6 +2884,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	desc := r.Desc()
 	// If the generation has changed, this snapshot may be useless, so don't
 	// attempt to send it.
+<<<<<<< HEAD
 	// NB: This is an overly strict check. If other delegates are added to this
 	// snapshot, we don't necessarily need to reject sending the snapshot, however
 	// if there are merges or splits, it is safer to reject.
