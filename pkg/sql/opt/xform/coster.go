@@ -1185,9 +1185,27 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 
 	filterSetup, filterPerRow := c.computeFiltersCost(join.On, util.FastIntSet{})
 
+	// It is much more expensive to do a seek in zigzag join vs. lookup join
+	// because zigzag join starts a new scan for every seek via
+	// `Fetcher.StartScan`. Instead of using `seqIOCostFactor`, bump seek costs to
+	// be similar to lookup join, though more fine-tuning is needed.
+	// TODO(msirek): Refine zigzag join costs and try out changes to execution to
+	//               do a point lookup for a match in the other index before
+	//               starting a new scan. Lookup join and inverted join add a
+	//               cost of 5 * randIOCostFactor per row to account for not
+	//               running non-key lookups in parallel. This may be applicable
+	//               here too.
+	//               Explore dynamically detecting selection of a bad zigzag join
+	//               during execution and switching to merge join on-the-fly.
+	// Seek costs should be at least as expensive as lookup join.
+	// See `indexLookupJoinPerLookupCost` and `computeIndexLookupJoinCost`.
+	// Increased zigzag join costs mean that accurate selectivity estimation is
+	// needed to ensure this index access path can be picked.
+	seekCost := memo.Cost(randIOCostFactor + lookupJoinRetrieveRowCost)
+
 	// Double the cost of emitting rows as well as the cost of seeking rows,
 	// given two indexes will be accessed.
-	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seqIOCostFactor) + scanCost + filterPerRow)
+	cost := memo.Cost(rowCount) * (2*(cpuCostFactor+seekCost) + scanCost + filterPerRow)
 	cost += filterSetup
 
 	// Add a penalty if the cardinality exceeds the row count estimate. Adding a

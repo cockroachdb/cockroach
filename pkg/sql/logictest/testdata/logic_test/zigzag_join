@@ -186,6 +186,9 @@ INSERT INTO d VALUES (30,  '{"a": []}')
 statement ok
 INSERT INTO d VALUES (31,  '{"a": {"b": "c", "d": "e"}, "f": "g"}')
 
+statement ok
+ANALYZE d;
+
 ## Multi-path contains queries with zigzag joins enabled.
 
 query IT
