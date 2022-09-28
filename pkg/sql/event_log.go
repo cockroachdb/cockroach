@@ -194,7 +194,7 @@ func (p *planner) getCommonSQLEventDetails(opt redactionOptions) eventpb.CommonS
 	commonSQLEventDetails := eventpb.CommonSQLEventDetails{
 		Statement:       redactableStmt,
 		Tag:             p.stmt.AST.StatementTag(),
-		User:            p.User().Normalized(),
+		User:            p.SessionData().SessionUser().Normalized(),
 		ApplicationName: p.SessionData().ApplicationName,
 	}
 	if pls := p.extendedEvalCtx.Context.Placeholders.Values; len(pls) > 0 {
