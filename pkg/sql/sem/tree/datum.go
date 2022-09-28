@@ -3027,6 +3027,9 @@ type DInterval struct {
 	duration.Duration
 }
 
+// DZeroInterval is the zero-valued DTimestamp.
+var DZeroInterval = &DInterval{}
+
 // AsDInterval attempts to retrieve a DInterval from an Expr, panicking if the
 // assertion fails.
 func AsDInterval(e Expr) (*DInterval, bool) {
