@@ -41,6 +41,11 @@ type CollectionFactory struct {
 	ieFactoryWithTxn   InternalExecutorFactoryWithTxn
 }
 
+// GetClusterSettings returns the cluster setting from the collection factory.
+func (cf *CollectionFactory) GetClusterSettings() *cluster.Settings {
+	return cf.settings
+}
+
 // InternalExecutorFactoryWithTxn is used to create an internal executor
 // with associated extra txn state information.
 // It should only be used as a field hanging off CollectionFactory.
@@ -53,6 +58,21 @@ type InternalExecutorFactoryWithTxn interface {
 		txn *kv.Txn,
 		descCol *Collection,
 	) (sqlutil.InternalExecutor, InternalExecutorCommitTxnFunc)
+
+	DescsTxnWithExecutor(
+		ctx context.Context,
+		db *kv.DB,
+		sd *sessiondata.SessionData,
+		f TxnWithExecutorFunc,
+		opts ...sqlutil.TxnOption,
+	) error
+
+	DescsTxn(
+		ctx context.Context,
+		db *kv.DB,
+		f func(context.Context, *kv.Txn, *Collection) error,
+		opts ...sqlutil.TxnOption,
+	) error
 }
 
 // InternalExecutorCommitTxnFunc is to commit the txn associated with an
