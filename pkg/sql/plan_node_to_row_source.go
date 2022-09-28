@@ -126,6 +126,9 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 		return nil
 	}
 	p.input = input
+	// Adding the input to drain ensures that the input will be properly closed
+	// by this planNodeToRowSource. This is important since the
+	// rowSourceToPlanNode created below is not responsible for that.
 	p.AddInputToDrain(input)
 	// Search the plan we're wrapping for firstNotWrapped, which is the planNode
 	// that DistSQL planning resumed in. Replace that planNode with input,
@@ -133,7 +136,7 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 	return walkPlan(ctx, p.node, planObserver{
 		replaceNode: func(ctx context.Context, nodeName string, plan planNode) (planNode, error) {
 			if plan == p.firstNotWrapped {
-				return makeRowSourceToPlanNode(input, p, planColumns(p.firstNotWrapped), p.firstNotWrapped), nil
+				return newRowSourceToPlanNode(input, p, planColumns(p.firstNotWrapped), p.firstNotWrapped), nil
 			}
 			return nil, nil
 		},
