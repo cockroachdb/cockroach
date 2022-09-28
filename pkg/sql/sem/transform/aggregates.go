@@ -37,8 +37,8 @@ func (v *isAggregateVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 			return true, expr
 		}
 
-		// TODO(mgartner): Plumb a function resolver here, or determine that the
-		// function should have already been resolved.
+		// We don't currently support aggregate UDFs, so no resolver is required
+		// here.
 		fd, err := t.Func.Resolve(v.ctx, &v.searchPath, nil /* resolver */)
 		if err != nil {
 			return false, expr
