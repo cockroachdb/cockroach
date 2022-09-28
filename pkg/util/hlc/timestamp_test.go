@@ -405,3 +405,23 @@ func BenchmarkTimestampStringSynthetic(b *testing.B) {
 		_ = ts.String()
 	}
 }
+
+func BenchmarkTimestampIsEmpty(b *testing.B) {
+	cases := map[string]Timestamp{
+		"empty":    {},
+		"walltime": {WallTime: 1664364012528805328},
+		"all":      {WallTime: 1664364012528805328, Logical: 65535, Synthetic: true},
+	}
+
+	var result bool
+
+	for name, ts := range cases {
+		b.Run(name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				result = ts.IsEmpty()
+			}
+		})
+	}
+
+	_ = result // make sure compiler doesn't optimize away the call
+}
