@@ -594,20 +594,14 @@ t1:
 index-recommendations
 SELECT k, i FROM t1 WHERE k = 1 AND i = 2
 ----
-creation: CREATE INDEX ON t1 (k) STORING (i);
-creation: CREATE INDEX ON t1 (i) STORING (k);
+creation: CREATE INDEX ON t1 (k, i);
 --
 optimal plan:
-inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
+scan t1@_hyp_3
  ├── columns: k:1!null i:2!null
- ├── eq columns: [5] = [5]
- ├── left fixed columns: [1] = [1]
- ├── right fixed columns: [2] = [2]
- ├── cost: 11.9982432
- ├── fd: ()-->(1,2)
- └── filters
-      ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      └── i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+ ├── constraint: /1/2/5: [/1/2 - /1/2]
+ ├── cost: 14.9945676
+ └── fd: ()-->(1,2)
 
 # Multi-column combinations used: EQ + R.
 index-candidates
@@ -653,7 +647,7 @@ inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
  ├── eq columns: [5] = [5]
  ├── left fixed columns: [1] = [1]
  ├── right fixed columns: [2] = [2]
- ├── cost: 10.6474054
+ ├── cost: 13.4131712
  ├── fd: ()-->(1,2)
  └── filters
       ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
@@ -709,31 +703,25 @@ t2:
 index-recommendations
 SELECT t1.i, t1.s FROM t1 JOIN t2 ON t1.k != t2.k WHERE t1.i = 2 AND t1.s = 'NG'
 ----
-creation: CREATE INDEX ON t1 (i) STORING (k, s);
-creation: CREATE INDEX ON t1 (s) STORING (k, i);
+creation: CREATE INDEX ON t1 (i, s) STORING (k);
 --
 optimal plan:
 project
  ├── columns: i:2!null s:4!null
- ├── cost: 1111.17702
+ ├── cost: 1114.17334
  ├── fd: ()-->(2,4)
  └── inner-join (cross)
       ├── columns: t1.k:1!null t1.i:2!null t1.s:4!null t2.k:8!null
-      ├── cost: 1108.1814
+      ├── cost: 1111.17772
       ├── fd: ()-->(2,4)
       ├── scan t2
       │    ├── columns: t2.k:8
       │    └── cost: 1074.52
-      ├── inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
+      ├── scan t1@_hyp_4
       │    ├── columns: t1.k:1 t1.i:2!null t1.s:4!null
-      │    ├── eq columns: [5] = [5]
-      │    ├── left fixed columns: [2] = [2]
-      │    ├── right fixed columns: [4] = ['NG']
-      │    ├── cost: 12.0073514
-      │    ├── fd: ()-->(2,4)
-      │    └── filters
-      │         ├── t1.i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
-      │         └── t1.s:4 = 'NG' [outer=(4), constraints=(/4: [/'NG' - /'NG']; tight), fd=()-->(4)]
+      │    ├── constraint: /2/4/5: [/2/'NG' - /2/'NG']
+      │    ├── cost: 15.0036757
+      │    └── fd: ()-->(2,4)
       └── filters
            └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
 
@@ -1234,13 +1222,13 @@ inner-join (lookup t4)
  ├── key columns: [6] = [6]
  ├── lookup columns are key
  ├── immutable
- ├── cost: 110.790741
+ ├── cost: 234.247531
  ├── inner-join (zigzag t4@_hyp_1 t4@_hyp_1)
  │    ├── columns: rowid:6!null
  │    ├── eq columns: [6] = [6]
  │    ├── left fixed columns: [9] = ['\x37626172000112320001']
  │    ├── right fixed columns: [9] = ['\x37666f6f000112310001']
- │    ├── cost: 35.6990123
+ │    ├── cost: 159.155802
  │    └── filters (true)
  └── filters
       └── j:4 @> '{"bar": "2", "foo": "1"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
@@ -1316,7 +1304,7 @@ optimal plan:
 project
  ├── columns: k:1!null f:3
  ├── immutable
- ├── cost: 10.7379279
+ ├── cost: 13.773964
  ├── fd: ()-->(1)
  └── inner-join (zigzag t4@_hyp_1 t4@_hyp_2)
       ├── columns: k:1!null i:2!null f:3 j:4
@@ -1324,7 +1312,7 @@ project
       ├── left fixed columns: [1] = [1]
       ├── right fixed columns: [2] = [2]
       ├── immutable
-      ├── cost: 10.7148919
+      ├── cost: 13.7509279
       ├── fd: ()-->(1,2)
       └── filters
            ├── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
