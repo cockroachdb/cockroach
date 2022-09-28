@@ -39,8 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -103,22 +101,7 @@ func ShouldStartDefaultTestTenant(t testing.TB) bool {
 		t.Fatal("invalid setting of tenantMode flag")
 	}
 
-	if rand.Float64() > probabilityOfStartingDefaultTestTenant {
-		return false
-	}
-
-	if !skip.UnderBench() {
-		// We're starting the default SQL server (i.e. we're running this test
-		// in a tenant). Log this for easier debugging unless we're running a
-		// benchmark (because these INFO messages would break the benchstat
-		// utility).
-		log.Shout(context.Background(), severity.INFO,
-			"Running test with the default test tenant. "+
-				"If you are only seeing a test case failure when this message appears, there may be a "+
-				"problem with your test case running within tenants.")
-	}
-
-	return true
+	return rand.Float64() <= probabilityOfStartingDefaultTestTenant
 }
 
 // TestServerInterface defines test server functionality that tests need; it is

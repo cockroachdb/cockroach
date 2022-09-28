@@ -47,14 +47,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -496,17 +497,6 @@ func (ts *TestServer) TestingKnobs() *base.TestingKnobs {
 	return nil
 }
 
-// TestingKnobsForTenant returns a TestingKnobs that is used when starting Test
-// Tenants. These knobs are a copy of the Server's TestingKnobs with any knobs
-// that have been found to be problematic to share by default removed.
-func (ts *TestServer) TestingKnobsForTenant() base.TestingKnobs {
-	knobs := *ts.TestingKnobs()
-	// TODO(ssd): We don't share the Server knobs the testcluster setup code
-	// installed an RPC listener that is inappropriate for the tenant.
-	knobs.Server = nil
-	return knobs
-}
-
 // TenantStatusServer returns the TenantStatusServer used by the TestServer.
 func (ts *TestServer) TenantStatusServer() interface{} {
 	return ts.status
@@ -540,10 +530,6 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	}
 
 	tempStorageConfig := base.DefaultTestTempStorageConfig(cluster.MakeTestingClusterSettings())
-	var useTransactionalDescIDGenerator bool
-	if knobs, ok := ts.params.Knobs.SQLExecutor.(*sql.ExecutorTestingKnobs); ok {
-		useTransactionalDescIDGenerator = knobs.UseTransactionalDescIDGenerator
-	}
 	params := base.TestTenantArgs{
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
@@ -557,24 +543,14 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 		UseDatabase:                 ts.params.UseDatabase,
 		SSLCertsDir:                 ts.params.SSLCertsDir,
 		AllowSettingClusterSettings: true,
+		TestingKnobs:                ts.params.Knobs,
 	}
-	if ts.params.ShareMostTestingKnobsWithTenant {
-		params.TestingKnobs = ts.TestingKnobsForTenant()
-	} else {
-		// These settings are inherited from the SQL server creation in
-		// logicTest.newCluster, and are required to run the logic test suite
-		// successfully.
-		params.TestingKnobs = base.TestingKnobs{
-			SQLExecutor: &sql.ExecutorTestingKnobs{
-				DeterministicExplain:            true,
-				UseTransactionalDescIDGenerator: useTransactionalDescIDGenerator,
-			},
-			SQLStatsKnobs: &sqlstats.TestingKnobs{
-				AOSTClause: "AS OF SYSTEM TIME '-1us'",
-			},
-			RangeFeed: ts.TestingKnobs().RangeFeed,
-		}
-	}
+
+	// Since we're creating a tenant, it doesn't make sense to pass through the
+	// Server testing knobs, since the bulk of them only apply to the system
+	// tenant. Any remaining knobs which are required by the tenant should be
+	// setup in StartTenant below (like the BlobClientFactory).
+	params.TestingKnobs.Server = &TestingKnobs{}
 
 	tenant, err := ts.StartTenant(ctx, params)
 	if err != nil {
@@ -584,6 +560,16 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	if len(ts.testTenants) == 0 {
 		ts.testTenants = make([]serverutils.TestTenantInterface, 1)
 		ts.testTenants[0] = tenant
+
+		if !skip.UnderBench() {
+			// Now that we've started the first tenant, log this fact for easier
+			// debugging. Skip the logging if we're running a benchmark (because
+			// these INFO messages break the benchstat utility).
+			log.Shout(context.Background(), severity.INFO,
+				"Running test with the default test tenant. "+
+					"If you are only seeing a test case failure when this message appears, there may be a "+
+					"problem with your test case running within tenants.")
+		}
 	} else {
 		// We restrict the creation of multiple default tenants because if
 		// we allow for more than one to be created, it's not clear what we
