@@ -1466,3 +1466,42 @@ NULL                                  294276-12-31 23:59:59.999999 +0000 +0000  
 0000-01-01 23:59:59.999999 +0000 UTC  1970-01-01 00:00:00 +0000 +0000           0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
 0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           NULL                                  294276-12-31 23:59:59.999999 +0000 +0000
 0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000           0000-01-02 00:00:00 +0000 UTC         2042-01-01 00:00:00 +0000 +0000
+
+statement ok
+SET inequality_lookup_join_enabled=false
+
+statement error pq: could not produce a query plan conforming to the LOOKUP JOIN hint
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f <= a ORDER BY a, b, c, d, e, f
+
+statement error pq: could not produce a query plan conforming to the LOOKUP JOIN hint
+SELECT a, b, c, d, e, f FROM def INNER LOOKUP JOIN abc ON a >= f ORDER BY a, b, c, d, e, f
+
+statement error pq: could not produce a query plan conforming to the LOOKUP JOIN hint
+SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f < a AND f >= b ORDER BY a, b, c, d, e, f
+
+query T
+EXPLAIN SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e <= a::DECIMAL ORDER BY a, b, c, d, e, f
+----
+distribution: full
+vectorized: true
+·
+• sort
+│ estimated row count: 33
+│ order: +a,+b,+c,+d,+e
+│ already ordered: +a
+│
+└── • lookup join
+    │ estimated row count: 33
+    │ table: def_e_decimal@def_e_decimal_pkey
+    │ equality: (b) = (f)
+    │ pred: column11 >= e
+    │
+    └── • render
+        │
+        └── • scan
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+statement ok
+RESET inequality_lookup_join_enabled

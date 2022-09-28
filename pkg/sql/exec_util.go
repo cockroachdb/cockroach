@@ -3338,6 +3338,10 @@ func (m *sessionDataMutator) SetEnforceHomeRegion(val bool) {
 	m.data.EnforceHomeRegion = val
 }
 
+func (m *sessionDataMutator) SetInequalityLookupJoinEnabled(val bool) {
+	m.data.InequalityLookupJoinEnabled = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

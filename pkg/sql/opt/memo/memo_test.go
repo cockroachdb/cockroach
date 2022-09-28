@@ -292,6 +292,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().EnforceHomeRegion = false
 	notStale()
 
+	// Stale inequality lookup joins enabled.
+	evalCtx.SessionData().InequalityLookupJoinEnabled = true
+	stale()
+	evalCtx.SessionData().InequalityLookupJoinEnabled = false
+	notStale()
+
 	// Stale testing_optimizer_random_seed.
 	evalCtx.SessionData().TestingOptimizerRandomSeed = 100
 	stale()
