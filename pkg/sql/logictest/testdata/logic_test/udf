@@ -2384,3 +2384,10 @@ subtest subqueries
 # UDFs with subqueries are not currently supported.
 statement error pgcode 0A000 unimplemented: subquery usage inside a function definition
 CREATE FUNCTION rec(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT * FROM t WHERE a = (SELECT max(i) FROM s)'
+
+
+subtest variadic
+
+# Variadic UDFS are not currently supported.
+statement error pgcode 0A000 unimplemented: this syntax\nHINT.*\n.*88947
+CREATE FUNCTION rec(VARIADIC arr INT[]) RETURNS INT LANGUAGE SQL AS '1'
