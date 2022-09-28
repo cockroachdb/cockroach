@@ -2706,8 +2706,6 @@ simple_typename ::=
 	| '@' iconst32
 	| complex_type_name
 	| const_typename
-	| bit_with_length
-	| character_with_length
 	| interval_type
 
 opt_array_bounds ::=
@@ -2851,7 +2849,9 @@ func_name_no_crdb_extra ::=
 const_typename ::=
 	numeric
 	| bit_without_length
+	| bit_with_length
 	| character_without_length
+	| character_with_length
 	| const_datetime
 	| const_geo
 
@@ -3178,13 +3178,6 @@ complex_type_name ::=
 	general_type_name '.' unrestricted_name
 	| general_type_name '.' unrestricted_name '.' unrestricted_name
 
-bit_with_length ::=
-	'BIT' opt_varying '(' iconst32 ')'
-	| 'VARBIT' '(' iconst32 ')'
-
-character_with_length ::=
-	character_base '(' iconst32 ')'
-
 interval_type ::=
 	'INTERVAL'
 	| 'INTERVAL' interval_qualifier
@@ -3291,8 +3284,15 @@ bit_without_length ::=
 	| 'BIT' 'VARYING'
 	| 'VARBIT'
 
+bit_with_length ::=
+	'BIT' opt_varying '(' iconst32 ')'
+	| 'VARBIT' '(' iconst32 ')'
+
 character_without_length ::=
 	character_base
+
+character_with_length ::=
+	character_base '(' iconst32 ')'
 
 const_datetime ::=
 	'DATE'
@@ -3540,16 +3540,6 @@ func_arg ::=
 	| func_arg_class func_arg_type
 	| func_arg_type
 
-opt_varying ::=
-	'VARYING'
-	| 
-
-character_base ::=
-	char_aliases
-	| char_aliases 'VARYING'
-	| 'VARCHAR'
-	| 'STRING'
-
 opt_column ::=
 	'COLUMN'
 	| 
@@ -3613,6 +3603,16 @@ opt_numeric_modifiers ::=
 	'(' iconst32 ')'
 	| '(' iconst32 ',' iconst32 ')'
 	| 
+
+opt_varying ::=
+	'VARYING'
+	| 
+
+character_base ::=
+	char_aliases
+	| char_aliases 'VARYING'
+	| 'VARCHAR'
+	| 'STRING'
 
 opt_timezone ::=
 	'WITH' 'TIME' 'ZONE'
@@ -3768,10 +3768,6 @@ func_arg_class ::=
 param_name ::=
 	type_function_name
 
-char_aliases ::=
-	'CHAR'
-	| 'CHARACTER'
-
 col_qual_list ::=
 	(  ) ( ( col_qualification ) )*
 
@@ -3786,6 +3782,10 @@ reference_actions ::=
 	| reference_on_update reference_on_delete
 	| reference_on_delete reference_on_update
 	| 
+
+char_aliases ::=
+	'CHAR'
+	| 'CHARACTER'
 
 frame_extent ::=
 	frame_bound

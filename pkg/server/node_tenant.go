@@ -10,26 +10,22 @@
 
 package server
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/redact"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 
-// TraceRedactedMarker is used to replace logs that weren't redacted.
-const TraceRedactedMarker = redact.RedactableString("verbose trace message redacted")
-
-// redactRecordingForTenant redacts the sensitive parts of log messages in the
-// recording if the tenant to which this recording is intended is not the system
-// tenant (the system tenant gets an unredacted trace).
-// See https://github.com/cockroachdb/cockroach/issues/70407.
-// The recording is modified in place.
+// redactRecording redacts the sensitive parts of log messages in the recording.
+// It is used to record KV traces going to tenants other than the sytem tenant
+// (the system tenant can receive unredacted recordings).
 //
-// tenID is the tenant that will receive this recording.
-func redactRecordingForTenant(tenID roachpb.TenantID, rec tracingpb.Recording) error {
-	if tenID == roachpb.SystemTenantID {
-		return nil
-	}
+// Unstructured log messages get redacted and tags get stripped. Structured
+// messages are left untouched (for better or worse).
+// The unstructured log messages get completely dropped unless the
+// `trace.redactable.enabled` cluster setting is set. This setting makes the log
+// messages properly redactable (i.e. only the sensitive parts are wrapped in
+// redaction markers) at some performance cost, whereas without it each log
+// message is wholly wrapped in redaction markers.
+//
+// The recording is modified in place.
+func redactRecording(rec tracingpb.Recording) {
 	for i := range rec {
 		sp := &rec[i]
 		sp.Tags = nil // TODO(benbardin): Remove for 23.1.
@@ -39,5 +35,4 @@ func redactRecordingForTenant(tenID roachpb.TenantID, rec tracingpb.Recording) e
 			record.Message = record.Message.Redact()
 		}
 	}
-	return nil
 }

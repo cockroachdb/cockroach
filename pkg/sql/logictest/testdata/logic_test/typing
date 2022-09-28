@@ -227,6 +227,13 @@ SELECT 1::pg_catalog.int4, 1::pg_catalog.int8, 'aa'::pg_catalog.text, 4.2::pg_ca
 ----
 1 1 aa 4.2
 
+# Test fixed-length types.
+
+query TTT
+SELECT VARCHAR(4) 'foo', CHAR(2) 'bar', STRING(1) 'cat'
+----
+foo  ba  c
+
 # Test that we error out referencing unknown types in pg_catalog.
 query error pq: type "pg_catalog.special_int" does not exist
 SELECT 1::pg_catalog.special_int

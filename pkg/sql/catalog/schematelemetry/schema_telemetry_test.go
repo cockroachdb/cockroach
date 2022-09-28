@@ -80,7 +80,10 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(db)
 
-	tdb.CheckQueryResultsRetry(t, qExists, [][]string{{"@weekly", "1"}})
+	clusterID := s.ExecutorConfig().(sql.ExecutorConfig).NodeInfo.
+		LogicalClusterID()
+	exp := schematelemetrycontroller.MaybeRewriteCronExpr(clusterID, "@weekly")
+	tdb.CheckQueryResultsRetry(t, qExists, [][]string{{exp, "1"}})
 	tdb.ExecSucceedsSoon(t, qSet)
 	tdb.CheckQueryResultsRetry(t, qExists, [][]string{{"* * * * *", "1"}})
 }
