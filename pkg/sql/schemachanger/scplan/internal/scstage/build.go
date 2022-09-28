@@ -714,7 +714,7 @@ func isRevertible(next *Stage) bool {
 
 func runningStatus(next *Stage) string {
 	if next == nil {
-		return "all stages completed"
+		return scpb.AllStagesCompletedJobStatus
 	}
 	return fmt.Sprintf("%s pending", next)
 }

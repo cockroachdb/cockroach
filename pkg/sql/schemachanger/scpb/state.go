@@ -40,6 +40,9 @@ type CurrentState struct {
 	Revertible bool
 }
 
+// AllStagesCompletedJobStatus job status when all stages are completed.
+const AllStagesCompletedJobStatus = "all stages completed"
+
 // DeepCopy returns a deep copy of the receiver.
 func (s CurrentState) DeepCopy() CurrentState {
 	return CurrentState{

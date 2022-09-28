@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 )
 
@@ -96,6 +97,12 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCtx.SessionData(),
 		execCtx.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
+
+	// Job execution is fully completed, we may not be able to
+	// construct the state again if descriptors got dropped.
+	if n.job.Status() == scpb.AllStagesCompletedJobStatus {
+		return nil
+	}
 
 	err := scrun.RunSchemaChangesInJob(
 		ctx,
