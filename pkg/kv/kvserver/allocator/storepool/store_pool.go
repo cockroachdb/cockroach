@@ -826,6 +826,23 @@ func (sp *StorePool) IsLive(storeID roachpb.StoreID) (bool, error) {
 	return status == storeStatusAvailable, nil
 }
 
+// IsStoreHealthy returns whether we believe this store can serve requests
+// reliably. A healthy store can be used for follower snapshot transmission or
+// follower reads. A healthy store does not imply that replicas can be moved to
+// this store.
+func (sp *StorePool) IsStoreHealthy(storeID roachpb.StoreID) bool {
+	status, err := sp.storeStatus(storeID, sp.NodeLivenessFn)
+	if err != nil {
+		return false
+	}
+	switch status {
+	case storeStatusAvailable, storeStatusDecommissioning, storeStatusDraining:
+		return true
+	default:
+		return false
+	}
+}
+
 func (sp *StorePool) storeStatus(
 	storeID roachpb.StoreID, nl NodeLivenessFunc,
 ) (storeStatus, error) {
@@ -1233,6 +1250,24 @@ func (sp *StorePool) GetLocalitiesByNode(
 			localities[replica.NodeID] = locality.locality
 		} else {
 			localities[replica.NodeID] = roachpb.Locality{}
+		}
+	}
+	return localities
+}
+
+// GetLocalitiesPerReplica computes the localities for the provided replicas.
+// It returns a map from the ReplicaDescriptor to the Locality of the Node.
+func (sp *StorePool) GetLocalitiesPerReplica(
+	replicas ...roachpb.ReplicaDescriptor,
+) map[roachpb.ReplicaID]roachpb.Locality {
+	sp.localitiesMu.RLock()
+	defer sp.localitiesMu.RUnlock()
+	localities := make(map[roachpb.ReplicaID]roachpb.Locality)
+	for _, replica := range replicas {
+		if locality, ok := sp.localitiesMu.nodeLocalities[replica.NodeID]; ok {
+			localities[replica.ReplicaID] = locality.locality
+		} else {
+			localities[replica.ReplicaID] = roachpb.Locality{}
 		}
 	}
 	return localities

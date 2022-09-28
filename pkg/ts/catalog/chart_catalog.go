@@ -616,6 +616,9 @@ var charts = []sectionDescription{
 					"range.snapshots.applied-voter",
 					"range.snapshots.applied-initial",
 					"range.snapshots.applied-non-voter",
+					"range.snapshot.delegate.successes",
+					"range.snapshot.delegate.failures",
+					"range.snapshot.send.latency",
 				},
 			},
 			{

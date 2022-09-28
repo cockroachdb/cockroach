@@ -759,6 +759,7 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
+
 	metaRangeRaftLeaderTransfers = metric.Metadata{
 		Name:        "range.raftleadertransfers",
 		Help:        "Number of raft leader transfers",
@@ -773,6 +774,40 @@ This count increments for every range recovered in offline loss of quorum
 recovery operation. Metric is updated when node on which survivor replica
 is located starts following the recovery.`,
 		Measurement: "Quorum Recoveries",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaRangeSnapshotSendLatency = metric.Metadata{
+		Name: "range.snapshot.send.latency",
+		Help: `Latency histogram for sending a snapshot from the coordinators perspective.
+
+This metric measures the time between deciding a snapshot needs to be sent until
+it is fully processed and accepted by the end recipient. It includes any
+queueing and retries along the way.  Note that this snapshot is intentionally
+not normalized by snapshot size since frequently the majority of the time spent waiting
+is on queues and they are independent of size.
+`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	metaDelegateSnapshotSuccesses = metric.Metadata{
+		Name: "range.snapshot.delegate.successes",
+		Help: `Number of snapshots that were delegated to a different node and
+resulted in success on that delegate. This does not count self delegated snapshots.
+`,
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDelegateSnapshotFailures = metric.Metadata{
+		Name: "range.snapshot.delegate.failures",
+		Help: `Number of snapshots that were delegated to a different node and
+resulted in failure on that delegate. There are numerous reasons a failure can
+occur on a delegate such as timeout, the delegate Raft log being too far behind
+or the delegate being too busy to send.
+`,
+		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
 
@@ -1839,6 +1874,7 @@ type StoreMetrics struct {
 	RangeSnapshotRecoverySentBytes               *metric.Counter
 	RangeSnapshotRebalancingRcvdBytes            *metric.Counter
 	RangeSnapshotRebalancingSentBytes            *metric.Counter
+	RangeSnapshotSendLatency                     *metric.Histogram
 
 	// Range snapshot queue metrics.
 	RangeSnapshotSendQueueLength     *metric.Gauge
@@ -1847,6 +1883,10 @@ type StoreMetrics struct {
 	RangeSnapshotRecvInProgress      *metric.Gauge
 	RangeSnapshotSendTotalInProgress *metric.Gauge
 	RangeSnapshotRecvTotalInProgress *metric.Gauge
+
+	// Delegate snapshot metrics. These don't count self-delegated snapshots.
+	DelegateSnapshotSuccesses *metric.Counter
+	DelegateSnapshotFailures  *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -2367,6 +2407,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotRecvTotalInProgress:             metric.NewGauge(metaRangeSnapshotRecvTotalInProgress),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
+		RangeSnapshotSendLatency: metric.NewHistogram(
+			metaRangeSnapshotSendLatency, histogramWindow, metric.BatchProcessLatencyBuckets),
+
+		DelegateSnapshotSuccesses: metric.NewCounter(metaDelegateSnapshotSuccesses),
+		DelegateSnapshotFailures:  metric.NewCounter(metaDelegateSnapshotFailures),
 
 		// Raft processing metrics.
 		RaftTicks: metric.NewCounter(metaRaftTicks),

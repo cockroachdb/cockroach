@@ -1617,17 +1617,26 @@ type snapTruncationInfo struct {
 	recipientStore roachpb.StoreID
 }
 
+// addSnapshotLogTruncation creates a log truncation record which will prevent
+// the raft log from being truncated past this point until the cleanup function
+// is called. This function will return the index that the truncation constraint
+// is set at and a cleanup function to remove the constraint. We will fetch the
+// applied index again in GetSnapshot and that is likely a different but higher
+// index. The appliedIndex fetched here is narrowly used for adding a log
+// truncation constraint to prevent log entries > appliedIndex from being
+// removed. Note that the appliedIndex maintained in Replica actually lags the
+// one in the engine, since replicaAppBatch.ApplyToStateMachine commits the
+// engine batch and then acquires mu to update the RaftAppliedIndex. The use of
+// a possibly stale value here is harmless since the values increases
+// monotonically. The actual snapshot index, may preserve more from a log
+// truncation perspective.
 func (r *Replica) addSnapshotLogTruncationConstraint(
-	ctx context.Context, snapUUID uuid.UUID, index uint64, recipientStore roachpb.StoreID,
-) {
+	ctx context.Context, snapUUID uuid.UUID, recipientStore roachpb.StoreID,
+) (uint64, func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.addSnapshotLogTruncationConstraintLocked(ctx, snapUUID, index, recipientStore)
-}
-
-func (r *Replica) addSnapshotLogTruncationConstraintLocked(
-	ctx context.Context, snapUUID uuid.UUID, index uint64, recipientStore roachpb.StoreID,
-) {
+	appliedIndex := r.mu.state.RaftAppliedIndex
+	// Cleared when OutgoingSnapshot closes.
 	if r.mu.snapshotLogTruncationConstraints == nil {
 		r.mu.snapshotLogTruncationConstraints = make(map[uuid.UUID]snapTruncationInfo)
 	}
@@ -1637,32 +1646,30 @@ func (r *Replica) addSnapshotLogTruncationConstraintLocked(
 		// fed into this method twice) or a UUID collision. We discard the update
 		// (which is benign) but log it loudly. If the index is the same, it's
 		// likely the former, otherwise the latter.
-		log.Warningf(ctx, "UUID collision at %s for %+v (index %d)", snapUUID, item, index)
-		return
+		log.Warningf(ctx, "UUID collision at %s for %+v (index %d)", snapUUID, item, appliedIndex)
+		return appliedIndex, func() {}
 	}
 
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = snapTruncationInfo{
-		index:          index,
+		index:          appliedIndex,
 		recipientStore: recipientStore,
 	}
-}
 
-// completeSnapshotLogTruncationConstraint marks the given snapshot as finished,
-// releasing the lock on raft log truncation after a grace period.
-func (r *Replica) completeSnapshotLogTruncationConstraint(snapUUID uuid.UUID) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	return appliedIndex, func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
 
-	_, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
-	if !ok {
-		// UUID collision while adding the snapshot in originally. Nothing
-		// else to do.
-		return
-	}
-	delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
-	if len(r.mu.snapshotLogTruncationConstraints) == 0 {
-		// Save a little bit of memory.
-		r.mu.snapshotLogTruncationConstraints = nil
+		_, ok := r.mu.snapshotLogTruncationConstraints[snapUUID]
+		if !ok {
+			// UUID collision while adding the snapshot in originally. Nothing
+			// else to do.
+			return
+		}
+		delete(r.mu.snapshotLogTruncationConstraints, snapUUID)
+		if len(r.mu.snapshotLogTruncationConstraints) == 0 {
+			// Save a little bit of memory.
+			r.mu.snapshotLogTruncationConstraints = nil
+		}
 	}
 }
 

@@ -1693,6 +1693,7 @@ func (r *Replica) initializeRaftLearners(
 	default:
 		log.Fatalf(ctx, "unexpected replicaType %s", replicaType)
 	}
+
 	// Lock learner snapshots even before we run the ConfChange txn to add them
 	// to prevent a race with the raft snapshot queue trying to send it first.
 	//
@@ -1824,7 +1825,7 @@ func (r *Replica) initializeRaftLearners(
 		// orphaned learner. Second, this tickled some bugs in etcd/raft around
 		// switching between StateSnapshot and StateProbe. Even if we worked through
 		// these, it would be susceptible to future similar issues.
-		if err := r.sendSnapshot(
+		if err := r.sendSnapshotUsingDelegate(
 			ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority, senderName, senderQueuePriority,
 		); err != nil {
 			return nil, err
@@ -1835,9 +1836,9 @@ func (r *Replica) initializeRaftLearners(
 
 // lockLearnerSnapshot stops the raft snapshot queue from sending snapshots to
 // the soon-to-be added learner replicas to prevent duplicate snapshots from
-// being sent. This lock is best effort because it times out and it is a node
-// local lock while the raft snapshot queue might be running on a different
-// node. An idempotent unlock function is returned.
+// being sent. This lock is a node local lock while the raft snapshot queue
+// might be running on a different node. An idempotent unlock function is
+// returned.
 func (r *Replica) lockLearnerSnapshot(
 	ctx context.Context, additions []roachpb.ReplicationTarget,
 ) (unlock func()) {
@@ -1845,15 +1846,15 @@ func (r *Replica) lockLearnerSnapshot(
 	// in 19.2 to work around a commit in etcd/raft that made this race more
 	// likely. It'd be nice if all learner snapshots could be sent from a single
 	// place.
-	var lockUUIDs []uuid.UUID
+	var cleanups []func()
 	for _, addition := range additions {
 		lockUUID := uuid.MakeV4()
-		lockUUIDs = append(lockUUIDs, lockUUID)
-		r.addSnapshotLogTruncationConstraint(ctx, lockUUID, 1, addition.StoreID)
+		_, cleanup := r.addSnapshotLogTruncationConstraint(ctx, lockUUID, addition.StoreID)
+		cleanups = append(cleanups, cleanup)
 	}
 	return func() {
-		for _, lockUUID := range lockUUIDs {
-			r.completeSnapshotLogTruncationConstraint(lockUUID)
+		for _, cleanup := range cleanups {
+			cleanup()
 		}
 	}
 }
@@ -2517,34 +2518,140 @@ func recordRangeEventsInLog(
 	return nil
 }
 
-// getSenderReplica returns a replica descriptor for a follower replica to act as
-// the sender for snapshots.
-// TODO(amy): select a follower based on locality matching.
-func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescriptor, error) {
-	log.Fatal(ctx, "follower snapshots not implemented")
-	return r.GetReplicaDescriptor()
+// getSenderReplicas returns an ordered list of replica descriptor for a
+// follower replica to act as the sender for delegated snapshots. The replicas
+// should be tried in order, and typically the coordinator is the last entry on
+// the list.
+func (r *Replica) getSenderReplicas(
+	ctx context.Context, recipient roachpb.ReplicaDescriptor,
+) ([]roachpb.ReplicaDescriptor, error) {
+
+	coordinator, err := r.GetReplicaDescriptor()
+	if err != nil {
+		// If there is no local replica descriptor, return an empty list.
+		return nil, err
+	}
+
+	// Unless all nodes are on V23.1, don't delegate. This prevents sending to a
+	// node that doesn't understand the request.
+	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1) {
+		return []roachpb.ReplicaDescriptor{coordinator}, nil
+	}
+
+	// Check follower snapshots, if zero just self-delegate.
+	numFollowers := int(NumDelegateLimit.Get(&r.ClusterSettings().SV))
+	if numFollowers == 0 {
+		return []roachpb.ReplicaDescriptor{coordinator}, nil
+	}
+
+	// Get range descriptor and store pool.
+	storePool := r.store.cfg.StorePool
+	rangeDesc := r.Desc()
+
+	if fn := r.store.cfg.TestingKnobs.SelectDelegateSnapshotSender; fn != nil {
+		sender := fn(rangeDesc)
+		// If a TestingKnob is specified use it whatever it is.
+		if sender != nil {
+			return sender, nil
+		}
+	}
+
+	// Include voter and non-voter replicas on healthy stores as candidates.
+	nonRecipientReplicas := rangeDesc.Replicas().Filter(
+		func(rDesc roachpb.ReplicaDescriptor) bool {
+			return rDesc.ReplicaID != recipient.ReplicaID && storePool.IsStoreHealthy(rDesc.StoreID)
+		},
+	)
+	candidates := nonRecipientReplicas.VoterAndNonVoterDescriptors()
+	if len(candidates) == 0 {
+		// Not clear when the coordinator would be considered dead, but if it does
+		// happen, just return the coordinator.
+		return []roachpb.ReplicaDescriptor{coordinator}, nil
+	}
+
+	// Get the localities of the candidate replicas, including the original sender.
+	localities := storePool.GetLocalitiesPerReplica(candidates...)
+	recipientLocality := storePool.GetLocalitiesPerReplica(recipient)[recipient.ReplicaID]
+
+	// Construct a map from replica to its diversity score compared to the
+	// recipient. Also track the best score we see.
+	replicaDistance := make(map[roachpb.ReplicaID]float64, len(localities))
+	closestStore := roachpb.MaxDiversityScore
+	for desc, locality := range localities {
+		score := recipientLocality.DiversityScore(locality)
+		if score < closestStore {
+			closestStore = score
+		}
+		replicaDistance[desc] = score
+	}
+
+	// Find all replicas that tie as the most optimal sender other than the
+	// coordinator. The coordinator will always be added to the end of the list
+	// regardless of score.
+	var tiedReplicas []roachpb.ReplicaID
+	for replID, score := range replicaDistance {
+		if score == closestStore {
+			// If the coordinator is tied for closest, always use it.
+			// TODO(baptist): Consider using other replicas at the same distance once
+			// this is integrated with admission control.
+			if replID == coordinator.ReplicaID {
+				return []roachpb.ReplicaDescriptor{coordinator}, nil
+			}
+			tiedReplicas = append(tiedReplicas, replID)
+		}
+	}
+
+	// Use a psuedo random source that is consistent across runs of this method
+	// for the same coordinator. Shuffle the replicas to prevent always choosing
+	// them in the same order.
+	pRand := rand.New(rand.NewSource(int64(coordinator.ReplicaID)))
+	pRand.Shuffle(len(tiedReplicas), func(i, j int) { tiedReplicas[i], tiedReplicas[j] = tiedReplicas[j], tiedReplicas[i] })
+
+	// Only keep the top numFollowers replicas.
+	if len(tiedReplicas) > numFollowers {
+		tiedReplicas = tiedReplicas[:numFollowers]
+	}
+
+	// Convert to replica descriptors before returning. The list of tiedReplicas
+	// is typically only one element.
+	replicaList := make([]roachpb.ReplicaDescriptor, len(tiedReplicas)+1)
+	for n, replicaId := range tiedReplicas {
+		found := false
+		replDesc, found := rangeDesc.Replicas().GetReplicaDescriptorByID(replicaId)
+		if !found {
+			return nil, errors.Errorf("unable to find replica for replicaId %d", replicaId)
+		}
+		replicaList[n] = replDesc
+	}
+	// Set the last replica to be the coordinator.
+	replicaList[len(replicaList)-1] = coordinator
+	return replicaList, nil
 }
 
-// TODO(amy): update description when patch for follower snapshots are completed.
-// sendSnapshot sends a snapshot of the replica state to the specified replica.
-// Currently only invoked from replicateQueue and raftSnapshotQueue. Be careful
-// about adding additional calls as generating a snapshot is moderately
-// expensive.
+// sendSnapshotUsingDelegate sends a snapshot of the replica state to the specified
+// replica through a delegate. Currently, only invoked from replicateQueue and
+// raftSnapshotQueue. Be careful about adding additional calls as generating a
+// snapshot is moderately expensive.
 //
 // A snapshot is a bulk transfer of all data in a range. It consists of a
 // consistent view of all the state needed to run some replica of a range as of
-// some applied index (not as of some mvcc-time). Snapshots are used by Raft
-// when a follower is far enough behind the leader that it can no longer be
-// caught up using incremental diffs (because the leader has already garbage
-// collected the diffs, in this case because it truncated the Raft log past
-// where the follower is).
+// some applied index (not as of some mvcc-time).  There are two primary cases
+// when a Snapshot is used.
 //
-// We also proactively send a snapshot when adding a new replica to bootstrap it
+// The first case is use by Raft when a voter or non-voter follower is far
+// enough behind the leader that it can no longer be caught up using incremental
+// diffs. This occurs because the leader has already garbage collected diffs
+// past where the follower is. The quota pool is responsible for keeping a
+// leader from getting too far ahead of any of the followers, so normally
+// followers don't need a snapshot, however there are a number of cases where
+// this can happen (restarts, paused followers, ...).
+//
+// The second case is adding a new replica to a replica set, to bootstrap it
 // (this is called a "learner" snapshot and is a special case of a Raft
 // snapshot, we just speed the process along). It's called a learner snapshot
-// because it's sent to what Raft terms a learner replica. As of 19.2, when we
-// add a new replica, it's first added as a learner using a Raft ConfChange,
-// which means it accepts Raft traffic but doesn't vote or affect quorum. Then
+// because it's sent to what Raft terms a learner replica. When we
+// add a new replica, it's first added as a learner using a Raft ConfChange.
+// A learner accepts Raft traffic but doesn't vote or affect quorum. Then
 // we immediately send it a snapshot to catch it up. After the snapshot
 // successfully applies, we turn it into a normal voting replica using another
 // ConfChange. It then uses the normal mechanisms to catch up with whatever got
@@ -2552,13 +2659,20 @@ func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescript
 // the voting replica directly, this avoids a period of fragility when the
 // replica would be a full member, but very far behind.
 //
-// Snapshots are expensive and mostly unexpected (except learner snapshots
-// during rebalancing). The quota pool is responsible for keeping a leader from
-// getting too far ahead of any of the followers, so ideally they'd never be far
-// enough behind to need a snapshot.
+// The snapshot process itself is broken into 4 parts: delegating the request,
+// generating the snapshot, transmitting it, and applying it.
 //
-// The snapshot process itself is broken into 3 parts: generating the snapshot,
-// transmitting it, and applying it.
+// Delegating the request:  Since a snapshot is expensive to transfer from a
+// network, CPU and IO perspective, the coordinator attempts to delegate the
+// request to a healthy delegate who is both closer to the final destination.
+// This is done by sending a DelegateSnapshotRequest to a replica. The replica
+// can either reject the delegation request or process it. It will reject if it
+// is too far behind, unhealthy, or has too long of a queue of snapshots to
+// send. If the delegate accepts the delegation request, then the remaining
+// three steps occur on that delegate. If the delegate does not decide to
+// process the request, it sends an error back to the coordinator and the
+// coordinator either chooses a different delegate or itself as the "delegate of
+// last resort".
 //
 // Generating the snapshot: The data contained in a snapshot is a full copy of
 // the replicated data plus everything the replica needs to be a healthy member
@@ -2566,7 +2680,7 @@ func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescript
 // instead of keeping it all in memory at once. The `(Replica).GetSnapshot`
 // method does the necessary locking and gathers the various Raft state needed
 // to run a replica. It also creates an iterator for the range's data as it
-// looked under those locks (this is powered by a RocksDB snapshot, which is a
+// looked under those locks (this is powered by a Pebble snapshot, which is a
 // different thing but a similar idea). Notably, GetSnapshot does not do the
 // data iteration.
 //
@@ -2589,7 +2703,7 @@ func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescript
 // returns true, this is communicated back to the sender, which then proceeds to
 // call `kvBatchSnapshotStrategy.Send`. This uses the iterator captured earlier
 // to send the data in chunks, each chunk a streaming grpc message. The sender
-// then sends a final message with an indicaton that it's done and blocks again,
+// then sends a final message with an indication that it's done and blocks again,
 // waiting for a second and final response from the recipient which indicates if
 // the snapshot was a success.
 //
@@ -2601,7 +2715,6 @@ func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescript
 // RocksDB. Each of the SSTs also has a range deletion tombstone to delete the
 // existing data in the range.
 //
-
 // Applying the snapshot: After the recipient has received the message
 // indicating it has all the data, it hands it all to
 // `(Store).processRaftSnapshotRequest` to be applied. First, this re-checks
@@ -2637,7 +2750,7 @@ func (r *Replica) getSenderReplica(ctx context.Context) (roachpb.ReplicaDescript
 // callers of `shouldAcceptSnapshotData` return an error so that we no longer
 // have to worry about racing with a second snapshot. See the comment on
 // ReplicaPlaceholder for details.
-func (r *Replica) sendSnapshot(
+func (r *Replica) sendSnapshotUsingDelegate(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
 	snapType kvserverpb.SnapshotRequest_Type,
@@ -2645,6 +2758,9 @@ func (r *Replica) sendSnapshot(
 	senderQueueName kvserverpb.SnapshotRequest_QueueName,
 	senderQueuePriority float64,
 ) (retErr error) {
+
+	startTime := timeutil.Now()
+
 	defer func() {
 		// Report the snapshot status to Raft, which expects us to do this once we
 		// finish sending the snapshot.
@@ -2671,12 +2787,12 @@ func (r *Replica) sendSnapshot(
 		)
 	}
 
-	// Check follower snapshots cluster setting.
-	if followerSnapshotsEnabled.Get(&r.ClusterSettings().SV) {
-		sender, err = r.getSenderReplica(ctx)
-		if err != nil {
-			return err
-		}
+	status := r.RaftStatus()
+	if status == nil {
+		// This code path is sometimes hit during scatter for replicas that
+		// haven't woken up yet.
+		retErr = &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
+		return
 	}
 
 	//  Don't send a queue name or priority if the receiver may not understand
@@ -2688,52 +2804,209 @@ func (r *Replica) sendSnapshot(
 		senderQueueName = 0
 		senderQueuePriority = 0
 	}
+	snapUUID := uuid.MakeV4()
+	appliedIndex, cleanup := r.addSnapshotLogTruncationConstraint(ctx, snapUUID, recipient.StoreID)
+	// The cleanup function needs to be called regardless of success or failure of
+	// sending to release the log truncation constraint.
+	defer cleanup()
 
-	log.VEventf(
-		ctx, 2, "delegating snapshot transmission for %v to %v", recipient, sender,
-	)
-	status := r.RaftStatus()
+	// Create new delegate snapshot request without specifying the delegate sender.
+	// NB: The FirstIndex is the minimum index that the delegate must send a
+	// snapshot at. The coordinator created a lock at its current applied index,
+	// and asks the delegate to send a snapshot from that index. Creating the lock
+	// further back would unnecessarily prevent Raft from GCing old data.
+	delegateRequest := &kvserverpb.DelegateSendSnapshotRequest{
+		RangeID:              r.RangeID,
+		CoordinatorReplica:   sender,
+		RecipientReplica:     recipient,
+		Priority:             priority,
+		SenderQueueName:      senderQueueName,
+		SenderQueuePriority:  senderQueuePriority,
+		Type:                 snapType,
+		Term:                 status.Term,
+		DelegatedSender:      sender,
+		FirstIndex:           appliedIndex,
+		DescriptorGeneration: r.Desc().Generation,
+		QueueOnDelegateLen:   MaxQueueOnDelegateLimit.Get(&r.ClusterSettings().SV),
+		SnapId:               snapUUID,
+	}
+
+	// Get the list of senders in order.
+	senders, err := r.getSenderReplicas(ctx, recipient)
+	if err != nil {
+		return err
+	}
+
+	if len(senders) == 0 {
+		return errors.Errorf("no sender found to send a snapshot from for %v", r)
+	}
+
+	for n, sender := range senders {
+		delegateRequest.DelegatedSender = sender
+		log.VEventf(
+			ctx, 2, "delegating snapshot transmission attempt %v for %v to %v", n+1, recipient, sender,
+		)
+
+		selfDelegate := n == len(senders)-1
+
+		// On the last attempt, always queue on the delegate to time out naturally.
+		if selfDelegate {
+			delegateRequest.QueueOnDelegateLen = -1
+		}
+
+		retErr = contextutil.RunWithTimeout(
+			ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
+				// Sending snapshot
+				return r.store.cfg.Transport.DelegateSnapshot(ctx, delegateRequest)
+			},
+		)
+		// Return once we have success.
+		if retErr == nil {
+			r.store.Metrics().RangeSnapshotSendLatency.RecordValue(timeutil.Since(startTime).Nanoseconds())
+			if !selfDelegate {
+				r.store.Metrics().DelegateSnapshotSuccesses.Inc(1)
+			}
+			return
+		} else {
+			if !selfDelegate {
+				r.store.Metrics().DelegateSnapshotFailures.Inc(1)
+			}
+			log.Warningf(ctx, "attempt %d: delegate snapshot %+v request failed %v", n+1, delegateRequest, retErr)
+		}
+	}
+	return
+}
+
+// validateSnapshotDelegationRequest will validate that this replica can send
+// the snapshot that the coordinator requested. The main reasons a request can't
+// be delegated are if the Generation or Term of the replica is not equal to the
+// Generation or Term of the coordinator's request or the applied index on this
+// replica is behind the truncated index of the coordinator. Note that the request
+// is validated twice, once before "queueing" and once after. This reduces the
+// chance of false positives (snapshots which are sent but can't be used),
+// however it is difficult to completely eliminate them. Between the time of sending the
+// original request and the delegate processing it, the leaseholder could decide
+// to truncate its index, change the leaseholder or split or merge the range.
+func (r *Replica) validateSnapshotDelegationRequest(
+	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
+) error {
+	desc := r.Desc()
+	// If the generation has changed, this snapshot may be useless, so don't
+	// attempt to send it.
+	// NB: This is an overly strict check. If other delegates are added to this
+	// snapshot, we don't necessarily need to reject sending the snapshot, however
+	// if there are merges or splits, it is safer to reject.
+	if desc.Generation != req.DescriptorGeneration {
+		log.VEventf(ctx, 2,
+			"%s: generation has changed since snapshot was generated %s != %s",
+			r, req.DescriptorGeneration, desc.Generation,
+		)
+		return errors.Errorf(
+			"%s: generation has changed since snapshot was generated %s != %s",
+			r, req.DescriptorGeneration, desc.Generation,
+		)
+	}
+
+	// Check that the snapshot we generated has a descriptor that includes the
+	// recipient. If it doesn't, the recipient will reject it, so it's better to
+	// not send it in the first place. It's possible to hit this case if we're not
+	// the leaseholder, and we haven't yet applied the configuration change that's
+	// adding the recipient to the range, or we are the leaseholder but have
+	// removed the recipient between starting to send the snapshot and this point.
+	if _, ok := desc.GetReplicaDescriptorByID(req.RecipientReplica.ReplicaID); !ok {
+		// Recipient replica not found in the current range descriptor.
+		// The sender replica's descriptor may be lagging behind the coordinator's.
+		log.VEventf(ctx, 2,
+			"%s: couldn't find receiver replica %s in sender descriptor %s",
+			r, req.DescriptorGeneration, r.Desc(),
+		)
+		return errors.Errorf(
+			"%s: couldn't find receiver replica %s in sender descriptor %s",
+			r, req.RecipientReplica, r.Desc(),
+		)
+	}
+
+	// Check the raft applied state index and term to determine if this replica
+	// is not too far behind the leaseholder. If the delegate is too far behind
+	// that is also needs a snapshot, then any snapshot it sends will be useless.
+	r.mu.RLock()
+	replIdx := r.mu.state.RaftAppliedIndex + 1
+
+	status := r.raftStatusRLocked()
 	if status == nil {
 		// This code path is sometimes hit during scatter for replicas that
 		// haven't woken up yet.
-		return &benignError{errors.Wrap(errMarkSnapshotError, "raft status not initialized")}
+		return errors.Errorf("raft status not initialized")
+	}
+	replTerm := status.Term
+	r.mu.RUnlock()
+
+	// Delegate has a different term than the coordinator. This typically means
+	// the lease has been transferred, and we should not process this request.
+	// There is a potential race where the leaseholder sends a delegate request
+	// and then the term changes before this request is processed. In that
+	// case this code path will not be checked and the snapshot will still be
+	// sent.
+	if replTerm != req.Term {
+		log.Infof(
+			ctx,
+			"sender: %v is not fit to send snapshot for %v; sender term: %v coordinator term: %v",
+			req.DelegatedSender, req.CoordinatorReplica, replTerm, req.Term,
+		)
+		return errors.Errorf(
+			"sender: %v is not fit to send snapshot for %v; sender term: %v, coordinator term: %v",
+			req.DelegatedSender, req.CoordinatorReplica, replTerm, req.Term,
+		)
 	}
 
-	// Create new delegate snapshot request with only required metadata.
-	delegateRequest := &kvserverpb.DelegateSnapshotRequest{
-		RangeID:             r.RangeID,
-		CoordinatorReplica:  sender,
-		RecipientReplica:    recipient,
-		Priority:            priority,
-		SenderQueueName:     senderQueueName,
-		SenderQueuePriority: senderQueuePriority,
-		Type:                snapType,
-		Term:                status.Term,
-		DelegatedSender:     sender,
+	// Sender replica's snapshot will be rejected if the sender replica's raft
+	// applied index is lower than or equal to the log truncated constraint on the
+	// leaseholder, as this replica's snapshot will be wasted. Note that it is
+	// possible that we can enforce strictly lesser than if etcd does not require
+	// previous raft log entries for appending.
+	if replIdx <= req.FirstIndex {
+		log.Infof(
+			ctx, "sender: %v is not fit to send snapshot;"+
+				" sender first index: %v, "+
+				"coordinator log truncation constraint: %v", req.DelegatedSender, replIdx, req.FirstIndex,
+		)
+		return errors.Mark(errors.Errorf(
+			"sender: %v is not fit to send snapshot;"+
+				" sender first index: %v, "+
+				"coordinator log truncation constraint: %v", req.DelegatedSender, replIdx, req.FirstIndex,
+		), errMarkSnapshotError)
 	}
-	err = contextutil.RunWithTimeout(
-		ctx, "delegate-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
-			return r.store.cfg.Transport.DelegateSnapshot(
-				ctx,
-				delegateRequest,
-			)
-		},
-	)
-	// Only mark explicitly as snapshot error (which is retriable) if we timed out.
-	// Otherwise, it's up to the remote to add this mark where appropriate.
-	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
-		err = errors.Mark(err, errMarkSnapshotError)
-	}
-	return err
+	return nil
 }
 
-// followerSnapshotsEnabled is used to enable or disable follower snapshots.
-var followerSnapshotsEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
+// NumDelegateLimit is used to control the number of delegate followers
+// to use for snapshots. To disable follower snapshots, set this to 0. If
+// enabled, the leaseholder / leader will attempt to find a closer delegate than
+// itself to send the snapshot through. This can save on network bandwidth at a
+// cost in some cases to snapshot send latency.
+var NumDelegateLimit = func() *settings.IntSetting {
+	s := settings.RegisterIntSetting(
 		settings.SystemOnly,
-		"kv.snapshot_delegation.enabled",
-		"set to true to allow snapshots from follower replicas",
-		false,
+		"kv.snapshot_delegation.num_follower",
+		"the number of delegates to try when sending snapshots, before falling back to sending from the leaseholder",
+		1,
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
+
+// MaxQueueOnDelegateLimit is used to control how long the outgoing snapshot
+// queue can be before we reject delegation requests. Setting to -1 allows
+// unlimited requests. The purpose of this setting is to prevent a long snapshot
+// queue from delaying a delegated snapshot from being sent. Once the queue
+// length is longer than the configured value, an additional delegation requests
+// will be rejected with an error.
+var MaxQueueOnDelegateLimit = func() *settings.IntSetting {
+	s := settings.RegisterIntSetting(
+		settings.SystemOnly,
+		"kv.snapshot_delegation.num_requests",
+		"how many queued requests are allowed on a delegate before the request is rejected",
+		3,
 	)
 	s.SetVisibility(settings.Public)
 	return s
@@ -2754,9 +3027,8 @@ var traceSnapshotThreshold = settings.RegisterDurationSetting(
 func (r *Replica) followerSendSnapshot(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream DelegateSnapshotResponseStream,
-) (retErr error) {
+	req *kvserverpb.DelegateSendSnapshotRequest,
+) error {
 	ctx = r.AnnotateCtx(ctx)
 	sendThreshold := traceSnapshotThreshold.Get(&r.ClusterSettings().SV)
 	if sendThreshold > 0 {
@@ -2776,55 +3048,46 @@ func (r *Replica) followerSendSnapshot(
 		}()
 	}
 
-	// TODO(amy): when delegating to different senders, check raft applied state
-	// to determine if this follower replica is fit to send.
-	// Acknowledge that the request has been accepted.
-	if err := stream.Send(
-		&kvserverpb.DelegateSnapshotResponse{
-			SnapResponse: &kvserverpb.SnapshotResponse{
-				Status: kvserverpb.SnapshotResponse_ACCEPTED,
-			},
-		},
-	); err != nil {
+	// Check the validity conditions twice, once before and once after we obtain
+	// the send semaphore. We check after to make sure the snapshot request still
+	// makes sense (e.g the range hasn't split under us). The check is
+	// lightweight. Even if the second check succeeds, the snapshot we send might
+	// still not be usable due to the leaseholder making a change that we don't
+	// know about, but we try to minimize that possibility since snapshots are
+	// expensive to send.
+	err := r.validateSnapshotDelegationRequest(ctx, req)
+	if err != nil {
 		return err
 	}
 
-	// Throttle snapshot sending.
+	// Throttle snapshot sending. Obtain the send semaphore and determine the rate limit.
 	rangeSize := r.GetMVCCStats().Total()
 	cleanup, err := r.store.reserveSendSnapshot(ctx, req, rangeSize)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Unable to reserve space for sending this snapshot")
 	}
 	defer cleanup()
 
-	snapType := req.Type
-	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
+	// Check validity again, it is possible that the pending request should not be
+	// sent after we are doing waiting.
+	err = r.validateSnapshotDelegationRequest(ctx, req)
 	if err != nil {
-		err = errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
-		return errors.Mark(err, errMarkSnapshotError)
+		return err
+	}
+
+	snapType := req.Type
+	snap, err := r.GetSnapshot(ctx, snapType, req.SnapId)
+	if err != nil {
+		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
 
-	// Check that the snapshot we generated has a descriptor that includes the
-	// recipient. If it doesn't, the recipient will reject it, so it's better to
-	// not send it in the first place. It's possible to hit this case if we're not
-	// the leaseholder and we haven't yet applied the configuration change that's
-	// adding the recipient to the range.
-	if _, ok := snap.State.Desc.GetReplicaDescriptor(recipient.StoreID); !ok {
-		return errors.Wrapf(
-			errMarkSnapshotError,
-			"attempting to send snapshot that does not contain the recipient as a replica; "+
-				"snapshot type: %s, recipient: s%d, desc: %s", snapType, recipient, snap.State.Desc,
-		)
-	}
-
-	// We avoid shipping over the past Raft log in the snapshot by changing
-	// the truncated state (we're allowed to -- it's an unreplicated key and not
-	// subject to mapping across replicas). The actual sending happens here:
-	_ = (*kvBatchSnapshotStrategy)(nil).Send
-	// and results in no log entries being sent at all. Note that
-	// Metadata.Index is really the applied index of the replica.
+	// We avoid shipping over the past Raft log in the snapshot by changing the
+	// truncated state (we're allowed to -- it's an unreplicated key and not
+	// subject to mapping across replicas). The actual sending happens in
+	// kvBatchSnapshotStrategy.Send and results in no log entries being sent at
+	// all. Note that Metadata.Index is really the applied index of the replica.
 	snap.State.TruncatedState = &roachpb.RaftTruncatedState{
 		Index: snap.RaftSnap.Metadata.Index,
 		Term:  snap.RaftSnap.Metadata.Term,

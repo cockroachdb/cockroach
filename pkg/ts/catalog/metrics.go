@@ -102,6 +102,7 @@ var histogramMetricsNames = map[string]struct{}{
 	"replication.flush_hist_nanos":              {},
 	"kv.replica_read_batch_evaluate.latency":    {},
 	"kv.replica_write_batch_evaluate.latency":   {},
+	"range.snapshot.send.latency":               {},
 }
 
 func allInternalTSMetricsNames() []string {
