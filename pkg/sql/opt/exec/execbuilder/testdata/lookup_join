@@ -2248,3 +2248,33 @@ SELECT y,w FROM family_index_join@family_index_join_y_idx WHERE y = 2
 ----
 Scan /Table/130/2/{2-3}
 Scan /Table/130/1/1/{0-1/2}, /Table/130/1/1/3/1
+
+statement ok
+SET variable_inequality_lookup_join_enabled=false
+
+query T
+EXPLAIN SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e <= a::DECIMAL ORDER BY a, b, c, d, e, f
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ estimated row count: 33
+│ order: +a,+b,+c,+d,+e
+│ already ordered: +a
+│
+└── • lookup join
+    │ estimated row count: 33
+    │ table: def_e_decimal@def_e_decimal_pkey
+    │ equality: (b) = (f)
+    │ pred: column11 >= e
+    │
+    └── • render
+        │
+        └── • scan
+              estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+              table: abc@abc_pkey
+              spans: FULL SCAN
+
+statement ok
+RESET variable_inequality_lookup_join_enabled

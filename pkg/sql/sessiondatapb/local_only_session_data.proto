@@ -291,6 +291,10 @@ message LocalOnlySessionData {
   // OptimizerUseForecasts indicates whether we should use statistics forecasts
   // for cardinality estimation in the optimizer.
   bool optimizer_use_forecasts = 79;
+  // VariableInequalityLookupJoinEnabled indicates whether the optimizer should
+  // be allowed to consider lookup joins with inequality conditions, in
+  // addition to the other restrictions on when they are planned.
+  bool variable_inequality_lookup_join_enabled = 80;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
