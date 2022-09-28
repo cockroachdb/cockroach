@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -775,6 +777,9 @@ func testRandomSyntax(
 	params.Knobs.PGWireTestingKnobs = &sql.PGWireTestingKnobs{
 		CatchPanics: true,
 	}
+	st := cluster.MakeTestingClusterSettings()
+	persistedsqlstats.SQLStatsFlushEnabled.Override(ctx, &st.SV, false)
+	params.Settings = st
 	s, rawDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}

@@ -119,8 +119,10 @@ func CanModifySchema(stmt Statement) bool {
 	if stmt.StatementReturnType() == DDL {
 		return true
 	}
-	scm, ok := stmt.(canModifySchema)
-	return ok && scm.modifiesSchema()
+	if scm, ok := stmt.(canModifySchema); ok {
+		return scm.modifiesSchema()
+	}
+	return false
 }
 
 // CanWriteData returns true if the statement can modify data.

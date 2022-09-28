@@ -185,14 +185,16 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 		if err != nil {
 			return err
 		}
-		tableDesc := objDesc.(catalog.TableDescriptor)
-		// Skip non-tables and don't throw an error if we encounter one.
-		if !tableDesc.IsTable() {
-			continue
+		if tableDesc, ok := objDesc.(catalog.TableDescriptor); ok {
+			// Skip non-tables and don't throw an error if we encounter one.
+			if !tableDesc.IsTable() {
+				continue
+			}
+			if err := n.startScrubTable(ctx, p, tableDesc, tableName); err != nil {
+				return err
+			}
 		}
-		if err := n.startScrubTable(ctx, p, tableDesc, tableName); err != nil {
-			return err
-		}
+		continue
 	}
 	return nil
 }

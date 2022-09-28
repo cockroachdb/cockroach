@@ -95,6 +95,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/testutils",
