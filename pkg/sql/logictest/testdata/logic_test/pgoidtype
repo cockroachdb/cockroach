@@ -33,8 +33,17 @@ SELECT pg_typeof('1'::OID), pg_typeof('pg_constraint'::REGCLASS), pg_typeof('pub
 ----
 oid  regclass  regnamespace
 
+statement error pq: unknown function: upper\(string\)\(\): function undefined
+SELECT 'upper(string)'::REGPROC
+
+statement error invalid function signature: upper
+SELECT 'upper'::REGPROCEDURE
+
+statement error pq: function upper\(int\) does not exist: function undefined
+SELECT 'upper(int)'::REGPROCEDURE
+
 query TT
-SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper'::REGPROCEDURE)
+SELECT pg_typeof('upper'::REGPROC), pg_typeof('upper(string)'::REGPROCEDURE)
 ----
 regproc  regprocedure
 
@@ -81,28 +90,31 @@ WHERE relname = 'pg_constraint'
 0  pg_constraint  0  pg_constraint  pg_constraint
 
 query OOOO
-SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'pg_catalog.upper'::REGPROCEDURE, 'upper'::REGPROC::OID
+SELECT 'upper'::REGPROC, 'upper(string)'::REGPROCEDURE, 'pg_catalog.upper(string)'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
 upper  upper  upper  833
 
-query error invalid function name
+query error pq: invalid function signature: invalid.more.pg_catalog.upper: at or near ".": syntax error
 SELECT 'invalid.more.pg_catalog.upper'::REGPROCEDURE
 
 query OOO
-SELECT 'upper(int)'::REGPROC, 'upper(int)'::REGPROCEDURE, 'upper(int)'::REGPROC::OID
+SELECT 'upper'::REGPROC, 'upper(string)'::REGPROCEDURE, 'upper'::REGPROC::OID
 ----
 upper  upper  833
 
-query error unknown function: blah\(\)
-SELECT 'blah(ignored, ignored)'::REGPROC, 'blah(ignored, ignored)'::REGPROCEDURE
+query error pq: unknown function: blah\(ignored\)\(\): function undefined
+SELECT 'blah(ignored)'::REGPROC
 
-query error unknown function: blah\(\)
+query error pq: unknown function: blah\(\): function undefined
+SELECT 'blah(int, int)'::REGPROCEDURE
+
+query error pq: invalid name: expected separator .: blah \( ignored , ignored \)
 SELECT ' blah ( ignored , ignored ) '::REGPROC
 
-query error unknown function: blah\(\)
+query error pq: invalid name: expected separator .: blah \(\)
 SELECT 'blah ()'::REGPROC
 
-query error unknown function: blah\(\)
+query error pq: invalid name: expected separator .: blah\( \)
 SELECT 'blah( )'::REGPROC
 
 query error invalid name: expected separator \.: blah\(, \)
@@ -111,15 +123,15 @@ SELECT 'blah(, )'::REGPROC
 query error more than one function named 'sqrt'
 SELECT 'sqrt'::REGPROC
 
-query OOOO
-SELECT 'array_in'::REGPROC, 'array_in(a,b,c)'::REGPROC, 'pg_catalog.array_in'::REGPROC, 'pg_catalog.array_in( a ,b, c )'::REGPROC
+query OO
+SELECT 'array_in'::REGPROC, 'pg_catalog.array_in'::REGPROC
 ----
-array_in  array_in  array_in  array_in
+array_in  array_in
 
-query OOOO
-SELECT 'array_in'::REGPROCEDURE, 'array_in(a,b,c)'::REGPROCEDURE, 'pg_catalog.array_in'::REGPROCEDURE, 'pg_catalog.array_in( a ,b, c )'::REGPROCEDURE
+query OO
+SELECT 'array_in(int)'::REGPROCEDURE, 'pg_catalog.array_in(int)'::REGPROCEDURE
 ----
-array_in  array_in  array_in  array_in
+array_in  array_in
 
 query OO
 SELECT 'public'::REGNAMESPACE, 'public'::REGNAMESPACE::OID
@@ -156,7 +168,7 @@ query error pgcode 42883 unknown function: blah\(\)
 SELECT 'blah'::REGPROC
 
 query error pgcode 42883 unknown function: blah\(\)
-SELECT 'blah'::REGPROCEDURE
+SELECT 'blah()'::REGPROCEDURE
 
 query error pgcode 42704 namespace 'blah' does not exist
 SELECT 'blah'::REGNAMESPACE
@@ -472,7 +484,12 @@ SELECT 'pg_catalog."radians"'::regproc
 radians
 
 query T
-SELECT 'pg_catalog."radians"("float4")'::regproc
+SELECT 'pg_catalog."radians"'::regproc
+----
+radians
+
+query T
+SELECT 'pg_catalog."radians"("float4")'::regprocedure
 ----
 radians
 
