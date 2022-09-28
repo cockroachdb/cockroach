@@ -1118,8 +1118,8 @@ var logRangeAndNodeEventsEnabled = func() *settings.BoolSetting {
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
 // behavior of the consistency checker for tests.
 type ConsistencyTestingKnobs struct {
-	// If non-nil, OnBadChecksumFatal is called by CheckConsistency() (instead of
-	// calling log.Fatal) on a checksum mismatch.
+	// If non-nil, OnBadChecksumFatal is called on a replica with a mismatching
+	// checksum, instead of log.Fatal.
 	OnBadChecksumFatal func(roachpb.StoreIdent)
 
 	ConsistencyQueueResultHook func(response roachpb.CheckConsistencyResponse)
