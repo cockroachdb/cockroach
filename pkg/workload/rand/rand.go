@@ -15,15 +15,21 @@ import (
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"reflect"
 	"strings"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -31,6 +37,11 @@ import (
 	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
 	"github.com/spf13/pflag"
+)
+
+var (
+	defaultSeedOnce, logSeedOnce sync.Once
+	defaultSeed                  int64
 )
 
 type random struct {
@@ -53,6 +64,17 @@ func init() {
 	workload.Register(randMeta)
 }
 
+// defaultRandomSeed sets the `defaultSeed` package variable if it's
+// not yet set. This makes it possible for every run of the `rand`
+// workload to use a different seed by default
+func defaultRandomSeed() int64 {
+	defaultSeedOnce.Do(func() {
+		defaultSeed = randutil.NewPseudoSeed()
+	})
+
+	return defaultSeed
+}
+
 var randMeta = workload.Meta{
 	Name:        `rand`,
 	Description: `random writes to table`,
@@ -67,16 +89,30 @@ var randMeta = workload.Meta{
 		g.flags.StringVar(&g.tableName, `table`, ``, `Table to write to`)
 		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of rows to insert in a single SQL statement`)
 		g.flags.StringVar(&g.method, `method`, `upsert`, `Choice of DML name: insert, upsert, ioc-update (insert on conflict update), ioc-nothing (insert on conflict no nothing)`)
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+		g.flags.Int64Var(&g.seed, `seed`, defaultRandomSeed(), "Random seed. Must be the same in 'init' and 'run'. Default changes in each run")
 		g.flags.StringVar(&g.primaryKey, `primary-key`, ``, `ioc-update and ioc-nothing require primary key`)
 		g.flags.IntVar(&g.nullPct, `null-percent`, 5, `Percent random nulls`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
+
 		return g
 	},
 }
 
+// logSeed will log the seed used in this run of the `rand`
+// workload. It should be called by a hook that is called after the
+// command line flags are parsed so that we log the accurate seed
+// being used
+func (w *random) logSeed() {
+	logSeedOnce.Do(func() {
+		log.Infof(context.Background(), "using random seed %v", w.seed)
+	})
+}
+
 // Meta implements the Generator interface.
-func (*random) Meta() workload.Meta { return randMeta }
+func (w *random) Meta() workload.Meta {
+	w.logSeed()
+	return randMeta
+}
 
 // Flags implements the Flagser interface.
 func (w *random) Flags() workload.Flags { return w.flags }
@@ -110,6 +146,31 @@ type col struct {
 	cdefault      gosql.NullString
 	isNullable    bool
 	isComputed    bool
+}
+
+// typeForOid returns the *types.T struct associated with the given
+// OID. Note that for columns of type `BIT` and `CHAR`, the width is
+// not recorded on the T struct itself; instead, we query the
+// `information_schema.columns` view to get that information. When the
+// `character_maximum_length` column is NULL, it means the column has
+// variable width and we set the width of the type to 0, which will
+// cause the random data generator to generate data with random width.
+func typeForOid(db *gosql.DB, typeOid oid.Oid, tableName, columnName string) (*types.T, error) {
+	datumType := *types.OidToType[typeOid]
+	if typeOid == oid.T_bit || typeOid == oid.T_char {
+		var width int32
+		if err := db.QueryRow(
+			`SELECT IFNULL(character_maximum_length, 0)
+			FROM information_schema.columns
+			WHERE table_name = $1 AND column_name = $2`,
+			tableName, columnName).Scan(&width); err != nil {
+			return nil, err
+		}
+
+		datumType.InternalType.Width = width
+	}
+
+	return &datumType, nil
 }
 
 // Ops implements the Opser interface.
@@ -161,8 +222,10 @@ WHERE attrelid=$1`, relid)
 		if err := rows.Scan(&c.name, &typOid, &c.cdefault, &c.isNullable, &c.isComputed); err != nil {
 			return workload.QueryLoad{}, err
 		}
-		datumType := types.OidToType[oid.Oid(typOid)]
-		c.dataType = datumType
+		c.dataType, err = typeForOid(db, oid.Oid(typOid), tableName, c.name)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
 		if c.cdefault.String == "unique_rowid()" { // skip
 			continue
 		}
@@ -308,6 +371,33 @@ type randOp struct {
 	writeStmt *gosql.Stmt
 }
 
+// sqlArray implements the driver.Valuer interface and abstracts away
+// the differences between arrays of geographic/geometric data and
+// other arrays: the former use ':' as separator, while the latter
+// uses ','
+type sqlArray struct {
+	array     []interface{}
+	paramType *types.T
+}
+
+func (sa sqlArray) Value() (driver.Value, error) {
+	family := sa.paramType.Family()
+	if family == types.GeographyFamily || family == types.GeometryFamily {
+		var repr strings.Builder
+		repr.WriteString("{")
+		var sep string
+		for _, elt := range sa.array {
+			repr.WriteString(fmt.Sprintf(`%s"%s"`, sep, string(elt.(geopb.EWKT))))
+			sep = ": "
+		}
+
+		repr.WriteString("}")
+		return repr.String(), nil
+	}
+
+	return pq.Array(sa.array).Value()
+}
+
 // DatumToGoSQL converts a datum to a Go type.
 func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 	d = eval.UnwrapDatum(nil, d)
@@ -320,7 +410,7 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 	case *tree.DString:
 		return string(*d), nil
 	case *tree.DBytes:
-		return string(*d), nil
+		return fmt.Sprintf(`x'%s'`, hex.EncodeToString([]byte(*d))), nil
 	case *tree.DDate, *tree.DTime:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	case *tree.DTimestamp:
@@ -338,7 +428,9 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 	case *tree.DFloat:
 		return float64(*d), nil
 	case *tree.DDecimal:
-		return d.Float64()
+		// use string representation here since randgen might generate
+		// decimals that don't fit into a float64
+		return d.String(), nil
 	case *tree.DArray:
 		arr := make([]interface{}, len(d.Array))
 		for i := range d.Array {
@@ -351,19 +443,26 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 			}
 			arr[i] = elt
 		}
-		return pq.Array(arr), nil
+		return sqlArray{arr, d.ParamTyp}, nil
 	case *tree.DUuid:
 		return d.UUID, nil
 	case *tree.DIPAddr:
 		return d.IPAddr.String(), nil
 	case *tree.DJSON:
 		return d.JSON.String(), nil
+	case *tree.DTimeTZ:
+		return d.TimeTZ.String(), nil
+	case *tree.DBox2D:
+		return d.CartesianBoundingBox.Repr(), nil
+	case *tree.DGeography:
+		return geo.SpatialObjectToEWKT(d.Geography.SpatialObject(), 2)
+	case *tree.DGeometry:
+		return geo.SpatialObjectToEWKT(d.Geometry.SpatialObject(), 2)
 	}
 	return nil, errors.Errorf("unhandled datum type: %s", reflect.TypeOf(d))
 }
 
-type nullVal struct {
-}
+type nullVal struct{}
 
 func (nullVal) Value() (driver.Value, error) {
 	return nil, nil
@@ -389,6 +488,8 @@ func (o *randOp) run(ctx context.Context) (err error) {
 	}
 	start := timeutil.Now()
 	_, err = o.writeStmt.ExecContext(ctx, params...)
-	o.hists.Get(`write`).Record(timeutil.Since(start))
+	if o.hists != nil {
+		o.hists.Get(`write`).Record(timeutil.Since(start))
+	}
 	return err
 }

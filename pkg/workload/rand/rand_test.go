@@ -1,0 +1,95 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package rand
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
+)
+
+func TestMain(m *testing.M) {
+	randutil.SeedForTests()
+	securityassets.SetLoader(securitytest.EmbeddedAssets)
+	serverutils.InitTestServerFactory(server.TestServerFactory)
+	os.Exit(m.Run())
+}
+
+// TestRandRun tests that for every type in SeedTypes (i.e., those
+// that can be used when creating columns for the rand workload), we
+// are able to generate a random value for that column type *and*
+// insert it into a column
+func TestRandRun(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dbName := "rand_test"
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: dbName})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, "CREATE DATABASE "+dbName)
+
+	rng, seed := randutil.NewTestRand()
+	t.Logf("rand workload random seed: %v", seed)
+	tblName := "datum_to_go_sql_test"
+	colName := "c1"
+
+	for _, typeT := range types.OidToType {
+		if !randgen.IsLegalColumnType(typeT) {
+			continue
+		}
+
+		// generate a datum of the given type just for the purposes of
+		// printing the Go type in the test description passed to t.Run()
+		sqlName := typeT.SQLStandardName()
+		datum := randgen.RandDatum(rng, typeT, false)
+		unwrapped := eval.UnwrapDatum(nil, datum)
+
+		t.Run(fmt.Sprintf("%s-%T", sqlName, unwrapped), func(t *testing.T) {
+			sqlDB.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %s.%s", dbName, tblName))
+			createTableStmt := fmt.Sprintf("CREATE TABLE %s.%s (%s %s)",
+				dbName, tblName, colName, sqlName)
+			sqlDB.Exec(t, createTableStmt)
+
+			stmt := fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES ($1)", dbName, tblName, colName)
+			writeStmt, err := db.Prepare(stmt)
+			require.NoError(t, err)
+
+			dataType, err := typeForOid(db, typeT.InternalType.Oid, tblName, colName)
+			require.NoError(t, err)
+			cols := []col{{name: colName, dataType: dataType}}
+			op := randOp{
+				config:    &random{batchSize: 1, seed: seed},
+				db:        db,
+				cols:      cols,
+				rng:       rng,
+				writeStmt: writeStmt,
+			}
+			require.NoError(t, op.run(ctx))
+		})
+	}
+}
