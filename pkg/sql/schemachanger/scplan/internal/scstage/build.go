@@ -583,6 +583,10 @@ func (bc buildContext) updateJobProgressOp(
 	var toRemove catalog.DescriptorIDSet
 	if next != nil {
 		toRemove = descIDsPresentBefore.Difference(descIDsPresentAfter)
+	} else {
+		// If the next stage is nil, simply remove al the descriptors, we are
+		// done processing
+		toRemove = descIDsPresentBefore
 	}
 	return &scop.UpdateSchemaChangerJob{
 		JobID:                 bc.scJobID,

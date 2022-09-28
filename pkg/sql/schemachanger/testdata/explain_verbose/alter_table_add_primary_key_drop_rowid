@@ -1008,6 +1008,8 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
