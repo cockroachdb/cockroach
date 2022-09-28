@@ -502,13 +502,13 @@ func randDelMissing(g *generator, rng *rand.Rand) Operation {
 	key := randKey(rng)
 	g.keys[key] = struct{}{}
 	g.nextDelSeq++
-	return delWithID(key, g.nextDelSeq)
+	return delWithSeq(key, g.nextDelSeq)
 }
 
 func randDelExisting(g *generator, rng *rand.Rand) Operation {
 	key := randMapKey(rng, g.keys)
 	g.nextDelSeq++
-	return delWithID(key, g.nextDelSeq)
+	return delWithSeq(key, g.nextDelSeq)
 }
 
 func randDelRange(g *generator, rng *rand.Rand) Operation {
@@ -732,10 +732,10 @@ func reverseScanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true}}
 }
 
-func delWithID(key string, id DelSeq) Operation {
+func delWithSeq(key string, seq DelSeq) Operation {
 	return Operation{Delete: &DeleteOperation{
 		Key: []byte(key),
-		Seq: id,
+		Seq: seq,
 	}}
 }
 
