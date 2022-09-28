@@ -12,11 +12,13 @@ package sql
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // EvalRoutineExpr returns the result of evaluating the routine. It calls the
@@ -66,33 +68,42 @@ func (p *planner) EvalRoutineExpr(
 	// Execute each statement in the routine sequentially.
 	ef := newExecFactory(p)
 	for i := 0; i < expr.NumStmts; i++ {
-		// Generate a plan for executing the ith statement.
-		plan, err := expr.PlanFn(ctx, ef, i, input)
-		if err != nil {
-			return nil, err
-		}
+		if err := func() error {
+			opName := "udf-stmt-" + expr.Name + "-" + strconv.Itoa(i)
+			ctx, sp := tracing.ChildSpan(ctx, opName)
+			defer sp.Finish()
 
-		// If this is the last statement, use the rowResultWriter created above.
-		// Otherwise, use a rowResultWriter that drops all rows added to it.
-		var w rowResultWriter
-		if i == expr.NumStmts-1 {
-			w = rrw
-		} else {
-			w = &droppingResultWriter{}
-		}
-
-		// Place a sequence point before each statement in the routine for
-		// volatile functions.
-		if expr.Volatility == volatility.Volatile {
-			if err := txn.Step(ctx); err != nil {
-				return nil, err
+			// Generate a plan for executing the ith statement.
+			plan, err := expr.PlanFn(ctx, ef, i, input)
+			if err != nil {
+				return err
 			}
-		}
 
-		// TODO(mgartner): Add a new tracing.ChildSpan to the context for better
-		// tracing of UDFs, like we do with apply-joins.
-		err = runPlanInsidePlan(ctx, p.RunParams(ctx), plan.(*planComponents), w)
-		if err != nil {
+			// If this is the last statement, use the rowResultWriter created above.
+			// Otherwise, use a rowResultWriter that drops all rows added to it.
+			var w rowResultWriter
+			if i == expr.NumStmts-1 {
+				w = rrw
+			} else {
+				w = &droppingResultWriter{}
+			}
+
+			// Place a sequence point before each statement in the routine for
+			// volatile functions.
+			if expr.Volatility == volatility.Volatile {
+				if err := txn.Step(ctx); err != nil {
+					return err
+				}
+			}
+
+			// Run the plan.
+			err = runPlanInsidePlan(ctx, p.RunParams(ctx), plan.(*planComponents), w)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}(); err != nil {
 			return nil, err
 		}
 	}
