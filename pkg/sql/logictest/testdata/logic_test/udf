@@ -889,6 +889,85 @@ test           public         100140       test_priv_f1()      root     EXECUTE 
 test           public         100143       test_priv_f2(int8)  root     EXECUTE         true
 test           test_priv_sc1  100144       test_priv_f3()      root     EXECUTE         true
 
+# Make sure has_function_privilege works.
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE')
+----
+true
+
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE WITH GRANT OPTION')
+----
+true
+
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE, EXECUTE WITH GRANT OPTION')
+----
+true
+
+user testuser
+
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE')
+----
+false
+
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE WITH GRANT OPTION')
+----
+false
+
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE, EXECUTE WITH GRANT OPTION')
+----
+false
+
+user root
+
+statement ok
+GRANT EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 TO testuser WITH GRANT OPTION;
+
+user testuser
+
+query B retry
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE')
+----
+true
+
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE WITH GRANT OPTION')
+----
+true
+
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE, EXECUTE WITH GRANT OPTION')
+----
+true
+
+user root
+
+statement ok
+REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 FROM testuser;
+
+user testuser
+
+query B retry
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE WITH GRANT OPTION')
+----
+false
+
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE')
+----
+true
+
+query B
+SELECT has_function_privilege('test_priv_f2(INT)', 'EXECUTE, EXECUTE WITH GRANT OPTION')
+----
+true
+
+user root
+
 statement ok
 SET search_path = public;
 
