@@ -87,6 +87,8 @@ func declareKeysGC(
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCThresholdKey(rs.GetRangeID())})
 	// Needed for Range bounds checks in calls to EvalContext.ContainsKey.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+	// Needed for updating optional GC hint.
+	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCHintKey(rs.GetRangeID())})
 	latchSpans.DisableUndeclaredAccessAssertions()
 }
 
@@ -192,6 +194,8 @@ func GC(
 		return result.Result{}, err
 	}
 
+	var res result.Result
+
 	// Fast path operation to try to remove all user key data from the range.
 	if rk := args.ClearRangeKey; rk != nil {
 		if !rk.StartKey.Equal(desc.StartKey.AsRawKey()) || !rk.EndKey.Equal(desc.EndKey.AsRawKey()) {
@@ -204,26 +208,49 @@ func GC(
 		}
 	}
 
+	gcThreshold := cArgs.EvalCtx.GetGCThreshold()
 	// Optionally bump the GC threshold timestamp.
-	var res result.Result
 	if !args.Threshold.IsEmpty() {
-		oldThreshold := cArgs.EvalCtx.GetGCThreshold()
-
 		// Protect against multiple GC requests arriving out of order; we track
 		// the maximum timestamp by forwarding the existing timestamp.
-		newThreshold := oldThreshold
-		updated := newThreshold.Forward(args.Threshold)
+		updated := gcThreshold.Forward(args.Threshold)
 
 		// Don't write the GC threshold key unless we have to.
 		if updated {
 			if err := MakeStateLoader(cArgs.EvalCtx).SetGCThreshold(
-				ctx, readWriter, cArgs.Stats, &newThreshold,
+				ctx, readWriter, cArgs.Stats, &gcThreshold,
 			); err != nil {
 				return result.Result{}, err
 			}
 
 			res.Replicated.State = &kvserverpb.ReplicaState{
-				GCThreshold: &newThreshold,
+				GCThreshold: &gcThreshold,
+			}
+		}
+	}
+
+	// Check if optional GC hint on the range is expired (e.g. delete operation is
+	// older than GC threshold) and remove it. Otherwise this range could be
+	// unnecessarily GC'd with high priority again.
+	// We should only do that when we are doing actual cleanup as we want to have
+	// a hint when request is being handled.
+	if len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRangeKey != nil {
+		sl := MakeStateLoader(cArgs.EvalCtx)
+		hint, err := sl.LoadGCHint(ctx, readWriter)
+		if err != nil {
+			return result.Result{}, err
+		}
+		if !hint.IsEmpty() {
+			if hint.LatestRangeDeleteTimestamp.LessEq(gcThreshold) {
+				hint.ResetLatestRangeDeleteTimestamp()
+				res.Replicated.State = &kvserverpb.ReplicaState{
+					GCHint: hint,
+				}
+				// If we got here, that means hint is already not empty and is enabled by
+				// version gate.
+				if _, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint, true); err != nil {
+					return result.Result{}, err
+				}
 			}
 		}
 	}

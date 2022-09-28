@@ -151,6 +151,8 @@ type raftLogQueue struct {
 	logSnapshots util.EveryN
 }
 
+var _ queueImpl = &raftLogQueue{}
+
 // newRaftLogQueue returns a new instance of raftLogQueue. Replicas are passed
 // to the queue both proactively (triggered by write load) and periodically
 // (via the scanner). When processing a replica, the queue decides whether the
@@ -729,6 +731,11 @@ func (rlq *raftLogQueue) process(
 	}
 	r.store.metrics.RaftLogTruncated.Inc(int64(decision.NumTruncatableIndexes()))
 	return true, nil
+}
+
+func (*raftLogQueue) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
 }
 
 // timer returns interval between processing successive queued truncations.

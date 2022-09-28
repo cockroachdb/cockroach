@@ -68,6 +68,8 @@ type consistencyQueue struct {
 	replicaCountFn func() int
 }
 
+var _ queueImpl = &consistencyQueue{}
+
 // A data wrapper to allow for the shouldQueue method to be easier to test.
 type consistencyShouldQueueData struct {
 	desc                      *roachpb.RangeDescriptor
@@ -198,6 +200,11 @@ func (q *consistencyQueue) process(
 		fn(resp)
 	}
 	return true, nil
+}
+
+func (*consistencyQueue) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
 }
 
 func (q *consistencyQueue) timer(duration time.Duration) time.Duration {

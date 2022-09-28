@@ -83,6 +83,8 @@ type replicaGCQueue struct {
 	db      *kv.DB
 }
 
+var _ queueImpl = &replicaGCQueue{}
+
 // newReplicaGCQueue returns a new instance of replicaGCQueue.
 func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 	rgcq := &replicaGCQueue{
@@ -363,6 +365,11 @@ func (rgcq *replicaGCQueue) process(
 		}
 	}
 	return true, nil
+}
+
+func (*replicaGCQueue) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
 }
 
 func (*replicaGCQueue) timer(_ time.Duration) time.Duration {
