@@ -190,7 +190,6 @@ func tryNewOnDeleteFastCascadeBuilder(
 		if memo.CanBeCompositeSensitive(md, &sel.Filters) {
 			return nil, false
 		}
-		// TODO(mgartner): Disallow this fast path if there is a UDF invocation.
 		if sel.Relational().HasSubquery {
 			return nil, false
 		}
