@@ -58,6 +58,7 @@ func TestLookupConstraints(t *testing.T) {
 	datadriven.Walk(t, tu.TestDataPath(t), func(t *testing.T, path string) {
 		semaCtx := tree.MakeSemaContext()
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			testCatalog := testcat.New()
