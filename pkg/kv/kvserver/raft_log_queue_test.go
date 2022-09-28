@@ -645,17 +645,19 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 		index2 = 60
 	)
 
+	r.mu.state.RaftAppliedIndex = index1
 	// Add first constraint.
-	r.addSnapshotLogTruncationConstraintLocked(ctx, id1, index1, storeID)
+	_, cleanup1 := r.addSnapshotLogTruncationConstraint(ctx, id1, storeID)
 	exp1 := map[uuid.UUID]snapTruncationInfo{id1: {index: index1}}
 
 	// Make sure it registered.
 	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, exp1)
 
+	r.mu.state.RaftAppliedIndex = index2
 	// Add another constraint with the same id. Extremely unlikely in practice
 	// but we want to make sure it doesn't blow anything up. Collisions are
 	// handled by ignoring the colliding update.
-	r.addSnapshotLogTruncationConstraintLocked(ctx, id1, index2, storeID)
+	_, cleanup2 := r.addSnapshotLogTruncationConstraint(ctx, id1, storeID)
 	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, exp1)
 
 	// Helper that grabs the min constraint index (which can trigger GC as a
@@ -672,19 +674,22 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	// colliding update at index2 is not represented.
 	assertMin(index1, time.Time{})
 
+	r.mu.state.RaftAppliedIndex = index2
 	// Add another, higher, index. We're not going to notice it's around
 	// until the lower one disappears.
-	r.addSnapshotLogTruncationConstraintLocked(ctx, id2, index2, storeID)
+	_, cleanup3 := r.addSnapshotLogTruncationConstraint(ctx, id2, storeID)
 
 	now := timeutil.Now()
 	// The colliding snapshot comes back. Or the original, we can't tell.
-	r.completeSnapshotLogTruncationConstraint(id1)
+	cleanup1()
+	// This won't do anything since we had a collision, but make sure it's ok.
+	cleanup2()
 	// The index should show up when its deadline isn't hit.
 	assertMin(index2, now)
 	assertMin(index2, now.Add(1))
 	assertMin(index2, time.Time{})
 
-	r.completeSnapshotLogTruncationConstraint(id2)
+	cleanup3()
 	assertMin(0, now)
 	assertMin(0, now.Add(2))
 

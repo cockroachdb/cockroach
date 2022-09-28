@@ -97,11 +97,9 @@ func (s channelServer) HandleSnapshot(
 }
 
 func (s channelServer) HandleDelegatedSnapshot(
-	ctx context.Context,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream kvserver.DelegateSnapshotResponseStream,
-) error {
-	panic("unimplemented")
+	ctx context.Context, req *kvserverpb.DelegateSendSnapshotRequest,
+) *kvserverpb.DelegateSnapshotResponse {
+	panic("unexpected HandleDelegatedSnapshot")
 }
 
 // raftTransportTestContext contains objects needed to test RaftTransport.

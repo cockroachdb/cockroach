@@ -220,44 +220,17 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 // replica. If this method returns without error, callers must eventually call
 // OutgoingSnapshot.Close.
 func (r *Replica) GetSnapshot(
-	ctx context.Context, snapType kvserverpb.SnapshotRequest_Type, recipientStore roachpb.StoreID,
+	ctx context.Context, snapType kvserverpb.SnapshotRequest_Type, snapUUID uuid.UUID,
 ) (_ *OutgoingSnapshot, err error) {
-	snapUUID := uuid.MakeV4()
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
 	// an AddSSTable" (i.e. a state in which an SSTable has been linked in, but
 	// the corresponding Raft command not applied yet).
 	r.raftMu.Lock()
 	snap := r.store.engine.NewSnapshot()
-	{
-		r.mu.Lock()
-		// We will fetch the applied index later again, from snap. The
-		// appliedIndex fetched here is narrowly used for adding a log truncation
-		// constraint to prevent log entries > appliedIndex from being removed.
-		// Note that the appliedIndex maintained in Replica actually lags the one
-		// in the engine, since replicaAppBatch.ApplyToStateMachine commits the
-		// engine batch and then acquires Replica.mu to update
-		// Replica.mu.state.RaftAppliedIndex. The use of a possibly stale value
-		// here is harmless since using a lower index in this constraint, than the
-		// actual snapshot index, preserves more from a log truncation
-		// perspective.
-		//
-		// TODO(sumeer): despite the above justification, this is unnecessarily
-		// complicated. Consider loading the RaftAppliedIndex from the snap for
-		// this use case.
-		appliedIndex := r.mu.state.RaftAppliedIndex
-		// Cleared when OutgoingSnapshot closes.
-		r.addSnapshotLogTruncationConstraintLocked(ctx, snapUUID, appliedIndex, recipientStore)
-		r.mu.Unlock()
-	}
 	r.raftMu.Unlock()
-
-	release := func() {
-		r.completeSnapshotLogTruncationConstraint(snapUUID)
-	}
 
 	defer func() {
 		if err != nil {
-			release()
 			snap.Close()
 		}
 	}()
@@ -284,7 +257,6 @@ func (r *Replica) GetSnapshot(
 		log.Errorf(ctx, "error generating snapshot: %+v", err)
 		return nil, err
 	}
-	snapData.onClose = release
 	return &snapData, nil
 }
 
