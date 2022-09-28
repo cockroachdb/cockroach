@@ -77,6 +77,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	txn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 		},
@@ -84,7 +85,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		NodeID: evalCtx.NodeID,
 	}
 
-	streamingMemAcc := evalCtx.Mon.MakeBoundAccount()
+	streamingMemAcc := evalCtx.TestingMon.MakeBoundAccount()
 	defer streamingMemAcc.Close(ctx)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")

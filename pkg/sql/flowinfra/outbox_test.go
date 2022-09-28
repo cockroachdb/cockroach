@@ -72,6 +72,7 @@ func TestOutbox(t *testing.T) {
 	dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
 			Settings:      st,
@@ -237,6 +238,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
 			Settings:      st,
@@ -309,6 +311,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
+				Mon:     evalCtx.TestingMon,
 				ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 				Cfg: &execinfra.ServerConfig{
 					Settings:      st,
@@ -386,6 +389,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
 			Settings:      st,
@@ -441,6 +445,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
@@ -516,6 +521,7 @@ func BenchmarkOutbox(b *testing.B) {
 			dialer := nodedialer.New(clientRPC, staticAddressResolver(addr))
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
+				Mon:     evalCtx.TestingMon,
 				ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 				Cfg: &execinfra.ServerConfig{
 					Settings:      st,

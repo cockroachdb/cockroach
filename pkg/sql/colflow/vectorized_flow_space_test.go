@@ -45,6 +45,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 		},
 		DiskMonitor: testDiskMonitor,
 		EvalCtx:     &evalCtx,
+		Mon:         evalCtx.TestingMon,
 	}
 
 	oneInput := []execinfrapb.InputSyncSpec{
@@ -121,6 +122,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 		},
 		DiskMonitor: testDiskMonitor,
 		EvalCtx:     &evalCtx,
+		Mon:         evalCtx.TestingMon,
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)

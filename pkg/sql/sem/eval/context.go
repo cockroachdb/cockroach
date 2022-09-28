@@ -175,7 +175,11 @@ type Context struct {
 
 	TestingKnobs TestingKnobs
 
-	Mon *mon.BytesMonitor
+	// TestingMon is a memory monitor that should be only used in tests. In
+	// production code consider using either the monitor of the planner or of
+	// the flow.
+	// TODO(yuzefovich): remove this.
+	TestingMon *mon.BytesMonitor
 
 	// SingleDatumAggMemAccount is a memory account that all aggregate builtins
 	// that store a single datum will share to account for the memory needed to
@@ -309,12 +313,23 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 		NodeID:           base.TestingIDContainer,
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
-	ctx.Mon = monitor
+	ctx.TestingMon = monitor
+	ctx.Planner = &fakePlannerWithMonitor{monitor: monitor}
 	ctx.Context = context.TODO()
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
 	return ctx
+}
+
+type fakePlannerWithMonitor struct {
+	Planner
+	monitor *mon.BytesMonitor
+}
+
+// Mon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) Mon() *mon.BytesMonitor {
+	return p.monitor
 }
 
 // SessionData returns the SessionData the current EvalCtx should use to eval.
@@ -368,10 +383,10 @@ func NewTestingEvalContext(st *cluster.Settings) *Context {
 // Stop closes out the EvalContext and must be called once it is no longer in use.
 func (ec *Context) Stop(c context.Context) {
 	if r := recover(); r != nil {
-		ec.Mon.EmergencyStop(c)
+		ec.TestingMon.EmergencyStop(c)
 		panic(r)
 	} else {
-		ec.Mon.Stop(c)
+		ec.TestingMon.Stop(c)
 	}
 }
 
