@@ -1212,7 +1212,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			nil, /* txn - the processors manage their own transactions */
 			p, recv, &evalCtxCopy,
 			nil, /* finishedSetupFn */
-		)()
+		)
 		return cbw.Err()
 	})
 
@@ -1351,7 +1351,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 				nil, /* txn - the processors manage their own transactions */
 				plan, recv, &evalCtx,
 				nil, /* finishedSetupFn */
-			)()
+			)
 			return cbw.Err()
 		}); err != nil {
 			return err

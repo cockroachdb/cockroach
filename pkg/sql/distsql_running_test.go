@@ -181,7 +181,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 		execCfg.DistSQLPlanner.PlanAndRun(
 			ctx, evalCtx, planCtx, txn, p.curPlan.main, recv,
-		)()
+		)
 		return rw.Err()
 	})
 	if err != nil {
