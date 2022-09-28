@@ -527,7 +527,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 			f.sp.RecordStructured(&execinfrapb.ComponentStats{
 				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
-					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.EvalCtx.Mon.MaximumBytes())),
+					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(f.FlowCtx.DiskMonitor.MaximumBytes())),
 				},
 			})
@@ -537,7 +537,13 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	// This closes the disk monitor opened in newFlowCtx.
 	f.DiskMonitor.Stop(ctx)
 	// This closes the monitor opened in ServerImpl.setupFlow.
-	f.EvalCtx.Stop(ctx)
+	if r := recover(); r != nil {
+		f.FlowCtx.Mon.EmergencyStop(ctx)
+		panic(r)
+	} else {
+		f.FlowCtx.Mon.Stop(ctx)
+	}
+	//f.EvalCtx.Stop(ctx)
 	for _, p := range f.processors {
 		if d, ok := p.(execreleasable.Releasable); ok {
 			d.Release()

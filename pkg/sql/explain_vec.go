@@ -89,6 +89,7 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.F
 	return &execinfra.FlowCtx{
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
+		// TODO: we need the monitor from the planner.
 		Cfg: &execinfra.ServerConfig{
 			Settings:         p.execCfg.Settings,
 			LogicalClusterID: p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,

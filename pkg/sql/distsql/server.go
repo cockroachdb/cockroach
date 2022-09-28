@@ -396,7 +396,8 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, makeLeaf, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
+		ctx, req.Flow.FlowID, evalCtx, monitor, makeLeaf, req.TraceKV,
+		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -469,6 +470,7 @@ func (ds *ServerImpl) newFlowContext(
 	ctx context.Context,
 	id execinfrapb.FlowID,
 	evalCtx *eval.Context,
+	monitor *mon.BytesMonitor,
 	makeLeafTxn func() (*kv.Txn, error),
 	traceKV bool,
 	collectStats bool,
@@ -481,6 +483,7 @@ func (ds *ServerImpl) newFlowContext(
 		Cfg:            &ds.ServerConfig,
 		ID:             id,
 		EvalCtx:        evalCtx,
+		Mon:            monitor,
 		Txn:            evalCtx.Txn,
 		MakeLeafTxn:    makeLeafTxn,
 		NodeID:         ds.ServerConfig.NodeID,
