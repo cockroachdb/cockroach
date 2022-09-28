@@ -3573,10 +3573,8 @@ func (errorChannelTestHandler) HandleSnapshot(
 }
 
 func (errorChannelTestHandler) HandleDelegatedSnapshot(
-	ctx context.Context,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream kvserver.DelegateSnapshotResponseStream,
-) error {
+	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
+) (*kvserverpb.DelegateSnapshotResponse, error) {
 	panic("unimplemented")
 }
 

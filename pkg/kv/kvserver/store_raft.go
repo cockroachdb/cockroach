@@ -160,41 +160,44 @@ func (qs *raftReceiveQueues) Delete(rangeID roachpb.RangeID) {
 // HandleDelegatedSnapshot reads the incoming delegated snapshot message and
 // throttles sending snapshots before passing the request to the sender replica.
 func (s *Store) HandleDelegatedSnapshot(
-	ctx context.Context,
-	req *kvserverpb.DelegateSnapshotRequest,
-	stream DelegateSnapshotResponseStream,
-) error {
+	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
+) (*kvserverpb.DelegateSnapshotResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
 	if fn := s.cfg.TestingKnobs.SendSnapshot; fn != nil {
-		fn()
-	}
-
-	sender, err := s.GetReplica(req.RangeID)
-	if err != nil {
-		return err
+		fn(req)
 	}
 
 	sp := tracing.SpanFromContext(ctx)
-	// Pass the request to the sender replica.
-	if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req, stream); err != nil {
-		return stream.Send(
-			&kvserverpb.DelegateSnapshotResponse{
-				SnapResponse:   snapRespErr(err),
-				CollectedSpans: sp.GetConfiguredRecording(),
-			},
-		)
+
+	// This can happen if the delegate doesn't know about the range yet. Return an
+	// error immediately.
+	sender, err := s.GetReplica(req.RangeID)
+	if err != nil {
+		//nolint:returnerrcheck
+		return &kvserverpb.DelegateSnapshotResponse{
+			SnapResponse:   snapRespErr(err),
+			CollectedSpans: sp.GetConfiguredRecording(),
+		}, nil
 	}
 
-	resp := &kvserverpb.DelegateSnapshotResponse{
+	// Pass the request to the sender replica.
+	if err := sender.followerSendSnapshot(ctx, req.RecipientReplica, req); err != nil {
+		// If an error occurred during snapshot sending, send an error response.
+		//nolint:returnerrcheck
+		return &kvserverpb.DelegateSnapshotResponse{
+			SnapResponse:   snapRespErr(err),
+			CollectedSpans: sp.GetConfiguredRecording(),
+		}, nil
+	}
+
+	return &kvserverpb.DelegateSnapshotResponse{
 		SnapResponse: &kvserverpb.SnapshotResponse{
 			Status:            kvserverpb.SnapshotResponse_APPLIED,
 			DeprecatedMessage: "Snapshot successfully applied by recipient",
 		},
 		CollectedSpans: sp.GetConfiguredRecording(),
-	}
-	// Send a final response that snapshot sending is completed.
-	return stream.Send(resp)
+	}, nil
 }
 
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
