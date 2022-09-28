@@ -88,13 +88,15 @@ type importRand struct {
 }
 
 func (r *importRand) reseed(pos importRandPosition) {
-	adjPos := (pos / reseedRandEveryN) * reseedRandEveryN
-	rnd := rand.New(rand.NewSource(int64(adjPos)))
-	for i := int(pos % reseedRandEveryN); i > 0; i-- {
-		_ = rnd.Float64()
+	adjPos := int64((pos / reseedRandEveryN) * reseedRandEveryN)
+	if r.Rand == nil {
+		r.Rand = rand.New(rand.NewSource(adjPos))
+	} else {
+		r.Rand.Seed(adjPos)
 	}
-
-	r.Rand = rnd
+	for i := int(pos % reseedRandEveryN); i > 0; i-- {
+		_ = r.Rand.Float64()
+	}
 	r.pos = pos
 }
 
