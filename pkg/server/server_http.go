@@ -14,8 +14,8 @@ import (
 	"context"
 	"crypto/tls"
 	"net/http"
-	"strings"
 
+	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -23,18 +23,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
 )
 
 type httpServer struct {
-	cfg   BaseConfig
-	mux   http.ServeMux
+	cfg BaseConfig
+	mux http.ServeMux
+	// gzMux is an HTTP handler that gzip-compresses mux.
+	gzMux http.Handler
 	proxy *nodeProxy
 }
 
@@ -44,7 +44,7 @@ func newHTTPServer(
 	parseNodeID ParseNodeIDFn,
 	getNodeIDHTTPAddress GetNodeIDHTTPAddressFn,
 ) *httpServer {
-	return &httpServer{
+	server := &httpServer{
 		cfg: cfg,
 		proxy: &nodeProxy{
 			scheme:               cfg.HTTPRequestScheme(),
@@ -53,6 +53,8 @@ func newHTTPServer(
 			rpcContext:           rpcContext,
 		},
 	}
+	server.gzMux = gziphandler.GzipHandler(http.HandlerFunc(server.mux.ServeHTTP))
+	return server
 }
 
 // HSTSEnabled is a boolean that enables HSTS headers on the HTTP
@@ -271,35 +273,6 @@ func (s *httpServer) start(
 	})
 }
 
-// gzipHandler intercepts HTTP Requests and will gzip the response if
-// the request contains the `Accept-Encoding: gzip` header. Requests
-// are then delegated to the server mux.
-func (s *httpServer) gzipHandler(w http.ResponseWriter, r *http.Request) {
-	ae := r.Header.Get(httputil.AcceptEncodingHeader)
-	switch {
-	case strings.Contains(ae, httputil.GzipEncoding):
-		w.Header().Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
-		gzw := newGzipResponseWriter(w)
-		defer func() {
-			// Certain requests must not have a body, yet closing the gzip writer will
-			// attempt to write the gzip header. Avoid logging a warning in this case.
-			// This is notably triggered by:
-			//
-			// curl -H 'Accept-Encoding: gzip' \
-			// 	    -H 'If-Modified-Since: Thu, 29 Mar 2018 22:36:32 GMT' \
-			//      -v http://localhost:8080/favicon.ico > /dev/null
-			//
-			// which results in a 304 Not Modified.
-			if err := gzw.Close(); err != nil && !errors.Is(err, http.ErrBodyNotAllowed) {
-				ctx := s.cfg.AmbientCtx.AnnotateCtx(r.Context())
-				log.Ops.Warningf(ctx, "error closing gzip response writer: %v", err)
-			}
-		}()
-		w = gzw
-	}
-	s.mux.ServeHTTP(w, r)
-}
-
 // baseHandler is the top-level HTTP handler for all HTTP traffic, before
 // authentication and authorization.
 //
@@ -328,5 +301,5 @@ func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	s.proxy.nodeProxyHandler(w, r, s.gzipHandler)
+	s.proxy.nodeProxyHandler(w, r, s.gzMux.ServeHTTP)
 }
