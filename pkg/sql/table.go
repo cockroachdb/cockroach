@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -110,7 +111,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	// changer, then we must fail and wait for that schema change to conclude.
 	// The error here will be dealt with in
 	// (*connExecutor).handleWaitingForConcurrentSchemaChanges().
-	if tableDesc.GetDeclarativeSchemaChangerState() != nil {
+	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
 		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 
