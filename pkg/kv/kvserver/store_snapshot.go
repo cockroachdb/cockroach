@@ -91,13 +91,6 @@ type outgoingSnapshotStream interface {
 	Recv() (*kvserverpb.SnapshotResponse, error)
 }
 
-// outgoingSnapshotStream is the minimal interface on a GRPC stream required
-// to send a snapshot over the network.
-type outgoingDelegatedStream interface {
-	Send(*kvserverpb.DelegateSnapshotRequest) error
-	Recv() (*kvserverpb.DelegateSnapshotResponse, error)
-}
-
 // snapshotRecordMetrics is a wrapper function that increments a set of metrics
 // related to the number of snapshot bytes sent/received. The definer of the
 // function specifies which metrics are incremented.
@@ -670,7 +663,11 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 	}
 }
 
-// reserveReceiveSnapshot throttles incoming snapshots.
+// reserveReceiveSnapshot reserves space for this snapshot which will attempt to
+// prevent overload of system resources as this snapshot is being sent.
+// Snapshots are often sent in bulk (due to operations like store decommission)
+// so it is necessary to prevent snapshot transfers from overly impacting
+// foreground traffic.
 func (s *Store) reserveReceiveSnapshot(
 	ctx context.Context, header *kvserverpb.SnapshotRequest_Header,
 ) (_cleanup func(), _err error) {
@@ -694,6 +691,13 @@ func (s *Store) reserveSendSnapshot(
 	defer sp.Finish()
 	if fn := s.cfg.TestingKnobs.BeforeSendSnapshotThrottle; fn != nil {
 		fn()
+	}
+	// If the flag to queue is not is set, set the wait timeout much lower to
+	// avoid waiting for a permit to send.
+	if !req.QueueOnDelegate {
+		var cancel func()
+		ctx, cancel = context.WithTimeout(ctx, 10*time.Millisecond) // nolint:context
+		defer cancel()
 	}
 
 	return s.throttleSnapshot(ctx, s.snapshotSendQueue,
@@ -1123,7 +1127,7 @@ func maybeHandleDeprecatedSnapErr(deprecated bool, err error) error {
 	return errors.Mark(err, errMarkSnapshotError)
 }
 
-// SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
+// SnapshotStorePool narrows StorePool to make sendSnapshotToDelegate easier to test.
 type SnapshotStorePool interface {
 	Throttle(reason storepool.ThrottleReason, why string, toStoreID roachpb.StoreID)
 }
@@ -1499,7 +1503,7 @@ func sendSnapshot(
 	recordBytesSent snapshotRecordMetrics,
 ) error {
 	if recordBytesSent == nil {
-		// NB: Some tests and an offline tool (ResetQuorum) call into `sendSnapshot`
+		// NB: Some tests and an offline tool (ResetQuorum) call into `sendSnapshotToDelegate`
 		// with a nil metrics tracking function. We pass in a fake metrics tracking function here that isn't
 		// hooked up to anything.
 		recordBytesSent = func(inc int64) {}
@@ -1625,6 +1629,8 @@ func sendSnapshot(
 	}
 }
 
+/*
+// TODO: Remove?
 // delegateSnapshot sends an outgoing delegated snapshot request via a
 // pre-opened GRPC stream. It sends the delegated snapshot request to the
 // sender and waits for confirmation that the snapshot has been applied.
@@ -1697,3 +1703,4 @@ func delegateSnapshot(
 	}
 
 }
+*/

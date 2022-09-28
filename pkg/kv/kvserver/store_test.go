@@ -2872,7 +2872,7 @@ func (sp *fakeStorePool) Throttle(
 }
 
 // TestSendSnapshotThrottling tests the store pool throttling behavior of
-// store.sendSnapshot, ensuring that it properly updates the StorePool on
+// store.sendSnapshotToDelegate, ensuring that it properly updates the StorePool on
 // various exceptional conditions and new capacity estimates.
 func TestSendSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -2965,12 +2965,13 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 		cleanup3, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
 			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
 			SenderQueuePriority: 1,
+			QueueOnDelegate:     true,
 		}, 1)
 		after := timeutil.Now()
-		cleanup3()
-		wg.Done()
 		require.Nil(t, err)
 		require.GreaterOrEqual(t, after.Sub(before), 10*time.Millisecond)
+		cleanup3()
+		wg.Done()
 	}()
 
 	// This task will not block for more than a few MS, but we want to wait for

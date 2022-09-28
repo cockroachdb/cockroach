@@ -61,12 +61,14 @@ const (
 
 type decommissionBenchSpec struct {
 	nodes        int
-	cpus         int
 	warehouses   int
 	load         bool
 	multistore   bool
 	snapshotRate int
 	duration     time.Duration
+
+	// Whether the test cluster nodes are in multiple regions.
+	multiregion bool
 
 	// When true, the test will attempt to stop the node prior to decommission.
 	whileDown bool
@@ -95,27 +97,23 @@ func registerDecommissionBench(r registry.Registry) {
 		// Basic benchmark configurations, to be run nightly.
 		{
 			nodes:      4,
-			cpus:       16,
 			warehouses: 1000,
 			load:       true,
 		},
 		{
 			nodes:      4,
-			cpus:       16,
 			warehouses: 1000,
 			load:       true,
 			duration:   1 * time.Hour,
 		},
 		{
 			nodes:      4,
-			cpus:       16,
 			warehouses: 1000,
 			load:       true,
 			whileDown:  true,
 		},
 		{
 			nodes:      8,
-			cpus:       16,
 			warehouses: 3000,
 			load:       true,
 			// This test can take nearly an hour to import and achieve balance, so
@@ -126,7 +124,6 @@ func registerDecommissionBench(r registry.Registry) {
 		{
 			// Add a new node during decommission (no drain).
 			nodes:              8,
-			cpus:               16,
 			warehouses:         3000,
 			load:               true,
 			whileUpreplicating: true,
@@ -138,7 +135,6 @@ func registerDecommissionBench(r registry.Registry) {
 		{
 			// Drain before decommission, without adding a new node.
 			nodes:      8,
-			cpus:       16,
 			warehouses: 3000,
 			load:       true,
 			drainFirst: true,
@@ -150,7 +146,6 @@ func registerDecommissionBench(r registry.Registry) {
 		{
 			// Drain before decommission, and add a new node.
 			nodes:              8,
-			cpus:               16,
 			warehouses:         3000,
 			load:               true,
 			whileUpreplicating: true,
@@ -162,7 +157,6 @@ func registerDecommissionBench(r registry.Registry) {
 		},
 		{
 			nodes:      4,
-			cpus:       16,
 			warehouses: 1000,
 			load:       true,
 			drainFirst: true,
@@ -170,7 +164,6 @@ func registerDecommissionBench(r registry.Registry) {
 		},
 		{
 			nodes:      4,
-			cpus:       16,
 			warehouses: 1000,
 			load:       true,
 			slowWrites: true,
@@ -178,7 +171,6 @@ func registerDecommissionBench(r registry.Registry) {
 		},
 		{
 			nodes:      8,
-			cpus:       16,
 			warehouses: 3000,
 			load:       true,
 			slowWrites: true,
@@ -189,7 +181,6 @@ func registerDecommissionBench(r registry.Registry) {
 		},
 		{
 			nodes:      12,
-			cpus:       16,
 			warehouses: 3000,
 			load:       true,
 			multistore: true,
@@ -201,13 +192,21 @@ func registerDecommissionBench(r registry.Registry) {
 		{
 			// Test to compare 12 4-store nodes vs 48 single-store nodes
 			nodes:      48,
-			cpus:       16,
 			warehouses: 3000,
 			load:       true,
 			// This test can take nearly an hour to import and achieve balance, so
 			// we extend the timeout to let it complete.
 			timeout: 3 * time.Hour,
 			skip:    manualBenchmarkingOnly,
+		},
+		{
+			// Multiregion, drain before decommission, and add a new node.
+			nodes:              6,
+			warehouses:         1000,
+			load:               true,
+			whileUpreplicating: true,
+			drainFirst:         true,
+			multiregion:        true,
 		},
 	} {
 		registerDecommissionBenchSpec(r, benchSpec)
@@ -223,7 +222,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 	}
 	extraNameParts := []string{""}
 	addlNodeCount := 0
-	specOptions := []spec.Option{spec.CPU(benchSpec.cpus)}
+	specOptions := []spec.Option{spec.CPU(16)}
 
 	if benchSpec.snapshotRate != 0 {
 		extraNameParts = append(extraNameParts,
@@ -264,6 +263,13 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 		extraNameParts = append(extraNameParts, fmt.Sprintf("duration=%s", benchSpec.duration))
 	}
 
+	if benchSpec.multiregion {
+		geoZones := []string{regionUsEast, regionUsWest, regionUsCentral}
+		specOptions = append(specOptions, spec.Zones(strings.Join(geoZones, ",")))
+		specOptions = append(specOptions, spec.Geo())
+		extraNameParts = append(extraNameParts, "multi-region")
+	}
+
 	// If run with ROACHTEST_DECOMMISSION_NOSKIP=1, roachtest will enable all specs.
 	noSkipFlag := os.Getenv(envDecommissionNoSkipFlag)
 	if noSkipFlag != "" {
@@ -273,8 +279,8 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 	extraName := strings.Join(extraNameParts, "/")
 
 	r.Add(registry.TestSpec{
-		Name: fmt.Sprintf("decommissionBench/nodes=%d/cpu=%d/warehouses=%d%s",
-			benchSpec.nodes, benchSpec.cpus, benchSpec.warehouses, extraName),
+		Name: fmt.Sprintf("decommissionBench/nodes=%d/warehouses=%d%s",
+			benchSpec.nodes, benchSpec.warehouses, extraName),
 		Owner: registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(
 			benchSpec.nodes+addlNodeCount+1,

@@ -14,7 +14,6 @@ option go_package = "kvserverpb";
 
 import "errorspb/errors.proto";
 import "roachpb/errors.proto";
-import "roachpb/internal_raft.proto";
 import "roachpb/metadata.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
@@ -221,7 +220,7 @@ message SnapshotRequest {
 
   Header header = 1;
 
-  // A RocksDB BatchRepr. Multiple kv_batches may be sent across multiple request messages.
+  // A BatchRepr. Multiple kv_batches may be sent across multiple request messages.
   bytes kv_batch = 2 [(gogoproto.customname) = "KVBatch"];
 
   bool final = 4;
@@ -274,12 +273,6 @@ message DelegateSnapshotRequest {
   // The priority of the snapshot.
   SnapshotRequest.Priority priority = 5;
 
-  // The sending queue's name.
-  SnapshotRequest.QueueName sender_queue_name = 9;
-
-  // The sending queue's priority.
-  double sender_queue_priority = 10;
-
   // The type of the snapshot.
   SnapshotRequest.Type type = 6;
 
@@ -288,7 +281,20 @@ message DelegateSnapshotRequest {
   uint64 term = 7;
 
   // The truncated state of the Raft log on the coordinator replica.
-  roachpb.RaftTruncatedState truncated_state = 8;
+  uint64 truncated_index = 8;
+
+  // The sending queue's name.
+  SnapshotRequest.QueueName sender_queue_name = 9;
+
+  // The sending queue's priority.
+  double sender_queue_priority = 10;
+
+  // The coordinator's updated range descriptor which includes the recipient descriptor.
+  uint64 descriptor_generation = 11 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeGeneration"];
+
+  // If not set the delegate should immediately return an error if it can't send
+  // without queueing.
+  bool queue_on_delegate = 12;
 }
 
 message DelegateSnapshotResponse {
@@ -297,6 +303,7 @@ message DelegateSnapshotResponse {
   // request.
   repeated util.tracing.tracingpb.RecordedSpan collected_spans = 2 [(gogoproto.nullable) = false];
 }
+
 
 // ConfChangeContext is encoded in the raftpb.ConfChange.Context field.
 message ConfChangeContext {
