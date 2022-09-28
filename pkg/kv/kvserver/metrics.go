@@ -1647,6 +1647,12 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaPebbleFlushUtilization = metric.Metadata{
+		Name:        "pebble.flush.utilization",
+		Help:        "The percentage of time spent flushing in the pebble flush loop",
+		Measurement: "Flush Utilization",
+		Unit:        metric.Unit_PERCENT,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1938,6 +1944,8 @@ type StoreMetrics struct {
 	// Replica batch evaluation metrics.
 	ReplicaReadBatchEvaluationLatency  *metric.Histogram
 	ReplicaWriteBatchEvaluationLatency *metric.Histogram
+
+	FlushUtilization *metric.GaugeFloat64
 }
 
 type tenantMetricsRef struct {
@@ -2471,6 +2479,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaWriteBatchEvaluationLatency: metric.NewHistogram(
 			metaReplicaWriteBatchEvaluationLatency, histogramWindow, metric.IOLatencyBuckets,
 		),
+		FlushUtilization: metric.NewGaugeFloat64(metaPebbleFlushUtilization),
 	}
 
 	{

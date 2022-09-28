@@ -491,7 +491,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	// were multiple replicas, more care would need to be taken in the initial
 	// syncFeed().
 	forceWriteStatus := func() {
-		if err := ts.node.computePeriodicMetrics(ctx, 0); err != nil {
+		if err := ts.node.computeMetricsPeriodically(ctx, map[*kvserver.Store]*storage.Metrics{}, 0); err != nil {
 			t.Fatalf("error publishing store statuses: %s", err)
 		}
 
@@ -681,6 +681,65 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	require.GreaterOrEqual(t, n.metrics.BatchCount.Count(), bCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[roachpb.Get].Count(), getCurr)
 	require.GreaterOrEqual(t, n.metrics.MethodCounts[roachpb.Put].Count(), putCurr)
+}
+
+func TestComputeMetricsPeriodically(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	specs := []base.StoreSpec{
+		{InMemory: true},
+		{InMemory: true},
+	}
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: specs,
+	})
+	stores := s.GetStores().(*kvserver.Stores)
+	defer s.Stopper().Stop(ctx)
+	// Wait until both stores are started properly.
+	testutils.SucceedsSoon(t, func() error {
+		var n int
+		err := stores.VisitStores(func(s *kvserver.Store) error {
+			if !s.IsStarted() {
+				return fmt.Errorf("not started: %s", s)
+			}
+			n++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if exp := len(specs); exp != n {
+			return fmt.Errorf("found only %d of %d stores", n, exp)
+		}
+		return nil
+	})
+
+	ts := s.(*TestServer)
+	n := ts.GetNode()
+	stm := map[*kvserver.Store]*storage.Metrics{}
+
+	err := n.computeMetricsPeriodically(ctx, stm, 0)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(stm))
+
+	err = stores.VisitStores(func(s *kvserver.Store) error {
+		return storage.MVCCPut(
+			ctx,
+			s.Engine(),
+			nil, /* ms */
+			keys.StoreIdentKey(),
+			hlc.Timestamp{},
+			hlc.ClockTimestamp{},
+			roachpb.MakeValueFromString("fake value for "+s.StoreID().String()),
+			nil, /* txn */
+		)
+	})
+	require.NoError(t, err)
+	err = n.computeMetricsPeriodically(ctx, stm, 0)
+
+	// Maybe do some stuff here? Then validate?
 }
 
 func TestGetTenantWeights(t *testing.T) {

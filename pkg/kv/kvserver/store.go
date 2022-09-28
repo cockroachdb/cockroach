@@ -2364,7 +2364,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		// Metrics depend in part on the system config. Compute them as soon as we
 		// get the first system config, then periodically in the background
 		// (managed by the Node).
-		if err := s.ComputeMetrics(ctx, -1); err != nil {
+		if err := s.ComputeMetrics(ctx); err != nil {
 			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 		log.Event(ctx, "computed initial metrics")
@@ -3325,29 +3325,25 @@ func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
 	return checkpointDir, nil
 }
 
-// ComputeMetrics immediately computes the current value of store metrics which
-// cannot be computed incrementally. This method should be invoked periodically
-// by a higher-level system which records store metrics.
-//
-// The tick argument should increment across repeated calls to this
-// method. It is used to compute some metrics less frequently than others.
-func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
+// computeMetrics is a common metric computation that is used by
+// ComputeMetricsPeriodically and ComputeMetrics to compute metrics
+func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err error) {
 	ctx = s.AnnotateCtx(ctx)
-	if err := s.updateCapacityGauges(ctx); err != nil {
-		return err
+	if err = s.updateCapacityGauges(ctx); err != nil {
+		return m, err
 	}
-	if err := s.updateReplicationGauges(ctx); err != nil {
-		return err
+	if err = s.updateReplicationGauges(ctx); err != nil {
+		return m, err
 	}
 
 	// Get the latest engine metrics.
-	m := s.engine.GetMetrics()
+	m = s.engine.GetMetrics()
 	s.metrics.updateEngineMetrics(m)
 
 	// Get engine Env stats.
 	envStats, err := s.engine.GetEnvStats()
 	if err != nil {
-		return err
+		return m, err
 	}
 	s.metrics.updateEnvStats(*envStats)
 
@@ -3358,6 +3354,28 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		}
 		s.metrics.RdbCheckpoints.Update(int64(len(dirs)))
 	}
+
+	return m, nil
+}
+
+// ComputeMetricsPeriodically computes metrics
+func (s *Store) ComputeMetricsPeriodically(
+	ctx context.Context, prevMetrics *storage.Metrics, tick int,
+) (m storage.Metrics, err error) {
+	m, err = s.computeMetrics(ctx)
+	if err != nil {
+		return m, err
+	}
+	wt := m.Flush.WriteThroughput
+
+	if prevMetrics != nil {
+		wt.Subtract(prevMetrics.Flush.WriteThroughput)
+	}
+	flushUtil := 0.0
+	if wt.WorkDuration > 0 {
+		flushUtil = float64(wt.WorkDuration) / float64(wt.WorkDuration+wt.IdleDuration)
+	}
+	s.metrics.FlushUtilization.Update(flushUtil)
 
 	// Log this metric infrequently (with current configurations,
 	// every 10 minutes). Trigger on tick 1 instead of tick 0 so that
@@ -3380,7 +3398,15 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		e.StoreId = int32(s.StoreID())
 		log.StructuredEvent(ctx, &e)
 	}
-	return nil
+	return m, nil
+}
+
+// ComputeMetrics immediately computes the current value of store metrics which
+// cannot be computed incrementally. This method should be invoked periodically
+// by a higher-level system which records store metrics.
+func (s *Store) ComputeMetrics(ctx context.Context) error {
+	_, err := s.computeMetrics(ctx)
+	return err
 }
 
 // ClusterNodeCount returns this store's view of the number of nodes in the
