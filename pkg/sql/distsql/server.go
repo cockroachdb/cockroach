@@ -325,15 +325,12 @@ func (ds *ServerImpl) setupFlow(
 		// state once the flow cleans up. Note that we could have made a copy of
 		// the whole evalContext, but that isn't free, so we choose to restore
 		// the original state in order to avoid performance regressions.
-		origMon := evalCtx.Mon
 		origTxn := evalCtx.Txn
 		oldOnFlowCleanup := onFlowCleanup
 		onFlowCleanup = func() {
-			evalCtx.Mon = origMon
 			evalCtx.Txn = origTxn
 			oldOnFlowCleanup()
 		}
-		evalCtx.Mon = monitor
 		if localState.MustUseLeafTxn() {
 			var err error
 			leafTxn, err = makeLeaf()
@@ -370,13 +367,12 @@ func (ds *ServerImpl) setupFlow(
 			NodeID:           ds.ServerConfig.NodeID,
 			Codec:            ds.ServerConfig.Codec,
 			ReCache:          ds.regexpCache,
-			Mon:              monitor,
 			Locality:         ds.ServerConfig.Locality,
 			Tracer:           ds.ServerConfig.Tracer,
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
 			Context:                   ctx,
-			Planner:                   &faketreeeval.DummyEvalPlanner{},
+			Planner:                   &faketreeeval.DummyEvalPlanner{Monitor: monitor},
 			PrivilegedAccessor:        &faketreeeval.DummyPrivilegedAccessor{},
 			SessionAccessor:           &faketreeeval.DummySessionAccessor{},
 			ClientNoticeSender:        &faketreeeval.DummyClientNoticeSender{},
@@ -396,7 +392,8 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, makeLeaf, req.TraceKV, req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
+		ctx, req.Flow.FlowID, evalCtx, monitor, makeLeaf, req.TraceKV,
+		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -469,6 +466,7 @@ func (ds *ServerImpl) newFlowContext(
 	ctx context.Context,
 	id execinfrapb.FlowID,
 	evalCtx *eval.Context,
+	monitor *mon.BytesMonitor,
 	makeLeafTxn func() (*kv.Txn, error),
 	traceKV bool,
 	collectStats bool,
@@ -481,6 +479,7 @@ func (ds *ServerImpl) newFlowContext(
 		Cfg:            &ds.ServerConfig,
 		ID:             id,
 		EvalCtx:        evalCtx,
+		Mon:            monitor,
 		Txn:            evalCtx.Txn,
 		MakeLeafTxn:    makeLeafTxn,
 		NodeID:         ds.ServerConfig.NodeID,

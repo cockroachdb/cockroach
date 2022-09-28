@@ -492,7 +492,7 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 			result = append(result, &execinfrapb.ComponentStats{
 				Component: execinfrapb.FlowComponentID(originSQLInstanceID, flowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
-					MaxMemUsage:  optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
+					MaxMemUsage:  optional.MakeUint(uint64(flowCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
 				},
 			})
