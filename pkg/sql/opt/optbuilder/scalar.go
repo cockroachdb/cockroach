@@ -639,8 +639,7 @@ func (b *Builder) buildUDF(
 	if o.Types.Length() > 0 {
 		args, ok := o.Types.(tree.ArgTypes)
 		if !ok {
-			// TODO(mgartner): Create an issue for this and link it here.
-			panic(unimplemented.New("user-defined functions",
+			panic(unimplemented.NewWithIssue(88947,
 				"variadiac user-defined functions are not yet supported"))
 		}
 		argCols = make(opt.ColList, len(args))
