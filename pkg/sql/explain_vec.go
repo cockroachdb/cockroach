@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -62,7 +63,8 @@ func (n *explainVecNode) startExec(params runParams) error {
 
 	distSQLPlanner.finalizePlanWithRowCount(planCtx, physPlan, n.plan.mainRowCount)
 	flows := physPlan.GenerateFlowSpecs()
-	flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
+	flowCtx, cleanup := newFlowCtxForExplainPurposes(params.ctx, planCtx, params.p)
+	defer cleanup()
 
 	// We want to get the vectorized plan which would be executed with the
 	// current 'vectorize' option. If 'vectorize' is set to 'off', then the
@@ -85,10 +87,26 @@ func (n *explainVecNode) startExec(params runParams) error {
 	return nil
 }
 
-func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.FlowCtx {
+func newFlowCtxForExplainPurposes(
+	ctx context.Context, planCtx *PlanningCtx, p *planner,
+) (_ *execinfra.FlowCtx, cleanup func()) {
+	monitor := mon.NewMonitor(
+		"explain", /* name */
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		p.execCfg.Settings,
+	)
+	monitor.StartNoReserved(ctx, p.Mon())
+	cleanup = func() {
+		monitor.Stop(ctx)
+	}
 	return &execinfra.FlowCtx{
 		NodeID:  planCtx.EvalContext().NodeID,
 		EvalCtx: planCtx.EvalContext(),
+		Mon:     monitor,
 		Cfg: &execinfra.ServerConfig{
 			Settings:         p.execCfg.Settings,
 			LogicalClusterID: p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,
@@ -97,7 +115,7 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.F
 		},
 		Descriptors: p.Descriptors(),
 		DiskMonitor: &mon.BytesMonitor{},
-	}
+	}, cleanup
 }
 
 func newPlanningCtxForExplainPurposes(
@@ -112,7 +130,6 @@ func newPlanningCtxForExplainPurposes(
 	}
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx,
 		params.p, params.p.txn, distribute)
-	planCtx.ignoreClose = true
 	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
 	for i := range planCtx.planner.curPlan.subqueryPlans {
 		p := &planCtx.planner.curPlan.subqueryPlans[i]

@@ -313,7 +313,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
-		cleanup := distSQLPlanner.Run(
+		distSQLPlanner.Run(
 			ctx,
 			planCtx,
 			nil, /* txn */
@@ -322,7 +322,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			&evalCtxCopy,
 			nil, /* finishedSetupFn */
 		)
-		defer cleanup()
 
 		return metadataCallbackWriter.Err()
 	}()
