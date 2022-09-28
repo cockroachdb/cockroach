@@ -3072,6 +3072,9 @@ func (s *adminServer) SendKVBatch(
 	var br *roachpb.BatchResponse
 	defer func() { sp.finish(ctx, br) }()
 	br, pErr := s.server.db.NonTransactionalSender().Send(ctx, *ba)
+	if br == nil {
+		br = &roachpb.BatchResponse{}
+	}
 	br.Error = pErr
 	return br, nil
 }
