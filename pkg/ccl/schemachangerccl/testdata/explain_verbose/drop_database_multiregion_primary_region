@@ -893,6 +893,12 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  - 105
+                  - 106
+                  - 107
+                  - 108
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed

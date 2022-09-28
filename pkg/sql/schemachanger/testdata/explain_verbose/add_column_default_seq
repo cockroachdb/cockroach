@@ -654,6 +654,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 106
+                  - 107
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed

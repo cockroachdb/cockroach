@@ -479,6 +479,15 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
       DescriptorID: 111
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
       IsNonCancelable: true
       JobID: 1
 
@@ -1424,5 +1433,9 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
       DescriptorID: 114
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 112
+      - 113
+      - 114
       IsNonCancelable: true
       JobID: 1

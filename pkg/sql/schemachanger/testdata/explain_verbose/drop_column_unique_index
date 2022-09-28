@@ -661,6 +661,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 106
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed

@@ -212,11 +212,9 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	// TODO (lucy): Maybe this test API should use an offset starting
 	// from the most recent job instead.
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
-		Username:    username.RootUserName(),
-		Description: "DROP DATABASE t CASCADE",
-		DescriptorIDs: descpb.IDs{
-			tbDesc.GetID(), dbDesc.GetID(), dbDesc.GetSchemaID(tree.PublicSchema),
-		},
+		Username:      username.RootUserName(),
+		Description:   "DROP DATABASE t CASCADE",
+		DescriptorIDs: nil,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -647,11 +645,9 @@ func TestDropTable(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0,
 		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
-			Username:    username.RootUserName(),
-			Description: `DROP TABLE t.public.kv`,
-			DescriptorIDs: descpb.IDs{
-				tableDesc.GetID(),
-			},
+			Username:      username.RootUserName(),
+			Description:   `DROP TABLE t.public.kv`,
+			DescriptorIDs: nil,
 		}); err != nil {
 		t.Fatal(err)
 	}

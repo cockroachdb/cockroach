@@ -335,6 +335,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 15 of 15;
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
