@@ -438,6 +438,10 @@ type StoreTestingKnobs struct {
 	// LeaseUpgradeInterceptor intercepts leases that get upgraded to
 	// epoch-based ones.
 	LeaseUpgradeInterceptor func(*roachpb.Lease)
+
+	// MVCCGCQueueLeaseCheckInterceptor intercepts calls to Replica.LeaseStatusAt when
+	// making high priority replica scans.
+	MVCCGCQueueLeaseCheckInterceptor func(ctx context.Context, replica *Replica, now hlc.ClockTimestamp) bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

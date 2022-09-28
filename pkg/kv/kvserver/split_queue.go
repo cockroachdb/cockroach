@@ -56,6 +56,8 @@ type splitQueue struct {
 	loadBasedCount telemetry.Counter
 }
 
+var _ queueImpl = &splitQueue{}
+
 // newSplitQueue returns a new instance of splitQueue.
 func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 	var purgChan <-chan time.Time
@@ -263,6 +265,11 @@ func (sq *splitQueue) processAttempt(
 		return true, nil
 	}
 	return false, nil
+}
+
+func (*splitQueue) postProcessScheduled(
+	ctx context.Context, replica replicaInQueue, priority float64,
+) {
 }
 
 // timer returns interval between processing successive queued splits.
