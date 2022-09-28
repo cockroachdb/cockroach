@@ -97,7 +97,7 @@ func (ag *aggregatorBase) init(
 	output execinfra.RowReceiver,
 	trailingMetaCallback func() []execinfrapb.ProducerMetadata,
 ) error {
-	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "aggregator-mem")
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		input = newInputStatCollector(input)
 		ag.ExecStatsForTrace = ag.execStatsForTrace

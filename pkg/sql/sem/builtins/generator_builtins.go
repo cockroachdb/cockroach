@@ -2058,7 +2058,7 @@ type spanKeyIterator struct {
 
 func newSpanKeyIterator(evalCtx *eval.Context, span roachpb.Span) *spanKeyIterator {
 	return &spanKeyIterator{
-		acc:  evalCtx.Mon.MakeBoundAccount(),
+		acc:  evalCtx.Planner.Mon().MakeBoundAccount(),
 		span: span,
 	}
 }
@@ -2162,7 +2162,7 @@ func makeRangeKeyIterator(ctx *eval.Context, args tree.Datums) (eval.ValueGenera
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
 	return &rangeKeyIterator{
 		spanKeyIterator: spanKeyIterator{
-			acc: ctx.Mon.MakeBoundAccount(),
+			acc: ctx.Planner.Mon().MakeBoundAccount(),
 		},
 		rangeID: rangeID,
 	}, nil
@@ -2475,7 +2475,7 @@ func makeShowCreateAllSchemasGenerator(
 	return &showCreateAllSchemasGenerator{
 		evalPlanner: ctx.Planner,
 		dbName:      dbName,
-		acc:         ctx.Mon.MakeBoundAccount(),
+		acc:         ctx.Planner.Mon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -2631,7 +2631,7 @@ func makeShowCreateAllTablesGenerator(
 	return &showCreateAllTablesGenerator{
 		evalPlanner: ctx.Planner,
 		dbName:      dbName,
-		acc:         ctx.Mon.MakeBoundAccount(),
+		acc:         ctx.Planner.Mon().MakeBoundAccount(),
 		sessionData: ctx.SessionData(),
 	}, nil
 }
@@ -2712,6 +2712,6 @@ func makeShowCreateAllTypesGenerator(
 	return &showCreateAllTypesGenerator{
 		evalPlanner: ctx.Planner,
 		dbName:      dbName,
-		acc:         ctx.Mon.MakeBoundAccount(),
+		acc:         ctx.Planner.Mon().MakeBoundAccount(),
 	}, nil
 }

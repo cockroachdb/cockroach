@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/lib/pq/oid"
 )
 
@@ -198,6 +199,9 @@ type Planner interface {
 	DatabaseCatalog
 	TypeResolver
 	tree.FunctionReferenceResolver
+
+	// Mon returns the Planner's monitor.
+	Mon() *mon.BytesMonitor
 
 	// ExecutorConfig returns *ExecutorConfig
 	ExecutorConfig() interface{}

@@ -131,6 +131,7 @@ func (dsp *DistSQLPlanner) Exec(
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
+	defer p.curPlan.close(ctx)
 	rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		return nil
 	})
@@ -157,7 +158,7 @@ func (dsp *DistSQLPlanner) Exec(
 		distributionType)
 	planCtx.stmtType = recv.stmtType
 
-	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()
+	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)
 	return rw.Err()
 }
 
