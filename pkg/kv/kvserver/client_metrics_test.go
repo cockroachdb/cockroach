@@ -137,7 +137,7 @@ func verifyStats(t *testing.T, tc *testcluster.TestCluster, storeIdxSlice ...int
 }
 
 func verifyStorageStats(t *testing.T, s *kvserver.Store) {
-	if err := s.ComputeMetrics(context.Background(), 0); err != nil {
+	if err := s.ComputeMetrics(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -417,7 +417,7 @@ func TestStoreMaxBehindNanosOnlyTracksEpochBasedLeases(t *testing.T) {
 		sinceExpBasedLeaseStart := timeutil.Since(timeutil.Unix(0, l.Start.WallTime))
 		for i := 0; i < tc.NumServers(); i++ {
 			s, _ := getFirstStoreReplica(t, tc.Server(i), keys.Meta1Prefix)
-			require.NoError(t, s.ComputeMetrics(ctx, 0))
+			require.NoError(t, s.ComputeMetrics(ctx))
 			maxBehind := time.Duration(s.Metrics().ClosedTimestampMaxBehindNanos.Value())
 			// We want to make sure that maxBehind ends up being much smaller than the
 			// start of an expiration based lease.
