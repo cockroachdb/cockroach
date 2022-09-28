@@ -377,11 +377,7 @@ message LeaseRejectedError {
 // An AmbiguousResultError indicates that a request may have succeeded or
 // failed, but the response was not received and the final result is ambiguous.
 message AmbiguousResultError {
-  // DEPRECATED: remove in 22.2.
-  optional string deprecated_message = 1 [(gogoproto.nullable) = false];
-  // Optionally provides a cause for the AmbiguousResultError. We do not
-  // implement Causer to avoid accidentally ignoring ambiguous results;
-  // the error must be inspected directly.
+  // The error that caused the ambiguous result.
   optional errorspb.EncodedError encoded_error = 3 [(gogoproto.nullable) = false];
   reserved 2;
 }
