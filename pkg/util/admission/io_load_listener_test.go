@@ -117,7 +117,7 @@ func TestIOLoadListener(t *testing.T) {
 					WorkDuration: time.Duration(flushWorkSec) * time.Second,
 					IdleDuration: time.Duration(flushIdleSec) * time.Second,
 				}
-				im := &pebble.InternalIntervalMetrics{}
+				im := &IntervalMetrics{}
 				im.Flush.WriteThroughput = flushMetric
 				var writeStallCount int
 				if d.HasArg("write-stall-count") {
@@ -151,15 +151,17 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("print-only-first-tick") {
 					d.ScanArgs(t, "print-only-first-tick", &printOnlyFirstTick)
 				}
-				ioll.pebbleMetricsTick(ctx, StoreMetrics{
-					Metrics:                 &metrics,
-					WriteStallCount:         int64(writeStallCount),
-					InternalIntervalMetrics: im,
-					DiskStats: DiskStats{
-						BytesRead:            uint64(bytesRead),
-						BytesWritten:         uint64(bytesWritten),
-						ProvisionedBandwidth: int64(provisionedBandwidth),
+				ioll.pebbleMetricsTick(ctx, StoreAndIntervalMetrics{
+					StoreMetrics: &StoreMetrics{
+						Metrics:         &metrics,
+						WriteStallCount: int64(writeStallCount),
+						DiskStats: DiskStats{
+							BytesRead:            uint64(bytesRead),
+							BytesWritten:         uint64(bytesWritten),
+							ProvisionedBandwidth: int64(provisionedBandwidth),
+						},
 					},
+					IntervalMetrics: im,
 				})
 				var buf strings.Builder
 				// Do the ticks until just before next adjustment.
@@ -213,9 +215,9 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		NumFiles:  10000,
 	}
 	ioll.pebbleMetricsTick(ctx,
-		StoreMetrics{Metrics: &m, InternalIntervalMetrics: &pebble.InternalIntervalMetrics{}})
+		StoreAndIntervalMetrics{StoreMetrics: &StoreMetrics{Metrics: &m}, IntervalMetrics: &IntervalMetrics{}})
 	ioll.pebbleMetricsTick(ctx,
-		StoreMetrics{Metrics: &m, InternalIntervalMetrics: &pebble.InternalIntervalMetrics{}})
+		StoreAndIntervalMetrics{StoreMetrics: &StoreMetrics{Metrics: &m}, IntervalMetrics: &IntervalMetrics{}})
 	ioll.allocateTokensTick()
 }
 
@@ -257,7 +259,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 	for _, tt := range tests {
 		buf.Printf("%s:\n", tt.name)
 		res := (*ioLoadListener)(nil).adjustTokensInner(
-			ctx, tt.prev, tt.l0Metrics, 12, &pebble.InternalIntervalMetrics{},
+			ctx, tt.prev, tt.l0Metrics, 12, &IntervalMetrics{},
 			100, 10, 0.50)
 		buf.Printf("%s\n", res)
 	}
@@ -302,10 +304,12 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 	ioll.mu.kvGranter = kvGranter
 	for i := 0; i < 100; i++ {
 		randomValues()
-		ioll.pebbleMetricsTick(ctx, StoreMetrics{
-			Metrics:                 &m,
-			InternalIntervalMetrics: &pebble.InternalIntervalMetrics{},
-			DiskStats:               d,
+		ioll.pebbleMetricsTick(ctx, StoreAndIntervalMetrics{
+			StoreMetrics: &StoreMetrics{
+				Metrics:   &m,
+				DiskStats: d,
+			},
+			IntervalMetrics: &IntervalMetrics{},
 		})
 		for j := 0; j < ticksInAdjustmentInterval; j++ {
 			ioll.allocateTokensTick()

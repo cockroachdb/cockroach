@@ -281,7 +281,7 @@ func cumLSMWriteAndIngestedBytes(
 
 // pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
 // the token allocations until the next call.
-func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMetrics) {
+func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreAndIntervalMetrics) {
 	ctx = logtags.AddTag(ctx, "s", io.storeID)
 	m := metrics.Metrics
 	if !io.statsInitialized {
@@ -378,12 +378,12 @@ func computeIntervalDiskLoadInfo(
 // inability to flush fast enough can result in write stalls due to high
 // memtable counts, which we want to avoid as it can cause latency hiccups of
 // 100+ms for all write traffic.
-func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics) {
+func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreAndIntervalMetrics) {
 	sas := io.kvRequester.getStoreAdmissionStats()
 	// Copy the cumulative disk banwidth values for later use.
 	cumDiskBW := io.ioLoadListenerState.diskBW
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState,
-		metrics.Levels[0], metrics.WriteStallCount, metrics.InternalIntervalMetrics,
+		metrics.Levels[0], metrics.WriteStallCount, metrics.IntervalMetrics,
 		L0FileCountOverloadThreshold.Get(&io.settings.SV),
 		L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
 		MinFlushUtilizationFraction.Get(&io.settings.SV),
@@ -480,7 +480,7 @@ func (*ioLoadListener) adjustTokensInner(
 	prev ioLoadListenerState,
 	l0Metrics pebble.LevelMetrics,
 	cumWriteStallCount int64,
-	im *pebble.InternalIntervalMetrics,
+	im *IntervalMetrics,
 	threshNumFiles, threshNumSublevels int64,
 	minFlushUtilTargetFraction float64,
 ) adjustTokensResult {

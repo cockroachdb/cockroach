@@ -1528,11 +1528,6 @@ func (p *Pebble) GetMetrics() Metrics {
 	}
 }
 
-// GetInternalIntervalMetrics implements the Engine interface.
-func (p *Pebble) GetInternalIntervalMetrics() *pebble.InternalIntervalMetrics {
-	return p.db.InternalIntervalMetrics()
-}
-
 // GetEncryptionRegistries implements the Engine interface.
 func (p *Pebble) GetEncryptionRegistries() (*EncryptionRegistries, error) {
 	rv := &EncryptionRegistries{}

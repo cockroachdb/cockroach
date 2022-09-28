@@ -13,6 +13,7 @@ package admission
 import (
 	"time"
 
+	"github.com/HdrHistogram/hdrhistogram-go"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -643,9 +644,48 @@ type StoreMetrics struct {
 	StoreID int32
 	*pebble.Metrics
 	WriteStallCount int64
-	*pebble.InternalIntervalMetrics
 	// Optional.
 	DiskStats DiskStats
+}
+
+// IntervalMetrics exposes metrics about internal subsystems, that can
+// be useful for deep observability purposes, and for higher-level admission
+// control systems that are trying to estimate the capacity of the DB.
+//
+// These represent the metrics over the interval of time from the last call to
+// retrieve these metrics. These are not cumulative, unlike Metrics.
+type IntervalMetrics struct {
+	// LogWriter metrics.
+	LogWriter struct {
+		// WriteThroughput is the WAL throughput.
+		WriteThroughput pebble.ThroughputMetric
+		// PendingBufferUtilization is the utilization of the WAL writer's
+		// finite-sized pending blocks buffer. It provides an additional signal
+		// regarding how close to "full" the WAL writer is. The value is in the
+		// interval [0,1].
+		PendingBufferUtilization float64
+		// SyncQueueUtilization is the utilization of the WAL writer's
+		// finite-sized queue of work that is waiting to sync. The value is in the
+		// interval [0,1].
+		SyncQueueUtilization float64
+		// SyncLatencyMicros is a distribution of the fsync latency observed by
+		// the WAL writer. It can be nil if there were no fsyncs.
+		SyncLatencyMicros *hdrhistogram.Histogram
+	}
+	// Flush loop metrics.
+	Flush struct {
+		// WriteThroughput is the flushing throughput.
+		WriteThroughput pebble.ThroughputMetric
+	}
+	// NB: the LogWriter throughput and the Flush throughput are not directly
+	// comparable because the former does not compress, unlike the latter.
+}
+
+// StoreAndIntervalMetrics is a wrapper around StoreMetrics that also contains
+// the IntervalMetrics
+type StoreAndIntervalMetrics struct {
+	*StoreMetrics
+	*IntervalMetrics
 }
 
 // DiskStats provide low-level stats about the disk resources used for a

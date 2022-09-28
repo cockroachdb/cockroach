@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/HdrHistogram/hdrhistogram-go"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -24,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/record"
 	"github.com/cockroachdb/redact"
 )
 
@@ -77,6 +80,11 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 	sgc.pebbleMetricsProvider = pmp
 	sgc.closeCh = make(chan struct{})
 	metrics := sgc.pebbleMetricsProvider.GetPebbleMetrics()
+	var lastMetrics []*pebble.Metrics
+	storeMetricsWithDiff := StoreAndIntervalMetrics{
+		StoreMetrics:    nil,
+		IntervalMetrics: &IntervalMetrics{},
+	}
 	for _, m := range metrics {
 		gc := sgc.initGrantCoordinator(m.StoreID)
 		// Defensive call to LoadAndStore even though Store ought to be sufficient
@@ -86,7 +94,9 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 		if !loaded {
 			sgc.numStores++
 		}
-		gc.pebbleMetricsTick(startupCtx, m)
+		lastMetrics = append(lastMetrics, m.Metrics)
+		storeMetricsWithDiff.StoreMetrics = &m
+		gc.pebbleMetricsTick(startupCtx, storeMetricsWithDiff)
 		gc.allocateIOTokensTick()
 	}
 	if sgc.disableTickerForTesting {
@@ -109,10 +119,13 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 						log.Warningf(ctx,
 							"expected %d store metrics and found %d metrics", sgc.numStores, len(metrics))
 					}
-					for _, m := range metrics {
+					for idx, m := range metrics {
 						if unsafeGc, ok := sgc.gcMap.Load(int64(m.StoreID)); ok {
 							gc := (*GrantCoordinator)(unsafeGc)
-							gc.pebbleMetricsTick(ctx, m)
+							storeMetricsWithDiff.StoreMetrics = &m
+							storeMetricsWithDiff.IntervalMetrics = computeIntervalMetrics(m.Metrics, lastMetrics[idx])
+							lastMetrics[idx] = m.Metrics
+							gc.pebbleMetricsTick(ctx, storeMetricsWithDiff)
 							iotc.UpdateIOThreshold(roachpb.StoreID(m.StoreID), gc.ioLoadListener.ioThreshold)
 						} else {
 							log.Warningf(ctx,
@@ -133,6 +146,31 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 		}
 		ticker.Stop()
 	}()
+}
+
+func computeIntervalMetrics(m1, m2 *pebble.Metrics) *IntervalMetrics {
+	// Copy the relevant metrics, ensuring to perform a deep clone of the histogram
+	// to avoid mutating it.
+	logDelta := m1.LogWriter
+	if m1.LogWriter.SyncLatencyMicros != nil {
+		logDelta.SyncLatencyMicros = hdrhistogram.Import(m1.LogWriter.SyncLatencyMicros.Export())
+	}
+	flushDelta := m1.Flush.WriteThroughput
+
+	// Subtract the cumulative metrics at the time of the last InternalIntervalMetrics call,
+	// if any, in order to compute the delta.
+	if m2 != nil {
+		logDelta.Subtract(&m2.LogWriter)
+		flushDelta.Subtract(m2.Flush.WriteThroughput)
+	}
+
+	iim := &IntervalMetrics{}
+	iim.LogWriter.PendingBufferUtilization = logDelta.PendingBufferLen.Mean() / record.CapAllocatedBlocks
+	iim.LogWriter.SyncQueueUtilization = logDelta.SyncQueueLen.Mean() / record.SyncConcurrency
+	iim.LogWriter.SyncLatencyMicros = logDelta.SyncLatencyMicros
+	iim.LogWriter.WriteThroughput = logDelta.WriteThroughput
+	iim.Flush.WriteThroughput = flushDelta
+	return iim
 }
 
 func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoordinator {
@@ -612,7 +650,7 @@ func NewGrantCoordinatorSQL(
 // pebbleMetricsTick is called every adjustmentInterval seconds and passes
 // through to the ioLoadListener, so that it can adjust the plan for future IO
 // token allocations.
-func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreMetrics) {
+func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreAndIntervalMetrics) {
 	coord.ioLoadListener.pebbleMetricsTick(ctx, m)
 }
 
