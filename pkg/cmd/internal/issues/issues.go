@@ -301,7 +301,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 		p.Repo, p.Org, searchLabel, title)
 
 	releaseLabel := fmt.Sprintf("branch-%s", p.Branch)
-	qExisting := qBase + " label:" + releaseLabel
+	qExisting := qBase + " label:" + releaseLabel + " -label:X-noreuse"
 	qRelated := qBase + " -label:" + releaseLabel
 
 	rExisting, _, err := p.searchIssues(ctx, qExisting, &github.SearchOptions{
