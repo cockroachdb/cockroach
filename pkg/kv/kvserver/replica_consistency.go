@@ -44,21 +44,6 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// How long to keep consistency checker checksums in-memory for collection.
-// Typically a long-poll waits for the result of the computation, so it's almost
-// immediately collected.
-//
-// Up to 22.1, the consistency check initiator used to synchronously collect the
-// first replica's checksum before all others, so checksum collection requests
-// could arrive late if the first one was slow. Since 22.2, all requests are
-// parallel and likely arrive quickly. Thus, in 23.1 the checksum task waits a
-// short amount of time until the collection request arrives, and otherwise
-// doesn't start.
-//
-// We still need the delayed GC in order to help a late arriving participant to
-// learn that the other one gave up, and fail fast instead of waiting.
-const replicaChecksumGCInterval = time.Hour
-
 // fatalOnStatsMismatch, if true, turns stats mismatches into fatal errors. A
 // stats mismatch is the event in which
 //   - the consistency checker finds that all replicas are consistent
@@ -84,11 +69,6 @@ type replicaChecksum struct {
 	// result passes a single checksum computation result from the task.
 	// INVARIANT: result is written to or closed only if started is closed.
 	result chan CollectChecksumResponse
-	// A non-zero gcTimestamp means this tracker is "inactive", i.e. either the
-	// computation task completed/failed, or the checksum collection request
-	// returned. A tracker is deleted from the state when both participants have
-	// learnt about it, or gcTimestamp passes, whichever happens first.
-	gcTimestamp time.Time
 }
 
 // CheckConsistency runs a consistency check on the range. It first applies a
@@ -406,21 +386,12 @@ func (r *Replica) runConsistencyCheck(
 	return nil, errors.New("could not collect checksum from any replica")
 }
 
-func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
-	for id, val := range r.mu.checksums {
-		// The timestamp is valid only if set.
-		if !val.gcTimestamp.IsZero() && now.After(val.gcTimestamp) {
-			delete(r.mu.checksums, id)
-		}
-	}
-}
-
-// getReplicaChecksum returns replicaChecksum tracker for the given ID, and
-// whether it is still active (i.e. has a zero GC timestamp).
-func (r *Replica) getReplicaChecksum(id uuid.UUID, now time.Time) (*replicaChecksum, bool) {
+// trackReplicaChecksum returns replicaChecksum tracker for the given ID, and
+// the corresponding cleanup function that the caller must invoke when finished
+// working on this tracker.
+func (r *Replica) trackReplicaChecksum(id uuid.UUID) (*replicaChecksum, func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.gcOldChecksumEntriesLocked(now)
 	c := r.mu.checksums[id]
 	if c == nil {
 		c = &replicaChecksum{
@@ -429,30 +400,15 @@ func (r *Replica) getReplicaChecksum(id uuid.UUID, now time.Time) (*replicaCheck
 		}
 		r.mu.checksums[id] = c
 	}
-	return c, c.gcTimestamp.IsZero()
-}
-
-// gcReplicaChecksum schedules GC to remove the given replicaChecksum from the
-// state after replicaChecksumGCInterval passes from now, or removes immediately
-// if it is no longer active.
-//
-// Each user of replicaChecksum (at most two during its lifetime: sender and
-// receiver; in any order) must call this method exactly once when they finish
-// working on this tracker.
-//
-// The guarantee: both parties see the same tracker iff neither of them arrives
-// at it (by calling getReplicaChecksum) later than GC timeout past the moment
-// when the other left it (by calling gcReplicaChecksum).
-func (r *Replica) gcReplicaChecksum(id uuid.UUID, rc *replicaChecksum) {
-	// TODO(pavelkalinnikov): Avoid locking, use atomics.
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// If the tracker is inactive (GC is already scheduled) then the counterparty
-	// has abandoned this tracker, and will not come back to it. Remove it then.
-	if !rc.gcTimestamp.IsZero() {
-		delete(r.mu.checksums, id)
-	} else { // otherwise give the counterparty some time to see this tracker
-		rc.gcTimestamp = timeutil.Now().Add(replicaChecksumGCInterval)
+	return c, func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		// Delete from the map only if it still holds the same record. Otherwise,
+		// someone has already deleted and/or replaced it. This should not happen, but
+		// we guard against it anyway, for clearer semantics.
+		if r.mu.checksums[id] == c {
+			delete(r.mu.checksums, id)
+		}
 	}
 }
 
@@ -461,8 +417,8 @@ func (r *Replica) gcReplicaChecksum(id uuid.UUID, rc *replicaChecksum) {
 // been GC-ed, or an error happened during the computation.
 func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksumResponse, error) {
 	now := timeutil.Now()
-	c, _ := r.getReplicaChecksum(id, now)
-	defer r.gcReplicaChecksum(id, c)
+	c, cleanup := r.trackReplicaChecksum(id)
+	defer cleanup()
 
 	// Wait for the checksum computation to start.
 	var taskCancel context.CancelFunc
@@ -711,17 +667,13 @@ func (*Replica) sha512(
 func (r *Replica) computeChecksumPostApply(
 	ctx context.Context, cc kvserverpb.ComputeChecksum,
 ) (err error) {
-	// Note: all exit paths must call gcReplicaChecksum.
-	c, active := r.getReplicaChecksum(cc.ChecksumID, timeutil.Now())
+	c, cleanup := r.trackReplicaChecksum(cc.ChecksumID)
 	defer func() {
 		if err != nil {
 			close(c.started) // send nothing to signal that the task failed to start
-			r.gcReplicaChecksum(cc.ChecksumID, c)
+			cleanup()
 		}
 	}()
-	if !active {
-		return errors.New("checksum collection request gave up")
-	}
 	if req, have := cc.Version, uint32(batcheval.ReplicaChecksumVersion); req != have {
 		return errors.Errorf("incompatible versions (requested: %d, have: %d)", req, have)
 	}
@@ -770,7 +722,7 @@ func (r *Replica) computeChecksumPostApply(
 	}, func(ctx context.Context) {
 		defer taskCancel()
 		defer snap.Close()
-		defer r.gcReplicaChecksum(cc.ChecksumID, c)
+		defer cleanup()
 		// Wait until the CollectChecksum request handler joins in and learns about
 		// the starting computation, and then start it.
 		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
