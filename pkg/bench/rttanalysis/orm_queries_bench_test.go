@@ -137,7 +137,7 @@ WHERE
       'numeric'
     )
   OR t.typtype IN ('r', 'e', 'd')
-  OR t.typinput = 'array_in(cstring,oid,integer)'::REGPROCEDURE
+  OR t.typinput = 'array_in(int)'::REGPROCEDURE
   OR t.typelem != 0`,
 		},
 

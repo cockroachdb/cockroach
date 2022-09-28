@@ -505,14 +505,14 @@ SELECT has_function_privilege((SELECT oid FROM pg_proc LIMIT 1), 'EXECUTE')
 ----
 true
 
-query error pgcode 42883 unknown function: does_not_exist()
+query error pq: has_function_privilege\(\): invalid function signature: does_not_exist
 SELECT has_function_privilege('does_not_exist', 'EXECUTE')
 
 query error pgcode 42883 unknown function: does_not_exist()
 SELECT has_function_privilege('does_not_exist()', 'EXECUTE')
 
 query B
-SELECT has_function_privilege('version', '  EXECUTE      ')
+SELECT has_function_privilege('version()', '  EXECUTE      ')
 ----
 true
 
@@ -524,10 +524,15 @@ true
 query B
 SELECT has_function_privilege('cos(float)', 'EXECUTE WITH GRANT OPTION')
 ----
+false
+
+query B
+SELECT has_function_privilege('cos(float)', 'EXECUTE, EXECUTE WITH GRANT OPTION')
+----
 true
 
 query B
-SELECT has_function_privilege('version'::Name, 'EXECUTE')
+SELECT has_function_privilege('version()'::Name, 'EXECUTE')
 ----
 true
 
