@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,7 +40,7 @@ func TestTxnWithStepping(t *testing.T) {
 	require.NoError(t, err)
 	// Write a key, read in the transaction without stepping, ensure we
 	// do not see the value, step the transaction, then ensure that we do.
-	require.NoError(t, cf.Txn(ctx, kvDB, func(
+	require.NoError(t, cf.GetInternalExecutorFactory().DescsTxn(ctx, kvDB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		if err := txn.Put(ctx, scratchKey, 1); err != nil {
@@ -67,5 +68,5 @@ func TestTxnWithStepping(t *testing.T) {
 			}
 		}
 		return nil
-	}, descs.SteppingEnabled()))
+	}, sqlutil.SteppingEnabled()))
 }

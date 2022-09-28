@@ -291,7 +291,8 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		})
 	}
 
-	if err := tf.collectionFactory.Txn(ctx, tf.db, initialTableDescsFn); err != nil {
+	ief := tf.collectionFactory.GetInternalExecutorFactory()
+	if err := ief.DescsTxn(ctx, tf.db, initialTableDescsFn); err != nil {
 		return err
 	}
 

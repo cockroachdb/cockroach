@@ -104,7 +104,7 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
 	var createdJobs []jobspb.JobID
 	var tableStatsToRefresh []descpb.ID
-	err := d.collectionFactory.Txn(ctx, d.db, func(
+	err := d.collectionFactory.GetInternalExecutorFactory().DescsTxn(ctx, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		pl := d.job.Payload()
@@ -152,7 +152,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 		d.jobRegistry.NotifyToResume(ctx, createdJobs...)
 	}
 	if len(tableStatsToRefresh) > 0 {
-		err := d.collectionFactory.Txn(ctx, d.db, func(
+		err := d.collectionFactory.GetInternalExecutorFactory().DescsTxn(ctx, d.db, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			for _, id := range tableStatsToRefresh {

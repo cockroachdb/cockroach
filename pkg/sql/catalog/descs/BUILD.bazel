@@ -20,7 +20,7 @@ go_library(
         "table.go",
         "table_name.go",
         "temporary_descriptors.go",
-        "txn.go",
+        "txn_utils.go",
         "type.go",
         "uncommitted_descriptors.go",
         "validate.go",

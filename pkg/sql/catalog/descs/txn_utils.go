@@ -12,6 +12,7 @@ package descs
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -23,57 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
-
-// Txn enables callers to run transactions with a *Collection such that all
-// retrieved immutable descriptors are properly leased and all mutable
-// descriptors are handled. The function deals with verifying the two version
-// invariant and retrying when it is violated. Callers need not worry that they
-// write mutable descriptors multiple times. The call will explicitly wait for
-// the leases to drain on old versions of descriptors modified or deleted in the
-// transaction; callers do not need to call lease.WaitForOneVersion.
-//
-// The passed transaction is pre-emptively anchored to the system config key on
-// the system tenant.
-// Deprecated: Use cf.TxnWithExecutor().
-func (cf *CollectionFactory) Txn(
-	ctx context.Context,
-	db *kv.DB,
-	f func(ctx context.Context, txn *kv.Txn, descriptors *Collection) error,
-	opts ...sqlutil.TxnOption,
-) error {
-	return cf.GetInternalExecutorFactory().DescsTxnWithExecutor(ctx, db, nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descriptors *Collection, _ sqlutil.InternalExecutor,
-	) error {
-		return f(ctx, txn, descriptors)
-	}, opts...)
-}
-
-// TxnOption is used to configure a Txn or TxnWithExecutor.
-type TxnOption interface {
-	apply(*txnConfig)
-}
-
-type txnConfig struct {
-	steppingEnabled bool
-}
-
-type txnOptionFn func(options *txnConfig)
-
-func (f txnOptionFn) apply(options *txnConfig) { f(options) }
-
-var steppingEnabled = txnOptionFn(func(o *txnConfig) {
-	o.steppingEnabled = true
-})
-
-// SteppingEnabled creates a TxnOption to determine whether the underlying
-// transaction should have stepping enabled. If stepping is enabled, the
-// transaction will implicitly use lower admission priority. However, the
-// user will need to remember to Step the Txn to make writes visible. The
-// InternalExecutor will automatically (for better or for worse) step the
-// transaction when executing each statement.
-func SteppingEnabled() TxnOption {
-	return steppingEnabled
-}
 
 // TxnWithExecutorFunc is used to run a transaction in the context of a
 // Collection and an InternalExecutor.

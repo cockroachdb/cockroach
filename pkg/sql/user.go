@@ -133,23 +133,26 @@ func GetUserSessionInitInfo(
 		}
 
 		// Find whether the user is an admin.
-		return execCfg.CollectionFactory.Txn(ctx, execCfg.DB, func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-		) error {
-			memberships, err := MemberOfWithAdminOption(
-				ctx,
-				execCfg,
-				ie,
-				descsCol,
-				txn,
-				user,
-			)
-			if err != nil {
-				return err
-			}
-			_, isSuperuser = memberships[username.AdminRoleName()]
-			return nil
-		},
+		return execCfg.CollectionFactory.GetInternalExecutorFactory().DescsTxn(
+			ctx,
+			execCfg.DB,
+			func(
+				ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+			) error {
+				memberships, err := MemberOfWithAdminOption(
+					ctx,
+					execCfg,
+					ie,
+					descsCol,
+					txn,
+					user,
+				)
+				if err != nil {
+					return err
+				}
+				_, isSuperuser = memberships[username.AdminRoleName()]
+				return nil
+			},
 		)
 	}); err != nil {
 		log.Warningf(ctx, "user membership lookup for %q failed: %v", user, err)

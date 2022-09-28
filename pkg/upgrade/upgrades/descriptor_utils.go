@@ -88,26 +88,29 @@ func runPostDeserializationChangesOnAllDescriptors(
 	maybeUpgradeDescriptors := func(
 		ctx context.Context, d upgrade.TenantDeps, toUpgrade []descpb.ID,
 	) error {
-		return d.CollectionFactory.Txn(ctx, d.DB, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-		) error {
-			descs, err := descriptors.GetMutableDescriptorsByID(ctx, txn, toUpgrade...)
-			if err != nil {
-				return err
-			}
-			batch := txn.NewBatch()
-			for _, desc := range descs {
-				if !desc.GetPostDeserializationChanges().HasChanges() {
-					continue
-				}
-				if err := descriptors.WriteDescToBatch(
-					ctx, false, desc, batch,
-				); err != nil {
+		return d.CollectionFactory.GetInternalExecutorFactory().DescsTxn(
+			ctx,
+			d.DB,
+			func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			) error {
+				descs, err := descriptors.GetMutableDescriptorsByID(ctx, txn, toUpgrade...)
+				if err != nil {
 					return err
 				}
-			}
-			return txn.Run(ctx, batch)
-		})
+				batch := txn.NewBatch()
+				for _, desc := range descs {
+					if !desc.GetPostDeserializationChanges().HasChanges() {
+						continue
+					}
+					if err := descriptors.WriteDescToBatch(
+						ctx, false, desc, batch,
+					); err != nil {
+						return err
+					}
+				}
+				return txn.Run(ctx, batch)
+			})
 	}
 
 	query := `SELECT id, length(descriptor) FROM system.descriptor ORDER BY id DESC`

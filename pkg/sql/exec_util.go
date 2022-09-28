@@ -3444,7 +3444,7 @@ func DescsTxn(
 	execCfg *ExecutorConfig,
 	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
 ) error {
-	return execCfg.CollectionFactory.Txn(ctx, execCfg.DB, f)
+	return execCfg.CollectionFactory.GetInternalExecutorFactory().DescsTxn(ctx, execCfg.DB, f)
 }
 
 // TestingDescsTxn is a convenience function for running a transaction on

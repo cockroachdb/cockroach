@@ -75,7 +75,8 @@ func InjectLegacyTable(
 	table catalog.TableDescriptor,
 	getDeprecatedDescriptor func() *descpb.TableDescriptor,
 ) {
-	err := s.CollectionFactory().(*descs.CollectionFactory).Txn(ctx, s.DB(), func(
+	ief := s.CollectionFactory().(*descs.CollectionFactory).GetInternalExecutorFactory()
+	err := ief.DescsTxn(ctx, s.DB(), func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		id := table.GetID()
@@ -140,7 +141,8 @@ func GetTable(
 ) catalog.TableDescriptor {
 	var table catalog.TableDescriptor
 	// Retrieve the table.
-	err := s.CollectionFactory().(*descs.CollectionFactory).Txn(ctx, s.DB(), func(
+	ief := s.CollectionFactory().(*descs.CollectionFactory).GetInternalExecutorFactory()
+	err := ief.DescsTxn(ctx, s.DB(), func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
 		table, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{

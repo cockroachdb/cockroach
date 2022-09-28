@@ -132,23 +132,26 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			)
 		}
 		blocked := false
-		if err := p.ExecCfg().CollectionFactory.Txn(ctx, p.ExecCfg().DB, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-		) error {
-			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
-				return err
-			}
-			desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, descID,
-				tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				})
-			if err != nil {
-				return err
-			}
-			blocked = desc.HasConcurrentSchemaChanges()
-			return nil
-		}); err != nil {
+		if err := p.ExecCfg().CollectionFactory.GetInternalExecutorFactory().DescsTxn(
+			ctx,
+			p.ExecCfg().DB,
+			func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			) error {
+				if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+					return err
+				}
+				desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, descID,
+					tree.CommonLookupFlags{
+						Required:    true,
+						AvoidLeased: true,
+					})
+				if err != nil {
+					return err
+				}
+				blocked = desc.HasConcurrentSchemaChanges()
+				return nil
+			}); err != nil {
 			return err
 		}
 		if !blocked {

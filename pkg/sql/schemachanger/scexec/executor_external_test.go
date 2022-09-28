@@ -102,7 +102,7 @@ func (ti *testInfra) txn(
 	ctx context.Context,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
 ) error {
-	return ti.cf.Txn(ctx, ti.db, f)
+	return ti.cf.GetInternalExecutorFactory().DescsTxn(ctx, ti.db, f)
 }
 
 func TestExecutorDescriptorMutationOps(t *testing.T) {

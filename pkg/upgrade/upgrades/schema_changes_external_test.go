@@ -306,7 +306,8 @@ CREATE TABLE test.test_table (
 			tdb.Exec(t, "CREATE DATABASE test")
 			tdb.Exec(t, createTableAfter)
 			var desc catalog.TableDescriptor
-			require.NoError(t, s.CollectionFactory().(*descs.CollectionFactory).Txn(ctx, s.DB(), func(
+			ief := s.CollectionFactory().(*descs.CollectionFactory).GetInternalExecutorFactory()
+			require.NoError(t, ief.DescsTxn(ctx, s.DB(), func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 			) (err error) {
 				tn := tree.MakeTableNameWithSchema("test", "public", "test_table")
