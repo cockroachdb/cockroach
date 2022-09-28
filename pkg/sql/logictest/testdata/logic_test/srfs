@@ -449,10 +449,10 @@ SELECT information_schema._pg_expandarray()
 query error pq: unknown signature: information_schema._pg_expandarray()
 SELECT * FROM information_schema._pg_expandarray()
 
-query error pq: information_schema\._pg_expandarray\(\): cannot determine type of empty array\. Consider annotating with the desired type, for example ARRAY\[\]:::int\[\]
+query error pq: information_schema\._pg_expandarray\(\): cannot determine type of empty array\. Consider casting to the desired type, for example ARRAY\[\]::int\[\]
 SELECT information_schema._pg_expandarray(ARRAY[])
 
-query error pq: information_schema\._pg_expandarray\(\): cannot determine type of empty array\. Consider annotating with the desired type, for example ARRAY\[\]:::int\[\]
+query error pq: information_schema\._pg_expandarray\(\): cannot determine type of empty array\. Consider casting to the desired type, for example ARRAY\[\]::int\[\]
 SELECT * FROM information_schema._pg_expandarray(ARRAY[])
 
 statement error could not determine polymorphic type
@@ -581,7 +581,7 @@ SELECT ('a').x
 query error pq: type string is not composite
 SELECT (('a')).x
 
-query error pq: unnest\(\): cannot determine type of empty array. Consider annotating with the desired type, for example ARRAY\[\]:::int\[\]
+query error pq: unnest\(\): cannot determine type of empty array. Consider casting to the desired type, for example ARRAY\[\]::int\[\]
 SELECT (unnest(ARRAY[])).*
 
 query error type int is not composite

@@ -317,7 +317,7 @@ error (42804): cannot subscript type tuple{char AS k, char AS v} because it is n
 build
 SELECT ARRAY[]
 ----
-error (42P18): cannot determine type of empty array. Consider annotating with the desired type, for example ARRAY[]:::int[]
+error (42P18): cannot determine type of empty array. Consider casting to the desired type, for example ARRAY[]::int[]
 
 build
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
