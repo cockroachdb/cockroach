@@ -454,6 +454,31 @@ func getNameForArg(ctx *eval.Context, arg tree.Datum, pgTable, pgCol string) (st
 	return string(tree.MustBeDString(r[0])), nil
 }
 
+func checkFunctionPrivilege(
+	ctx *eval.Context, fn string, oid oid.Oid, priv privilege.Kind, grantable bool, userName string,
+) (bool, error) {
+	specificName := fmt.Sprintf("%s_%d", fn, oid)
+	grantableStr := "NO"
+	if grantable {
+		grantableStr = "YES"
+	}
+	query := `
+SELECT specific_name
+FROM information_schema.role_routine_grants 
+WHERE specific_name = $1
+AND privilege_type = $2
+AND is_grantable = $3
+AND grantee = $4`
+	r, err := ctx.Planner.QueryRowEx(
+		ctx.Ctx(), "check-function-privilege", sessiondata.NoSessionDataOverride,
+		query, specificName, priv.String(), grantableStr, userName,
+	)
+	if err != nil {
+		return false, err
+	}
+	return len(r) > 0, nil
+}
+
 // privMap maps a privilege string to a Privilege.
 type privMap map[string]privilege.Privilege
 
@@ -1476,33 +1501,38 @@ SELECT description
 				oid = t
 			}
 
-			fn, err := getNameForArg(ctx, oid, "pg_proc", "proname")
+			// Get function name with OID from pg_proc
+			fn, _, err := ctx.Planner.ResolveFunctionByOID(ctx.Ctx(), oid.(*tree.DOid).Oid)
 			if err != nil {
+				if errors.Is(err, tree.ErrFunctionUndefined) {
+					return eval.ObjectNotFound, nil
+				}
 				return eval.HasNoPrivilege, err
-			}
-			retNull := false
-			if fn == "" {
-				// Postgres returns NULL if no matching function is found
-				// when given an OID.
-				retNull = true
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				// TODO(nvanbenschoten): this privilege is incorrect, but we don't
-				// currently have an EXECUTE privilege and we aren't even checking
-				// this down below, so it's fine for now.
-				"EXECUTE":                   {Kind: privilege.USAGE},
-				"EXECUTE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
+				"EXECUTE":                   {Kind: privilege.EXECUTE},
+				"EXECUTE WITH GRANT OPTION": {Kind: privilege.EXECUTE, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
-			if retNull {
-				return eval.ObjectNotFound, nil
+
+			hasPriv := false
+			for _, priv := range privs {
+				ret, err := checkFunctionPrivilege(
+					ctx, fn, oid.(*tree.DOid).Oid, priv.Kind, priv.GrantOption, ctx.SessionData().User().Normalized(),
+				)
+				if err != nil {
+					return eval.HasNoPrivilege, err
+				}
+				hasPriv = hasPriv || ret
 			}
-			// All users have EXECUTE privileges for all functions.
-			_ = privs
-			return eval.HasPrivilege, nil
+
+			if hasPriv {
+				return eval.HasPrivilege, nil
+			}
+			return eval.HasNoPrivilege, nil
 		},
 	),
 
