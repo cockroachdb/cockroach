@@ -12,6 +12,38 @@
 #  1  o---------------------------------------o
 #     a   b   c   d   e   f   g   h   i   j   k   l   m   n
 
+# A clear without a time span should error, as should a clear with a target time
+# at or above the end time.
+run stats error
+clear_time_range k=a end=z
+----
+>> clear_time_range k=a end=z
+stats: no change
+>> at end:
+<no data>
+stats: 
+error: (*withstack.withStack:) end time is required
+
+run stats error
+clear_time_range k=a end=z ts=5 targetTs=5
+----
+>> clear_time_range k=a end=z ts=5 targetTs=5
+stats: no change
+>> at end:
+<no data>
+stats: 
+error: (*withstack.withStack:) end time 5.000000000,0 must be above start time 5.000000000,0
+
+run stats error
+clear_time_range k=a end=z ts=5 targetTs=6
+----
+>> clear_time_range k=a end=z ts=5 targetTs=6
+stats: no change
+>> at end:
+<no data>
+stats: 
+error: (*withstack.withStack:) end time 5.000000000,0 must be above start time 6.000000000,0
+
 # Clear the entire span.
 run ok
 del_range_ts k=a end=k ts=1
