@@ -2024,7 +2024,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 		var expirationLeases int64
 		var epochLeases int64
 		for i := range tc.Servers {
-			if err := tc.GetFirstStoreFromServer(t, i).ComputeMetrics(context.Background(), 0); err != nil {
+			if err := tc.GetFirstStoreFromServer(t, i).ComputeMetrics(context.Background()); err != nil {
 				return err
 			}
 			metrics = tc.GetFirstStoreFromServer(t, i).Metrics()
@@ -4835,7 +4835,7 @@ func TestUninitializedMetric(t *testing.T) {
 	targetStore := tc.GetFirstStoreFromServer(t, 1)
 
 	// Force the store to compute the replica metrics
-	require.NoError(t, targetStore.ComputeMetrics(ctx, 0))
+	require.NoError(t, targetStore.ComputeMetrics(ctx))
 
 	// Blocked snapshot on the second server (1) should realize 1 uninitialized replica.
 	require.Equal(t, int64(1), targetStore.Metrics().UninitializedCount.Value())
@@ -4845,7 +4845,7 @@ func TestUninitializedMetric(t *testing.T) {
 	require.NoError(t, <-addReplicaErr)
 
 	// Again force the store to compute metrics, increment tick counter 0 -> 1
-	require.NoError(t, targetStore.ComputeMetrics(ctx, 1))
+	require.NoError(t, targetStore.ComputeMetrics(ctx))
 
 	// There should now be no uninitialized replicas in the recorded metrics
 	require.Equal(t, int64(0), targetStore.Metrics().UninitializedCount.Value())
