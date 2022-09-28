@@ -2982,7 +2982,7 @@ func (sp *fakeStorePool) Throttle(
 }
 
 // TestSendSnapshotThrottling tests the store pool throttling behavior of
-// store.sendSnapshot, ensuring that it properly updates the StorePool on
+// store.sendSnapshotUsingDelegate, ensuring that it properly updates the StorePool on
 // various exceptional conditions and new capacity estimates.
 func TestSendSnapshotThrottling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -3053,21 +3053,36 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 	s := tc.store
 
 	// Checking this now makes sure that if the defaults change this test will also.
-	require.Equal(t, 2, s.snapshotSendQueue.Len())
+	require.Equal(t, 2, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
 	cleanup1, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
 		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
 		SenderQueuePriority: 1,
 	}, 1)
 	require.Nil(t, err)
-	require.Equal(t, 1, s.snapshotSendQueue.Len())
+	require.Equal(t, 1, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
 	cleanup2, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
 		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
 		SenderQueuePriority: 1,
 	}, 1)
 	require.Nil(t, err)
-	require.Equal(t, 0, s.snapshotSendQueue.Len())
+	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 1, s.snapshotSendQueue.QueueLen())
+
 	// At this point both the first two tasks will be holding reservations and
-	// waiting for cleanup, a third task will block.
+	// waiting for cleanup, a third task will block or fail First send one with
+	// the queue length set to 0 - this will fail since the first tasks are still
+	// running.
+	_, err = s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
+		SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		SenderQueuePriority: 1,
+		QueueOnDelegateLen:  0,
+	}, 1)
+	require.NotNil(t, err)
+	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 1, s.snapshotSendQueue.QueueLen())
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -3075,12 +3090,13 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 		cleanup3, err := s.reserveSendSnapshot(ctx, &kvserverpb.DelegateSnapshotRequest{
 			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
 			SenderQueuePriority: 1,
+			QueueOnDelegateLen:  -1,
 		}, 1)
 		after := timeutil.Now()
-		cleanup3()
-		wg.Done()
 		require.Nil(t, err)
 		require.GreaterOrEqual(t, after.Sub(before), 10*time.Millisecond)
+		cleanup3()
+		wg.Done()
 	}()
 
 	// This task will not block for more than a few MS, but we want to wait for
@@ -3094,6 +3110,7 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 		_, err := s.reserveSendSnapshot(deadlineCtx, &kvserverpb.DelegateSnapshotRequest{
 			SenderQueueName:     kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
 			SenderQueuePriority: 1,
+			QueueOnDelegateLen:  -1,
 		}, 1)
 		wg.Done()
 		require.NotNil(t, err)
@@ -3101,12 +3118,16 @@ func TestSendSnapshotConcurrency(t *testing.T) {
 
 	// Wait a little time before calling signaling the first two as complete.
 	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, 0, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 2, s.snapshotSendQueue.QueueLen())
+
 	cleanup1()
 	cleanup2()
 
 	// Wait until all cleanup run before checking the number of permits.
 	wg.Wait()
-	require.Equal(t, 2, s.snapshotSendQueue.Len())
+	require.Equal(t, 2, s.snapshotSendQueue.AvailableLen())
+	require.Equal(t, 0, s.snapshotSendQueue.QueueLen())
 }
 
 func TestReserveSnapshotThrottling(t *testing.T) {

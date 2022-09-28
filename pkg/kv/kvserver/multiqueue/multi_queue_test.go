@@ -294,25 +294,32 @@ func TestMultiQueueLen(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	queue := NewMultiQueue(2)
-	require.Equal(t, 2, queue.Len())
+	require.Equal(t, 2, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
 
 	task1 := queue.Add(1, 1)
-	require.Equal(t, 1, queue.Len())
+	require.Equal(t, 1, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
 	task2 := queue.Add(1, 1)
-	require.Equal(t, 0, queue.Len())
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 1, queue.QueueLen())
 	task3 := queue.Add(1, 1)
-	require.Equal(t, 0, queue.Len())
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 2, queue.QueueLen())
 
 	queue.Cancel(task1)
 	// Finish task 1, but immediately start task3.
-	require.Equal(t, 0, queue.Len())
+	require.Equal(t, 0, queue.AvailableLen())
+	require.Equal(t, 1, queue.QueueLen())
 
 	p := <-task2.GetWaitChan()
 	queue.Release(p)
-	require.Equal(t, 1, queue.Len())
+	require.Equal(t, 1, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
 
 	queue.Cancel(task3)
-	require.Equal(t, 2, queue.Len())
+	require.Equal(t, 2, queue.AvailableLen())
+	require.Equal(t, 0, queue.QueueLen())
 }
 
 // verifyOrder makes sure that the chans are called in the specified order.

@@ -98,13 +98,6 @@ type SnapshotResponseStream interface {
 	Recv() (*kvserverpb.SnapshotRequest, error)
 }
 
-// DelegateSnapshotResponseStream is the subset of the
-// MultiRaft_RaftSnapshotServer interface that is needed for sending delegated responses.
-type DelegateSnapshotResponseStream interface {
-	Send(request *kvserverpb.DelegateSnapshotResponse) error
-	Recv() (*kvserverpb.DelegateSnapshotRequest, error)
-}
-
 // RaftMessageHandler is the interface that must be implemented by
 // arguments to RaftTransport.Listen.
 type RaftMessageHandler interface {
@@ -133,8 +126,7 @@ type RaftMessageHandler interface {
 	HandleDelegatedSnapshot(
 		ctx context.Context,
 		req *kvserverpb.DelegateSnapshotRequest,
-		stream DelegateSnapshotResponseStream,
-	) error
+	) (*kvserverpb.DelegateSnapshotResponse, error)
 }
 
 // RaftTransport handles the rpc messages for raft.
@@ -320,21 +312,12 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 // DelegateRaftSnapshot handles incoming delegated snapshot requests and passes
 // the request to pass off to the sender store. Errors during the snapshots
 // process are sent back as a response.
-func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
-	ctx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
-	defer cancel()
-	req, err := stream.Recv()
-	if err != nil {
-		return err
-	}
-	// Check to ensure the header is valid.
+func (t *RaftTransport) DelegateRaftSnapshot(
+	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
+) (*kvserverpb.DelegateSnapshotResponse, error) {
 	if req == nil {
 		err := errors.New("client error: no message in first delegated snapshot request")
-		return stream.Send(
-			&kvserverpb.DelegateSnapshotResponse{
-				SnapResponse: snapRespErr(err),
-			},
-		)
+		return &kvserverpb.DelegateSnapshotResponse{SnapResponse: snapRespErr(err)}, nil
 	}
 	// Get the handler of the sender store.
 	handler, ok := t.getHandler(req.DelegatedSender.StoreID)
@@ -346,11 +329,12 @@ func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapsh
 			req.CoordinatorReplica.StoreID,
 			req.DelegatedSender.StoreID,
 		)
-		return roachpb.NewStoreNotFoundError(req.DelegatedSender.StoreID)
+		err := errors.New("unable to accept Raft message: no handler registered for the sender store")
+		return &kvserverpb.DelegateSnapshotResponse{SnapResponse: snapRespErr(err)}, nil
 	}
 
 	// Pass off the snapshot request to the sender store.
-	return handler.HandleDelegatedSnapshot(ctx, req, stream)
+	return handler.HandleDelegatedSnapshot(ctx, req)
 }
 
 // RaftSnapshot handles incoming streaming snapshot requests.
@@ -640,8 +624,8 @@ func (t *RaftTransport) SendSnapshot(
 	return sendSnapshot(ctx, t.st, t.tracer, stream, storePool, header, snap, newBatch, sent, recordBytesSent)
 }
 
-// DelegateSnapshot creates a rpc stream between the leaseholder and the
-// new designated sender for delegated snapshot requests.
+// DelegateSnapshot sends a DelegateSnapshotRequest to a remote store
+// and determines if it encountered any errors when sending the snapshot.
 func (t *RaftTransport) DelegateSnapshot(
 	ctx context.Context, req *kvserverpb.DelegateSnapshotRequest,
 ) error {
@@ -653,14 +637,25 @@ func (t *RaftTransport) DelegateSnapshot(
 	client := NewMultiRaftClient(conn)
 
 	// Creates a rpc stream between the leaseholder and sender.
-	stream, err := client.DelegateRaftSnapshot(ctx)
+	resp, err := client.DelegateRaftSnapshot(ctx, req)
 	if err != nil {
 		return errors.Mark(err, errMarkSnapshotError)
 	}
-	defer func() {
-		if err := stream.CloseSend(); err != nil {
-			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
+
+	// Import the remotely collected spans, if any.
+	if len(resp.CollectedSpans) != 0 {
+		span := tracing.SpanFromContext(ctx)
+		if span == nil {
+			log.Warningf(ctx, "trying to ingest remote spans but there is no recording span set up")
+		} else {
+			span.ImportRemoteRecording(resp.CollectedSpans)
 		}
-	}()
-	return delegateSnapshot(ctx, stream, req)
+	}
+	// On a delegated request, we only see the fully applied result.
+	if resp.SnapResponse.Status != kvserverpb.SnapshotResponse_APPLIED {
+		log.VEventf(ctx, 2, "%s", resp.SnapResponse)
+		return errors.Mark(errors.Errorf("%s: error: %s", req.DelegatedSender, resp.SnapResponse), errMarkSnapshotError)
+	}
+	log.VEventf(ctx, 2, "%s: delegated snapshot was successfully applied", req.DelegatedSender)
+	return nil
 }

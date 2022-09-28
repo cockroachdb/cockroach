@@ -221,11 +221,28 @@ func (m *MultiQueue) releaseLocked(permit *Permit) {
 	m.tryRunNextLocked()
 }
 
-// Len returns the number of additional tasks that can be added without
-// queueing. This will return 0 if there is anything queued. This method should
-// only be used for testing.
-func (m *MultiQueue) Len() int {
+// AvailableLen returns the number of additional tasks that can be added without
+// queueing. This will return 0 if there is anything queued.
+func (m *MultiQueue) AvailableLen() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.remainingRuns
+}
+
+// QueueLen returns the length of the queue if one more task is added. If this
+// returns 0 then a task can be added and run without queueing.
+// NB: The value returned is not a guarantee that queueing will not occur when
+// the request is submitted. multiple calls to QueueLen could race.
+func (m *MultiQueue) QueueLen() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.remainingRuns > 0 {
+		return 0
+	}
+	// Start counting from 1 since we will be the first in the queue if it gets added.
+	count := 1
+	for i := 0; i < len(m.outstanding); i++ {
+		count += len(m.outstanding[i])
+	}
+	return count - m.remainingRuns
 }

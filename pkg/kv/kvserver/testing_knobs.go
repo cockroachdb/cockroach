@@ -283,7 +283,7 @@ type StoreTestingKnobs struct {
 
 	// SendSnapshot is run after receiving a DelegateRaftSnapshot request but
 	// before any throttling or sending logic.
-	SendSnapshot func()
+	SendSnapshot func(*kvserverpb.DelegateSnapshotRequest)
 	// ReceiveSnapshot is run after receiving a snapshot header but before
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
@@ -424,6 +424,8 @@ type StoreTestingKnobs struct {
 	// AfterSendSnapshotThrottle intercepts replicas after receiving a spot in the
 	// send snapshot semaphore.
 	AfterSendSnapshotThrottle func()
+	// SelectDelegateSnapshotSender returns a replica to send delegated snapshots.
+	SelectDelegateSnapshotSender func(*roachpb.RangeDescriptor) []roachpb.ReplicaDescriptor
 
 	// This method, if set, gets to see (and mutate, if desired) any local
 	// StoreDescriptor before it is being sent out on the Gossip network.
