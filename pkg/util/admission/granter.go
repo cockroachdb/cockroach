@@ -643,9 +643,15 @@ type StoreMetrics struct {
 	StoreID int32
 	*pebble.Metrics
 	WriteStallCount int64
-	*pebble.InternalIntervalMetrics
 	// Optional.
 	DiskStats DiskStats
+}
+
+// StoreAndIntervalMetrics is a wrapper around StoreMetrics that also contains
+// the pebble.InternalIntervalMetrics
+type StoreAndIntervalMetrics struct {
+	*StoreMetrics
+	*pebble.InternalIntervalMetrics
 }
 
 // DiskStats provide low-level stats about the disk resources used for a

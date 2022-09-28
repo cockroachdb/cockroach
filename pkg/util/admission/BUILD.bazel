@@ -38,7 +38,9 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_pebble//record",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_hdrhistogram_hdrhistogram_go//:hdrhistogram-go",
     ],
 )
 
