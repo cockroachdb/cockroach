@@ -2422,6 +2422,17 @@ func MVCCClearTimeRange(
 		rightPeekBound = keys.MaxKey
 	}
 
+	// endTime must be set. Otherwise, MVCCIncrementalIterator defaults to
+	// MaxTimestamp, unlike the code below which uses it literally.
+	if endTime.IsEmpty() {
+		return nil, errors.New("end time is required")
+	}
+
+	// endTime must also be above startTime.
+	if endTime.LessEq(startTime) {
+		return nil, errors.Errorf("end time %s must be above start time %s", endTime, startTime)
+	}
+
 	// Since we're setting up multiple iterators, we require consistent iterators.
 	if !rw.ConsistentIterators() {
 		return nil, errors.AssertionFailedf("requires consistent iterators")

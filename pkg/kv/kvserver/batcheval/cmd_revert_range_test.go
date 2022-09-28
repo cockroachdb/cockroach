@@ -60,6 +60,7 @@ func TestCmdRevertRange(t *testing.T) {
 	defer eng.Close()
 
 	baseTime := hlc.Timestamp{WallTime: 1000}
+	tsReq := hlc.Timestamp{WallTime: 10000}
 
 	// Lay down some keys to be the starting point to which we'll revert later.
 	var stats enginepb.MVCCStats
@@ -106,7 +107,7 @@ func TestCmdRevertRange(t *testing.T) {
 		StartKey: roachpb.RKey(startKey),
 		EndKey:   roachpb.RKey(endKey),
 	}
-	cArgs := batcheval.CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsC, MaxSpanRequestKeys: 2}}
+	cArgs := batcheval.CommandArgs{Header: roachpb.Header{RangeID: desc.RangeID, Timestamp: tsReq, MaxSpanRequestKeys: 2}}
 	evalCtx := &batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */), Stats: stats}
 	cArgs.EvalCtx = evalCtx.EvalContext()
 	afterStats, err := storage.ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
@@ -185,7 +186,6 @@ func TestCmdRevertRange(t *testing.T) {
 	tsD := tsC.Add(100, 0)
 	sumD := hashRange(t, eng, startKey, endKey)
 
-	cArgs.Header.Timestamp = tsD
 	// Re-set EvalCtx to pick up revised stats.
 	cArgs.EvalCtx = (&batcheval.MockEvalCtx{Desc: &desc, Clock: hlc.NewClockWithSystemTimeSource(time.Nanosecond), Stats: stats}).EvalContext( /* maxOffset */ )
 	for _, tc := range []struct {
