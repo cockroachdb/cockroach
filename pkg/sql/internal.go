@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -1354,4 +1356,149 @@ func (ief *InternalExecutorFactory) RunWithoutTxn(
 ) error {
 	ie := ief.NewInternalExecutor(nil /* sessionData */)
 	return run(ctx, ie)
+}
+
+type kvTxnFunc = func(context.Context, *kv.Txn) error
+
+// ApplyTxnOptions is to apply the txn options and returns the txn generator
+// function.
+func ApplyTxnOptions(
+	db *kv.DB, opts ...sqlutil.TxnOption,
+) func(ctx context.Context, f kvTxnFunc) error {
+	var config sqlutil.TxnConfig
+	for _, opt := range opts {
+		opt.Apply(&config)
+	}
+	run := db.Txn
+
+	if config.GetSteppingEnabled() {
+
+		run = func(ctx context.Context, f kvTxnFunc) error {
+			return db.TxnWithSteppingEnabled(ctx, sessiondatapb.Normal, f)
+		}
+	}
+	return run
+}
+
+// DescsTxnWithExecutor enables callers to run transactions with a *Collection
+// such that all retrieved immutable descriptors are properly leased and all mutable
+// descriptors are handled. The function deals with verifying the two version
+// invariant and retrying when it is violated. Callers need not worry that they
+// write mutable descriptors multiple times. The call will explicitly wait for
+// the leases to drain on old versions of descriptors modified or deleted in the
+// transaction; callers do not need to call lease.WaitForOneVersion.
+// It also enables using internal executor to run sql queries in a txn manner.
+//
+// The passed transaction is pre-emptively anchored to the system config key on
+// the system tenant.
+func (ief *InternalExecutorFactory) DescsTxnWithExecutor(
+	ctx context.Context,
+	db *kv.DB,
+	sd *sessiondata.SessionData,
+	f descs.TxnWithExecutorFunc,
+	opts ...sqlutil.TxnOption,
+) error {
+	run := ApplyTxnOptions(db, opts...)
+	cf := ief.server.cfg.CollectionFactory
+
+	// Waits for descriptors that were modified, skipping
+	// over ones that had their descriptor wiped.
+	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
+		// Wait for a single version on leased descriptors.
+		for _, ld := range modifiedDescriptors {
+			waitForNoVersion := deletedDescs.Contains(ld.ID)
+			retryOpts := retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     1.5,
+				MaxBackoff:     time.Second,
+			}
+			// Detect unpublished ones.
+			if waitForNoVersion {
+				err := cf.GetLeaseManager().WaitForNoVersion(ctx, ld.ID, retryOpts)
+				if err != nil {
+					return err
+				}
+			} else {
+				_, err := cf.GetLeaseManager().WaitForOneVersion(ctx, ld.ID, retryOpts)
+				// If the descriptor has been deleted, just wait for leases to drain.
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					err = cf.GetLeaseManager().WaitForNoVersion(ctx, ld.ID, retryOpts)
+				}
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	for {
+		var withNewVersion []lease.IDVersion
+		var deletedDescs catalog.DescriptorIDSet
+		if err := run(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			withNewVersion, deletedDescs = nil, catalog.DescriptorIDSet{}
+			descsCol := cf.NewCollection(
+				ctx, nil, /* temporarySchemaProvider */
+				ief.MemoryMonitor(),
+			)
+			defer descsCol.ReleaseAll(ctx)
+			ie, commitTxnFn := ief.NewInternalExecutorWithTxn(sd, &cf.GetClusterSettings().SV, txn, descsCol)
+			if err := f(ctx, txn, descsCol, ie); err != nil {
+				return err
+			}
+			deletedDescs = descsCol.GetDeletedDescs()
+			withNewVersion, err = descsCol.GetOriginalPreviousIDVersionsForUncommitted()
+			if err != nil {
+				return err
+			}
+			return commitTxnFn(ctx)
+		}); descs.IsTwoVersionInvariantViolationError(err) {
+			continue
+		} else {
+			if err == nil {
+				err = waitForDescriptors(withNewVersion, deletedDescs)
+			}
+			return err
+		}
+	}
+}
+
+// DescsTxn is similar to DescsTxnWithExecutor, but without an internal executor
+// involved.
+func (ief *InternalExecutorFactory) DescsTxn(
+	ctx context.Context,
+	db *kv.DB,
+	sd *sessiondata.SessionData,
+	f func(context.Context, *kv.Txn, *descs.Collection) error,
+	opts ...sqlutil.TxnOption,
+) error {
+	return ief.DescsTxnWithExecutor(
+		ctx,
+		db,
+		sd,
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, _ sqlutil.InternalExecutor) error {
+			return f(ctx, txn, descriptors)
+		},
+		opts...,
+	)
+}
+
+// TxnWithExecutor is to run queries with internal executor in a transactional
+// manner.
+func (ief *InternalExecutorFactory) TxnWithExecutor(
+	ctx context.Context,
+	db *kv.DB,
+	sd *sessiondata.SessionData,
+	f func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+	opts ...sqlutil.TxnOption,
+) error {
+	return ief.DescsTxnWithExecutor(
+		ctx,
+		db,
+		sd,
+		func(ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor) error {
+			return f(ctx, txn, ie)
+		},
+		opts...,
+	)
 }
