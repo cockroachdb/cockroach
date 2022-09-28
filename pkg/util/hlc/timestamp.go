@@ -194,11 +194,13 @@ func (t Timestamp) AsOfSystemTime() string {
 }
 
 // IsEmpty returns true if t is an empty Timestamp.
+// gcassert:inline
 func (t Timestamp) IsEmpty() bool {
-	return t == Timestamp{}
+	return t.WallTime == 0 && t.Logical == 0 && !t.Synthetic
 }
 
 // IsSet returns true if t is not an empty Timestamp.
+// gcassert:inline
 func (t Timestamp) IsSet() bool {
 	return !t.IsEmpty()
 }
