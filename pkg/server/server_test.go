@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -343,6 +344,9 @@ func TestAcceptEncoding(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var uncompressedSize int64
+	var compressedSize int64
+
 	testData := []struct {
 		acceptEncoding string
 		newReader      func(io.Reader) io.Reader
@@ -379,13 +383,29 @@ func TestAcceptEncoding(t *testing.T) {
 			if ce := resp.Header.Get(httputil.ContentEncodingHeader); ce != d.acceptEncoding {
 				t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
 			}
-			r := d.newReader(resp.Body)
+
+			// Measure and stash resposne body length for later comparison
+			rawBytes, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			rawBodyLength := int64(len(rawBytes))
+			if d.acceptEncoding == "" {
+				uncompressedSize = rawBodyLength
+			} else {
+				compressedSize = rawBodyLength
+			}
+
+			r := d.newReader(bytes.NewReader(rawBytes))
 			var data serverpb.JSONResponse
 			if err := jsonpb.Unmarshal(r, &data); err != nil {
 				t.Error(err)
 			}
 		}()
 	}
+
+	// Ensure compressed responses are smaller than uncompressed ones when the
+	// uncompressed body would be larger than one MTU.
+	require.Greater(t, uncompressedSize, int64(1400), "gzip compression testing requires a response body > 1400 bytes (one MTU). Please update the test response.")
+	require.Less(t, compressedSize, uncompressedSize, "Compressed response body must be smaller than uncompressed response body")
 }
 
 func TestListenerFileCreation(t *testing.T) {
