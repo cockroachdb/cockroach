@@ -169,14 +169,27 @@ type ioLoadListener struct {
 	diskBandwidthLimiter  diskBandwidthLimiter
 }
 
+// storeInternalIntervalMetrics exposes metrics about internal subsystems in the
+// store, that are useful for admission control. These represent the metrics
+// over the interval of time from the last call to retrieve these metrics. These
+// are not cumulative, unlike Metrics.
+type storeInternalIntervalMetrics struct {
+	// Flush loop metrics.
+	flush struct {
+		// WriteThroughput is the flushing throughput.
+		writeThroughput pebble.ThroughputMetric
+	}
+}
+
 type ioLoadListenerState struct {
 	// Cumulative.
 	cumL0AddedBytes uint64
 	// Gauge.
 	curL0Bytes int64
 	// Cumulative.
-	cumWriteStallCount int64
-	diskBW             struct {
+	cumWriteStallCount      int64
+	cumStoreInternalMetrics storeInternalIntervalMetrics
+	diskBW                  struct {
 		// Cumulative
 		bytesRead        uint64
 		bytesWritten     uint64
@@ -309,10 +322,24 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 		io.diskBW.bytesRead = metrics.DiskStats.BytesRead
 		io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
 		io.diskBW.incomingLSMBytes = cumLSMIncomingBytes
+		io.setCumulativeStoreInternalIntervalMetrics(metrics)
 		io.copyAuxEtcFromPerWorkEstimator()
 		return
 	}
 	io.adjustTokens(ctx, metrics)
+	io.setCumulativeStoreInternalIntervalMetrics(metrics)
+
+}
+
+func (io *ioLoadListener) setCumulativeStoreInternalIntervalMetrics(metrics StoreMetrics) {
+	wt := metrics.Flush.WriteThroughput
+	io.cumStoreInternalMetrics = storeInternalIntervalMetrics{
+		flush: struct{ writeThroughput pebble.ThroughputMetric }{writeThroughput: pebble.ThroughputMetric{
+			Bytes:        wt.Bytes,
+			WorkDuration: wt.WorkDuration,
+			IdleDuration: wt.IdleDuration,
+		}},
+	}
 }
 
 // allocateTokensTick gives out 1/ticksInAdjustmentInterval of the
@@ -382,8 +409,11 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	sas := io.kvRequester.getStoreAdmissionStats()
 	// Copy the cumulative disk banwidth values for later use.
 	cumDiskBW := io.ioLoadListenerState.diskBW
+	wt := metrics.Flush.WriteThroughput
+	wt.Subtract(io.cumStoreInternalMetrics.flush.writeThroughput)
+
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState,
-		metrics.Levels[0], metrics.WriteStallCount, metrics.InternalIntervalMetrics,
+		metrics.Levels[0], metrics.WriteStallCount, wt,
 		L0FileCountOverloadThreshold.Get(&io.settings.SV),
 		L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
 		MinFlushUtilizationFraction.Get(&io.settings.SV),
@@ -480,7 +510,7 @@ func (*ioLoadListener) adjustTokensInner(
 	prev ioLoadListenerState,
 	l0Metrics pebble.LevelMetrics,
 	cumWriteStallCount int64,
-	im *pebble.InternalIntervalMetrics,
+	flushWriteThroughput pebble.ThroughputMetric,
 	threshNumFiles, threshNumSublevels int64,
 	minFlushUtilTargetFraction float64,
 ) adjustTokensResult {
@@ -611,12 +641,12 @@ func (*ioLoadListener) adjustTokensInner(
 	// Compute flush utilization for this interval. A very low flush utilization
 	// will cause flush tokens to be unlimited.
 	intFlushUtilization := float64(0)
-	if im.Flush.WriteThroughput.WorkDuration > 0 {
-		intFlushUtilization = float64(im.Flush.WriteThroughput.WorkDuration) /
-			float64(im.Flush.WriteThroughput.WorkDuration+im.Flush.WriteThroughput.IdleDuration)
+	if flushWriteThroughput.WorkDuration > 0 {
+		intFlushUtilization = float64(flushWriteThroughput.WorkDuration) /
+			float64(flushWriteThroughput.WorkDuration+flushWriteThroughput.IdleDuration)
 	}
 	// Compute flush tokens for this interval that would cause 100% utilization.
-	intFlushTokens := float64(im.Flush.WriteThroughput.PeakRate()) * adjustmentInterval
+	intFlushTokens := float64(flushWriteThroughput.PeakRate()) * adjustmentInterval
 	intWriteStalls := cumWriteStallCount - prev.cumWriteStallCount
 
 	// Ensure flushUtilTargetFraction is in the configured bounds. This also
