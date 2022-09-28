@@ -72,6 +72,25 @@ func CheckSSTConflicts(
 		rightPeekBound = keys.MaxKey
 	}
 
+	var statsDiff enginepb.MVCCStats
+	var intents []roachpb.Intent
+	if usePrefixSeek {
+		// If we're going to be using a prefix iterator, check for the fast path
+		// first, where there are no keys in the reader between the sstable's start
+		// and end keys. We use a non-prefix iterator for this search, and reopen a
+		// prefix one if there are engine keys in the span.
+		nonPrefixIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			UpperBound: end.Key,
+		})
+		nonPrefixIter.SeekGE(start)
+		valid, err := nonPrefixIter.Valid()
+		nonPrefixIter.Close()
+		if !valid {
+			return statsDiff, err
+		}
+	}
+
 	// Check for any range keys.
 	//
 	// TODO(bilal): Expose reader.Properties.NumRangeKeys() here, so we don't
@@ -112,23 +131,6 @@ func CheckSSTConflicts(
 		usePrefixSeek = false
 	}
 	rkIter.Close()
-
-	var statsDiff enginepb.MVCCStats
-	var intents []roachpb.Intent
-
-	if usePrefixSeek {
-		// If we're going to be using a prefix iterator, check for the fast path
-		// first, where there are no keys in the reader between the sstable's start
-		// and end keys. We use a non-prefix iterator for this search, and reopen a
-		// prefix one if there are engine keys in the span.
-		nonPrefixIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: end.Key})
-		nonPrefixIter.SeekGE(start)
-		valid, err := nonPrefixIter.Valid()
-		nonPrefixIter.Close()
-		if !valid {
-			return statsDiff, err
-		}
-	}
 
 	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
