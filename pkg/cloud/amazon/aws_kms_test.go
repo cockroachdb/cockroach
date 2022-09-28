@@ -77,7 +77,10 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		params.Add(KMSRegionParam, kmsRegion)
 
 		uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
-		_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
+		_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{
+			ExternalIOConfig: &base.ExternalIODirConfig{},
+			Settings:         awsKMSTestSettings,
+		})
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
 			cloud.AuthParam,
@@ -104,7 +107,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 
 		uri := fmt.Sprintf("aws:///%s?%s", keyID, params.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
-			Settings:         cluster.NoSettings,
+			Settings:         awsKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
 	})
@@ -115,7 +118,7 @@ func TestEncryptDecryptAWS(t *testing.T) {
 		uri := fmt.Sprintf("aws:///%s?%s", keyID, q.Encode())
 
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
-			Settings:         cluster.NoSettings,
+			Settings:         awsKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
 	})
@@ -159,7 +162,7 @@ func TestEncryptDecryptAWSAssumeRole(t *testing.T) {
 	}
 
 	testEnv := &cloud.TestKMSEnv{
-		Settings:         cluster.NoSettings,
+		Settings:         awsKMSTestSettings,
 		ExternalIOConfig: &base.ExternalIODirConfig{},
 	}
 
@@ -264,7 +267,7 @@ func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 	}
 	uri := fmt.Sprintf("aws:///%s?%s", keyARN, q.Encode())
 	_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{
-		Settings:         cluster.NoSettings,
+		Settings:         awsKMSTestSettings,
 		ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
 	require.True(t, testutils.IsError(err, "implicit credentials disallowed"))
 }
