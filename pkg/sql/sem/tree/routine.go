@@ -39,6 +39,10 @@ type RoutineExecFactory interface{}
 // function. It is only created by execbuilder - it is never constructed during
 // parsing.
 type RoutineExpr struct {
+	// Name is a string name that describes the RoutineExpr, e.g., the name of
+	// the UDF that the RoutineExpr is built from.
+	Name string
+
 	// Input contains the input expressions to the routine.
 	Input TypedExprs
 
@@ -63,8 +67,6 @@ type RoutineExpr struct {
 	// its inputs are NULL. If false, the function will not be evaluated in the
 	// presence of null inputs, and will instead evaluate directly to NULL.
 	CalledOnNullInput bool
-
-	name string
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
@@ -84,7 +86,7 @@ func NewTypedRoutineExpr(
 		Typ:               typ,
 		Volatility:        v,
 		CalledOnNullInput: calledOnNullInput,
-		name:              name,
+		Name:              name,
 	}
 }
 
@@ -102,7 +104,7 @@ func (node *RoutineExpr) ResolvedType() *types.T {
 
 // Format is part of the Expr interface.
 func (node *RoutineExpr) Format(ctx *FmtCtx) {
-	ctx.Printf("%s(", node.name)
+	ctx.Printf("%s(", node.Name)
 	for i := range node.Input {
 		node.Input[i].Format(ctx)
 		if i > 0 {
