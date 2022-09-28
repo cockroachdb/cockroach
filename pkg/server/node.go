@@ -1064,10 +1064,9 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 	var reqSp spanForRequest
-	// Shadow ctx from the outer function. Written like this to pass the linter.
 	ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
 	// NB: wrapped to delay br evaluation to its value when returning.
-	defer func() { reqSp.finish(ctx, br) }()
+	defer func() { reqSp.finish(br) }()
 	if log.HasSpanOrEvent(ctx) {
 		log.Eventf(ctx, "node received request: %s", args.Summary())
 	}
@@ -1171,7 +1170,7 @@ type spanForRequest struct {
 
 // finish finishes the span. If the span was recording and br is not nil, the
 // recording is written to br.CollectedSpans.
-func (sp *spanForRequest) finish(ctx context.Context, br *roachpb.BatchResponse) {
+func (sp *spanForRequest) finish(br *roachpb.BatchResponse) {
 	var rec tracingpb.Recording
 	// If we don't have a response, there's nothing to attach a trace to.
 	// Nothing more for us to do.
@@ -1194,10 +1193,7 @@ func (sp *spanForRequest) finish(ctx context.Context, br *roachpb.BatchResponse)
 		needRedaction := sp.tenID != roachpb.SystemTenantID &&
 			redactServerTracesForSecondaryTenants.Get(&sp.settings.SV)
 		if needRedaction {
-			if err := redactRecordingForTenant(sp.tenID, rec); err != nil {
-				log.Errorf(ctx, "error redacting trace recording: %s", err)
-				rec = nil
-			}
+			redactRecording(rec)
 		}
 		br.CollectedSpans = append(br.CollectedSpans, rec...)
 	}

@@ -1350,10 +1350,12 @@ func TestQuantileOps(t *testing.T) {
 				t.Errorf("test case %d incorrect fixed %v expected %v", i, fixed, tc.fixed)
 			}
 			intSqFixed := fixed.integrateSquared()
-			// This seems like it should run into floating point errors, but it hasn't
-			// yet, so yay?
-			if intSqFixed != intSq {
-				t.Errorf("test case %d incorrect intSqFixed %v expected %v", i, intSqFixed, intSq)
+
+			// Truncate to 10 decimal places.
+			truncatedIntSqFixed := math.Trunc(intSqFixed*1e10) / 1e10
+			truncatedIntSq := math.Trunc(intSq*1e10) / 1e10
+			if truncatedIntSqFixed != truncatedIntSq {
+				t.Errorf("test case %d incorrect truncatedIntSqFixed %v expected %v", i, truncatedIntSqFixed, truncatedIntSq)
 			}
 		})
 	}

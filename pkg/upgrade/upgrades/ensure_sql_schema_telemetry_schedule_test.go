@@ -107,9 +107,12 @@ func TestSchemaTelemetrySchedule(t *testing.T) {
 		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING %s = '* * * * *'`,
 			schematelemetrycontroller.SchemaTelemetryRecurrence.Key()))
 		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{"* * * * *", "1"}})
+		clusterID := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).NodeInfo.
+			LogicalClusterID()
+		exp := schematelemetrycontroller.MaybeRewriteCronExpr(clusterID, "@daily")
 		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING %s = '@daily'`,
 			schematelemetrycontroller.SchemaTelemetryRecurrence.Key()))
-		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{"@daily", "1"}})
+		tdb.CheckQueryResultsRetry(t, qExists, [][]string{{exp, "1"}})
 	})
 
 }

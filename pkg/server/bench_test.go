@@ -61,7 +61,7 @@ func BenchmarkSetupSpanForIncomingRPC(b *testing.B) {
 				_, sp := setupSpanForIncomingRPC(
 					ctx, roachpb.SystemTenantID, ba, tr, cluster.MakeTestingClusterSettings(),
 				)
-				sp.finish(ctx, nil /* br */)
+				sp.finish(nil /* br */)
 			}
 		})
 	}
