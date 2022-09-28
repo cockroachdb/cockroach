@@ -696,7 +696,7 @@ func (dsp *DistSQLPlanner) Run(
 
 	// TODO(yuzefovich): it feels like this closing should happen after
 	// PlanAndRun. We should refactor this and get rid off ignoreClose field.
-	if planCtx.planner != nil && !planCtx.ignoreClose {
+	if planCtx.planner != nil {
 		// planCtx can change before the cleanup function is executed, so we make
 		// a copy of the planner and bind it to the function.
 		curPlan := &planCtx.planner.curPlan
@@ -1440,9 +1440,6 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	}
 	subqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
 	subqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
-	// Don't close the top-level plan from subqueries - someone else will handle
-	// that.
-	subqueryPlanCtx.ignoreClose = true
 	subqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, subqueryPlanCtx, subqueryPlan.plan)
 	defer physPlanCleanup()
 	if err != nil {
@@ -1787,7 +1784,6 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	}
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 	postqueryPlanCtx.stmtType = tree.Rows
-	postqueryPlanCtx.ignoreClose = true
 	// Postqueries are only executed on the main query path where we skip the
 	// diagram generation.
 	postqueryPlanCtx.skipDistSQLDiagramGeneration = true
