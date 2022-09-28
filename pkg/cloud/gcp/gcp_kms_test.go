@@ -31,6 +31,12 @@ import (
 	_ "google.golang.org/api/impersonate"
 )
 
+var gcpKMSTestSettings *cluster.Settings
+
+func init() {
+	gcpKMSTestSettings = cluster.MakeTestingClusterSettings()
+}
+
 func TestEncryptDecryptGCS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -74,7 +80,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
-			Settings:         cluster.MakeTestingClusterSettings(),
+			Settings:         gcpKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
 	})
@@ -93,7 +99,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
-			Settings:         cluster.MakeTestingClusterSettings(),
+			Settings:         gcpKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
 	})
@@ -119,7 +125,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 		cloud.KMSEncryptDecrypt(t, uri, &cloud.TestKMSEnv{
-			Settings:         cluster.MakeTestingClusterSettings(),
+			Settings:         gcpKMSTestSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{},
 		})
 	})
@@ -144,7 +150,10 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 	encodedCredentials := base64.StdEncoding.EncodeToString([]byte(os.Getenv("GOOGLE_CREDENTIALS_JSON")))
 
 	t.Run("auth-assume-role-implicit", func(t *testing.T) {
-		testEnv := &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}}
+		testEnv := &cloud.TestKMSEnv{
+			ExternalIOConfig: &base.ExternalIODirConfig{},
+			Settings:         gcpKMSTestSettings,
+		}
 		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s=%s", keyID, cloud.AuthParam, cloud.AuthParamImplicit), testEnv)
 
 		q := make(url.Values)
@@ -155,7 +164,10 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 	})
 
 	t.Run("auth-assume-role-specified", func(t *testing.T) {
-		testEnv := &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}}
+		testEnv := &cloud.TestKMSEnv{
+			ExternalIOConfig: &base.ExternalIODirConfig{},
+			Settings:         gcpKMSTestSettings,
+		}
 		cloud.CheckNoKMSAccess(t, fmt.Sprintf("gs:///%s?%s=%s&%s=%s", keyID, cloud.AuthParam,
 			cloud.AuthParamSpecified, CredentialsParam, url.QueryEscape(encodedCredentials)), testEnv)
 
@@ -173,7 +185,10 @@ func TestKMSAssumeRoleGCP(t *testing.T) {
 			skip.IgnoreLint(t, "ASSUME_SERVICE_ACCOUNT_CHAIN env var must be set")
 		}
 		roleChain := strings.Split(roleChainStr, ",")
-		testEnv := &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}}
+		testEnv := &cloud.TestKMSEnv{
+			ExternalIOConfig: &base.ExternalIODirConfig{},
+			Settings:         gcpKMSTestSettings,
+		}
 
 		q := make(url.Values)
 		q.Set(cloud.AuthParam, cloud.AuthParamSpecified)
@@ -210,7 +225,7 @@ func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
 
 	uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
 	_, err := cloud.KMSFromURI(ctx, uri, &cloud.TestKMSEnv{
-		Settings:         cluster.MakeTestingClusterSettings(),
+		Settings:         gcpKMSTestSettings,
 		ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
 	require.True(t, testutils.IsError(err,
 		"implicit credentials disallowed for gcs due to --external-io-implicit-credentials flag"),
