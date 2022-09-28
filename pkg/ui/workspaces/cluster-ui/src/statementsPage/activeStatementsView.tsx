@@ -54,6 +54,7 @@ export type ActiveStatementsViewStateProps = {
   sessionsError: Error | null;
   filters: ActiveStatementFilters;
   internalAppNamePrefix: string;
+  isTenant?: boolean;
 };
 
 export type ActiveStatementsViewProps = ActiveStatementsViewStateProps &
@@ -70,6 +71,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   sessionsError,
   filters,
   internalAppNamePrefix,
+  isTenant,
 }: ActiveStatementsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -204,6 +206,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
             onClearFilters={clearFilters}
             onChangeSortSetting={onSortClick}
             onColumnsSelect={onColumnsSelect}
+            isTenant={isTenant}
           />
         </Loading>
       </div>

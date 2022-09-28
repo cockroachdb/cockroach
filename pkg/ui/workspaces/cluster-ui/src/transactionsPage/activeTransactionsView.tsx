@@ -54,6 +54,7 @@ export type ActiveTransactionsViewStateProps = {
   filters: ActiveTransactionFilters;
   sortSetting: SortSetting;
   internalAppNamePrefix: string;
+  isTenant?: boolean;
 };
 
 export type ActiveTransactionsViewProps = ActiveTransactionsViewStateProps &
@@ -66,6 +67,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   refreshLiveWorkload,
   onFiltersChange,
   onSortChange,
+  isTenant,
   selectedColumns,
   sortSetting,
   transactions,
@@ -205,6 +207,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
             onClearFilters={clearFilters}
             onChangeSortSetting={onChangeSortSetting}
             onColumnsSelect={onColumnsSelect}
+            isTenant={isTenant}
           />
         </Loading>
       </div>

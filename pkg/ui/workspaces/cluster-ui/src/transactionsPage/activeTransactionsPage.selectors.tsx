@@ -24,6 +24,7 @@ import {
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
 import { localStorageSelector } from "../store/utils/selectors";
+import { selectIsTenant } from "src/store/uiConfig";
 
 export const selectSortSetting = (state: AppState): SortSetting =>
   localStorageSelector(state)["sortSetting/ActiveTransactionsPage"];
@@ -54,6 +55,7 @@ export const mapStateToActiveTransactionsPageProps = (
   sortSetting: selectSortSetting(state),
   filters: selectFilters(state),
   internalAppNamePrefix: selectAppName(state),
+  isTenant: selectIsTenant(state),
 });
 
 export const mapDispatchToActiveTransactionsPageProps = (

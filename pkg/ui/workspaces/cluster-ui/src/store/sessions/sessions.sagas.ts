@@ -8,15 +8,31 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeLatest, PutEffect } from "redux-saga/effects";
+import {
+  all,
+  call,
+  put,
+  takeLatest,
+  AllEffect,
+  PutEffect,
+  SelectEffect,
+  select,
+} from "redux-saga/effects";
 
 import { actions } from "./sessions.reducer";
+import { actions as clusterLockActions } from "../clusterLocks/clusterLocks.reducer";
 import { getSessions } from "src/api/sessionsApi";
+import { selectIsTenant } from "../uiConfig";
 
-export function* refreshSessionsAndClusterLocksSaga(): Generator<PutEffect> {
-  yield put(actions.request());
-
-  // TODO (xzhang) request clusterLocks info here. This is currently not available on CC.
+export function* refreshSessionsAndClusterLocksSaga(): Generator<
+  AllEffect<PutEffect> | SelectEffect | PutEffect
+> {
+  const isTenant = yield select(selectIsTenant);
+  if (isTenant) {
+    yield put(actions.request());
+    return;
+  }
+  yield all([put(actions.request()), put(clusterLockActions.request())]);
 }
 
 export function* requestSessionsSaga(): any {
