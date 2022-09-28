@@ -219,7 +219,7 @@ func newCopyMachine(
 		if len(s) != 1 {
 			return nil, pgerror.Newf(
 				pgcode.FeatureNotSupported,
-				"ESCAPE must be a single rune",
+				"ESCAPE must be a single one-byte character",
 			)
 		}
 
