@@ -323,6 +323,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		flowCtx := &execinfra.FlowCtx{
 			Cfg:     &execinfra.ServerConfig{Settings: st},
 			EvalCtx: &evalCtx,
+			Mon:     evalCtx.TestingMon,
 		}
 		defer flowCtx.EvalCtx.Stop(ctx)
 

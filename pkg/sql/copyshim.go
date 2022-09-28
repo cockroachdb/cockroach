@@ -91,13 +91,15 @@ func RunCopyFrom(
 		return -1, err
 	}
 
+	mon := execinfra.NewTestMemMonitor(ctx, execCfg.Settings)
+
 	// TODO(cucaroach): test open transaction and implicit txn, this will require
 	// a real client side/over the wire copy implementation logictest can use.
 	txnOpt := copyTxnOpt{txn: txn}
 	txnOpt.resetPlanner = func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
 		p.cancelChecker.Reset(ctx)
 		p.optPlanningCtx.init(p)
-		p.resetPlanner(ctx, txn, stmtTS, p.sessionDataMutatorIterator.sds.Top())
+		p.resetPlanner(ctx, txn, stmtTS, p.sessionDataMutatorIterator.sds.Top(), mon)
 		p.extendedEvalCtx.Context.Txn = txn
 	}
 	p, cleanup := newInternalPlanner("copytest",
@@ -134,7 +136,6 @@ func RunCopyFrom(
 		rd: bufio.NewReader(bytes.NewReader(buf)),
 	}
 	rows := 0
-	mon := execinfra.NewTestMemMonitor(ctx, execCfg.Settings)
 	c, err := newCopyMachine(ctx, conn, stmt.AST.(*tree.CopyFrom), p, txnOpt, mon,
 		func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
 			err := dsp.ExecLocalAll(ctx, execCfg, p, res)

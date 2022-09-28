@@ -468,7 +468,7 @@ func (z *zigzagJoiner) setupInfo(
 			LockWaitPolicy:             spec.LockingWaitPolicy,
 			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
 			Alloc:                      &info.alloc,
-			MemMonitor:                 flowCtx.EvalCtx.Mon,
+			MemMonitor:                 flowCtx.Mon,
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
