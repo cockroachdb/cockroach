@@ -96,6 +96,8 @@ upsert descriptor #104
 delete descriptor #106
 write *eventpb.DropSchema to event log: DROP SCHEMA ‹db›.‹sc›
 update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
 commit transaction #3
 # end PostCommitPhase
 
