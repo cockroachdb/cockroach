@@ -5564,7 +5564,7 @@ memo (optimized, ~16KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 11.94
+ │         └── cost: 21.04
  ├── G2: (scan pqr,cols=(2,3))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,3))
@@ -5645,7 +5645,7 @@ memo (optimized, ~18KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 17.51
+ │         └── cost: 26.61
  ├── G2: (scan pqr,cols=(2-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2-4))
@@ -5668,7 +5668,7 @@ memo (optimized, ~18KB, required=[presentation: q:2,r:3,s:4])
  ├── G9: (zigzag-join G3 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 11.95
+ │         └── cost: 21.05
  ├── G10: (filters)
  ├── G11: (eq G16 G17)
  ├── G12: (eq G18 G19)
@@ -5710,7 +5710,7 @@ memo (optimized, ~13KB, required=[presentation: q:2,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (zigzag-join G3 pqr@q pqr@s)
  │    └── [presentation: q:2,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 12.14
+ │         └── cost: 22.13
  ├── G2: (scan pqr,cols=(2,4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,4))
@@ -6213,7 +6213,7 @@ memo (optimized, ~37KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 11.96
+ │         └── cost: 20.97
  ├── G2: (scan pqr,cols=(1-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(1-4))
@@ -6241,12 +6241,12 @@ memo (optimized, ~37KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G11: (zigzag-join G21 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G21 pqr@q pqr@r)
- │         └── cost: 11.95
+ │         └── cost: 21.05
  ├── G12: (filters G16)
  ├── G13: (zigzag-join G5 pqr@r pqr@s)
  │    └── []
  │         ├── best: (zigzag-join G5 pqr@r pqr@s)
- │         └── cost: 31.14
+ │         └── cost: 131.14
  ├── G14: (eq G22 G23)
  ├── G15: (eq G24 G23)
  ├── G16: (eq G25 G26)
@@ -6496,6 +6496,104 @@ select
 # GenerateInvertedIndexZigzagJoins
 # --------------------------------------------------
 
+# Stats on table b created via:
+# insert into b select g,g,g,'{"a": "b"}'
+#                      from generate_series(10,100000) g(g);
+# insert into b select g,g,g,'{"f": "g"}'
+#                      from generate_series(100001,200000) g(g);
+# insert into b select g,g,g,'{"a":[{"b":"c"}, 5]}'
+#                      from generate_series(200001,300000) g(g);
+# insert into b select g,g,g,'{"a":1}'
+#                      from generate_series(300001,400000) g(g);
+# insert into b select g,g,g,'{"b":2}'
+#                      from generate_series(400001,500000) g(g);
+# analyze b;
+# Only histogram buckets on column j are preserved.
+exec-ddl
+ALTER TABLE b INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "k"
+        ],
+        "created_at": "2022-10-03 22:22:47.76982",
+        "distinct_count": 496512,
+        "null_count": 0,
+        "row_count": 499991
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "u"
+        ],
+        "created_at": "2022-10-03 22:22:47.76982",
+        "distinct_count": 496512,
+        "null_count": 0,
+        "row_count": 499991
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "v"
+        ],
+        "created_at": "2022-10-03 22:22:47.76982",
+        "distinct_count": 496512,
+        "null_count": 0,
+        "row_count": 499991
+    },
+    {
+        "avg_size": 25,
+        "columns": [
+            "j"
+        ],
+        "created_at": "2022-10-03 22:22:47.76982",
+        "distinct_count": 5,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 103378,
+                "num_range": 0,
+                "upper_bound": "\\x3761000112620001"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 102478,
+                "num_range": 0,
+                "upper_bound": "\\x376100012a0200"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 101998,
+                "num_range": 0,
+                "upper_bound": "\\x37610002000300012a0a00"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 96659,
+                "num_range": 0,
+                "upper_bound": "\\x37610002000362000112630001"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 96119,
+                "num_range": 0,
+                "upper_bound": "\\x376200012a0400"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 99359,
+                "num_range": 0,
+                "upper_bound": "\\x3766000112670001"
+            }
+        ],
+        "histo_col_type": "BYTES",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 499991
+    }
+]';
+----
+
 # Query only the primary key with a remaining filter. 2+ paths in containment
 # query should favor zigzag joins.
 opt expect=GenerateInvertedIndexZigzagJoins
@@ -6580,6 +6678,62 @@ inner-join (lookup b)
  │    └── filters (true)
  └── filters
       └── j:4 @> '{"a": [{"b": "c", "d": 3}, 5]}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Stats on table b created via:
+# insert into c select g, ARRAY[1,3], g
+#                      from generate_series(1,100000) g(g);
+# analyze c;
+# Only histogram buckets on column a are preserved.
+exec-ddl
+ALTER TABLE c INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "k"
+        ],
+        "created_at": "2022-10-03 22:41:56.480168",
+        "distinct_count": 99658,
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "avg_size": 7,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2022-10-03 22:41:56.480168",
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 101040,
+                "num_range": 0,
+                "upper_bound": "\\x89"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 98960,
+                "num_range": 0,
+                "upper_bound": "\\x8b"
+            }
+        ],
+        "histo_col_type": "BYTES",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 100000
+    },
+    {
+        "avg_size": 4,
+        "columns": [
+            "u"
+        ],
+        "created_at": "2022-10-03 22:41:56.480168",
+        "distinct_count": 99658,
+        "null_count": 0,
+        "row_count": 100000
+    }
+]';
+----
 
 opt expect=GenerateInvertedIndexZigzagJoins
 SELECT k FROM c WHERE a @> ARRAY[1,3,1,5]
@@ -7164,6 +7318,7 @@ project
  └── distinct-on
       ├── columns: k:1!null j:4
       ├── grouping columns: k:1!null
+      ├── internal-ordering: +1
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
@@ -7172,6 +7327,7 @@ project
       │    ├── left columns: k:10 j:13
       │    ├── right columns: k:19 j:22
       │    ├── immutable
+      │    ├── ordering: +1
       │    ├── scan b
       │    │    ├── columns: k:10!null j:13
       │    │    ├── constraint: /10: [/1 - /1]
@@ -7183,11 +7339,16 @@ project
       │         ├── immutable
       │         ├── key: (19)
       │         ├── fd: (19)-->(22)
-      │         └── scan b@j_inv_idx
+      │         ├── ordering: +19
+      │         └── sort
       │              ├── columns: k:19!null
-      │              ├── inverted constraint: /27/19
-      │              │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
-      │              └── key: (19)
+      │              ├── key: (19)
+      │              ├── ordering: +19
+      │              └── scan b@j_inv_idx
+      │                   ├── columns: k:19!null
+      │                   ├── inverted constraint: /27/19
+      │                   │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
+      │                   └── key: (19)
       └── aggregations
            └── const-agg [as=j:4, outer=(4)]
                 └── j:4
@@ -7203,6 +7364,7 @@ project
  └── distinct-on
       ├── columns: k:1!null a:2
       ├── grouping columns: k:1!null
+      ├── internal-ordering: +1
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2)
@@ -7211,6 +7373,7 @@ project
       │    ├── left columns: k:9 a:10
       │    ├── right columns: k:17 a:18
       │    ├── immutable
+      │    ├── ordering: +1
       │    ├── scan c
       │    │    ├── columns: k:9!null a:10
       │    │    ├── constraint: /9: [/1 - /1]
@@ -7222,11 +7385,16 @@ project
       │         ├── immutable
       │         ├── key: (17)
       │         ├── fd: (17)-->(18)
-      │         └── scan c@a_inv_idx
+      │         ├── ordering: +17
+      │         └── sort
       │              ├── columns: k:17!null
-      │              ├── inverted constraint: /24/17
-      │              │    └── spans: ["\x8a", "\x8a"]
-      │              └── key: (17)
+      │              ├── key: (17)
+      │              ├── ordering: +17
+      │              └── scan c@a_inv_idx
+      │                   ├── columns: k:17!null
+      │                   ├── inverted constraint: /24/17
+      │                   │    └── spans: ["\x8a", "\x8a"]
+      │                   └── key: (17)
       └── aggregations
            └── const-agg [as=a:2, outer=(2)]
                 └── a:2
@@ -8655,6 +8823,7 @@ project
  └── distinct-on
       ├── columns: k:1!null u:2 j:4
       ├── grouping columns: k:1!null
+      ├── internal-ordering: +1
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,4)
@@ -8663,25 +8832,33 @@ project
       │    ├── left columns: k:10 u:11 j:13
       │    ├── right columns: k:19 u:20 j:22
       │    ├── immutable
+      │    ├── ordering: +1
       │    ├── index-join b
       │    │    ├── columns: k:10!null u:11!null j:13
       │    │    ├── key: (10)
       │    │    ├── fd: ()-->(11), (10)-->(13)
+      │    │    ├── ordering: +10 opt(11) [actual: +10]
       │    │    └── scan b@u
       │    │         ├── columns: k:10!null u:11!null
       │    │         ├── constraint: /11/10: [/1 - /1]
       │    │         ├── key: (10)
-      │    │         └── fd: ()-->(11)
+      │    │         ├── fd: ()-->(11)
+      │    │         └── ordering: +10 opt(11) [actual: +10]
       │    └── index-join b
       │         ├── columns: k:19!null u:20 j:22!null
       │         ├── immutable
       │         ├── key: (19)
       │         ├── fd: (19)-->(20,22)
-      │         └── scan b@j_inv_idx
+      │         ├── ordering: +19
+      │         └── sort
       │              ├── columns: k:19!null
-      │              ├── inverted constraint: /27/19
-      │              │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
-      │              └── key: (19)
+      │              ├── key: (19)
+      │              ├── ordering: +19
+      │              └── scan b@j_inv_idx
+      │                   ├── columns: k:19!null
+      │                   ├── inverted constraint: /27/19
+      │                   │    └── spans: ["7foo\x00\x01\x12bar\x00\x01", "7foo\x00\x01\x12bar\x00\x01"]
+      │                   └── key: (19)
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
@@ -8698,6 +8875,7 @@ project
  └── distinct-on
       ├── columns: k:1!null a:2 u:3
       ├── grouping columns: k:1!null
+      ├── internal-ordering: +1
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(2,3)
@@ -8706,25 +8884,33 @@ project
       │    ├── left columns: k:9 a:10 u:11
       │    ├── right columns: k:17 a:18 u:19
       │    ├── immutable
+      │    ├── ordering: +1
       │    ├── index-join c
       │    │    ├── columns: k:9!null a:10 u:11!null
       │    │    ├── key: (9)
       │    │    ├── fd: ()-->(11), (9)-->(10)
+      │    │    ├── ordering: +9 opt(11) [actual: +9]
       │    │    └── scan c@u
       │    │         ├── columns: k:9!null u:11!null
       │    │         ├── constraint: /11/9: [/1 - /1]
       │    │         ├── key: (9)
-      │    │         └── fd: ()-->(11)
+      │    │         ├── fd: ()-->(11)
+      │    │         └── ordering: +9 opt(11) [actual: +9]
       │    └── index-join c
       │         ├── columns: k:17!null a:18!null u:19
       │         ├── immutable
       │         ├── key: (17)
       │         ├── fd: (17)-->(18,19)
-      │         └── scan c@a_inv_idx
+      │         ├── ordering: +17
+      │         └── sort
       │              ├── columns: k:17!null
-      │              ├── inverted constraint: /24/17
-      │              │    └── spans: ["\x8a", "\x8a"]
-      │              └── key: (17)
+      │              ├── key: (17)
+      │              ├── ordering: +17
+      │              └── scan c@a_inv_idx
+      │                   ├── columns: k:17!null
+      │                   ├── inverted constraint: /24/17
+      │                   │    └── spans: ["\x8a", "\x8a"]
+      │                   └── key: (17)
       └── aggregations
            ├── const-agg [as=a:2, outer=(2)]
            │    └── a:2
