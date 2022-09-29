@@ -551,6 +551,11 @@ var (
 	useMVCCRangeTombstonesForPointDeletes = util.ConstantWithMetamorphicTestBool(
 		"logictest-use-mvcc-range-tombstones-for-point-deletes", false)
 
+	// smallEngineBlocks will configure Pebble with very small blocks of 1 byte,
+	// to provoke bugs in time-bound iterators.
+	smallEngineBlocks = util.ConstantWithMetamorphicTestBool(
+		"logictest-small-engine-blocks", false)
+
 	// BackupRestoreProbability is the environment variable for `3node-backup` config.
 	backupRestoreProbability = envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0)
 )
@@ -1243,6 +1248,7 @@ func (t *logicTest) newCluster(
 						UseRangeTombstonesForPointDeletes: supportsMVCCRangeTombstones &&
 							useMVCCRangeTombstonesForPointDeletes,
 					},
+					SmallEngineBlocks: smallEngineBlocks,
 				},
 				SQLEvalContext: &eval.TestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
