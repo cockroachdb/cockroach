@@ -183,6 +183,7 @@ var mvccValueBenchmarkConfigs = struct {
 }
 
 func BenchmarkEncodeMVCCValue(b *testing.B) {
+	DisableMetamorphicSimpleValueEncoding(b)
 	cfg := mvccValueBenchmarkConfigs
 	for hDesc, h := range cfg.headers {
 		for vDesc, v := range cfg.values {
