@@ -102,8 +102,7 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 	if err != nil {
 		return 1
 	}
-	// TODO(Chengxiong): Consider how to produce proper help message for
-	// UDFs.
+
 	props, _ := builtinsregistry.GetBuiltinProperties(d.Name)
 	msg := HelpMessage{
 		Function: f.String(),

@@ -419,7 +419,6 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 					FuncName:                       d.Name, // FIXME
 				})
 			}
-			// TODO(chengxiong): add eventlog for function privilege changes.
 		}
 	}
 
