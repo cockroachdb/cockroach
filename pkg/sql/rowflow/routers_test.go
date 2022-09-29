@@ -799,8 +799,8 @@ func TestRouterDiskSpill(t *testing.T) {
 	// memErrorWhenConsumingRows indicates whether we expect an OOM error to
 	// occur when we're consuming rows from the row channel. By default, it
 	// will occur because routerOutput derives a memory monitor for the row
-	// buffer from evalCtx.Mon which has a limit, and we're going to consume
-	// rows after the spilling has occurred (meaning that evalCtx.Mon reached
+	// buffer from evalCtx.TestingMon which has a limit, and we're going to consume
+	// rows after the spilling has occurred (meaning that evalCtx.TestingMon reached
 	// its limit). In order for this to not happen we will create a separate
 	// memory account.
 	for _, memErrorWhenConsumingRows := range []bool{false, true} {

@@ -127,7 +127,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 		return errors.New("processor is unexpectedly not a RowSource")
 	}
 
-	acc := evalCtx.Mon.MakeBoundAccount()
+	acc := evalCtx.TestingMon.MakeBoundAccount()
 	defer acc.Close(ctx)
 	testAllocator := colmem.NewAllocator(ctx, &acc, coldataext.NewExtendedColumnFactory(&evalCtx))
 	columnarizers := make([]colexecop.Operator, len(args.inputs))

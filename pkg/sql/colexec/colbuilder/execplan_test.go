@@ -84,7 +84,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		NodeID: evalCtx.NodeID,
 	}
 
-	streamingMemAcc := evalCtx.Mon.MakeBoundAccount()
+	streamingMemAcc := evalCtx.TestingMon.MakeBoundAccount()
 	defer streamingMemAcc.Close(ctx)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
