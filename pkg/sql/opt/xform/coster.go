@@ -11,6 +11,7 @@
 package xform
 
 import (
+	"context"
 	"math"
 	"math/rand"
 
@@ -68,6 +69,7 @@ type Coster interface {
 // and index statistics that are propagated throughout the logical expression
 // tree.
 type coster struct {
+	ctx     context.Context
 	evalCtx *eval.Context
 	mem     *memo.Memo
 
@@ -92,8 +94,10 @@ type coster struct {
 var _ Coster = &coster{}
 
 // MakeDefaultCoster creates an instance of the default coster.
-func MakeDefaultCoster(mem *memo.Memo, evalCtx *eval.Context) Coster {
-	return &coster{evalCtx: evalCtx,
+func MakeDefaultCoster(ctx context.Context, evalCtx *eval.Context, mem *memo.Memo) Coster {
+	return &coster{
+		ctx:      ctx,
+		evalCtx:  evalCtx,
 		mem:      mem,
 		locality: evalCtx.Locality,
 	}
@@ -452,10 +456,13 @@ var fnCost = map[string]memo.Cost{
 }
 
 // Init initializes a new coster structure with the given memo.
-func (c *coster) Init(evalCtx *eval.Context, mem *memo.Memo, perturbation float64, rng *rand.Rand) {
+func (c *coster) Init(
+	ctx context.Context, evalCtx *eval.Context, mem *memo.Memo, perturbation float64, rng *rand.Rand,
+) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*c = coster{
+		ctx:          ctx,
 		evalCtx:      evalCtx,
 		mem:          mem,
 		locality:     evalCtx.Locality,
@@ -937,7 +944,7 @@ func (c *coster) computeLookupJoinCost(
 		join.LocalityOptimized,
 	)
 	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion {
-		provided := distribution.BuildLookupJoinLookupTableDistribution(c.evalCtx, join)
+		provided := distribution.BuildLookupJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
 		if provided.Any() || len(provided.Regions) != 1 {
 			cost += LargeDistributeCost
 		}
@@ -1103,7 +1110,7 @@ func (c *coster) computeInvertedJoinCost(
 	cost += memo.Cost(rowsProcessed) * perRowCost
 
 	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion {
-		provided := distribution.BuildInvertedJoinLookupTableDistribution(c.evalCtx, join)
+		provided := distribution.BuildInvertedJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
 		if provided.Any() || len(provided.Regions) != 1 {
 			cost += LargeDistributeCost
 		}

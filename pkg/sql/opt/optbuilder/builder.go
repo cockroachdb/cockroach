@@ -217,7 +217,7 @@ func (b *Builder) Build() (err error) {
 	// Special case for CannedOptPlan.
 	if canned, ok := b.stmt.(*tree.CannedOptPlan); ok {
 		b.factory.DisableOptimizations()
-		_, err := exprgen.Build(b.catalog, b.factory, canned.Plan)
+		_, err := exprgen.Build(b.ctx, b.catalog, b.factory, canned.Plan)
 		return err
 	}
 

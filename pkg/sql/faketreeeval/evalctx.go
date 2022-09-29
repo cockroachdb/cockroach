@@ -453,7 +453,9 @@ func (ep *DummyEvalPlanner) ResolveFunctionByOID(
 }
 
 // GetMultiregionConfig is part of the eval.Planner interface.
-func (ep *DummyEvalPlanner) GetMultiregionConfig(databaseID descpb.ID) (interface{}, bool) {
+func (ep *DummyEvalPlanner) GetMultiregionConfig(
+	ctx context.Context, databaseID descpb.ID,
+) (interface{}, bool) {
 	return nil /* regionConfig */, false
 }
 

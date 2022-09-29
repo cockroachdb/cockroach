@@ -11,6 +11,8 @@
 package optbuilder
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -429,8 +431,10 @@ func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta 
 // errorOnInvalidMultiregionDB panics if the table described by tabMeta is owned
 // by a non-multiregion database or a multiregion database with SURVIVE REGION
 // FAILURE goal.
-func errorOnInvalidMultiregionDB(evalCtx *eval.Context, tabMeta *opt.TableMeta) {
-	survivalGoal, ok := tabMeta.GetDatabaseSurvivalGoal(evalCtx.Planner)
+func errorOnInvalidMultiregionDB(
+	ctx context.Context, evalCtx *eval.Context, tabMeta *opt.TableMeta,
+) {
+	survivalGoal, ok := tabMeta.GetDatabaseSurvivalGoal(ctx, evalCtx.Planner)
 	// non-multiregional database or SURVIVE REGION FAILURE option
 	if !ok {
 		err := pgerror.New(pgcode.QueryHasNoHomeRegion,
@@ -542,7 +546,7 @@ func (b *Builder) buildScan(
 	// Scanning tables in databases that don't use the SURVIVE ZONE FAILURE option
 	// is disallowed when EnforceHomeRegion is true.
 	if b.evalCtx.SessionData().EnforceHomeRegion {
-		errorOnInvalidMultiregionDB(b.evalCtx, tabMeta)
+		errorOnInvalidMultiregionDB(b.ctx, b.evalCtx, tabMeta)
 	}
 
 	private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
