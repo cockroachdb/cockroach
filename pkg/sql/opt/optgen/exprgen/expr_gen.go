@@ -11,6 +11,7 @@
 package exprgen
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"reflect"
@@ -74,18 +75,26 @@ import (
 //	)
 //
 // For more examples, see the various testdata/ files.
-func Build(catalog cat.Catalog, factory *norm.Factory, input string) (_ opt.Expr, err error) {
-	return buildAndOptimize(catalog, nil /* optimizer */, factory, input)
+func Build(
+	ctx context.Context, catalog cat.Catalog, factory *norm.Factory, input string,
+) (_ opt.Expr, err error) {
+	return buildAndOptimize(ctx, catalog, nil /* optimizer */, factory, input)
 }
 
 // Optimize generates an expression from an optgen string and runs normalization
 // and exploration rules. The string must represent a relational expression.
-func Optimize(catalog cat.Catalog, o *xform.Optimizer, input string) (_ opt.Expr, err error) {
-	return buildAndOptimize(catalog, o, o.Factory(), input)
+func Optimize(
+	ctx context.Context, catalog cat.Catalog, o *xform.Optimizer, input string,
+) (_ opt.Expr, err error) {
+	return buildAndOptimize(ctx, catalog, o, o.Factory(), input)
 }
 
 func buildAndOptimize(
-	catalog cat.Catalog, optimizer *xform.Optimizer, factory *norm.Factory, input string,
+	ctx context.Context,
+	catalog cat.Catalog,
+	optimizer *xform.Optimizer,
+	factory *norm.Factory,
+	input string,
 ) (_ opt.Expr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -103,7 +112,7 @@ func buildAndOptimize(
 			mem: factory.Memo(),
 			cat: catalog,
 		},
-		coster: xform.MakeDefaultCoster(factory.Memo(), factory.EvalContext()),
+		coster: xform.MakeDefaultCoster(ctx, factory.EvalContext(), factory.Memo()),
 	}
 
 	// To create a valid optgen "file", we create a rule with a bogus match.
@@ -129,7 +138,7 @@ func buildAndOptimize(
 		return nil, errors.AssertionFailedf("expropt requires a relational expression")
 	}
 
-	eg.populateBestProps(expr, required)
+	eg.populateBestProps(ctx, expr, required)
 	if rel, ok := expr.(memo.RelExpr); ok {
 		eg.mem.SetRoot(rel, required)
 	}
@@ -377,10 +386,12 @@ func convertSlice(
 
 // populateBestProps sets the physical properties and costs of the expressions
 // in the tree. Returns the cost of the expression tree.
-func (eg *exprGen) populateBestProps(expr opt.Expr, required *physical.Required) memo.Cost {
+func (eg *exprGen) populateBestProps(
+	ctx context.Context, expr opt.Expr, required *physical.Required,
+) memo.Cost {
 	rel, _ := expr.(memo.RelExpr)
 	if rel != nil {
-		if !xform.CanProvidePhysicalProps(eg.f.EvalContext(), rel, required) {
+		if !xform.CanProvidePhysicalProps(ctx, eg.f.EvalContext(), rel, required) {
 			panic(errorf("operator %s cannot provide required props %s", rel.Op(), required))
 		}
 	}
@@ -393,7 +404,7 @@ func (eg *exprGen) populateBestProps(expr opt.Expr, required *physical.Required)
 		} else {
 			childProps = xform.BuildChildPhysicalPropsScalar(eg.mem, expr, i)
 		}
-		cost += eg.populateBestProps(expr.Child(i), childProps)
+		cost += eg.populateBestProps(ctx, expr.Child(i), childProps)
 	}
 
 	if rel != nil {
@@ -401,7 +412,7 @@ func (eg *exprGen) populateBestProps(expr opt.Expr, required *physical.Required)
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
 		provided.Ordering = ordering.BuildProvided(rel, &required.Ordering)
-		provided.Distribution = distribution.BuildProvided(eg.f.EvalContext(), rel, &required.Distribution)
+		provided.Distribution = distribution.BuildProvided(ctx, eg.f.EvalContext(), rel, &required.Distribution)
 
 		cost += eg.coster.ComputeCost(rel, required)
 		eg.mem.SetBestProps(rel, required, provided, cost)

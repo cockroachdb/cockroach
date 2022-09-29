@@ -153,7 +153,7 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 		// unoptimized-query-oracle roachtest.
 		disableRuleProbability = p
 	}
-	o.defaultCoster.Init(evalCtx, o.mem, costPerturbation, o.rng)
+	o.defaultCoster.Init(ctx, evalCtx, o.mem, costPerturbation, o.rng)
 	o.coster = &o.defaultCoster
 	if disableRuleProbability > 0 {
 		o.disableRulesRandom(disableRuleProbability)
@@ -567,7 +567,7 @@ func (o *Optimizer) optimizeGroupMember(
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	if CanProvidePhysicalProps(o.evalCtx, member, required) {
+	if CanProvidePhysicalProps(o.ctx, o.evalCtx, member, required) {
 		var cost memo.Cost
 		for i, n := 0, member.ChildCount(); i < n; i++ {
 			// Given required parent properties, get the properties required from
@@ -801,7 +801,7 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
 		provided.Ordering = ordering.BuildProvided(relParent, &parentProps.Ordering)
-		provided.Distribution = distribution.BuildProvided(o.evalCtx, relParent, &parentProps.Distribution)
+		provided.Distribution = distribution.BuildProvided(o.ctx, o.evalCtx, relParent, &parentProps.Distribution)
 		o.mem.SetBestProps(relParent, parentProps, &provided, relCost)
 	}
 
@@ -1089,7 +1089,7 @@ func (o *Optimizer) FormatMemo(flags FmtFlags) string {
 // the real computed cost, not the perturbed cost.
 func (o *Optimizer) RecomputeCost() {
 	var c coster
-	c.Init(o.evalCtx, o.mem, 0 /* perturbation */, nil /* rng */)
+	c.Init(o.ctx, o.evalCtx, o.mem, 0 /* perturbation */, nil /* rng */)
 
 	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
