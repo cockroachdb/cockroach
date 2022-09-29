@@ -314,6 +314,8 @@ type cloudStorageSink struct {
 
 var cloudStorageSinkIDAtomic int64
 
+const sinkCompressionGzip compressionAlgo = "gzip"
+
 // Files that are emitted can be partitioned by their earliest event time,
 // for example being emitted to topic/date/file.ndjson, or further split by hour.
 // Note that a file may contain events with timestamps that would normally
