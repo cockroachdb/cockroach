@@ -226,6 +226,15 @@ func jwtRunTest(t *testing.T, insecure bool) {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting jwks: %d", len(a.Vals))
 							}
 							jwtauthccl.JWTAuthJWKS.Override(context.Background(), &testServer.ClusterSettings().SV, a.Vals[0])
+						case "ident_map":
+							if len(a.Vals) != 1 {
+								t.Fatalf("wrong number of argumenets to jwt_cluster_setting ident_map: %d", len(a.Vals))
+							}
+							args := strings.Split(a.Vals[0], ",")
+							if len(args) != 3 {
+								t.Fatalf("wrong number of comma separated argumenets to jwt_cluster_setting ident_map: %d", len(a.Vals))
+							}
+							pgwire.ConnIdentityMapConf.Override(context.Background(), &testServer.ClusterSettings().SV, strings.Join(args, "    "))
 						default:
 							t.Fatalf("unknown jwt_cluster_setting: %s", a.Key)
 						}
