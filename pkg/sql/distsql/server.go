@@ -376,7 +376,7 @@ func (ds *ServerImpl) setupFlow(
 			// Most processors will override this Context with their own context in
 			// ProcessorBase. StartInternal().
 			Context:                   ctx,
-			Planner:                   &faketreeeval.DummyEvalPlanner{},
+			Planner:                   &faketreeeval.DummyEvalPlanner{Monitor: monitor},
 			PrivilegedAccessor:        &faketreeeval.DummyPrivilegedAccessor{},
 			SessionAccessor:           &faketreeeval.DummySessionAccessor{},
 			ClientNoticeSender:        &faketreeeval.DummyClientNoticeSender{},

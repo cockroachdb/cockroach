@@ -447,7 +447,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// former has the corresponding writer set.
 		batchReceiver = recv
 	}
-	ctx, flow, opChains, firstErr := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &setupReq, recv, batchReceiver, localState)
+	ctx, flow, opChains, firstErr := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Planner.Mon(), &setupReq, recv, batchReceiver, localState)
 
 	// Now wait for all the flows to be scheduled on remote nodes. Note that we
 	// are not waiting for the flows themselves to complete.
@@ -1293,7 +1293,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
-		subqueryResultMemAcc := planner.EvalContext().Mon.MakeBoundAccount()
+		subqueryResultMemAcc := planner.Mon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		if !dsp.PlanAndRunSubqueries(
 			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
@@ -1389,7 +1389,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		noteworthyMemoryUsageBytes,
 		dsp.distSQLSrv.Settings,
 	)
-	subqueryMonitor.StartNoReserved(ctx, evalCtx.Mon)
+	subqueryMonitor.StartNoReserved(ctx, evalCtx.Planner.Mon())
 	defer subqueryMonitor.Stop(ctx)
 
 	subqueryMemAccount := subqueryMonitor.MakeBoundAccount()
@@ -1721,7 +1721,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		noteworthyMemoryUsageBytes,
 		dsp.distSQLSrv.Settings,
 	)
-	postqueryMonitor.StartNoReserved(ctx, evalCtx.Mon)
+	postqueryMonitor.StartNoReserved(ctx, evalCtx.Planner.Mon())
 	defer postqueryMonitor.Stop(ctx)
 
 	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()

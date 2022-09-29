@@ -299,7 +299,7 @@ func runPlanInsidePlan(
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
-		subqueryResultMemAcc := params.p.EvalContext().Mon.MakeBoundAccount()
+		subqueryResultMemAcc := params.p.Mon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		if !params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx,

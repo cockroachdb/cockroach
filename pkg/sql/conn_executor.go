@@ -2815,7 +2815,6 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.IVarContainer = nil
 	evalCtx.Context.Context = ex.Ctx()
 	evalCtx.Txn = txn
-	evalCtx.Mon = ex.state.mon
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
@@ -2881,7 +2880,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
-	p.resetPlanner(ctx, txn, stmtTS, ex.sessionData())
+	p.resetPlanner(ctx, txn, stmtTS, ex.sessionData(), ex.state.mon)
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 }
 
