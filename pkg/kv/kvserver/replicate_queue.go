@@ -814,7 +814,7 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		}
 
 		if err != nil {
-			log.KvDistribution.Warningf(ctx, "error processing replica: %v%s", err, traceOutput)
+			log.KvDistribution.Infof(ctx, "error processing replica: %v%s", err, traceOutput)
 		} else if exceededDuration {
 			log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
 				processDuration, loggingThreshold, traceOutput)
