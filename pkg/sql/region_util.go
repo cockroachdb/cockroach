@@ -2333,10 +2333,12 @@ func (p *planner) checkNoRegionChangeUnderway(
 }
 
 // GetMultiregionConfig is part of the eval.Planner interface.
-func (p *planner) GetMultiregionConfig(databaseID descpb.ID) (interface{}, bool) {
+func (p *planner) GetMultiregionConfig(
+	ctx context.Context, databaseID descpb.ID,
+) (interface{}, bool) {
 
 	regionConfig, err := SynthesizeRegionConfig(
-		p.EvalContext().Ctx(),
+		ctx,
 		p.txn,
 		databaseID,
 		p.Descriptors(),
