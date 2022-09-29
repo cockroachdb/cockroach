@@ -190,12 +190,9 @@ func (dsp *DistSQLPlanner) ExecLocalAll(
 		Tracing: &SessionTracing{},
 	}
 	evalCtxFactory = func() *extendedEvalContext {
+		factoryEvalCtx.Context = evalCtx.Context
 		factoryEvalCtx.Placeholders = &p.semaCtx.Placeholders
 		factoryEvalCtx.Annotations = &p.semaCtx.Annotations
-		// Query diagnostics can change the Context; make sure we are using the
-		// same one.
-		// TODO(radu): consider removing this if/when #46164 is addressed.
-		factoryEvalCtx.Context = evalCtx.Context
 		return &factoryEvalCtx
 	}
 	return dsp.PlanAndRunAll(ctx, evalCtx, planCtx, p, recv, evalCtxFactory)
