@@ -143,6 +143,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
+        "//pkg/kv/kvserver/spanset",
         "//pkg/kv/kvserver/uncertainty",
         "//pkg/roachpb",
         "//pkg/settings/cluster",

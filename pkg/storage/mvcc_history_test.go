@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -56,6 +57,8 @@ var (
 	mvccHistoriesReader = util.ConstantWithMetamorphicTestChoice("mvcc-histories-reader",
 		"engine", "readonly", "batch", "snapshot").(string)
 	mvccHistoriesUseBatch   = util.ConstantWithMetamorphicTestBool("mvcc-histories-use-batch", false)
+	mvccHistoriesPeekBounds = util.ConstantWithMetamorphicTestChoice("mvcc-histories-peek-bounds",
+		"none", "left", "right", "both").(string)
 	sstIterVerify           = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
 	metamorphicIteratorSeed = util.ConstantWithMetamorphicTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
 	separateEngineBlocks    = util.ConstantWithMetamorphicTestBool("mvcc-histories-separate-engine-blocks", false)
@@ -984,8 +987,9 @@ func cmdClearTimeRange(e *evalCtx) error {
 	batch := e.engine.NewBatch()
 	defer batch.Close()
 
-	resume, err := storage.MVCCClearTimeRange(e.ctx, batch, e.ms, key, endKey, targetTs, ts,
-		nil, nil, clearRangeThreshold, int64(maxBatchSize), int64(maxBatchByteSize))
+	rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(batch, key, endKey)
+	resume, err := storage.MVCCClearTimeRange(e.ctx, rw, e.ms, key, endKey, targetTs, ts,
+		leftPeekBound, rightPeekBound, clearRangeThreshold, int64(maxBatchSize), int64(maxBatchByteSize))
 	if err != nil {
 		return err
 	}
@@ -1132,8 +1136,9 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	}
 
 	return e.withWriter("del_range_ts", func(rw storage.ReadWriter) error {
-		return storage.MVCCDeleteRangeUsingTombstone(
-			e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, idempotent, 0, msCovered)
+		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
+		return storage.MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs,
+			leftPeekBound, rightPeekBound, idempotent, 0, msCovered)
 	})
 }
 
@@ -1159,8 +1164,9 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 		e.scanArg("rangeThreshold", &rangeThreshold)
 	}
 	return e.withWriter("del_range_pred", func(rw storage.ReadWriter) error {
-		resumeSpan, err := storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts,
-			localTs, nil, nil, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), 0)
+		rw, leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(rw, key, endKey)
+		resumeSpan, err := storage.MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
+			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), 0)
 
 		if resumeSpan != nil {
 			e.results.buf.Printf("del_range_pred: resume span [%s,%s)\n", resumeSpan.Key,
@@ -2341,6 +2347,46 @@ func (e *evalCtx) iterErr() error {
 		}
 	}
 	return nil
+}
+
+// metamorphicPeekBounds generates MVCC range key peek bounds for a command
+// based on its keyspan, and enables spanset assertions for the ReadWriter.
+func (e *evalCtx) metamorphicPeekBounds(
+	rw storage.ReadWriter, start, end roachpb.Key,
+) (storage.ReadWriter, roachpb.Key, roachpb.Key) {
+	leftPeekBound, rightPeekBound := start.Prevish(8), end.Next()
+	if end == nil {
+		rightPeekBound = nil
+	}
+
+	switch mvccHistoriesPeekBounds {
+	case "none":
+		leftPeekBound, rightPeekBound = nil, nil
+	case "left":
+		rightPeekBound = nil
+	case "right":
+		leftPeekBound = nil
+	case "both":
+	default:
+		e.t.Fatalf("invalid peek bound kind %q", mvccHistoriesPeekBounds)
+		return nil, nil, nil
+	}
+
+	if leftPeekBound != nil || rightPeekBound != nil {
+		ss := &spanset.SpanSet{}
+		ss.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: start, EndKey: end})
+		peekSpan := roachpb.Span{Key: leftPeekBound, EndKey: rightPeekBound}
+		if peekSpan.Key == nil {
+			peekSpan.Key = keys.LocalMax
+		}
+		if peekSpan.EndKey == nil {
+			peekSpan.EndKey = keys.MaxKey
+		}
+		ss.AddNonMVCC(spanset.SpanReadOnly, peekSpan)
+		rw = spanset.NewReadWriterAt(rw, ss, hlc.Timestamp{})
+	}
+
+	return rw, leftPeekBound, rightPeekBound
 }
 
 func toKey(s string) roachpb.Key {
