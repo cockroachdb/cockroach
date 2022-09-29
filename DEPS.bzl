@@ -8804,20 +8804,20 @@ def go_deps():
         name = "io_etcd_go_etcd_api_v3",
         build_file_proto_mode = "disable_global",
         importpath = "go.etcd.io/etcd/api/v3",
-        sha256 = "8754587bf6d4b1bc889d519355ea8899e093d8550e0d98730f8570d608f998f9",
-        strip_prefix = "go.etcd.io/etcd/api/v3@v3.5.0",
+        sha256 = "7664ddbf05148db36ec74d8c5e72ba65db25cd594ea38a471077298c398a9ea7",
+        strip_prefix = "go.etcd.io/etcd/api/v3@v3.6.0-alpha.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/etcd/api/v3/io_etcd_go_etcd_api_v3-v3.5.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/etcd/api/v3/io_etcd_go_etcd_api_v3-v3.6.0-alpha.0.zip",
         ],
     )
     go_repository(
         name = "io_etcd_go_etcd_client_pkg_v3",
         build_file_proto_mode = "disable_global",
         importpath = "go.etcd.io/etcd/client/pkg/v3",
-        sha256 = "c0ca209767c5734c6ed023888ba5be02aab5bd3c4d018999467f2bfa8bf65ee3",
-        strip_prefix = "go.etcd.io/etcd/client/pkg/v3@v3.5.0",
+        sha256 = "abfb4724be4ea8b042737efbdd1bc11ba4d3c4c8dd8e749c7791adf8d16ef062",
+        strip_prefix = "go.etcd.io/etcd/client/pkg/v3@v3.6.0-alpha.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/etcd/client/pkg/v3/io_etcd_go_etcd_client_pkg_v3-v3.5.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/etcd/client/pkg/v3/io_etcd_go_etcd_client_pkg_v3-v3.6.0-alpha.0.zip",
         ],
     )
     go_repository(
@@ -8831,16 +8831,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "io_etcd_go_etcd_pkg_v3",
-        build_file_proto_mode = "disable_global",
-        importpath = "go.etcd.io/etcd/pkg/v3",
-        sha256 = "1700dfed48becf82ccfe6865fe59daac2121d48f60b7c4bf090f0ff2320d33d4",
-        strip_prefix = "go.etcd.io/etcd/pkg/v3@v3.0.0-20201109164711-01844fd28560",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/etcd/pkg/v3/io_etcd_go_etcd_pkg_v3-v3.0.0-20201109164711-01844fd28560.zip",
-        ],
-    )
-    go_repository(
         name = "io_etcd_go_etcd_raft_v3",
         build_directives = [
             "gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -8851,10 +8841,10 @@ def go_deps():
         ],
         build_file_proto_mode = "default",
         importpath = "go.etcd.io/etcd/raft/v3",
-        sha256 = "62faedd81e10061a4e0d7476865a62b84121ea462514afeaa1b9d66cc53b5a4b",
-        strip_prefix = "go.etcd.io/etcd/raft/v3@v3.0.0-20210320072418-e51c697ec6e8",
+        sha256 = "c38bd2461780b85b5a54eb4a14c3c6f8ad67ba213d92677e918f984e29281736",
+        strip_prefix = "go.etcd.io/etcd/raft/v3@v3.6.0-alpha.0.0.20220928120404-d379e6221e10",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/etcd/raft/v3/io_etcd_go_etcd_raft_v3-v3.0.0-20210320072418-e51c697ec6e8.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/go.etcd.io/etcd/raft/v3/io_etcd_go_etcd_raft_v3-v3.6.0-alpha.0.0.20220928120404-d379e6221e10.zip",
         ],
     )
     go_repository(
