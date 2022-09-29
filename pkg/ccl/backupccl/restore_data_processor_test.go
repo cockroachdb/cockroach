@@ -255,7 +255,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
 					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir),
 					nil, /* ie */
-					nil, /* cf */
+					nil, /* ief */
 					nil, /* kvDB */
 					nil, /* limiters */
 					opts...)

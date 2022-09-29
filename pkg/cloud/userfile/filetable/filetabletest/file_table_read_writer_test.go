@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -107,8 +107,11 @@ func TestListAndDeleteFiles(t *testing.T) {
 	s, _, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
+	executor := filetable.MakeInternalFileToTableExecutor(
+		s.InternalExecutor().(*sql.InternalExecutor),
+		s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
+		kvDB,
+	)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, username.RootUserName())
 	require.NoError(t, err)
@@ -158,8 +161,11 @@ func TestReadWriteFile(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
+	executor := filetable.MakeInternalFileToTableExecutor(
+		s.InternalExecutor().(*sql.InternalExecutor),
+		s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
+		kvDB,
+	)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, username.RootUserName())
 	require.NoError(t, err)
@@ -341,8 +347,11 @@ func TestUserGrants(t *testing.T) {
 	require.NoError(t, err)
 
 	// Operate under non-admin user.
-	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
+	executor := filetable.MakeInternalFileToTableExecutor(
+		s.InternalExecutor().(*sql.InternalExecutor),
+		s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
+		kvDB,
+	)
 	johnUser := username.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, johnUser)
@@ -425,8 +434,11 @@ func TestDifferentUserDisallowed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Operate under non-admin user john.
-	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
+	executor := filetable.MakeInternalFileToTableExecutor(
+		s.InternalExecutor().(*sql.InternalExecutor),
+		s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
+		kvDB,
+	)
 	johnUser := username.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, johnUser)
@@ -483,8 +495,11 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Operate under non-admin user john.
-	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
+	executor := filetable.MakeInternalFileToTableExecutor(
+		s.InternalExecutor().(*sql.InternalExecutor),
+		s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
+		kvDB,
+	)
 	johnUser := username.MakeSQLUsernameFromPreNormalizedString("john")
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, johnUser)
@@ -518,8 +533,11 @@ func TestDatabaseScope(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	executor := filetable.MakeInternalFileToTableExecutor(s.InternalExecutor().(*sql.
-		InternalExecutor), s.CollectionFactory().(*descs.CollectionFactory), kvDB)
+	executor := filetable.MakeInternalFileToTableExecutor(
+		s.InternalExecutor().(*sql.InternalExecutor),
+		s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
+		kvDB,
+	)
 	fileTableReadWriter, err := filetable.NewFileToTableSystem(ctx, qualifiedTableName,
 		executor, username.RootUserName())
 	require.NoError(t, err)

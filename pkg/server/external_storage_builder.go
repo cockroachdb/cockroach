@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,7 +39,7 @@ type externalStorageBuilder struct {
 	blobClientFactory blobs.BlobClientFactory
 	initCalled        bool
 	ie                *sql.InternalExecutor
-	cf                *descs.CollectionFactory
+	ief               sqlutil.InternalExecutorFactory
 	db                *kv.DB
 	limiters          cloud.Limiters
 	recorder          multitenant.TenantSideExternalIORecorder
@@ -53,7 +53,7 @@ func (e *externalStorageBuilder) init(
 	nodeDialer *nodedialer.Dialer,
 	testingKnobs base.TestingKnobs,
 	ie *sql.InternalExecutor,
-	cf *descs.CollectionFactory,
+	ief sqlutil.InternalExecutorFactory,
 	db *kv.DB,
 	recorder multitenant.TenantSideExternalIORecorder,
 ) {
@@ -69,7 +69,7 @@ func (e *externalStorageBuilder) init(
 	e.blobClientFactory = blobClientFactory
 	e.initCalled = true
 	e.ie = ie
-	e.cf = cf
+	e.ief = ief
 	e.db = db
 	e.limiters = cloud.MakeLimiters(ctx, &settings.SV)
 	e.recorder = recorder
@@ -81,8 +81,8 @@ func (e *externalStorageBuilder) makeExternalStorage(
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie,
-		e.cf, e.db, e.limiters, append(e.defaultOptions(), opts...)...)
+	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie, e.ief,
+		e.db, e.limiters, append(e.defaultOptions(), opts...)...)
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
@@ -92,7 +92,7 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory,
-		user, e.ie, e.cf, e.db, e.limiters, append(e.defaultOptions(), opts...)...)
+		user, e.ie, e.ief, e.db, e.limiters, append(e.defaultOptions(), opts...)...)
 }
 
 func (e *externalStorageBuilder) defaultOptions() []cloud.ExternalStorageOption {
