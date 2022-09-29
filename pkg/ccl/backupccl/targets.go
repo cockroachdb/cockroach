@@ -394,11 +394,14 @@ func checkMissingIntroducedSpans(
 				_, introduced := tablesIntroduced[table.GetID()]
 
 				if !inPrevBackup && !introduced {
-					tableError := errors.Newf("table %v was not properly backed up after its import"+
-						" completed. To continue the restore, "+
-						"either 1) restore from a different full backup; 2) restore to a system time before"+
-						" the import completed; 3) or remove %v from the restore targets.",
-						table.Name, table.Name)
+					tableError := errors.Newf("table %q cannot be safely restored from this backup."+
+						" This backup is affected by issue #88042, which produced incorrect backups after an IMPORT."+
+						" To continue the restore, you can either:"+
+						" 1) restore to a system time before the import completed, %v;"+
+						" 2) restore with a newer backup chain (a full backup [+ incrementals])"+
+						" taken after the current backup target;"+
+						" 3) or remove table %v from the restore targets.",
+						table.Name, mainBackupManifests[i].StartTime.GoTime().String(), table.Name)
 					return errors.WithIssueLink(tableError, errors.IssueLink{
 						IssueURL: "https://github.com/cockroachdb/cockroach/issues/88042",
 						Detail: `An incremental database backup with revision history can incorrectly backup data for a table 

@@ -1425,7 +1425,9 @@ func getReintroducedSpans(
 	// iterate two fields in the _last_ backup's manifest:
 	//
 	// 1. manifest.Descriptors contains a list of descriptors _explicitly_
-	// included in the backup, gathered at backup startTime.
+	// included in the backup, gathered at backup startTime. This includes all
+	// public descriptors, and in the case of cluster backups, offline
+	// descriptors.
 	//
 	// 2. manifest.DescriptorChanges contains a list of descriptor changes tracked
 	// in the backup. While investigating #88042, it was discovered that during
@@ -1447,6 +1449,10 @@ func getReintroducedSpans(
 		}
 	}
 
+	// Gather all the descriptors that were offline at the endTime of the last
+	// backup, according the backup's descriptor changes. If the last descriptor
+	// change in the previous backup interval put the table offline, then that
+	// backup was offline at the endTime of the last backup.
 	latestTableDescChangeInLastBackup := make(map[descpb.ID]*descpb.TableDescriptor)
 	for _, rev := range lastBackup.DescriptorChanges {
 		if table, _, _, _, _ := descpb.FromDescriptor(rev.Desc); table != nil {
@@ -1458,7 +1464,7 @@ func getReintroducedSpans(
 		}
 	}
 
-	if knobs := execCfg.BackupRestoreTestingKnobs; knobs != nil && knobs.SkipDescriptorChangeIntroduction {
+	if knobs := execCfg.BackupRestoreTestingKnobs; knobs == nil || !knobs.SkipDescriptorChangeIntroduction {
 		for _, table := range latestTableDescChangeInLastBackup {
 			if table.Offline() {
 				offlineInLastBackup[table.GetID()] = struct{}{}
