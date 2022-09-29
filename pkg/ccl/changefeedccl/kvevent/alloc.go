@@ -46,6 +46,17 @@ func (a *Alloc) Release(ctx context.Context) {
 	a.clear()
 }
 
+// AdjustBytesToTarget adjust byte allocation to the specified target.
+// Target bytes cannot be adjusted to the higher level than the current allocation.
+func (a *Alloc) AdjustBytesToTarget(ctx context.Context, targetBytes int64) {
+	if a.isZero() || targetBytes <= 0 || targetBytes >= a.bytes {
+		return
+	}
+	toRelease := a.bytes - targetBytes
+	a.bytes = targetBytes
+	a.ap.Release(ctx, toRelease, 0)
+}
+
 // Bytes returns the size of this alloc in bytes.
 func (a *Alloc) Bytes() int64 {
 	return a.bytes
