@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -65,6 +67,7 @@ func compareRows(
 
 func TestDiskRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -108,6 +111,8 @@ func TestDiskRowContainer(t *testing.T) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	evalCtx := eval.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{Monitor: evalCtx.TestingMon}
 	diskMonitor := mon.NewMonitor(
 		"test-disk",
 		mon.DiskResource,
@@ -368,6 +373,7 @@ func makeUniqueRows(
 
 func TestDiskRowContainerDiskFull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -406,6 +412,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 
 func TestDiskRowContainerFinalIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -536,6 +543,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 
 func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()

@@ -40,6 +40,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
 	}
 	base := flowinfra.NewFlowBase(
