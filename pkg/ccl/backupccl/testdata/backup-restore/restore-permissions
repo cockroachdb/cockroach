@@ -180,6 +180,16 @@ subtest cluster-restore
 new-server name=s2 allow-implicit-access share-io-dir=s1
 ----
 
+# The cluster restore below needs to drop the defaultdb table and can end up
+# waiting up to 5 minutes by default for that to happen.
+#
+# TODO(ssd): We could move this into our test setup code in the driver. But, for
+# reasons that aren't clear to me, other tests that also do cluster retores are
+# not impacted by this.
+exec-sql
+SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '1s'
+----
+
 exec-sql
 CREATE USER testuser;
 ----

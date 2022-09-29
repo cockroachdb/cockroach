@@ -81,6 +81,7 @@ var LeaseJitterFraction = settings.RegisterFloatSetting(
 func (m *Manager) WaitForNoVersion(
 	ctx context.Context, id descpb.ID, retryOpts retry.Options,
 ) error {
+	logPacer := log.Every(time.Minute)
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
@@ -103,7 +104,7 @@ func (m *Manager) WaitForNoVersion(
 		if count == 0 {
 			break
 		}
-		if count != lastCount {
+		if count != lastCount || logPacer.ShouldLog() {
 			lastCount = count
 			log.Infof(ctx, "waiting for %d leases to expire: desc=%d", count, id)
 		}
@@ -125,6 +126,7 @@ func (m *Manager) WaitForNoVersion(
 func (m *Manager) WaitForOneVersion(
 	ctx context.Context, id descpb.ID, retryOpts retry.Options,
 ) (desc catalog.Descriptor, _ error) {
+	logPacer := log.Every(time.Minute)
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			sc := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
@@ -158,7 +160,7 @@ func (m *Manager) WaitForOneVersion(
 		if count == 0 {
 			break
 		}
-		if count != lastCount {
+		if count != lastCount || logPacer.ShouldLog() {
 			lastCount = count
 			log.Infof(ctx, "waiting for %d leases to expire: desc=%v", count, descs)
 		}
