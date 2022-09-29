@@ -482,7 +482,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │                 - 107
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP TABLE db.sc.t
 │                   redactedstatement: DROP TABLE ‹db›.‹sc›.‹t›
@@ -492,15 +492,30 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 1 element transitioning toward ABSENT
+        ├── • 3 elements transitioning toward ABSENT
         │   │
-        │   └── • Table:{DescID: 107}
-        │       │ DROPPED → ABSENT
+        │   ├── • Table:{DescID: 107}
+        │   │   │ DROPPED → ABSENT
+        │   │   │
+        │   │   └── • PreviousTransactionPrecedence dependency from DROPPED Table:{DescID: 107}
+        │   │         rule: "descriptor DROPPED in transaction before removal"
+        │   │
+        │   ├── • IndexData:{DescID: 107, IndexID: 1}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "index removed before garbage collection"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 107, ReferencedDescID: 104}
+        │   │         rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │
+        │   └── • TableData:{DescID: 107, ReferencedDescID: 104}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       └── • PreviousTransactionPrecedence dependency from DROPPED Table:{DescID: 107}
-        │             rule: "descriptor DROPPED in transaction before removal"
+        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 107}
+        │             rule: "table removed right before garbage collection"
         │
-        └── • 4 Mutation operations
+        └── • 5 Mutation operations
             │
             ├── • LogEvent
             │     Element:
@@ -517,6 +532,13 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
             │     TargetStatus: 1
             │
             ├── • CreateGCJobForTable
+            │     DatabaseID: 104
+            │     StatementForDropJob:
+            │       Statement: DROP TABLE db.sc.t
+            │     TableID: 107
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 1
             │     StatementForDropJob:
             │       Statement: DROP TABLE db.sc.t
             │     TableID: 107

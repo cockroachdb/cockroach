@@ -90,13 +90,13 @@ type MutationVisitorStateUpdater interface {
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
 
 	// AddNewGCJobForTable enqueues a GC job for the given table.
-	AddNewGCJobForTable(stmt scop.StatementForDropJob, descriptor catalog.TableDescriptor)
+	AddNewGCJobForTable(stmt scop.StatementForDropJob, dbID, tableID descpb.ID)
 
 	// AddNewGCJobForDatabase enqueues a GC job for the given database.
-	AddNewGCJobForDatabase(stmt scop.StatementForDropJob, descriptor catalog.DatabaseDescriptor)
+	AddNewGCJobForDatabase(stmt scop.StatementForDropJob, dbID descpb.ID)
 
 	// AddNewGCJobForIndex enqueues a GC job for the given table index.
-	AddNewGCJobForIndex(stmt scop.StatementForDropJob, tbl catalog.TableDescriptor, index catalog.Index)
+	AddNewGCJobForIndex(stmt scop.StatementForDropJob, tableID descpb.ID, indexID descpb.IndexID)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
 	AddNewSchemaChangerJob(

@@ -263,6 +263,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	index.TemporaryIndexID = tempIndexID
 	sec := &scpb.SecondaryIndex{Index: index}
 	b.Add(sec)
+	b.Add(&scpb.IndexData{TableID: sec.TableID, IndexID: sec.IndexID})
 	b.Add(&scpb.IndexName{
 		TableID: index.TableID,
 		IndexID: index.IndexID,
@@ -290,6 +291,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		))
 	}
 	b.AddTransient(temp)
+	b.AddTransient(&scpb.IndexData{TableID: temp.TableID, IndexID: temp.IndexID})
 	for _, ic := range newIndexColumns {
 		tic := protoutil.Clone(ic).(*scpb.IndexColumn)
 		tic.IndexID = tempIndexID

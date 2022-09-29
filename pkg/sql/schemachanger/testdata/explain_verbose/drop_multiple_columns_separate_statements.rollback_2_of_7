@@ -146,7 +146,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
     │   │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │
-    │   └── • 16 Mutation operations
+    │   └── • 15 Mutation operations
     │       │
     │       ├── • SetColumnName
     │       │     ColumnID: 3
@@ -189,13 +189,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │       │
     │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 2
-    │       │     TableID: 104
-    │       │
-    │       ├── • CreateGCJobForIndex
-    │       │     IndexID: 3
-    │       │     StatementForDropJob:
-    │       │       Rollback: true
-    │       │       Statement: removed primary index; ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -247,11 +240,26 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
-        ├── • 1 element transitioning toward ABSENT
+        ├── • 3 elements transitioning toward ABSENT
+        │   │
+        │   ├── • IndexData:{DescID: 104, IndexID: 3}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
+        │   │
+        │   ├── • IndexData:{DescID: 104, IndexID: 4}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104, IndexID: 3}
+        │   │   │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
         │   │
         │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │       │ DELETE_ONLY → ABSENT
@@ -262,18 +270,24 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 2 of 7;
         │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │
-        └── • 4 Mutation operations
+        └── • 5 Mutation operations
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 3
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 4
+            │     TableID: 104
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 4
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t DROP COLUMN j
-            │         CASCADE
-            │     TableID: 104
-            │
-            ├── • MakeIndexAbsent
-            │     IndexID: 4
+            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

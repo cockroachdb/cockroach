@@ -1,6 +1,6 @@
 setup
-CREATE SCHEMA SC1;
-CREATE SEQUENCE sc1.SQ1;
+CREATE SCHEMA sc1;
+CREATE SEQUENCE sc1.sq1;
 CREATE TABLE sc1.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), val INT8 DEFAULT nextval('sc1.sq1'));
 CREATE VIEW sc1.v1 AS (SELECT name FROM sc1.t1);
 CREATE VIEW sc1.v2 AS (SELECT name AS n1, name AS n2 FROM sc1.v1);
@@ -535,6 +535,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [IndexData:{DescID: 106, IndexID: 1}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}, ABSENT]
   kind: Precedence
@@ -619,6 +623,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Schema:{DescID: 104}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
+- from: [Sequence:{DescID: 105}, ABSENT]
+  to:   [TableData:{DescID: 105, ReferencedDescID: 100}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105]}, ABSENT]
   kind: SameStagePrecedence
@@ -651,6 +659,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Sequence:{DescID: 105}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
+- from: [Table:{DescID: 106}, ABSENT]
+  to:   [TableData:{DescID: 106, ReferencedDescID: 100}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105]}, ABSENT]
   kind: Precedence
@@ -747,6 +759,10 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   to:   [Table:{DescID: 106}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
+- from: [TableData:{DescID: 106, ReferencedDescID: 100}, DROPPED]
+  to:   [IndexData:{DescID: 106, IndexID: 1}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
 - from: [View:{DescID: 107}, DROPPED]
   to:   [ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
@@ -1718,17 +1734,20 @@ PreCommitPhase stage 1 of 1 with 74 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 20 MutationType ops
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 21 MutationType ops
         pending
       Statements:
       - statement: DROP SCHEMA defaultdb.sc1 CASCADE
         redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
         statementtag: DROP SCHEMA
-PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
   transitions:
     [[Schema:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[Sequence:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
+    [[IndexData:{DescID: 106, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
@@ -1766,6 +1785,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
       TableID: 105
@@ -1783,6 +1803,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP SCHEMA defaultdb.sc1 CASCADE
       TableID: 106
@@ -1944,6 +1965,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 113
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP SCHEMA defaultdb.sc1 CASCADE
+      TableID: 106
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 100
       JobID: 1

@@ -814,6 +814,13 @@ func TestLogic_fuzzystrmatch(
 	runLogicTest(t, "fuzzystrmatch")
 }
 
+func TestLogic_gc_job_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "gc_job_mixed")
+}
+
 func TestLogic_generator_probe_ranges(
 	t *testing.T,
 ) {

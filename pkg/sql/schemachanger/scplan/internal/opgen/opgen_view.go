@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -36,7 +37,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_TXN_DROPPED,
-				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.MarkDescriptorAsSyntheticallyDropped {
+				emit(func(this *scpb.View, md *opGenContext) *scop.MarkDescriptorAsSyntheticallyDropped {
 					return &scop.MarkDescriptorAsSyntheticallyDropped{
 						DescriptorID: this.ViewID,
 					}
@@ -74,26 +75,26 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.View, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.CreateGCJobForTable {
-					if !this.IsMaterialized {
-						return nil
-
-					}
-					return &scop.CreateGCJobForTable{
-						TableID:             this.ViewID,
-						StatementForDropJob: statementForDropJob(this, md),
-					}
-				}),
-				emit(func(this *scpb.View) *scop.DeleteDescriptor {
-					if !this.IsMaterialized {
-						return &scop.DeleteDescriptor{
-							DescriptorID: this.ViewID,
+				emit(func(this *scpb.View, md *opGenContext) *scop.CreateGCJobForTable {
+					if this.IsMaterialized && !md.ActiveVersion.IsActive(clusterversion.V23_1) {
+						return &scop.CreateGCJobForTable{
+							TableID:             this.ViewID,
+							DatabaseID:          databaseIDFromDroppedNamespaceTarget(md, this.ViewID),
+							StatementForDropJob: statementForDropJob(this, md),
 						}
 					}
 					return nil
+				}),
+				emit(func(this *scpb.View) *scop.DeleteDescriptor {
+					if this.IsMaterialized {
+						return nil
+					}
+					return &scop.DeleteDescriptor{
+						DescriptorID: this.ViewID,
+					}
 				}),
 			),
 		),

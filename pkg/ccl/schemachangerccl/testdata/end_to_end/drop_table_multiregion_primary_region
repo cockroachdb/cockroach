@@ -95,7 +95,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
 upsert descriptor #105
    type:
      arrayTypeId: 107

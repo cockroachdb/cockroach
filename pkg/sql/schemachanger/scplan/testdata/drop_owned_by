@@ -552,19 +552,25 @@ PreCommitPhase stage 1 of 1 with 63 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 18 MutationType ops
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 20 MutationType ops
         pending
       Statements:
       - statement: DROP OWNED BY r
         redactedstatement: DROP OWNED BY r
         statementtag: DROP OWNED BY
-PostCommitNonRevertiblePhase stage 1 of 1 with 30 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
   transitions:
     [[Schema:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
     [[Sequence:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
+    [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 109, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 107, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
+    [[IndexData:{DescID: 108, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 108, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 110}, ABSENT], DROPPED] -> ABSENT
     [[EnumType:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
     [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], DROPPED] -> ABSENT
@@ -599,6 +605,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 30 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP OWNED BY r
       TableID: 106
@@ -616,6 +623,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 30 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP OWNED BY r
       TableID: 109
@@ -633,6 +641,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 30 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP OWNED BY r
       TableID: 107
@@ -650,6 +659,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 30 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP OWNED BY r
       TableID: 108
@@ -741,6 +751,16 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 30 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 113
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP OWNED BY r
+      TableID: 109
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP OWNED BY r
+      TableID: 108
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 100
       JobID: 1

@@ -336,7 +336,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │                 - 108
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
 │                   redactedstatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
@@ -347,15 +347,30 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 1 element transitioning toward ABSENT
+        ├── • 3 elements transitioning toward ABSENT
         │   │
-        │   └── • Table:{DescID: 108}
-        │       │ DROPPED → ABSENT
+        │   ├── • Table:{DescID: 108}
+        │   │   │ DROPPED → ABSENT
+        │   │   │
+        │   │   └── • PreviousTransactionPrecedence dependency from DROPPED Table:{DescID: 108}
+        │   │         rule: "descriptor DROPPED in transaction before removal"
+        │   │
+        │   ├── • IndexData:{DescID: 108, IndexID: 1}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "index removed before garbage collection"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 108, ReferencedDescID: 104}
+        │   │         rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │
+        │   └── • TableData:{DescID: 108, ReferencedDescID: 104}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       └── • PreviousTransactionPrecedence dependency from DROPPED Table:{DescID: 108}
-        │             rule: "descriptor DROPPED in transaction before removal"
+        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
+        │             rule: "table removed right before garbage collection"
         │
-        └── • 5 Mutation operations
+        └── • 6 Mutation operations
             │
             ├── • LogEvent
             │     Element:
@@ -373,6 +388,13 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │     TargetStatus: 1
             │
             ├── • CreateGCJobForTable
+            │     DatabaseID: 104
+            │     StatementForDropJob:
+            │       Statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
+            │     TableID: 108
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 1
             │     StatementForDropJob:
             │       Statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
             │     TableID: 108

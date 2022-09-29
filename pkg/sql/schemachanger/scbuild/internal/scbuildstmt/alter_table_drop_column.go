@@ -210,7 +210,7 @@ func dropColumn(
 				Table: *tn,
 				Index: tree.UnrestrictedName(indexName.Name),
 			}
-			dropSecondaryIndex(b, &name, behavior, e, indexElts)
+			dropSecondaryIndex(b, &name, behavior, e)
 		case *scpb.UniqueWithoutIndexConstraint:
 			// TODO(ajwerner): Support dropping UNIQUE WITHOUT INDEX constraints.
 			panic(errors.Wrap(scerrors.NotImplementedError(n),
@@ -405,8 +405,8 @@ func handleDropColumnCreateNewPrimaryIndex(
 		panic(errors.AssertionFailedf("can only drop columns which are stored in the primary index, this one is %v ",
 			dropped.Kind))
 	}
-	in, temp := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
 	out.apply(b.Drop)
+	in, temp := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
 	in.apply(b.Add)
 	temp.apply(b.AddTransient)
 	return in.primary

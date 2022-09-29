@@ -106,7 +106,6 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	err := scrun.RunSchemaChangesInJob(
 		ctx,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
-		execCfg.Settings,
 		deps,
 		n.job.ID(),
 		payload.DescriptorIDs,

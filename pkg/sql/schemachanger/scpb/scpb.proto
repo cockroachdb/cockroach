@@ -62,6 +62,7 @@ enum Status {
   TRANSIENT_MERGED = 19;
   TRANSIENT_VALIDATED = 20;
   TRANSIENT_PUBLIC = 21;
+  TRANSIENT_DROPPED = 22;
 }
 
 // TargetMetadata refers to the metadata for individual elements, where
