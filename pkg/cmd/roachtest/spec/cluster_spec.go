@@ -41,6 +41,7 @@ type ClusterSpec struct {
 	NodeCount    int
 	// CPUs is the number of CPUs per node.
 	CPUs           int
+	HighMem        bool
 	SSDs           int
 	VolumeSize     int
 	PreferLocalSSD bool
@@ -77,6 +78,9 @@ func ClustersCompatible(s1, s2 ClusterSpec) bool {
 // String implements fmt.Stringer.
 func (s ClusterSpec) String() string {
 	str := fmt.Sprintf("n%dcpu%d", s.NodeCount, s.CPUs)
+	if s.HighMem {
+		str += "m"
+	}
 	if s.Geo {
 		str += "-Geo"
 	}
@@ -111,11 +115,11 @@ func (s *ClusterSpec) Args(extra ...string) ([]string, error) {
 			// based on the cloud and CPU count.
 			switch s.Cloud {
 			case AWS:
-				machineType = AWSMachineType(s.CPUs)
+				machineType = AWSMachineType(s.CPUs, s.HighMem)
 			case GCE:
-				machineType = GCEMachineType(s.CPUs)
+				machineType = GCEMachineType(s.CPUs, s.HighMem)
 			case Azure:
-				machineType = AzureMachineType(s.CPUs)
+				machineType = AzureMachineType(s.CPUs, s.HighMem)
 			case Local:
 			// Don't need to set machineType.
 			default:

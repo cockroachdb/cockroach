@@ -28,6 +28,17 @@ func CPU(n int) Option {
 	return nodeCPUOption(n)
 }
 
+type nodeHighMemOption bool
+
+func (o nodeHighMemOption) apply(spec *ClusterSpec) {
+	spec.HighMem = bool(o)
+}
+
+// HighMem requests nodes with additional memory per CPU.
+func HighMem(enabled bool) Option {
+	return nodeHighMemOption(enabled)
+}
+
 type volumeSizeOption int
 
 func (o volumeSizeOption) apply(spec *ClusterSpec) {
