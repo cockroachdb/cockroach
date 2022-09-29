@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,6 +41,7 @@ func testAggregateResultDeepCopy(
 ) {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
+	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{Monitor: evalCtx.TestingMon}
 	argTypes := []*types.T{firstArgs[0].ResolvedType()}
 	otherArgs = flattenArgs(otherArgs...)
 	if len(otherArgs) == 0 {
@@ -575,6 +577,7 @@ func runBenchmarkAggregate(
 ) {
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
+	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{Monitor: evalCtx.TestingMon}
 	argTypes := []*types.T{firstArgs[0].ResolvedType()}
 	otherArgs = flattenArgs(otherArgs...)
 	if len(otherArgs) == 0 {

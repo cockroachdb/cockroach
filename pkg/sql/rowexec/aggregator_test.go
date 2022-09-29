@@ -426,6 +426,7 @@ func BenchmarkAggregation(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 
 	for _, aggFunc := range aggFuncs {
@@ -480,6 +481,7 @@ func BenchmarkCountRows(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 
 	b.SetBytes(int64(8 * numRows * numCols))
@@ -507,6 +509,7 @@ func BenchmarkGrouping(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 	spec := &execinfrapb.AggregatorSpec{
 		GroupCols: []uint32{0},
@@ -558,6 +561,7 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 
 	for _, aggFunc := range aggFuncs {

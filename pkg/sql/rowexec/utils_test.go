@@ -57,6 +57,7 @@ func runProcessorTest(
 	flowCtx := execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st, Stopper: stopper, DistSender: distSender},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Txn:     txn,
 	}
 
