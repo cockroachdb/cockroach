@@ -126,7 +126,15 @@ func (c *ConcurrentBufferGuard) ForceSync() {
 func (c *ConcurrentBufferGuard) syncRLocked() {
 	// We upgrade the read-lock to a write-lock, then when we are done flushing,
 	// the lock is downgraded to a read-lock.
-	// Note: this looks incorrect, see https://github.com/cockroachdb/cockroach/issues/83080
+	//
+	// This code looks dangerous (upgrading a read-lock to a write-lock is not
+	// an atomic operation), but it is safe here because the atomic add in
+	// reserveMsgBlockIndex ensures that only one goroutine writing into the
+	// buffer (the one that reserves the index just beyond the buffer's length)
+	// will attempt to perform the flush. The other goroutines will either
+	// write into the buffer and release their locks (if they reserved an index
+	// within the buffer's length) or release their locks and wait on the
+	// flushDone condition to try again.
 	c.flushSyncLock.RUnlock()
 	defer c.flushSyncLock.RLock()
 	c.flushSyncLock.Lock()
