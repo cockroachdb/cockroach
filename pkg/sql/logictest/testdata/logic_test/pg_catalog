@@ -4705,8 +4705,6 @@ SELECT cur_max_builtin_oid FROM [SELECT max(oid) as cur_max_builtin_oid FROM pg_
 ## existing functions at init time. Though the changes to builtin function OID is
 ## generally ok, it's still better if we could move the new implement to end of the
 ## list at init time (see all_builtins.go)
-## TODO(chengxiong): consider to have a deterministic list of builtin function oids
-## so that new implementations can just be added to it.
 query TT
 SELECT proname, oid FROM pg_catalog.pg_proc WHERE oid = $cur_max_builtin_oid
 ----
