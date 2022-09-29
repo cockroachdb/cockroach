@@ -707,10 +707,20 @@ bit_in
 query T
 SELECT to_regprocedure('bit_in')
 ----
+NULL
+
+query T
+SELECT to_regprocedure('bit_in(int)')
+----
 bit_in
 
 query T
 SELECT to_regprocedure('version')
+----
+NULL
+
+query T
+SELECT to_regprocedure('version()')
 ----
 version
 

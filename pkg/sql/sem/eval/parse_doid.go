@@ -14,10 +14,13 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -46,18 +49,14 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 	}
 
 	switch t.Oid() {
-	case oid.T_regproc, oid.T_regprocedure:
-		// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
-		// Postgres only does this when the cast is ::regprocedure, but we're
-		// going to always do it.
-		// We additionally do not yet implement disambiguation based on type
-		// parameters: we return the match iff there is exactly one.
-		s = pgSignatureRegexp.ReplaceAllString(s, "$1")
-
-		substrs, err := splitIdentifierList(s)
+	case oid.T_regproc:
+		// To be compatible with postgres, we always treat the trimmed input string
+		// as a function name.
+		substrs, err := splitIdentifierList(strings.TrimSpace(s))
 		if err != nil {
 			return nil, err
 		}
+
 		if len(substrs) > 3 {
 			// A fully qualified function name in pg's dialect can contain
 			// at most 3 parts: db.schema.funname.
@@ -80,6 +79,53 @@ func ParseDOid(ctx *Context, s string, t *types.T) (*tree.DOid, error) {
 		}
 		overload := funcDef.Overloads[0]
 		return tree.NewDOidWithTypeAndName(overload.Oid, t, funcDef.Name), nil
+	case oid.T_regprocedure:
+		// Fake a ALTER FUNCTION statement to extract the function signature.
+		// We're kinda being lazy here to rely on the parser to determine if the
+		// function signature syntax is sane from grammar perspective. We may
+		// match postgres' implementation of `parseNameAndArgTypes` to return
+		// more detailed errors like "expected a left parenthesis".
+		stmt, err := parser.ParseOne("ALTER FUNCTION " + strings.TrimSpace(s) + " IMMUTABLE")
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid function signature: %s", s)
+		}
+		fn := stmt.AST.(*tree.AlterFunctionOptions).Function
+		if fn.Args == nil {
+			// Always require the full function signature.
+			return nil, errors.Newf("invalid function signature: %s", s)
+		}
+
+		un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
+		fd, err := ctx.Planner.ResolveFunction(ctx.Ctx(), un, &ctx.SessionData().SearchPath)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(fd.Overloads) == 1 {
+			// This is a hack to be compatible with some ORMs which depends on some
+			// builtin function not implemented in CRDB. We just use `Any` as the arg
+			// type while some ORMs sends more meaningful function signatures whose
+			// arg type list mismatch with `Any` type. For this case we just
+			// short-circuit it to return the oid. For example, `array_in` is defined
+			// to take in a `Any` type, but some ORM sends
+			// `'array_in(cstring,oid,integer)'::REGPROCEDURE` for introspection.
+			ol := fd.Overloads[0]
+			if !catid.IsOIDUserDefined(ol.Oid) &&
+				ol.Types.Length() == 1 &&
+				ol.Types.GetAt(0).Identical(types.Any) {
+				return tree.NewDOidWithTypeAndName(ol.Oid, t, fd.Name), nil
+			}
+		}
+
+		argTypes, err := fn.InputArgTypes(ctx.Ctx(), ctx.Planner)
+		if err != nil {
+			return nil, err
+		}
+		ol, err := fd.MatchOverload(argTypes, fn.FuncName.Schema(), &ctx.SessionData().SearchPath)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDOidWithTypeAndName(ol.Oid, t, fd.Name), nil
 	case oid.T_regtype:
 		parsedTyp, err := ctx.Planner.GetTypeFromValidSQLSyntax(s)
 		if err == nil {

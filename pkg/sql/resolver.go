@@ -351,6 +351,12 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 			}
 		}
 		return table, nil
+	} else if specifier.FunctionOID != nil {
+		fnID, err := funcdesc.UserDefinedFunctionOIDToID(*specifier.FunctionOID)
+		if err != nil {
+			return nil, err
+		}
+		return p.Descriptors().GetImmutableFunctionByID(ctx, p.txn, fnID, tree.ObjectLookupFlagsWithRequired())
 	}
 	return nil, errors.AssertionFailedf("invalid HasPrivilegeSpecifier")
 }
