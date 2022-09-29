@@ -231,7 +231,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 7 Mutation operations
+│       └── • 8 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 108
@@ -252,6 +252,10 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           │       SchemaID: 106
 │           │
 │           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 104
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 105
 │           │     Initialize: true
 │           │
@@ -263,11 +267,12 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │                 Authorization:
 │                   UserName: root
 │                 DescriptorIDs:
+│                 - 104
 │                 - 105
 │                 - 108
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
 │                   redactedstatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
@@ -278,7 +283,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 5 elements transitioning toward ABSENT
+        ├── • 7 elements transitioning toward ABSENT
         │   │
         │   ├── • Table:{DescID: 108}
         │   │   │ DROPPED → ABSENT
@@ -325,22 +330,37 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
         │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
         │   │         rule: "dependents removed before column"
         │   │
-        │   └── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-        │       │ DELETE_ONLY → ABSENT
+        │   ├── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
+        │   │   │     rule: "descriptor removal right before dependent element removal"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • skip DELETE_ONLY → ABSENT operations
+        │   │         rule: "skip index removal ops on relation drop"
+        │   │
+        │   ├── • IndexData:{DescID: 108, IndexID: 1}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "index removed before garbage collection"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 108, ReferencedDescID: 104}
+        │   │         rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │
+        │   └── • TableData:{DescID: 108, ReferencedDescID: 104}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       ├── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
-        │       │     rule: "descriptor removal right before dependent element removal"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       └── • skip DELETE_ONLY → ABSENT operations
-        │             rule: "skip index removal ops on relation drop"
+        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
+        │             rule: "table removed right before garbage collection"
         │
-        └── • 8 Mutation operations
+        └── • 10 Mutation operations
             │
             ├── • LogEvent
             │     Element:
@@ -356,11 +376,6 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │         SourceElementID: 1
             │         SubWorkID: 1
             │     TargetStatus: 1
-            │
-            ├── • CreateGCJobForTable
-            │     StatementForDropJob:
-            │       Statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
-            │     TableID: 108
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 1
@@ -401,6 +416,22 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │         SubWorkID: 1
             │     TableID: 108
             │
+            ├── • CreateGCJobForTable
+            │     DatabaseID: 104
+            │     StatementForDropJob:
+            │       Statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
+            │     TableID: 108
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 1
+            │     StatementForDropJob:
+            │       Statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
+            │     TableID: 108
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
             ├── • RemoveJobStateFromDescriptor
             │     DescriptorID: 105
             │     JobID: 1
@@ -411,6 +442,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │
             └── • UpdateSchemaChangerJob
                   DescriptorIDsToRemove:
+                  - 104
                   - 105
                   - 108
                   IsNonCancelable: true

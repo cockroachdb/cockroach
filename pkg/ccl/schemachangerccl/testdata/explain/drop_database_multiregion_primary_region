@@ -104,8 +104,9 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 9 elements transitioning toward ABSENT
+           ├── 12 elements transitioning toward ABSENT
            │    ├── DROPPED     → ABSENT Database:{DescID: 104}
+           │    ├── PUBLIC      → ABSENT DatabaseData:{DescID: 104}
            │    ├── DROPPED     → ABSENT Schema:{DescID: 106}
            │    ├── DROPPED     → ABSENT EnumType:{DescID: 105}
            │    ├── DROPPED     → ABSENT AliasType:{DescID: 107, ReferencedTypeIDs: [105 107]}
@@ -113,11 +114,13 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 1}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 4294967295}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 4294967294}
-           │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-           └── 20 Mutation operations
+           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108, IndexID: 1}
+           │    └── PUBLIC      → ABSENT TableData:{DescID: 108, ReferencedDescID: 104}
+           └── 21 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGCJobForDatabase {"DatabaseID":104}
                 ├── DeleteDescriptor {"DescriptorID":104}
+                ├── CreateGCJobForDatabase {"DatabaseID":104}
                 ├── LogEvent {"TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":106}
                 ├── LogEvent {"TargetStatus":1}
@@ -125,10 +128,11 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
                 ├── LogEvent {"TargetStatus":1}
                 ├── DeleteDescriptor {"DescriptorID":107}
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGCJobForTable {"TableID":108}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+                ├── CreateGCJobForTable {"DatabaseID":104,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}

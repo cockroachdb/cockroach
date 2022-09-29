@@ -335,7 +335,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 6 Mutation operations
+│       └── • 7 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 107
@@ -355,6 +355,10 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           │       SchemaID: 106
 │           │
 │           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 104
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 107
 │           │     Initialize: true
 │           │
@@ -362,10 +366,11 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │                 Authorization:
 │                   UserName: root
 │                 DescriptorIDs:
+│                 - 104
 │                 - 107
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP TABLE db.sc.t
 │                   redactedstatement: DROP TABLE ‹db›.‹sc›.‹t›
@@ -375,7 +380,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 7 elements transitioning toward ABSENT
+        ├── • 9 elements transitioning toward ABSENT
         │   │
         │   ├── • Table:{DescID: 107}
         │   │   │ DROPPED → ABSENT
@@ -455,28 +460,43 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
         │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 4294967294}
         │   │         rule: "dependents removed before column"
         │   │
-        │   └── • PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
-        │       │ DELETE_ONLY → ABSENT
+        │   ├── • PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from ABSENT Table:{DescID: 107}
+        │   │   │     rule: "descriptor removal right before dependent element removal"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • skip DELETE_ONLY → ABSENT operations
+        │   │         rule: "skip index removal ops on relation drop"
+        │   │
+        │   ├── • IndexData:{DescID: 107, IndexID: 1}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "index removed before garbage collection"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 107, ReferencedDescID: 104}
+        │   │         rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │
+        │   └── • TableData:{DescID: 107, ReferencedDescID: 104}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       ├── • SameStagePrecedence dependency from ABSENT Table:{DescID: 107}
-        │       │     rule: "descriptor removal right before dependent element removal"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       └── • skip DELETE_ONLY → ABSENT operations
-        │             rule: "skip index removal ops on relation drop"
+        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 107}
+        │             rule: "table removed right before garbage collection"
         │
-        └── • 9 Mutation operations
+        └── • 11 Mutation operations
             │
             ├── • LogEvent
             │     Element:
@@ -491,11 +511,6 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
             │         SourceElementID: 1
             │         SubWorkID: 1
             │     TargetStatus: 1
-            │
-            ├── • CreateGCJobForTable
-            │     StatementForDropJob:
-            │       Statement: DROP TABLE db.sc.t
-            │     TableID: 107
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 1
@@ -557,12 +572,29 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
             │         SubWorkID: 1
             │     TableID: 107
             │
+            ├── • CreateGCJobForTable
+            │     DatabaseID: 104
+            │     StatementForDropJob:
+            │       Statement: DROP TABLE db.sc.t
+            │     TableID: 107
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 1
+            │     StatementForDropJob:
+            │       Statement: DROP TABLE db.sc.t
+            │     TableID: 107
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
             ├── • RemoveJobStateFromDescriptor
             │     DescriptorID: 107
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
                   DescriptorIDsToRemove:
+                  - 104
                   - 107
                   IsNonCancelable: true
                   JobID: 1

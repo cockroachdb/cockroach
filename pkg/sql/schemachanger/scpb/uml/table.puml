@@ -105,6 +105,11 @@ object TableZoneConfig
 
 TableZoneConfig :  TableID
 
+object TableData
+
+TableData :  TableID
+TableData :  DatabaseID
+
 object TableLocalityGlobal
 
 TableLocalityGlobal :  TableID
@@ -139,7 +144,6 @@ ColumnType :  TypeT
 ColumnType :  IsNullable
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
-ColumnType :  IsRelationBeingDropped
 
 object ColumnDefaultExpression
 
@@ -183,7 +187,6 @@ object SecondaryIndexPartial
 SecondaryIndexPartial :  TableID
 SecondaryIndexPartial :  IndexID
 SecondaryIndexPartial :  Expression
-SecondaryIndexPartial :  IsRelationBeingDropped
 
 object IndexComment
 
@@ -199,6 +202,11 @@ IndexColumn :  ColumnID
 IndexColumn :  OrdinalInKind
 IndexColumn :  Kind
 IndexColumn :  Direction
+
+object IndexData
+
+IndexData :  TableID
+IndexData :  IndexID
 
 object ConstraintName
 
@@ -245,6 +253,10 @@ object DatabaseComment
 DatabaseComment :  DatabaseID
 DatabaseComment :  Comment
 
+object DatabaseData
+
+DatabaseData :  DatabaseID
+
 object SchemaParent
 
 SchemaParent :  SchemaID
@@ -284,6 +296,9 @@ Sequence <|-- TableComment
 Table <|-- RowLevelTTL
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
+Table <|-- TableData
+View <|-- TableData
+Sequence <|-- TableData
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion
@@ -305,6 +320,9 @@ PrimaryIndex <|-- IndexColumn
 SecondaryIndex <|-- IndexColumn
 TemporaryIndex <|-- IndexColumn
 Column <|-- IndexColumn
+PrimaryIndex <|-- IndexData
+SecondaryIndex <|-- IndexData
+TemporaryIndex <|-- IndexData
 UniqueWithoutIndexConstraint <|-- ConstraintName
 CheckConstraint <|-- ConstraintName
 ForeignKeyConstraint <|-- ConstraintName
@@ -337,6 +355,7 @@ EnumType <|-- UserPrivileges
 Database <|-- DatabaseRegionConfig
 Database <|-- DatabaseRoleSetting
 Database <|-- DatabaseComment
+Database <|-- DatabaseData
 Schema <|-- SchemaParent
 Schema <|-- SchemaComment
 AliasType <|-- ObjectParent

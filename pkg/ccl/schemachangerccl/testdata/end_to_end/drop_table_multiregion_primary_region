@@ -28,8 +28,25 @@ add synthetic descriptor #108:
      version: "1"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 7 MutationType ops
+## PreCommitPhase stage 1 of 1 with 8 MutationType ops
 delete object namespace entry {104 106 table_regional_by_table} -> 108
+upsert descriptor #104
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: multi_region_test_db
+     privileges:
+  ...
+       public:
+         id: 106
+  -  version: "1"
+  +  version: "2"
 upsert descriptor #105
    type:
      arrayTypeId: 107
@@ -95,7 +112,7 @@ upsert descriptor #108
   +  version: "2"
 delete all comments for table descriptors [108]
 create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
-  descriptor IDs: [105 108]
+  descriptor IDs: [104 105 108]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -103,7 +120,24 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 10 MutationType ops
+upsert descriptor #104
+   database:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: multi_region_test_db
+     privileges:
+  ...
+       public:
+         id: 106
+  -  version: "2"
+  +  version: "3"
 upsert descriptor #105
    type:
      arrayTypeId: 107

@@ -29,8 +29,25 @@ add synthetic descriptor #107:
      version: "1"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 6 MutationType ops
+## PreCommitPhase stage 1 of 1 with 7 MutationType ops
 delete object namespace entry {104 106 t} -> 107
+upsert descriptor #104
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000000"
+  +  modificationTime: {}
+     name: db
+     privileges:
+  ...
+       sc:
+         id: 106
+  -  version: "2"
+  +  version: "3"
 upsert descriptor #107
   ...
      createAsOfTime:
@@ -67,7 +84,7 @@ upsert descriptor #107
   +  version: "2"
 delete all comments for table descriptors [107]
 create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
-  descriptor IDs: [107]
+  descriptor IDs: [104 107]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -75,7 +92,24 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
+upsert descriptor #104
+   database:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+     id: 104
+  -  modificationTime:
+  -    wallTime: "1640995200000000001"
+  +  modificationTime: {}
+     name: db
+     privileges:
+  ...
+       sc:
+         id: 106
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #107
   ...
      createAsOfTime:

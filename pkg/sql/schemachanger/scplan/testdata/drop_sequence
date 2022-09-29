@@ -11,7 +11,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 104
-PreCommitPhase stage 1 of 1 with 5 MutationType ops
+PreCommitPhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -31,12 +31,16 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
         Name: sq1
         SchemaID: 101
     *scop.SetJobStateOnDescriptor
+      DescriptorID: 100
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
     *scop.CreateSchemaChangerJob
       Authorization:
         UserName: root
       DescriptorIDs:
+      - 100
       - 104
       JobID: 1
       NonCancelable: true
@@ -45,9 +49,10 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       - statement: DROP SEQUENCE defaultdb.sq1
         redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1›
         statementtag: DROP SEQUENCE
-PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -63,14 +68,19 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP SEQUENCE defaultdb.public.sq1
       TableID: 104
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 100
+      JobID: 1
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
+      - 100
       - 104
       IsNonCancelable: true
       JobID: 1
@@ -89,7 +99,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 104
-PreCommitPhase stage 1 of 1 with 11 MutationType ops
+PreCommitPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -127,6 +137,9 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
         Name: sq1
         SchemaID: 101
     *scop.SetJobStateOnDescriptor
+      DescriptorID: 100
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
     *scop.SetJobStateOnDescriptor
@@ -139,6 +152,7 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
       Authorization:
         UserName: root
       DescriptorIDs:
+      - 100
       - 104
       - 105
       - 106
@@ -149,9 +163,10 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
       - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
         redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
         statementtag: DROP SEQUENCE
-PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -167,9 +182,13 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP SEQUENCE defaultdb.public.sq1 CASCADE
       TableID: 104
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 100
+      JobID: 1
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
@@ -181,6 +200,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
       JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
+      - 100
       - 104
       - 105
       - 106
@@ -191,6 +211,10 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
+- from: [Sequence:{DescID: 104}, ABSENT]
+  to:   [TableData:{DescID: 104, ReferencedDescID: 100}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT]
   kind: SameStagePrecedence

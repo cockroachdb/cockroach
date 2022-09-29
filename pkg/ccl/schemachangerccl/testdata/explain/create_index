@@ -10,11 +10,12 @@ EXPLAIN (ddl) CREATE INDEX id1
 Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›)); 
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 9 elements transitioning toward PUBLIC
+ │         ├── 10 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
  │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+ │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104, IndexID: 2}
  │         │    ├── ABSENT → PUBLIC        IndexPartitioning:{DescID: 104, IndexID: 2}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
@@ -40,8 +41,9 @@ Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.�
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase
  │    ├── Stage 1 of 7 in PostCommitPhase
- │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
- │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+ │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+ │    │    │    └── ABSENT      → PUBLIC     IndexData:{DescID: 104, IndexID: 3}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":3,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
@@ -96,10 +98,11 @@ Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.�
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward TRANSIENT_ABSENT
-           │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+           ├── 2 elements transitioning toward TRANSIENT_ABSENT
+           │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+           │    └── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104, IndexID: 3}
            └── 4 Mutation operations
-                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

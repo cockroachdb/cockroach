@@ -54,7 +54,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
       DescriptorID: 110
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 111
-PreCommitPhase stage 1 of 1 with 32 MutationType ops
+PreCommitPhase stage 1 of 1 with 33 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -215,6 +215,9 @@ PreCommitPhase stage 1 of 1 with 32 MutationType ops
         Name: v1
         SchemaID: 101
     *scop.SetJobStateOnDescriptor
+      DescriptorID: 100
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
     *scop.SetJobStateOnDescriptor
@@ -242,6 +245,7 @@ PreCommitPhase stage 1 of 1 with 32 MutationType ops
       Authorization:
         UserName: root
       DescriptorIDs:
+      - 100
       - 104
       - 105
       - 106
@@ -252,13 +256,13 @@ PreCommitPhase stage 1 of 1 with 32 MutationType ops
       - 111
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 19 MutationType ops
         pending
       Statements:
       - statement: DROP TABLE defaultdb.shipments CASCADE
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
         statementtag: DROP TABLE
-PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 29 MutationType ops
   transitions:
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -269,8 +273,12 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
     [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 109, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 109, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 110}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 110, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[Column:{DescID: 111, ColumnID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -290,10 +298,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGCJobForTable
-      StatementForDropJob:
-        Statement: DROP TABLE defaultdb.public.shipments CASCADE
-      TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
@@ -371,6 +375,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 109
+    *scop.CreateGCJobForTable
+      DatabaseID: 100
+      StatementForDropJob:
+        Statement: DROP TABLE defaultdb.public.shipments CASCADE
+      TableID: 109
     *scop.LogEvent
       Element:
         Sequence:
@@ -385,6 +394,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP TABLE defaultdb.public.shipments CASCADE
       TableID: 110
@@ -454,6 +464,19 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
           SourceElementID: 2
           SubWorkID: 1
       TableID: 111
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP TABLE defaultdb.public.shipments CASCADE
+      TableID: 109
+    *scop.CreateGCJobForIndex
+      IndexID: 2
+      StatementForDropJob:
+        Statement: DROP TABLE defaultdb.public.shipments CASCADE
+      TableID: 109
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 100
+      JobID: 1
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
@@ -480,6 +503,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 26 MutationType ops
       JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
+      - 100
       - 104
       - 105
       - 106
@@ -818,6 +842,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [IndexData:{DescID: 109, IndexID: 1}, DROPPED]
+  to:   [IndexData:{DescID: 109, IndexID: 2}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs in the same stage
 - from: [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
@@ -826,6 +854,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [IndexData:{DescID: 109, IndexID: 1}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
   kind: Precedence
@@ -854,6 +886,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [IndexData:{DescID: 109, IndexID: 2}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
   kind: Precedence
@@ -878,6 +914,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [Sequence:{DescID: 110}, ABSENT]
+  to:   [TableData:{DescID: 110, ReferencedDescID: 100}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Sequence:{DescID: 110}, DROPPED]
   to:   [Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT]
   kind: SameStagePrecedence
@@ -954,6 +994,10 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: SameStagePrecedence
   rule: descriptor removal right before dependent element removal
+- from: [Table:{DescID: 109}, ABSENT]
+  to:   [TableData:{DescID: 109, ReferencedDescID: 100}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnComment:{DescID: 109, ColumnID: 1, Comment: tracking_number is a must}, ABSENT]
   kind: SameStagePrecedence
@@ -1130,6 +1174,14 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 109}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
+- from: [TableData:{DescID: 109, ReferencedDescID: 100}, DROPPED]
+  to:   [IndexData:{DescID: 109, IndexID: 1}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs in the same stage
+- from: [TableData:{DescID: 109, ReferencedDescID: 100}, DROPPED]
+  to:   [IndexData:{DescID: 109, IndexID: 2}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs in the same stage
 - from: [View:{DescID: 111}, ABSENT]
   to:   [Column:{DescID: 111, ColumnID: 1}, ABSENT]
   kind: SameStagePrecedence
@@ -1233,7 +1285,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 114
-PreCommitPhase stage 1 of 1 with 16 MutationType ops
+PreCommitPhase stage 1 of 1 with 17 MutationType ops
   transitions:
     [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
@@ -1318,6 +1370,9 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
       - 112
       - 113
     *scop.SetJobStateOnDescriptor
+      DescriptorID: 100
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 112
       Initialize: true
     *scop.SetJobStateOnDescriptor
@@ -1330,17 +1385,18 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
       Authorization:
         UserName: root
       DescriptorIDs:
+      - 100
       - 112
       - 113
       - 114
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.greeter
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹greeter›
         statementtag: DROP TABLE
-PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 14 MutationType ops
   transitions:
     [[Table:{DescID: 114}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -1349,7 +1405,10 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
     [[Column:{DescID: 114, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 114, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 114, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 114, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 114, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -1364,10 +1423,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
-    *scop.CreateGCJobForTable
-      StatementForDropJob:
-        Statement: DROP TABLE defaultdb.public.greeter
-      TableID: 114
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
@@ -1423,6 +1478,24 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 114
+    *scop.CreateGCJobForTable
+      DatabaseID: 100
+      StatementForDropJob:
+        Statement: DROP TABLE defaultdb.public.greeter
+      TableID: 114
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP TABLE defaultdb.public.greeter
+      TableID: 114
+    *scop.CreateGCJobForIndex
+      IndexID: 2
+      StatementForDropJob:
+        Statement: DROP TABLE defaultdb.public.greeter
+      TableID: 114
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 100
+      JobID: 1
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 112
       JobID: 1
@@ -1434,6 +1507,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
       JobID: 1
     *scop.UpdateSchemaChangerJob
       DescriptorIDsToRemove:
+      - 100
       - 112
       - 113
       - 114

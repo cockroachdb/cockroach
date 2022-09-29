@@ -186,6 +186,10 @@ ElementState:
     usesSequenceIds: []
     usesTypeIds: []
   Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 108
+  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: id
@@ -497,6 +501,14 @@ ElementState:
     indexId: 1
     kind: STORED
     ordinalInKind: 2
+    tableId: 108
+  Status: PUBLIC
+- IndexData:
+    indexId: 1
+    tableId: 108
+  Status: PUBLIC
+- IndexData:
+    indexId: 2
     tableId: 108
   Status: PUBLIC
 - ConstraintName:

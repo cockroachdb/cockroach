@@ -51,30 +51,35 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │         │    ├── VALIDATED   → DELETE_ONLY PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC      → ABSENT      IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
- │         └── 6 Mutation operations
+ │         └── 7 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveAllTableComments {"TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 7 elements transitioning toward ABSENT
+           ├── 9 elements transitioning toward ABSENT
            │    ├── DROPPED     → ABSENT Table:{DescID: 107}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 1}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 2}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 3}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 4294967295}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 107, ColumnID: 4294967294}
-           │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
-           └── 9 Mutation operations
+           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 107, IndexID: 1}
+           │    └── PUBLIC      → ABSENT TableData:{DescID: 107, ReferencedDescID: 104}
+           └── 11 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGCJobForTable {"TableID":107}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":107}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":107}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":107}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":107}
+                ├── CreateGCJobForTable {"DatabaseID":104,"TableID":107}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":107}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
