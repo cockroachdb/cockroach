@@ -51,3 +51,12 @@ func (op *MVCCLogicalOp) MustSetValue(value interface{}) {
 		panic(errors.AssertionFailedf("%T excludes %T", op, value))
 	}
 }
+
+// IsEmpty returns true if the header is empty.
+// gcassert:inline
+func (h MVCCValueHeader) IsEmpty() bool {
+	// NB: We don't use a struct comparison like h == MVCCValueHeader{} due to a
+	// Go 1.19 performance regression, see:
+	// https://github.com/cockroachdb/cockroach/issues/88818
+	return h.LocalTimestamp.IsEmpty()
+}
