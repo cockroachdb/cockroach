@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -87,6 +88,10 @@ var (
 		oldIntentFrac:   .1,
 		rangeKeyFrac:    .1,
 	}
+
+	// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
+	// bugs in time-bound iterators.
+	smallEngineBlocks = util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 )
 
 const intentAgeThreshold = 2 * time.Hour
@@ -121,7 +126,7 @@ func TestRunNewVsOld(t *testing.T) {
 			rng, seed := randutil.NewTestRand()
 			t.Logf("Using subtest seed: %d", seed)
 
-			eng := storage.NewDefaultInMemForTesting()
+			eng := storage.NewDefaultInMemForTesting(storage.If(smallEngineBlocks, storage.BlockSize(1)))
 			defer eng.Close()
 
 			tc.ds.dist(N, rng).setupTest(t, eng, *tc.ds.desc())
@@ -273,7 +278,7 @@ func TestNewVsInvariants(t *testing.T) {
 			t.Logf("Using subtest seed: %d", seed)
 
 			desc := tc.ds.desc()
-			eng := storage.NewDefaultInMemForTesting()
+			eng := storage.NewDefaultInMemForTesting(storage.If(smallEngineBlocks, storage.BlockSize(1)))
 			defer eng.Close()
 
 			sortedDistribution(tc.ds.dist(N, rng)).setupTest(t, eng, *desc)
