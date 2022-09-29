@@ -65,7 +65,7 @@ var SampleLogicalPlans = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.metrics.statement_details.plan_collection.enabled",
 	"periodically save a logical plan for each fingerprint",
-	false,
+	true,
 ).WithPublic()
 
 // LogicalPlanCollectionPeriod specifies the interval between collections of
