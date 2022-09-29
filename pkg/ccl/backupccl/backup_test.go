@@ -573,7 +573,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 				blobs.TestEmptyBlobClientFactory,
 				username.RootUserName(),
 				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor),
-				tc.Servers[0].CollectionFactory().(*descs.CollectionFactory),
+				tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
 				tc.Servers[0].DB(),
 				nil, /* limiters */
 			)
@@ -8027,7 +8027,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		blobs.TestBlobServiceClient(dir),
 		username.RootUserName(),
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)
