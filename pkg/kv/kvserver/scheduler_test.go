@@ -236,7 +236,7 @@ func TestSchedulerLoop(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1)
 
 	s.Start(stopper)
 	s.EnqueueRaftTicks(1, 2, 3)
@@ -253,7 +253,9 @@ func TestSchedulerLoop(t *testing.T) {
 }
 
 // Verify that when we enqueue the same range multiple times for the same
-// reason, it is only processed once.
+// reason, it is only processed once, except the ticking. Ticking is special
+// because it adapts to scheduling delays in order to keep heartbeating delays
+// minimal.
 func TestSchedulerBuffering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -264,25 +266,36 @@ func TestSchedulerBuffering(t *testing.T) {
 
 	m := newStoreMetrics(metric.TestSampleInterval)
 	p := newTestProcessor()
-	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1)
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 5)
 	s.Start(stopper)
 
 	testCases := []struct {
-		flag     raftScheduleFlags
-		expected string
+		flag  raftScheduleFlags
+		ticks int
+		want  string
 	}{
-		{stateRaftReady, "ready=[1:1] request=[] tick=[]"},
-		{stateRaftRequest, "ready=[1:1] request=[1:1] tick=[]"},
-		{stateRaftTick, "ready=[1:1] request=[1:1] tick=[1:1]"},
-		{stateRaftReady | stateRaftRequest | stateRaftTick, "ready=[1:2] request=[1:2] tick=[1:2]"},
+		{flag: stateRaftReady, want: "ready=[1:1] request=[] tick=[]"},
+		{flag: stateRaftRequest, want: "ready=[1:1] request=[1:1] tick=[]"},
+		{flag: stateRaftTick, want: "ready=[1:1] request=[1:1] tick=[1:5]"},
+		{flag: stateRaftReady | stateRaftRequest | stateRaftTick,
+			want: "ready=[1:2] request=[1:2] tick=[1:10]"},
+		{flag: stateRaftTick, want: "ready=[1:2] request=[1:2] tick=[1:15]"},
+
+		// Only 5/10 ticks are buffered.
+		{flag: 0, ticks: 10, want: "ready=[1:2] request=[1:2] tick=[1:20]"},
 	}
 
 	for _, c := range testCases {
-		s.signal(s.enqueueN(c.flag, 1, 1, 1, 1, 1))
+		const id = roachpb.RangeID(1)
+		cnt := s.enqueueN(c.flag, id, id, id, id, id)
+		for t := c.ticks; t > 0; t-- {
+			cnt += s.enqueue1(stateRaftTick, id)
+		}
+		s.signal(cnt)
 
 		testutils.SucceedsSoon(t, func() error {
-			if s := p.String(); c.expected != s {
-				return errors.Errorf("expected %s, but got %s", c.expected, s)
+			if s := p.String(); c.want != s {
+				return errors.Errorf("expected %s, but got %s", c.want, s)
 			}
 			return nil
 		})
