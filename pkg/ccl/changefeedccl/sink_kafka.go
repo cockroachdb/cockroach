@@ -499,7 +499,7 @@ func (s *kafkaSink) workerLoop() {
 		}
 		s.mu.inflight--
 
-		if !isRetrying() && s.isInternalRetryable(ackError) {
+		if !isRetrying() && s.mu.flushErr == nil && s.isInternalRetryable(ackError) {
 			startInternalRetry(ackError)
 		}
 
