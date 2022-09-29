@@ -176,7 +176,7 @@ func TestCloudStorageSink(t *testing.T) {
 			clientFactory,
 			user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
 			opts...)
