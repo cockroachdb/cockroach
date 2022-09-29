@@ -100,3 +100,10 @@ func TestCCLLogic_schema_change_in_txn(
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "schema_change_in_txn")
 }
+
+func TestCCLLogic_show_create(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "show_create")
+}

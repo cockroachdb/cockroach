@@ -2171,6 +2171,13 @@ func TestTenantLogicCCL_schema_change_in_txn(
 	runCCLLogicTest(t, "schema_change_in_txn")
 }
 
+func TestTenantLogicCCL_show_create(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "show_create")
+}
+
 func TestTenantLogicCCL_tenant(
 	t *testing.T,
 ) {
