@@ -55,6 +55,8 @@ var (
 	mvccHistoriesReader = util.ConstantWithMetamorphicTestChoice("mvcc-histories-reader",
 		"engine", "readonly", "batch", "snapshot").(string)
 	mvccHistoriesUseBatch   = util.ConstantWithMetamorphicTestBool("mvcc-histories-use-batch", false)
+	mvccHistoriesPeekBounds = util.ConstantWithMetamorphicTestChoice("mvcc-histories-peek-bounds",
+		"none", "left", "right", "both").(string)
 	sstIterVerify           = util.ConstantWithMetamorphicTestBool("mvcc-histories-sst-iter-verify", false)
 	metamorphicIteratorSeed = util.ConstantWithMetamorphicTestRange("mvcc-metamorphic-iterator-seed", 0, 0, 100000) // 0 = disabled
 	separateEngineBlocks    = util.ConstantWithMetamorphicTestBool("mvcc-histories-separate-engine-blocks", false)
@@ -986,13 +988,14 @@ func cmdClearTimeRange(e *evalCtx) error {
 	if e.hasArg("maxBatchByteSize") {
 		e.scanArg("maxBatchByteSize", &maxBatchByteSize)
 	}
+	leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(key, endKey)
 
 	// NB: Must use a batch, since it requires consistent iterators.
 	batch := e.engine.NewBatch()
 	defer batch.Close()
 
 	resume, err := MVCCClearTimeRange(e.ctx, batch, e.ms, key, endKey, targetTs, ts,
-		nil, nil, clearRangeThreshold, int64(maxBatchSize), int64(maxBatchByteSize))
+		leftPeekBound, rightPeekBound, clearRangeThreshold, int64(maxBatchSize), int64(maxBatchByteSize))
 	if err != nil {
 		return err
 	}
@@ -1123,6 +1126,7 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	ts := e.getTs(nil)
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	idempotent := e.hasArg("idempotent")
+	leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(key, endKey)
 
 	var msCovered *enginepb.MVCCStats
 	if cmdDeleteRangeTombstoneKnownStats && !e.hasArg("noCoveredStats") {
@@ -1139,7 +1143,8 @@ func cmdDeleteRangeTombstone(e *evalCtx) error {
 	}
 
 	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
-		return MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs, nil, nil, idempotent, 0, msCovered)
+		return MVCCDeleteRangeUsingTombstone(e.ctx, rw, e.ms, key, endKey, ts, localTs,
+			leftPeekBound, rightPeekBound, idempotent, 0, msCovered)
 	})
 }
 
@@ -1164,9 +1169,10 @@ func cmdDeleteRangePredicate(e *evalCtx) error {
 	if e.hasArg("rangeThreshold") {
 		e.scanArg("rangeThreshold", &rangeThreshold)
 	}
+	leftPeekBound, rightPeekBound := e.metamorphicPeekBounds(key, endKey)
 	return e.withWriter("del_range_pred", func(rw ReadWriter) error {
-		resumeSpan, err := MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts,
-			localTs, nil, nil, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), 0)
+		resumeSpan, err := MVCCPredicateDeleteRange(e.ctx, rw, e.ms, key, endKey, ts, localTs,
+			leftPeekBound, rightPeekBound, predicates, int64(max), int64(maxBytes), int64(rangeThreshold), 0)
 
 		if resumeSpan != nil {
 			e.results.buf.Printf("del_range_pred: resume span [%s,%s)\n", resumeSpan.Key,
@@ -2345,6 +2351,27 @@ func (e *evalCtx) iterErr() error {
 		}
 	}
 	return nil
+}
+
+func (e *evalCtx) metamorphicPeekBounds(left, right roachpb.Key) (roachpb.Key, roachpb.Key) {
+	leftPeekBound, rightPeekBound := left.Prevish(8), right.Next()
+	if right == nil {
+		rightPeekBound = nil
+	}
+
+	switch mvccHistoriesPeekBounds {
+	case "none":
+		return nil, nil
+	case "left":
+		return leftPeekBound, nil
+	case "right":
+		return nil, rightPeekBound
+	case "both":
+		return leftPeekBound, rightPeekBound
+	default:
+		e.t.Fatalf("invalid peek bound kind %q", mvccHistoriesPeekBounds)
+		return nil, nil
+	}
 }
 
 func toKey(s string) roachpb.Key {
