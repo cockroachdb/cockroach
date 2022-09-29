@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -59,6 +60,11 @@ const (
 	backupRestoreRowPayloadSize = 100
 	localFoo                    = "nodelocal://0/foo"
 )
+
+// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
+// bugs in time-bound iterators. We disable this in race builds, which can
+// be too slow.
+var smallEngineBlocks = !util.RaceEnabled && util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 
 func backupRestoreTestSetupWithParams(
 	t testing.TB,
@@ -88,6 +94,13 @@ func backupRestoreTestSetupWithParams(
 			param.DisableDefaultTestTenant = true
 			params.ServerArgsPerNode[i] = param
 		}
+	}
+
+	if smallEngineBlocks {
+		if params.ServerArgs.Knobs.Store == nil {
+			params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{}
+		}
+		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
 
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
@@ -168,6 +181,14 @@ func backupRestoreTestSetupEmptyWithParams(
 			params.ServerArgsPerNode[i] = param
 		}
 	}
+
+	if smallEngineBlocks {
+		if params.ServerArgs.Knobs.Store == nil {
+			params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{}
+		}
+		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
+	}
+
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
 
@@ -192,6 +213,9 @@ func createEmptyCluster(
 	// Disabling the default test tenant due to test failures. More
 	// investigation is required. Tracked with #76378.
 	params.ServerArgs.DisableDefaultTestTenant = true
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		SmallEngineBlocks: smallEngineBlocks,
+	}
 	tc := testcluster.StartTestCluster(t, clusterSize, params)
 
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
