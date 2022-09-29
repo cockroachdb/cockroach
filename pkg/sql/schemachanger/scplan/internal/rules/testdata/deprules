@@ -1875,11 +1875,9 @@ deprules
   query:
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $column[Type] = '*scpb.Column'
-    - $column-type[Type] = '*scpb.ColumnType'
     - columnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
-    - joinOnColumnID($index-column, $column-type, $table-id, $column-id)
-    - relationIsNotBeingDropped(*scpb.ColumnType)($column-type)
+    - descriptorIsNotBeingDropped($index-column)
     - $index-target[TargetStatus] = TRANSIENT_ABSENT
     - $index-node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-target[TargetStatus] = ABSENT
@@ -1893,11 +1891,9 @@ deprules
   query:
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $column[Type] = '*scpb.Column'
-    - $column-type[Type] = '*scpb.ColumnType'
     - columnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
-    - joinOnColumnID($index-column, $column-type, $table-id, $column-id)
-    - relationIsNotBeingDropped(*scpb.ColumnType)($column-type)
+    - descriptorIsNotBeingDropped($index-column)
     - $index-target[TargetStatus] = ABSENT
     - $index-node[CurrentStatus] = ABSENT
     - $column-target[TargetStatus] = TRANSIENT_ABSENT
@@ -1911,11 +1907,9 @@ deprules
   query:
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $column[Type] = '*scpb.Column'
-    - $column-type[Type] = '*scpb.ColumnType'
     - columnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
-    - joinOnColumnID($index-column, $column-type, $table-id, $column-id)
-    - relationIsNotBeingDropped(*scpb.ColumnType)($column-type)
+    - descriptorIsNotBeingDropped($index-column)
     - transient($index-target, $column-target)
     - $index-node[CurrentStatus] = TRANSIENT_ABSENT
     - $column-node[CurrentStatus] = TRANSIENT_ABSENT
@@ -1928,11 +1922,9 @@ deprules
   query:
     - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
     - $column[Type] = '*scpb.Column'
-    - $column-type[Type] = '*scpb.ColumnType'
     - columnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - joinOnColumnID($index-column, $column, $table-id, $column-id)
-    - joinOnColumnID($index-column, $column-type, $table-id, $column-id)
-    - relationIsNotBeingDropped(*scpb.ColumnType)($column-type)
+    - descriptorIsNotBeingDropped($index-column)
     - toAbsent($index-target, $column-target)
     - $index-node[CurrentStatus] = ABSENT
     - $column-node[CurrentStatus] = ABSENT
@@ -2160,9 +2152,7 @@ deprules
     - toAbsent($index-target, $column-target)
     - $index-node[CurrentStatus] = VALIDATED
     - $column-node[CurrentStatus] = WRITE_ONLY
-    - $column-type[Type] = '*scpb.ColumnType'
-    - joinOnColumnID($index-column, $column-type, $table-id, $column-id)
-    - relationIsNotBeingDropped(*scpb.ColumnType)($column-type)
+    - descriptorIsNotBeingDropped($index-column)
     - isIndexKeyColumnKey(*scpb.IndexColumn)($index-column)
     - joinTargetNode($index, $index-target, $index-node)
     - joinTargetNode($column, $column-target, $column-node)
