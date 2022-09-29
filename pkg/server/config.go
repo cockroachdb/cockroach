@@ -606,8 +606,11 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		tableCache = pebble.NewTableCache(pebbleCache, runtime.GOMAXPROCS(0), totalFileLimit)
 	}
 
-	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
-		cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).SkipMinSizeCheck
+	var storeKnobs kvserver.StoreTestingKnobs
+	if s := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); s != nil {
+		storeKnobs = *s
+	}
+
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 		var sizeInBytes = spec.Size.InBytes
@@ -619,7 +622,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				sizeInBytes = int64(float64(sysMem) * spec.Size.Percent / 100)
 			}
-			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
+			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < base.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of memory is only %s bytes, which is below the minimum requirement of %s",
 					spec.Size.Percent, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
@@ -644,13 +647,17 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				details = append(details, redact.Sprintf("store %d: %+v", i, e.Properties()))
 				engines = append(engines, e)
 			} else {
-				e, err := storage.Open(ctx,
-					storage.InMemory(),
+				options := []storage.ConfigOption{
 					storage.Attributes(spec.Attributes),
 					storage.CacheSize(cfg.CacheSize),
 					storage.MaxSize(sizeInBytes),
 					storage.EncryptionAtRest(spec.EncryptionOptions),
-					storage.Settings(cfg.Settings))
+					storage.Settings(cfg.Settings),
+				}
+				if storeKnobs.SmallEngineBlocks {
+					options = append(options, storage.BlockSize(1))
+				}
+				e, err := storage.Open(ctx, storage.InMemory(), options...)
 				if err != nil {
 					return Engines{}, err
 				}
@@ -667,7 +674,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if spec.Size.Percent > 0 {
 				sizeInBytes = int64(float64(du.TotalBytes) * spec.Size.Percent / 100)
 			}
-			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
+			if sizeInBytes != 0 && !storeKnobs.SkipMinSizeCheck && sizeInBytes < base.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
@@ -694,6 +701,12 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig.Opts.Experimental.MaxWriterConcurrency = 2
 			pebbleConfig.Opts.Experimental.CPUWorkPermissionGranter = &cpuWorkPermissionGranter{
 				cfg.SoftSlotGranter,
+			}
+			if storeKnobs.SmallEngineBlocks {
+				for i := range pebbleConfig.Opts.Levels {
+					pebbleConfig.Opts.Levels[i].BlockSize = 1
+					pebbleConfig.Opts.Levels[i].IndexBlockSize = 1
+				}
 			}
 			// If the spec contains Pebble options, set those too.
 			if len(spec.PebbleOptions) > 0 {
