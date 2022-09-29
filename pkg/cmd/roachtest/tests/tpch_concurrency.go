@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -160,7 +159,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		// additional step to ensure that some kind of lower bound for the
 		// supported concurrency is always sustained and fail the test if it
 		// isn't.
-		minConcurrency, maxConcurrency := 48, 160
+		minConcurrency, maxConcurrency := 50, 110
 		// Run the binary search to find the largest concurrency that doesn't
 		// crash a node in the cluster. The current range is represented by
 		// [minConcurrency, maxConcurrency).
@@ -193,12 +192,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
 		},
-		// By default, the timeout is 10 hours which might not be sufficient
-		// given that a single iteration of checkConcurrency might take on the
-		// order of an hour and a half, so in order to let each test run to
-		// complete, we'll give it 12 hours. Successful runs typically take
-		// less, around 8 hours.
-		Timeout: 12 * time.Hour,
 	})
 
 	r.Add(registry.TestSpec{
@@ -208,11 +201,5 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},
-		// By default, the timeout is 10 hours which might not be sufficient
-		// given that a single iteration of checkConcurrency might take on the
-		// order of an hour and a half, so in order to let each test run to
-		// complete, we'll give it 12 hours. Successful runs typically take
-		// less, around 8 hours.
-		Timeout: 12 * time.Hour,
 	})
 }
