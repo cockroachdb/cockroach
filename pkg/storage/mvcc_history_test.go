@@ -167,12 +167,8 @@ func TestMVCCHistories(t *testing.T) {
 		// If enabled by metamorphic parameter, use very small blocks to provoke TBI
 		// optimization. We'll also flush after each command.
 		if separateEngineBlocks && !disableSeparateEngineBlocks {
-			engineOpts = append(engineOpts, func(cfg *engineConfig) error {
+			engineOpts = append(engineOpts, BlockSize(1), func(cfg *engineConfig) error {
 				cfg.Opts.DisableAutomaticCompactions = true
-				for i := range cfg.Opts.Levels {
-					cfg.Opts.Levels[i].BlockSize = 1
-					cfg.Opts.Levels[i].IndexBlockSize = 1
-				}
 				return nil
 			})
 		}
