@@ -113,14 +113,26 @@ export type EventExecution = {
 
 const highContentionInsight = (
   execType: InsightExecEnum = InsightExecEnum.TRANSACTION,
-  latencyThreshold: number,
+  latencyThreshold?: number,
+  contentionDuration?: number,
 ): Insight => {
-  let threshold = latencyThreshold + "ms";
-  if (!latencyThreshold) {
-    threshold =
-      "the value of the 'sql.insights.latency_threshold' cluster setting";
+  let description: string;
+  if (
+    latencyThreshold &&
+    contentionDuration &&
+    contentionDuration < latencyThreshold
+  ) {
+    description = `This ${execType} waited on other ${execType}s to execute for ${contentionDuration}ms.`;
+  } else {
+    let threshold: string;
+    if (!latencyThreshold) {
+      threshold =
+        "the value of the 'sql.insights.latency_threshold' cluster setting";
+    } else {
+      threshold = latencyThreshold + "ms";
+    }
+    description = `This ${execType} waited on other ${execType}s to execute for longer than ${threshold}.`;
   }
-  const description = `This ${execType} has been waiting on other ${execType}s to execute for longer than ${threshold}.`;
   return {
     name: InsightNameEnum.highContention,
     label: "High Contention",
@@ -208,10 +220,15 @@ export const getInsightFromProblem = (
   cause: string,
   execOption: InsightExecEnum,
   latencyThreshold?: number,
+  contentionDuration?: number,
 ): Insight => {
   switch (cause) {
     case InsightNameEnum.highContention:
-      return highContentionInsight(execOption, latencyThreshold);
+      return highContentionInsight(
+        execOption,
+        latencyThreshold,
+        contentionDuration,
+      );
     case InsightNameEnum.failedExecution:
       return failedExecutionInsight(execOption);
     case InsightNameEnum.planRegression:
