@@ -416,8 +416,8 @@ func GetBuiltinFuncDefinition(
 	}
 
 	// First try that if we can get function directly with the function name.
-	// There is a case where the part[0] of the name is a qualified string.
-	// TODO(Chengxiong): figure out why that could be an input.
+	// There is a case where the part[0] of the name is a qualified string when
+	// the qualified name is double quoted as a single name like "schema.fn".
 	if def, ok := ResolvedBuiltinFuncDefs[fName.Object()]; ok {
 		return def, nil
 	}

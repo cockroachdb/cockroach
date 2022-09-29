@@ -1476,33 +1476,37 @@ SELECT description
 				oid = t
 			}
 
-			fn, err := getNameForArg(ctx, oid, "pg_proc", "proname")
+			// Check if the function OID actually exists.
+			_, _, err := ctx.Planner.ResolveFunctionByOID(ctx.Ctx(), oid.(*tree.DOid).Oid)
 			if err != nil {
+				if errors.Is(err, tree.ErrFunctionUndefined) {
+					return eval.ObjectNotFound, nil
+				}
 				return eval.HasNoPrivilege, err
 			}
-			retNull := false
-			if fn == "" {
-				// Postgres returns NULL if no matching function is found
-				// when given an OID.
-				retNull = true
-			}
 
+			specifier := eval.HasPrivilegeSpecifier{FunctionOID: &oid.(*tree.DOid).Oid}
 			privs, err := parsePrivilegeStr(args[1], privMap{
-				// TODO(nvanbenschoten): this privilege is incorrect, but we don't
-				// currently have an EXECUTE privilege and we aren't even checking
-				// this down below, so it's fine for now.
-				"EXECUTE":                   {Kind: privilege.USAGE},
-				"EXECUTE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
+				"EXECUTE":                   {Kind: privilege.EXECUTE},
+				"EXECUTE WITH GRANT OPTION": {Kind: privilege.EXECUTE, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
-			if retNull {
-				return eval.ObjectNotFound, nil
+
+			// For user-defined function, utilize the descriptor based way.
+			if catid.IsOIDUserDefined(oid.(*tree.DOid).Oid) {
+				return ctx.Planner.HasAnyPrivilege(ctx.Ctx(), specifier, ctx.SessionData().User(), privs)
 			}
-			// All users have EXECUTE privileges for all functions.
-			_ = privs
-			return eval.HasPrivilege, nil
+
+			// For builtin functions, all users should have `EXECUTE` privilege, but
+			// no one can grant on them.
+			for _, priv := range privs {
+				if !priv.GrantOption {
+					return eval.HasPrivilege, nil
+				}
+			}
+			return eval.HasNoPrivilege, nil
 		},
 	),
 
