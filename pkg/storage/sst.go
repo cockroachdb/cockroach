@@ -52,7 +52,7 @@ func CheckSSTConflicts(
 	leftPeekBound, rightPeekBound roachpb.Key,
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
-	sstToReqTimestamp hlc.Timestamp,
+	sstTimestamp hlc.Timestamp,
 	maxIntents int64,
 	usePrefixSeek bool,
 ) (enginepb.MVCCStats, error) {
@@ -132,11 +132,16 @@ func CheckSSTConflicts(
 	}
 	rkIter.Close()
 
+	if usePrefixSeek {
+		// Prefix iteration and range key masking don't work together. See the
+		// comment on the panic inside pebbleIterator.setOptions.
+		sstTimestamp = hlc.Timestamp{}
+	}
 	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		KeyTypes:             IterKeyTypePointsAndRanges,
 		LowerBound:           leftPeekBound,
 		UpperBound:           rightPeekBound,
-		RangeKeyMaskingBelow: sstToReqTimestamp,
+		RangeKeyMaskingBelow: sstTimestamp,
 		Prefix:               usePrefixSeek,
 		useL6Filters:         true,
 	})
@@ -716,7 +721,20 @@ func CheckSSTConflicts(
 			sstIter.SeekGE(MVCCKey{Key: extKey.Key})
 			sstOK, sstErr = sstIter.Valid()
 			if sstOK {
-				extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+				// Seeks on the engine are expensive. Try Next()ing if we're very close
+				// to the sst key (which we might be).
+				nextsUntilSeek := 5
+				for extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
+					extIter.NextKey()
+					extOK, _ = extIter.Valid()
+					nextsUntilSeek--
+					if nextsUntilSeek <= 0 {
+						break
+					}
+				}
+				if extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
+					extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+				}
 			}
 			extOK, extErr = extIter.Valid()
 			continue
@@ -735,6 +753,42 @@ func CheckSSTConflicts(
 			statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
 		}
 
+		// Fast path with sstTimestamp set and a common case of import cancellation.
+		// Since we use range key masking, we can just Next() the ext iterator
+		// past its range key.
+		if sstTimestamp.IsSet() && extHasRange && !extHasPoint && !sstHasRange {
+			if vers, ok := extRangeKeys.FirstAtOrAbove(sstTimestamp); !ok || vers.Timestamp.Equal(sstTimestamp) {
+				// All range key versions are below the request timestamp. We can seek
+				// past the range key, as all SST points/ranges are going to be above
+				// this range key.
+				extIter.Next()
+				extOK, extErr = extIter.Valid()
+				if !extOK {
+					break
+				}
+
+				sstIter.SeekGE(MVCCKey{Key: extIter.UnsafeKey().Key})
+				sstOK, sstErr = sstIter.Valid()
+				if sstOK {
+					// Seeks on the engine are expensive. Try Next()ing if we're very close
+					// to the sst key (which we might be).
+					nextsUntilSeek := 5
+					for extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
+						extIter.NextKey()
+						extOK, _ = extIter.Valid()
+						nextsUntilSeek--
+						if nextsUntilSeek <= 0 {
+							break
+						}
+					}
+					if extOK && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
+						extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
+					}
+				}
+				extOK, extErr = extIter.Valid()
+				continue
+			}
+		}
 		steppedExtIter := false
 		// Before Next-ing the SST iter, if it contains any range keys, check if both:
 		// 1) the next SST key takes us outside the current SST range key
