@@ -87,7 +87,7 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 					// Provoke and check WriteIntentErrors.
 					startKey, endKey := MVCCKey{Key: roachpb.Key(start)}, MVCCKey{Key: roachpb.Key(end)}
 					_, err := CheckSSTConflicts(ctx, sstFile.Bytes(), engine, startKey, endKey, startKey.Key, endKey.Key.Next(),
-						false /*disallowShadowing*/, hlc.Timestamp{} /*disallowShadowingBelow*/, tc.maxIntents, usePrefixSeek)
+						false /*disallowShadowing*/, hlc.Timestamp{} /*disallowShadowingBelow*/, hlc.Timestamp{} /* sstReqTS */, tc.maxIntents, usePrefixSeek)
 					require.Error(t, err)
 					writeIntentErr := &roachpb.WriteIntentError{}
 					require.ErrorAs(t, err, &writeIntentErr)

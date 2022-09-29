@@ -52,6 +52,7 @@ func CheckSSTConflicts(
 	leftPeekBound, rightPeekBound roachpb.Key,
 	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
+	sstToReqTimestamp hlc.Timestamp,
 	maxIntents int64,
 	usePrefixSeek bool,
 ) (enginepb.MVCCStats, error) {
@@ -130,11 +131,12 @@ func CheckSSTConflicts(
 	}
 
 	extIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-		KeyTypes:     IterKeyTypePointsAndRanges,
-		LowerBound:   leftPeekBound,
-		UpperBound:   rightPeekBound,
-		Prefix:       usePrefixSeek,
-		useL6Filters: true,
+		KeyTypes:             IterKeyTypePointsAndRanges,
+		LowerBound:           leftPeekBound,
+		UpperBound:           rightPeekBound,
+		RangeKeyMaskingBelow: sstToReqTimestamp,
+		Prefix:               usePrefixSeek,
+		useL6Filters:         true,
 	})
 	defer extIter.Close()
 
