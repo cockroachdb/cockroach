@@ -14,6 +14,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -44,6 +45,7 @@ a given corpus file.
 				name, state := cr.GetCorpus(idx)
 				jobID := jobspb.JobID(0)
 				params := scplan.Params{
+					ActiveVersion:  clusterversion.TestingClusterVersion,
 					InRollback:     state.InRollback,
 					ExecutionPhase: scop.LatestPhase,
 					SchemaChangerJobIDSupplier: func() jobspb.JobID {

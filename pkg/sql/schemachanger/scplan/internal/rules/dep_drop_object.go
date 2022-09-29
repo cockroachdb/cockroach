@@ -105,7 +105,6 @@ func init() {
 			fromDescID := rel.Var("fromDescID")
 			return rel.Clauses{
 				from.typeFilter(isTypeDescriptor),
-				from.joinTargetNode(),
 				from.descIDEq(fromDescID),
 				to.referencedTypeDescIDsContain(fromDescID),
 				to.typeFilter(isSimpleDependent, or(isWithTypeT, isWithExpression)),
@@ -122,7 +121,6 @@ func init() {
 			seqID := rel.Var("seqID")
 			return rel.Clauses{
 				from.Type((*scpb.Sequence)(nil)),
-				from.joinTargetNode(),
 				from.descIDEq(seqID),
 				to.referencedSequenceIDsContains(seqID),
 				to.typeFilter(isSimpleDependent, isWithExpression),

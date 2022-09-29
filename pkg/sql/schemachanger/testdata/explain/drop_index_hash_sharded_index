@@ -43,14 +43,15 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 3 elements transitioning toward ABSENT
+           ├── 4 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104, ColumnID: 3}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
-           │    └── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 104, IndexID: 2}
            └── 6 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

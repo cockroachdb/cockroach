@@ -105,6 +105,11 @@ object TableZoneConfig
 
 TableZoneConfig :  TableID
 
+object TableData
+
+TableData :  TableID
+TableData :  DatabaseID
+
 object TableLocalityGlobal
 
 TableLocalityGlobal :  TableID
@@ -198,6 +203,11 @@ IndexColumn :  OrdinalInKind
 IndexColumn :  Kind
 IndexColumn :  Direction
 
+object IndexData
+
+IndexData :  TableID
+IndexData :  IndexID
+
 object ConstraintName
 
 ConstraintName :  TableID
@@ -243,6 +253,10 @@ object DatabaseComment
 DatabaseComment :  DatabaseID
 DatabaseComment :  Comment
 
+object DatabaseData
+
+DatabaseData :  DatabaseID
+
 object SchemaParent
 
 SchemaParent :  SchemaID
@@ -282,6 +296,9 @@ Sequence <|-- TableComment
 Table <|-- RowLevelTTL
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
+Table <|-- TableData
+View <|-- TableData
+Sequence <|-- TableData
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalitySecondaryRegion
@@ -303,6 +320,9 @@ PrimaryIndex <|-- IndexColumn
 SecondaryIndex <|-- IndexColumn
 TemporaryIndex <|-- IndexColumn
 Column <|-- IndexColumn
+PrimaryIndex <|-- IndexData
+SecondaryIndex <|-- IndexData
+TemporaryIndex <|-- IndexData
 UniqueWithoutIndexConstraint <|-- ConstraintName
 CheckConstraint <|-- ConstraintName
 ForeignKeyConstraint <|-- ConstraintName
@@ -335,6 +355,7 @@ EnumType <|-- UserPrivileges
 Database <|-- DatabaseRegionConfig
 Database <|-- DatabaseRoleSetting
 Database <|-- DatabaseComment
+Database <|-- DatabaseData
 Schema <|-- SchemaParent
 Schema <|-- SchemaComment
 AliasType <|-- ObjectParent

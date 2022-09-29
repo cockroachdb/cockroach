@@ -65,10 +65,13 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward ABSENT
-           │    └── DROPPED → ABSENT Table:{DescID: 107}
-           └── 4 Mutation operations
+           ├── 3 elements transitioning toward ABSENT
+           │    ├── DROPPED → ABSENT Table:{DescID: 107}
+           │    ├── PUBLIC  → ABSENT IndexData:{DescID: 107, IndexID: 1}
+           │    └── PUBLIC  → ABSENT TableData:{DescID: 107, ReferencedDescID: 104}
+           └── 5 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGCJobForTable {"TableID":107}
+                ├── CreateGCJobForTable {"DatabaseID":104,"TableID":107}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":107}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

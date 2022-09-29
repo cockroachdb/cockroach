@@ -311,6 +311,17 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TableZoneConfig)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
+	rel.EntityMapping(t((*scpb.DatabaseData)(nil)),
+		rel.EntityAttr(DescID, "DatabaseID"),
+	),
+	rel.EntityMapping(t((*scpb.TableData)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ReferencedDescID, "DatabaseID"),
+	),
+	rel.EntityMapping(t((*scpb.IndexData)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(IndexID, "IndexID"),
+	),
 }
 
 // Schema is the schema exported by this package covering the elements of scpb.

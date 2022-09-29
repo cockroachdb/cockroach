@@ -70,7 +70,8 @@ message ElementProto {
   ForeignKeyConstraint foreign_key_constraint = 27 [(gogoproto.moretags) = "parent:\"Table\""];
   TableComment table_comment = 28 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
   RowLevelTTL row_level_ttl = 29 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
-  TableZoneConfig table_zone_config = 121  [(gogoproto.moretags) = "parent:\"Table, View\""];
+  TableZoneConfig table_zone_config = 130 [(gogoproto.moretags) = "parent:\"Table, View\""];
+  TableData table_data = 131 [(gogoproto.customname) = "TableData", (gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
 
   // Multi-region elements.
   TableLocalityGlobal locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -92,6 +93,7 @@ message ElementProto {
   SecondaryIndexPartial secondary_index_partial = 42 [(gogoproto.moretags) = "parent:\"SecondaryIndex\""];
   IndexComment index_comment = 43 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
   IndexColumn index_column = 44 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex, Column\""];
+  IndexData index_data = 45 [(gogoproto.customname) = "IndexData", (gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex\""];
 
   // Constraint elements.
   ConstraintName constraint_name = 51 [(gogoproto.moretags) = "parent:\"UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
@@ -106,6 +108,7 @@ message ElementProto {
   DatabaseRegionConfig database_region_config = 80 [(gogoproto.moretags) = "parent:\"Database\""];
   DatabaseRoleSetting database_role_setting = 81 [(gogoproto.moretags) = "parent:\"Database\""];
   DatabaseComment database_comment = 82 [(gogoproto.moretags) = "parent:\"Database\""];
+  DatabaseData database_data = 83 [(gogoproto.customname) = "DatabaseData", (gogoproto.moretags) = "parent:\"Database\""];
 
   // Schema elements.
   SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
@@ -114,7 +117,7 @@ message ElementProto {
   // Object elements.
   ObjectParent object_parent = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
 
-  // Enum type elements
+  // Enum type elements.
   EnumTypeValue enum_type_value = 120 [(gogoproto.moretags) = "parent:\"EnumType\""];
 }
 
@@ -490,4 +493,21 @@ message EnumTypeValue {
 // TableZoneConfig temporary place holder just to allow blocking operations.
 message TableZoneConfig {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// DatabaseData models what needs to be GCed when a database is dropped.
+message DatabaseData {
+  uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// TableData models what needs to be GCed when a table is dropped.
+message TableData {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 database_id = 2 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// IndexData models what needs to be GCed when an index is dropped.
+message IndexData {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }

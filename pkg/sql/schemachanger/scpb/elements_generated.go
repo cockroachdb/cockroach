@@ -420,6 +420,37 @@ func FindDatabaseComment(b ElementStatusIterator) (current Status, target Target
 	return current, target, element
 }
 
+func (e DatabaseData) element() {}
+
+// ForEachDatabaseData iterates over elements of type DatabaseData.
+func ForEachDatabaseData(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DatabaseData),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*DatabaseData); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindDatabaseData finds the first element of type DatabaseData.
+func FindDatabaseData(b ElementStatusIterator) (current Status, target TargetStatus, element *DatabaseData) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*DatabaseData); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e DatabaseRegionConfig) element() {}
 
 // ForEachDatabaseRegionConfig iterates over elements of type DatabaseRegionConfig.
@@ -629,6 +660,37 @@ func FindIndexComment(b ElementStatusIterator) (current Status, target TargetSta
   }
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*IndexComment); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e IndexData) element() {}
+
+// ForEachIndexData iterates over elements of type IndexData.
+func ForEachIndexData(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexData),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*IndexData); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindIndexData finds the first element of type IndexData.
+func FindIndexData(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexData) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*IndexData); ok {
 			element = elt
 			current = c
 			target = t
@@ -1125,6 +1187,37 @@ func FindTableComment(b ElementStatusIterator) (current Status, target TargetSta
   }
 	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
 		if elt, ok := e.(*TableComment); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e TableData) element() {}
+
+// ForEachTableData iterates over elements of type TableData.
+func ForEachTableData(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *TableData),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*TableData); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindTableData finds the first element of type TableData.
+func FindTableData(b ElementStatusIterator) (current Status, target TargetStatus, element *TableData) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*TableData); ok {
 			element = elt
 			current = c
 			target = t

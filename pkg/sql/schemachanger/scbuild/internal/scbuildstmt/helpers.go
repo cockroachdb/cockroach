@@ -216,7 +216,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 
 func undroppedBackrefs(b BuildCtx, id catid.DescID) ElementResultSet {
 	return b.BackReferences(id).Filter(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
-		return target != scpb.ToAbsent && screl.ContainsDescID(e, id)
+		return target == scpb.ToPublic && screl.ContainsDescID(e, id)
 	})
 }
 
@@ -405,6 +405,7 @@ type indexSpec struct {
 	columns       []*scpb.IndexColumn
 	idxComment    *scpb.IndexComment
 	constrComment *scpb.ConstraintComment
+	data          *scpb.IndexData
 }
 
 // apply makes it possible to conveniently define build targets for all
@@ -437,6 +438,9 @@ func (s indexSpec) apply(fn func(e scpb.Element)) {
 	if s.constrComment != nil {
 		fn(s.constrComment)
 	}
+	if s.data != nil {
+		fn(s.data)
+	}
 }
 
 // clone conveniently deep-copies all the elements in the indexSpec.
@@ -467,6 +471,9 @@ func (s indexSpec) clone() (c indexSpec) {
 	}
 	if s.constrComment != nil {
 		c.constrComment = protoutil.Clone(s.constrComment).(*scpb.ConstraintComment)
+	}
+	if s.data != nil {
+		c.data = protoutil.Clone(s.data).(*scpb.IndexData)
 	}
 	return c
 }
@@ -509,6 +516,7 @@ func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s i
 			s.constrComment = cc
 		}
 	})
+	_, _, s.data = scpb.FindIndexData(idxElts)
 	return s
 }
 
@@ -610,6 +618,9 @@ func makeSwapIndexSpec(
 		if in.constrComment != nil {
 			in.constrComment.ConstraintID = inConstraintID
 		}
+		if in.data != nil {
+			in.data.IndexID = inID
+		}
 	}
 	// Setup temporary index.
 	{
@@ -635,6 +646,10 @@ func makeSwapIndexSpec(
 			ic.IndexID = tempID
 		}
 		temp.columns = s.columns
+		if s.data != nil {
+			temp.data = s.data
+			temp.data.IndexID = tempID
+		}
 	}
 	return in, temp
 }

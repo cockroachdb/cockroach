@@ -17,6 +17,8 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   {sequenceId: 104}
 - [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {objectId: 104, parentSchemaId: 101}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 104}
 
 setup
 CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text);
@@ -40,6 +42,8 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   {sequenceId: 104}
 - [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {objectId: 104, parentSchemaId: 101}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 104}
 - [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC]
   {columnId: 2, expr: 'nextval(104:::REGCLASS)', tableId: 105, usesSequenceIds: [104]}
 - [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC]
@@ -67,5 +71,7 @@ DROP SEQUENCE defaultdb.ownedseq CASCADE
   {sequenceId: 111}
 - [[ObjectParent:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {objectId: 111, parentSchemaId: 101}
+- [[TableData:{DescID: 111, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 111}
 - [[SequenceOwner:{DescID: 110, ColumnID: 1, ReferencedDescID: 111}, ABSENT], PUBLIC]
   {columnId: 1, sequenceId: 111, tableId: 110}

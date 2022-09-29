@@ -449,11 +449,11 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #104
   ...
      - direction: DROP
@@ -524,13 +524,10 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-create job #2 (non-cancelable: true): "GC for removed temporary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)"
-  descriptor IDs: [104]
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 2 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops pending"
 commit transaction #11
-notified job registry to adopt jobs: [2]
 begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -589,11 +586,11 @@ upsert descriptor #104
   -  version: "8"
   +  version: "9"
 write *eventpb.FinishSchemaChange to event log
-create job #3 (non-cancelable: true): "GC for removed primary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)"
+create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 commit transaction #12
-notified job registry to adopt jobs: [3]
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

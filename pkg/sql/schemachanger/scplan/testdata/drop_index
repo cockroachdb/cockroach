@@ -62,6 +62,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
 PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -78,13 +79,13 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
+    *scop.MakeIndexAbsent
+      IndexID: 2
+      TableID: 104
     *scop.CreateGCJobForIndex
       IndexID: 2
       StatementForDropJob:
-        Statement: removed secondary index; DROP INDEX defaultdb.public.t1@idx1 CASCADE
-      TableID: 104
-    *scop.MakeIndexAbsent
-      IndexID: 2
+        Statement: DROP INDEX defaultdb.public.t1@idx1 CASCADE
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
@@ -110,6 +111,10 @@ DROP INDEX idx1 CASCADE
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
+  to:   [IndexData:{DescID: 104, IndexID: 2}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, DELETE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT]
   kind: PreviousTransactionPrecedence
@@ -217,6 +222,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndexPartial:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.RemoveDroppedIndexPartialPredicate
       IndexID: 4
@@ -236,13 +242,13 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
+    *scop.MakeIndexAbsent
+      IndexID: 4
+      TableID: 104
     *scop.CreateGCJobForIndex
       IndexID: 4
       StatementForDropJob:
-        Statement: removed secondary index; DROP INDEX defaultdb.public.t1@idx2 CASCADE
-      TableID: 104
-    *scop.MakeIndexAbsent
-      IndexID: 4
+        Statement: DROP INDEX defaultdb.public.t1@idx2 CASCADE
       TableID: 104
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4
@@ -319,6 +325,10 @@ DROP INDEX idx2 CASCADE
   to:   [Column:{DescID: 104, ColumnID: 4}, ABSENT]
   kind: Precedence
   rule: indexes containing column reach absent before column
+- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
+  to:   [IndexData:{DescID: 104, IndexID: 4}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, DELETE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
   kind: PreviousTransactionPrecedence
@@ -445,6 +455,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], DELETE_ONLY] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -467,13 +478,13 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
+    *scop.MakeIndexAbsent
+      IndexID: 6
+      TableID: 104
     *scop.CreateGCJobForIndex
       IndexID: 6
       StatementForDropJob:
-        Statement: removed secondary index; DROP INDEX defaultdb.public.t1@idx3 CASCADE
-      TableID: 104
-    *scop.MakeIndexAbsent
-      IndexID: 6
+        Statement: DROP INDEX defaultdb.public.t1@idx3 CASCADE
       TableID: 104
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 5
@@ -558,6 +569,10 @@ DROP INDEX idx3 CASCADE
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: Precedence
   rule: indexes containing column reach absent before column
+- from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
+  to:   [IndexData:{DescID: 104, IndexID: 6}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, DELETE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT]
   kind: PreviousTransactionPrecedence
@@ -738,6 +753,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
 PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -756,13 +772,13 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
+    *scop.MakeIndexAbsent
+      IndexID: 8
+      TableID: 104
     *scop.CreateGCJobForIndex
       IndexID: 8
       StatementForDropJob:
-        Statement: removed secondary index; DROP INDEX defaultdb.public.t1@idx4 CASCADE
-      TableID: 104
-    *scop.MakeIndexAbsent
-      IndexID: 8
+        Statement: DROP INDEX defaultdb.public.t1@idx4 CASCADE
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
@@ -836,6 +852,10 @@ DROP INDEX idx4 CASCADE
   to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT]
+  to:   [IndexData:{DescID: 104, IndexID: 8}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, DELETE_ONLY]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 8, ConstraintID: 3}, ABSENT]
   kind: PreviousTransactionPrecedence
