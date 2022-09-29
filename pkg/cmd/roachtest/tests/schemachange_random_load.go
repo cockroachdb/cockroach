@@ -45,6 +45,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 			spec.Geo(),
 			spec.Zones(geoZonesStr),
 		),
+		NativeLibs: registry.LibGEOS,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
@@ -81,10 +82,11 @@ func registerRandomLoadBenchSpec(r registry.Registry, b randomLoadBenchSpec) {
 	name := strings.Join(nameParts, "/")
 
 	r.Add(registry.TestSpec{
-		Name:    name,
-		Owner:   registry.OwnerSQLSchema,
-		Cluster: r.MakeClusterSpec(b.Nodes),
-		Skip:    "https://github.com/cockroachdb/cockroach/issues/56230",
+		Name:       name,
+		Owner:      registry.OwnerSQLSchema,
+		Cluster:    r.MakeClusterSpec(b.Nodes),
+		NativeLibs: registry.LibGEOS,
+		Skip:       "https://github.com/cockroachdb/cockroach/issues/56230",
 		// This is set while development is still happening on the workload and we
 		// fix (or bypass) minor schema change bugs that are discovered.
 		NonReleaseBlocker: true,
@@ -133,9 +135,6 @@ func runSchemaChangeRandomLoad(
 	t.Status("copying binaries")
 	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
-	if err := c.PutLibraries(ctx, "./lib"); err != nil {
-		t.Fatal(err)
-	}
 
 	t.Status("starting cockroach nodes")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)

@@ -45,9 +45,6 @@ func registerRubyPG(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		if err := c.PutLibraries(ctx, "./lib"); err != nil {
-			t.Fatal(err)
-		}
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
@@ -234,10 +231,11 @@ func registerRubyPG(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "ruby-pg",
-		Owner:   registry.OwnerSQLExperience,
-		Cluster: r.MakeClusterSpec(1),
-		Tags:    []string{`default`, `orm`},
+		Name:       "ruby-pg",
+		Owner:      registry.OwnerSQLExperience,
+		Cluster:    r.MakeClusterSpec(1),
+		NativeLibs: registry.LibGEOS,
+		Tags:       []string{`default`, `orm`},
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRubyPGTest(ctx, t, c)
 		},
