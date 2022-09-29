@@ -121,7 +121,7 @@ func TestRunNewVsOld(t *testing.T) {
 			rng, seed := randutil.NewTestRand()
 			t.Logf("Using subtest seed: %d", seed)
 
-			eng := storage.NewDefaultInMemForTesting()
+			eng := storage.NewDefaultInMemForTesting(storage.BlockSize(1))
 			defer eng.Close()
 
 			tc.ds.dist(N, rng).setupTest(t, eng, *tc.ds.desc())
@@ -273,7 +273,7 @@ func TestNewVsInvariants(t *testing.T) {
 			t.Logf("Using subtest seed: %d", seed)
 
 			desc := tc.ds.desc()
-			eng := storage.NewDefaultInMemForTesting()
+			eng := storage.NewDefaultInMemForTesting(storage.BlockSize(1))
 			defer eng.Close()
 
 			sortedDistribution(tc.ds.dist(N, rng)).setupTest(t, eng, *desc)

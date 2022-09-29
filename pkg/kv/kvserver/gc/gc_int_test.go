@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -54,6 +55,9 @@ func TestEndToEndGC(t *testing.T) {
 	tc := testcluster.NewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					SmallEngineBlocks: true,
+				},
 				Server: &server.TestingKnobs{
 					WallClock: manualClock,
 				},
