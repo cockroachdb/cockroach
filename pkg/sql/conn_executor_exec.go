@@ -1129,6 +1129,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		if !ok {
 			return nil, errors.AssertionFailedf("query %d not in registry", stmt.QueryID)
 		}
+		queryMeta.planGist = planner.instrumentation.planGist.String()
 		queryMeta.phase = executing
 		// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
 		queryMeta.isDistributed = distributePlan.WillDistribute()

@@ -912,6 +912,10 @@ message ActiveQuery {
   // Time elapsed since this query started execution.
   google.protobuf.Duration elapsed_time = 11
   [ (gogoproto.nullable) = false, (gogoproto.stdduration) = true ];
+
+  // The compressed plan that can be converted back into the statement's logical plan.
+  // Empty if the statement is in the PREPARING state.
+  string plan_gist = 12;
 }
 
 // Request object for ListSessions and ListLocalSessions.
