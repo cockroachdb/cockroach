@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -51,6 +52,7 @@ func newTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMon
 // Tests the de-duping functionality of DiskBackedNumberedRowContainer.
 func TestNumberedRowContainerDeDuping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -142,6 +144,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 // elsewhere.
 func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -242,6 +245,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 // DiskBackedIndexedRowContainer return the same results.
 func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	rng, _ := randutil.NewTestRand()
 
@@ -553,6 +557,9 @@ func accessPatternForBenchmarkIterations(totalAccesses int, accessPattern [][]in
 }
 
 func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
 	const numRows = 10000
 
 	ctx := context.Background()

@@ -67,6 +67,7 @@ func runSampler(
 	flowCtx := execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 	// Override the default memory limit. If memLimitBytes is small but
 	// non-zero, the processor will hit this limit and disable sampling.
@@ -356,6 +357,7 @@ func TestSamplerSketch(t *testing.T) {
 				Settings: st,
 			},
 			EvalCtx: &evalCtx,
+			Mon:     evalCtx.TestingMon,
 		}
 
 		spec := &execinfrapb.SamplerSpec{
