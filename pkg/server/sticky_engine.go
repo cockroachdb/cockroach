@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -136,6 +137,10 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 		storage.MaxSize(spec.Size.InBytes),
 		storage.EncryptionAtRest(spec.EncryptionOptions),
 		storage.ForStickyEngineTesting,
+	}
+
+	if s := cfg.TestingKnobs.Store; s != nil && s.(*kvserver.StoreTestingKnobs).SmallEngineBlocks {
+		options = append(options, storage.BlockSize(1))
 	}
 
 	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)
