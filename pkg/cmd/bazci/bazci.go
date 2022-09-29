@@ -184,6 +184,9 @@ func processBuildEventProtocolLog(action, bepLoc string) error {
 			outputDir = strings.ReplaceAll(outputDir, ":", "/")
 			outputDir = filepath.Join("bazel-testlogs", outputDir)
 			summary := event.GetTestSummary()
+			if summary == nil {
+				summary = &bes.TestSummary{}
+			}
 			for _, testResult := range testResults[label] {
 				outputDir := outputDir
 				if testResult.run > 1 {
@@ -216,6 +219,9 @@ func processBuildEventProtocolLog(action, bepLoc string) error {
 
 	if action == "build" {
 		for _, target := range builtTargets {
+			if target == nil {
+				continue
+			}
 			for _, outputGroup := range target.OutputGroup {
 				if outputGroup.Incomplete {
 					continue
