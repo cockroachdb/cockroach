@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -500,8 +499,8 @@ func makeTenantSQLServerArgs(
 	)
 
 	circularInternalExecutor := &sql.InternalExecutor{}
+	internalExecutorFactory := &sql.InternalExecutorFactory{}
 	circularJobRegistry := &jobs.Registry{}
-	collectionFactory := &descs.CollectionFactory{}
 
 	// Initialize the protectedts subsystem in multi-tenant clusters.
 	var protectedTSProvider protectedts.Provider
@@ -541,7 +540,7 @@ func makeTenantSQLServerArgs(
 		nodeDialer,
 		baseCfg.TestingKnobs,
 		circularInternalExecutor,
-		collectionFactory,
+		internalExecutorFactory,
 		db,
 		costController,
 	)
@@ -610,7 +609,7 @@ func makeTenantSQLServerArgs(
 		sessionRegistry:          sessionRegistry,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: circularInternalExecutor,
-		collectionFactory:        collectionFactory,
+		internalExecutorFactory:  internalExecutorFactory,
 		circularJobRegistry:      circularJobRegistry,
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,

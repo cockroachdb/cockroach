@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -152,7 +151,7 @@ func ExternalStorageFromURI(
 	blobClientFactory blobs.BlobClientFactory,
 	user username.SQLUsername,
 	ie sqlutil.InternalExecutor,
-	cf *descs.CollectionFactory,
+	ief sqlutil.InternalExecutorFactory,
 	kvDB *kv.DB,
 	limiters Limiters,
 	opts ...ExternalStorageOption,
@@ -162,7 +161,7 @@ func ExternalStorageFromURI(
 		return nil, err
 	}
 	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory,
-		ie, cf, kvDB, limiters, opts...)
+		ie, ief, kvDB, limiters, opts...)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -207,20 +206,20 @@ func MakeExternalStorage(
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 	ie sqlutil.InternalExecutor,
-	cf *descs.CollectionFactory,
+	ief sqlutil.InternalExecutorFactory,
 	kvDB *kv.DB,
 	limiters Limiters,
 	opts ...ExternalStorageOption,
 ) (ExternalStorage, error) {
 	args := ExternalStorageContext{
-		IOConf:            conf,
-		Settings:          settings,
-		BlobClientFactory: blobClientFactory,
-		InternalExecutor:  ie,
-		CollectionFactory: cf,
-		DB:                kvDB,
-		Options:           opts,
-		Limiters:          limiters,
+		IOConf:                  conf,
+		Settings:                settings,
+		BlobClientFactory:       blobClientFactory,
+		InternalExecutor:        ie,
+		InternalExecutorFactory: ief,
+		DB:                      kvDB,
+		Options:                 opts,
+		Limiters:                limiters,
 	}
 	if conf.DisableOutbound && dest.Provider != cloudpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")

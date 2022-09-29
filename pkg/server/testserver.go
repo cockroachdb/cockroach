@@ -1101,6 +1101,11 @@ func (ts *TestServer) InternalExecutor() interface{} {
 	return ts.sqlServer.internalExecutor
 }
 
+// InternalExecutorFactory is part of TestServerInterface.
+func (ts *TestServer) InternalExecutorFactory() interface{} {
+	return ts.sqlServer.internalExecutorFactory
+}
+
 // GetNode exposes the Server's Node.
 func (ts *TestServer) GetNode() *Node {
 	return ts.node

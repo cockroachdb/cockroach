@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
@@ -150,14 +149,14 @@ type ExternalStorageURIParser func(ExternalStorageURIContext, *url.URL) (cloudpb
 // ExternalStorageContext contains the dependencies passed to external storage
 // implementations during creation.
 type ExternalStorageContext struct {
-	IOConf            base.ExternalIODirConfig
-	Settings          *cluster.Settings
-	BlobClientFactory blobs.BlobClientFactory
-	InternalExecutor  sqlutil.InternalExecutor
-	CollectionFactory *descs.CollectionFactory
-	DB                *kv.DB
-	Options           []ExternalStorageOption
-	Limiters          Limiters
+	IOConf                  base.ExternalIODirConfig
+	Settings                *cluster.Settings
+	BlobClientFactory       blobs.BlobClientFactory
+	InternalExecutor        sqlutil.InternalExecutor
+	InternalExecutorFactory sqlutil.InternalExecutorFactory
+	DB                      *kv.DB
+	Options                 []ExternalStorageOption
+	Limiters                Limiters
 }
 
 // ExternalStorageOptions holds dependencies and values that can be

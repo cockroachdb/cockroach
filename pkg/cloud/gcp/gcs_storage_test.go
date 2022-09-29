@@ -60,7 +60,16 @@ func TestPutGoogleCloud(t *testing.T) {
 		if specified {
 			uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
 		}
-		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, nil, testSettings)
+		cloudtestutils.CheckExportStore(
+			t,
+			uri,
+			false,
+			user,
+			nil, /* ie */
+			nil, /* ief */
+			nil, /* kvDB */
+			testSettings,
+		)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
 			bucket,
 			"backup-test-specified",
@@ -71,7 +80,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			url.QueryEscape(encoded),
 		), username.RootUserName(),
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -81,8 +90,16 @@ func TestPutGoogleCloud(t *testing.T) {
 			skip.IgnoreLint(t, "implicit auth is not configured")
 		}
 
-		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
-			cloud.AuthParam, cloud.AuthParamImplicit), false, user, nil, nil, nil, testSettings)
+		cloudtestutils.CheckExportStore(
+			t,
+			fmt.Sprintf("gs://%s/%s?%s=%s", bucket, "backup-test-implicit",
+				cloud.AuthParam, cloud.AuthParamImplicit),
+			false,
+			user,
+			nil, /* ie */
+			nil, /* ief */
+			nil, /* kvDB */
+			testSettings)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s/%s?%s=%s",
 			bucket,
 			"backup-test-implicit",
@@ -91,7 +108,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			cloud.AuthParamImplicit,
 		), username.RootUserName(),
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -118,7 +135,15 @@ func TestPutGoogleCloud(t *testing.T) {
 			token.AccessToken,
 		)
 		uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
-		cloudtestutils.CheckExportStore(t, uri, false, user, nil, nil, nil, testSettings)
+		cloudtestutils.CheckExportStore(
+			t,
+			uri,
+			false,
+			user,
+			nil, /* ie */
+			nil, /* ief */
+			nil, /* kvDB */
+			testSettings)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s",
 			bucket,
 			"backup-test-specified",
@@ -129,7 +154,7 @@ func TestPutGoogleCloud(t *testing.T) {
 			token.AccessToken,
 		), username.RootUserName(),
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -161,20 +186,27 @@ func TestGCSAssumeRole(t *testing.T) {
 		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
 			CredentialsParam, url.QueryEscape(encoded)), user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
 
-		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s&%s=%s",
-			limitedBucket,
-			"backup-test-assume-role",
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
-			AssumeRoleParam,
-			assumedAccount, CredentialsParam,
-			url.QueryEscape(encoded),
-		), false, user, nil, nil, nil, testSettings)
+		cloudtestutils.CheckExportStore(
+			t,
+			fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s&%s=%s",
+				limitedBucket,
+				"backup-test-assume-role",
+				cloud.AuthParam,
+				cloud.AuthParamSpecified,
+				AssumeRoleParam,
+				assumedAccount, CredentialsParam,
+				url.QueryEscape(encoded),
+			), false, user,
+			nil, /* ie */
+			nil, /* ief */
+			nil, /* kvDB */
+			testSettings,
+		)
 		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s/%s?%s=%s&%s=%s&%s=%s",
 			limitedBucket,
 			"backup-test-assume-role",
@@ -187,7 +219,7 @@ func TestGCSAssumeRole(t *testing.T) {
 			url.QueryEscape(encoded),
 		), username.RootUserName(),
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -203,7 +235,7 @@ func TestGCSAssumeRole(t *testing.T) {
 		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s?%s=%s", limitedBucket, "backup-test-assume-role",
 			cloud.AuthParam, cloud.AuthParamImplicit), user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -211,7 +243,7 @@ func TestGCSAssumeRole(t *testing.T) {
 		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role",
 			cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount), false, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -225,7 +257,7 @@ func TestGCSAssumeRole(t *testing.T) {
 			assumedAccount,
 		), username.RootUserName(),
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -269,7 +301,7 @@ func TestGCSAssumeRole(t *testing.T) {
 					)
 					cloudtestutils.CheckNoPermission(t, roleURI, user,
 						nil, /* ie */
-						nil, /* cf */
+						nil, /* ief */
 						nil, /* kvDB */
 						testSettings,
 					)
@@ -285,13 +317,13 @@ func TestGCSAssumeRole(t *testing.T) {
 				)
 				cloudtestutils.CheckExportStore(t, uri, false, user,
 					nil, /* ie */
-					nil, /* cf */
+					nil, /* ief */
 					nil, /* kvDB */
 					testSettings,
 				)
 				cloudtestutils.CheckListFiles(t, uri, user,
 					nil, /* ie */
-					nil, /* cf */
+					nil, /* ief */
 					nil, /* kvDB */
 					testSettings,
 				)
@@ -339,7 +371,7 @@ func TestFileDoesNotExist(t *testing.T) {
 		s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
 			nil, /* blobClientFactory */
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
 		)
@@ -358,7 +390,7 @@ func TestFileDoesNotExist(t *testing.T) {
 		s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{}, testSettings,
 			nil, /* blobClientFactory */
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
 		)
@@ -395,7 +427,7 @@ func TestCompressedGCS(t *testing.T) {
 	s1, err := cloud.MakeExternalStorage(ctx, conf1, base.ExternalIODirConfig{}, testSettings,
 		nil, /* blobClientFactory */
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)
@@ -403,7 +435,7 @@ func TestCompressedGCS(t *testing.T) {
 	s2, err := cloud.MakeExternalStorage(ctx, conf2, base.ExternalIODirConfig{}, testSettings,
 		nil, /* blobClientFactory */
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)

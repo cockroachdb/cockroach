@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -2702,9 +2703,9 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 	writeToUserfile := func(filename, data string) {
 		// Write to userfile storage now that testuser has CREATE privileges.
 		ie := tc.Server(0).InternalExecutor().(*sql.InternalExecutor)
-		cf := tc.Server(0).CollectionFactory().(*descs.CollectionFactory)
+		ief := tc.Server(0).InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 		fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.TestUserName(), ie, cf, tc.Server(0).DB(), nil)
+			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.TestUserName(), ie, ief, tc.Server(0).DB(), nil)
 		require.NoError(t, err)
 		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data))))
 	}
@@ -5852,7 +5853,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			blobs.TestEmptyBlobClientFactory,
 			username.RootUserName(),
 			tc.Server(0).InternalExecutor().(*sql.InternalExecutor),
-			tc.Server(0).CollectionFactory().(*descs.CollectionFactory),
+			tc.Server(0).InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
 			tc.Server(0).DB(),
 			nil,
 		)
