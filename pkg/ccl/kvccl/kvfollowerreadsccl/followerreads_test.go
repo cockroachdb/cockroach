@@ -144,13 +144,28 @@ func TestCanSendToFollower(t *testing.T) {
 			exp:  true,
 		},
 		{
+			name: "stale non-txn export batch",
+			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), stale),
+			exp:  false,
+		},
+		{
 			name: "current-time non-txn batch",
 			ba:   withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
 			exp:  false,
 		},
 		{
+			name: "current-time non-txn export batch",
+			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), current),
+			exp:  false,
+		},
+		{
 			name: "future non-txn batch",
 			ba:   withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
+			exp:  false,
+		},
+		{
+			name: "future non-txn export batch",
+			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), future),
 			exp:  false,
 		},
 		{
@@ -175,8 +190,28 @@ func TestCanSendToFollower(t *testing.T) {
 		},
 		{
 			name: "stale locking read",
-			ba:   batch(txn(stale), &roachpb.ScanRequest{KeyLocking: lock.Exclusive}),
+			ba:   batch(txn(stale), &roachpb.GetRequest{KeyLocking: lock.Exclusive}),
 			exp:  false,
+		},
+		{
+			name: "stale scan",
+			ba:   batch(txn(stale), &roachpb.ScanRequest{}),
+			exp:  true,
+		},
+		{
+			name: "stale reverse scan",
+			ba:   batch(txn(stale), &roachpb.ReverseScanRequest{}),
+			exp:  true,
+		},
+		{
+			name: "stale refresh",
+			ba:   batch(txn(stale), &roachpb.RefreshRequest{}),
+			exp:  true,
+		},
+		{
+			name: "stale refresh range",
+			ba:   batch(txn(stale), &roachpb.RefreshRangeRequest{}),
+			exp:  true,
 		},
 		{
 			name: "stale write",
@@ -237,14 +272,32 @@ func TestCanSendToFollower(t *testing.T) {
 			exp:      true,
 		},
 		{
+			name:     "stale non-txn export batch, global reads policy",
+			ba:       withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), stale),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
 			name:     "current-time non-txn batch, global reads policy",
 			ba:       withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), current),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
 		{
+			name:     "current-time non-txn export batch, global reads policy",
+			ba:       withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), current),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
 			name:     "future non-txn batch, global reads policy",
 			ba:       withBatchTimestamp(batch(nil, &roachpb.GetRequest{}), future),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      false,
+		},
+		{
+			name:     "future non-txn export batch, global reads policy",
+			ba:       withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), future),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
@@ -274,9 +327,33 @@ func TestCanSendToFollower(t *testing.T) {
 		},
 		{
 			name:     "stale locking read, global reads policy",
-			ba:       batch(txn(stale), &roachpb.ScanRequest{KeyLocking: lock.Exclusive}),
+			ba:       batch(txn(stale), &roachpb.GetRequest{KeyLocking: lock.Exclusive}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
+		},
+		{
+			name:     "stale scan, global reads policy",
+			ba:       batch(txn(stale), &roachpb.ScanRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "stale reverse scan, global reads policy",
+			ba:       batch(txn(stale), &roachpb.ReverseScanRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "stale refresh, global reads policy",
+			ba:       batch(txn(stale), &roachpb.RefreshRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "stale refresh range, global reads policy",
+			ba:       batch(txn(stale), &roachpb.RefreshRangeRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
 		},
 		{
 			name:     "stale write, global reads policy",
@@ -317,6 +394,30 @@ func TestCanSendToFollower(t *testing.T) {
 		{
 			name:     "current-time read, global reads policy",
 			ba:       batch(txn(current), &roachpb.GetRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "current-time scan, global reads policy",
+			ba:       batch(txn(current), &roachpb.ScanRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "current-time reverse scan, global reads policy",
+			ba:       batch(txn(current), &roachpb.ReverseScanRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "current-time refresh, global reads policy",
+			ba:       batch(txn(current), &roachpb.RefreshRequest{}),
+			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
+			exp:      true,
+		},
+		{
+			name:     "current-time refresh range, global reads policy",
+			ba:       batch(txn(current), &roachpb.RefreshRangeRequest{}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      true,
 		},
