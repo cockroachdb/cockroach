@@ -31,7 +31,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   └── • ColumnName:{DescID: 104, Name: j, ColumnID: 2}
         │         ABSENT → PUBLIC
         │
-        ├── • 4 elements transitioning toward ABSENT
+        ├── • 5 elements transitioning toward ABSENT
         │   │
         │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │ BACKFILL_ONLY → ABSENT
@@ -51,6 +51,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   └── • skip PUBLIC → ABSENT operations
         │   │         rule: "skip index-column removal ops on index removal"
         │   │
+        │   ├── • IndexData:{DescID: 104, IndexID: 2}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
+        │   │
         │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
@@ -66,7 +72,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │       └── • skip PUBLIC → ABSENT operations
         │             rule: "skip index-column removal ops on index removal"
         │
-        └── • 9 Mutation operations
+        └── • 8 Mutation operations
             │
             ├── • SetColumnName
             │     ColumnID: 2
@@ -88,13 +94,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             ├── • RefreshStats
             │     TableID: 104
             │
-            ├── • CreateGCJobForIndex
-            │     IndexID: 2
-            │     StatementForDropJob:
-            │       Rollback: true
-            │       Statement: removed primary index; ALTER TABLE defaultdb.public.t DROP COLUMN j
-            │     TableID: 104
-            │
             ├── • MakeIndexAbsent
             │     EventBase:
             │       Authorization:
@@ -108,10 +107,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     TableID: 104
             │
             ├── • CreateGCJobForIndex
-            │     IndexID: 3
+            │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t DROP COLUMN j
+            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j
             │     TableID: 104
             │
             ├── • MakeIndexAbsent

@@ -641,6 +641,7 @@ func addSecondaryIndexTargetsForAddColumn(
 		})
 	}
 	b.Add(sec)
+	b.Add(&scpb.IndexData{TableID: tbl.TableID, IndexID: index.IndexID})
 	indexName := desc.Name
 	numImplicitColumns := 0
 	if partitioning != nil {
@@ -681,6 +682,7 @@ func addSecondaryIndexTargetsForAddColumn(
 		b.Add(c)
 	}
 	b.AddTransient(temp)
+	b.AddTransient(&scpb.IndexData{TableID: temp.TableID, IndexID: temp.IndexID})
 	// Add in the partitioning descriptor for the final and temporary index.
 	if partitioning != nil {
 		b.Add(&scpb.IndexPartitioning{

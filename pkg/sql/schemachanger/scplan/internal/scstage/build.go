@@ -142,13 +142,7 @@ func buildStages(bc buildContext) (stages []Stage) {
 			if bs.phase == scop.LatestPhase {
 				// This should never happen, we should always be able to make forward
 				// progress because we haven't reached the terminal state yet.
-				var str strings.Builder
-				for _, t := range sb.current {
-					str.WriteString(" - ")
-					str.WriteString(screl.NodeString(t.n))
-					str.WriteString("\n")
-				}
-				panic(errors.WithDetailf(errors.AssertionFailedf("unable to make progress"), "terminal state:\n%s", str.String()))
+				panic(errors.WithDetailf(errors.AssertionFailedf("unable to make progress"), "terminal state:\n%s", sb))
 			}
 			bs.phase++
 			sb = bc.makeStageBuilder(bs)
@@ -348,7 +342,7 @@ func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState 
 	return sb.makeCurrentTargetState(t.e.To())
 }
 
-// hasUnmeetableOutboundDeps returns true iff the candidate node has inbound
+// hasUnmetInboundDeps returns true iff the candidate node has inbound
 // dependencies which aren't yet met.
 //
 // In plain english: we can only schedule this node in this stage if all the
@@ -512,6 +506,17 @@ func (sb stageBuilder) hasAnyNonRevertibleOps() bool {
 		}
 	}
 	return false
+}
+
+// String returns a string representation of the stageBuilder.
+func (sb stageBuilder) String() string {
+	var str strings.Builder
+	for _, t := range sb.current {
+		str.WriteString(" - ")
+		str.WriteString(screl.NodeString(t.n))
+		str.WriteString("\n")
+	}
+	return str.String()
 }
 
 // computeExtraJobOps generates job-related operations to decorate a stage with.

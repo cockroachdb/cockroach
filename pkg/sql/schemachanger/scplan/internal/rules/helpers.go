@@ -275,7 +275,7 @@ func isColumn(e scpb.Element) bool {
 }
 
 func isSimpleDependent(e scpb.Element) bool {
-	return !IsDescriptor(e) && !isSubjectTo2VersionInvariant(e)
+	return !IsDescriptor(e) && !isSubjectTo2VersionInvariant(e) && !isData(e)
 }
 
 func getTypeT(element scpb.Element) (*scpb.TypeT, error) {
@@ -387,6 +387,18 @@ func isConstraintDependent(e scpb.Element) bool {
 	case *scpb.ConstraintName:
 		return true
 	case *scpb.ConstraintComment:
+		return true
+	}
+	return false
+}
+
+func isData(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.DatabaseData:
+		return true
+	case *scpb.TableData:
+		return true
+	case *scpb.IndexData:
 		return true
 	}
 	return false

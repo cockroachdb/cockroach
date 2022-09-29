@@ -123,13 +123,6 @@ func init() {
 				emit(func(this *scpb.SecondaryIndex, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.SecondaryIndex, md *targetsWithElementMap) *scop.CreateGCJobForIndex {
-					return &scop.CreateGCJobForIndex{
-						TableID:             this.TableID,
-						IndexID:             this.IndexID,
-						StatementForDropJob: statementForDropJob(this, md),
-					}
-				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.MakeIndexAbsent {
 					return &scop.MakeIndexAbsent{
 						TableID: this.TableID,

@@ -360,7 +360,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │                 - 108
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP TABLE multi_region_test_db.public.table_regional_by_row
 │                   redactedstatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›
@@ -370,7 +370,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 6 elements transitioning toward ABSENT
+        ├── • 8 elements transitioning toward ABSENT
         │   │
         │   ├── • Table:{DescID: 108}
         │   │   │ DROPPED → ABSENT
@@ -435,28 +435,43 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
         │   │   └── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
         │   │         rule: "dependents removed before column"
         │   │
-        │   └── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-        │       │ DELETE_ONLY → ABSENT
+        │   ├── • PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
+        │   │   │     rule: "descriptor removal right before dependent element removal"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 108, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • skip DELETE_ONLY → ABSENT operations
+        │   │         rule: "skip index removal ops on relation drop"
+        │   │
+        │   ├── • IndexData:{DescID: 108, IndexID: 1}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "index removed before garbage collection"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 108, ReferencedDescID: 104}
+        │   │         rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │
+        │   └── • TableData:{DescID: 108, ReferencedDescID: 104}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       ├── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
-        │       │     rule: "descriptor removal right before dependent element removal"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 108, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       └── • skip DELETE_ONLY → ABSENT operations
-        │             rule: "skip index removal ops on relation drop"
+        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
+        │             rule: "table removed right before garbage collection"
         │
-        └── • 10 Mutation operations
+        └── • 11 Mutation operations
             │
             ├── • LogEvent
             │     Element:
@@ -471,11 +486,6 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │         SourceElementID: 1
             │         SubWorkID: 1
             │     TargetStatus: 1
-            │
-            ├── • CreateGCJobForTable
-            │     StatementForDropJob:
-            │       Statement: DROP TABLE multi_region_test_db.public.table_regional_by_row
-            │     TableID: 108
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 1
@@ -523,6 +533,18 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │       TargetMetadata:
             │         SourceElementID: 1
             │         SubWorkID: 1
+            │     TableID: 108
+            │
+            ├── • CreateGCJobForTable
+            │     DatabaseID: 104
+            │     StatementForDropJob:
+            │       Statement: DROP TABLE multi_region_test_db.public.table_regional_by_row
+            │     TableID: 108
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 1
+            │     StatementForDropJob:
+            │       Statement: DROP TABLE multi_region_test_db.public.table_regional_by_row
             │     TableID: 108
             │
             ├── • RemoveJobStateFromDescriptor

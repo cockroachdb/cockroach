@@ -51,18 +51,21 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 5 elements transitioning toward ABSENT
+           ├── 7 elements transitioning toward ABSENT
            │    ├── DROPPED     → ABSENT Table:{DescID: 108}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 1}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 4294967295}
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108, ColumnID: 4294967294}
-           │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
-           └── 8 Mutation operations
+           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108, IndexID: 1}
+           │    └── PUBLIC      → ABSENT TableData:{DescID: 108, ReferencedDescID: 104}
+           └── 9 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGCJobForTable {"TableID":108}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+                ├── CreateGCJobForTable {"DatabaseID":104,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

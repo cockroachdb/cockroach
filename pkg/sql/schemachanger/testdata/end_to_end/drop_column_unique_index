@@ -351,11 +351,11 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "16"
   +  version: "17"
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
 upsert descriptor #106
   ...
      - direction: DROP
@@ -403,13 +403,10 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "17"
   +  version: "18"
-create job #2 (non-cancelable: true): "GC for removed temporary index; ALTER TABLE t.public.test DROP COLUMN pi"
-  descriptor IDs: [106]
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops pending"
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops pending"
 commit transaction #11
-notified job registry to adopt jobs: [2]
 begin transaction #12
-## PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 3 with 7 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -492,11 +489,11 @@ upsert descriptor #106
   -  version: "18"
   +  version: "19"
 write *eventpb.FinishSchemaChange to event log
-create job #3 (non-cancelable: true): "GC for removed primary index; ALTER TABLE t.public.test DROP COLUMN pi"
+create job #2 (non-cancelable: true): "GC for ALTER TABLE t.public.test DROP COLUMN pi"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 commit transaction #12
-notified job registry to adopt jobs: [3]
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase
