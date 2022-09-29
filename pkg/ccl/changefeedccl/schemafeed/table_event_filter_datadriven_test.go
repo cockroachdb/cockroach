@@ -154,7 +154,7 @@ func TestDataDriven(t *testing.T) {
 						ev.After.GetName(), ev.Before.GetVersion(), ev.After.GetVersion(),
 						schemafeed.ClassifyEvent(ev),
 					)
-					if _, noColumnChanges := schemafeed.IsPrimaryIndexChange(ev); noColumnChanges {
+					if _, noColumnChanges := schemafeed.IsPrimaryIndexChange(ev, changefeedbase.Targets{}); noColumnChanges {
 						buf.WriteString(" (no column changes)")
 					}
 				}
