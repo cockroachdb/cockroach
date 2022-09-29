@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,6 +38,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
+// bugs in time-bound iterators. We disable this under race, due to the slowdown.
+var smallEngineBlocks = !util.RaceEnabled &&
+	util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 
 func init() {
 	randutil.SeedForTests()
@@ -54,6 +61,9 @@ func TestEndToEndGC(t *testing.T) {
 	tc := testcluster.NewTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					SmallEngineBlocks: smallEngineBlocks,
+				},
 				Server: &server.TestingKnobs{
 					WallClock: manualClock,
 				},
