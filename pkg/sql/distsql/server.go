@@ -325,15 +325,12 @@ func (ds *ServerImpl) setupFlow(
 		// state once the flow cleans up. Note that we could have made a copy of
 		// the whole evalContext, but that isn't free, so we choose to restore
 		// the original state in order to avoid performance regressions.
-		origMon := evalCtx.Mon
 		origTxn := evalCtx.Txn
 		oldOnFlowCleanup := onFlowCleanup
 		onFlowCleanup = func() {
-			evalCtx.Mon = origMon
 			evalCtx.Txn = origTxn
 			oldOnFlowCleanup()
 		}
-		evalCtx.Mon = monitor
 		if localState.MustUseLeafTxn() {
 			var err error
 			leafTxn, err = makeLeaf()
@@ -370,7 +367,6 @@ func (ds *ServerImpl) setupFlow(
 			NodeID:           ds.ServerConfig.NodeID,
 			Codec:            ds.ServerConfig.Codec,
 			ReCache:          ds.regexpCache,
-			Mon:              monitor,
 			Locality:         ds.ServerConfig.Locality,
 			Tracer:           ds.ServerConfig.Tracer,
 			// Most processors will override this Context with their own context in
