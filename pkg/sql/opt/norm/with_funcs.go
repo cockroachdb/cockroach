@@ -69,7 +69,7 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 // `column IN (VALUES(...))` or `column NOT IN(VALUES(...))`, but could likely
 // be extended to handle other expressions in the future.
 func (c *CustomFuncs) CanInlineWithScan(private *memo.WithScanPrivate, scalar opt.ScalarExpr) bool {
-	if !private.CanInlineInPlace {
+	if true /* !private.CanInlineInPlace */ {
 		return false
 	}
 	// If we don't have `column IN(...)` or `column NOT IN(...)`, it is not
