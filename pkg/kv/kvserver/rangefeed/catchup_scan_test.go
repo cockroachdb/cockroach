@@ -91,7 +91,7 @@ func TestCatchupScan(t *testing.T) {
 	kv2_2_2 := makeKTV(testKey2, ts2, testValue2)
 	kv2_5_3 := makeKTV(testKey2, ts5, testValue3)
 
-	eng := storage.NewDefaultInMemForTesting()
+	eng := storage.NewDefaultInMemForTesting(storage.BlockSize(1))
 	defer eng.Close()
 	// Put with no intent.
 	for _, kv := range []storage.MVCCKeyValue{kv1_1_1, kv1_2_2, kv1_3_3, kv2_1_1, kv2_2_2, kv2_5_3} {
@@ -141,7 +141,7 @@ func TestCatchupScanInlineError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	eng := storage.NewDefaultInMemForTesting()
+	eng := storage.NewDefaultInMemForTesting(storage.BlockSize(1))
 	defer eng.Close()
 
 	// Write an inline value.
@@ -167,7 +167,7 @@ func TestCatchupScanSeesOldIntent(t *testing.T) {
 	// [#85886]: https://github.com/cockroachdb/cockroach/issues/85886
 
 	ctx := context.Background()
-	eng := storage.NewDefaultInMemForTesting()
+	eng := storage.NewDefaultInMemForTesting(storage.BlockSize(1))
 	defer eng.Close()
 
 	// b -> version @ 1100 (visible)
