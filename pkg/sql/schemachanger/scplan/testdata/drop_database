@@ -883,21 +883,28 @@ PreCommitPhase stage 1 of 1 with 98 MutationType ops
       - 117
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 29 MutationType ops
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 31 MutationType ops
         pending
       Statements:
       - statement: DROP DATABASE db1 CASCADE
         redactedstatement: DROP DATABASE ‹db1› CASCADE
         statementtag: DROP DATABASE
-PostCommitNonRevertiblePhase stage 1 of 1 with 44 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
   transitions:
     [[Database:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
+    [[DatabaseData:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Schema:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
     [[Schema:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 110}, ABSENT], DROPPED] -> ABSENT
+    [[IndexData:{DescID: 110, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
+    [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TableData:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 112}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 113}, ABSENT], DROPPED] -> ABSENT
@@ -919,12 +926,12 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 44 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TargetStatus: 1
+    *scop.DeleteDescriptor
+      DescriptorID: 104
     *scop.CreateGCJobForDatabase
       DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
-    *scop.DeleteDescriptor
-      DescriptorID: 104
     *scop.LogEvent
       Element:
         Schema:
@@ -970,6 +977,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 44 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 107
@@ -987,6 +995,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 44 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 110
@@ -1004,6 +1013,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 44 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 108
@@ -1021,6 +1031,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 44 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 109
@@ -1182,6 +1193,16 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 44 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 117
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP DATABASE db1 CASCADE
+      TableID: 110
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: DROP DATABASE db1 CASCADE
+      TableID: 109
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
@@ -1806,6 +1827,10 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 117, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [Database:{DescID: 104}, ABSENT]
+  to:   [DatabaseData:{DescID: 104}, DROPPED]
+  kind: SameStagePrecedence
+  rule: descriptor removed right before garbage collection
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [Database:{DescID: 104}, ABSENT]
   kind: PreviousTransactionPrecedence
@@ -1994,6 +2019,10 @@ DROP DATABASE db1 CASCADE
   to:   [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
+- from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [IndexData:{DescID: 109, IndexID: 1}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
   kind: Precedence
@@ -2010,6 +2039,10 @@ DROP DATABASE db1 CASCADE
   to:   [IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents
+- from: [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [IndexData:{DescID: 110, IndexID: 1}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, VALIDATED]
   to:   [IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT]
   kind: Precedence
@@ -2134,6 +2167,10 @@ DROP DATABASE db1 CASCADE
   to:   [Schema:{DescID: 106}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
+- from: [Sequence:{DescID: 107}, ABSENT]
+  to:   [TableData:{DescID: 107, ReferencedDescID: 104}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Sequence:{DescID: 107}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 110, ColumnID: 3, ReferencedSequenceIDs: [107]}, ABSENT]
   kind: SameStagePrecedence
@@ -2166,6 +2203,10 @@ DROP DATABASE db1 CASCADE
   to:   [Sequence:{DescID: 107}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
+- from: [Sequence:{DescID: 108}, ABSENT]
+  to:   [TableData:{DescID: 108, ReferencedDescID: 104}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Sequence:{DescID: 108}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [108]}, ABSENT]
   kind: SameStagePrecedence
@@ -2198,6 +2239,10 @@ DROP DATABASE db1 CASCADE
   to:   [Sequence:{DescID: 108}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
+- from: [Table:{DescID: 109}, ABSENT]
+  to:   [TableData:{DescID: 109, ReferencedDescID: 104}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [108]}, ABSENT]
   kind: Precedence
@@ -2294,6 +2339,10 @@ DROP DATABASE db1 CASCADE
   to:   [Table:{DescID: 109}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
+- from: [Table:{DescID: 110}, ABSENT]
+  to:   [TableData:{DescID: 110, ReferencedDescID: 104}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 110, ColumnID: 3, ReferencedSequenceIDs: [107]}, ABSENT]
   kind: Precedence
@@ -2386,6 +2435,14 @@ DROP DATABASE db1 CASCADE
   to:   [Table:{DescID: 110}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
+- from: [TableData:{DescID: 109, ReferencedDescID: 104}, DROPPED]
+  to:   [IndexData:{DescID: 109, IndexID: 1}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
+- from: [TableData:{DescID: 110, ReferencedDescID: 104}, DROPPED]
+  to:   [IndexData:{DescID: 110, IndexID: 1}, DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
 - from: [View:{DescID: 111}, DROPPED]
   to:   [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
   kind: Precedence

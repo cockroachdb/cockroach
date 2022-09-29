@@ -66,7 +66,7 @@ func init() {
 	registerDepRuleForDrop(
 		"remove columns from index right before removing index",
 		scgraph.Precedence,
-		"index", "index-column",
+		"index-column", "index",
 		scpb.Status_DELETE_ONLY, scpb.Status_ABSENT,
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -103,4 +103,5 @@ func init() {
 			}
 		},
 	)
+
 }

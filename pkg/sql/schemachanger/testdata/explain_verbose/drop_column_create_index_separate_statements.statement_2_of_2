@@ -36,7 +36,13 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │
 │   ├── • Stage 1 of 15 in PostCommitPhase
 │   │   │
-│   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
+│   │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT
+│   │   │   │
+│   │   │   ├── • IndexData:{DescID: 104, IndexID: 4}
+│   │   │   │   │ ABSENT → PUBLIC
+│   │   │   │   │
+│   │   │   │   └── • SameStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+│   │   │   │         rule: "temp index data exists as soon as temp index accepts writes"
 │   │   │   │
 │   │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
 │   │   │       │ DELETE_ONLY → WRITE_ONLY
@@ -193,7 +199,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │
 │   ├── • Stage 8 of 15 in PostCommitPhase
 │   │   │
-│   │   ├── • 7 elements transitioning toward PUBLIC
+│   │   ├── • 8 elements transitioning toward PUBLIC
 │   │   │   │
 │   │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
 │   │   │   │   │ VALIDATED → PUBLIC
@@ -240,6 +246,12 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │   │   │   │
 │   │   │   │   └── • PreviousTransactionPrecedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
 │   │   │   │         rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
+│   │   │   │
+│   │   │   ├── • IndexData:{DescID: 104, IndexID: 5}
+│   │   │   │   │ ABSENT → PUBLIC
+│   │   │   │   │
+│   │   │   │   └── • SameStagePrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 4, TemporaryIndexID: 6, SourceIndexID: 3}
+│   │   │   │         rule: "index data exists as soon as index accepts backfills"
 │   │   │   │
 │   │   │   ├── • IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}
 │   │   │   │   │ ABSENT → PUBLIC
@@ -356,13 +368,19 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │
 │   ├── • Stage 9 of 15 in PostCommitPhase
 │   │   │
-│   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
+│   │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT
 │   │   │   │
-│   │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
-│   │   │       │ DELETE_ONLY → WRITE_ONLY
+│   │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+│   │   │   │   │ DELETE_ONLY → WRITE_ONLY
+│   │   │   │   │
+│   │   │   │   └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+│   │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │   │
+│   │   │   └── • IndexData:{DescID: 104, IndexID: 6}
+│   │   │       │ ABSENT → PUBLIC
 │   │   │       │
-│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
-│   │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │       └── • SameStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+│   │   │             rule: "temp index data exists as soon as temp index accepts writes"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -691,7 +709,19 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
-        ├── • 2 elements transitioning toward TRANSIENT_ABSENT
+        ├── • 4 elements transitioning toward TRANSIENT_ABSENT
+        │   │
+        │   ├── • IndexData:{DescID: 104, IndexID: 4}
+        │   │   │ PUBLIC → TRANSIENT_ABSENT
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104, IndexID: 1}
+        │   │   │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │   │
+        │   │   ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104, IndexID: 2}
+        │   │   │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │   │
+        │   │   └── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
         │   │
         │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │   │   │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
@@ -705,13 +735,28 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
         │   │   └── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
         │   │
-        │   └── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
-        │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+        │   ├── • TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+        │   │   │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+        │   │   │
+        │   │   └── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+        │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+        │   │
+        │   └── • IndexData:{DescID: 104, IndexID: 6}
+        │       │ PUBLIC → TRANSIENT_ABSENT
         │       │
-        │       └── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
-        │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104, IndexID: 1}
+        │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │       │
+        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104, IndexID: 2}
+        │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │       │
+        │       ├── • SameStagePrecedence dependency from TRANSIENT_DROPPED IndexData:{DescID: 104, IndexID: 4}
+        │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
+        │       │
+        │       └── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 4, SourceIndexID: 3}
+        │             rule: "index removed before garbage collection"
         │
-        ├── • 6 elements transitioning toward ABSENT
+        ├── • 8 elements transitioning toward ABSENT
         │   │
         │   ├── • Column:{DescID: 104, ColumnID: 2}
         │   │   │ DELETE_ONLY → ABSENT
@@ -781,31 +826,40 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
         │   │         rule: "dependents removed before index"
         │   │
-        │   └── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-        │       │ DELETE_ONLY → ABSENT
+        │   ├── • IndexData:{DescID: 104, IndexID: 1}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
+        │   │         rule: "index removed before garbage collection"
+        │   │
+        │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   └── • IndexData:{DescID: 104, IndexID: 2}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 2}
-        │       │     rule: "dependents removed before index"
+        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104, IndexID: 1}
+        │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
         │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-        │       │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
-        │       │
-        │       └── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
-        │             rule: "dependents removed before index"
+        │       └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+        │             rule: "index removed before garbage collection"
         │
         └── • 13 Mutation operations
-            │
-            ├── • CreateGCJobForIndex
-            │     IndexID: 1
-            │     StatementForDropJob:
-            │       Statement: removed primary index; ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
-            │     TableID: 104
             │
             ├── • MakeIndexAbsent
             │     EventBase:
@@ -817,6 +871,12 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │         SourceElementID: 1
             │         SubWorkID: 1
             │     IndexID: 1
+            │     TableID: 104
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 1
+            │     StatementForDropJob:
+            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
             │     TableID: 104
             │
             ├── • LogEvent
@@ -834,34 +894,18 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGCJobForIndex
-            │     IndexID: 2
-            │     StatementForDropJob:
-            │       Statement: removed secondary index; ALTER TABLE defaultdb.public.t DROP COLUMN j
-            │         CASCADE
-            │     TableID: 104
-            │
             ├── • MakeIndexAbsent
             │     IndexID: 2
             │     TableID: 104
             │
             ├── • CreateGCJobForIndex
-            │     IndexID: 4
+            │     IndexID: 2
             │     StatementForDropJob:
-            │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t DROP COLUMN j
-            │         CASCADE
+            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
             │     IndexID: 4
-            │     TableID: 104
-            │
-            ├── • CreateGCJobForIndex
-            │     IndexID: 6
-            │     StatementForDropJob:
-            │       Statement: removed temporary index; CREATE UNIQUE INDEX idx ON defaultdb.public.t
-            │         (k)
-            │       StatementID: 1
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
@@ -890,6 +934,19 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │       TargetMetadata:
             │         SourceElementID: 1
             │         SubWorkID: 1
+            │     TableID: 104
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 4
+            │     StatementForDropJob:
+            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
+            │     TableID: 104
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 6
+            │     StatementForDropJob:
+            │       Statement: CREATE UNIQUE INDEX idx ON defaultdb.public.t (k)
+            │       StatementID: 1
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

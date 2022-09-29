@@ -655,22 +655,24 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 	oldPrimaryIndex, newPrimaryIndex *scpb.PrimaryIndex,
 	rowidToDrop *scpb.Column,
 ) {
-	if shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
+	if !shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 		b, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
 	) {
-		newUniqueSecondaryIndex, tempIndex := addNewUniqueSecondaryIndexAndTempIndex(b, tn, tbl, oldPrimaryIndex)
-		addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(b, tn, tbl, t,
-			oldPrimaryIndex.IndexID, newUniqueSecondaryIndex.IndexID, tempIndex.IndexID)
-		addIndexNameForNewUniqueSecondaryIndex(b, tbl, newUniqueSecondaryIndex.IndexID)
+		return
 	}
+	sec, temp := addNewUniqueSecondaryIndexAndTempIndex(b, tbl, oldPrimaryIndex)
+	addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
+		b, tn, tbl, t, oldPrimaryIndex.IndexID, sec.IndexID, temp.IndexID)
+	addIndexNameForNewUniqueSecondaryIndex(b, tbl, sec.IndexID)
 }
 
 // addNewUniqueSecondaryIndexAndTempIndex constructs and adds elements for
 // a new secondary index and its associated temporary index.
 func addNewUniqueSecondaryIndexAndTempIndex(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, oldPrimaryIndexElem *scpb.PrimaryIndex,
+	b BuildCtx, tbl *scpb.Table, oldPrimaryIndexElem *scpb.PrimaryIndex,
 ) (*scpb.SecondaryIndex, *scpb.TemporaryIndex) {
-	newSecondaryIndexElem := &scpb.SecondaryIndex{Index: scpb.Index{
+
+	sec := &scpb.SecondaryIndex{Index: scpb.Index{
 		TableID:             tbl.TableID,
 		IndexID:             nextRelationIndexID(b, tbl),
 		IsUnique:            true,
@@ -681,19 +683,20 @@ func addNewUniqueSecondaryIndexAndTempIndex(
 		SourceIndexID:       oldPrimaryIndexElem.IndexID,
 		TemporaryIndexID:    0,
 	}}
-	b.Add(newSecondaryIndexElem)
-
-	temporaryIndexElemForNewSecondaryIndex := &scpb.TemporaryIndex{
-		Index:                    protoutil.Clone(newSecondaryIndexElem).(*scpb.SecondaryIndex).Index,
+	temp := &scpb.TemporaryIndex{
+		Index:                    protoutil.Clone(sec).(*scpb.SecondaryIndex).Index,
 		IsUsingSecondaryEncoding: true,
 	}
-	temporaryIndexElemForNewSecondaryIndex.ConstraintID = b.NextTableConstraintID(tbl.TableID)
-	b.AddTransient(temporaryIndexElemForNewSecondaryIndex)
+	temp.ConstraintID = sec.ConstraintID + 1
+	temp.IndexID = sec.IndexID + 1
+	sec.TemporaryIndexID = temp.IndexID
 
-	temporaryIndexElemForNewSecondaryIndex.IndexID = nextRelationIndexID(b, tbl)
-	newSecondaryIndexElem.TemporaryIndexID = temporaryIndexElemForNewSecondaryIndex.IndexID
+	b.Add(sec)
+	b.Add(&scpb.IndexData{TableID: sec.TableID, IndexID: sec.IndexID})
+	b.AddTransient(temp)
+	b.AddTransient(&scpb.IndexData{TableID: temp.TableID, IndexID: temp.IndexID})
 
-	return newSecondaryIndexElem, temporaryIndexElemForNewSecondaryIndex
+	return sec, temp
 }
 
 // addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex constructs and adds IndexColumn

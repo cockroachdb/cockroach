@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 9 elements transitioning toward PUBLIC
+│       ├── • 10 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
@@ -38,6 +38,12 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │       │   │   │
 │       │   │   └── • PreviousTransactionPrecedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
+│       │   │
+│       │   ├── • IndexData:{DescID: 104, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index data exists as soon as index accepts backfills"
 │       │   │
 │       │   ├── • IndexPartitioning:{DescID: 104, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
@@ -190,13 +196,19 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
 │   │
 │   ├── • Stage 1 of 7 in PostCommitPhase
 │   │   │
-│   │   ├── • 1 element transitioning toward TRANSIENT_ABSENT
+│   │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT
 │   │   │   │
-│   │   │   └── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-│   │   │       │ DELETE_ONLY → WRITE_ONLY
+│   │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+│   │   │   │   │ DELETE_ONLY → WRITE_ONLY
+│   │   │   │   │
+│   │   │   │   └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+│   │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │   │
+│   │   │   └── • IndexData:{DescID: 104, IndexID: 3}
+│   │   │       │ ABSENT → PUBLIC
 │   │   │       │
-│   │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-│   │   │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │       └── • SameStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+│   │   │             rule: "temp index data exists as soon as temp index accepts writes"
 │   │   │
 │   │   └── • 3 Mutation operations
 │   │       │
@@ -409,25 +421,31 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
-        ├── • 1 element transitioning toward TRANSIENT_ABSENT
+        ├── • 2 elements transitioning toward TRANSIENT_ABSENT
         │   │
-        │   └── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-        │       │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+        │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+        │   │   │ TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT
+        │   │   │
+        │   │   └── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+        │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+        │   │
+        │   └── • IndexData:{DescID: 104, IndexID: 3}
+        │       │ PUBLIC → TRANSIENT_ABSENT
         │       │
-        │       └── • PreviousTransactionPrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-        │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
+        │       └── • Precedence dependency from TRANSIENT_ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+        │             rule: "index removed before garbage collection"
         │
         └── • 4 Mutation operations
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 3
+            │     TableID: 104
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     StatementForDropJob:
-            │       Statement: removed temporary index; CREATE INDEX id1 ON defaultdb.public.t1 (id,
-            │         name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
-            │     TableID: 104
-            │
-            ├── • MakeIndexAbsent
-            │     IndexID: 3
+            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION
+            │         BY LIST (id) (PARTITION p1 VALUES IN (1))
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

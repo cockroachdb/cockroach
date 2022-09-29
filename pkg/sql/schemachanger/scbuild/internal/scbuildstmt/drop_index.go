@@ -81,15 +81,15 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 // dropAnIndex resolves `index` and mark its constituent elements as ToAbsent
 // in the builder state enclosed by `b`.
 func dropAnIndex(
-	b BuildCtx, index *tree.TableIndexName, ifExists bool, dropBehavior tree.DropBehavior,
+	b BuildCtx, indexName *tree.TableIndexName, ifExists bool, dropBehavior tree.DropBehavior,
 ) {
-	toBeDroppedIndexElms := b.ResolveIndexByName(index, ResolveParams{
+	toBeDroppedIndexElms := b.ResolveIndexByName(indexName, ResolveParams{
 		IsExistenceOptional: ifExists,
 		RequiredPrivilege:   privilege.CREATE,
 	})
 	if toBeDroppedIndexElms == nil {
 		// Attempt to resolve this index failed but `IF EXISTS` is set.
-		b.MarkNameAsNonExistent(&index.Table)
+		b.MarkNameAsNonExistent(&indexName.Table)
 		return
 	}
 	// Panic if dropping primary index.
@@ -113,27 +113,26 @@ func dropAnIndex(
 	if dropBehavior != tree.DropCascade && sie.IsUnique && !sie.IsCreatedExplicitly {
 		panic(errors.WithHint(
 			pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"index %q is in use as unique constraint", index.String()),
+				"index %q is in use as unique constraint", indexName.String()),
 			"use CASCADE if you really want to drop it.",
 		))
 	}
-	dropSecondaryIndex(b, index, dropBehavior, sie, toBeDroppedIndexElms)
+	dropSecondaryIndex(b, indexName, dropBehavior, sie)
 }
 
 // dropSecondaryIndex is a helper to drop a secondary index which may be used
 // both in DROP INDEX and as a cascade from another operation.
 func dropSecondaryIndex(
 	b BuildCtx,
-	index *tree.TableIndexName,
+	indexName *tree.TableIndexName,
 	dropBehavior tree.DropBehavior,
 	sie *scpb.SecondaryIndex,
-	toBeDroppedIndexElms ElementResultSet,
 ) {
 	// Maybe drop dependent views.
 	// If CASCADE and there are "dependent" views (i.e. views that use this
 	// to-be-dropped index), then we will drop all dependent views and their
 	// dependents.
-	maybeDropDependentViews(b, sie, index.String(), dropBehavior)
+	maybeDropDependentViews(b, sie, indexName.String(), dropBehavior)
 
 	// Maybe drop dependent FK constraints.
 	// A PK or unique constraint is required to serve an inbound FK constraint.
@@ -142,22 +141,23 @@ func dropSecondaryIndex(
 	// In this case, if we were to drop 'ui' and no other unique constraint can be
 	// found to replace 'uc' (to continue to serve 'fk'), we will require CASCADE
 	//and drop 'fk' as well.
-	maybeDropDependentFKConstraints(b, sie, index, dropBehavior)
+	maybeDropDependentFKConstraints(b, sie, indexName, dropBehavior)
 
 	// If shard index, also drop the shard column and all check constraints that
 	// uses this shard column if no other index uses the shard column.
-	maybeDropAdditionallyForShardedIndex(b, sie, index.String(), dropBehavior)
+	maybeDropAdditionallyForShardedIndex(b, sie, indexName.String(), dropBehavior)
 
 	// If expression index, also drop the expression column if no other index is
 	// using the expression column.
 	dropAdditionallyForExpressionIndex(b, sie)
 
-	// Finally, drop the index's resolved elements.
-	toBeDroppedIndexElms.ForEachElementStatus(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
-		if target != scpb.ToAbsent {
+	// Finally, drop the index's public elements and trigger a GC job.
+	b.QueryByID(sie.TableID).
+		Filter(hasIndexIDAttrFilter(sie.IndexID)).
+		Filter(publicTargetFilter).
+		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			b.Drop(e)
-		}
-	})
+		})
 }
 
 // maybeDropDependentViews attempts to drop all views that depend

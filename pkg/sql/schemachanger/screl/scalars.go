@@ -58,6 +58,10 @@ func AllTargetDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
 		case *scpb.ObjectParent:
 			// Ignore the parent schema, it won't have back-references.
 			ids.Add(te.ObjectID)
+		case *scpb.TableData:
+			// Ignore the parent database in the table data element, the parent
+			// database won't have back-references to any tables.
+			ids.Add(te.TableID)
 		default:
 			_ = WalkDescIDs(e, func(id *catid.DescID) error {
 				ids.Add(*id)
@@ -110,10 +114,11 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 		*scpb.IndexComment, *scpb.ConstraintName, *scpb.ConstraintComment,
 		*scpb.Namespace, *scpb.Owner, *scpb.UserPrivileges,
 		*scpb.DatabaseRegionConfig, *scpb.DatabaseRoleSetting, *scpb.DatabaseComment,
-		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.ObjectParent:
-		return clusterversion.V22_1
-	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
-		return clusterversion.V22_2UseDelRangeInGCJob
+		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.ObjectParent,
+		*scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
+		return clusterversion.V22_2
+	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData:
+		return clusterversion.V23_1
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}

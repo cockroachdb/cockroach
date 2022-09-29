@@ -54,12 +54,6 @@ func init() {
 				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Database, md *targetsWithElementMap) *scop.CreateGCJobForDatabase {
-					return &scop.CreateGCJobForDatabase{
-						DatabaseID:          this.DatabaseID,
-						StatementForDropJob: statementForDropJob(this, md),
-					}
-				}),
 				emit(func(this *scpb.Database) *scop.DeleteDescriptor {
 					return &scop.DeleteDescriptor{
 						DescriptorID: this.DatabaseID,

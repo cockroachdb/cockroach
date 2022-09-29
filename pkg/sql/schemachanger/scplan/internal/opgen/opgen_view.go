@@ -77,16 +77,6 @@ func init() {
 				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.View, md *targetsWithElementMap) *scop.CreateGCJobForTable {
-					if !this.IsMaterialized {
-						return nil
-
-					}
-					return &scop.CreateGCJobForTable{
-						TableID:             this.ViewID,
-						StatementForDropJob: statementForDropJob(this, md),
-					}
-				}),
 				emit(func(this *scpb.View) *scop.DeleteDescriptor {
 					if !this.IsMaterialized {
 						return &scop.DeleteDescriptor{

@@ -148,6 +148,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -247,6 +248,7 @@ PostCommitPhase stage 1 of 7 with 4 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+    [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakeDeleteOnlyColumnWriteOnly
       ColumnID: 2
@@ -371,17 +373,11 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
-    *scop.CreateGCJobForIndex
-      IndexID: 3
-      StatementForDropJob:
-        Statement: removed temporary index; ALTER TABLE defaultdb.public.foo ADD COLUMN
-          j INT8 NOT NULL DEFAULT 123
-      TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3
       TableID: 104
@@ -393,16 +389,12 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
-    *scop.CreateGCJobForIndex
-      IndexID: 1
-      StatementForDropJob:
-        Statement: removed primary index; ALTER TABLE defaultdb.public.foo ADD COLUMN j
-          INT8 NOT NULL DEFAULT 123
-      TableID: 104
     *scop.MakeIndexAbsent
       EventBase:
         Authorization:
@@ -414,6 +406,16 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       IndexID: 1
+      TableID: 104
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 NOT NULL DEFAULT 123
+      TableID: 104
+    *scop.CreateGCJobForIndex
+      IndexID: 3
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 NOT NULL DEFAULT 123
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
@@ -437,6 +439,7 @@ StatementPhase stage 1 of 1 with 18 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -599,6 +602,7 @@ PostCommitPhase stage 1 of 7 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+    [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
   ops:
     *scop.MakeDeleteOnlyColumnWriteOnly
@@ -740,17 +744,11 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
-    *scop.CreateGCJobForIndex
-      IndexID: 3
-      StatementForDropJob:
-        Statement: removed temporary index; ALTER TABLE defaultdb.public.foo ADD COLUMN
-          j INT8 DEFAULT 123
-      TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3
       TableID: 104
@@ -762,16 +760,12 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
-    *scop.CreateGCJobForIndex
-      IndexID: 1
-      StatementForDropJob:
-        Statement: removed primary index; ALTER TABLE defaultdb.public.foo ADD COLUMN j
-          INT8 DEFAULT 123
-      TableID: 104
     *scop.MakeIndexAbsent
       EventBase:
         Authorization:
@@ -782,6 +776,16 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       IndexID: 1
+      TableID: 104
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
+      TableID: 104
+    *scop.CreateGCJobForIndex
+      IndexID: 3
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
@@ -803,6 +807,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -901,6 +906,7 @@ PostCommitPhase stage 1 of 7 with 4 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+    [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakeDeleteOnlyColumnWriteOnly
       ColumnID: 2
@@ -1025,17 +1031,11 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
-    *scop.CreateGCJobForIndex
-      IndexID: 3
-      StatementForDropJob:
-        Statement: removed temporary index; ALTER TABLE defaultdb.public.foo ADD COLUMN
-          a INT8 AS (i + 1) STORED
-      TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3
       TableID: 104
@@ -1047,16 +1047,12 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
-    *scop.CreateGCJobForIndex
-      IndexID: 1
-      StatementForDropJob:
-        Statement: removed primary index; ALTER TABLE defaultdb.public.foo ADD COLUMN a
-          INT8 AS (i + 1) STORED
-      TableID: 104
     *scop.MakeIndexAbsent
       EventBase:
         Authorization:
@@ -1068,6 +1064,16 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       IndexID: 1
+      TableID: 104
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN a INT8 AS (i + 1) STORED
+      TableID: 104
+    *scop.CreateGCJobForIndex
+      IndexID: 3
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN a INT8 AS (i + 1) STORED
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
@@ -1277,10 +1283,12 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     [[PrimaryIndex:{DescID: 108, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexData:{DescID: 108, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 108, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[SecondaryIndex:{DescID: 108, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
+    [[IndexData:{DescID: 108, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 108, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT] -> PUBLIC
@@ -1376,7 +1384,9 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
 PostCommitPhase stage 1 of 7 with 4 MutationType ops
   transitions:
     [[TemporaryIndex:{DescID: 108, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+    [[IndexData:{DescID: 108, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 108, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+    [[IndexData:{DescID: 108, IndexID: 5}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakeDeleteOnlyIndexWriteOnly
       IndexID: 3
@@ -1525,26 +1535,14 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[TemporaryIndex:{DescID: 108, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
     [[TemporaryIndex:{DescID: 108, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
-    *scop.CreateGCJobForIndex
-      IndexID: 3
-      StatementForDropJob:
-        Statement: removed temporary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY
-          KEY USING COLUMNS (j)
-      TableID: 108
     *scop.MakeIndexAbsent
       IndexID: 3
-      TableID: 108
-    *scop.CreateGCJobForIndex
-      IndexID: 5
-      StatementForDropJob:
-        Statement: removed temporary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY
-          KEY USING COLUMNS (j)
       TableID: 108
     *scop.MakeIndexAbsent
       IndexID: 5
@@ -1557,16 +1555,13 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 108, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexData:{DescID: 108, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexData:{DescID: 108, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
-    *scop.CreateGCJobForIndex
-      IndexID: 1
-      StatementForDropJob:
-        Statement: removed primary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY
-          USING COLUMNS (j)
-      TableID: 108
     *scop.MakeIndexAbsent
       EventBase:
         Authorization:
@@ -1577,6 +1572,21 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       IndexID: 1
+      TableID: 108
+    *scop.CreateGCJobForIndex
+      IndexID: 1
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)
+      TableID: 108
+    *scop.CreateGCJobForIndex
+      IndexID: 3
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)
+      TableID: 108
+    *scop.CreateGCJobForIndex
+      IndexID: 5
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)
       TableID: 108
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 108
@@ -1603,6 +1613,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexData:{DescID: 109, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -1703,6 +1714,7 @@ PostCommitPhase stage 1 of 15 with 4 MutationType ops
   transitions:
     [[Column:{DescID: 109, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
     [[TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+    [[IndexData:{DescID: 109, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakeDeleteOnlyColumnWriteOnly
       ColumnID: 2
@@ -1779,6 +1791,7 @@ PostCommitPhase stage 8 of 15 with 12 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[SecondaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC], ABSENT] -> BACKFILL_ONLY
+    [[IndexData:{DescID: 109, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 5}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 5}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
@@ -1848,6 +1861,7 @@ PostCommitPhase stage 8 of 15 with 12 MutationType ops
 PostCommitPhase stage 9 of 15 with 3 MutationType ops
   transitions:
     [[TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
+    [[IndexData:{DescID: 109, IndexID: 5}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakeDeleteOnlyIndexWriteOnly
       IndexID: 5
@@ -1962,15 +1976,12 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
 PostCommitNonRevertiblePhase stage 2 of 2 with 8 MutationType ops
   transitions:
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+    [[IndexData:{DescID: 109, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+    [[IndexData:{DescID: 109, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
-    *scop.CreateGCJobForIndex
-      IndexID: 1
-      StatementForDropJob:
-        Statement: removed primary index; ALTER TABLE defaultdb.public.baz ADD COLUMN g
-          INT8 UNIQUE DEFAULT 1
-      TableID: 109
     *scop.MakeIndexAbsent
       EventBase:
         Authorization:
@@ -1984,22 +1995,25 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 8 MutationType ops
       IndexID: 1
       TableID: 109
     *scop.CreateGCJobForIndex
-      IndexID: 3
+      IndexID: 1
       StatementForDropJob:
-        Statement: removed temporary index; ALTER TABLE defaultdb.public.baz ADD COLUMN
-          g INT8 UNIQUE DEFAULT 1
+        Statement: ALTER TABLE defaultdb.public.baz ADD COLUMN g INT8 UNIQUE DEFAULT 1
       TableID: 109
     *scop.MakeIndexAbsent
       IndexID: 3
       TableID: 109
     *scop.CreateGCJobForIndex
-      IndexID: 5
+      IndexID: 3
       StatementForDropJob:
-        Statement: removed temporary index; ALTER TABLE defaultdb.public.baz ADD COLUMN
-          g INT8 UNIQUE DEFAULT 1
+        Statement: ALTER TABLE defaultdb.public.baz ADD COLUMN g INT8 UNIQUE DEFAULT 1
       TableID: 109
     *scop.MakeIndexAbsent
       IndexID: 5
+      TableID: 109
+    *scop.CreateGCJobForIndex
+      IndexID: 5
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.baz ADD COLUMN g INT8 UNIQUE DEFAULT 1
       TableID: 109
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 109
@@ -2161,6 +2175,18 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   to:   [Column:{DescID: 109, ColumnID: 2}, PUBLIC]
   kind: Precedence
   rule: column dependents exist before column becomes public
+- from: [IndexData:{DescID: 109, IndexID: 1}, DROPPED]
+  to:   [IndexData:{DescID: 109, IndexID: 3}, TRANSIENT_DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
+- from: [IndexData:{DescID: 109, IndexID: 1}, DROPPED]
+  to:   [IndexData:{DescID: 109, IndexID: 5}, TRANSIENT_DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
+- from: [IndexData:{DescID: 109, IndexID: 3}, TRANSIENT_DROPPED]
+  to:   [IndexData:{DescID: 109, IndexID: 5}, TRANSIENT_DROPPED]
+  kind: SameStagePrecedence
+  rule: schedule all GC jobs for a descriptor in the same stage
 - from: [IndexName:{DescID: 109, Name: baz_g_key, IndexID: 4}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
@@ -2173,6 +2199,10 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   to:   [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
   rules: [index dependents exist before index becomes public; index named right before index becomes public]
+- from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
+  to:   [IndexData:{DescID: 109, IndexID: 1}, DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, DELETE_ONLY]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: PreviousTransactionPrecedence
@@ -2213,6 +2243,10 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   to:   [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 2}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
+- from: [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
+  to:   [IndexData:{DescID: 109, IndexID: 2}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: index data exists as soon as index accepts backfills
 - from: [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILL_ONLY]
   to:   [IndexName:{DescID: 109, Name: baz_pkey, IndexID: 2}, PUBLIC]
   kind: Precedence
@@ -2270,6 +2304,10 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   kind: Precedence
   rule: index existence precedes index dependents
 - from: [SecondaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
+  to:   [IndexData:{DescID: 109, IndexID: 4}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: index data exists as soon as index accepts backfills
+- from: [SecondaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILL_ONLY]
   to:   [IndexName:{DescID: 109, Name: baz_g_key, IndexID: 4}, PUBLIC]
   kind: Precedence
   rule: index existence precedes index dependents
@@ -2313,10 +2351,18 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   to:   [TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY
+- from: [TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  to:   [IndexData:{DescID: 109, IndexID: 3}, TRANSIENT_DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   to:   [TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: PreviousTransactionPrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
+- from: [TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
+  to:   [IndexData:{DescID: 109, IndexID: 3}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: temp index data exists as soon as temp index accepts writes
 - from: [TemporaryIndex:{DescID: 109, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -2341,10 +2387,18 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   to:   [TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY
+- from: [TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT]
+  to:   [IndexData:{DescID: 109, IndexID: 5}, TRANSIENT_DROPPED]
+  kind: Precedence
+  rule: index removed before garbage collection
 - from: [TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_DELETE_ONLY]
   to:   [TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT]
   kind: PreviousTransactionPrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT
+- from: [TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
+  to:   [IndexData:{DescID: 109, IndexID: 5}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: temp index data exists as soon as temp index accepts writes
 - from: [TemporaryIndex:{DescID: 109, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, WRITE_ONLY]
   to:   [SecondaryIndex:{DescID: 109, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, BACKFILLED]
   kind: Precedence

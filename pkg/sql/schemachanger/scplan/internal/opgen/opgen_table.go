@@ -59,12 +59,6 @@ func init() {
 				emit(func(this *scpb.Table, md *targetsWithElementMap) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Table, md *targetsWithElementMap) *scop.CreateGCJobForTable {
-					return &scop.CreateGCJobForTable{
-						TableID:             this.TableID,
-						StatementForDropJob: statementForDropJob(this, md),
-					}
-				}),
 			),
 		),
 	)

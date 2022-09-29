@@ -12,7 +12,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 10 elements transitioning toward ABSENT
+        ├── • 11 elements transitioning toward ABSENT
         │   │
         │   ├── • Column:{DescID: 106, ColumnID: 2}
         │   │   │ DELETE_ONLY → ABSENT
@@ -87,6 +87,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
         │   │   └── • skip PUBLIC → ABSENT operations
         │   │         rule: "skip index-column removal ops on index removal"
         │   │
+        │   ├── • IndexData:{DescID: 106, IndexID: 2}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
+        │   │
         │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
@@ -111,7 +117,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
         │       └── • skip PUBLIC → ABSENT operations
         │             rule: "skip index-column removal ops on index removal"
         │
-        └── • 9 Mutation operations
+        └── • 8 Mutation operations
             │
             ├── • SetColumnName
             │     ColumnID: 2
@@ -120,14 +126,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
             │
             ├── • RemoveColumnDefaultExpression
             │     ColumnID: 2
-            │     TableID: 106
-            │
-            ├── • CreateGCJobForIndex
-            │     IndexID: 2
-            │     StatementForDropJob:
-            │       Rollback: true
-            │       Statement: removed primary index; ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE
-            │         DEFAULT gen_random_uuid()
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -143,11 +141,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
             │     TableID: 106
             │
             ├── • CreateGCJobForIndex
-            │     IndexID: 3
+            │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: removed temporary index; ALTER TABLE db.public.tbl ADD COLUMN j UUID
-            │         UNIQUE DEFAULT gen_random_uuid()
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()
             │     TableID: 106
             │
             ├── • MakeIndexAbsent

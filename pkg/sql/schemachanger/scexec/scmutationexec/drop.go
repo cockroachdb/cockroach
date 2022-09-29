@@ -15,48 +15,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) CreateGCJobForTable(ctx context.Context, op scop.CreateGCJobForTable) error {
-	desc, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	m.s.AddNewGCJobForTable(op.StatementForDropJob, desc)
+func (m *visitor) CreateGCJobForTable(_ context.Context, op scop.CreateGCJobForTable) error {
+	m.s.AddNewGCJobForTable(op.StatementForDropJob, op.DatabaseID, op.TableID)
 	return nil
 }
 
-func (m *visitor) CreateGCJobForDatabase(
-	ctx context.Context, op scop.CreateGCJobForDatabase,
-) error {
-	desc, err := m.checkOutDatabase(ctx, op.DatabaseID)
-	if err != nil {
-		return err
-	}
-	m.s.AddNewGCJobForDatabase(op.StatementForDropJob, desc)
+func (m *visitor) CreateGCJobForDatabase(_ context.Context, op scop.CreateGCJobForDatabase) error {
+	m.s.AddNewGCJobForDatabase(op.StatementForDropJob, op.DatabaseID)
 	return nil
 }
 
-func (m *visitor) CreateGCJobForIndex(ctx context.Context, op scop.CreateGCJobForIndex) error {
-	desc, err := m.s.GetDescriptor(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	tbl, err := catalog.AsTableDescriptor(desc)
-	if err != nil {
-		return err
-	}
-	idx, err := tbl.FindIndexWithID(op.IndexID)
-	if err != nil {
-		return errors.AssertionFailedf("table %q (%d): could not find index %d", tbl.GetName(), tbl.GetID(), op.IndexID)
-	}
-	m.s.AddNewGCJobForIndex(op.StatementForDropJob, tbl, idx)
+func (m *visitor) CreateGCJobForIndex(_ context.Context, op scop.CreateGCJobForIndex) error {
+	m.s.AddNewGCJobForIndex(op.StatementForDropJob, op.TableID, op.IndexID)
 	return nil
 }
 

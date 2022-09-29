@@ -57,9 +57,9 @@ func nonNilElement(element scpb.Element) scpb.Element {
 }
 
 // Assert that only simple dependents (non-descriptor, non-index, non-column)
-// have screl.ReferencedDescID attributes.
+// and data elements have screl.ReferencedDescID attributes.
 func checkSimpleDependentsReferenceDescID(e scpb.Element) error {
-	if isSimpleDependent(e) {
+	if isSimpleDependent(e) || isData(e) {
 		return nil
 	}
 	if _, err := screl.Schema.GetAttribute(screl.ReferencedDescID, e); err == nil {
@@ -70,16 +70,16 @@ func checkSimpleDependentsReferenceDescID(e scpb.Element) error {
 
 // Assert that elements can be grouped into three categories when transitioning
 // from PUBLIC to ABSENT:
-//   - go via DROPPED iff they're descriptor elements
+//   - go via DROPPED iff they're descriptor or data elements;
 //   - go via a non-read status iff they're indexes or columns, which are
-//     subject to the two-version invariant.
+//     subject to the two-version invariant;
 //   - go direct to ABSENT in all other cases.
 func checkToAbsentCategories(e scpb.Element) error {
 	s0 := opgen.InitialStatus(e, scpb.Status_ABSENT)
 	s1 := opgen.NextStatus(e, scpb.Status_ABSENT, s0)
 	switch s1 {
 	case scpb.Status_TXN_DROPPED, scpb.Status_DROPPED:
-		if IsDescriptor(e) {
+		if IsDescriptor(e) || isData(e) {
 			return nil
 		}
 	case scpb.Status_VALIDATED, scpb.Status_WRITE_ONLY, scpb.Status_DELETE_ONLY:
@@ -143,8 +143,8 @@ func checkIsColumnDependent(e scpb.Element) error {
 // Assert that isIndexDependent covers all dependent elements of an index
 // element.
 func checkIsIndexDependent(e scpb.Element) error {
-	// Exclude indexes themselves.
-	if isIndex(e) {
+	// Exclude indexes themselves and their data.
+	if isIndex(e) || isData(e) {
 		return nil
 	}
 	// An index dependent should have an IndexID attribute.

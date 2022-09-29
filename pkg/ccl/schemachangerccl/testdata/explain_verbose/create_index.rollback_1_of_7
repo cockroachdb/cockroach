@@ -14,7 +14,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 10 elements transitioning toward ABSENT
+        ├── • 11 elements transitioning toward ABSENT
         │   │
         │   ├── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
@@ -54,6 +54,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   │
         │   │   └── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 104, IndexID: 2}
         │   │         rule: "dependents removed before index"
+        │   │
+        │   ├── • IndexData:{DescID: 104, IndexID: 2}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
         │   │
         │   ├── • IndexPartitioning:{DescID: 104, IndexID: 2}
         │   │     PUBLIC → ABSENT
@@ -97,7 +103,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   └── • IndexPartitioning:{DescID: 104, IndexID: 3}
         │         PUBLIC → ABSENT
         │
-        └── • 7 Mutation operations
+        └── • 6 Mutation operations
             │
             ├── • LogEvent
             │     Element:
@@ -117,24 +123,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGCJobForIndex
-            │     IndexID: 2
-            │     StatementForDropJob:
-            │       Rollback: true
-            │       Statement: removed secondary index; CREATE INDEX id1 ON defaultdb.public.t1 (id,
-            │         name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
-            │     TableID: 104
-            │
             ├── • MakeIndexAbsent
             │     IndexID: 2
             │     TableID: 104
             │
             ├── • CreateGCJobForIndex
-            │     IndexID: 3
+            │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: removed temporary index; CREATE INDEX id1 ON defaultdb.public.t1 (id,
-            │         name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
+            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION
+            │         BY LIST (id) (PARTITION p1 VALUES IN (1))
             │     TableID: 104
             │
             ├── • MakeIndexAbsent

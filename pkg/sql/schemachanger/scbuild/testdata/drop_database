@@ -37,6 +37,8 @@ DROP DATABASE db1 CASCADE
   {databaseId: 104, roleName: __placeholder_role_name__}
 - [[DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT], PUBLIC]
   {comment: db1 is good, databaseId: 104}
+- [[DatabaseData:{DescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104}
 - [[Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 105, name: public}
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
@@ -77,6 +79,8 @@ DROP DATABASE db1 CASCADE
   {sequenceId: 107}
 - [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {objectId: 107, parentSchemaId: 105}
+- [[TableData:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, tableId: 107}
 - [[Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 110, name: t1, schemaId: 105}
 - [[Owner:{DescID: 110}, ABSENT], PUBLIC]
@@ -133,6 +137,10 @@ DROP DATABASE db1 CASCADE
   {constraintId: 1, indexId: 1, isUnique: true, tableId: 110}
 - [[IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: t1_pkey, tableId: 110}
+- [[IndexData:{DescID: 110, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, tableId: 110}
+- [[TableData:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, tableId: 110}
 - [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 108, name: sq1, schemaId: 106}
 - [[Owner:{DescID: 108}, ABSENT], PUBLIC]
@@ -145,6 +153,8 @@ DROP DATABASE db1 CASCADE
   {sequenceId: 108}
 - [[ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC]
   {objectId: 108, parentSchemaId: 106}
+- [[TableData:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, tableId: 108}
 - [[Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 109, name: t1, schemaId: 106}
 - [[Owner:{DescID: 109}, ABSENT], PUBLIC]
@@ -207,6 +217,10 @@ DROP DATABASE db1 CASCADE
   {indexId: 1, name: t1_pkey, tableId: 109}
 - [[IndexComment:{DescID: 109, IndexID: 1, Comment: t1_pkey is good}, ABSENT], PUBLIC]
   {comment: t1_pkey is good, indexId: 1, tableId: 109}
+- [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, tableId: 109}
+- [[TableData:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC]
+  {databaseId: 104, tableId: 109}
 - [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 111, name: v1, schemaId: 106}
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]

@@ -121,13 +121,6 @@ func init() {
 			equiv(scpb.Status_BACKFILLED),
 			equiv(scpb.Status_BACKFILL_ONLY),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.PrimaryIndex, md *targetsWithElementMap) *scop.CreateGCJobForIndex {
-					return &scop.CreateGCJobForIndex{
-						TableID:             this.TableID,
-						IndexID:             this.IndexID,
-						StatementForDropJob: statementForDropJob(this, md),
-					}
-				}),
 				emit(func(this *scpb.PrimaryIndex, md *targetsWithElementMap) *scop.MakeIndexAbsent {
 					return &scop.MakeIndexAbsent{
 						EventBase: newLogEventBase(this, md),

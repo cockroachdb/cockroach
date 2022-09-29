@@ -872,7 +872,7 @@ upsert descriptor #104
   -  version: "12"
   +  version: "13"
 write *eventpb.DropIndex to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-create job #2 (non-cancelable: true): "GC for removed primary index; ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE; removed temporary index; CREATE UNIQUE INDEX idx ON defaultdb.public.t (k)"
+create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE; CREATE UNIQUE INDEX idx ON defaultdb.public.t (k)"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable

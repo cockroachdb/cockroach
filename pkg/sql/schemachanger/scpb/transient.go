@@ -28,4 +28,5 @@ var transientEquivalent = map[Status]Status{
 	Status_MERGE_ONLY:    Status_TRANSIENT_MERGE_ONLY,
 	Status_MERGED:        Status_TRANSIENT_MERGED,
 	Status_VALIDATED:     Status_TRANSIENT_VALIDATED,
+	Status_DROPPED:       Status_TRANSIENT_DROPPED,
 }

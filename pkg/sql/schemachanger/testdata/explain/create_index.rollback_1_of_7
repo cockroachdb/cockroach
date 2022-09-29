@@ -9,18 +9,18 @@ EXPLAIN (ddl) rollback at post-commit stage 1 of 7;
 Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.public.‹t› (‹v›) WHERE (‹v› = ‹'a'›); 
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 6 elements transitioning toward ABSENT
+           ├── 7 elements transitioning toward ABSENT
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
            │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106, IndexID: 2}
            │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
            │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-           └── 7 Mutation operations
+           └── 6 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
-                ├── CreateGCJobForIndex {"IndexID":3,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

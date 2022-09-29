@@ -60,6 +60,9 @@ ElementState:
     comment: multi region db is good
     databaseId: 104
   Status: PUBLIC
+- DatabaseData:
+    databaseId: 104
+  Status: PUBLIC
 
 decompose
 table_global
@@ -129,6 +132,10 @@ ElementState:
     temporaryIndexId: 0
   Status: PUBLIC
 - TableZoneConfig:
+    tableId: 110
+  Status: PUBLIC
+- TableData:
+    databaseId: 104
     tableId: 110
   Status: PUBLIC
 - TableLocalityGlobal:
@@ -283,6 +290,10 @@ ElementState:
     ordinalInKind: 0
     tableId: 110
   Status: PUBLIC
+- IndexData:
+    indexId: 1
+    tableId: 110
+  Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 110
@@ -376,6 +387,10 @@ ElementState:
     temporaryIndexId: 0
   Status: PUBLIC
 - TableZoneConfig:
+    tableId: 109
+  Status: PUBLIC
+- TableData:
+    databaseId: 104
     tableId: 109
   Status: PUBLIC
 - TableLocalitySecondaryRegion:
@@ -532,6 +547,10 @@ ElementState:
     ordinalInKind: 0
     tableId: 109
   Status: PUBLIC
+- IndexData:
+    indexId: 1
+    tableId: 109
+  Status: PUBLIC
 - Namespace:
     databaseId: 104
     descriptorId: 109
@@ -639,6 +658,10 @@ ElementState:
     tableId: 108
   Status: PUBLIC
 - TableZoneConfig:
+    tableId: 108
+  Status: PUBLIC
+- TableData:
+    databaseId: 104
     tableId: 108
   Status: PUBLIC
 - TableLocalityRegionalByRow:
@@ -879,6 +902,10 @@ ElementState:
     indexId: 1
     kind: KEY
     ordinalInKind: 0
+    tableId: 108
+  Status: PUBLIC
+- IndexData:
+    indexId: 1
     tableId: 108
   Status: PUBLIC
 - Namespace:

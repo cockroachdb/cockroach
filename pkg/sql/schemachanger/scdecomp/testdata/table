@@ -73,6 +73,10 @@ ElementState:
     tableId: 104
     temporaryIndexId: 0
   Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 104
+  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: id
@@ -174,6 +178,10 @@ ElementState:
     indexId: 1
     kind: KEY
     ordinalInKind: 0
+    tableId: 104
+  Status: PUBLIC
+- IndexData:
+    indexId: 1
     tableId: 104
   Status: PUBLIC
 - Namespace:
@@ -305,6 +313,10 @@ ElementState:
     tableId: 105
   Status: PUBLIC
 - TableZoneConfig:
+    tableId: 105
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
     tableId: 105
   Status: PUBLIC
 - ColumnName:
@@ -535,6 +547,14 @@ ElementState:
     ordinalInKind: 0
     tableId: 105
   Status: PUBLIC
+- IndexData:
+    indexId: 1
+    tableId: 105
+  Status: PUBLIC
+- IndexData:
+    indexId: 2
+    tableId: 105
+  Status: PUBLIC
 - ConstraintName:
     constraintId: 2
     name: myfk
@@ -651,6 +671,10 @@ ElementState:
     sourceIndexId: 0
     tableId: 104
     temporaryIndexId: 0
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 104
   Status: PUBLIC
 - ColumnName:
     columnId: 1
@@ -793,6 +817,10 @@ ElementState:
     ordinalInKind: 0
     tableId: 104
   Status: PUBLIC
+- IndexData:
+    indexId: 1
+    tableId: 104
+  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 104
@@ -889,6 +917,10 @@ ElementState:
     sourceIndexId: 0
     tableId: 108
     temporaryIndexId: 0
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 108
   Status: PUBLIC
 - ColumnName:
     columnId: 1
@@ -1043,6 +1075,10 @@ ElementState:
     indexId: 1
     kind: KEY
     ordinalInKind: 0
+    tableId: 108
+  Status: PUBLIC
+- IndexData:
+    indexId: 1
     tableId: 108
   Status: PUBLIC
 - Namespace:

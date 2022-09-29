@@ -32,13 +32,15 @@ Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP C
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 2 elements transitioning toward ABSENT
+           ├── 4 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
-           │    └── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 4}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
+           │    └── PUBLIC      → ABSENT IndexData:{DescID: 106, IndexID: 5}
            └── 6 Mutation operations
-                ├── CreateGCJobForIndex {"IndexID":4,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":4,"TableID":106}
-                ├── CreateGCJobForIndex {"IndexID":5,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":4,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":5,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":5,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

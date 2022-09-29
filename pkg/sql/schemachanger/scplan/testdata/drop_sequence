@@ -48,6 +48,7 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
 PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -63,6 +64,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP SEQUENCE defaultdb.public.sq1
       TableID: 104
@@ -152,6 +154,7 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
 PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
+    [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -167,6 +170,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
           SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGCJobForTable
+      DatabaseID: 100
       StatementForDropJob:
         Statement: DROP SEQUENCE defaultdb.public.sq1 CASCADE
       TableID: 104
@@ -191,6 +195,10 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
+- from: [Sequence:{DescID: 104}, ABSENT]
+  to:   [TableData:{DescID: 104, ReferencedDescID: 100}, DROPPED]
+  kind: SameStagePrecedence
+  rule: table removed right before garbage collection
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT]
   kind: SameStagePrecedence
