@@ -160,7 +160,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 110
     type:
@@ -186,7 +185,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 110
     type:
@@ -212,7 +210,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 110
     type:
@@ -238,7 +235,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 110
     type:
@@ -413,7 +409,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 109
     type:
@@ -439,7 +434,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 109
     type:
@@ -465,7 +459,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 109
     type:
@@ -491,7 +484,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 109
     type:
@@ -686,7 +678,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -713,7 +704,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -739,7 +729,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -765,7 +754,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -791,7 +779,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:

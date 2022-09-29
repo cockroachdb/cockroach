@@ -139,7 +139,6 @@ ColumnType :  TypeT
 ColumnType :  IsNullable
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
-ColumnType :  IsRelationBeingDropped
 
 object ColumnDefaultExpression
 
@@ -183,7 +182,6 @@ object SecondaryIndexPartial
 SecondaryIndexPartial :  TableID
 SecondaryIndexPartial :  IndexID
 SecondaryIndexPartial :  Expression
-SecondaryIndexPartial :  IsRelationBeingDropped
 
 object IndexComment
 

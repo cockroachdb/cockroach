@@ -28,20 +28,14 @@ func init() {
 		"index", "column",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to nodeVars) rel.Clauses {
-			ic, ct := mkNodeVars("index-column"), mkNodeVars("column-type")
+			ic := mkNodeVars("index-column")
 			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				ct.Type((*scpb.ColumnType)(nil)),
 				columnInIndex(ic, from, relationID, columnID, "index-id"),
 				joinOnColumnID(ic, to, relationID, columnID),
-				joinOnColumnID(ic, ct, relationID, columnID),
-				rel.Filter("relationIsNotBeingDropped", ct.el)(
-					func(ct *scpb.ColumnType) bool {
-						return !ct.IsRelationBeingDropped
-					},
-				),
+				ic.descriptorIsNotBeingDropped(),
 			}
 		})
 
@@ -49,7 +43,7 @@ func init() {
 		scgraph.Precedence,
 		"index", "column",
 		func(from, to nodeVars) rel.Clauses {
-			ic, ct := mkNodeVars("index-column"), mkNodeVars("column-type")
+			ic := mkNodeVars("index-column")
 			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndex)(nil)),
@@ -57,13 +51,7 @@ func init() {
 				columnInIndex(ic, from, relationID, columnID, "index-id"),
 				joinOnColumnID(ic, to, relationID, columnID),
 				statusesToAbsent(from, scpb.Status_VALIDATED, to, scpb.Status_WRITE_ONLY),
-				ct.Type((*scpb.ColumnType)(nil)),
-				joinOnColumnID(ic, ct, relationID, columnID),
-				rel.Filter("relationIsNotBeingDropped", ct.el)(
-					func(ct *scpb.ColumnType) bool {
-						return !ct.IsRelationBeingDropped
-					},
-				),
+				ic.descriptorIsNotBeingDropped(),
 				rel.Filter("isIndexKeyColumnKey", ic.el)(
 					func(ic *scpb.IndexColumn) bool {
 						return ic.Kind == scpb.IndexColumn_KEY
