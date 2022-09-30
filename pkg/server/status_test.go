@@ -984,14 +984,14 @@ func TestHotRanges2ResponseWithViewActivityOptions(t *testing.T) {
 		}
 	}
 
-	// Grant VIEWACTIVITY and all test should work.
-	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+	// Grant VIEWCLUSTERMETADATA and all test should work.
+	db.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWCLUSTERMETADATA TO %s", authenticatedUserNameNoAdmin().Normalized()))
 	if err := postStatusJSONProtoWithAdminOption(s, "v2/hotranges", req, &hotRangesResp, false); err != nil {
 		t.Fatal(err)
 	}
 
 	// Grant VIEWACTIVITYREDACTED and all test should get permission errors.
-	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+	db.Exec(t, fmt.Sprintf("REVOKE SYSTEM  VIEWCLUSTERMETADATA FROM %s", authenticatedUserNameNoAdmin().Normalized()))
 	if err := postStatusJSONProtoWithAdminOption(s, "v2/hotranges", req, &hotRangesResp, false); err != nil {
 		if !testutils.IsError(err, "status: 403") {
 			t.Fatalf("expected privilege error, got %v", err)
