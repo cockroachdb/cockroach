@@ -363,19 +363,16 @@ func (ds *ServerImpl) setupFlow(
 			return nil, nil, nil, err
 		}
 		evalCtx = &eval.Context{
-			Settings:         ds.ServerConfig.Settings,
-			SessionDataStack: sessiondata.NewStack(sd),
-			ClusterID:        ds.ServerConfig.LogicalClusterID.Get(),
-			ClusterName:      ds.ServerConfig.ClusterName,
-			NodeID:           ds.ServerConfig.NodeID,
-			Codec:            ds.ServerConfig.Codec,
-			ReCache:          ds.regexpCache,
-			Mon:              monitor,
-			Locality:         ds.ServerConfig.Locality,
-			Tracer:           ds.ServerConfig.Tracer,
-			// Most processors will override this Context with their own context in
-			// ProcessorBase. StartInternal().
-			Context:                   ctx,
+			Settings:                  ds.ServerConfig.Settings,
+			SessionDataStack:          sessiondata.NewStack(sd),
+			ClusterID:                 ds.ServerConfig.LogicalClusterID.Get(),
+			ClusterName:               ds.ServerConfig.ClusterName,
+			NodeID:                    ds.ServerConfig.NodeID,
+			Codec:                     ds.ServerConfig.Codec,
+			ReCache:                   ds.regexpCache,
+			Mon:                       monitor,
+			Locality:                  ds.ServerConfig.Locality,
+			Tracer:                    ds.ServerConfig.Tracer,
 			Planner:                   &faketreeeval.DummyEvalPlanner{},
 			PrivilegedAccessor:        &faketreeeval.DummyPrivilegedAccessor{},
 			SessionAccessor:           &faketreeeval.DummySessionAccessor{},

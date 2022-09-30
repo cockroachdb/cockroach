@@ -359,9 +359,6 @@ type ProcessorBaseNoHelper struct {
 	// origCtx is the context from which ctx was derived. InternalClose() resets
 	// ctx to this.
 	origCtx context.Context
-	// evalOrigCtx is the original context that was stored in the eval.Context.
-	// InternalClose() uses it to correctly reset the eval.Context.
-	evalOrigCtx context.Context
 
 	State procState
 
@@ -868,8 +865,6 @@ func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string)
 			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(pb.ProcessorID)))
 		}
 	}
-	pb.evalOrigCtx = pb.EvalCtx.Context
-	pb.EvalCtx.Context = pb.Ctx
 	return pb.Ctx
 }
 
@@ -900,7 +895,6 @@ func (pb *ProcessorBaseNoHelper) InternalClose() bool {
 	// Reset the context so that any incidental uses after this point do not
 	// access the finished span.
 	pb.Ctx = pb.origCtx
-	pb.EvalCtx.Context = pb.evalOrigCtx
 	return true
 }
 

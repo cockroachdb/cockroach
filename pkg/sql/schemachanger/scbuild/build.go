@@ -184,7 +184,7 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 	bs := builderState{
 		ctx:              ctx,
 		clusterSettings:  d.ClusterSettings(),
-		evalCtx:          newEvalCtx(ctx, d),
+		evalCtx:          newEvalCtx(d),
 		semaCtx:          newSemaCtx(d),
 		cr:               d.CatalogReader(),
 		tr:               d.TableReader(),

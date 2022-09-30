@@ -156,7 +156,6 @@ func MakeSimpleTableDescriptor(
 	create.Defs = filteredDefs
 
 	evalCtx := eval.Context{
-		Context:            ctx,
 		Sequence:           &importSequenceOperators{},
 		Regions:            makeImportRegionOperator(""),
 		SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),

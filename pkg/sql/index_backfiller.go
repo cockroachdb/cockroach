@@ -167,7 +167,7 @@ func (ib *IndexBackfillPlanner) plan(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		sd := NewFakeSessionData(ib.execCfg.SV())
-		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, sd, nowTimestamp, descriptors)
+		evalCtx = createSchemaChangeEvalCtx(ib.execCfg, sd, nowTimestamp, descriptors)
 		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx,
 			nil /* planner */, txn, DistributionTypeSystemTenantOnly)
 		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
