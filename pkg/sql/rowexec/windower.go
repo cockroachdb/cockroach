@@ -112,6 +112,26 @@ func newWindower(
 	w.inputTypes = input.OutputTypes()
 	ctx := evalCtx.Ctx()
 
+	// Limit the memory use by creating a child monitor with a hard limit.
+	// windower will overflow to disk if this limit is not enough.
+	limit := execinfra.GetWorkMemLimit(flowCtx)
+	if limit < memRequiredByWindower {
+		// The limit is set very low (likely by the tests in order to improve
+		// the test coverage), but the windower requires some amount of RAM, so
+		// we override the limit. This behavior is acceptable given that we
+		// don't expect anyone to lower the setting to less than 100KiB in
+		// production.
+		limit = memRequiredByWindower
+	}
+	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)
+	limitedMon.StartNoReserved(ctx, evalCtx.Mon)
+	w.acc = limitedMon.MakeBoundAccount()
+	// If we have aggregate builtins that aggregate a single datum, we want
+	// them to reuse the same shared memory account with the windower. Notably,
+	// we need to update the eval context before constructing the window
+	// builtins.
+	evalCtx.SingleDatumAggMemAccount = &w.acc
+
 	w.partitionBy = spec.PartitionBy
 	windowFns := spec.WindowFns
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
@@ -145,20 +165,6 @@ func newWindower(
 	}
 	w.outputRow = make(rowenc.EncDatumRow, len(w.outputTypes))
 
-	// Limit the memory use by creating a child monitor with a hard limit.
-	// windower will overflow to disk if this limit is not enough.
-	limit := execinfra.GetWorkMemLimit(flowCtx)
-	if limit < memRequiredByWindower {
-		// The limit is set very low (likely by the tests in order to improve
-		// the test coverage), but the windower requires some amount of RAM, so
-		// we override the limit. This behavior is acceptable given that we
-		// don't expect anyone to lower the setting to less than 100KiB in
-		// production.
-		limit = memRequiredByWindower
-	}
-	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)
-	limitedMon.StartNoReserved(ctx, evalCtx.Mon)
-
 	if err := w.InitWithEvalCtx(
 		w,
 		post,
@@ -190,11 +196,6 @@ func newWindower(
 	); err != nil {
 		return nil, err
 	}
-
-	w.acc = w.MemMonitor.MakeBoundAccount()
-	// If we have aggregate builtins that aggregate a single datum, we want
-	// them to reuse the same shared memory account with the windower.
-	evalCtx.SingleDatumAggMemAccount = &w.acc
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		w.input = newInputStatCollector(w.input)
