@@ -84,15 +84,16 @@ func New(
 	tolerances changefeedbase.CanHandle,
 ) SchemaFeed {
 	m := &schemaFeed{
-		filter:            schemaChangeEventFilters[events],
-		db:                cfg.DB,
-		clock:             cfg.DB.Clock(),
-		settings:          cfg.Settings,
-		targets:           targets,
-		leaseMgr:          cfg.LeaseManager.(*lease.Manager),
-		collectionFactory: cfg.CollectionFactory,
-		metrics:           metrics,
-		tolerances:        tolerances,
+		filter:                  schemaChangeEventFilters[events],
+		db:                      cfg.DB,
+		clock:                   cfg.DB.Clock(),
+		settings:                cfg.Settings,
+		targets:                 targets,
+		leaseMgr:                cfg.LeaseManager.(*lease.Manager),
+		collectionFactory:       cfg.CollectionFactory,
+		internalExecutorFactory: cfg.InternalExecutorFactory,
+		metrics:                 metrics,
+		tolerances:              tolerances,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
@@ -122,8 +123,9 @@ type schemaFeed struct {
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
 	// lease manager?
-	leaseMgr          *lease.Manager
-	collectionFactory *descs.CollectionFactory
+	leaseMgr                *lease.Manager
+	collectionFactory       *descs.CollectionFactory
+	internalExecutorFactory descs.TxnManager
 
 	mu struct {
 		syncutil.Mutex
@@ -291,7 +293,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		})
 	}
 
-	if err := tf.collectionFactory.Txn(ctx, tf.db, initialTableDescsFn); err != nil {
+	if err := tf.internalExecutorFactory.DescsTxn(ctx, tf.db, initialTableDescsFn); err != nil {
 		return err
 	}
 

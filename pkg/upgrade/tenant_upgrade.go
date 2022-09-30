@@ -32,14 +32,15 @@ import (
 // TenantDeps are the dependencies of upgrades which perform actions at the
 // SQL layer.
 type TenantDeps struct {
-	DB                *kv.DB
-	Codec             keys.SQLCodec
-	Settings          *cluster.Settings
-	CollectionFactory *descs.CollectionFactory
-	LeaseManager      *lease.Manager
-	JobRegistry       *jobs.Registry
-	InternalExecutor  sqlutil.InternalExecutor
-	SessionData       *sessiondata.SessionData
+	DB                      *kv.DB
+	Codec                   keys.SQLCodec
+	Settings                *cluster.Settings
+	CollectionFactory       *descs.CollectionFactory
+	InternalExecutorFactory descs.TxnManager
+	LeaseManager            *lease.Manager
+	JobRegistry             *jobs.Registry
+	InternalExecutor        sqlutil.InternalExecutor
+	SessionData             *sessiondata.SessionData
 
 	SpanConfig struct { // deps for span config upgrades; can be removed accordingly
 		spanconfig.KVAccessor

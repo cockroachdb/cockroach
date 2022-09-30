@@ -1036,7 +1036,7 @@ SELECT id
 	ec := s.ExecutorConfig().(sql.ExecutorConfig)
 	codec := ec.Codec
 	descIDGen := ec.DescIDGenerator
-	require.NoError(t, s.CollectionFactory().(*descs.CollectionFactory).TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
+	require.NoError(t, ec.InternalExecutorFactory.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		checkImmutableDescriptor := func(id descpb.ID, expName string, f func(t *testing.T, desc catalog.Descriptor)) error {

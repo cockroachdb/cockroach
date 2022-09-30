@@ -100,7 +100,7 @@ func GetUserSessionInitInfo(
 		// necessary.
 		rootFn := func(ctx context.Context) (expired bool, ret password.PasswordHash, err error) {
 			err = runFn(ctx, func(ctx context.Context) error {
-				authInfo, _, err := retrieveSessionInitInfoWithCache(ctx, execCfg, ie, user, databaseName)
+				authInfo, _, err := retrieveSessionInitInfoWithCache(ctx, execCfg, user, databaseName)
 				if err != nil {
 					return err
 				}
@@ -126,14 +126,14 @@ func GetUserSessionInitInfo(
 		// Other users must reach for system.users no matter what, because
 		// only that contains the truth about whether the user exists.
 		authInfo, settingsEntries, err = retrieveSessionInitInfoWithCache(
-			ctx, execCfg, ie, user, databaseName,
+			ctx, execCfg, user, databaseName,
 		)
 		if err != nil {
 			return err
 		}
 
 		// Find whether the user is an admin.
-		return execCfg.CollectionFactory.Txn(ctx, execCfg.DB, func(
+		return execCfg.InternalExecutorFactory.DescsTxn(ctx, execCfg.DB, func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
 			memberships, err := MemberOfWithAdminOption(
@@ -203,11 +203,7 @@ func getUserInfoRunFn(
 }
 
 func retrieveSessionInitInfoWithCache(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	ie *InternalExecutor,
-	userName username.SQLUsername,
-	databaseName string,
+	ctx context.Context, execCfg *ExecutorConfig, userName username.SQLUsername, databaseName string,
 ) (aInfo sessioninit.AuthInfo, settingsEntries []sessioninit.SettingsCacheEntry, err error) {
 	if err = func() (retErr error) {
 		makePlanner := func(opName string) (interface{}, func()) {
@@ -223,9 +219,8 @@ func retrieveSessionInitInfoWithCache(
 		aInfo, retErr = execCfg.SessionInitCache.GetAuthInfo(
 			ctx,
 			execCfg.Settings,
-			ie,
 			execCfg.DB,
-			execCfg.CollectionFactory,
+			execCfg.InternalExecutorFactory,
 			userName,
 			retrieveAuthInfo,
 			makePlanner,
@@ -240,9 +235,8 @@ func retrieveSessionInitInfoWithCache(
 		settingsEntries, retErr = execCfg.SessionInitCache.GetDefaultSettings(
 			ctx,
 			execCfg.Settings,
-			ie,
 			execCfg.DB,
-			execCfg.CollectionFactory,
+			execCfg.InternalExecutorFactory,
 			userName,
 			databaseName,
 			retrieveDefaultSettings,
@@ -258,7 +252,7 @@ func retrieveSessionInitInfoWithCache(
 
 func retrieveAuthInfo(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
+	f descs.TxnManager,
 	user username.SQLUsername,
 	makePlanner func(opName string) (interface{}, func()),
 	settings *cluster.Settings,
@@ -268,10 +262,16 @@ func retrieveAuthInfo(
 	// we should always look up the latest data.
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
 		`WHERE username=$1`
-	values, err := ie.QueryRowEx(
-		ctx, "get-hashed-pwd", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		getHashedPassword, user)
+	var values tree.Datums
+	var err error
+	_ = f.RunWithoutTxn(ctx, func(ctx context.Context, ie sqlutil.InternalExecutor) error {
+		values, err = ie.QueryRowEx(
+			ctx, "get-hashed-pwd", nil, /* txn */
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			getHashedPassword, user)
+		return err
+	})
+
 	if err != nil {
 		return aInfo, errors.Wrapf(err, "error looking up user %s", user)
 	}
@@ -297,12 +297,17 @@ func retrieveAuthInfo(
 	const getLoginDependencies = `SELECT option, value FROM system.public.role_options ` +
 		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN')`
 
-	roleOptsIt, err := ie.QueryIteratorEx(
-		ctx, "get-login-dependencies", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		getLoginDependencies,
-		user,
-	)
+	var roleOptsIt sqlutil.InternalRows
+	_ = f.RunWithoutTxn(ctx, func(ctx context.Context, ie sqlutil.InternalExecutor) error {
+		roleOptsIt, err = ie.QueryIteratorEx(
+			ctx, "get-login-dependencies", nil, /* txn */
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			getLoginDependencies,
+			user,
+		)
+		return err
+	})
+
 	if err != nil {
 		return aInfo, errors.Wrapf(err, "error looking up user %s", user)
 	}
@@ -366,7 +371,7 @@ func retrieveAuthInfo(
 }
 
 func retrieveDefaultSettings(
-	ctx context.Context, ie sqlutil.InternalExecutor, user username.SQLUsername, databaseID descpb.ID,
+	ctx context.Context, f descs.TxnManager, user username.SQLUsername, databaseID descpb.ID,
 ) (settingsEntries []sessioninit.SettingsCacheEntry, retErr error) {
 	// Add an empty slice for all the keys so that something gets cached and
 	// prevents a lookup for the same key from happening later.
@@ -398,13 +403,19 @@ WHERE
 `
 	// We use a nil txn as role settings are not tied to any transaction state,
 	// and we should always look up the latest data.
-	defaultSettingsIt, err := ie.QueryIteratorEx(
-		ctx, "get-default-settings", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		getDefaultSettings,
-		user,
-		databaseID,
-	)
+	var defaultSettingsIt sqlutil.InternalRows
+	var err error
+	_ = f.RunWithoutTxn(ctx, func(ctx context.Context, ie sqlutil.InternalExecutor) error {
+		defaultSettingsIt, err = ie.QueryIteratorEx(
+			ctx, "get-default-settings", nil, /* txn */
+			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+			getDefaultSettings,
+			user,
+			databaseID,
+		)
+		return err
+	})
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "error looking up user %s", user)
 	}

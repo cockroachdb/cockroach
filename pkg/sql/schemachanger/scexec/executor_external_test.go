@@ -55,6 +55,7 @@ type testInfra struct {
 	lm       *lease.Manager
 	tsql     *sqlutils.SQLRunner
 	cf       *descs.CollectionFactory
+	ief      descs.TxnManager
 }
 
 func (ti testInfra) newExecDeps(
@@ -94,6 +95,7 @@ func setupTestInfra(t testing.TB) *testInfra {
 		db:       tc.Server(0).DB(),
 		lm:       tc.Server(0).LeaseManager().(*lease.Manager),
 		cf:       tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory,
+		ief:      tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).InternalExecutorFactory,
 		tsql:     sqlutils.MakeSQLRunner(tc.ServerConn(0)),
 	}
 }
@@ -102,7 +104,7 @@ func (ti *testInfra) txn(
 	ctx context.Context,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
 ) error {
-	return ti.cf.Txn(ctx, ti.db, f)
+	return ti.ief.DescsTxn(ctx, ti.db, f)
 }
 
 func TestExecutorDescriptorMutationOps(t *testing.T) {

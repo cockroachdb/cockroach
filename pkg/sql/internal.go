@@ -113,6 +113,8 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 }
 
 // MakeInternalExecutor creates an InternalExecutor.
+// TODO (janexing): usage of it should be deprecated with `DescsTxnWithExecutor()`
+// or `RunWithoutTxn()`.
 func MakeInternalExecutor(
 	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
 ) InternalExecutor {
@@ -121,55 +123,6 @@ func MakeInternalExecutor(
 		mon:        monitor,
 		memMetrics: memMetrics,
 	}
-}
-
-// newInternalExecutorWithTxn creates an Internal Executor with txn related
-// information, and also a function that can be called to commit the txn.
-// This function should only be used in the implementation of
-// descs.CollectionFactory's InternalExecutorFactoryWithTxn.
-// TODO (janexing): This function will be soon refactored after we change
-// the internal executor infrastructure with a single conn executor for all
-// sql statement executions within a txn.
-func newInternalExecutorWithTxn(
-	s *Server,
-	sd *sessiondata.SessionData,
-	txn *kv.Txn,
-	memMetrics MemoryMetrics,
-	monitor *mon.BytesMonitor,
-	descCol *descs.Collection,
-) (*InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
-	schemaChangerState := &SchemaChangerState{
-		mode: sd.NewSchemaChangerMode,
-	}
-	ie := InternalExecutor{
-		s:          s,
-		mon:        monitor,
-		memMetrics: memMetrics,
-		extraTxnState: &extraTxnState{
-			txn:                    txn,
-			descCollection:         descCol,
-			jobs:                   new(jobsCollection),
-			schemaChangeJobRecords: make(map[descpb.ID]*jobs.Record),
-			schemaChangerState:     schemaChangerState,
-		},
-	}
-	ie.s.populateMinimalSessionData(sd)
-	ie.sessionDataStack = sessiondata.NewStack(sd)
-
-	commitTxnFunc := func(ctx context.Context) error {
-		defer func() {
-			ie.extraTxnState.jobs.reset()
-			ie.releaseSchemaChangeJobRecords()
-		}()
-		if err := ie.commitTxn(ctx); err != nil {
-			return err
-		}
-		return ie.s.cfg.JobRegistry.Run(
-			ctx, ie.s.cfg.InternalExecutor, *ie.extraTxnState.jobs,
-		)
-	}
-
-	return &ie, commitTxnFunc
 }
 
 // MakeInternalExecutorMemMonitor creates and starts memory monitor for an
@@ -1288,12 +1241,6 @@ type InternalExecutorFactory struct {
 	monitor    *mon.BytesMonitor
 }
 
-// MemoryMonitor returns the monitor which should be used when constructing
-// things in the context of an internal executor created by this factory.
-func (ief *InternalExecutorFactory) MemoryMonitor() *mon.BytesMonitor {
-	return ief.monitor
-}
-
 // NewInternalExecutorFactory returns a new internal executor factory.
 func NewInternalExecutorFactory(
 	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
@@ -1306,10 +1253,11 @@ func NewInternalExecutorFactory(
 }
 
 var _ sqlutil.InternalExecutorFactory = &InternalExecutorFactory{}
-var _ descs.InternalExecutorFactoryWithTxn = &InternalExecutorFactory{}
+var _ descs.TxnManager = &InternalExecutorFactory{}
 
 // NewInternalExecutor constructs a new internal executor.
-// TODO (janexing): this should be deprecated soon.
+// TODO (janexing): usage of it should be deprecated with `DescsTxnWithExecutor()`
+// or `RunWithoutTxn()`.
 func (ief *InternalExecutorFactory) NewInternalExecutor(
 	sd *sessiondata.SessionData,
 ) sqlutil.InternalExecutor {
@@ -1318,12 +1266,14 @@ func (ief *InternalExecutorFactory) NewInternalExecutor(
 	return &ie
 }
 
-// NewInternalExecutorWithTxn creates an internal executor with txn-related info,
-// such as descriptor collection and schema change job records, etc. It should
-// be called only after InternalExecutorFactory.NewInternalExecutor is already
-// called to construct the InternalExecutorFactory with required server info.
-// This function should only be used under CollectionFactory.TxnWithExecutor().
-func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
+// newInternalExecutorWithTxn creates an internal executor with txn-related info,
+// such as descriptor collection and schema change job records, etc.
+// This function should only be used under
+// InternalExecutorFactory.DescsTxnWithExecutor().
+// TODO (janexing): This function will be soon refactored after we change
+// the internal executor infrastructure with a single conn executor for all
+// sql statement executions within a txn.
+func (ief *InternalExecutorFactory) newInternalExecutorWithTxn(
 	sd *sessiondata.SessionData, sv *settings.Values, txn *kv.Txn, descCol *descs.Collection,
 ) (sqlutil.InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
 	// By default, if not given session data, we initialize a sessionData that
@@ -1337,16 +1287,39 @@ func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
 		sd = NewFakeSessionData(sv)
 		sd.UserProto = username.RootUserName().EncodeProto()
 	}
-	ie, commitTxnFunc := newInternalExecutorWithTxn(
-		ief.server,
-		sd,
-		txn,
-		ief.memMetrics,
-		ief.monitor,
-		descCol,
-	)
 
-	return ie, commitTxnFunc
+	schemaChangerState := &SchemaChangerState{
+		mode: sd.NewSchemaChangerMode,
+	}
+	ie := InternalExecutor{
+		s:          ief.server,
+		mon:        ief.monitor,
+		memMetrics: ief.memMetrics,
+		extraTxnState: &extraTxnState{
+			txn:                    txn,
+			descCollection:         descCol,
+			jobs:                   new(jobsCollection),
+			schemaChangeJobRecords: make(map[descpb.ID]*jobs.Record),
+			schemaChangerState:     schemaChangerState,
+		},
+	}
+	ie.s.populateMinimalSessionData(sd)
+	ie.sessionDataStack = sessiondata.NewStack(sd)
+
+	commitTxnFunc := func(ctx context.Context) error {
+		defer func() {
+			ie.extraTxnState.jobs.reset()
+			ie.releaseSchemaChangeJobRecords()
+		}()
+		if err := ie.commitTxn(ctx); err != nil {
+			return err
+		}
+		return ie.s.cfg.JobRegistry.Run(
+			ctx, ie.s.cfg.InternalExecutor, *ie.extraTxnState.jobs,
+		)
+	}
+
+	return &ie, commitTxnFunc
 }
 
 // RunWithoutTxn is to create an internal executor without binding to a txn,
@@ -1439,10 +1412,10 @@ func (ief *InternalExecutorFactory) DescsTxnWithExecutor(
 			withNewVersion, deletedDescs = nil, catalog.DescriptorIDSet{}
 			descsCol := cf.NewCollection(
 				ctx, nil, /* temporarySchemaProvider */
-				ief.MemoryMonitor(),
+				ief.monitor,
 			)
 			defer descsCol.ReleaseAll(ctx)
-			ie, commitTxnFn := ief.NewInternalExecutorWithTxn(sd, &cf.GetClusterSettings().SV, txn, descsCol)
+			ie, commitTxnFn := ief.newInternalExecutorWithTxn(sd, &cf.GetClusterSettings().SV, txn, descsCol)
 			if err := f(ctx, txn, descsCol, ie); err != nil {
 				return err
 			}

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -64,12 +63,11 @@ func TestCacheInvalidation(t *testing.T) {
 		settings, err := execCfg.SessionInitCache.GetDefaultSettings(
 			ctx,
 			s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
 			s.DB(),
-			s.CollectionFactory().(*descs.CollectionFactory),
+			s.InternalExecutorFactory().(*sql.InternalExecutorFactory),
 			username.TestUserName(),
 			"defaultdb",
-			func(ctx context.Context, ie sqlutil.InternalExecutor, userName username.SQLUsername, databaseID descpb.ID) ([]sessioninit.SettingsCacheEntry, error) {
+			func(ctx context.Context, ief descs.TxnManager, userName username.SQLUsername, databaseID descpb.ID) ([]sessioninit.SettingsCacheEntry, error) {
 				didReadFromSystemTable = true
 				return nil, nil
 			})
@@ -91,11 +89,10 @@ func TestCacheInvalidation(t *testing.T) {
 		aInfo, err := execCfg.SessionInitCache.GetAuthInfo(
 			ctx,
 			settings,
-			s.InternalExecutor().(sqlutil.InternalExecutor),
 			s.DB(),
-			s.CollectionFactory().(*descs.CollectionFactory),
+			s.InternalExecutorFactory().(*sql.InternalExecutorFactory),
 			username.TestUserName(),
-			func(ctx context.Context, ie sqlutil.InternalExecutor, userName username.SQLUsername, makePlanner func(opName string) (interface{}, func()), settings *cluster.Settings) (sessioninit.AuthInfo, error) {
+			func(ctx context.Context, f descs.TxnManager, userName username.SQLUsername, makePlanner func(opName string) (interface{}, func()), settings *cluster.Settings) (sessioninit.AuthInfo, error) {
 				didReadFromSystemTable = true
 				return sessioninit.AuthInfo{}, nil
 			},
@@ -218,7 +215,6 @@ func TestCacheSingleFlight(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	settings := s.ExecutorConfig().(sql.ExecutorConfig).Settings
-	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	c := s.ExecutorConfig().(sql.ExecutorConfig).SessionInitCache
 
 	testuser := username.MakeSQLUsernameFromPreNormalizedString("test")
@@ -247,9 +243,9 @@ func TestCacheSingleFlight(t *testing.T) {
 
 	go func() {
 		didReadFromSystemTable := false
-		_, err := c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
+		_, err := c.GetAuthInfo(ctx, settings, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).InternalExecutorFactory, testuser, func(
 			ctx context.Context,
-			ie sqlutil.InternalExecutor,
+			f descs.TxnManager,
 			userName username.SQLUsername,
 			makePlanner func(opName string) (interface{}, func()),
 			settings *cluster.Settings,
@@ -274,9 +270,9 @@ func TestCacheSingleFlight(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		go func() {
 			didReadFromSystemTable := false
-			_, err := c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
+			_, err := c.GetAuthInfo(ctx, settings, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).InternalExecutorFactory, testuser, func(
 				ctx context.Context,
-				ie sqlutil.InternalExecutor,
+				f descs.TxnManager,
 				userName username.SQLUsername,
 				makePlanner func(opName string) (interface{}, func()),
 				settings *cluster.Settings,
@@ -298,9 +294,9 @@ func TestCacheSingleFlight(t *testing.T) {
 
 	// GetAuthInfo should not be using the cache since it is outdated.
 	didReadFromSystemTable := false
-	_, err = c.GetAuthInfo(ctx, settings, ie, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory, testuser, func(
+	_, err = c.GetAuthInfo(ctx, settings, s.DB(), s.ExecutorConfig().(sql.ExecutorConfig).InternalExecutorFactory, testuser, func(
 		ctx context.Context,
-		ie sqlutil.InternalExecutor,
+		f descs.TxnManager,
 		userName username.SQLUsername,
 		makePlanner func(opName string) (interface{}, func()),
 		settings *cluster.Settings,
