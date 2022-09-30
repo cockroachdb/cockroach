@@ -1337,7 +1337,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	var didUpdate bool
 	var depMutationJobs []jobspb.JobID
 	var otherJobIDs []jobspb.JobID
-	err := sc.execCfg.CollectionFactory.Txn(ctx, sc.db, func(
+	err := sc.execCfg.InternalExecutorFactory.DescsTxn(ctx, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		depMutationJobs = depMutationJobs[:0]
@@ -2453,7 +2453,7 @@ func (sc *SchemaChanger) txn(
 			return err
 		}
 	}
-	return sc.execCfg.CollectionFactory.Txn(ctx, sc.db, f)
+	return sc.execCfg.InternalExecutorFactory.DescsTxn(ctx, sc.db, f)
 }
 
 // txnWithExecutor is to run internal executor within a txn.
@@ -2467,7 +2467,7 @@ func (sc *SchemaChanger) txnWithExecutor(
 			return err
 		}
 	}
-	return sc.execCfg.CollectionFactory.TxnWithExecutor(ctx, sc.db, sd, f)
+	return sc.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, sc.db, sd, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.

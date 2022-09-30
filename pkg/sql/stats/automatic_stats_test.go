@@ -74,6 +74,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 		executor,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -201,6 +202,7 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 		executor,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -307,6 +309,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		executor,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -555,6 +558,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		executor,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -612,6 +616,7 @@ func TestAutoStatsOnStartupClusterSettingOff(t *testing.T) {
 		executor,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -660,6 +665,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 		executor,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
@@ -777,6 +783,7 @@ func TestAnalyzeSystemTables(t *testing.T) {
 		executor,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	var tableNames []string

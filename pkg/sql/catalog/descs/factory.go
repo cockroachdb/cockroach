@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -38,7 +37,6 @@ type CollectionFactory struct {
 	spanConfigSplitter spanconfig.Splitter
 	spanConfigLimiter  spanconfig.Limiter
 	defaultMonitor     *mon.BytesMonitor
-	ieFactoryWithTxn   InternalExecutorFactoryWithTxn
 }
 
 // GetClusterSettings returns the cluster setting from the collection factory.
@@ -46,18 +44,10 @@ func (cf *CollectionFactory) GetClusterSettings() *cluster.Settings {
 	return cf.settings
 }
 
-// InternalExecutorFactoryWithTxn is used to create an internal executor
-// with associated extra txn state information.
-// It should only be used as a field hanging off CollectionFactory.
-type InternalExecutorFactoryWithTxn interface {
-	MemoryMonitor() *mon.BytesMonitor
-
-	NewInternalExecutorWithTxn(
-		sd *sessiondata.SessionData,
-		sv *settings.Values,
-		txn *kv.Txn,
-		descCol *Collection,
-	) (sqlutil.InternalExecutor, InternalExecutorCommitTxnFunc)
+// TxnManager is used to enable running multiple queries with an internal
+// executor in a transactional manner.
+type TxnManager interface {
+	sqlutil.InternalExecutorFactory
 
 	DescsTxnWithExecutor(
 		ctx context.Context,
@@ -127,12 +117,4 @@ func (cf *CollectionFactory) NewCollection(
 	}
 	return newCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydrated, cf.systemDatabase,
 		cf.virtualSchemas, temporarySchemaProvider, monitor)
-}
-
-// SetInternalExecutorWithTxn is to set the internal executor factory hanging
-// off the collection factory.
-func (cf *CollectionFactory) SetInternalExecutorWithTxn(
-	ieFactoryWithTxn InternalExecutorFactoryWithTxn,
-) {
-	cf.ieFactoryWithTxn = ieFactoryWithTxn
 }

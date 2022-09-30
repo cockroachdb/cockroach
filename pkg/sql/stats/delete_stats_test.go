@@ -47,6 +47,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		ex,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 
@@ -344,6 +345,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 		ex,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	testData := []TableStatisticProto{

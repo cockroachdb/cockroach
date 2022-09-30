@@ -246,6 +246,7 @@ func TestCacheBasic(t *testing.T) {
 		ex,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
@@ -352,6 +353,7 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 		s.InternalExecutor().(sqlutil.InternalExecutor),
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
@@ -410,6 +412,7 @@ func TestCacheWait(t *testing.T) {
 		ex,
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	for _, tableID := range tableIDs {
@@ -465,6 +468,7 @@ func TestCacheAutoRefresh(t *testing.T) {
 		s.InternalExecutor().(sqlutil.InternalExecutor),
 		s.ClusterSettings(),
 		s.CollectionFactory().(*descs.CollectionFactory),
+		s.InternalExecutorFactory().(descs.TxnManager),
 	)
 	require.NoError(t, sc.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 

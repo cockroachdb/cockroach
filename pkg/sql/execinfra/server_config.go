@@ -149,7 +149,7 @@ type ServerConfig struct {
 	// InternalExecutorFactory is used to construct session-bound
 	// executors. The idea is that a higher-layer binds some of the arguments
 	// required, so that users of ServerConfig don't have to care about them.
-	InternalExecutorFactory sqlutil.InternalExecutorFactory
+	InternalExecutorFactory descs.TxnManager
 
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
