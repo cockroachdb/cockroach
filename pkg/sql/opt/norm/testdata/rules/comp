@@ -207,6 +207,17 @@ select
       ├── (s:4::TIME + '05:00:00') < '01:00:00' [outer=(4), stable]
       └── (s:4::TIME + '-05:00:00') < '23:00:00' [outer=(4), stable]
 
+# Regression test for #89024 - don't attempt to evaluate op for NULL values.
+norm expect-not=(NormalizeCmpPlusConst,NormalizeCmpMinusConst,NormalizeCmpConstMinus)
+SELECT 1
+WHERE (parse_time(e'D~<\x0bjN"@y')::TIME - '50 years'::INTERVAL)::TIME <= NULL::TIME
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
 # --------------------------------------------------
 # NormalizeCmpMinusConst
 # --------------------------------------------------
