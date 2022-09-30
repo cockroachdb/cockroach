@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -143,6 +144,10 @@ type TxnCoordSender struct {
 		// caller of DeferCommitWait has assumed responsibility for performing
 		// the commit-wait.
 		commitWaitDeferred bool
+
+		// NB: Used ONLY for investigation, so that the outermost span can be
+		// obtained on error.
+		rootCtx context.Context
 	}
 
 	// A pointer member to the creating factory provides access to
@@ -922,7 +927,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 
 	// Update our transaction with any information the error has.
 	if errTxn := pErr.GetTxn(); errTxn != nil {
-		if err := sanityCheckErrWithTxn(ctx, pErr, ba, &tc.testingKnobs); err != nil {
+		if err := sanityCheckErrWithTxn(ctx, pErr, ba, &tc.testingKnobs, tc.mu.rootCtx); err != nil {
 			return roachpb.NewError(err)
 		}
 		tc.mu.txn.Update(errTxn)
@@ -945,6 +950,7 @@ func sanityCheckErrWithTxn(
 	pErrWithTxn *roachpb.Error,
 	ba roachpb.BatchRequest,
 	knobs *ClientTestingKnobs,
+	rootCtx context.Context,
 ) error {
 	txn := pErrWithTxn.GetTxn()
 	if txn.Status != roachpb.COMMITTED {
@@ -955,6 +961,17 @@ func sanityCheckErrWithTxn(
 	// context timeout expires while a commit request is in flight.
 	if ba.IsSingleAbortTxnRequest() {
 		return nil
+	}
+
+	// NB: OK, we have a "transaction unexpectedly committed" error. Let's log
+	// the trace of the transaction to investigate. We should have recording
+	// enabled on the ctx already.
+	{
+		sp := tracing.SpanFromContext(rootCtx)
+		// We probably should do this in an annotated version of context.Background(),
+		// but since this is for investigation it shouldn't matter that we log the
+		// trace using the same context.
+		log.Warningf(ctx, "INVESTIGATE - transaction unexpectedly committed, trace:\n%s", sp.GetConfiguredRecording())
 	}
 
 	// Finding out about our transaction being committed indicates a serious bug.
@@ -1389,6 +1406,12 @@ func (tc *TxnCoordSender) HasPerformedWrites() bool {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.hasPerformedWritesLocked()
+}
+
+func (tc *TxnCoordSender) SetRootCtx(ctx context.Context) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.mu.rootCtx = ctx
 }
 
 func (tc *TxnCoordSender) hasPerformedReadsLocked() bool {

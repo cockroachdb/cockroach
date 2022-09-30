@@ -235,6 +235,11 @@ func (m *MockTransactionalSender) HasPerformedWrites() bool {
 	panic("unimplemented")
 }
 
+// SetRootCtx is part of TxnSenderFactory.
+func (m *MockTransactionalSender) SetRootCtx(ctx context.Context) {
+	panic("unimplemented")
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (
