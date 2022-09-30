@@ -37,7 +37,7 @@ func updateInvalidColumnIDsInSequenceBackReferences(
 	for {
 		var currSeqID descpb.ID
 		var done bool
-		if err := d.CollectionFactory.TxnWithExecutor(ctx, d.DB, d.SessionData, func(
+		if err := d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) (err error) {
 			currSeqID = lastSeqID

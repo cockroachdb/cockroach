@@ -89,15 +89,16 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 		err = m.Run(ctx, cv, mc.SystemDeps(), r.j)
 	case *upgrade.TenantUpgrade:
 		tenantDeps := upgrade.TenantDeps{
-			DB:                execCtx.ExecCfg().DB,
-			Codec:             execCtx.ExecCfg().Codec,
-			Settings:          execCtx.ExecCfg().Settings,
-			CollectionFactory: execCtx.ExecCfg().CollectionFactory,
-			LeaseManager:      execCtx.ExecCfg().LeaseManager,
-			InternalExecutor:  execCtx.ExecCfg().InternalExecutor,
-			JobRegistry:       execCtx.ExecCfg().JobRegistry,
-			TestingKnobs:      execCtx.ExecCfg().UpgradeTestingKnobs,
-			SessionData:       execCtx.SessionData(),
+			DB:                      execCtx.ExecCfg().DB,
+			Codec:                   execCtx.ExecCfg().Codec,
+			Settings:                execCtx.ExecCfg().Settings,
+			CollectionFactory:       execCtx.ExecCfg().CollectionFactory,
+			InternalExecutorFactory: execCtx.ExecCfg().InternalExecutorFactory,
+			LeaseManager:            execCtx.ExecCfg().LeaseManager,
+			InternalExecutor:        execCtx.ExecCfg().InternalExecutor,
+			JobRegistry:             execCtx.ExecCfg().JobRegistry,
+			TestingKnobs:            execCtx.ExecCfg().UpgradeTestingKnobs,
+			SessionData:             execCtx.SessionData(),
 		}
 		tenantDeps.SpanConfig.KVAccessor = execCtx.ExecCfg().SpanConfigKVAccessor
 		tenantDeps.SpanConfig.Splitter = execCtx.ExecCfg().SpanConfigSplitter

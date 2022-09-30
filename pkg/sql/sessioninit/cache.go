@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -106,13 +105,12 @@ func NewCache(account mon.BoundAccount, stopper *stop.Stopper) *Cache {
 func (a *Cache) GetAuthInfo(
 	ctx context.Context,
 	settings *cluster.Settings,
-	ie sqlutil.InternalExecutor,
 	db *kv.DB,
-	f *descs.CollectionFactory,
+	f descs.TxnManager,
 	username username.SQLUsername,
 	readFromSystemTables func(
 		ctx context.Context,
-		ie sqlutil.InternalExecutor,
+		f descs.TxnManager,
 		username username.SQLUsername,
 		makePlanner func(opName string) (interface{}, func()),
 		settings *cluster.Settings,
@@ -120,12 +118,12 @@ func (a *Cache) GetAuthInfo(
 	makePlanner func(opName string) (interface{}, func()),
 ) (aInfo AuthInfo, err error) {
 	if !CacheEnabled.Get(&settings.SV) {
-		return readFromSystemTables(ctx, ie, username, makePlanner, settings)
+		return readFromSystemTables(ctx, f, username, makePlanner, settings)
 	}
 
 	var usersTableDesc catalog.TableDescriptor
 	var roleOptionsTableDesc catalog.TableDescriptor
-	err = f.Txn(ctx, db, func(
+	err = f.DescsTxn(ctx, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		_, usersTableDesc, err = descriptors.GetImmutableTableByName(
@@ -167,7 +165,7 @@ func (a *Cache) GetAuthInfo(
 	val, err := a.loadValueOutsideOfCache(
 		ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
 		func(loadCtx context.Context) (interface{}, error) {
-			return readFromSystemTables(loadCtx, ie, username, makePlanner, settings)
+			return readFromSystemTables(loadCtx, f, username, makePlanner, settings)
 		})
 	if err != nil {
 		return aInfo, err
@@ -283,21 +281,20 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 func (a *Cache) GetDefaultSettings(
 	ctx context.Context,
 	settings *cluster.Settings,
-	ie sqlutil.InternalExecutor,
 	db *kv.DB,
-	f *descs.CollectionFactory,
+	f descs.TxnManager,
 	userName username.SQLUsername,
 	databaseName string,
 	readFromSystemTables func(
 		ctx context.Context,
-		ie sqlutil.InternalExecutor,
+		f descs.TxnManager,
 		userName username.SQLUsername,
 		databaseID descpb.ID,
 	) ([]SettingsCacheEntry, error),
 ) (settingsEntries []SettingsCacheEntry, err error) {
 	var dbRoleSettingsTableDesc catalog.TableDescriptor
 	var databaseID descpb.ID
-	err = f.Txn(ctx, db, func(
+	err = f.DescsTxn(ctx, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		_, dbRoleSettingsTableDesc, err = descriptors.GetImmutableTableByName(
@@ -333,7 +330,7 @@ func (a *Cache) GetDefaultSettings(
 	if !CacheEnabled.Get(&settings.SV) {
 		settingsEntries, err = readFromSystemTables(
 			ctx,
-			ie,
+			f,
 			userName,
 			databaseID,
 		)
@@ -357,7 +354,7 @@ func (a *Cache) GetDefaultSettings(
 	val, err := a.loadValueOutsideOfCache(
 		ctx, fmt.Sprintf("defaultsettings-%s-%d-%d", userName.Normalized(), databaseID, dbRoleSettingsTableVersion),
 		func(loadCtx context.Context) (interface{}, error) {
-			return readFromSystemTables(loadCtx, ie, userName, databaseID)
+			return readFromSystemTables(loadCtx, f, userName, databaseID)
 		},
 	)
 	if err != nil {

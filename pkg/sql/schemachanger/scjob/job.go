@@ -69,6 +69,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	payload := n.job.Payload()
 	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
+		execCfg.InternalExecutorFactory,
 		execCfg.DB,
 		execCfg.IndexBackfiller,
 		execCfg.IndexMerger,

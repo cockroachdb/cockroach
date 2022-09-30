@@ -175,7 +175,7 @@ func cleanupSessionTempObjects(
 	sessionID clusterunique.ID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return ief.(descs.InternalExecutorFactoryWithTxn).DescsTxnWithExecutor(
+	return ief.(descs.TxnManager).DescsTxnWithExecutor(
 		ctx, db, nil /* sessionData */, func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 			ie sqlutil.InternalExecutor,
