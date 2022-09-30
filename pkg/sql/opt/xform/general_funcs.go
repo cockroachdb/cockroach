@@ -569,15 +569,23 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 			)
 			newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
 			if !filters.IsTrue() {
-				newScanOrSelect = c.wrapScanInLimitedSelect(
+				newScanOrSelect = c.e.f.ConstructSelect(
 					newScanOrSelect,
-					sp,
-					newScanPrivate,
-					filters,
-					limit,
+					c.RemapScanColsInFilter(filters, sp, newScanPrivate),
 				)
 			}
-			queue.PushBack(newScanOrSelect)
+			// It is safe to use an empty ordering for this Limit because this
+			// is a single key span so a prefix of the index columns are held
+			// constant for this span, and the remaining columns correspond to
+			// the ordering columns (see hasOrderingSeq). If a Select was
+			// applied to the Scan above, the execution engine guarantees that
+			// the order of the rows from the Scan will be preserved.
+			newLimit := c.e.f.ConstructLimit(
+				newScanOrSelect,
+				c.IntConst(tree.NewDInt(tree.DInt(limit))),
+				c.EmptyOrdering(),
+			)
+			queue.PushBack(newLimit)
 		}
 	}
 
@@ -654,7 +662,10 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 	})
 	newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
 	if !filters.IsTrue() {
-		newScanOrSelect = c.wrapScanInLimitedSelect(newScanOrSelect, sp, newScanPrivate, filters, limit)
+		newScanOrSelect = c.e.f.ConstructSelect(
+			newScanOrSelect,
+			c.RemapScanColsInFilter(filters, sp, newScanPrivate),
+		)
 	}
 	// TODO(mgartner/msirek): Converting ColSets to ColLists here is only safe
 	// because column IDs are always allocated in a consistent, ascending order
@@ -709,29 +720,6 @@ func (c *CustomFuncs) numAllowedValues(
 		}
 	}
 	return 0, false
-}
-
-// wrapScanInLimitedSelect wraps "scan" in a SelectExpr with filters mapped from
-// the originalScanPrivate columns to the columns in scan. If limit is non-zero,
-// the SelectExpr is wrapped in a LimitExpr with that limit.
-func (c *CustomFuncs) wrapScanInLimitedSelect(
-	scan memo.RelExpr,
-	originalScanPrivate, newScanPrivate *memo.ScanPrivate,
-	filters memo.FiltersExpr,
-	limit int,
-) (limitedSelect memo.RelExpr) {
-	limitedSelect = c.e.f.ConstructSelect(
-		scan,
-		c.RemapScanColsInFilter(filters, originalScanPrivate, newScanPrivate),
-	)
-	if limit != 0 {
-		limitedSelect = c.e.f.ConstructLimit(
-			limitedSelect,
-			c.IntConst(tree.NewDInt(tree.DInt(limit))),
-			c.EmptyOrdering(),
-		)
-	}
-	return limitedSelect
 }
 
 // indexHasOrderingSequence returns whether the Scan can provide a given
