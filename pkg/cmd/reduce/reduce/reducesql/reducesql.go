@@ -49,6 +49,10 @@ var SQLPasses = []reduce.Pass{
 	removeIndexCols,
 	removeIndexPredicate,
 	removeIndexStoringCols,
+	removeIndexPartitionBy,
+	removeIndexPartitions,
+	removeIndexPartitionListValues,
+	removeIndexPartitionListCols,
 	removeWindowPartitions,
 	removeDBSchema,
 	removeFroms,
@@ -825,6 +829,101 @@ var (
 			return removeStoringCol(node)
 		case *tree.UniqueConstraintTableDef:
 			return removeStoringCol(&node.IndexTableDef)
+		}
+		return 0
+	})
+	removeIndexPartitionBy = walkSQL("remove INDEX PARTITION BY", func(xfi int, node interface{}) int {
+		xf := xfi == 0
+		removePartitionBy := func(idx *tree.IndexTableDef) int {
+			if idx.PartitionByIndex != nil {
+				if xf {
+					idx.PartitionByIndex = nil
+				}
+				return 1
+			}
+			return 0
+		}
+		switch node := node.(type) {
+		case *tree.IndexTableDef:
+			return removePartitionBy(node)
+		case *tree.UniqueConstraintTableDef:
+			return removePartitionBy(&node.IndexTableDef)
+		}
+		return 0
+	})
+	removeIndexPartitions = walkSQL("remove INDEX partitions", func(xfi int, node interface{}) int {
+		removePartitionBy := func(idx *tree.IndexTableDef) int {
+			if idx.PartitionByIndex != nil {
+				n := len(idx.PartitionByIndex.List)
+				if xfi < n {
+					idx.PartitionByIndex.List =
+						append(idx.PartitionByIndex.List[:xfi], idx.PartitionByIndex.List[xfi+1:]...)
+				}
+				return n
+			}
+			return 0
+		}
+		switch node := node.(type) {
+		case *tree.IndexTableDef:
+			return removePartitionBy(node)
+		case *tree.UniqueConstraintTableDef:
+			return removePartitionBy(&node.IndexTableDef)
+		}
+		return 0
+	})
+	removeIndexPartitionListValues = walkSQL("remove INDEX partition list values", func(xfi int, node interface{}) int {
+		removePartitionBy := func(idx *tree.IndexTableDef) int {
+			if idx.PartitionByIndex != nil {
+				n := 0
+				for i := range idx.PartitionByIndex.List {
+					list := &idx.PartitionByIndex.List[i]
+					l := len(list.Exprs)
+					if xfi >= n && xfi < n+l {
+						list.Exprs = append(list.Exprs[:xfi-n], list.Exprs[xfi-n+1:]...)
+					}
+					n += l
+				}
+				return n
+			}
+			return 0
+		}
+		switch node := node.(type) {
+		case *tree.IndexTableDef:
+			return removePartitionBy(node)
+		case *tree.UniqueConstraintTableDef:
+			return removePartitionBy(&node.IndexTableDef)
+		}
+		return 0
+	})
+	removeIndexPartitionListCols = walkSQL("remove INDEX partition list cols", func(xfi int, node interface{}) int {
+		removePartitionBy := func(idx *tree.IndexTableDef) int {
+			if idx.PartitionByIndex != nil && len(idx.PartitionByIndex.List) > 0 {
+				n := len(idx.PartitionByIndex.Fields)
+				if xfi < n {
+					idx.PartitionByIndex.Fields =
+						append(idx.PartitionByIndex.Fields[:xfi], idx.PartitionByIndex.Fields[xfi+1:]...)
+					// Remove the corresponding column from the index columns.
+					idx.Columns = append(idx.Columns[:xfi], idx.Columns[xfi+1:]...)
+					// Remove the corresponding value from every tuple in every
+					// partition.
+					for i := range idx.PartitionByIndex.List {
+						list := &idx.PartitionByIndex.List[i]
+						for j := range list.Exprs {
+							t := list.Exprs[j].(*tree.Tuple)
+							t.Exprs = append(t.Exprs[:xfi], t.Exprs[xfi+1:]...)
+						}
+					}
+
+				}
+				return n
+			}
+			return 0
+		}
+		switch node := node.(type) {
+		case *tree.IndexTableDef:
+			return removePartitionBy(node)
+		case *tree.UniqueConstraintTableDef:
+			return removePartitionBy(&node.IndexTableDef)
 		}
 		return 0
 	})
