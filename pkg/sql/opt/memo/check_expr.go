@@ -339,7 +339,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 
 	case *WithScanExpr:
 		// Verify the input columns exist in the binding.
-		binding := m.Metadata().WithBinding(t.With)
+		binding := m.Metadata().WithBinding(t.With).BoundExpr
 		if binding == nil {
 			panic(errors.AssertionFailedf("WithScan binding missing"))
 		}
