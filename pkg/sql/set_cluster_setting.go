@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -65,41 +64,56 @@ type setClusterSettingNode struct {
 }
 
 func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, action string) error {
-	if settings.AdminOnly(name) {
-		return p.RequireAdminRole(ctx, fmt.Sprintf("%s cluster setting '%s'", action, name))
-	}
 
-	// logic for system privileges.
-	var hasModifyPrivilegeErr error
-	var hasViewPrivilegeErr error
+	// First check system privileges.
+	hasModify := false
+	hasView := false
 	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-		hasModifyPrivilegeErr = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING)
-		hasViewPrivilegeErr = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING)
-	}
-
-	hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
-	if err != nil {
-		return err
-	}
-
-	if action == "set" && hasModifyPrivilegeErr != nil {
-		if !hasModify {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with the %s privilege are allowed to %s cluster setting '%s'",
-				roleoption.MODIFYCLUSTERSETTING, action, name)
+		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
+			hasModify = true
+			hasView = true
+		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+			return err
+		}
+		if !hasView {
+			if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING); err == nil {
+				hasView = true
+			} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+				return err
+			}
 		}
 	}
-	hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
-	if err != nil {
-		return err
-	}
-	// check that for "show" action user has either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges.
-	if action == "show" && !(hasModifyPrivilegeErr == nil || hasViewPrivilegeErr == nil) {
-		if !(hasModify || hasView) {
-			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with either %s or %s privileges are allowed to %s cluster setting '%s'",
-				roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING, action, name)
+
+	// Fallback to role option if the user doesn't have the privilege.
+	if !hasModify {
+		ok, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
+		if err != nil {
+			return err
 		}
+		hasModify = hasModify || ok
+		hasView = hasView || ok
+	}
+
+	// The "set" action requires MODIFYCLUSTERSETTING.
+	if action == "set" && !hasModify {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with the %s privilege are allowed to %s cluster setting '%s'",
+			privilege.MODIFYCLUSTERSETTING, action, name)
+	}
+
+	if !hasView {
+		ok, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
+		if err != nil {
+			return err
+		}
+		hasView = hasView || ok
+	}
+
+	// The "show" action requires either either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges.
+	if action == "show" && !hasView {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with either %s or %s privileges are allowed to %s cluster setting '%s'",
+			privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING, action, name)
 	}
 	return nil
 }
