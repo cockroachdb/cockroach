@@ -780,6 +780,7 @@ func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
 // lease in a single cycle of the replicate_queue.
 func TestLeasePreferencesDuringOutage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 88769, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	stickyRegistry := server.NewStickyInMemEnginesRegistry()
