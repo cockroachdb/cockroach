@@ -85,6 +85,9 @@ func (c *CustomFuncs) FoldBinaryCheckOverflow(
 	}
 
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
+	if lDatum == tree.DNull || rDatum == tree.DNull {
+		return nil, false
+	}
 	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
 	if err != nil {
 		return nil, false
