@@ -251,10 +251,15 @@ func (p *Processor) run(
 	rtsIterFunc IntentScannerConstructor,
 	stopper *stop.Stopper,
 ) {
+	// Close the memory budget last, or there will be a period of time during
+	// which requests are still ongoing but will run into the closed budget,
+	// causing shutdown noise and busy retries.
+	// Closing the budget after stoppedC ensures that all other goroutines are
+	// (very close to being) shut down by the time the budget goes away.
+	defer p.MemBudget.Close(ctx)
 	defer close(p.stoppedC)
 	ctx, cancelOutputLoops := context.WithCancel(ctx)
 	defer cancelOutputLoops()
-	defer p.MemBudget.Close(ctx)
 
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
@@ -572,8 +577,8 @@ func (p *Processor) ForwardClosedTS(ctx context.Context, closedTS hlc.Timestamp)
 func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duration) bool {
 	// The code is a bit unwieldy because we try to avoid any allocations on fast
 	// path where we have enough budget and outgoing channel is free. If not, we
-	// try to set up timeout for acquiring budget and then reuse it for inserting
-	// value into channel.
+	// try to set up timeout for acquiring budget and then reuse this timeout when
+	// inserting value into channel.
 	var alloc *SharedBudgetAllocation
 	if p.MemBudget != nil {
 		size := calculateDateEventSize(e)
@@ -581,7 +586,9 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 			var err error
 			// First we will try non-blocking fast path to allocate memory budget.
 			alloc, err = p.MemBudget.TryGet(ctx, size)
-			if err != nil {
+			// If budget is already closed, then just let it through because processor
+			// is terminating.
+			if err != nil && !errors.Is(err, budgetClosedError) {
 				// Since we don't have enough budget, we should try to wait for
 				// allocation returns before failing.
 				if timeout > 0 {
@@ -595,11 +602,15 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 				p.Metrics.RangeFeedBudgetBlocked.Inc(1)
 				alloc, err = p.MemBudget.WaitAndGet(ctx, size)
 			}
-			if err != nil {
+			if err != nil && !errors.Is(err, budgetClosedError) {
 				p.Metrics.RangeFeedBudgetExhausted.Inc(1)
 				p.sendStop(newErrBufferCapacityExceeded())
 				return false
 			}
+			// Always release allocation pointer after sending as it is nil safe.
+			// In normal case its value is moved into event, in case of allocation
+			// errors it is nil, in case of send errors it is non-nil and this call
+			// ensures that unused allocation is released.
 			defer func() {
 				alloc.Release(ctx)
 			}()
@@ -614,7 +625,7 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 		select {
 		case p.eventC <- ev:
 			// Reset allocation after successful posting to prevent deferred cleanup
-			// from freeing it.
+			// from freeing it (see comment on defer for explanation).
 			alloc = nil
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
@@ -628,7 +639,7 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 		select {
 		case p.eventC <- ev:
 			// Reset allocation after successful posting to prevent deferred cleanup
-			// from freeing it.
+			// from freeing it (see comment on defer for explanation).
 			alloc = nil
 		case <-p.stoppedC:
 			// Already stopped. Do nothing.
@@ -641,7 +652,7 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 			select {
 			case p.eventC <- ev:
 				// Reset allocation after successful posting to prevent deferred cleanup
-				// from freeing it.
+				// from freeing it  (see comment on defer for explanation).
 				alloc = nil
 			case <-p.stoppedC:
 				// Already stopped. Do nothing.
