@@ -1,0 +1,404 @@
+# This test induces the skipped span introduction bug described in
+# https://github.com/cockroachdb/cockroach/issues/88042
+# and ensures that RESTORE now fails with an expected error message.
+# The exact timeline that induces the bug is the following:
+#
+# - t0: begin import jobs and pause it
+# - t1: wildcard table or database backup with revision history
+# - t2: cancel an import job, and continue a different one
+# - t3: run an incremental backup with revision history
+#       - the testing knob will induce this incremental backup to skip the
+#         introduction of the imported tables
+# - t4: restore the tables.
+#       - If we restore AOST after the imports completed/failed, the restore should fail as it now
+#         detects that the incremental backup at t3 forgot to re-introduce the span.
+#       - If we restore AOST before the import completed/failed, the restore should succeed, as the
+#         skipped span introduction is irrelevant.
+#
+# The test also ensures that similar backup/restore/import scenarios are safe from corruption:
+#  - the timeline above with table/database backups w/o revision history
+#  - revision history cluster backups
+#  - revision history table/database backups which includes an incremental backup between t1 and t2
+
+new-server name=s1 knobs=skip-descriptor-change-intro
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE TABLE foofoo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foofoo VALUES (10, 'x0');
+CREATE TABLE goodfoo (i INT PRIMARY KEY, s STRING);
+CREATE INDEX goodfoo_idx on goodfoo (s);
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://0/export1/' FROM SELECT * FROM baz;
+----
+
+
+# Pause the import job, in order to back up the importing data.
+import expect-pausepoint tag=a
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+import expect-pausepoint tag=aa
+IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+import expect-pausepoint tag=aaa
+IMPORT INTO goodfoo (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+# Create 5 backup chains:
+#
+# 1. A corrupt database backup chain with revision history
+#
+# 2. A corrupt wildcard table backup chain with revision history
+#
+# 3. A clean database backup chain with revision history which includes two
+#    backups that observe the offline descriptors.
+#
+# 4. A clean data database backup chain without revision history
+#
+# 5. A clean cluster backup chain with revision history
+
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/database/' with revision_history;
+----
+
+
+exec-sql
+BACKUP TABLE d.* INTO 'nodelocal://0/table/' with revision_history;
+----
+
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/database_double_inc/' with revision_history;
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://0/database_no_hist/';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://0/cluster/' with revision_history;
+----
+
+
+# Conduct another incremental backup on the database_double_inc chain
+# and ensure the processors spin up
+exec-sql
+INSERT INTO baz VALUES (4, 'a');
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database_double_inc/' with revision_history;
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+save-cluster-ts tag=t0
+----
+
+# Resume the job so the next set of incremental backups observes that tables are back online
+job cancel=a
+----
+
+job cancel=aa
+----
+
+job tag=a wait-for-state=cancelled
+----
+
+
+job tag=aa wait-for-state=cancelled
+----
+
+job resume=aaa
+----
+
+job tag=aaa wait-for-state=succeeded
+----
+
+
+# Verify proper rollback
+query-sql
+SELECT count(*) FROM d.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d.foofoo;
+----
+1
+
+# Verify completed import
+query-sql
+SELECT count(*) FROM d.goodfoo;
+----
+3
+
+
+# Because BackupRestoreTestingKnobs.SkipDescriptorChangeIntroduction is turned on,
+# this backup will be unable to introduce foo, foofoo, and goodfoo.
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database/' with revision_history;
+----
+
+exec-sql
+BACKUP TABLE d.* INTO LATEST IN 'nodelocal://0/table/' with revision_history;
+----
+
+# However, the following backup chains avoid the bug
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database_double_inc/' with revision_history;
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://0/database_no_hist/';
+----
+
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://0/cluster/' with revision_history;
+----
+
+
+# Note that we're purposely skipping the reintroduction of foo, foofoo, goodfoo in the
+# incremental to simulate the bug.
+# - note that goodfoo did get backed up in the incremental backup, but only because when
+#   the import resumed, it re-ingested goodfoo using an addsstable request at a timestamp greater than
+#   the incremental backup start time. If it had been introduced, 6 rows should have appeared in
+#   SHOW BACKUP, as seen in different backup chains.
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo' or object_name = 'goodfoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 0 incremental
+d foofoo table 0 incremental
+d goodfoo table 3 incremental
+
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/table/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo' or object_name = 'goodfoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 0 incremental
+d foofoo table 0 incremental
+d goodfoo table 3 incremental
+
+# In all show backups below, the foo,foofoo, and goodfoo should get introduced
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database_double_inc/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo' or object_name = 'goodfoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 0 incremental
+d foofoo table 1 incremental
+d goodfoo table 6 incremental
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/database_no_hist/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo' or object_name = 'goodfoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 0 incremental
+d foofoo table 1 incremental
+d goodfoo table 6 incremental
+
+# Note that the cluster level SHOW BACKUP includes foo and foofoo in the full
+# backup while the database ones do not. This is because CLUSTER
+# backup manifests includes these in the Descriptors field (i.e. cluster backups
+# explicitly backup offline tables, see #88043), while database
+# backups only include these descriptors in manifest.DescriptorChanges (see
+# #88042).
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://0/cluster/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo' or object_name = 'goodfoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 3 full
+d foofoo table 4 full
+d goodfoo table 3 full
+d foo table 0 incremental
+d foofoo table 1 incremental
+d goodfoo table 6 incremental
+
+
+############
+# Restore validation
+############
+
+# check that RESTORE will fail if any corrupt table restore is attempted
+exec-sql expect-error-regex='table "foo" cannot be safely restored from this backup .*'
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/' with new_db_name = d_fail;
+----
+regex matches error
+
+exec-sql expect-error-regex='table "goodfoo" cannot be safely restored from this backup .*'
+RESTORE TABLE d.goodfoo FROM LATEST IN 'nodelocal://0/database/' with into_db = defaultdb;
+----
+regex matches error
+
+exec-sql expect-error-regex='table "foofoo" cannot be safely restored from this backup .*'
+RESTORE TABLE d.foofoo FROM LATEST IN 'nodelocal://0/database/' with into_db = defaultdb;
+----
+regex matches error
+
+
+# Ensure the restore succeeds if there are no corrupt tables in the target
+exec-sql
+RESTORE TABLE d.baz FROM LATEST IN 'nodelocal://0/database/' with into_db = defaultdb;
+----
+
+
+# Check that the wildcard restore encounters the same errors
+
+exec-sql
+CREATE DATABASE defaultdb2;
+----
+
+exec-sql expect-error-regex='table "foo" cannot be safely restored from this backup .*'
+RESTORE TABLE d.* FROM LATEST IN 'nodelocal://0/table/' with into_db = defaultdb2;
+----
+regex matches error
+
+exec-sql expect-error-regex='table "foofoo" cannot be safely restored from this backup .*'
+RESTORE TABLE d.foofoo FROM LATEST IN 'nodelocal://0/table/' with into_db = defaultdb2;
+----
+regex matches error
+
+# Ensure the restore succeeds if there are no corrupt tables in the target
+exec-sql
+RESTORE TABLE d.baz FROM LATEST IN 'nodelocal://0/table/' with into_db = defaultdb2;
+----
+
+######################
+# Check that you can restore AOST while the tables are offline
+restore aost=t0
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database/' AS OF SYSTEM TIME t0 with new_db_name=d_t0;
+----
+
+
+query-sql
+SELECT table_name FROM [SHOW TABLES FROM d_t0];
+----
+baz
+
+
+###########################
+# Check the alternative scenarios
+###########################
+
+# Check that a backup chain with the intermediate incremental backup restores properly
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database_double_inc/' with new_db_name = d_double_inc;
+----
+
+query-sql
+SELECT count(*) FROM d_double_inc.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d_double_inc.foofoo;
+----
+1
+
+query-sql
+SELECT count(*) FROM d_double_inc.goodfoo;
+----
+3
+
+
+# Check that that backup chain with the intermediate incremental backup restores properly
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/database_no_hist/' with new_db_name = d_no_hist;
+----
+
+query-sql
+SELECT count(*) FROM d_no_hist.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d_no_hist.foofoo;
+----
+1
+
+query-sql
+SELECT count(*) FROM d_no_hist.goodfoo;
+----
+3
+
+
+# Check the cluster level restore
+new-server name=s2 share-io-dir=s1
+----
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://0/cluster/';
+----
+
+query-sql
+SELECT count(*) FROM d.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d.foofoo;
+----
+1
+
+
+query-sql
+SELECT count(*) FROM d.goodfoo;
+----
+3
