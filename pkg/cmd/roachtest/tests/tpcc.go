@@ -192,8 +192,12 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 
 	var ep *tpccChaosEventProcessor
-	promCfg, cleanupFunc := setupPrometheusForTPCC(ctx, t, c, opts, workloadInstances)
-	defer cleanupFunc()
+	var promCfg *prometheus.Config
+	if !opts.DisablePrometheus {
+		var cleanupFunc func()
+		promCfg, cleanupFunc = setupPrometheusForRoachtest(ctx, t, c, opts.PrometheusConfig, workloadInstances)
+		defer cleanupFunc()
+	}
 	if opts.ChaosEventsProcessor != nil {
 		if promCfg == nil {
 			t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
@@ -1413,26 +1417,23 @@ func makeWorkloadScrapeNodes(
 	return workloadScrapeNodes
 }
 
-// setupPrometheusForTPCC initializes prometheus to run against the provided
+// setupPrometheusForRoachtest initializes prometheus to run against the provided
 // PrometheusConfig. If no PrometheusConfig is provided, it creates a prometheus
 // scraper for all CockroachDB nodes in the TPC-C setup, as well as one for
 // each workloadInstance.
 // Returns the created PrometheusConfig if prometheus is initialized, as well
 // as a cleanup function which should be called in a defer statement.
-func setupPrometheusForTPCC(
+func setupPrometheusForRoachtest(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
-	opts tpccOptions,
+	promCfg *prometheus.Config,
 	workloadInstances []workloadInstance,
 ) (*prometheus.Config, func()) {
-	cfg := opts.PrometheusConfig
+	cfg := promCfg
 	if cfg == nil {
 		// Avoid setting prometheus automatically up for local clusters.
 		if c.IsLocal() {
-			return nil, func() {}
-		}
-		if opts.DisablePrometheus {
 			return nil, func() {}
 		}
 		cfg = &prometheus.Config{}
@@ -1440,12 +1441,10 @@ func setupPrometheusForTPCC(
 		cfg.WithPrometheusNode(workloadNode)
 		cfg.WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
 		cfg.WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
-		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
-			"/", makeWorkloadScrapeNodes(workloadNode, workloadInstances)))
-
-	}
-	if opts.DisablePrometheus {
-		t.Fatal("test has PrometheusConfig but DisablePrometheus was on")
+		if len(workloadInstances) > 0 {
+			cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
+				"/", makeWorkloadScrapeNodes(workloadNode, workloadInstances)))
+		}
 	}
 	if c.IsLocal() {
 		t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
