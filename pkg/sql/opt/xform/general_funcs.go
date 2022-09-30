@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -569,12 +568,18 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 			)
 			newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
 			if !filters.IsTrue() {
-				newScanOrSelect = c.wrapScanInLimitedSelect(
+				// TODO(mgartner): I think we can wrap this scan in a limit by
+				// adding an ordering to the limit identical to the original
+				// ordering but with the columns remapped. But we should
+				// consider if this transformation is useful in that case - I
+				// think it's only useful if there is a single constraint span
+				// where the prefix columns are held constant - for all other
+				// cases we'll have to perform a sort.
+				newScanOrSelect = c.wrapScanInSelect(
 					newScanOrSelect,
 					sp,
 					newScanPrivate,
 					filters,
-					limit,
 				)
 			}
 			queue.PushBack(newScanOrSelect)
@@ -654,7 +659,14 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 	})
 	newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
 	if !filters.IsTrue() {
-		newScanOrSelect = c.wrapScanInLimitedSelect(newScanOrSelect, sp, newScanPrivate, filters, limit)
+		// TODO(mgartner): I think we can wrap this scan in a limit by
+		// adding an ordering to the limit identical to the original
+		// ordering but with the columns remapped. But we should
+		// consider if this transformation is useful in that case - I
+		// think it's only useful if there is a single constraint span
+		// where the prefix columns are held constant - for all other
+		// cases we'll have to perform a sort.
+		newScanOrSelect = c.wrapScanInSelect(newScanOrSelect, sp, newScanPrivate, filters)
 	}
 	// TODO(mgartner/msirek): Converting ColSets to ColLists here is only safe
 	// because column IDs are always allocated in a consistent, ascending order
@@ -711,27 +723,17 @@ func (c *CustomFuncs) numAllowedValues(
 	return 0, false
 }
 
-// wrapScanInLimitedSelect wraps "scan" in a SelectExpr with filters mapped from
-// the originalScanPrivate columns to the columns in scan. If limit is non-zero,
-// the SelectExpr is wrapped in a LimitExpr with that limit.
-func (c *CustomFuncs) wrapScanInLimitedSelect(
+// wrapScanInSelect wraps "scan" in a SelectExpr with filters mapped from
+// the originalScanPrivate columns to the columns in scan.
+func (c *CustomFuncs) wrapScanInSelect(
 	scan memo.RelExpr,
 	originalScanPrivate, newScanPrivate *memo.ScanPrivate,
 	filters memo.FiltersExpr,
-	limit int,
 ) (limitedSelect memo.RelExpr) {
-	limitedSelect = c.e.f.ConstructSelect(
+	return c.e.f.ConstructSelect(
 		scan,
 		c.RemapScanColsInFilter(filters, originalScanPrivate, newScanPrivate),
 	)
-	if limit != 0 {
-		limitedSelect = c.e.f.ConstructLimit(
-			limitedSelect,
-			c.IntConst(tree.NewDInt(tree.DInt(limit))),
-			c.EmptyOrdering(),
-		)
-	}
-	return limitedSelect
 }
 
 // indexHasOrderingSequence returns whether the Scan can provide a given
