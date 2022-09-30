@@ -72,11 +72,6 @@ message RecordedSpan {
   // Operation name.
   string operation = 4;
 
-  // Tags associated with the span.
-  // Deprecated. Avoid new uses. Prefer tag_groups.
-  // TODO(benbardin): Remove the tags field for 23.1.
-  map<string, string> tags = 6;
-
   // tag_groups describes tags associated with the span, potentially in a
   // shallow structured hierarchy.
   //
@@ -125,7 +120,6 @@ message RecordedSpan {
   //
   // A StructuredRecord wraps the Payload with a RecordedAt timestamp to expose
   // information about when this event occurred.
-  // DeprecatedInternalStructured only stores the Payloads.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
 
 
@@ -137,7 +131,7 @@ message RecordedSpan {
   // view of the various operations that are being traced as part of a span.
   map<string, OperationMetadata> children_metadata = 19 [(gogoproto.nullable) = false];
 
-  reserved 5,10,11,15;
+  reserved 5,6,10,11,15;
 }
 
 message TagGroup {

@@ -103,11 +103,13 @@ const (
 )
 
 var hiddenTags = map[string]struct{}{
-	"_unfinished": {},
-	"_verbose":    {},
-	"_dropped":    {},
-	"node":        {},
-	"store":       {},
+	"_unfinished":                {},
+	"_verbose":                   {},
+	"_dropped_logs":              {},
+	"_dropped_children":          {},
+	"_dropped_indirect_children": {},
+	"node":                       {},
+	"store":                      {},
 }
 
 type processedSpan struct {

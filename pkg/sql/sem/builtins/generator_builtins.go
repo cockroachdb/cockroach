@@ -2253,12 +2253,12 @@ func (p *payloadsForSpanGenerator) Start(_ context.Context, _ *kv.Txn) error {
 	p.payloadIndex = -1
 
 	rec := p.span.GetFullRecording(tracingpb.RecordingStructured)
-	if rec == nil {
+	if rec.Empty() {
 		// No structured records.
 		return nil
 	}
-	p.payloads = make([]json.JSON, len(rec[0].StructuredRecords))
-	for i, sr := range rec[0].StructuredRecords {
+	p.payloads = make([]json.JSON, len(rec.Root.StructuredRecords))
+	for i, sr := range rec.Root.StructuredRecords {
 		var err error
 		p.payloads[i], err = protoreflect.MessageToJSON(sr.Payload, protoreflect.FmtFlags{EmitDefaults: true})
 		if err != nil {

@@ -9,13 +9,14 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { connect } from "react-redux";
+import { useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import * as d3 from "d3";
 
-import { NodesSummary } from "src/redux/nodes";
+import { nodeStatusesSelector, nodeSumsSelector } from "src/redux/nodes";
 import { Bytes } from "src/util/format";
 import { util } from "@cockroachlabs/cluster-ui";
+import { createSelector } from "reselect";
 
 import { EventBox } from "src/views/cluster/containers/events";
 import { Metric } from "src/views/shared/components/metricQuery";
@@ -30,26 +31,18 @@ import {
 } from "src/views/shared/components/summaryBar";
 import { Tooltip, Anchor } from "src/components";
 import { howAreCapacityMetricsCalculated } from "src/util/docs";
-import { AdminUIState } from "src/redux/state";
 
 /**
  * ClusterNodeTotals displays a high-level breakdown of the nodes on the cluster
  * and their current liveness status.
  */
-
-export interface ClusterNodeTotalsProps {
-  nodesSummary: NodesSummary;
-  nodesSummaryEmpty: boolean;
-}
-
-export const ClusterNodeTotalsComponent: React.FC<ClusterNodeTotalsProps> = ({
-  nodesSummary,
-  nodesSummaryEmpty,
-}) => {
+export const ClusterNodeTotals: React.FC = () => {
+  const nodeSums = useSelector(nodeSumsSelector);
+  const nodesSummaryEmpty = useSelector(selectNodesSummaryEmpty);
   if (nodesSummaryEmpty) {
     return null;
   }
-  const { nodeCounts } = nodesSummary.nodeSums;
+  const { nodeCounts } = nodeSums;
   let children: React.ReactNode;
   if (nodeCounts.dead > 0 || nodeCounts.suspect > 0) {
     children = (
@@ -86,18 +79,10 @@ export const ClusterNodeTotalsComponent: React.FC<ClusterNodeTotalsProps> = ({
   );
 };
 
-export function selectNodesSummaryEmpty(state: AdminUIState) {
-  return !state.cachedData.nodes.data;
-}
-
-const mapStateToProps = (state: AdminUIState) => ({
-  nodesSummaryEmpty: selectNodesSummaryEmpty(state),
-});
-
-const ClusterNodeTotals = connect(
-  mapStateToProps,
-  {},
-)(ClusterNodeTotalsComponent);
+export const selectNodesSummaryEmpty = createSelector(
+  nodeStatusesSelector,
+  nodes => !nodes,
+);
 
 const formatOnePlace = d3.format(".1f");
 const formatPercentage = d3.format(".2%");
@@ -110,19 +95,19 @@ function formatNanosAsMillis(n: number) {
  */
 export interface ClusterSummaryProps {
   nodeSources: string[];
-  nodesSummary: NodesSummary;
 }
 
 export default function (props: ClusterSummaryProps) {
+  const nodeSums = useSelector(nodeSumsSelector);
   // Capacity math used in the summary status section.
-  const { capacityUsed, capacityUsable } = props.nodesSummary.nodeSums;
+  const { capacityUsed, capacityUsable } = nodeSums;
   const capacityPercent =
     capacityUsable !== 0 ? capacityUsed / capacityUsable : null;
   return (
     <div>
       <SummaryBar>
         <SummaryLabel>Summary</SummaryLabel>
-        <ClusterNodeTotals nodesSummary={props.nodesSummary} />
+        <ClusterNodeTotals />
         <SummaryStat
           title={
             <Tooltip
@@ -153,7 +138,7 @@ export default function (props: ClusterSummaryProps) {
         </SummaryStat>
         <SummaryStat
           title="Unavailable ranges"
-          value={props.nodesSummary.nodeSums.unavailableRanges}
+          value={nodeSums.unavailableRanges}
         />
         <SummaryMetricStat
           id="qps"

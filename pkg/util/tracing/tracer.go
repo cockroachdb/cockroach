@@ -1004,7 +1004,7 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	// after Finish().
 	c.mu.Lock()
 	c.mu.openChildren = nil
-	c.mu.recording.finishedChildren = nil
+	c.mu.recording.finishedChildren = Trace{}
 	c.mu.tags = nil
 	c.mu.lazyTags = nil
 	c.mu.recording.logs.Discard()
@@ -1187,7 +1187,7 @@ child operation: %s, tracer created at:
 		// activeSpansRegistry indirectly through this link. If the parent is
 		// recording, it will also use this link to collect the child's recording.
 		//
-		// NB: (!opts.Parent.empty() && opts.Parent.i.crdb == nil) is not possible at
+		// NB: (!opts.Parent.Empty() && opts.Parent.i.crdb == nil) is not possible at
 		// the moment, but let's not rely on that.
 		if !opts.Parent.empty() && opts.Parent.i.crdb != nil {
 
@@ -1267,7 +1267,7 @@ func (c MapCarrier) ForEach(fn func(key, val string) error) error {
 func (t *Tracer) InjectMetaInto(sm SpanMeta, carrier Carrier) {
 	if sm.Empty() {
 		// Fast path when tracing is disabled. ExtractMetaFrom will accept an
-		// empty map as a noop context.
+		// Empty map as a noop context.
 		return
 	}
 	// If the span has been marked as not wanting children, we don't propagate any
@@ -1392,7 +1392,7 @@ type RegistrySpan interface {
 	// WithDetachedRecording option. In other situations, the recording of such
 	// children is not included in the parent's recording but, in the case of the
 	// span registry, we want as much information as possible to be included.
-	GetFullRecording(recType tracingpb.RecordingType) tracingpb.Recording
+	GetFullRecording(recType tracingpb.RecordingType) Trace
 
 	// SetRecordingType sets the recording mode of the span and its children,
 	// recursively. Setting it to RecordingOff disables further recording.
@@ -1472,6 +1472,13 @@ func (t *Tracer) TestingGetStatsAndReset() (int, int) {
 	created := atomic.SwapInt32(&t.spansCreated, 0)
 	allocs := atomic.SwapInt32(&t.spansAllocated, 0)
 	return int(created), int(allocs)
+}
+
+func (t *Tracer) now() time.Time {
+	if clock := t.testing.Clock; clock != nil {
+		return clock.Now()
+	}
+	return timeutil.Now()
 }
 
 // ForkSpan forks the current span, if any[1]. Forked spans "follow from" the
@@ -1582,7 +1589,7 @@ func ContextWithRecordingSpan(
 }
 
 // makeOtelSpan creates an OpenTelemetry span. If either of localParent or
-// remoteParent are not empty, the returned span will be a child of that parent.
+// remoteParent are not Empty, the returned span will be a child of that parent.
 //
 // End() needs to be called on the returned span once the span is complete.
 func makeOtelSpan(
@@ -1660,7 +1667,7 @@ func (w MetadataCarrier) ForEach(fn func(key, val string) error) error {
 //
 // We use this to circumvent the interceptor's work when tracing is
 // disabled. Otherwise, the interceptor causes an increase in the
-// number of packets (even with an empty context!).
+// number of packets (even with an Empty context!).
 //
 // See #17177.
 func SpanInclusionFuncForClient(parent *Span) bool {

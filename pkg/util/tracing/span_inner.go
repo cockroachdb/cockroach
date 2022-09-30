@@ -12,7 +12,9 @@ package tracing
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -86,11 +88,61 @@ func (s *spanInner) GetRecording(
 	if s.isNoop() {
 		return nil
 	}
-	return s.crdb.GetRecording(recType, finishing)
+	trace := s.crdb.GetRecording(recType, finishing)
+	spans := trace.Flatten()
+
+	// Sort the spans by StartTime, except the first Span (the root of this
+	// recording) which stays in place.
+	toSort := sortPoolRecordings.Get().(*tracingpb.Recording) // avoids allocations in sort.Sort
+	*toSort = spans[1:]
+	sort.Sort(toSort)
+	*toSort = nil
+	sortPoolRecordings.Put(toSort)
+
+	return spans
 }
 
-func (s *spanInner) ImportRemoteRecording(remoteRecording []tracingpb.RecordedSpan) {
-	s.crdb.recordFinishedChildren(remoteRecording)
+var sortPoolRecordings = sync.Pool{
+	New: func() interface{} {
+		return &tracingpb.Recording{}
+	},
+}
+
+func (s *spanInner) ImportRemoteRecording(remoteRecording tracingpb.Recording) {
+	s.crdb.recordFinishedChildren(treeifyRecording(remoteRecording))
+}
+
+func treeifyRecording(rec tracingpb.Recording) Trace {
+	if len(rec) == 0 {
+		return Trace{}
+	}
+
+	byParent := make(map[tracingpb.SpanID][]*tracingpb.RecordedSpan)
+	for i := range rec {
+		s := &rec[i]
+		byParent[s.ParentSpanID] = append(byParent[s.ParentSpanID], s)
+	}
+	r := treeifyRecordingInner(rec[0], byParent)
+
+	// Include the orphans under the root.
+	orphans := rec.OrphanSpans()
+	for _, sp := range orphans {
+		r.addChild(treeifyRecordingInner(sp, byParent))
+	}
+	r.sortChildren()
+	return r
+}
+
+func treeifyRecordingInner(
+	sp tracingpb.RecordedSpan, byParent map[tracingpb.SpanID][]*tracingpb.RecordedSpan,
+) Trace {
+	r := MakeTrace(sp)
+	for _, s := range byParent[sp.SpanID] {
+		r.addChild(treeifyRecordingInner(*s, byParent))
+	}
+	r.sortChildren()
+
+	return r
 }
 
 func (s *spanInner) Finish() {
