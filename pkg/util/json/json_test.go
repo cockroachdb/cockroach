@@ -855,7 +855,7 @@ func TestJSONExists(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		left, err := Random(20, rng)
 		require.NoError(t, err)
-		right := randomJSONString(rng).(string)
+		right := randomJSONString(rng, defaultRandStrLen).(string)
 		require.NoError(t, err)
 
 		var exists bool
@@ -1860,7 +1860,7 @@ func TestEncodeExistsJSONInvertedIndexSpans(t *testing.T) {
 		// Generate two random JSONs and evaluate the result of `left ? right`.
 		left, err := Random(20, rng)
 		require.NoError(t, err)
-		right := randomJSONString(rng).(string)
+		right := randomJSONString(rng, defaultRandStrLen).(string)
 		require.NoError(t, err)
 
 		var exists bool
