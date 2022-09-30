@@ -190,6 +190,16 @@ func (s *testIterator) UnsafeValue() []byte {
 	return s.curKV().Value
 }
 
+func (s *testIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	rawV := s.curKV().Value
+	v, err := storage.DecodeMVCCValue(rawV)
+	return len(rawV), v.IsTombstone(), err
+}
+
+func (s *testIterator) ValueLen() int {
+	return len(s.curKV().Value)
+}
+
 func (s *testIterator) curKV() storage.MVCCKeyValue {
 	return s.kvs[s.cur]
 }

@@ -98,6 +98,16 @@ func (f *multiIterator) UnsafeValue() []byte {
 	return f.iters[f.currentIdx].UnsafeValue()
 }
 
+// MVCCValueLenAndIsTombstone implements the SimpleMVCCIterator interface.
+func (f *multiIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	return f.iters[f.currentIdx].MVCCValueLenAndIsTombstone()
+}
+
+// ValueLen implements the SimpleMVCCIterator interface.
+func (f *multiIterator) ValueLen() int {
+	return f.iters[f.currentIdx].ValueLen()
+}
+
 // HasPointAndRange implements SimpleMVCCIterator.
 func (f *multiIterator) HasPointAndRange() (bool, bool) {
 	panic("not implemented")
