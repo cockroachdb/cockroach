@@ -538,7 +538,7 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 	// Construct a dummy operator as the binding.
 	md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
 		Props: bindingProps,
-	}))
+	}), false /* canInlineInPlace */)
 	mutationInput := b.factory.ConstructWithScan(&memo.WithScanPrivate{
 		With:    binding,
 		InCols:  oldValues,
@@ -779,7 +779,7 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 
 	md.AddWithBinding(binding, b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
 		Props: bindingProps,
-	}))
+	}), false /* canInlineInPlace */)
 	mutationInput := f.ConstructWithScan(&memo.WithScanPrivate{
 		With:    binding,
 		InCols:  append(oldValues[:len(oldValues):len(oldValues)], newValues...),

@@ -577,7 +577,7 @@ func (e ScalarListExpr) isConstantsAndPlaceholders(evalCtx *eval.Context, inside
 			if insideTuple {
 				return false
 			}
-			if !tupleExpr.Elems.isConstantsAndPlaceholders(evalCtx, true) {
+			if !tupleExpr.Elems.isConstantsAndPlaceholders(evalCtx, true /* insideTuple */) {
 				return false
 			}
 		} else {

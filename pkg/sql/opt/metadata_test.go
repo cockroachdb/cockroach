@@ -101,7 +101,7 @@ func TestMetadata(t *testing.T) {
 
 	// Call CopyFrom and verify that same objects are present in new metadata.
 	expr := &memo.ProjectExpr{}
-	md.AddWithBinding(1, expr)
+	md.AddWithBinding(1, expr, false /* canInlineInPlace */)
 	var mdNew opt.Metadata
 	mdNew.CopyFrom(md, f.CopyWithoutAssigningPlaceholders)
 

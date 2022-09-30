@@ -355,7 +355,11 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 						unTitle(childName), childName, childTyp.asField(),
 					)
 					g.w.nestIndent("if id := t.WithBindingID(); id != 0 {\n")
-					g.w.writeIndent("f.Metadata().AddWithBinding(id, %s)", unTitle(childName))
+					if opTyp.friendlyName == "WithExpr" {
+						g.w.writeIndent("f.Metadata().AddWithBinding(id, %s, !t.Mtr.Set || !t.Mtr.Materialize)", unTitle(childName))
+					} else {
+						g.w.writeIndent("f.Metadata().AddWithBinding(id, %s, false /* canInlineInPlace */)", unTitle(childName))
+					}
 					g.w.unnest("}\n")
 					g.w.nestIndent("return f.Construct%s(\n", define.Name)
 					g.w.writeIndent("%s,\n", unTitle(childName))

@@ -158,8 +158,15 @@ func (b *Builder) buildCTEs(
 			))
 		}
 
+		isCorrelated := !cteExpr.Relational().OuterCols.Empty()
+		canInlineInPlace := !isCorrelated && len(cteOrdering) == 0 &&
+			(!cte.Mtr.Set || !cte.Mtr.Materialize)
 		id := b.factory.Memo().NextWithID()
-		b.factory.Metadata().AddWithBinding(id, cteExpr)
+		b.factory.Metadata().AddWithBinding(
+			id,
+			cteExpr,
+			canInlineInPlace,
+		)
 
 		addedCTEs[i] = cteSource{
 			name:         cte.Name,
@@ -173,7 +180,7 @@ func (b *Builder) buildCTEs(
 		cte := &addedCTEs[i]
 		outScope.ctes[cte.name.Alias.String()] = cte
 
-		if isCorrelated := !cteExpr.Relational().OuterCols.Empty(); isCorrelated {
+		if isCorrelated {
 			correlatedCTEs = append(correlatedCTEs, cte)
 		} else {
 			b.addCTE(cte)
@@ -303,7 +310,7 @@ func (b *Builder) buildCTE(
 	cteSrc.expr = b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
 		Props: bindingProps,
 	})
-	b.factory.Metadata().AddWithBinding(withID, cteSrc.expr)
+	b.factory.Metadata().AddWithBinding(withID, cteSrc.expr, false /* canInlineInPlace */)
 
 	// We want to check if the recursive query is actually recursive. This is for
 	// annoying cases like `SELECT 1 UNION ALL SELECT 2`.

@@ -2593,7 +2593,7 @@ func (sb *statisticsBuilder) colStatWithScan(
 ) *props.ColumnStatistic {
 	s := withScan.Relational().Statistics()
 
-	boundExpr := sb.md.WithBinding(withScan.With).(RelExpr)
+	boundExpr := sb.md.WithBinding(withScan.With).BoundExpr.(RelExpr)
 
 	// Calculate the corresponding col stat in the bound expression and convert
 	// the result.

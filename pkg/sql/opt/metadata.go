@@ -117,7 +117,7 @@ type Metadata struct {
 
 	// withBindings store bindings for relational expressions inside With or
 	// mutation operators, used to determine the logical properties of WithScan.
-	withBindings map[WithID]Expr
+	withBindings map[WithID]*WithBindingInfo
 
 	// NOTE! When adding fields here, update Init (if reusing allocated
 	// data structures is desired), CopyFrom and TestMetadata.
@@ -758,17 +758,29 @@ func (md *Metadata) AllDataSourceNames(
 // See the comment for Metadata for more details on identifiers.
 type WithID uint64
 
-// AddWithBinding associates a WithID to its bound expression.
-func (md *Metadata) AddWithBinding(id WithID, expr Expr) {
-	if md.withBindings == nil {
-		md.withBindings = make(map[WithID]Expr)
-	}
-	md.withBindings[id] = expr
+// WithBindingInfo contains metadata about the WITH clause bound expression.
+type WithBindingInfo struct {
+
+	// BoundExpr is the normalized WITH clause bound expression.
+	BoundExpr Expr
+
+	// CanInlineInPlace is true when the WithScanExpr is allowed to be inlined
+	// when it is normalized as opposed to inlining which takes place when the
+	// WithExpr is normalized.
+	CanInlineInPlace bool
 }
 
-// WithBinding returns the bound expression for the given WithID.
-// Panics with an assertion error if there is none.
-func (md *Metadata) WithBinding(id WithID) Expr {
+// AddWithBinding associates a WithID to its bound expression.
+func (md *Metadata) AddWithBinding(id WithID, expr Expr, canInlineInPlace bool) {
+	if md.withBindings == nil {
+		md.withBindings = make(map[WithID]*WithBindingInfo)
+	}
+	md.withBindings[id] = &WithBindingInfo{expr, canInlineInPlace}
+}
+
+// WithBinding returns the WithBindingInfo, including the bound expression, for
+// the given WithID. Panics with an assertion error if there is none.
+func (md *Metadata) WithBinding(id WithID) *WithBindingInfo {
 	res, ok := md.withBindings[id]
 	if !ok {
 		panic(errors.AssertionFailedf("no binding for WithID %d", id))

@@ -1080,8 +1080,8 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				// expressions in the metadata.
 				if !addedWithBindings {
 					for i, n := opt.WithID(1), b.mem.MaxWithID(); i <= n; i++ {
-						memoExpr := b.mem.Metadata().WithBinding(i)
-						f.Metadata().AddWithBinding(i, memoExpr)
+						withBindingInfo := b.mem.Metadata().WithBinding(i)
+						f.Metadata().AddWithBinding(i, withBindingInfo.BoundExpr, withBindingInfo.CanInlineInPlace)
 					}
 					addedWithBindings = true
 				}
