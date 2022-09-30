@@ -731,7 +731,7 @@ func (s *statusServer) Allocator(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -1821,7 +1821,7 @@ func (s *statusServer) RaftDebug(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -2298,7 +2298,7 @@ func (s *statusServer) HotRanges(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -2368,7 +2368,7 @@ type tableMeta struct {
 func (s *statusServer) HotRangesV2(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponseV2, error) {
-	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2577,7 +2577,7 @@ func (s *statusServer) Range(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3286,7 +3286,7 @@ func (s *statusServer) Stores(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
