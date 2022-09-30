@@ -4181,7 +4181,11 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 	var conjunctSelectivity props.Selectivity
 
 	for f := 0; f < len(h.filters); f++ {
-		disjunction := h.filters[f]
+		disjunction := &h.filters[f]
+		if disjunction.ScalarProps().TightConstraints {
+			// applyFilters will have already handled this filter.
+			continue
+		}
 		var disjuncts []opt.ScalarExpr
 		if orExpr, ok := disjunction.Condition.(*OrExpr); !ok {
 			continue
@@ -4638,7 +4642,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 	filters := *constraints.(*FiltersExpr)
 	// For each ANDed check constraint...
 	for i := 0; i < len(filters); i++ {
-		filter := filters[i]
+		filter := &filters[i]
 		// This must be some type of comparison operation, or an OR or AND
 		// expression. These operations have at least 2 children.
 		if filter.Condition.ChildCount() < 2 {
