@@ -895,6 +895,22 @@ func (i *intentInterleavingIter) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
 }
 
+func (i *intentInterleavingIter) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	if i.isCurAtIntentIter() {
+		// Defensive code: Returning the actual length in the error case is not
+		// necessary.
+		return len(i.intentIter.UnsafeValue()), false, errors.Errorf("not at MVCC value")
+	}
+	return i.iter.MVCCValueLenAndIsTombstone()
+}
+
+func (i *intentInterleavingIter) ValueLen() int {
+	if i.isCurAtIntentIter() {
+		return i.intentIter.ValueLen()
+	}
+	return i.iter.ValueLen()
+}
+
 func (i *intentInterleavingIter) Key() MVCCKey {
 	key := i.UnsafeKey()
 	keyCopy := make([]byte, len(key.Key))

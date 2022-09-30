@@ -106,6 +106,27 @@ func (i *verifyingMVCCIterator) UnsafeValue() []byte {
 	return i.value
 }
 
+// MVCCValueLenAndIsTombstone implements MVCCIterator.
+func (i *verifyingMVCCIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	// NB: don't move the following code into a helper since we desire inlining
+	// of tryDecodeSimpleMVCCValue.
+	v, ok, err := tryDecodeSimpleMVCCValue(i.value)
+	if err == nil && !ok {
+		v, err = decodeExtendedMVCCValue(i.value)
+	}
+	if err != nil {
+		// Defensive code: Returning the actual length in the error case is not
+		// necessary.
+		return len(i.value), false, err
+	}
+	return len(i.value), v.IsTombstone(), nil
+}
+
+// ValueLen implements MVCCIterator.
+func (i *verifyingMVCCIterator) ValueLen() int {
+	return len(i.value)
+}
+
 // Valid implements MVCCIterator.
 func (i *verifyingMVCCIterator) Valid() (bool, error) {
 	return i.valid, i.err

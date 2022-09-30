@@ -607,22 +607,16 @@ func updateStatsOnRangeKeyPutVersion(
 }
 
 // updateStatsOnRangeKeyCover updates MVCCStats for when an MVCC range key
-// covers an MVCC point key at the given timestamp.
-func updateStatsOnRangeKeyCover(ts hlc.Timestamp, key MVCCKey, valueRaw []byte) enginepb.MVCCStats {
+// covers an MVCC point key at the given timestamp. The valueLen and
+// isTombstone are attributes of the point key.
+func updateStatsOnRangeKeyCover(
+	ts hlc.Timestamp, key MVCCKey, valueLen int, isTombstone bool,
+) enginepb.MVCCStats {
 	var ms enginepb.MVCCStats
 	ms.AgeTo(ts.WallTime)
-
-	// Determine whether the point key was a tombstone. If decoding fails, we
-	// assume the point key is live.
-	value, ok, err := tryDecodeSimpleMVCCValue(valueRaw)
-	if !ok && err == nil {
-		value, err = decodeExtendedMVCCValue(valueRaw)
-	}
-	isTombstone := err == nil && value.IsTombstone()
-
 	if !isTombstone {
 		ms.LiveCount--
-		ms.LiveBytes -= int64(key.EncodedSize()) + int64(len(valueRaw))
+		ms.LiveBytes -= int64(key.EncodedSize()) + int64(valueLen)
 	}
 	return ms
 }
@@ -1849,14 +1843,13 @@ func mvccPutInternal(
 						// existing MVCC range tombstone. If it isn't, account for it.
 						_, hasRange := iter.HasPointAndRange()
 						if !hasRange || iter.RangeKeys().Versions[0].Timestamp.Less(prevUnsafeKey.Timestamp) {
-							prevValRaw := iter.UnsafeValue()
-							prevVal, err := DecodeMVCCValue(prevValRaw)
+							prevValLen, prevValIsTombstone, err := iter.MVCCValueLenAndIsTombstone()
 							if err != nil {
 								return err
 							}
-							if prevVal.Value.IsPresent() {
-								prevIsValue = prevVal.Value.IsPresent()
-								prevValSize = int64(len(prevValRaw))
+							if !prevValIsTombstone {
+								prevIsValue = !prevValIsTombstone
+								prevValSize = int64(prevValLen)
 							}
 						}
 					}
@@ -2659,8 +2652,7 @@ func MVCCClearTimeRange(
 		}
 
 		// Process point keys.
-		vRaw := iter.UnsafeValue()
-		v, err := DecodeMVCCValue(vRaw)
+		valueLen, valueIsTombstone, err := iter.MVCCValueLenAndIsTombstone()
 		if err != nil {
 			return nil, err
 		}
@@ -2672,8 +2664,8 @@ func MVCCClearTimeRange(
 				// Since the key matches, our previous clear "restored" this revision of
 				// the this key, so update the stats with this as the "restored" key.
 				restoredMeta.KeyBytes = MVCCVersionTimestampSize
-				restoredMeta.ValBytes = int64(len(vRaw))
-				restoredMeta.Deleted = v.IsTombstone()
+				restoredMeta.ValBytes = int64(valueLen)
+				restoredMeta.Deleted = valueIsTombstone
 				restoredMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 
 				// If there was an MVCC range tombstone between this version and the
@@ -2719,7 +2711,7 @@ func MVCCClearTimeRange(
 		// previous point key above. We must also check that the clear actually
 		// revealed the key, since it may have been covered by the point key that
 		// we cleared or a different range tombstone below the one we cleared.
-		if !v.IsTombstone() {
+		if !valueIsTombstone {
 			if v, ok := clearRangeKeys.FirstAtOrAbove(k.Timestamp); ok {
 				if !clearedMetaKey.Key.Equal(k.Key) ||
 					!clearedMeta.Timestamp.ToTimestamp().LessEq(v.Timestamp) {
@@ -2728,7 +2720,7 @@ func MVCCClearTimeRange(
 						ms.Add(enginepb.MVCCStats{
 							LastUpdateNanos: v.Timestamp.WallTime,
 							LiveCount:       1,
-							LiveBytes:       int64(k.EncodedSize()) + int64(len(vRaw)),
+							LiveBytes:       int64(k.EncodedSize()) + int64(valueLen),
 						})
 					}
 				}
@@ -2741,8 +2733,8 @@ func MVCCClearTimeRange(
 			clearMatchingKey(k)
 			clearedMetaKey.Key = append(clearedMetaKey.Key[:0], k.Key...)
 			clearedMeta.KeyBytes = MVCCVersionTimestampSize
-			clearedMeta.ValBytes = int64(len(vRaw))
-			clearedMeta.Deleted = v.IsTombstone()
+			clearedMeta.ValBytes = int64(valueLen)
+			clearedMeta.Deleted = valueIsTombstone
 			clearedMeta.Timestamp = k.Timestamp.ToLegacyTimestamp()
 
 			// Move the iterator to the next key/value in linear iteration even if it
@@ -3333,7 +3325,11 @@ func MVCCDeleteRangeUsingTombstone(
 			return errors.Errorf("can't write range tombstone across inline key %s", key)
 		}
 		if ms != nil {
-			ms.Add(updateStatsOnRangeKeyCover(timestamp, key, iter.UnsafeValue()))
+			valueLen, isTombstone, err := iter.MVCCValueLenAndIsTombstone()
+			if err != nil {
+				return err
+			}
+			ms.Add(updateStatsOnRangeKeyCover(timestamp, key, valueLen, isTombstone))
 		}
 		iter.NextKey()
 	}
@@ -3911,6 +3907,7 @@ type iterForKeyVersions interface {
 	Next()
 	UnsafeKey() MVCCKey
 	UnsafeValue() []byte
+	MVCCValueLenAndIsTombstone() (int, bool, error)
 	ValueProto(msg protoutil.Message) error
 	RangeKeys() MVCCRangeKeyStack
 }
@@ -4019,6 +4016,15 @@ func (s *separatedIntentAndVersionIter) UnsafeValue() []byte {
 		return s.mvccIter.UnsafeValue()
 	}
 	return s.engineIter.UnsafeValue()
+}
+
+func (s *separatedIntentAndVersionIter) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	if !s.atMVCCIter {
+		// Defensive code: Returning the actual length in the error case is not
+		// necessary.
+		return len(s.engineIter.UnsafeValue()), false, errors.AssertionFailedf("not at MVCC value")
+	}
+	return s.mvccIter.MVCCValueLenAndIsTombstone()
 }
 
 func (s *separatedIntentAndVersionIter) ValueProto(msg protoutil.Message) error {
@@ -4393,16 +4399,12 @@ func mvccResolveWriteIntent(
 				if hasPoint, hasRange := iter.HasPointAndRange(); hasPoint {
 					if unsafeKey := iter.UnsafeKey(); unsafeKey.Key.Equal(oldKey.Key) {
 						if !hasRange || iter.RangeKeys().Versions[0].Timestamp.Less(unsafeKey.Timestamp) {
-							unsafeValRaw := iter.UnsafeValue()
-							prevVal, prevValOK, err := tryDecodeSimpleMVCCValue(unsafeValRaw)
-							if !prevValOK && err == nil {
-								prevVal, err = decodeExtendedMVCCValue(unsafeValRaw)
-							}
+							prevValLen, prevValIsTombstone, err := iter.MVCCValueLenAndIsTombstone()
 							if err != nil {
 								return false, err
 							}
-							prevIsValue = prevVal.Value.IsPresent()
-							prevValSize = int64(len(iter.UnsafeValue()))
+							prevIsValue = !prevValIsTombstone
+							prevValSize = int64(prevValLen)
 						}
 					}
 				}
@@ -4471,8 +4473,13 @@ func mvccResolveWriteIntent(
 	})
 
 	ok = false
+
+	// These variables containing the next key-value information are initialized
+	// in the following if-block when ok is set to true. These are only read
+	// after the if-block when ok is true (i.e., they were initialized).
 	var unsafeNextKey MVCCKey
-	var unsafeNextValueRaw []byte
+	var nextValueLen int
+	var nextValueIsTombstone bool
 	if nextKey := latestKey.Next(); nextKey.IsValue() {
 		// The latestKey was not the smallest possible timestamp {WallTime: 0,
 		// Logical: 1}. Practically, this is the only case that will occur in
@@ -4500,21 +4507,18 @@ func mvccResolveWriteIntent(
 				// particular timestamp.
 				return false, errors.Errorf("expected an MVCC value key: %s", unsafeNextKey)
 			}
-			unsafeNextValueRaw = iter.UnsafeValue()
-			// If a non-tombstone point key is covered by a range tombstone, then
-			// synthesize a point tombstone at the lowest range tombstone covering it.
-			// This is where the point key ceases to exist, contributing to GCBytesAge.
-			unsafeNextValue, unsafeNextValueOK, err := tryDecodeSimpleMVCCValue(unsafeNextValueRaw)
-			if !unsafeNextValueOK && err == nil {
-				unsafeNextValue, err = decodeExtendedMVCCValue(unsafeNextValueRaw)
-			}
+			nextValueLen, nextValueIsTombstone, err = iter.MVCCValueLenAndIsTombstone()
 			if err != nil {
 				return false, err
 			}
-			if !unsafeNextValue.IsTombstone() && hasRange {
+			// If a non-tombstone point key is covered by a range tombstone, then
+			// synthesize a point tombstone at the lowest range tombstone covering it.
+			// This is where the point key ceases to exist, contributing to GCBytesAge.
+			if !nextValueIsTombstone && hasRange {
 				if v, found := iter.RangeKeys().FirstAtOrAbove(unsafeNextKey.Timestamp); found {
 					unsafeNextKey.Timestamp = v.Timestamp
-					unsafeNextValueRaw = []byte{}
+					nextValueIsTombstone = true
+					nextValueLen = 0
 				}
 			}
 		}
@@ -4535,16 +4539,11 @@ func mvccResolveWriteIntent(
 		return true, nil
 	}
 
-	// Get the bytes for the next version so we have size for stat counts.
-	unsafeNextValue, err := DecodeMVCCValue(unsafeNextValueRaw)
-	if err != nil {
-		return false, err
-	}
 	// Update the keyMetadata with the next version.
 	buf.newMeta = enginepb.MVCCMetadata{
-		Deleted:  unsafeNextValue.IsTombstone(),
+		Deleted:  nextValueIsTombstone,
 		KeyBytes: MVCCVersionTimestampSize,
-		ValBytes: int64(len(unsafeNextValueRaw)),
+		ValBytes: int64(nextValueLen),
 	}
 	if err = rw.ClearIntent(metaKey.Key, canSingleDelHelper.onAbortIntent(), meta.Txn.ID); err != nil {
 		return false, err
@@ -4991,22 +4990,17 @@ func MVCCGarbageCollect(
 				break
 			}
 			if ms != nil {
-				unsafeValRaw := iter.UnsafeValue()
-				unsafeVal, unsafeValOK, err := tryDecodeSimpleMVCCValue(unsafeValRaw)
-				if !unsafeValOK && err == nil {
-					unsafeVal, err = decodeExtendedMVCCValue(unsafeValRaw)
-				}
+				valLen, valIsTombstone, err := iter.MVCCValueLenAndIsTombstone()
 				if err != nil {
 					return err
 				}
-
 				keySize := MVCCVersionTimestampSize
-				valSize := int64(len(unsafeValRaw))
+				valSize := int64(valLen)
 
 				// A non-deletion becomes non-live when its newer neighbor shows up.
 				// A deletion tombstone becomes non-live right when it is created.
 				fromNS := prevNanos
-				if unsafeVal.IsTombstone() {
+				if valIsTombstone {
 					fromNS = unsafeIterKey.Timestamp.WallTime
 				} else if !rangeTombstones.IsEmpty() {
 					// For non deletions, we need to find if we had a range tombstone
@@ -5530,10 +5524,11 @@ func computeStatsForIterWithVisitors(
 		}
 
 		unsafeKey := iter.UnsafeKey()
-		unsafeValue := iter.UnsafeValue()
 
 		if pointKeyVisitor != nil {
-			if err := pointKeyVisitor(unsafeKey, unsafeValue); err != nil {
+			// NB: pointKeyVisitor is typically nil, so we will typically not call
+			// iter.UnsafeValue().
+			if err := pointKeyVisitor(unsafeKey, iter.UnsafeValue()); err != nil {
 				return enginepb.MVCCStats{}, err
 			}
 		}
@@ -5577,24 +5572,25 @@ func computeStatsForIterWithVisitors(
 			}
 		}
 
-		if implicitMeta {
-			// No MVCCMetadata entry for this series of keys.
-			var isTombstone bool
-			{
-				mvccValue, ok, err := tryDecodeSimpleMVCCValue(unsafeValue)
-				if !ok && err == nil {
-					mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
-				}
-				if err != nil {
-					return ms, errors.Wrap(err, "unable to decode MVCCValue")
-				}
-				isTombstone = mvccValue.IsTombstone()
+		var valueLen int
+		var mvccValueIsTombstone bool
+		if isValue {
+			// MVCC value
+			var err error
+			valueLen, mvccValueIsTombstone, err = iter.MVCCValueLenAndIsTombstone()
+			if err != nil {
+				return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode MVCCValue")
 			}
-
+		} else {
+			valueLen = iter.ValueLen()
+		}
+		if implicitMeta {
+			// INVARIANT: implicitMeta => isValue.
+			// No MVCCMetadata entry for this series of keys.
 			meta.Reset()
 			meta.KeyBytes = MVCCVersionTimestampSize
-			meta.ValBytes = int64(len(unsafeValue))
-			meta.Deleted = isTombstone
+			meta.ValBytes = int64(valueLen)
+			meta.Deleted = mvccValueIsTombstone
 			meta.Timestamp.WallTime = unsafeKey.Timestamp.WallTime
 		}
 
@@ -5602,13 +5598,13 @@ func computeStatsForIterWithVisitors(
 			metaKeySize := int64(len(unsafeKey.Key)) + 1
 			var metaValSize int64
 			if !implicitMeta {
-				metaValSize = int64(len(unsafeValue))
+				metaValSize = int64(valueLen)
 			}
 			totalBytes := metaKeySize + metaValSize
 			first = true
 
 			if !implicitMeta {
-				if err := protoutil.Unmarshal(unsafeValue, &meta); err != nil {
+				if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
 				}
 			}
@@ -5643,7 +5639,7 @@ func computeStatsForIterWithVisitors(
 			}
 		}
 
-		totalBytes := int64(len(unsafeValue)) + MVCCVersionTimestampSize
+		totalBytes := int64(valueLen) + MVCCVersionTimestampSize
 		if isSys {
 			ms.SysBytes += totalBytes
 		} else {
@@ -5669,26 +5665,14 @@ func computeStatsForIterWithVisitors(
 					return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d "+
 						"(meta: %s)", MVCCVersionTimestampSize, meta.KeyBytes, &meta)
 				}
-				if meta.ValBytes != int64(len(unsafeValue)) {
+				if meta.ValBytes != int64(valueLen) {
 					return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d "+
-						"(meta: %s)", len(unsafeValue), meta.ValBytes, &meta)
+						"(meta: %s)", valueLen, meta.ValBytes, &meta)
 				}
 				accrueGCAgeNanos = meta.Timestamp.WallTime
 			} else {
 				// Overwritten value. Is it a deletion tombstone?
-				var isTombstone bool
-				{
-					mvccValue, ok, err := tryDecodeSimpleMVCCValue(unsafeValue)
-					if !ok && err == nil {
-						mvccValue, err = decodeExtendedMVCCValue(unsafeValue)
-					}
-					if err != nil {
-						return ms, errors.Wrap(err, "unable to decode MVCCValue")
-					}
-					isTombstone = mvccValue.IsTombstone()
-				}
-
-				if isTombstone {
+				if mvccValueIsTombstone {
 					// The contribution of the tombstone picks up GCByteAge from its own timestamp on.
 					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - unsafeKey.Timestamp.WallTime/1e9)
 				} else if nextRangeTombstone.IsSet() && nextRangeTombstone.WallTime < accrueGCAgeNanos {
@@ -5704,7 +5688,7 @@ func computeStatsForIterWithVisitors(
 				accrueGCAgeNanos = unsafeKey.Timestamp.WallTime
 			}
 			ms.KeyBytes += MVCCVersionTimestampSize
-			ms.ValBytes += int64(len(unsafeValue))
+			ms.ValBytes += int64(valueLen)
 			ms.ValCount++
 		}
 	}
@@ -6277,10 +6261,11 @@ func ReplacePointTombstonesWithRangeTombstones(
 		}
 
 		// Skip non-tombstone values.
-		valueRaw := iter.UnsafeValue()
-		if value, err := DecodeMVCCValue(valueRaw); err != nil {
+		valueLen, isTombstone, err := iter.MVCCValueLenAndIsTombstone()
+		if err != nil {
 			return err
-		} else if !value.IsTombstone() {
+		}
+		if !isTombstone {
 			iter.NextKey()
 			continue
 		}
@@ -6296,7 +6281,7 @@ func ReplacePointTombstonesWithRangeTombstones(
 		// Clear the point key, and construct a meta record for stats.
 		clearedMeta := &enginepb.MVCCMetadata{
 			KeyBytes:  MVCCVersionTimestampSize,
-			ValBytes:  int64(len(valueRaw)),
+			ValBytes:  int64(valueLen),
 			Deleted:   true,
 			Timestamp: key.Timestamp.ToLegacyTimestamp(),
 		}
@@ -6315,15 +6300,14 @@ func ReplacePointTombstonesWithRangeTombstones(
 			return err
 		} else if ok {
 			if key = iter.UnsafeKey(); key.Key.Equal(clearedKey.Key) {
-				valueRaw = iter.UnsafeValue()
-				value, err := DecodeMVCCValue(valueRaw)
+				valueLen, isTombstone, err = iter.MVCCValueLenAndIsTombstone()
 				if err != nil {
 					return err
 				}
 				restoredMeta = &enginepb.MVCCMetadata{
 					KeyBytes:  MVCCVersionTimestampSize,
-					ValBytes:  int64(len(valueRaw)),
-					Deleted:   value.IsTombstone(),
+					ValBytes:  int64(valueLen),
+					Deleted:   isTombstone,
 					Timestamp: key.Timestamp.ToLegacyTimestamp(),
 				}
 				if _, hasRange := iter.HasPointAndRange(); hasRange {

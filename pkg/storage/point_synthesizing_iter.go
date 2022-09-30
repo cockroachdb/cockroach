@@ -643,6 +643,33 @@ func (i *pointSynthesizingIter) UnsafeValue() []byte {
 	return i.rangeKeys[i.rangeKeysIdx].Value
 }
 
+// MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
+func (i *pointSynthesizingIter) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	if i.atPoint {
+		return i.iter.MVCCValueLenAndIsTombstone()
+	}
+	if i.rangeKeysIdx >= len(i.rangeKeys) || i.rangeKeysIdx < 0 {
+		return 0, false, errors.Errorf("iter is not Valid")
+	}
+	val := i.rangeKeys[i.rangeKeysIdx].Value
+	if len(val) != 0 {
+		return 0, false, errors.Errorf("unexpected non-empty value for range key")
+	}
+	return 0, true, nil
+}
+
+// ValueLen implements the MVCCIterator interface.
+func (i *pointSynthesizingIter) ValueLen() int {
+	if i.atPoint {
+		return i.iter.ValueLen()
+	}
+	if i.rangeKeysIdx >= len(i.rangeKeys) || i.rangeKeysIdx < 0 {
+		// Caller has violated invariant!
+		return 0
+	}
+	return len(i.rangeKeys[i.rangeKeysIdx].Value)
+}
+
 // ValueProto implements MVCCIterator.
 func (i *pointSynthesizingIter) ValueProto(msg protoutil.Message) error {
 	return protoutil.Unmarshal(i.UnsafeValue(), msg)

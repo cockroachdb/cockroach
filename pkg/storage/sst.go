@@ -309,6 +309,12 @@ func CheckSSTConflicts(
 				continue
 			}
 
+			// TODO(sumeer): extValueRaw is not always needed below. In many cases
+			// MVCCValueLenAndIsTombstone() suffices. This will require some
+			// rearrangement of the logic in compareForCollision. This is not a
+			// pressing optimization since currently the value is cheap to retrieve
+			// for the latest version of a key, and we are seeing the latest version
+			// because of the extIter.SeekGE call above.
 			extKey, extValueRaw := extIter.UnsafeKey(), extIter.UnsafeValue()
 			sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
 
@@ -399,10 +405,7 @@ func CheckSSTConflicts(
 			sstBottomTombstone := sstRangeKeys.Versions[len(sstRangeKeys.Versions)-1]
 			sstTopTombstone := sstRangeKeys.Versions[0]
 			extKey := extIter.UnsafeKey()
-			extValue, ok, err := tryDecodeSimpleMVCCValue(extIter.UnsafeValue())
-			if !ok && err == nil {
-				extValue, err = decodeExtendedMVCCValue(extIter.UnsafeValue())
-			}
+			extValueLen, extValueIsTombstone, err := extIter.MVCCValueLenAndIsTombstone()
 			if err != nil {
 				return enginepb.MVCCStats{}, err
 			}
@@ -416,7 +419,7 @@ func CheckSSTConflicts(
 				// Check if shadowing a live key is allowed. Deleting a live key counts
 				// as a shadow.
 				extValueDeleted := extHasRange && extRangeKeys.Covers(extKey)
-				if !extValue.IsTombstone() && !extValueDeleted && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
+				if !extValueIsTombstone && !extValueDeleted && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
 					// Note that we don't check for value equality here, unlike in the
 					// point key shadow case. This is because a range key and a point key
 					// by definition have different values.
@@ -430,12 +433,14 @@ func CheckSSTConflicts(
 					}
 					sstPointShadowsExtPoint := sstHasPoint && sstIter.UnsafeKey().Key.Equal(extKey.Key)
 					if (extKeyChanged || sstRangeKeysChanged) && !sstPointShadowsExtPoint {
-						statsDiff.Add(updateStatsOnRangeKeyCover(sstRangeKeyVersion.Timestamp, extKey, extIter.UnsafeValue()))
+						statsDiff.Add(updateStatsOnRangeKeyCover(
+							sstRangeKeyVersion.Timestamp, extKey, extValueLen, extValueIsTombstone))
 					} else if !extKeyChanged && sstPointShadowsExtPoint {
 						// This is either a conflict, shadow, or idempotent operation.
 						// Subtract the RangeKeyCover stats diff from the last iteration, as
 						// compareForCollision will account for the shadow.
-						statsDiff.Subtract(updateStatsOnRangeKeyCover(sstRangeKeyVersion.Timestamp, extKey, extIter.UnsafeValue()))
+						statsDiff.Subtract(updateStatsOnRangeKeyCover(
+							sstRangeKeyVersion.Timestamp, extKey, extValueLen, extValueIsTombstone))
 					}
 				}
 			}
@@ -697,7 +702,7 @@ func CheckSSTConflicts(
 			extPrevRangeKeys = extRangeKeys.Clone()
 		}
 
-		extKey, extValueRaw := extIter.UnsafeKey(), extIter.UnsafeValue()
+		extKey := extIter.UnsafeKey()
 		sstKey, sstValueRaw := sstIter.UnsafeKey(), sstIter.UnsafeValue()
 
 		// Keep seeking the iterators until both keys are equal.
@@ -720,6 +725,10 @@ func CheckSSTConflicts(
 
 		extValueDeletedByRange := extHasRange && extHasPoint && extRangeKeys.Covers(extKey)
 		if sstHasPoint && extHasPoint && !extValueDeletedByRange {
+			// TODO(sumeer): extValueRaw is not always needed below. In many cases
+			// MVCCValueLenAndIsTombstone() suffices. This will require some
+			// rearrangement of the logic in compareForCollision.
+			extValueRaw := extIter.UnsafeValue()
 			if err := compareForCollision(sstKey, extKey, sstValueRaw, extValueRaw); err != nil {
 				return enginepb.MVCCStats{}, err
 			}
