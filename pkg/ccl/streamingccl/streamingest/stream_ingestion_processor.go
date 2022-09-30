@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -140,14 +141,10 @@ type streamIngestionProcessor struct {
 	forceClientForTests streamclient.Client
 	// streamPartitionClients are a collection of streamclient.Client created for
 	// consuming multiple partitions from a stream.
-	streamPartitionClients []streamclient.Client
+	streamPartitionClients map[string]streamclient.Client
 
 	// cutoverProvider indicates when the cutover time has been reached.
 	cutoverProvider cutoverProvider
-
-	// frontier keeps track of the progress for the spans tracked by this processor
-	// and is used forward resolved spans
-	frontier *span.Frontier
 	// lastFlushTime keeps track of the last time that we flushed due to a
 	// checkpoint timestamp event.
 	lastFlushTime time.Time
@@ -176,12 +173,19 @@ type streamIngestionProcessor struct {
 	// cancelMergeAndWait cancels the merging goroutines and waits for them to
 	// finish. It cannot be called concurrently with Next(), as it consumes from
 	// the merged channel.
-	cancelMergeAndWait func()
+	cancelMergeAndWait func() error
+
+	// partitionWorkerErr is used to signal errors from partition workers.
+	partitionWorkerErr chan error
 
 	// mu is used to provide thread-safe read-write operations to ingestionErr
 	// and pollingErr.
 	mu struct {
 		syncutil.Mutex
+
+		// frontier keeps track of the progress for the spans tracked by this processor
+		// and is used to forward resolved spans.
+		frontier *span.Frontier
 
 		// ingestionErr stores any error that is returned from the worker goroutine so
 		// that it can be forwarded through the DistSQL flow.
@@ -242,7 +246,6 @@ func newStreamIngestionDataProcessor(
 		spec:              spec,
 		output:            output,
 		curKVBatch:        make([]storage.MVCCKeyValue, 0),
-		frontier:          frontier,
 		maxFlushRateTimer: timeutil.NewTimer(),
 		cutoverProvider: &cutoverFromJobProgress{
 			jobID:    jobspb.JobID(spec.JobID),
@@ -253,6 +256,8 @@ func newStreamIngestionDataProcessor(
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 	}
+	sip.mu.frontier = frontier
+
 	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
@@ -303,45 +308,119 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
 
-	// Initialize the event streams.
-	subscriptions := make(map[string]streamclient.Subscription)
 	sip.cg = ctxgroup.WithContext(ctx)
-	sip.streamPartitionClients = make([]streamclient.Client, 0)
+
+	sip.streamPartitionClients = make(map[string]streamclient.Client)
 	for _, partitionSpec := range sip.spec.PartitionSpecs {
-		id := partitionSpec.PartitionID
-		token := streamclient.SubscriptionToken(partitionSpec.SubscriptionToken)
 		addr := partitionSpec.Address
 		var streamClient streamclient.Client
 		if sip.forceClientForTests != nil {
 			streamClient = sip.forceClientForTests
 			log.Infof(ctx, "using testing client")
 		} else {
+			var err error
 			streamClient, err = streamclient.NewStreamClient(ctx, streamingccl.StreamAddress(addr))
 			if err != nil {
-				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", token, addr))
+				sip.MoveToDraining(err)
 				return
 			}
-			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
-
-		startTime := frontierForSpans(sip.frontier, partitionSpec.Spans...)
-
-		if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
-			if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
-				streamingKnobs.BeforeClientSubscribe(addr, string(token), startTime)
-			}
-		}
-
-		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), token, startTime)
-
-		if err != nil {
-			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", addr))
-			return
-		}
-		subscriptions[id] = sub
-		sip.cg.GoCtx(sub.Subscribe)
+		sip.streamPartitionClients[partitionSpec.PartitionID] = streamClient
 	}
-	sip.eventCh = sip.merge(ctx, subscriptions)
+	sip.startPartitions(ctx)
+}
+
+// startPartitions initializes the event-related properties of the ingestion
+// processor and spins up goroutines to connect to and read in events from each
+// producer partition and forward them to sip.eventCh.
+// When errors are encountered from the subscription to any partition, all
+// partitions are retried together as the shared batcher must be flushed prior
+// to repeating any events.
+func (sip *streamIngestionProcessor) startPartitions(ctx context.Context) {
+	// Initialize the event streams.
+	merged := make(chan partitionEvent)
+	ctx, cancel := context.WithCancel(ctx)
+	g := ctxgroup.WithContext(ctx)
+
+	// errCh is used to signal any worker errors for retry and is closed upon all
+	// workers completing.
+	errCh := make(chan error, len(sip.spec.PartitionSpecs))
+
+	for _, partitionSpec := range sip.spec.PartitionSpecs {
+		partitionSpec := partitionSpec
+		streamClient := sip.streamPartitionClients[partitionSpec.PartitionID]
+		g.GoCtx(func(ctx context.Context) error {
+			err := sip.partitionWorker(ctx, streamClient, partitionSpec, merged)
+			if err != nil {
+				errCh <- err
+			}
+			return err
+		})
+	}
+
+	sip.cancelMergeAndWait = func() error {
+		cancel()
+		return g.Wait()
+	}
+
+	go func() {
+		// Ignore err since non-nil error would have been sent to errCh already
+		_ = g.Wait()
+		close(errCh)
+	}()
+
+	sip.eventCh = merged
+	sip.partitionWorkerErr = errCh
+}
+
+func (sip *streamIngestionProcessor) partitionWorker(
+	ctx context.Context,
+	client streamclient.Client,
+	spec execinfrapb.StreamIngestionPartitionSpec,
+	out chan partitionEvent,
+) error {
+	token := streamclient.SubscriptionToken(spec.SubscriptionToken)
+	addr := spec.Address
+
+	sip.mu.Lock()
+	startTime := frontierForSpans(sip.mu.frontier, spec.Spans...)
+	sip.mu.Unlock()
+
+	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+		if streamingKnobs != nil && streamingKnobs.BeforeClientSubscribe != nil {
+			streamingKnobs.BeforeClientSubscribe(addr, string(token), startTime)
+		}
+	}
+
+	var sub streamclient.Subscription
+	sub, err := client.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), token, startTime)
+	if err != nil {
+		return errors.Wrapf(err, "subscribing to partition %v", addr)
+	}
+
+	sip.cg.GoCtx(sub.Subscribe)
+	ctxDone := ctx.Done()
+
+	for {
+		select {
+		case event, ok := <-sub.Events():
+			if !ok {
+				return errors.Wrapf(sub.Err(), "partition %s subscription from %v", spec.PartitionID, addr)
+			}
+
+			pe := partitionEvent{
+				Event:     event,
+				partition: spec.PartitionID,
+			}
+			select {
+			case out <- pe:
+			case <-ctxDone:
+				return ctx.Err()
+			}
+		case <-ctxDone:
+			return ctx.Err()
+		}
+	}
 }
 
 // Next is part of the RowSource interface.
@@ -364,7 +443,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, sip.DrainHelper()
 	}
 
-	if progressUpdate != nil {
+	if progressUpdate != nil && len(progressUpdate.ResolvedSpans) > 0 {
 		progressBytes, err := protoutil.Marshal(progressUpdate)
 		if err != nil {
 			sip.MoveToDraining(err)
@@ -418,7 +497,9 @@ func (sip *streamIngestionProcessor) close() {
 	sip.pollingWaitGroup.Wait()
 	// Wait for the merge goroutine.
 	if sip.cancelMergeAndWait != nil {
-		sip.cancelMergeAndWait()
+		if err := sip.cancelMergeAndWait(); err != nil {
+			sip.mu.ingestionErr = err
+		}
 	}
 	sip.InternalClose()
 }
@@ -450,62 +531,6 @@ func (sip *streamIngestionProcessor) checkForCutoverSignal(
 	}
 }
 
-// merge takes events from all the streams and merges them into a single
-// channel.
-func (sip *streamIngestionProcessor) merge(
-	ctx context.Context, subscriptions map[string]streamclient.Subscription,
-) chan partitionEvent {
-	merged := make(chan partitionEvent)
-
-	ctx, cancel := context.WithCancel(ctx)
-	g := ctxgroup.WithContext(ctx)
-
-	sip.cancelMergeAndWait = func() {
-		cancel()
-		// Wait until the merged channel is closed by the goroutine above.
-		for range merged {
-		}
-	}
-
-	for partition, sub := range subscriptions {
-		partition := partition
-		sub := sub
-		g.GoCtx(func(ctx context.Context) error {
-			ctxDone := ctx.Done()
-			for {
-				select {
-				case event, ok := <-sub.Events():
-					if !ok {
-						return sub.Err()
-					}
-
-					pe := partitionEvent{
-						Event:     event,
-						partition: partition,
-					}
-
-					select {
-					case merged <- pe:
-					case <-ctxDone:
-						return ctx.Err()
-					}
-				case <-ctxDone:
-					return ctx.Err()
-				}
-			}
-		})
-	}
-	go func() {
-		err := g.Wait()
-		sip.mu.Lock()
-		defer sip.mu.Unlock()
-		sip.mu.ingestionErr = err
-		close(merged)
-	}()
-
-	return merged
-}
-
 // consumeEvents handles processing events on the merged event queue and returns
 // once a checkpoint event has been emitted so that it can inform the downstream
 // frontier processor to consider updating the frontier.
@@ -514,6 +539,7 @@ func (sip *streamIngestionProcessor) merge(
 // increasing after it has flushed all KV events previously received by that
 // partition.
 func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, error) {
+	ctx := sip.Ctx
 	// This timer is used to batch up resolved timestamp events that occur within
 	// a given time interval, as to not flush too often and allow the buffer to
 	// accumulate data.
@@ -524,12 +550,68 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 		return nil, nil
 	}
 
+	ro := retry.Options{
+		InitialBackoff: 3 * time.Second,
+		Multiplier:     2,
+		MaxBackoff:     1 * time.Minute,
+		MaxRetries:     5,
+	}
+	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+		if streamingKnobs != nil && streamingKnobs.OverrideIngestionPartitionRetry != nil {
+			ro = streamingKnobs.OverrideIngestionPartitionRetry()
+		}
+	}
+	// The retry struct is created fresh for every call to consumeEvents(),
+	// meaning its backoff amount is effectively reset at least every flush
+	// interval.
+	r := retry.Start(ro)
+	retryCount := 0
+
 	for sip.State == execinfra.StateRunning {
 		select {
+		case err, ok := <-sip.partitionWorkerErr:
+			// Clear partitionWorkerErr since we only want to handle the first event
+			// for a single set of workers.
+			sip.partitionWorkerErr = nil
+
+			// If the first event we observe is that channel was closed, the workers
+			// completed without error and we can signal termination of events.
+			if !ok {
+				close(sip.eventCh)
+				continue
+			}
+
+			// If out of retries, record the error and signal the termination of events.
+			if !r.Next() {
+				log.Errorf(ctx, "exiting after %d attempts with subscription error %s", retryCount, err.Error())
+				sip.mu.Lock()
+				sip.mu.ingestionErr = err
+				sip.mu.Unlock()
+				close(sip.eventCh)
+				continue
+			}
+
+			retryCount++
+			log.Infof(ctx, "ingestion processor retrying subscriptions (attempt %d) after error: %s", retryCount, err.Error())
+			_ = sip.cancelMergeAndWait()
+
+			// Must flush to avoid inserting old KVs into the same SST
+			log.Infof(ctx, "ingestion processor flushing existing batches before retry")
+			flushResult, flushErr := sip.flush()
+
+			log.Infof(ctx, "ingestion processor restarting subscriptions for retry")
+			sip.startPartitions(ctx)
+
+			// Only return if there was some progress made by the flush
+			if flushErr != nil || (flushResult != nil && len(flushResult.ResolvedSpans) > 0) {
+				return flushResult, flushErr
+			}
+			continue
 		case event, ok := <-sip.eventCh:
 			if !ok {
 				sip.internalDrained = true
-				return sip.flush()
+				flushResult, flushErr := sip.flush()
+				return flushResult, flushErr
 			}
 			if event.Type() == streamingccl.KVEvent {
 				sip.metrics.AdmitLatency.RecordValue(
@@ -621,7 +703,7 @@ func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) er
 func (sip *streamIngestionProcessor) rekey(key roachpb.Key) ([]byte, error) {
 	rekey, ok, err := sip.rekeyer.RewriteKey(key, 0 /*wallTime*/)
 	if !ok {
-		return nil, errors.New("every key is expected to match tenant prefix")
+		return nil, errors.Wrapf(err, "key %s did not match tenant prefix")
 	}
 	if err != nil {
 		return nil, err
@@ -697,6 +779,8 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
+	sip.mu.Lock()
+	defer sip.mu.Unlock()
 	resolvedSpans := event.GetResolvedSpans()
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
@@ -711,7 +795,7 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 		if highestTimestamp.Less(resolvedSpan.Timestamp) {
 			highestTimestamp = resolvedSpan.Timestamp
 		}
-		_, err := sip.frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
+		_, err := sip.mu.frontier.Forward(resolvedSpan.Span, resolvedSpan.Timestamp)
 		if err != nil {
 			return errors.Wrap(err, "unable to forward checkpoint frontier")
 		}
@@ -838,9 +922,12 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 		}
 	}
 
+	sip.mu.Lock()
+	defer sip.mu.Unlock()
+
 	// Go through buffered checkpoint events, and put them on the channel to be
 	// emitted to the downstream frontier processor.
-	sip.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
+	sip.mu.frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) span.OpResult {
 		flushedCheckpoints.ResolvedSpans = append(flushedCheckpoints.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
 		return span.ContinueMatch
 	})

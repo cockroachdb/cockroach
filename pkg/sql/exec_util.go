@@ -104,6 +104,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1612,12 +1613,16 @@ type StreamingTestingKnobs struct {
 	RunAfterReceivingEvent func(ctx context.Context) error
 
 	// BeforeClientSubscribe allows observation of parameters about to be passed
-	// to a streaming client
+	// to a streaming client.
 	BeforeClientSubscribe func(addr string, token string, startTime hlc.Timestamp)
 
 	// BeforeIngestionStart allows blocking the stream ingestion job
 	// before a stream ingestion happens.
 	BeforeIngestionStart func(ctx context.Context) error
+
+	// OverrideIngestionPartitionRetry allows changing the internal retry options
+	// used by ingestion processors.
+	OverrideIngestionPartitionRetry func() retry.Options
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
