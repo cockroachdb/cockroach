@@ -202,6 +202,7 @@ func NewTxnFromProto(
 	txn.mu.ID = proto.ID
 	txn.mu.userPriority = roachpb.NormalUserPriority
 	txn.mu.sender = db.factory.RootTransactionalSender(proto, txn.mu.userPriority)
+	txn.mu.sender.SetRootCtx(ctx)
 	return txn
 }
 
@@ -222,6 +223,7 @@ func NewLeafTxn(
 	txn.mu.ID = tis.Txn.ID
 	txn.mu.userPriority = roachpb.NormalUserPriority
 	txn.mu.sender = db.factory.LeafTransactionalSender(tis)
+	txn.mu.sender.SetRootCtx(ctx)
 	return txn
 }
 
