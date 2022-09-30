@@ -2454,16 +2454,19 @@ func (r *restoreResumer) dropDescriptors(
 			entry.db = mutParent.(*dbdesc.Mutable)
 		}
 
+		// Add dropped descriptor as uncommitted to satisfy descriptor validation.
+		// We explicitly write out this descriptor to ensure that the lease manager
+		// has a chance to evict leases it might be holding on it.
+		mutSchema.SetDropped()
+		mutSchema.MaybeIncrementVersion()
+		if err := descsCol.WriteDescToBatch(ctx, false, mutSchema, b); err != nil {
+			return err
+		}
+
 		// Delete schema entries in descriptor and namespace system tables.
 		b.Del(catalogkeys.EncodeNameKey(codec, mutSchema))
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, mutSchema.GetID()))
 		descsCol.NotifyOfDeletedDescriptor(mutSchema.GetID())
-		// Add dropped descriptor as uncommitted to satisfy descriptor validation.
-		mutSchema.SetDropped()
-		mutSchema.MaybeIncrementVersion()
-		if err := descsCol.AddUncommittedDescriptor(ctx, mutSchema); err != nil {
-			return err
-		}
 
 		// Remove the back-reference to the deleted schema in the parent database.
 		if schemaInfo, ok := entry.db.Schemas[schemaDesc.GetName()]; !ok {
