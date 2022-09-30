@@ -59,9 +59,9 @@ const (
 )
 
 const usesSpheroidMessage = " Uses a spheroid to perform the operation."
-const spheroidDistanceMessage = `"\n\nWhen operating on a spheroid, this function will use the sphere to calculate ` +
-	`the closest two points. The spheroid distance between these two points is calculated using GeographicLib. ` +
-	`This follows observed PostGIS behavior.`
+const spheroidDistanceMessage = "\n\nWhen operating on a spheroid, this function will use the sphere to calculate " +
+	"the closest two points. The spheroid distance between these two points is calculated using GeographicLib. " +
+	"This follows observed PostGIS behavior."
 
 const (
 	defaultWKTDecimalDigits = 15
@@ -598,14 +598,12 @@ var geoBuiltins = map[string]builtinDefinition{
 				return tree.NewDGeometry(ret), nil
 			},
 			Info: infoBuilder{
-				info: `
-Returns a geometry which represents the S2 covering used by the index using the index configuration specified
-by the settings parameter.
-
-The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX ... WITH (...),
-e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
-SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3').
-`,
+				info: "Returns a geometry which represents the S2 covering used by the index using the " +
+					"index configuration specified by the settings parameter.\n\n" +
+					"The settings parameter uses the same format as the parameters inside " +
+					"the `WITH` in `CREATE INDEX ... WITH (...)`, " +
+					"e.g. `CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3)` " +
+					"can be tried using `SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3')`",
 			}.String(),
 			Volatility: volatility.Immutable,
 		},
@@ -643,14 +641,12 @@ SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3').
 				return tree.NewDGeography(ret), nil
 			},
 			Info: infoBuilder{
-				info: `
-Returns a geography which represents the S2 covering used by the index using the index configuration specified
-by the settings parameter.
-
-The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX ... WITH (...),
-e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
-SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3').
-`,
+				info: "Returns a geography which represents the S2 covering used by the " +
+					"index using the index configuration specified by the settings parameter.\n\n" +
+					"The settings parameter uses the same format as the parameters inside the " +
+					"`WITH` in `CREATE INDEX ... WITH (...)`, e.g. " +
+					"`CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3)` " +
+					"can be tried using `SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3')`.",
 			}.String(),
 			Volatility: volatility.Immutable,
 		},
