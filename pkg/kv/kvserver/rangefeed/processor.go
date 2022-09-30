@@ -251,10 +251,14 @@ func (p *Processor) run(
 	rtsIterFunc IntentScannerConstructor,
 	stopper *stop.Stopper,
 ) {
+	// It is important that budget is closed last as it would let any request
+	// through after it is closed to avoid shutdown noise and busy retries.
+	// If it is closed after stoppedC then any request that budget let through
+	// guaranteed to be discarded because stoppedC would already be closed.
+	defer p.MemBudget.Close(ctx)
 	defer close(p.stoppedC)
 	ctx, cancelOutputLoops := context.WithCancel(ctx)
 	defer cancelOutputLoops()
-	defer p.MemBudget.Close(ctx)
 
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
@@ -581,7 +585,9 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 			var err error
 			// First we will try non-blocking fast path to allocate memory budget.
 			alloc, err = p.MemBudget.TryGet(ctx, size)
-			if err != nil {
+			// If budget is already closed, then just let it through because processor
+			// is terminating.
+			if err != nil && !errors.Is(err, budgetClosedError) {
 				// Since we don't have enough budget, we should try to wait for
 				// allocation returns before failing.
 				if timeout > 0 {
@@ -595,7 +601,7 @@ func (p *Processor) sendEvent(ctx context.Context, e event, timeout time.Duratio
 				p.Metrics.RangeFeedBudgetBlocked.Inc(1)
 				alloc, err = p.MemBudget.WaitAndGet(ctx, size)
 			}
-			if err != nil {
+			if err != nil && !errors.Is(err, budgetClosedError) {
 				p.Metrics.RangeFeedBudgetExhausted.Inc(1)
 				p.sendStop(newErrBufferCapacityExceeded())
 				return false
