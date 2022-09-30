@@ -15,7 +15,7 @@ mkdir -p "$ANTITHESIS_ARTIFACTS"
 
 tc_start_block "Variable Setup"
 build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
-build_tag="poc-antithesis-latest"
+build_tag="kv_txn_unexpectedly_committed"
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
 release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
 
