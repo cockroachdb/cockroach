@@ -740,7 +740,7 @@ func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst 
 	case *memo.WithExpr:
 		binding := f.invokeReplace(t.Binding, replace).(memo.RelExpr)
 		if id := t.WithBindingID(); id != 0 {
-			f.Metadata().AddWithBinding(id, binding)
+			f.Metadata().AddWithBinding(id, binding, !t.Mtr.Set || !t.Mtr.Materialize)
 		}
 		return f.ConstructWith(
 			binding,

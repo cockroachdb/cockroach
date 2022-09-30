@@ -69,15 +69,16 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 // `column IN (VALUES(...))` or `column NOT IN(VALUES(...))`, but could likely
 // be extended to handle other expressions in the future.
 func (c *CustomFuncs) CanInlineWithScan(private *memo.WithScanPrivate, scalar opt.ScalarExpr) bool {
-	if !private.CanInlineInPlace {
-		return false
-	}
 	// If we don't have `column IN(...)` or `column NOT IN(...)`, it is not
 	// cheaper to inline because we wouldn't be avoiding one or more joins.
 	if scalar.Op() != opt.VariableOp {
 		return false
 	}
-	expr := c.mem.Metadata().WithBinding(private.With)
+	withBindingInfo := c.mem.Metadata().WithBinding(private.With)
+	if !withBindingInfo.CanInlineInPlace {
+		return false
+	}
+	expr := withBindingInfo.BoundExpr
 	var valuesExpr *memo.ValuesExpr
 	var ok bool
 	if valuesExpr, ok = expr.(*memo.ValuesExpr); !ok {
@@ -92,10 +93,10 @@ func (c *CustomFuncs) CanInlineWithScan(private *memo.WithScanPrivate, scalar op
 // InlineWithScan replaces a WithScanExpr with its bound expression, mapped to
 // new output ColumnIDs.
 func (c *CustomFuncs) InlineWithScan(private *memo.WithScanPrivate) memo.RelExpr {
-	expr := c.mem.Metadata().WithBinding(private.With)
+	expr := c.mem.Metadata().WithBinding(private.With).BoundExpr
 	var valuesExpr *memo.ValuesExpr
 	var ok bool
-	valuesExpr.Op()
+
 	if valuesExpr, ok = expr.(*memo.ValuesExpr); !ok {
 		// Didn't find the expected VALUES.
 		panic(errors.AssertionFailedf("attempt to inline a WithScan which is not a VALUES clause; operator: %s",

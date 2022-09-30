@@ -97,12 +97,11 @@ func (b *Builder) buildDataSource(
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				With:             cte.id,
-				Name:             string(cte.name.Alias),
-				InCols:           inCols,
-				OutCols:          outCols,
-				ID:               b.factory.Metadata().NextUniqueID(),
-				CanInlineInPlace: !cte.mtr.Set || !cte.mtr.Materialize,
+				With:    cte.id,
+				Name:    string(cte.name.Alias),
+				InCols:  inCols,
+				OutCols: outCols,
+				ID:      b.factory.Metadata().NextUniqueID(),
 			})
 
 			return outScope
@@ -175,7 +174,7 @@ func (b *Builder) buildDataSource(
 		}
 
 		id := b.factory.Memo().NextWithID()
-		b.factory.Metadata().AddWithBinding(id, innerScope.expr)
+		b.factory.Metadata().AddWithBinding(id, innerScope.expr, false /* canInlineInPlace */)
 		cte := &cteSource{
 			name:         tree.AliasClause{},
 			cols:         innerScope.makePresentationWithHiddenCols(),
@@ -204,12 +203,11 @@ func (b *Builder) buildDataSource(
 		}
 
 		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			With:             cte.id,
-			Name:             string(cte.name.Alias),
-			InCols:           inCols,
-			OutCols:          outCols,
-			ID:               b.factory.Metadata().NextUniqueID(),
-			CanInlineInPlace: !cte.mtr.Set || !cte.mtr.Materialize,
+			With:    cte.id,
+			Name:    string(cte.name.Alias),
+			InCols:  inCols,
+			OutCols: outCols,
+			ID:      b.factory.Metadata().NextUniqueID(),
 		})
 
 		return outScope
