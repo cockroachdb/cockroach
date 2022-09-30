@@ -12,6 +12,7 @@ package tree_test
 
 import (
 	"math/rand"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -64,6 +66,56 @@ func BenchmarkAsJSON(b *testing.B) {
 				bench(b, typ)
 			})
 		}
+	}
+}
+
+func BenchmarkParseJSON(b *testing.B) {
+	// Use fixed seed so that each invocation of this benchmark
+	// produces exactly the same types, and datums streams.
+	// This number can be changed to an arbitrary value; doing so
+	// would result in new types/datums being produced.
+	rng := randutil.NewTestRandWithSeed(-4365865412074131521)
+
+	const numJSON = 4096
+	makeTestData := func(opts ...jsonb.RandOption) (res []string) {
+		res = make([]string, numJSON)
+		for i := 0; i < numJSON; i++ {
+			j, err := jsonb.RandGen(rng, opts...)
+			if err != nil {
+				panic(err)
+			}
+			res[i] = j.String()
+		}
+		return res
+	}
+
+	for _, strLenExp := range []int{6, 8, 10, 12, 15, 16, 17, 18, 20} {
+		maxStrLen := 1 << strLenExp
+		b.Run(strconv.Itoa(maxStrLen), func(b *testing.B) {
+			// Create test data for the specified string length.
+			// Use the same test data for each implementation.
+			b.StopTimer()
+			testData := makeTestData(jsonb.WithMaxStrLen(maxStrLen), jsonb.WithComplexity(40))
+			b.StartTimer()
+
+			for _, impl := range []jsonb.ParseJSONImplType{jsonb.UseStdGoJSON, jsonb.UseJSONIter} {
+				b.Run(impl.String(), func(b *testing.B) {
+					defer jsonb.TestingSetParseJSONImpl(impl)()
+					b.ReportAllocs()
+					var totalBytes int64
+
+					for i := 0; i < b.N; i++ {
+						str := testData[i%numJSON]
+						_, err := jsonb.ParseJSON(str)
+						if err != nil {
+							b.Fatal(err)
+						}
+						totalBytes += int64(len(str))
+					}
+					b.SetBytes(int64(float64(totalBytes) / (float64(b.N))))
+				})
+			}
+		})
 	}
 }
 

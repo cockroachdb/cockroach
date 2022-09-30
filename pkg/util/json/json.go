@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"reflect"
 	"sort"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	uniq "github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
+	jsoniter "github.com/json-iterator/go"
 )
 
 // Type represents a JSON type.
@@ -840,8 +842,52 @@ func (j jsonObject) Size() uintptr {
 	return valSize
 }
 
-// ParseJSON takes a string of JSON and returns a JSON value.
-func ParseJSON(s string) (JSON, error) {
+// ParseJSONImplType is the implementation library
+// used to parse JSON.
+type ParseJSONImplType int
+
+const (
+	// UseStdGoJSON : encoding/json
+	UseStdGoJSON ParseJSONImplType = iota
+	// UseJSONIter :json-iterator
+	UseJSONIter
+
+	// Note: Other libraries tested and rejected include:
+	//  * go-json: universally slower, worse (allocation) than either
+	//    standard or json-iter for larger inputs.
+	//  * simdjson-go: too restrictive; doesn't work on all platforms,
+	//    does not parse raw json literals (true/false, etc); and is not
+	//    a drop in replacement.
+	//  * ffjson, easyjson: not appropriate since these library use code
+	//    generation, and cannot parse arbitrary JSON.
+)
+
+var parseJSONImpl = util.ConstantWithMetamorphicTestChoice(
+	"parse-json-impl", UseJSONIter, UseStdGoJSON)
+
+// TestingSetParseJSONImpl configures ParseJSON to use specified implementation.
+func TestingSetParseJSONImpl(impl ParseJSONImplType) func() {
+	old := parseJSONImpl
+	parseJSONImpl = impl
+	return func() {
+		parseJSONImpl = old
+	}
+}
+
+func (impl ParseJSONImplType) String() string {
+	switch impl {
+	case UseStdGoJSON:
+		return "stdgo"
+	case UseJSONIter:
+		return "jsoniter"
+	default:
+		return "unknown"
+	}
+}
+
+// parseJSONGoStd parses json using encoding/json library.
+// TODO(yevgeniy): Remove this code once we get more confidence in json-iter implementation.
+func parseJSONGoStd(s string) (JSON, error) {
 	// This goes in two phases - first it parses the string into raw interface{}s
 	// using the Go encoding/json package, then it transforms that into a JSON.
 	// This could be faster if we wrote a parser to go directly into the JSON.
@@ -862,6 +908,119 @@ func ParseJSON(s string) (JSON, error) {
 		return nil, errTrailingCharacters
 	}
 	return MakeJSON(result)
+}
+
+var parseCfg = jsoniter.Config{
+	EscapeHTML:             true,
+	SortMapKeys:            false, // We'll sort when we build JSONb object.
+	ValidateJsonRawMessage: true,
+	UseNumber:              true,
+}.Froze()
+
+// readNumber reads json.Number from the iterator and checks to see if
+// json.Number has leading 0's -- which is not allowed.
+// TODO(yevgeniy): jsoniter.Iterator should handle this directly in the it.ReadNumber()
+func readNumber(it *jsoniter.Iterator) json.Number {
+	n := it.ReadNumber()
+
+	pos := 0
+	if pos < len(n) && n[0] == '-' {
+		pos++
+	}
+
+	if pos+1 < len(n) && n[pos] == '0' {
+		switch n[pos+1] {
+		case 'e', 'E', '.':
+			return n
+		default:
+			it.ReportError("readNumber", "leading 0 not allowed")
+			return n[:pos+1]
+		}
+	}
+	return n
+}
+
+// jsonIterToJSON converts json iterator to JSON.
+// Indicates error via it.Error field.
+func jsonIterToJSON(it *jsoniter.Iterator) JSON {
+	switch next := it.WhatIsNext(); next {
+	case jsoniter.StringValue:
+		return FromString(it.ReadString())
+	case jsoniter.NumberValue:
+		n, err := FromNumber(readNumber(it))
+		if err != nil {
+			it.ReportError("parse-num", err.Error())
+			return nil
+		}
+		return n
+	case jsoniter.NilValue:
+		if it.ReadNil() {
+			return NullJSONValue
+		}
+		it.ReportError("parse", "failed to read expected 'null'")
+		return nil
+	case jsoniter.BoolValue:
+		return FromBool(it.ReadBool())
+	case jsoniter.ArrayValue:
+		b := NewArrayBuilder(0)
+		for it.ReadArray() && it.Error == nil {
+			if v := jsonIterToJSON(it); it.Error == nil {
+				b.Add(v)
+			}
+		}
+		return b.Build()
+	case jsoniter.ObjectValue:
+		b := NewObjectBuilder(0)
+		for field := it.ReadObject(); field != "" && it.Error == nil; field = it.ReadObject() {
+			if v := jsonIterToJSON(it); it.Error == nil {
+				b.Add(field, v)
+			}
+		}
+		return b.Build()
+	default:
+		it.ReportError("parse", "unexpected JSON value type")
+		return nil
+	}
+}
+
+// iterHasMoreData returns true if iterator has more data.
+// This is similar to encoder/json More() check.
+func iterHasMoreData(it *jsoniter.Iterator) bool {
+	buf := bytes.TrimSpace(it.SkipAndReturnBytes())
+	return !(len(buf) == 0 || buf[0] == ']' || buf[0] == '}')
+}
+
+func parseUsingJSONIter(s string) (JSON, error) {
+	it := parseCfg.BorrowIterator([]byte(s))
+	defer parseCfg.ReturnIterator(it)
+	j := jsonIterToJSON(it)
+
+	// Errors indicated via it.Error.
+	if it.Error != nil && it.Error != io.EOF {
+		err := errors.Handled(it.Error)
+		err = errors.Wrap(err, "unable to decode JSON")
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
+		return nil, err
+	}
+
+	// This check is similar to encoder/json More() check.
+	if iterHasMoreData(it) {
+		return nil, errTrailingCharacters
+	}
+
+	return j, nil
+}
+
+// ParseJSON takes a string of JSON and returns a JSON value.
+func ParseJSON(s string) (JSON, error) {
+	switch parseJSONImpl {
+	case UseStdGoJSON:
+		return parseJSONGoStd(s)
+	case UseJSONIter:
+		return parseUsingJSONIter(s)
+	default:
+		return nil, errors.AssertionFailedf("invalid JSON impl")
+	}
 }
 
 // EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
