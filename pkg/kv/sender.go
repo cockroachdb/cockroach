@@ -331,6 +331,10 @@ type TxnSender interface {
 
 	// HasPerformedWrites returns true if a write has been performed.
 	HasPerformedWrites() bool
+
+	// SetRootCtx sets a root ctx that can be used to collect traces on error.
+	// For investigation purposes only!
+	SetRootCtx(ctx context.Context)
 }
 
 // SteppingMode is the argument type to ConfigureStepping.
