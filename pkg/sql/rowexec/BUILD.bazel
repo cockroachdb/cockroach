@@ -168,6 +168,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/faketreeeval",
         "//pkg/sql/flowinfra",
         "//pkg/sql/inverted",
         "//pkg/sql/opt/invertedexpr",

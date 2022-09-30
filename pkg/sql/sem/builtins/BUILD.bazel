@@ -157,6 +157,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/faketreeeval",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",

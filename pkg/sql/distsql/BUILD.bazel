@@ -76,6 +76,7 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfra/execagg",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/faketreeeval",
         "//pkg/sql/flowinfra",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
