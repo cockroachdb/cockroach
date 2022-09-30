@@ -245,7 +245,7 @@ func NewFileToTableSystem(
 	if err != nil {
 		return nil, err
 	}
-	if err := e.ief.(descs.InternalExecutorFactoryWithTxn).DescsTxnWithExecutor(
+	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(
 		ctx, e.db, nil /* SessionData */, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) error {
@@ -367,7 +367,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 		return err
 	}
 
-	if err := e.ief.(descs.InternalExecutorFactoryWithTxn).DescsTxnWithExecutor(
+	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(
 		ctx, e.db, nil /* sd */, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) error {

@@ -45,7 +45,7 @@ type Manager struct {
 	deps     upgrade.SystemDeps
 	lm       *lease.Manager
 	ie       sqlutil.InternalExecutor
-	cf       *descs.CollectionFactory
+	ief      descs.TxnManager
 	jr       *jobs.Registry
 	codec    keys.SQLCodec
 	settings *cluster.Settings
@@ -74,7 +74,7 @@ func NewManager(
 	deps upgrade.SystemDeps,
 	lm *lease.Manager,
 	ie sqlutil.InternalExecutor,
-	cf *descs.CollectionFactory,
+	ief descs.TxnManager,
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
@@ -88,7 +88,7 @@ func NewManager(
 		deps:     deps,
 		lm:       lm,
 		ie:       ie,
-		cf:       cf,
+		ief:      ief,
 		jr:       jr,
 		codec:    codec,
 		settings: settings,
@@ -415,13 +415,13 @@ func (m *Manager) checkPreconditions(
 			continue
 		}
 		if err := tm.Precondition(ctx, v, upgrade.TenantDeps{
-			DB:                m.deps.DB,
-			Codec:             m.codec,
-			Settings:          m.settings,
-			LeaseManager:      m.lm,
-			InternalExecutor:  m.ie,
-			CollectionFactory: m.cf,
-			JobRegistry:       m.jr,
+			DB:                      m.deps.DB,
+			Codec:                   m.codec,
+			Settings:                m.settings,
+			LeaseManager:            m.lm,
+			InternalExecutor:        m.ie,
+			InternalExecutorFactory: m.ief,
+			JobRegistry:             m.jr,
 		}); err != nil {
 			return errors.Wrapf(
 				err,
