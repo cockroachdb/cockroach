@@ -412,8 +412,8 @@ var generators = map[string]builtinDefinition{
 				"small number of ranges to avoid overloading the cluster. Each returned row "+
 				"contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), "+
 				"and verbose detail.\n\n"+
-				"Example usage:\n"+
-				"SELECT * FROM crdb_internal.check_consistency(true, '\\x02', '\\x04')",
+				"Example usage:\n\n"+
+				"`SELECT * FROM crdb_internal.check_consistency(true, b'\\x02', b'\\x04')`",
 			volatility.Volatile,
 		),
 	),
