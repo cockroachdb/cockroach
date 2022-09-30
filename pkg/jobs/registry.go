@@ -960,15 +960,16 @@ func (r *Registry) cleanupOldJobsPage(
 
 	log.VEventf(ctx, 2, "read potentially expired jobs: %d", numRows)
 	if len(toDelete.Array) > 0 {
-		log.Infof(ctx, "attempting to clean up %d expired job records", len(toDelete.Array))
+		log.VEventf(ctx, 2, "attempting to clean up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
 		var nDeleted int
 		if nDeleted, err = r.ex.Exec(
 			ctx, "gc-jobs", nil /* txn */, stmt, toDelete,
 		); err != nil {
+			log.Infof(ctx, "error cleaning up %d jobs: %v", len(toDelete.Array), err)
 			return false, 0, errors.Wrap(err, "deleting old jobs")
 		}
-		log.Infof(ctx, "cleaned up %d expired job records", nDeleted)
+		log.VEventf(ctx, 2, "cleaned up %d expired job records", nDeleted)
 	}
 	// If we got as many rows as we asked for, there might be more.
 	morePages := numRows == pageSize
@@ -1202,7 +1203,7 @@ func (r *Registry) stepThroughStateMachine(
 ) error {
 	payload := job.Payload()
 	jobType := payload.Type()
-	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
+	log.VEventf(ctx, 2, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
 	jm := r.metrics.JobMetrics[jobType]
 	onExecutionFailed := func(cause error) error {
 		log.InfofDepth(
@@ -1419,7 +1420,7 @@ func (r *Registry) MarkIdle(job *Job, isIdle bool) {
 		jobType := payload.Type()
 		jm := r.metrics.JobMetrics[jobType]
 		if aj.isIdle != isIdle {
-			log.Infof(r.serverCtx, "%s job %d: toggling idleness to %+v", jobType, job.ID(), isIdle)
+			log.VEventf(r.serverCtx, 2, "%s job %d: toggling idleness to %+v", jobType, job.ID(), isIdle)
 			if isIdle {
 				r.metrics.RunningNonIdleJobs.Dec(1)
 				jm.CurrentlyIdle.Inc(1)
