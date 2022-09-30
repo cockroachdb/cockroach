@@ -11,10 +11,13 @@
 package delegate
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 )
 
 func (d *delegator) delegateShowClusterSettingList(
@@ -24,19 +27,51 @@ func (d *delegator) delegateShowClusterSettingList(
 	if err != nil {
 		return nil, err
 	}
-	hasModify, err := d.catalog.HasRoleOption(d.ctx, roleoption.MODIFYCLUSTERSETTING)
-	if err != nil {
-		return nil, err
+
+	// First check system privileges.
+	hasModify := false
+	hasView := false
+	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.SystemPrivilegesTable) {
+		if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
+			hasModify = true
+			hasView = true
+		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+			return nil, err
+		}
+		if !hasView {
+			if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING); err == nil {
+				hasView = true
+			} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
+				return nil, err
+			}
+		}
 	}
-	hasView, err := d.catalog.HasRoleOption(d.ctx, roleoption.VIEWCLUSTERSETTING)
-	if err != nil {
-		return nil, err
+
+	// Fallback to role option if the user doesn't have the privilege.
+	if !hasModify {
+		ok, err := d.catalog.HasRoleOption(d.ctx, roleoption.MODIFYCLUSTERSETTING)
+		if err != nil {
+			return nil, err
+		}
+		hasModify = hasModify || ok
+		hasView = hasView || ok
 	}
-	if !hasModify && !hasView && !isAdmin {
+
+	if !hasView {
+		ok, err := d.catalog.HasRoleOption(d.ctx, roleoption.VIEWCLUSTERSETTING)
+		if err != nil {
+			return nil, err
+		}
+		hasView = hasView || ok
+	}
+
+	// If user is not admin and has neither privilege, return an error.
+	if !isAdmin && !hasView && !hasModify {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only users with either %s or %s privileges are allowed to SHOW CLUSTER SETTINGS",
-			roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
+			privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 	}
+
 	if stmt.All {
 		return parse(
 			`SELECT variable, value, type AS setting_type, public, description
