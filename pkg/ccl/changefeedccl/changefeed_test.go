@@ -7283,6 +7283,7 @@ func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 
 func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 89028, "flaky test")
 	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
