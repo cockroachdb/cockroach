@@ -223,7 +223,7 @@
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-schema
 /pkg/ccl/testutilsccl/       @cockroachdb/test-eng-noreview
 /pkg/ccl/utilccl/            @cockroachdb/unowned @cockroachdb/server-prs
-/pkg/ccl/workloadccl/        @cockroachdb/sql-experience-noreview
+/pkg/ccl/workloadccl/        @cockroachdb/sql-experience-noreview @cockroachdb/test-eng
 /pkg/ccl/benchccl/rttanalysisccl/     @cockroachdb/sql-experience
 /pkg/clusterversion/         @cockroachdb/kv-prs-noreview
 /pkg/cmd/allocsim/           @cockroachdb/kv-prs
@@ -286,7 +286,7 @@
 /pkg/cmd/uptodate/           @cockroachdb/dev-inf
 /pkg/cmd/urlcheck/           @cockroachdb/docs
 /pkg/cmd/whoownsit/          @cockroachdb/test-eng
-/pkg/cmd/workload/           @cockroachdb/sql-experience-noreview
+/pkg/cmd/workload/           @cockroachdb/sql-experience-noreview @cockroachdb/test-eng
 /pkg/cmd/wraprules/          @cockroachdb/obs-inf-prs-noreview
 /pkg/cmd/zerosum/            @cockroachdb/kv-noreview
 /pkg/col/                    @cockroachdb/sql-queries
@@ -360,7 +360,7 @@
 /pkg/util/admission/         @cockroachdb/admission-control
 /pkg/util/schedulerlatency/  @cockroachdb/admission-control
 /pkg/util/tracing            @cockroachdb/obs-inf-prs
-/pkg/workload/               @cockroachdb/sql-experience-noreview
+/pkg/workload/               @cockroachdb/sql-experience-noreview @cockroachdb/test-eng
 /pkg/obs/                    @cockroachdb/obs-inf-prs
 /pkg/obsservice/             @cockroachdb/obs-inf-prs
 

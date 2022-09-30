@@ -442,6 +442,11 @@ type StoreTestingKnobs struct {
 	// MVCCGCQueueLeaseCheckInterceptor intercepts calls to Replica.LeaseStatusAt when
 	// making high priority replica scans.
 	MVCCGCQueueLeaseCheckInterceptor func(ctx context.Context, replica *Replica, now hlc.ClockTimestamp) bool
+
+	// SmallEngineBlocks will configure the engine with a very small block size of
+	// 1 byte, resulting in each key having its own block. This can provoke bugs
+	// in time-bound iterators.
+	SmallEngineBlocks bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
