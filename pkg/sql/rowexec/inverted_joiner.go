@@ -162,6 +162,7 @@ const invertedJoinerProcName = "inverted joiner"
 // argument is non-nil only for tests. When nil, the invertedJoiner uses
 // the spec to construct an implementation of DatumsToInvertedExpr.
 func newInvertedJoiner(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.InvertedJoinerSpec,
@@ -226,14 +227,14 @@ func newInvertedJoiner(
 	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
 	for i := range spec.FetchSpec.KeyAndSuffixColumns {
 		if err := typedesc.EnsureTypeIsHydrated(
-			flowCtx.EvalCtx.Ctx(), spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+			ctx, spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
 		); err != nil {
 			return nil, err
 		}
 	}
 
 	if err := ij.ProcessorBase.Init(
-		ij, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
+		ctx, ij, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ij.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
@@ -261,7 +262,7 @@ func newInvertedJoiner(
 	// execbuilder.Builder.buildInvertedJoin.
 	onExprColTypes[len(ij.inputTypes)+ij.invertedFetchedColOrdinal] = spec.InvertedColumnOriginalType
 
-	if err := ij.onExprHelper.Init(spec.OnExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
+	if err := ij.onExprHelper.Init(ctx, spec.OnExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
 		return nil, err
 	}
 	combinedRowLen := len(onExprColTypes)
@@ -272,7 +273,7 @@ func newInvertedJoiner(
 
 	if ij.datumsToInvertedExpr == nil {
 		var invertedExprHelper execinfrapb.ExprHelper
-		if err := invertedExprHelper.Init(spec.InvertedExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
+		if err := invertedExprHelper.Init(ctx, spec.InvertedExpr, onExprColTypes, semaCtx, ij.EvalCtx); err != nil {
 			return nil, err
 		}
 		ij.datumsToInvertedExpr, err = invertedidx.NewDatumsToInvertedExpr(
@@ -289,7 +290,7 @@ func newInvertedJoiner(
 
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
-		flowCtx.EvalCtx.Context,
+		ctx,
 		row.FetcherInitArgs{
 			Txn:                        flowCtx.Txn,
 			LockStrength:               spec.LockingStrength,
@@ -305,7 +306,7 @@ func newInvertedJoiner(
 		return nil, err
 	}
 
-	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		ij.input = newInputStatCollector(ij.input)
 		ij.fetcher = newRowFetcherStatCollector(&fetcher)
 		ij.ExecStatsForTrace = ij.execStatsForTrace
@@ -316,7 +317,6 @@ func newInvertedJoiner(
 	ij.spanBuilder.InitWithFetchSpec(flowCtx.EvalCtx, flowCtx.Codec(), &ij.fetchSpec)
 
 	// Initialize memory monitors and row container for index rows.
-	ctx := flowCtx.EvalCtx.Ctx()
 	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "invertedjoiner-limited")
 	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "invertedjoiner-disk")
 	ij.indexRows = rowcontainer.NewDiskBackedNumberedRowContainer(

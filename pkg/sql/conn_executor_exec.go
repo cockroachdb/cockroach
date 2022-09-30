@@ -473,8 +473,6 @@ func (ex *connExecutor) execStmtInOpenState(
 				retErr,
 			)
 		}()
-		// TODO(radu): consider removing this if/when #46164 is addressed.
-		p.extendedEvalCtx.Context.Context = ctx
 	}
 
 	// We exempt `SET` statements from the statement timeout, particularly so as
@@ -1532,10 +1530,6 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			ex.resetEvalCtx(&factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
 			factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
 			factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
-			// Query diagnostics can change the Context; make sure we are using the
-			// same one.
-			// TODO(radu): consider removing this if/when #46164 is addressed.
-			factoryEvalCtx.Context = evalCtx.Context
 			return &factoryEvalCtx
 		}
 	}

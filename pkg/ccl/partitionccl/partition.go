@@ -40,7 +40,11 @@ import (
 // TODO(dan): The typechecking here should be run during plan construction, so
 // we can support placeholders.
 func valueEncodePartitionTuple(
-	typ tree.PartitionByType, evalCtx *eval.Context, maybeTuple tree.Expr, cols []catalog.Column,
+	ctx context.Context,
+	typ tree.PartitionByType,
+	evalCtx *eval.Context,
+	maybeTuple tree.Expr,
+	cols []catalog.Column,
 ) ([]byte, error) {
 	// Replace any occurrences of the MINVALUE/MAXVALUE pseudo-names
 	// into MinVal and MaxVal, to be recognized below.
@@ -96,7 +100,7 @@ func valueEncodePartitionTuple(
 		}
 
 		var semaCtx tree.SemaContext
-		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(evalCtx.Context, expr, cols[i].GetType(), "partition",
+		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(ctx, expr, cols[i].GetType(), "partition",
 			&semaCtx,
 			volatility.Immutable,
 			false, /*allowAssignmentCast*/
@@ -207,7 +211,8 @@ func createPartitioningImpl(
 		}
 		for _, expr := range l.Exprs {
 			encodedTuple, err := valueEncodePartitionTuple(
-				tree.PartitionByList, evalCtx, expr, cols)
+				ctx, tree.PartitionByList, evalCtx, expr, cols,
+			)
 			if err != nil {
 				return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
@@ -245,12 +250,14 @@ func createPartitioningImpl(
 		}
 		var err error
 		p.FromInclusive, err = valueEncodePartitionTuple(
-			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.From}, cols)
+			ctx, tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.From}, cols,
+		)
 		if err != nil {
 			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		p.ToExclusive, err = valueEncodePartitionTuple(
-			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.To}, cols)
+			ctx, tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.To}, cols,
+		)
 		if err != nil {
 			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}

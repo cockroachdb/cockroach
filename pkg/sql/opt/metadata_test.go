@@ -431,14 +431,14 @@ func TestTableMeta_GetRegionsInDatabase(t *testing.T) {
 	p := &fakeGetMultiregionConfigPlanner{}
 	// Call the function once, make sure our planner method gets invoked.
 	{
-		_, exists := tabMeta.GetRegionsInDatabase(p)
+		_, exists := tabMeta.GetRegionsInDatabase(context.Background(), p)
 		require.False(t, exists)
 		require.Equal(t, 1, p.getMultiregionConfigCalled)
 	}
 	// Call the function again, make sure that our planner method doesn't
 	// get invoked again.
 	{
-		_, exists := tabMeta.GetRegionsInDatabase(p)
+		_, exists := tabMeta.GetRegionsInDatabase(context.Background(), p)
 		require.False(t, exists)
 		require.Equal(t, 1, p.getMultiregionConfigCalled)
 	}
@@ -450,7 +450,7 @@ type fakeGetMultiregionConfigPlanner struct {
 }
 
 func (f *fakeGetMultiregionConfigPlanner) GetMultiregionConfig(
-	databaseID descpb.ID,
+	ctx context.Context, databaseID descpb.ID,
 ) (interface{}, bool) {
 	f.getMultiregionConfigCalled++
 	return nil, false

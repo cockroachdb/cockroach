@@ -1260,7 +1260,7 @@ func (ot *OptTester) Expr() (opt.Expr, error) {
 	f.Init(&ot.evalCtx, ot.catalog)
 	f.DisableOptimizations()
 
-	return exprgen.Build(ot.catalog, &f, ot.sql)
+	return exprgen.Build(ot.ctx, ot.catalog, &f, ot.sql)
 }
 
 // ExprNorm parses the input directly into an expression and runs
@@ -1284,7 +1284,7 @@ func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 		ot.appliedRules.Add(int(ruleName))
 	})
 
-	return exprgen.Build(ot.catalog, &f, ot.sql)
+	return exprgen.Build(ot.ctx, ot.catalog, &f, ot.sql)
 }
 
 // ExprOpt parses the input directly into an expression and runs normalization
@@ -1305,7 +1305,7 @@ func (ot *OptTester) ExprOpt() (opt.Expr, error) {
 		ot.appliedRules.Add(int(ruleName))
 	})
 
-	return exprgen.Optimize(ot.catalog, o, ot.sql)
+	return exprgen.Optimize(ot.ctx, ot.catalog, o, ot.sql)
 }
 
 // RuleStats performs the optimization and returns statistics about how many

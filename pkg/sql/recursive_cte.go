@@ -68,9 +68,9 @@ type recursiveCTERun struct {
 
 func (n *recursiveCTENode) startExec(params runParams) error {
 	n.typs = planTypes(n.initial)
-	n.workingRows.Init(n.typs, params.extendedEvalCtx, "cte" /* opName */)
+	n.workingRows.Init(params.ctx, n.typs, params.extendedEvalCtx, "cte" /* opName */)
 	if n.deduplicate {
-		n.allRows.InitWithDedup(n.typs, params.extendedEvalCtx, "cte-all" /* opName */)
+		n.allRows.InitWithDedup(params.ctx, n.typs, params.extendedEvalCtx, "cte-all" /* opName */)
 	}
 	return nil
 }
@@ -128,7 +128,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	defer lastWorkingRows.Close(params.ctx)
 
 	n.workingRows = rowContainerHelper{}
-	n.workingRows.Init(n.typs, params.extendedEvalCtx, "cte" /* opName */)
+	n.workingRows.Init(params.ctx, n.typs, params.extendedEvalCtx, "cte" /* opName */)
 
 	// Set up a bufferNode that can be used as a reference for a scanBufferNode.
 	buf := &bufferNode{

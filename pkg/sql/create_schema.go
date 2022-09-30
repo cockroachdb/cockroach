@@ -176,7 +176,7 @@ func CreateSchemaDescriptorWithPrivileges(
 
 func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema) error {
 	if err := checkSchemaChangeEnabled(
-		p.EvalContext().Context,
+		params.ctx,
 		p.ExecCfg(),
 		"CREATE SCHEMA",
 	); err != nil {

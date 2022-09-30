@@ -1326,6 +1326,7 @@ func NewTableDesc(
 
 	setter := tablestorageparam.NewSetter(&desc)
 	if err := storageparam.Set(
+		ctx,
 		semaCtx,
 		evalCtx,
 		n.StorageParams,
@@ -1860,6 +1861,7 @@ func NewTableDesc(
 				idx.Predicate = expr
 			}
 			if err := storageparam.Set(
+				ctx,
 				semaCtx,
 				evalCtx,
 				d.StorageParams,

@@ -191,7 +191,7 @@ func TestPostProcess(t *testing.T) {
 			semaCtx := tree.MakeSemaContext()
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
-			if err := out.Init(&tc.post, inBuf.OutputTypes(), &semaCtx, evalCtx); err != nil {
+			if err := out.Init(context.Background(), &tc.post, inBuf.OutputTypes(), &semaCtx, evalCtx); err != nil {
 				t.Fatal(err)
 			}
 
@@ -327,7 +327,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		defer flowCtx.EvalCtx.Stop(ctx)
 
 		input := execinfra.NewRepeatableRowSource(types.OneIntCol, randgen.MakeIntRows(10, 1))
-		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &execinfrapb.PostProcessSpec{}, &rowDisposer{})
+		noop, err := newNoopProcessor(ctx, flowCtx, 0 /* processorID */, input, &execinfrapb.PostProcessSpec{}, &rowDisposer{})
 		if err != nil {
 			t.Fatal(err)
 		}

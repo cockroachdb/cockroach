@@ -87,6 +87,7 @@ type aggregatorBase struct {
 // trailingMetaCallback is passed as part of ProcStateOpts; the inputs to drain
 // are in aggregatorBase.
 func (ag *aggregatorBase) init(
+	ctx context.Context,
 	self execinfra.RowSource,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -96,7 +97,6 @@ func (ag *aggregatorBase) init(
 	output execinfra.RowReceiver,
 	trailingMetaCallback func() []execinfrapb.ProducerMetadata,
 ) error {
-	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		input = newInputStatCollector(input)
@@ -135,7 +135,7 @@ func (ag *aggregatorBase) init(
 			}
 		}
 		constructor, arguments, outputType, err := execagg.GetAggregateConstructor(
-			flowCtx.EvalCtx, semaCtx, &aggInfo, ag.inputTypes,
+			ctx, flowCtx.EvalCtx, semaCtx, &aggInfo, ag.inputTypes,
 		)
 		if err != nil {
 			return err
@@ -148,7 +148,7 @@ func (ag *aggregatorBase) init(
 	}
 
 	return ag.ProcessorBase.Init(
-		self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
+		ctx, self, post, ag.outputTypes, flowCtx, processorID, output, memMonitor,
 		execinfra.ProcStateOpts{
 			InputsToDrain:        []execinfra.RowSource{ag.input},
 			TrailingMetaCallback: trailingMetaCallback,
@@ -251,6 +251,7 @@ const (
 )
 
 func newAggregator(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.AggregatorSpec,
@@ -259,10 +260,10 @@ func newAggregator(
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	if spec.IsRowCount() {
-		return newCountAggregator(flowCtx, processorID, input, post, output)
+		return newCountAggregator(ctx, flowCtx, processorID, input, post, output)
 	}
 	if len(spec.OrderedGroupCols) == len(spec.GroupCols) {
-		return newOrderedAggregator(flowCtx, processorID, spec, input, post, output)
+		return newOrderedAggregator(ctx, flowCtx, processorID, spec, input, post, output)
 	}
 
 	ag := &hashAggregator{
@@ -271,6 +272,7 @@ func newAggregator(
 	}
 
 	if err := ag.init(
+		ctx,
 		ag,
 		flowCtx,
 		processorID,
@@ -294,6 +296,7 @@ func newAggregator(
 }
 
 func newOrderedAggregator(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.AggregatorSpec,
@@ -304,6 +307,7 @@ func newOrderedAggregator(
 	ag := &orderedAggregator{}
 
 	if err := ag.init(
+		ctx,
 		ag,
 		flowCtx,
 		processorID,

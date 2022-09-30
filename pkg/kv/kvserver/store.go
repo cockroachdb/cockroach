@@ -3306,11 +3306,15 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	return nil
 }
 
+func (s *Store) checkpointsDir() string {
+	return filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
+}
+
 // checkpoint creates a RocksDB checkpoint in the auxiliary directory with the
 // provided tag used in the filepath. The filepath for the checkpoint directory
 // is returned.
 func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
-	checkpointBase := filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
+	checkpointBase := s.checkpointsDir()
 	_ = s.engine.MkdirAll(checkpointBase)
 
 	checkpointDir := filepath.Join(checkpointBase, tag)
@@ -3346,6 +3350,14 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		return err
 	}
 	s.metrics.updateEnvStats(*envStats)
+
+	{
+		dirs, err := s.engine.List(s.checkpointsDir())
+		if err != nil { // skip NotFound or any other error
+			dirs = nil
+		}
+		s.metrics.RdbCheckpoints.Update(int64(len(dirs)))
+	}
 
 	// Log this metric infrequently (with current configurations,
 	// every 10 minutes). Trigger on tick 1 instead of tick 0 so that

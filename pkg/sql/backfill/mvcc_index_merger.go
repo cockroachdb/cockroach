@@ -144,7 +144,7 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 	}
 
 	semaCtx := tree.MakeSemaContext()
-	if err := ibm.out.Init(&execinfrapb.PostProcessSpec{}, nil, &semaCtx, ibm.flowCtx.NewEvalCtx()); err != nil {
+	if err := ibm.out.Init(ctx, &execinfrapb.PostProcessSpec{}, nil, &semaCtx, ibm.flowCtx.NewEvalCtx()); err != nil {
 		ibm.output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 		return
 	}

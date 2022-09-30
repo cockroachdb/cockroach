@@ -32,9 +32,7 @@ import {
 } from "./types";
 
 export const getTransactionInsights = (
-  eventState:
-    | TransactionInsightEventState
-    | TransactionInsightEventDetailsState,
+  eventState: TransactionInsightEventState,
 ): Insight[] => {
   const insights: Insight[] = [];
   if (eventState) {
@@ -44,7 +42,34 @@ export const getTransactionInsights = (
         eventState.insightName
       ) {
         insights.push(
-          insight(eventState.execType, eventState.contentionThreshold),
+          insight(
+            eventState.execType,
+            eventState.contentionThreshold,
+            eventState.contentionDuration.milliseconds(),
+          ),
+        );
+      }
+    });
+  }
+  return insights;
+};
+
+export const getTransactionInsightsFromDetails = (
+  eventState: TransactionInsightEventDetailsState,
+): Insight[] => {
+  const insights: Insight[] = [];
+  if (eventState) {
+    InsightTypes.forEach(insight => {
+      if (
+        insight(eventState.execType, eventState.contentionThreshold).name ==
+        eventState.insightName
+      ) {
+        insights.push(
+          insight(
+            eventState.execType,
+            eventState.contentionThreshold,
+            eventState.totalContentionTime,
+          ),
         );
       }
     });
@@ -86,7 +111,7 @@ export function getTransactionInsightEventDetailsFromState(
   insightEventDetailsResponse: TransactionInsightEventDetailsResponse,
 ): TransactionInsightEventDetails {
   let insightEventDetails: TransactionInsightEventDetails = null;
-  const insightsForEventDetails = getTransactionInsights(
+  const insightsForEventDetails = getTransactionInsightsFromDetails(
     insightEventDetailsResponse,
   );
   if (insightsForEventDetails.length > 0) {

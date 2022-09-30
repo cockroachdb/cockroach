@@ -11,6 +11,7 @@
 package execinfrapb
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -46,7 +47,7 @@ func TestProcessExpression(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	semaCtx := tree.MakeSemaContext()
-	expr, err := processExpression(e, &evalCtx, &semaCtx, &h)
+	expr, err := processExpression(context.Background(), e, &evalCtx, &semaCtx, &h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +74,7 @@ func TestProcessExpressionConstantEval(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	semaCtx := tree.MakeSemaContext()
-	expr, err := processExpression(e, &evalCtx, &semaCtx, &h)
+	expr, err := processExpression(context.Background(), e, &evalCtx, &semaCtx, &h)
 	if err != nil {
 		t.Fatal(err)
 	}

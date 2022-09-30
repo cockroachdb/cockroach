@@ -273,6 +273,7 @@ func makeIndexDescriptor(
 	}
 
 	if err := storageparam.Set(
+		params.ctx,
 		params.p.SemaCtx(),
 		params.EvalContext(),
 		n.StorageParams,

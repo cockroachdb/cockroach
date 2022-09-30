@@ -280,7 +280,7 @@ type Planner interface {
 
 	// DeserializeSessionState deserializes the state as serialized variables
 	// into the current session.
-	DeserializeSessionState(state *tree.DBytes) (*tree.DBool, error)
+	DeserializeSessionState(ctx context.Context, state *tree.DBytes) (*tree.DBool, error)
 
 	// CreateSessionRevivalToken creates a token that can be used to log in
 	// as the current user, in bytes form.
@@ -358,7 +358,7 @@ type Planner interface {
 	// the multiregion properties of the database identified via databaseID. The
 	// second return value is false if the database doesn't exist or is not
 	// multiregion.
-	GetMultiregionConfig(databaseID descpb.ID) (interface{}, bool)
+	GetMultiregionConfig(ctx context.Context, databaseID descpb.ID) (interface{}, bool)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

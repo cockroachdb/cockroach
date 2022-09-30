@@ -126,13 +126,13 @@ var _ execinfra.Processor = &changeAggregator{}
 var _ execinfra.RowSource = &changeAggregator{}
 
 func newChangeAggregatorProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ChangeAggregatorSpec,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changeagg-mem")
 	ca := &changeAggregator{
 		flowCtx: flowCtx,
@@ -140,6 +140,7 @@ func newChangeAggregatorProcessor(
 		memAcc:  memMonitor.MakeBoundAccount(),
 	}
 	if err := ca.Init(
+		ctx,
 		ca,
 		post,
 		changefeedResultTypes,
@@ -813,6 +814,7 @@ var _ execinfra.Processor = &changeFrontier{}
 var _ execinfra.RowSource = &changeFrontier{}
 
 func newChangeFrontierProcessor(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec execinfrapb.ChangeFrontierSpec,
@@ -820,7 +822,6 @@ func newChangeFrontierProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changefntr-mem")
 	sf, err := makeSchemaChangeFrontier(hlc.Timestamp{}, spec.TrackedSpans...)
 	if err != nil {
@@ -841,6 +842,7 @@ func newChangeFrontierProcessor(
 	}
 
 	if err := cf.Init(
+		ctx,
 		cf,
 		post,
 		input.OutputTypes(),

@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -110,7 +112,9 @@ func serializeSessionState(
 }
 
 // DeserializeSessionState deserializes the given state into the current session.
-func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, error) {
+func (p *planner) DeserializeSessionState(
+	ctx context.Context, state *tree.DBytes,
+) (*tree.DBool, error) {
 	evalCtx := p.ExtendedEvalContext()
 	if !evalCtx.TxnIsSingleStmt {
 		return nil, pgerror.Newf(
@@ -136,7 +140,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 			"can only deserialize matching session users",
 		)
 	}
-	if err := p.checkCanBecomeUser(evalCtx.Ctx(), sd.User()); err != nil {
+	if err := p.checkCanBecomeUser(ctx, sd.User()); err != nil {
 		return nil, err
 	}
 
@@ -188,7 +192,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 		}
 
 		_, err = evalCtx.statementPreparer.addPreparedStmt(
-			evalCtx.Ctx(),
+			ctx,
 			prepStmt.Name,
 			stmt,
 			placeholderTypes,

@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -634,8 +637,34 @@ func validateUniqueConstraint(
 
 	sessionDataOverride := sessiondata.NoSessionDataOverride
 	sessionDataOverride.User = user
-	values, err := ie.QueryRowEx(ctx, "validate unique constraint", txn, sessionDataOverride, query)
-	if err != nil {
+	// We are likely to have performed a lot of work before getting here (e.g.
+	// importing the data), so we want to make an effort in order to run the
+	// validation query without error in order to not fail the whole operation.
+	// Thus, we allow up to 5 retries with an exponential backoff for an
+	// allowlist of errors.
+	//
+	// We choose to explicitly perform the retry here rather than propagate the
+	// error as "job retryable" and relying on the jobs framework to do the
+	// retries in order to not waste (a lot of) work that was performed before
+	// we got here.
+	var values tree.Datums
+	retryOptions := retry.Options{
+		InitialBackoff: 20 * time.Millisecond,
+		Multiplier:     1.5,
+		MaxRetries:     5,
+	}
+	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
+		values, err = ie.QueryRowEx(ctx, "validate unique constraint", txn, sessionDataOverride, query)
+		if err == nil {
+			break
+		}
+		if pgerror.IsSQLRetryableError(err) || flowinfra.IsFlowRetryableError(err) {
+			// An example error that we want to retry is "no inbound stream"
+			// connection error which can occur if the node that is used for the
+			// distributed query goes down.
+			log.Infof(ctx, "retrying the validation query because of %v", err)
+			continue
+		}
 		return err
 	}
 	if values.Len() > 0 {

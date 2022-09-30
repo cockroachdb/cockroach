@@ -260,6 +260,7 @@ var ParallelizeMultiKeyLookupJoinsEnabled = settings.RegisterBoolSetting(
 
 // newJoinReader returns a new joinReader.
 func newJoinReader(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.JoinReaderSpec,
@@ -354,7 +355,7 @@ func newJoinReader(
 	resolver := flowCtx.NewTypeResolver(jr.txn)
 	for i := range spec.FetchSpec.KeyAndSuffixColumns {
 		if err := typedesc.EnsureTypeIsHydrated(
-			flowCtx.EvalCtx.Ctx(), spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+			ctx, spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
 		); err != nil {
 			return nil, err
 		}
@@ -378,6 +379,7 @@ func newJoinReader(
 	rightTypes := spec.FetchSpec.FetchedColumnTypes()
 
 	if err := jr.joinerBase.init(
+		ctx,
 		jr,
 		flowCtx,
 		processorID,
@@ -409,12 +411,12 @@ func newJoinReader(
 		lookupExprTypes = append(lookupExprTypes, rightTypes...)
 
 		semaCtx := flowCtx.NewSemaContext(jr.txn)
-		if err := jr.lookupExpr.Init(spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
+		if err := jr.lookupExpr.Init(ctx, spec.LookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx); err != nil {
 			return nil, err
 		}
 		if !spec.RemoteLookupExpr.Empty() {
 			if err := jr.remoteLookupExpr.Init(
-				spec.RemoteLookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx,
+				ctx, spec.RemoteLookupExpr, lookupExprTypes, semaCtx, jr.EvalCtx,
 			); err != nil {
 				return nil, err
 			}
@@ -440,10 +442,10 @@ func newJoinReader(
 	jr.MemMonitor = mon.NewMonitorInheritWithLimit(
 		"joinreader-mem" /* name */, memoryLimit, flowCtx.EvalCtx.Mon,
 	)
-	jr.MemMonitor.StartNoReserved(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon)
+	jr.MemMonitor.StartNoReserved(ctx, flowCtx.EvalCtx.Mon)
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
-	if err := jr.initJoinReaderStrategy(flowCtx, rightTypes, readerType); err != nil {
+	if err := jr.initJoinReaderStrategy(ctx, flowCtx, rightTypes, readerType); err != nil {
 		return nil, err
 	}
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
@@ -488,7 +490,7 @@ func newJoinReader(
 		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
 			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.EvalCtx.Mon,
 		)
-		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon)
+		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(ctx, flowCtx.EvalCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		jr.streamerInfo.txnKVStreamerMemAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		// The index joiner can rely on the streamer to maintain the input ordering,
@@ -502,7 +504,7 @@ func newJoinReader(
 		var diskBuffer kvstreamer.ResultDiskBuffer
 		if jr.streamerInfo.maintainOrdering {
 			jr.streamerInfo.diskMonitor = execinfra.NewMonitor(
-				flowCtx.EvalCtx.Ctx(), jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
+				ctx, jr.FlowCtx.DiskMonitor, "streamer-disk", /* name */
 			)
 			diskBuffer = rowcontainer.NewKVStreamerResultDiskBuffer(
 				jr.FlowCtx.Cfg.TempStorage, jr.streamerInfo.diskMonitor,
@@ -536,7 +538,7 @@ func newJoinReader(
 
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
-		flowCtx.EvalCtx.Context,
+		ctx,
 		row.FetcherInitArgs{
 			StreamingKVFetcher:         streamingKVFetcher,
 			Txn:                        jr.txn,
@@ -554,7 +556,7 @@ func newJoinReader(
 		return nil, err
 	}
 
-	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		jr.input = newInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.ExecStatsForTrace = jr.execStatsForTrace
@@ -567,7 +569,7 @@ func newJoinReader(
 }
 
 func (jr *joinReader) initJoinReaderStrategy(
-	flowCtx *execinfra.FlowCtx, typs []*types.T, readerType joinReaderType,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, typs []*types.T, readerType joinReaderType,
 ) error {
 	strategyMemAcc := jr.MemMonitor.MakeBoundAccount()
 	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
@@ -667,7 +669,6 @@ func (jr *joinReader) initJoinReaderStrategy(
 		return nil
 	}
 
-	ctx := flowCtx.EvalCtx.Ctx()
 	// Limit the memory use by creating a child monitor with a hard limit.
 	// joinReader will overflow to disk if this limit is not enough.
 	limit := execinfra.GetWorkMemLimit(flowCtx)

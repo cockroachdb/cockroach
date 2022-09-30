@@ -6,6 +6,14 @@ exec-ddl
 CREATE TABLE child (c INT PRIMARY KEY, p INT NOT NULL REFERENCES parent(p) ON DELETE CASCADE)
 ----
 
+exec-ddl
+CREATE FUNCTION one_volatile() RETURNS INT VOLATILE LANGUAGE SQL AS 'SELECT 1'
+----
+
+exec-ddl
+CREATE FUNCTION one_immutable() RETURNS INT IMMUTABLE LANGUAGE SQL AS 'SELECT 1'
+----
+
 # Simple cascade; fast path (the filter gets transferred over to the cascade).
 build-cascades
 DELETE FROM parent WHERE p > 1
@@ -103,6 +111,67 @@ root
                 │         └──  parent.p:4 => p:18
                 └── filters
                      └── child.p:15 = p:18
+
+# Delete with volatile UDF; no fast path.
+build-cascades
+DELETE FROM parent WHERE p > one_volatile()
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── input binding: &1
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── filters
+ │              └── p:4 > one_volatile()
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:12 child.p:13
+           └── semi-join (hash)
+                ├── columns: c:12!null child.p:13!null
+                ├── scan child
+                │    ├── columns: c:12!null child.p:13!null
+                │    └── flags: disabled not visible index feature
+                ├── with-scan &1
+                │    ├── columns: p:16!null
+                │    └── mapping:
+                │         └──  parent.p:4 => p:16
+                └── filters
+                     └── child.p:13 = p:16
+
+# Delete with immutable UDF; fast path.
+build-cascades
+DELETE FROM parent WHERE p > one_immutable()
+----
+root
+ ├── delete parent
+ │    ├── columns: <none>
+ │    ├── fetch columns: p:4
+ │    ├── cascades
+ │    │    └── child_p_fkey
+ │    └── select
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── scan parent
+ │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── filters
+ │              └── p:4 > one_immutable()
+ └── cascade
+      └── delete child
+           ├── columns: <none>
+           ├── fetch columns: c:12 child.p:13
+           └── select
+                ├── columns: c:12!null child.p:13!null
+                ├── scan child
+                │    ├── columns: c:12!null child.p:13!null
+                │    └── flags: disabled not visible index feature
+                └── filters
+                     └── child.p:13 > one_immutable()
 
 # Delete everything.
 build-cascades

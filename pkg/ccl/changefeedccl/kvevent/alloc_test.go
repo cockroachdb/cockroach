@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +37,7 @@ func TestAllocMergeRandomized(t *testing.T) {
 		// Allocate N allocs from the P pools.
 		poolPerm := rand.Perm(P)
 		for i := range allocs {
-			allocs[i] = pools[poolPerm[i%P]].alloc()
+			allocs[i] = pools[poolPerm[i%P]].alloc(1)
 		}
 
 		// Randomly merge the allocs together.
@@ -82,6 +83,26 @@ func TestAllocMergeRandomized(t *testing.T) {
 	}
 }
 
+func TestAllocAdjust(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	p := &testAllocPool{}
+	a := p.alloc(10)
+	require.EqualValues(t, 10, a.Bytes())
+	require.EqualValues(t, 1, a.Events())
+	a.AdjustBytesToTarget(ctx, 6)
+	require.EqualValues(t, 6, a.Bytes())
+	a.AdjustBytesToTarget(ctx, 7) // no-op
+	require.EqualValues(t, 6, a.Bytes())
+	a.AdjustBytesToTarget(ctx, -5) // no-op
+	require.EqualValues(t, 6, a.Bytes())
+	a.AdjustBytesToTarget(ctx, 1)
+	require.EqualValues(t, 1, a.Bytes())
+	a.Release(ctx)
+}
+
 type testAllocPool struct {
 	syncutil.Mutex
 	n int64
@@ -91,17 +112,17 @@ type testAllocPool struct {
 func (ap *testAllocPool) Release(ctx context.Context, bytes, entries int64) {
 	ap.Lock()
 	defer ap.Unlock()
-	if ap.n == 0 {
-		panic("can't release zero resources")
+	if ap.n < bytes {
+		panic(errors.AssertionFailedf("can't release %d bytes from zero resources", bytes))
 	}
 	ap.n -= bytes
 }
 
-func (ap *testAllocPool) alloc() Alloc {
+func (ap *testAllocPool) alloc(bytes int64) Alloc {
 	ap.Lock()
 	defer ap.Unlock()
-	ap.n++
-	return TestingMakeAlloc(1, ap)
+	ap.n += bytes
+	return TestingMakeAlloc(bytes, ap)
 }
 
 func (ap *testAllocPool) getN() int {

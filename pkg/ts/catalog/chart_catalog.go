@@ -3035,6 +3035,11 @@ var charts = []sectionDescription{
 				AxisLabel: "Duration (nanos)",
 			},
 			{
+				Title:     "Checkpoints",
+				Metrics:   []string{"storage.checkpoints"},
+				AxisLabel: "Directories",
+			},
+			{
 				Title: "Bytes Used Per Level",
 				Metrics: []string{
 					"storage.l0-level-size",

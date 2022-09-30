@@ -43,7 +43,9 @@ type Evaluator struct {
 
 // NewEvaluator returns evaluator configured to process specified
 // select expression.
-func NewEvaluator(evalCtx *eval.Context, sc *tree.SelectClause) (*Evaluator, error) {
+func NewEvaluator(
+	ctx context.Context, evalCtx *eval.Context, sc *tree.SelectClause,
+) (*Evaluator, error) {
 	e := &Evaluator{evalCtx: evalCtx.Copy()}
 
 	if len(sc.From.Tables) > 0 { // 0 tables used only in tests.
@@ -53,7 +55,7 @@ func NewEvaluator(evalCtx *eval.Context, sc *tree.SelectClause) (*Evaluator, err
 		e.from = sc.From.Tables[0]
 	}
 
-	if err := e.initSelectClause(evalCtx.Ctx(), sc); err != nil {
+	if err := e.initSelectClause(ctx, sc); err != nil {
 		return nil, err
 	}
 
@@ -316,7 +318,9 @@ func (e *exprEval) matchesFilter(
 }
 
 // computeRenderColumnName returns render name for a selector, adjusted for CDC use case.
-func (e *exprEval) computeRenderColumnName(selector tree.SelectExpr) (string, error) {
+func (e *exprEval) computeRenderColumnName(
+	ctx context.Context, selector tree.SelectExpr,
+) (string, error) {
 	as, err := func() (string, error) {
 		if selector.As != "" {
 			return string(selector.As), nil
@@ -324,7 +328,7 @@ func (e *exprEval) computeRenderColumnName(selector tree.SelectExpr) (string, er
 		// We use ComputeColNameInternal instead of GetRenderName because the latter, if it can't
 		// figure out the name, returns "?column?" as the name; but we want to name things slightly
 		// different in that case.
-		_, s, err := tree.ComputeColNameInternal(e.evalCtx.Ctx(), e.semaCtx.SearchPath, selector.Expr, e.semaCtx.FunctionResolver)
+		_, s, err := tree.ComputeColNameInternal(ctx, e.semaCtx.SearchPath, selector.Expr, e.semaCtx.FunctionResolver)
 		return s, err
 	}()
 	if err != nil {
@@ -353,7 +357,7 @@ func (e *exprEval) makeUniqueName(as string) string {
 func (e *exprEval) addSelector(
 	ctx context.Context, selector tree.SelectExpr, numSelectors int,
 ) error {
-	as, err := e.computeRenderColumnName(selector)
+	as, err := e.computeRenderColumnName(ctx, selector)
 	if err != nil {
 		return err
 	}
