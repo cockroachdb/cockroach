@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -65,9 +64,6 @@ type setClusterSettingNode struct {
 }
 
 func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, action string) error {
-	if settings.AdminOnly(name) {
-		return p.RequireAdminRole(ctx, fmt.Sprintf("%s cluster setting '%s'", action, name))
-	}
 
 	// logic for system privileges.
 	var hasModifyPrivilegeErr error

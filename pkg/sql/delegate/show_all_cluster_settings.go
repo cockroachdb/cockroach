@@ -11,10 +11,13 @@
 package delegate
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 )
 
 func (d *delegator) delegateShowClusterSettingList(
@@ -24,6 +27,13 @@ func (d *delegator) delegateShowClusterSettingList(
 	if err != nil {
 		return nil, err
 	}
+	// logic for system privileges.
+	var hasModifyPrivilegeErr error
+	var hasViewPrivilegeErr error
+	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.SystemPrivilegesTable) {
+		hasModifyPrivilegeErr = d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING)
+		hasViewPrivilegeErr = d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING)
+	}
 	hasModify, err := d.catalog.HasRoleOption(d.ctx, roleoption.MODIFYCLUSTERSETTING)
 	if err != nil {
 		return nil, err
@@ -32,10 +42,12 @@ func (d *delegator) delegateShowClusterSettingList(
 	if err != nil {
 		return nil, err
 	}
-	if !hasModify && !hasView && !isAdmin {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with either %s or %s privileges are allowed to SHOW CLUSTER SETTINGS",
-			roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
+	if !isAdmin && !(hasModifyPrivilegeErr == nil || hasViewPrivilegeErr == nil) {
+		if !hasModify && !hasView {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with either %s or %s privileges are allowed to SHOW CLUSTER SETTINGS",
+				roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
+		}
 	}
 	if stmt.All {
 		return parse(

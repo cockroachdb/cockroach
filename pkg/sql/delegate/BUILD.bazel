@@ -40,6 +40,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/delegate",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -59,6 +60,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/util",
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",

@@ -32,6 +32,9 @@ user testuser
 statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
 SET CLUSTER SETTING sql.defaults.default_int_size = 4
 
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'version'
+SET CLUSTER SETTING version = '22.2'
+
 statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster setting 'sql.defaults.default_int_size'
 SHOW CLUSTER SETTING sql.defaults.default_int_size
 
