@@ -109,6 +109,16 @@ func (f *ReadAsOfIterator) UnsafeValue() []byte {
 	return f.iter.UnsafeValue()
 }
 
+// MVCCValueLenAndIsTombstone implements the SimpleMVCCIterator interface.
+func (f *ReadAsOfIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	return f.iter.MVCCValueLenAndIsTombstone()
+}
+
+// ValueLen implements the SimpleMVCCIterator interface.
+func (f *ReadAsOfIterator) ValueLen() int {
+	return f.iter.ValueLen()
+}
+
 // HasPointAndRange implements SimpleMVCCIterator.
 func (f *ReadAsOfIterator) HasPointAndRange() (bool, bool) {
 	return true, false

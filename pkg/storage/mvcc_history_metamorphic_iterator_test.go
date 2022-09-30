@@ -320,6 +320,14 @@ func (m *metamorphicIterator) UnsafeValue() []byte {
 	return m.it.UnsafeValue()
 }
 
+func (m *metamorphicIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	return m.it.MVCCValueLenAndIsTombstone()
+}
+
+func (m *metamorphicIterator) ValueLen() int {
+	return m.it.ValueLen()
+}
+
 func (m *metamorphicIterator) HasPointAndRange() (bool, bool) {
 	return m.it.HasPointAndRange()
 }

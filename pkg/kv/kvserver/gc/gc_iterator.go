@@ -35,6 +35,9 @@ type gcIterator struct {
 	cachedRangeTombstoneKey roachpb.Key
 }
 
+// TODO(sumeer): change gcIterator to use MVCCValueLenAndIsTombstone(). It
+// needs to get the value only for intents.
+
 func makeGCIterator(
 	desc *roachpb.RangeDescriptor,
 	snap storage.Reader,
