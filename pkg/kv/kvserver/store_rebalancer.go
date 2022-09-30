@@ -391,8 +391,11 @@ func (sr *StoreRebalancer) ShouldRebalanceStore(ctx context.Context, rctx *Rebal
 	// We only bother rebalancing stores that are fielding more than the
 	// cluster-level overfull threshold of QPS.
 	if !(rctx.LocalDesc.Capacity.QueriesPerSecond > rctx.QPSMaxThreshold) {
-		log.KvDistribution.Infof(
-			ctx,
+		// Since the lack of activity is the most common case, we don't
+		// log externally by default. Only show the details when
+		// requested by log config or when looking at traces.
+		log.KvDistribution.VEventf(
+			ctx, 1,
 			"local QPS %.2f is below max threshold %.2f (mean=%.2f); no rebalancing needed",
 			rctx.LocalDesc.Capacity.QueriesPerSecond, rctx.QPSMaxThreshold, rctx.allStoresList.CandidateQueriesPerSecond.Mean)
 		return false
