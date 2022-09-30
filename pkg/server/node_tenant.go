@@ -28,7 +28,6 @@ import "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 func redactRecording(rec tracingpb.Recording) {
 	for i := range rec {
 		sp := &rec[i]
-		sp.Tags = nil // TODO(benbardin): Remove for 23.1.
 		sp.TagGroups = nil
 		for j := range sp.Logs {
 			record := &sp.Logs[j]

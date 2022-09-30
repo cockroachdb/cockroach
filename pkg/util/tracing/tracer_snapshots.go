@@ -148,7 +148,7 @@ func (t *Tracer) generateSnapshot() SpansSnapshot {
 	traces := make([]tracingpb.Recording, 0, 1000)
 	_ = t.SpanRegistry().VisitRoots(func(sp RegistrySpan) error {
 		rec := sp.GetFullRecording(tracingpb.RecordingVerbose)
-		traces = append(traces, rec)
+		traces = append(traces, rec.Flatten())
 		return nil
 	})
 

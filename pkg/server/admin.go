@@ -3906,7 +3906,8 @@ func (s *adminServer) GetTrace(
 		}
 		traceStillExists = true
 		if recording == nil {
-			recording = sp.GetFullRecording(tracingpb.RecordingVerbose)
+			trace := sp.GetFullRecording(tracingpb.RecordingVerbose)
+			recording = trace.Flatten()
 		}
 		return iterutil.StopIteration()
 	}); err != nil {

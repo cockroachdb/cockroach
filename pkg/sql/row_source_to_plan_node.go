@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -21,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// rowSourceToPlanNode wraps a RowSource and presents it as a PlanNode. It must
-// be constructed with Create(), after which it is a PlanNode and can be treated
-// as such.
+// rowSourceToPlanNode wraps an execinfra.RowSource and presents it as a
+// planNode. It must be constructed via newRowSourceToPlanNode, after which it
+// is a planNode and can be treated as such.
 type rowSourceToPlanNode struct {
 	source    execinfra.RowSource
 	forwarder metadataForwarder
@@ -42,13 +41,17 @@ type rowSourceToPlanNode struct {
 
 var _ planNode = &rowSourceToPlanNode{}
 
-// makeRowSourceToPlanNode creates a new planNode that wraps a RowSource. It
-// takes an optional metadataForwarder, which if non-nil is invoked for every
+// newRowSourceToPlanNode creates a new planNode that wraps an
+// execinfra.RowSource. It takes a metadataForwarder, which is invoked for every
 // piece of metadata this wrapper receives from the wrapped RowSource.
+//
 // It also takes an optional planNode, which is the planNode that the RowSource
 // that this rowSourceToPlanNode is wrapping originally replaced. That planNode
 // will be closed when this one is closed.
-func makeRowSourceToPlanNode(
+//
+// NOTE: it is not guaranteed the ConsumerClosed will be called on the provided
+// RowSource by the returned rowSourceToPlanNode.
+func newRowSourceToPlanNode(
 	s execinfra.RowSource,
 	forwarder metadataForwarder,
 	planCols colinfo.ResultColumns,
@@ -72,23 +75,16 @@ func (r *rowSourceToPlanNode) startExec(params runParams) error {
 
 func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 	for {
-		var p *execinfrapb.ProducerMetadata
-		r.row, p = r.source.Next()
+		var meta *execinfrapb.ProducerMetadata
+		r.row, meta = r.source.Next()
 
-		if p != nil {
-			if p.Err != nil {
-				return false, p.Err
+		if meta != nil {
+			// Return errors immediately, all other metadata is "forwarded".
+			if meta.Err != nil {
+				return false, meta.Err
 			}
-			if r.forwarder != nil {
-				r.forwarder.forwardMetadata(p)
-				continue
-			}
-			if p.TraceData != nil {
-				// We drop trace metadata since we have no reasonable way to propagate
-				// it in local SQL execution.
-				continue
-			}
-			return false, fmt.Errorf("unexpected producer metadata: %+v", p)
+			r.forwarder.forwardMetadata(meta)
+			continue
 		}
 
 		if r.row == nil {
@@ -114,11 +110,14 @@ func (r *rowSourceToPlanNode) Values() tree.Datums {
 }
 
 func (r *rowSourceToPlanNode) Close(ctx context.Context) {
-	if r.source != nil {
-		r.source.ConsumerClosed()
-		r.source = nil
-	}
+	// Make sure to lose the reference to the source.
+	//
+	// Note that we do not call ConsumerClosed on it since it is not the
+	// responsibility of this rowSourceToPlanNode (the responsibility belongs to
+	// the corresponding planNodeToRowSource).
+	r.source = nil
 	if r.originalPlanNode != nil {
 		r.originalPlanNode.Close(ctx)
+		r.originalPlanNode = nil
 	}
 }
