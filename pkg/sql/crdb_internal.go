@@ -1094,6 +1094,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   service_lat_var     FLOAT NOT NULL,
   overhead_lat_avg    FLOAT NOT NULL,
   overhead_lat_var    FLOAT NOT NULL,
+  cpu_time_avg        FLOAT NOT NULL,
+  cpu_time_var        FLOAT NOT NULL,
   bytes_read_avg      FLOAT NOT NULL,
   bytes_read_var      FLOAT NOT NULL,
   rows_read_avg       FLOAT NOT NULL,
@@ -1197,6 +1199,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				tree.NewDFloat(tree.DFloat(stats.Stats.ServiceLat.GetVariance(stats.Stats.Count))),  // service_lat_var
 				tree.NewDFloat(tree.DFloat(stats.Stats.OverheadLat.Mean)),                           // overhead_lat_avg
 				tree.NewDFloat(tree.DFloat(stats.Stats.OverheadLat.GetVariance(stats.Stats.Count))), // overhead_lat_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.CpuTime.Mean)),                               // cpu_time_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.CpuTime.GetVariance(stats.Stats.Count))),     // cpu_time_var
 				tree.NewDFloat(tree.DFloat(stats.Stats.BytesRead.Mean)),                             // bytes_read_avg
 				tree.NewDFloat(tree.DFloat(stats.Stats.BytesRead.GetVariance(stats.Stats.Count))),   // bytes_read_var
 				tree.NewDFloat(tree.DFloat(stats.Stats.RowsRead.Mean)),                              // rows_read_avg

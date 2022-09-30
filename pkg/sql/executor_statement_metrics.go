@@ -131,6 +131,7 @@ func (ex *connExecutor) recordStatementSummary(
 	// We want to exclude any overhead to reduce possible confusion.
 	svcLatRaw := phaseTimes.GetServiceLatencyNoOverhead()
 	svcLat := svcLatRaw.Seconds()
+	cpuTime := phaseTimes.GetServiceCPUTimeTotal().Seconds()
 
 	// processing latency: contributing towards SQL results.
 	processingLat := parseLat + planLat + runLat
@@ -192,6 +193,7 @@ func (ex *connExecutor) recordStatementSummary(
 		RunLatency:           runLat,
 		ServiceLatency:       svcLat,
 		OverheadLatency:      execOverhead,
+		ServiceCPUTime:       cpuTime,
 		BytesRead:            stats.bytesRead,
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,

@@ -113,6 +113,9 @@ message StatementStatistics {
   // index_recommendations is the list of index recommendations generated for the statement fingerprint.
   repeated string index_recommendations = 27;
 
+  // cpu_time is the amount of CPU time spent (in seconds) by this query.
+  optional NumericStat cpu_time = 28 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;

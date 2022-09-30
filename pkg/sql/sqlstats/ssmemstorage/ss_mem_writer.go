@@ -129,6 +129,7 @@ func (s *Container) RecordStatement(
 	stats.mu.data.RunLat.Record(stats.mu.data.Count, value.RunLatency)
 	stats.mu.data.ServiceLat.Record(stats.mu.data.Count, value.ServiceLatency)
 	stats.mu.data.OverheadLat.Record(stats.mu.data.Count, value.OverheadLatency)
+	stats.mu.data.CpuTime.Record(stats.mu.data.Count, value.ServiceCPUTime)
 	stats.mu.data.BytesRead.Record(stats.mu.data.Count, float64(value.BytesRead))
 	stats.mu.data.RowsRead.Record(stats.mu.data.Count, float64(value.RowsRead))
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))

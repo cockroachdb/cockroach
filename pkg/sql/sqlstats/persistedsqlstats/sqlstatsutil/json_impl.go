@@ -286,6 +286,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"runLat", (*numericStats)(&s.RunLat)},
 		{"svcLat", (*numericStats)(&s.ServiceLat)},
 		{"ovhLat", (*numericStats)(&s.OverheadLat)},
+		{"cpuTime", (*numericStats)(&s.CpuTime)},
 		{"bytesRead", (*numericStats)(&s.BytesRead)},
 		{"rowsRead", (*numericStats)(&s.RowsRead)},
 		{"rowsWritten", (*numericStats)(&s.RowsWritten)},

@@ -201,6 +201,7 @@ type RecordedStmtStats struct {
 	RunLatency           float64
 	ServiceLatency       float64
 	OverheadLatency      float64
+	ServiceCPUTime       float64
 	BytesRead            int64
 	RowsRead             int64
 	RowsWritten          int64

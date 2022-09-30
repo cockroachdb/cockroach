@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -1878,12 +1879,16 @@ func (ex *connExecutor) execCmd() error {
 			ex.machine.CurState(), pos, cmd)
 	}
 
+	nanos := grunning.Time().Nanoseconds()
+	receivedCPUTime := time.Unix(0, nanos)
+
 	var ev fsm.Event
 	var payload fsm.EventPayload
 	var res ResultBase
 	switch tcmd := cmd.(type) {
 	case ExecStmt:
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceivedCPUTime, receivedCPUTime)
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, tcmd.ParseStart)
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, tcmd.ParseEnd)
 
@@ -1937,6 +1942,7 @@ func (ex *connExecutor) execCmd() error {
 		// ExecPortal is handled like ExecStmt, except that the placeholder info
 		// is taken from the portal.
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceived, tcmd.TimeReceived)
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionQueryReceivedCPUTime, receivedCPUTime)
 		// When parsing has been done earlier, via a separate parse
 		// message, it is not any more part of the statistics collected
 		// for this execution. In that case, we simply report that

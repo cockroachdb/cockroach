@@ -156,6 +156,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.Nodes = util.CombineUniqueInt64(s.Nodes, other.Nodes)
 	s.PlanGists = util.CombineUniqueString(s.PlanGists, other.PlanGists)
 	s.IndexRecommendations = other.IndexRecommendations
+	s.CpuTime.Add(other.CpuTime, s.Count, other.Count)
 
 	s.ExecStats.Add(other.ExecStats)
 
@@ -189,7 +190,8 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
 		s.RowsRead.AlmostEqual(other.RowsRead, eps) &&
-		s.RowsWritten.AlmostEqual(other.RowsWritten, eps)
+		s.RowsWritten.AlmostEqual(other.RowsWritten, eps) &&
+		s.CpuTime.AlmostEqual(other.CpuTime, eps)
 	// s.ExecStats are deliberately ignored since they are subject to sampling
 	// probability and are not fully deterministic (e.g. the number of network
 	// messages depends on the range cache state).

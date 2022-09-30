@@ -33,6 +33,8 @@ const (
 
 	// Executor phases.
 
+	SessionQueryReceivedCPUTime
+
 	// SessionQueryReceived is the SessionPhase when a query is received.
 	SessionQueryReceived
 
@@ -53,6 +55,8 @@ const (
 
 	// PlannerEndExecStmt is the SessionPhase when execution ends.
 	PlannerEndExecStmt
+
+	PlannerEndExecStmtCpuTime
 
 	// SessionQueryServiced is the SessionPhase when a query is serviced.
 	// Note: we compute this even for empty queries or  "special" statements that
@@ -164,6 +168,13 @@ func (t *Times) GetServiceLatencyNoOverhead() time.Duration {
 // NOTE: SessionQueryServiced phase must have been set.
 func (t *Times) GetServiceLatencyTotal() time.Duration {
 	return t.times[SessionQueryServiced].Sub(t.times[SessionQueryReceived])
+}
+
+// GetServiceCPUTimeTotal returns the total CPU time of serving a query
+// including any overhead like internal retries.
+// NOTE: SessionQueryServicedCPUTime phase must have been set.
+func (t *Times) GetServiceCPUTimeTotal() time.Duration {
+	return t.times[PlannerEndExecStmtCpuTime].Sub(t.times[SessionQueryReceivedCPUTime])
 }
 
 // GetRunLatency returns the time between a query execution starting and

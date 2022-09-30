@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1196,6 +1197,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, timeutil.Now())
+	cpuNanos := grunning.Time().Nanoseconds()
+	fmt.Println("planner end exec stmt nanos", cpuNanos)
+	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmtCpuTime, time.Unix(0, cpuNanos))
 
 	ex.extraTxnState.rowsRead += stats.rowsRead
 	ex.extraTxnState.bytesRead += stats.bytesRead
@@ -1955,6 +1959,7 @@ var showQueryStatsFns = map[tree.Name]func(*sessionphase.Times) time.Duration{
 	// Since the last query has already finished, it is safe to retrieve its
 	// total service latency.
 	"service_latency":          func(phaseTimes *sessionphase.Times) time.Duration { return phaseTimes.GetServiceLatencyTotal() },
+	"cpu_time":                 func(phaseTimes *sessionphase.Times) time.Duration { return phaseTimes.GetServiceCPUTimeTotal() },
 	"post_commit_jobs_latency": func(phaseTimes *sessionphase.Times) time.Duration { return phaseTimes.GetPostCommitJobsLatency() },
 }
 
