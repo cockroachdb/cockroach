@@ -306,31 +306,24 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		close(notifyFatal)
 	}
 
-	serverArgsPerNode := make(map[int]base.TestServerArgs)
+	serverArgsPerNode := make(map[int]base.TestServerArgs, numStores)
 	for i := 0; i < numStores; i++ {
-		testServerArgs := base.TestServerArgs{
+		serverArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &testKnobs,
-				Server: &server.TestingKnobs{
-					StickyEngineRegistry: stickyEngineRegistry,
-				},
+				Store:  &testKnobs,
+				Server: &server.TestingKnobs{StickyEngineRegistry: stickyEngineRegistry},
 			},
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:               true,
-					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
-				},
-			},
+			StoreSpecs: []base.StoreSpec{{
+				InMemory:               true,
+				StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+			}},
 		}
-		serverArgsPerNode[i] = testServerArgs
 	}
 
-	tc = testcluster.StartTestCluster(t, numStores,
-		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationAuto,
-			ServerArgsPerNode: serverArgsPerNode,
-		},
-	)
+	tc = testcluster.StartTestCluster(t, numStores, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationAuto,
+		ServerArgsPerNode: serverArgsPerNode,
+	})
 	defer tc.Stopper().Stop(context.Background())
 
 	store := tc.GetFirstStoreFromServer(t, 0)
