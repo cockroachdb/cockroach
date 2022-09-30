@@ -98,6 +98,7 @@ func RunCopyFrom(
 		p.cancelChecker.Reset(ctx)
 		p.optPlanningCtx.init(p)
 		p.resetPlanner(ctx, txn, stmtTS, p.sessionDataMutatorIterator.sds.Top())
+		p.extendedEvalCtx.Context.Txn = txn
 	}
 	p, cleanup := newInternalPlanner("copytest",
 		txn,
