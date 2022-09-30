@@ -45,13 +45,24 @@ func TestDiagnosticsRequest(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	_, err := db.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	require.NoError(t, err)
 
-	completedQuery := "SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1"
+	var collectUntilExpirationEnabled bool
 	isCompleted := func(reqID int64) (completed bool, diagnosticsID gosql.NullInt64) {
+		completedQuery := "SELECT completed, statement_diagnostics_id FROM system.statement_diagnostics_requests WHERE ID = $1"
 		reqRow := db.QueryRow(completedQuery, reqID)
 		require.NoError(t, reqRow.Scan(&completed, &diagnosticsID))
+		if completed && !collectUntilExpirationEnabled {
+			// Ensure that if the request was completed and the continuous
+			// collection is not enabled, the local registry no longer has the
+			// request.
+			require.False(
+				t, registry.TestingFindRequest(reqID), "request was "+
+					"completed and should have been removed from the registry",
+			)
+		}
 		return completed, diagnosticsID
 	}
 	checkNotCompleted := func(reqID int64) {
@@ -76,6 +87,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 		return nil
 	}
 	setCollectUntilExpiration := func(v bool) {
+		collectUntilExpirationEnabled = v
 		_, err := db.Exec(
 			fmt.Sprintf("SET CLUSTER SETTING sql.stmt_diagnostics.collect_continuously.enabled = %t", v))
 		require.NoError(t, err)
@@ -86,7 +98,6 @@ func TestDiagnosticsRequest(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	var minExecutionLatency, expiresAfter time.Duration
 	var samplingProbability float64
 
@@ -445,7 +456,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 		// We should not find the request and a subsequent executions should not
 		// capture anything.
 		testutils.SucceedsSoon(t, func() error {
-			if found := registry.TestingFindRequest(stmtdiagnostics.RequestID(reqID)); found {
+			if found := registry.TestingFindRequest(reqID); found {
 				return errors.New("expected expired request to no longer be tracked")
 			}
 			return nil
