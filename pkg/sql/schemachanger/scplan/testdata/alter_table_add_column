@@ -128,6 +128,10 @@ PostCommitPhase stage 2 of 2 with 6 MutationType ops
       DescriptorID: 106
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
+      - 105
+      - 106
       IsNonCancelable: true
       JobID: 1
 
@@ -410,6 +414,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
       IsNonCancelable: true
       JobID: 1
 
@@ -772,6 +778,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
       IsNonCancelable: true
       JobID: 1
 
@@ -1052,6 +1060,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
       DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
       IsNonCancelable: true
       JobID: 1
 
@@ -1235,6 +1245,9 @@ PostCommitPhase stage 2 of 2 with 7 MutationType ops
       DescriptorID: 107
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
+      - 107
       IsNonCancelable: true
       JobID: 1
 
@@ -1548,6 +1561,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
       DescriptorID: 108
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 108
       IsNonCancelable: true
       JobID: 1
 
@@ -1962,6 +1977,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 8 MutationType ops
       DescriptorID: 109
       JobID: 1
     *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 109
       IsNonCancelable: true
       JobID: 1
 

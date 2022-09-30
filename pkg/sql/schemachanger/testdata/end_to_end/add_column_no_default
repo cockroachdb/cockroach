@@ -184,5 +184,6 @@ write *eventpb.FinishSchemaChange to event log
 adding table for stats refresh: 106
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
 commit transaction #4
 # end PostCommitPhase

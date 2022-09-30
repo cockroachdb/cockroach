@@ -987,3 +987,16 @@ func IsSystemDescriptor(desc Descriptor) bool {
 	}
 	return false
 }
+
+// HasConcurrentDeclarativeSchemaChange returns true iff the descriptors has
+// a concurrent declarative schema change. This declarative schema changer is
+// extremely disciplined and only writes state information during the pre-commit
+// phase, so if a descriptor has a declarative state, we know an ongoing
+// declarative schema change active. The legacy schema changer will tag descriptors
+// with job IDs even during the statement phase, so we cannot rely on similar
+// checks to block concurrent schema changes. Hence, Descriptor.HasConcurrentSchemaChanges
+// is not equivalent to this operation (the former can lead to false positives
+// for the legacy schema changer).
+func HasConcurrentDeclarativeSchemaChange(desc Descriptor) bool {
+	return desc.GetDeclarativeSchemaChangerState() != nil
+}

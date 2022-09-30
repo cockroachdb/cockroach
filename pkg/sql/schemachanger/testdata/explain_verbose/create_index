@@ -350,6 +350,8 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 106
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
