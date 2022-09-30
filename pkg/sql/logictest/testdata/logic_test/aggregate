@@ -3786,3 +3786,19 @@ query FFFF
 select covar_pop(y, x), covar_samp(y, x), regr_sxx(y, x), regr_syy(y, x) from corrupt_combine
 ----
 37.5 45 2983.333333333333 17.5
+
+# Regression test for #88993 where a limit pushed down into a union of scans
+# caused incorrect query results.
+statement ok
+CREATE TABLE t2 (
+  a INT,
+  b INT,
+  c INT,
+  INDEX (b, c, a)
+);
+INSERT INTO t2 (a, b, c) VALUES (1, 10, 20), (0, 11, 100);
+
+query I
+SELECT min(a) FROM t2 WHERE (b <= 11 AND c < 50) OR (b = 11 AND c = 50) OR (b >= 11 AND c > 50)
+----
+0
