@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -531,6 +532,56 @@ func (v *validator) processOp(op Operation) {
 
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`deleteRangeUsingTombstone`, t.Result)
+		}
+	case *AddSSTableOperation:
+		if resultIsErrorStr(t.Result, "key range .* outside of bounds of range") {
+			// The AddSSTable may race with a range split. It's not possible to ingest
+			// an SST spanning multiple ranges, but the generator will optimistically
+			// try to fit the SST inside one of the current ranges, so we ignore the
+			// error and try again later.
+		} else if resultIsErrorStr(t.Result, "write for key .* at timestamp .* too old; wrote at") {
+			// We may race with a concurrent write. Try again later.
+		} else if v.checkNonAmbError(op, t.Result) {
+			break
+		}
+		err := func() error {
+			// TODO(erikgrinaker): This should handle range tombstones too.
+			iter, err := storage.NewMemSSTIterator(t.Data, false /* verify */, storage.IterOptions{
+				KeyTypes:   storage.IterKeyTypePointsOnly,
+				LowerBound: keys.MinKey,
+				UpperBound: keys.MaxKey,
+			})
+			if err != nil {
+				return err
+			}
+			defer iter.Close()
+			for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+				if ok, err := iter.Valid(); !ok {
+					return err
+				}
+				key := iter.Key().Key
+				rawValue := iter.Value()
+				mvccValue, err := storage.DecodeMVCCValue(rawValue)
+				if err != nil {
+					return err
+				}
+				seq := mvccValue.KVNemesisSeq.Get()
+				write := &observedWrite{
+					Key:   key,
+					Seq:   mvccValue.KVNemesisSeq.Get(),
+					Value: mvccValue.Value,
+				}
+				if sv, ok := v.tryConsumeWrite(key, seq); ok {
+					write.Timestamp = sv.Timestamp
+				}
+				v.curObservations = append(v.curObservations, write)
+			}
+		}()
+		if err != nil {
+			v.failures = append(v.failures, err)
+		}
+		if v.buffering == bufferingSingle {
+			v.checkAtomic(`addSSTable`, t.Result)
 		}
 	case *ScanOperation:
 		if _, isErr := v.checkError(op, t.Result); isErr {

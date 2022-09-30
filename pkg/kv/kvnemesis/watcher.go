@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -192,6 +193,44 @@ func (w *Watcher) processEvents(ctx context.Context, eventC chan kvcoord.RangeFe
 					}
 				}
 				w.mu.Unlock()
+			case *roachpb.RangeFeedSSTable:
+				w.mu.Lock()
+				if len(e.Data) == 0 {
+					return errors.AssertionFailedf("no SST data found")
+				}
+				// TODO(erikgrinaker): This should handle range keys too.
+				iter, err := storage.NewMemSSTIterator(e.Data, false /* verify */, storage.IterOptions{
+					KeyTypes:   storage.IterKeyTypePointsOnly,
+					LowerBound: keys.MinKey,
+					UpperBound: keys.MaxKey,
+				})
+				if err != nil {
+					return err
+				}
+				defer iter.Close()
+				for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+					if ok, err := iter.Valid(); err != nil {
+						return err
+					} else if !ok {
+						break
+					}
+					key := iter.Key()
+					rawValue := iter.Value()
+					mvccValue, err := storage.DecodeMVCCValue(rawValue)
+					if err != nil {
+						return err
+					}
+					mvccValue.Value.Timestamp = key.Timestamp
+					if seq := mvccValue.KVNemesisSeq.Get(); seq > 0 {
+						w.env.Tracker.Add(key.Key, nil, key.Timestamp, seq)
+					}
+					if err := w.handleValueLocked(ctx, roachpb.Span{Key: key.Key}, mvccValue.Value, nil); err != nil {
+						return err
+					}
+					log.Infof(ctx, `rangefeed AddSSTable %s %s -> %s`,
+						key.Key, key.Timestamp, mvccValue.Value.PrettyPrint())
+				}
+				w.mu.Unlock()
 			default:
 				return errors.Errorf("unknown event: %T", e)
 			}
@@ -204,7 +243,12 @@ func (w *Watcher) handleValue(
 ) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	return w.handleValueLocked(ctx, span, v, prevV)
+}
 
+func (w *Watcher) handleValueLocked(
+	ctx context.Context, span roachpb.Span, v roachpb.Value, prevV *roachpb.Value,
+) error {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, `rangefeed %s %s -> %s`, span, v.Timestamp, v.PrettyPrint())
 	if prevV != nil {
@@ -244,34 +288,36 @@ func (w *Watcher) handleValue(
 
 	// Handle a point write.
 	w.mu.kvs.Put(storage.MVCCKey{Key: span.Key, Timestamp: v.Timestamp}, v.RawBytes)
-	prevTs := v.Timestamp.Prev()
-	getPrevV := w.mu.kvs.Get(span.Key, prevTs)
+	if prevV != nil {
+		prevTs := v.Timestamp.Prev()
+		getPrevV := w.mu.kvs.Get(span.Key, prevTs)
 
-	// RangeFeed doesn't send the timestamps of the previous values back
-	// because changefeeds don't need them. It would likely be easy to
-	// implement, but would add unnecessary allocations in changefeeds,
-	// which don't need them. This means we'd want to make it an option in
-	// the request, which seems silly to do for only this test.
-	getPrevV.Timestamp = hlc.Timestamp{}
-	// Additionally, ensure that deletion tombstones and missing keys are
-	// normalized as the nil slice, so that they can be matched properly
-	// between the RangeFeed and the Engine.
-	if len(prevV.RawBytes) == 0 {
-		prevV.RawBytes = nil
-	}
-	prevValueMismatch := !reflect.DeepEqual(prevV, &getPrevV)
-	var engineContents string
-	if prevValueMismatch {
-		engineContents = w.mu.kvs.DebugPrint("  ")
-	}
+		// RangeFeed doesn't send the timestamps of the previous values back
+		// because changefeeds don't need them. It would likely be easy to
+		// implement, but would add unnecessary allocations in changefeeds,
+		// which don't need them. This means we'd want to make it an option in
+		// the request, which seems silly to do for only this test.
+		getPrevV.Timestamp = hlc.Timestamp{}
+		// Additionally, ensure that deletion tombstones and missing keys are
+		// normalized as the nil slice, so that they can be matched properly
+		// between the RangeFeed and the Engine.
+		if len(prevV.RawBytes) == 0 {
+			prevV.RawBytes = nil
+		}
+		prevValueMismatch := !reflect.DeepEqual(prevV, &getPrevV)
+		var engineContents string
+		if prevValueMismatch {
+			engineContents = w.mu.kvs.DebugPrint("  ")
+		}
 
-	if prevValueMismatch {
-		log.Infof(ctx, "rangefeed mismatch\n%s", engineContents)
-		s := mustGetStringValue(getPrevV.RawBytes)
-		fmt.Println(s)
-		return errors.Errorf(
-			`expected (%s, %s) has previous value %s in kvs, but rangefeed has: %s`,
-			span, prevTs, mustGetStringValue(getPrevV.RawBytes), mustGetStringValue(prevV.RawBytes))
+		if prevValueMismatch {
+			log.Infof(ctx, "rangefeed mismatch\n%s", engineContents)
+			s := mustGetStringValue(getPrevV.RawBytes)
+			fmt.Println(s)
+			return errors.Errorf(
+				`expected (%s, %s) has previous value %s in kvs, but rangefeed has: %s`,
+				span, prevTs, mustGetStringValue(getPrevV.RawBytes), mustGetStringValue(prevV.RawBytes))
+		}
 	}
 	return nil
 }

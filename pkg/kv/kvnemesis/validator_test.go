@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -136,6 +137,8 @@ func TestValidate(t *testing.T) {
 		t5
 	)
 
+	ctx := context.Background()
+
 	vi := func(s kvnemesisutil.Seq) string {
 		return PutOperation{Seq: s}.Value()
 	}
@@ -185,6 +188,23 @@ func TestValidate(t *testing.T) {
 			Key:   []byte(key),
 			Value: roachpb.MakeValueFromString(value).RawBytes,
 		}
+	}
+
+	var sstValueHeader enginepb.MVCCValueHeader
+	sstValueHeader.KVNemesisSeq.Set(s1)
+	sstSpan := roachpb.Span{Key: roachpb.Key(k1), EndKey: roachpb.Key(k4)}
+	sstTS := hlc.Timestamp{WallTime: 1}
+	sstFile := &storage.MemFile{}
+	{
+		st := cluster.MakeTestingClusterSettings()
+		w := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
+		defer w.Close()
+
+		require.NoError(t, w.PutMVCC(storage.MVCCKey{Key: roachpb.Key(k1), Timestamp: sstTS},
+			storage.MVCCValue{MVCCValueHeader: sstValueHeader, Value: roachpb.MakeValueFromString("v1")}))
+		require.NoError(t, w.PutMVCC(storage.MVCCKey{Key: roachpb.Key(k2), Timestamp: sstTS},
+			storage.MVCCValue{MVCCValueHeader: sstValueHeader}))
+		require.NoError(t, w.Finish())
 	}
 
 	tests := []struct {
@@ -1805,6 +1825,16 @@ func TestValidate(t *testing.T) {
 			kvs: kvs(
 				kv(k1, t1, s1),
 				rd(k1, k2, t2, s2),
+			),
+		},
+		{
+			name: "addsstable ingestion",
+			steps: []Step{
+				step(withResultTS(addSSTable(sstFile.Data(), sstSpan, sstTS, sstValueHeader.KVNemesisSeq.Get(), false), t1)),
+			},
+			kvs: kvs(
+				kv(k1, t1, s1),
+				tombstone(k2, t1, s1),
 			),
 		},
 	}
