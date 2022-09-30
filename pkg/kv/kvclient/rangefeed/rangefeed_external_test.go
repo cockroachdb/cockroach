@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,6 +42,10 @@ import (
 var (
 	pointKV = storageutils.PointKV
 	rangeKV = storageutils.RangeKV
+
+	// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
+	// bugs in time-bound iterators.
+	smallEngineBlocks = util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 )
 
 type kvs = storageutils.KVs
@@ -564,7 +569,15 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					SmallEngineBlocks: smallEngineBlocks,
+				},
+			},
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 	srv := tc.Server(0)
 	db := srv.DB()
@@ -653,7 +666,15 @@ func TestWithOnDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					SmallEngineBlocks: smallEngineBlocks,
+				},
+			},
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 	srv := tc.Server(0)
 	db := srv.DB()
