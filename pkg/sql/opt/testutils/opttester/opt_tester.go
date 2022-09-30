@@ -285,6 +285,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData().InsertFastPath = true
 	ot.evalCtx.SessionData().OptSplitScanLimit = tabledesc.MaxBucketAllowed
+	ot.evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
 
 	return ot
 }
