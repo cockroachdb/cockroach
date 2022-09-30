@@ -222,7 +222,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 	// cluster-level overfull threshold of QPS.
 	qpsMaxThreshold := allocatorimpl.OverfullQPSThreshold(options, allStoresList.CandidateQueriesPerSecond.Mean)
 	if !(localDesc.Capacity.QueriesPerSecond > qpsMaxThreshold) {
-		log.KvDistribution.Infof(ctx, "local QPS %.2f is below max threshold %.2f (mean=%.2f); no rebalancing needed",
+		log.KvDistribution.VEventf(ctx, 1, "local QPS %.2f is below max threshold %.2f (mean=%.2f); no rebalancing needed",
 			localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold, allStoresList.CandidateQueriesPerSecond.Mean)
 		return
 	}
