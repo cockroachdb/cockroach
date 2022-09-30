@@ -250,7 +250,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// write (s3 agrees with s1).
 	diffKey := []byte("e")
 	var diffTimestamp hlc.Timestamp
-	notifyReportDiff := make(chan struct{}, 1)
+	notifyReportDiff := make(chan struct{})
 	testKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff =
 		func(s roachpb.StoreIdent, diff kvserver.ReplicaSnapshotDiffSlice) {
 			rangeDesc := tc.LookupRangeOrFatal(t, diffKey)
@@ -293,17 +293,17 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 				t.Errorf("expected:\n%s\ngot:\n%s", exp, act)
 			}
 
-			notifyReportDiff <- struct{}{}
+			close(notifyReportDiff)
 		}
 	// s2 (index 1) will panic.
-	notifyFatal := make(chan struct{}, 1)
+	notifyFatal := make(chan struct{})
 	testKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal = func(s roachpb.StoreIdent) {
 		store := tc.GetFirstStoreFromServer(t, 1)
 		if s != *store.Ident {
 			t.Errorf("OnBadChecksumFatal called from %v", s)
 			return
 		}
-		notifyFatal <- struct{}{}
+		close(notifyFatal)
 	}
 
 	serverArgsPerNode := make(map[int]base.TestServerArgs)
