@@ -170,6 +170,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
+		defer p.curPlan.close(ctx)
 
 		evalCtx := p.ExtendedEvalContext()
 		// We need distribute = true so that executing the plan involves marshaling

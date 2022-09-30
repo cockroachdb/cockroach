@@ -131,6 +131,7 @@ func (dsp *DistSQLPlanner) Exec(
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}
+	defer p.curPlan.close(ctx)
 	rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		return nil
 	})

@@ -228,7 +228,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 }
 
 // clearRightRows clears rightRows and resets rightRowsIterator. This function
-// must be called before reusing rightRows and rightRowIterator.
+// must be called before reusing rightRows and rightRowsIterator.
 func (a *applyJoinNode) clearRightRows(params runParams) error {
 	if err := a.run.rightRows.Clear(params.ctx); err != nil {
 		return err
@@ -265,6 +265,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 func runPlanInsidePlan(
 	ctx context.Context, params runParams, plan *planComponents, resultWriter rowResultWriter,
 ) error {
+	defer plan.close(ctx)
 	recv := MakeDistSQLReceiver(
 		ctx, resultWriter, tree.Rows,
 		params.ExecCfg().RangeDescriptorCache,
