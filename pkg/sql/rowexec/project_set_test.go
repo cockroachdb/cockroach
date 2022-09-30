@@ -164,6 +164,7 @@ func BenchmarkProjectSet(b *testing.B) {
 				flowCtx := execinfra.FlowCtx{
 					Cfg:     &execinfra.ServerConfig{Settings: st},
 					EvalCtx: &evalCtx,
+					Mon:     evalCtx.TestingMon,
 				}
 
 				in := distsqlutils.NewRowBuffer(c.inputTypes, c.input, distsqlutils.RowBufferArgs{})

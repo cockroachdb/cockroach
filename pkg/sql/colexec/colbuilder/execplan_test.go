@@ -77,6 +77,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	txn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 		},

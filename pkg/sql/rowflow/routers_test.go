@@ -67,6 +67,7 @@ func setupRouter(
 			Settings: st,
 		},
 		EvalCtx:     evalCtx,
+		Mon:         evalCtx.TestingMon,
 		DiskMonitor: diskMonitor,
 	}
 	r.init(ctx, &flowCtx, inputTypes)
@@ -676,6 +677,7 @@ func TestRouterBlocks(t *testing.T) {
 					Settings: st,
 				},
 				EvalCtx:     &evalCtx,
+				Mon:         evalCtx.TestingMon,
 				DiskMonitor: diskMonitor,
 			}
 			router.init(ctx, &flowCtx, colTypes)
@@ -786,6 +788,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
