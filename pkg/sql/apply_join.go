@@ -57,6 +57,10 @@ type applyJoinNode struct {
 	// performed the apply join so far).
 	iterationCount int
 
+	// lastRightSidePlan if non-nil is the last plan that was returned by
+	// planRightSideFn and hasn't been closed yet.
+	lastRightSidePlan *planComponents
+
 	run struct {
 		// emptyRight is a cached, all-NULL slice that's used for left outer joins
 		// in the case of finding no match on the left.
@@ -228,7 +232,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 }
 
 // clearRightRows clears rightRows and resets rightRowsIterator. This function
-// must be called before reusing rightRows and rightRowIterator.
+// must be called before reusing rightRows and rightRowsIterator.
 func (a *applyJoinNode) clearRightRows(params runParams) error {
 	if err := a.run.rightRows.Clear(params.ctx); err != nil {
 		return err
@@ -252,6 +256,10 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 		return err
 	}
 	plan := p.(*planComponents)
+	if a.lastRightSidePlan != nil {
+		a.lastRightSidePlan.close(ctx)
+	}
+	a.lastRightSidePlan = plan
 	rowResultWriter := NewRowResultWriter(&a.run.rightRows)
 	if err := runPlanInsidePlan(ctx, params, plan, rowResultWriter); err != nil {
 		return err
@@ -342,6 +350,10 @@ func (a *applyJoinNode) Values() tree.Datums {
 
 func (a *applyJoinNode) Close(ctx context.Context) {
 	a.input.plan.Close(ctx)
+	if a.lastRightSidePlan != nil {
+		a.lastRightSidePlan.close(ctx)
+		a.lastRightSidePlan = nil
+	}
 	a.run.rightRows.Close(ctx)
 	if a.run.rightRowsIterator != nil {
 		a.run.rightRowsIterator.Close()
