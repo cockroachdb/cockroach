@@ -128,6 +128,12 @@ func (r *Request) isConditional() bool {
 	return r.minExecutionLatency != 0
 }
 
+// continueCollecting returns true if we want to continue collecting bundles for
+// this request. Notably it doesn't check whether the request has expired.
+func (r *Request) continueCollecting(st *cluster.Settings) bool {
+	return collectUntilExpiration.Get(&st.SV) && r.samplingProbability != 0 && !r.expiresAt.IsZero()
+}
+
 // NewRegistry constructs a new Registry.
 func NewRegistry(ie sqlutil.InternalExecutor, db *kv.DB, st *cluster.Settings) *Registry {
 	r := &Registry{
@@ -411,35 +417,33 @@ func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
 }
 
 // IsExecLatencyConditionMet returns true if the completed request's execution
-// latency satisfies the request's condition. If false is returned, it inlines
-// the logic of RemoveOngoing.
+// latency satisfies the request's condition. The request is automatically
+// removed from the registry (unless the continuous collection is enabled and
+// the request hasn't expired).
 func (r *Registry) IsExecLatencyConditionMet(
 	requestID RequestID, req Request, execLatency time.Duration,
 ) bool {
+	expired := req.isExpired(timeutil.Now())
+	shouldRemove := expired
+	defer func() {
+		if shouldRemove {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			if req.isConditional() {
+				delete(r.mu.requestFingerprints, requestID)
+			} else {
+				delete(r.mu.unconditionalOngoing, requestID)
+			}
+		}
+	}()
 	if req.minExecutionLatency <= execLatency {
+		// The request is satisfied. We should remove the request from the
+		// registry unless we want to continue collecting bundles for this
+		// request.
+		shouldRemove = shouldRemove || !req.continueCollecting(r.st)
 		return true
 	}
-	// This is a conditional request and the condition is not satisfied, so we
-	// only need to remove the request if it has expired.
-	if req.isExpired(timeutil.Now()) {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		delete(r.mu.requestFingerprints, requestID)
-	}
 	return false
-}
-
-// RemoveOngoing removes the given request from the list of ongoing queries.
-func (r *Registry) RemoveOngoing(requestID RequestID, req Request) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if req.isConditional() {
-		if req.isExpired(timeutil.Now()) {
-			delete(r.mu.requestFingerprints, requestID)
-		}
-	} else {
-		delete(r.mu.unconditionalOngoing, requestID)
-	}
 }
 
 // ShouldCollectDiagnostics checks whether any data should be collected for the
