@@ -153,8 +153,12 @@ func (b *ConstraintBuilder) Build(
 	rightEqSet := rightEq.ToSet()
 
 	// Retrieve the inequality columns from onFilters.
-	rightCmp, inequalityFilterOrds :=
-		memo.ExtractJoinInequalityRightColumnsWithFilterOrds(b.leftCols, b.rightCols, onFilters)
+	var rightCmp opt.ColList
+	var inequalityFilterOrds []int
+	if b.evalCtx.SessionData().VariableInequalityLookupJoinEnabled {
+		rightCmp, inequalityFilterOrds =
+			memo.ExtractJoinInequalityRightColumnsWithFilterOrds(b.leftCols, b.rightCols, onFilters)
+	}
 
 	allFilters := append(onFilters, optionalFilters...)
 
