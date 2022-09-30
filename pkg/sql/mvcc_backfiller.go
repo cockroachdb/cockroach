@@ -127,7 +127,7 @@ func (im *IndexBackfillerMergePlanner) plan(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		sd := NewFakeSessionData(im.execCfg.SV())
-		evalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.ReadTimestamp(), descriptors)
+		evalCtx = createSchemaChangeEvalCtx(im.execCfg, sd, txn.ReadTimestamp(), descriptors)
 		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
 			DistributionTypeSystemTenantOnly)
 

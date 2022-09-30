@@ -130,9 +130,6 @@ type Context struct {
 	// need to restore once we finish evaluating it.
 	iVarContainerStack []tree.IndexedVarContainer
 
-	// Context holds the context in which the expression is evaluated.
-	Context context.Context
-
 	Planner Planner
 
 	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
@@ -280,7 +277,9 @@ func (ec *Context) MustGetPlaceholderValue(p *tree.Placeholder) tree.Datum {
 	if !ok {
 		panic(errors.AssertionFailedf("fail"))
 	}
-	out, err := Expr(ec.Context, ec, e)
+	// It is very painful to propagate context.Context into this method since it
+	// requires adding it as an argument to hundreds (maybe more) of places.
+	out, err := Expr(context.TODO(), ec, e)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "fail"))
 	}
@@ -315,7 +314,6 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	ctx.TestingMon = monitor
 	ctx.Planner = &fakePlannerWithMonitor{monitor: monitor}
-	ctx.Context = context.TODO()
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
@@ -641,7 +639,10 @@ func arrayOfType(typ *types.T) (*tree.DArray, error) {
 func UnwrapDatum(evalCtx *Context, d tree.Datum) tree.Datum {
 	d = tree.UnwrapDOidWrapper(d)
 	if p, ok := d.(*tree.Placeholder); ok && evalCtx != nil && evalCtx.HasPlaceholders() {
-		ret, err := Expr(evalCtx.Context, evalCtx, p)
+		// It is very painful to propagate context.Context into this method
+		// since it requires adding it as an argument to hundreds (maybe more)
+		// of places.
+		ret, err := Expr(context.TODO(), evalCtx, p)
 		if err != nil {
 			// If we fail to evaluate the placeholder, it's because we don't have
 			// a placeholder available. Just return the placeholder and someone else

@@ -11,8 +11,6 @@
 package scbuild
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -41,14 +39,13 @@ func newSemaCtx(d Dependencies) *tree.SemaContext {
 
 // EvalCtx implements the scbuildstmt.TreeContextBuilder interface.
 func (b buildCtx) EvalCtx() *eval.Context {
-	return newEvalCtx(b.Context, b.Dependencies)
+	return newEvalCtx(b.Dependencies)
 }
 
-func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
+func newEvalCtx(d Dependencies) *eval.Context {
 	return &eval.Context{
 		ClusterID:          d.ClusterID(),
 		SessionDataStack:   sessiondata.NewStack(d.SessionData()),
-		Context:            ctx,
 		Planner:            &faketreeeval.DummyEvalPlanner{},
 		PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
 		SessionAccessor:    &faketreeeval.DummySessionAccessor{},

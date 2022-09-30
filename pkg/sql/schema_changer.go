@@ -2478,7 +2478,6 @@ func (sc *SchemaChanger) txnWithExecutor(
 // used in the surrounding SQL session, so session tracing is unable
 // to capture schema change activity.
 func createSchemaChangeEvalCtx(
-	ctx context.Context,
 	execCfg *ExecutorConfig,
 	sd *sessiondata.SessionData,
 	ts hlc.Timestamp,
@@ -2492,10 +2491,7 @@ func createSchemaChangeEvalCtx(
 		ExecCfg: execCfg,
 		Descs:   descriptors,
 		Context: eval.Context{
-			SessionDataStack: sessiondata.NewStack(sd),
-			// TODO(andrei): This is wrong (just like on the main code path on
-			// setupFlow). Each processor should override Ctx with its own context.
-			Context:            ctx,
+			SessionDataStack:   sessiondata.NewStack(sd),
 			Planner:            &faketreeeval.DummyEvalPlanner{},
 			PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
 			SessionAccessor:    &faketreeeval.DummySessionAccessor{},

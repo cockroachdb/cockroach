@@ -378,7 +378,7 @@ func newInternalPlanner(
 		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
 	}
 
-	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg)
+	p.extendedEvalCtx = internalExtendedEvalCtx(sds, params.collection, txn, ts, ts, execCfg)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
 	p.extendedEvalCtx.SessionAccessor = p
@@ -436,7 +436,6 @@ func newInternalPlanner(
 // there's no session to speak of here, different fields are filled in here to
 // keep the tests using the internal planner passing.
 func internalExtendedEvalCtx(
-	ctx context.Context,
 	sds *sessiondata.Stack,
 	tables *descs.Collection,
 	txn *kv.Txn,
@@ -475,7 +474,6 @@ func internalExtendedEvalCtx(
 			TxnReadOnly:                    false,
 			TxnImplicit:                    true,
 			TxnIsSingleStmt:                true,
-			Context:                        ctx,
 			TestingKnobs:                   evalContextTestingKnobs,
 			StmtTimestamp:                  stmtTimestamp,
 			TxnTimestamp:                   txnTimestamp,

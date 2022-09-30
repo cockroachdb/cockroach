@@ -264,8 +264,6 @@ func (ih *instrumentationHelper) Setup(
 			// the helper setup.
 			ih.traceMetadata = make(execNodeTraceMetadata)
 		}
-		// Make sure that the builtins use the correct context.
-		ih.evalCtx.Context = newCtx
 	}()
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {

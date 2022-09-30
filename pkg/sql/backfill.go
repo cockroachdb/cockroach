@@ -155,7 +155,7 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 			ie sqlutil.InternalExecutor,
 		) error {
 			// We need to re-create the evalCtx since the txn may retry.
-			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, readAsOf, descriptors)
+			evalCtx := createSchemaChangeEvalCtx(sc.execCfg, sd, readAsOf, descriptors)
 			return retryable(ctx, txn, &evalCtx, ie)
 		})
 	}
@@ -1024,7 +1024,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			return err
 		}
 		sd := NewFakeSessionData(sc.execCfg.SV())
-		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.ReadTimestamp(), descriptors)
+		evalCtx = createSchemaChangeEvalCtx(sc.execCfg, sd, txn.ReadTimestamp(), descriptors)
 		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil, /* planner */
 			txn, DistributionTypeSystemTenantOnly)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
@@ -1321,7 +1321,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 			}
 			cbw := MetadataCallbackWriter{rowResultWriter: &errOnlyResultWriter{}, fn: metaFn}
 			sd := NewFakeSessionData(sc.execCfg.SV())
-			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, sd, txn.ReadTimestamp(), descriptors)
+			evalCtx := createSchemaChangeEvalCtx(sc.execCfg, sd, txn.ReadTimestamp(), descriptors)
 			recv := MakeDistSQLReceiver(
 				ctx,
 				&cbw,
