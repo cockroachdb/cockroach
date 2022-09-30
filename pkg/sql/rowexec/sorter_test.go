@@ -375,7 +375,7 @@ func TestSortInvalidLimit(t *testing.T) {
 		var k uint64
 		// All arguments apart from spec and post are not necessary.
 		if _, err := newSortTopKProcessor(
-			nil, 0, &spec, nil, nil, nil, k,
+			context.Background(), nil, 0, &spec, nil, nil, nil, k,
 		); !testutils.IsError(err, errSortTopKZeroK.Error()) {
 			t.Fatalf("unexpected error %v, expected %v", err, errSortTopKZeroK)
 		}

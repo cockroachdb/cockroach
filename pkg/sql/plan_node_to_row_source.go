@@ -97,9 +97,13 @@ func (p *planNodeToRowSource) MustBeStreaming() bool {
 
 // InitWithOutput implements the LocalProcessor interface.
 func (p *planNodeToRowSource) InitWithOutput(
-	flowCtx *execinfra.FlowCtx, post *execinfrapb.PostProcessSpec, output execinfra.RowReceiver,
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	post *execinfrapb.PostProcessSpec,
+	output execinfra.RowReceiver,
 ) error {
 	return p.InitWithEvalCtx(
+		ctx,
 		p,
 		post,
 		p.outputTypes,

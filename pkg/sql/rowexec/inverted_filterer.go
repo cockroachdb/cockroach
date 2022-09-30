@@ -69,6 +69,7 @@ var _ execopnode.OpNode = &invertedFilterer{}
 const invertedFiltererProcName = "inverted filterer"
 
 func newInvertedFilterer(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.InvertedFiltererSpec,
@@ -96,7 +97,7 @@ func newInvertedFilterer(
 
 	// Initialize ProcessorBase.
 	if err := ifr.ProcessorBase.Init(
-		ifr, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
+		ctx, ifr, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ifr.input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
@@ -108,7 +109,6 @@ func newInvertedFilterer(
 		return nil, err
 	}
 
-	ctx := flowCtx.EvalCtx.Ctx()
 	// Initialize memory monitor and row container for input rows.
 	ifr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "inverted-filterer-limited")
 	ifr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "inverted-filterer-disk")
@@ -121,7 +121,7 @@ func newInvertedFilterer(
 		ifr.diskMonitor,
 	)
 
-	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		ifr.input = newInputStatCollector(ifr.input)
 		ifr.ExecStatsForTrace = ifr.execStatsForTrace
 	}
@@ -130,7 +130,7 @@ func newInvertedFilterer(
 		semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
 		var exprHelper execinfrapb.ExprHelper
 		colTypes := []*types.T{spec.PreFiltererSpec.Type}
-		if err := exprHelper.Init(spec.PreFiltererSpec.Expression, colTypes, semaCtx, ifr.EvalCtx); err != nil {
+		if err := exprHelper.Init(ctx, spec.PreFiltererSpec.Expression, colTypes, semaCtx, ifr.EvalCtx); err != nil {
 			return nil, err
 		}
 		preFilterer, preFiltererState, err := invertedidx.NewBoundPreFilterer(

@@ -11,6 +11,7 @@
 package colexecagg
 
 import (
+	"context"
 	"unsafe"
 
 	"github.com/cockroachdb/apd/v3"
@@ -443,6 +444,7 @@ type aggAllocBase struct {
 //
 // evalCtx will not be mutated.
 func ProcessAggregations(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	aggregations []execinfrapb.AggregatorSpec_Aggregation,
@@ -458,7 +460,7 @@ func ProcessAggregations(
 	outputTypes = make([]*types.T, len(aggregations))
 	for i, aggFn := range aggregations {
 		constructors[i], constArguments[i], outputTypes[i], err = execagg.GetAggregateConstructor(
-			evalCtx, semaCtx, &aggFn, inputTypes,
+			ctx, evalCtx, semaCtx, &aggFn, inputTypes,
 		)
 		if err != nil {
 			return

@@ -11,6 +11,7 @@
 package invertedidx_test
 
 import (
+	"context"
 	"math"
 	"strconv"
 	"testing"
@@ -292,7 +293,7 @@ func TestTryJoinGeoIndex(t *testing.T) {
 		}
 
 		actInvertedExpr := invertedidx.TryJoinInvertedIndex(
-			evalCtx.Context, &f, filters, tab2, md.Table(tab2).Index(tc.indexOrd), inputCols,
+			context.Background(), &f, filters, tab2, md.Table(tab2).Index(tc.indexOrd), inputCols,
 		)
 
 		if actInvertedExpr == nil {

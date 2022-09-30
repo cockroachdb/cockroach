@@ -11,6 +11,8 @@
 package distribution
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -22,7 +24,9 @@ import (
 
 // CanProvide returns true if the given operator returns rows that can
 // satisfy the given required distribution.
-func CanProvide(evalCtx *eval.Context, expr memo.RelExpr, required *physical.Distribution) bool {
+func CanProvide(
+	ctx context.Context, evalCtx *eval.Context, expr memo.RelExpr, required *physical.Distribution,
+) bool {
 	if required.Any() {
 		return true
 	}
@@ -40,7 +44,7 @@ func CanProvide(evalCtx *eval.Context, expr memo.RelExpr, required *physical.Dis
 
 	case *memo.ScanExpr:
 		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
-		provided.FromIndexScan(evalCtx, tabMeta, t.Index, t.Constraint)
+		provided.FromIndexScan(ctx, evalCtx, tabMeta, t.Index, t.Constraint)
 
 	case *memo.LookupJoinExpr:
 		if t.LocalityOptimized {
@@ -86,7 +90,7 @@ func BuildChildRequired(
 // This function assumes that the provided distributions have already been set in
 // the children of the expression.
 func BuildProvided(
-	evalCtx *eval.Context, expr memo.RelExpr, required *physical.Distribution,
+	ctx context.Context, evalCtx *eval.Context, expr memo.RelExpr, required *physical.Distribution,
 ) physical.Distribution {
 	var provided physical.Distribution
 	switch t := expr.(type) {
@@ -98,7 +102,7 @@ func BuildProvided(
 
 	case *memo.ScanExpr:
 		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
-		provided.FromIndexScan(evalCtx, tabMeta, t.Index, t.Constraint)
+		provided.FromIndexScan(ctx, evalCtx, tabMeta, t.Index, t.Constraint)
 
 	default:
 		// TODO(msirek): Clarify the distinction between a distribution which can
@@ -141,7 +145,7 @@ func GetDEnumAsStringFromConstantExpr(expr opt.Expr) (enumAsString string, ok bo
 // from performing lookups of a LookupJoin, if that distribution can be
 // statically determined.
 func BuildLookupJoinLookupTableDistribution(
-	evalCtx *eval.Context, lookupJoin *memo.LookupJoinExpr,
+	ctx context.Context, evalCtx *eval.Context, lookupJoin *memo.LookupJoinExpr,
 ) (provided physical.Distribution) {
 	lookupTableMeta := lookupJoin.Memo().Metadata().TableMeta(lookupJoin.Table)
 	lookupTable := lookupTableMeta.Table
@@ -186,7 +190,7 @@ func BuildLookupJoinLookupTableDistribution(
 			}
 		}
 	}
-	provided.FromIndexScan(evalCtx, lookupTableMeta, lookupJoin.Index, nil)
+	provided.FromIndexScan(ctx, evalCtx, lookupTableMeta, lookupJoin.Index, nil)
 	return provided
 }
 
@@ -194,7 +198,7 @@ func BuildLookupJoinLookupTableDistribution(
 // from performing lookups of an inverted join, if that distribution can be
 // statically determined.
 func BuildInvertedJoinLookupTableDistribution(
-	evalCtx *eval.Context, invertedJoin *memo.InvertedJoinExpr,
+	ctx context.Context, evalCtx *eval.Context, invertedJoin *memo.InvertedJoinExpr,
 ) (provided physical.Distribution) {
 	lookupTableMeta := invertedJoin.Memo().Metadata().TableMeta(invertedJoin.Table)
 	lookupTable := lookupTableMeta.Table
@@ -215,7 +219,7 @@ func BuildInvertedJoinLookupTableDistribution(
 			}
 		}
 	}
-	provided.FromIndexScan(evalCtx, lookupTableMeta, invertedJoin.Index, nil)
+	provided.FromIndexScan(ctx, evalCtx, lookupTableMeta, invertedJoin.Index, nil)
 	return provided
 }
 

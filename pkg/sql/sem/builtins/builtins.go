@@ -6630,7 +6630,7 @@ table's zone configuration this will return NULL.`,
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				state := tree.MustBeDBytes(args[0])
-				return evalCtx.Planner.DeserializeSessionState(tree.NewDBytes(state))
+				return evalCtx.Planner.DeserializeSessionState(evalCtx.Ctx(), tree.NewDBytes(state))
 			},
 			Info:       `This function deserializes the serialized variables into the current session.`,
 			Volatility: volatility.Volatile,

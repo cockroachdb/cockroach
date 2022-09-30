@@ -233,6 +233,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.implicitTxn = implicitTxn
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
+	ih.evalCtx = p.EvalContext()
 
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
@@ -263,6 +264,8 @@ func (ih *instrumentationHelper) Setup(
 			// the helper setup.
 			ih.traceMetadata = make(execNodeTraceMetadata)
 		}
+		// Make sure that the builtins use the correct context.
+		ih.evalCtx.Context = newCtx
 	}()
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
@@ -309,7 +312,6 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	ih.collectExecStats = true
-	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(tracingpb.RecordingVerbose))
 	ih.shouldFinishSpan = true
 	return newCtx, true
@@ -372,7 +374,7 @@ func (ih *instrumentationHelper) Finish(
 			)
 			warnings = ob.GetWarnings()
 			bundle = buildStatementBundle(
-				ih.origCtx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
+				ctx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
 			)
 			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest)
 			ih.stmtDiagnosticsRecorder.RemoveOngoing(ih.diagRequestID, ih.diagRequest)

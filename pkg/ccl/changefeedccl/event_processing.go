@@ -166,7 +166,7 @@ func newKVEventToRowConsumer(
 			return nil, err
 		}
 		safeExpr = tree.AsString(expr)
-		evaluator, err = cdceval.NewEvaluator(evalCtx, expr)
+		evaluator, err = cdceval.NewEvaluator(ctx, evalCtx, expr)
 		if err != nil {
 			return nil, err
 		}
@@ -319,9 +319,14 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 			return err
 		}
 	}
+
+	// Since we're done processing/converting this event, and will not use much more
+	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
+	a := ev.DetachAlloc()
+	a.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
+
 	if err := c.sink.EmitRow(
-		ctx, topic,
-		keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, ev.DetachAlloc(),
+		ctx, topic, keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, a,
 	); err != nil {
 		return err
 	}

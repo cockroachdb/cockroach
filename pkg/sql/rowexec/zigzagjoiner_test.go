@@ -706,7 +706,7 @@ func TestZigzagJoiner(t *testing.T) {
 
 			out := &distsqlutils.RowBuffer{}
 			post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
-			z, err := newZigzagJoiner(&flowCtx, 0 /* processorID */, &c.spec, c.fixedValues, &post, out)
+			z, err := newZigzagJoiner(ctx, &flowCtx, 0 /* processorID */, &c.spec, c.fixedValues, &post, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -780,6 +780,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 
 	testReaderProcessorDrain(ctx, t, func(out execinfra.RowReceiver) (execinfra.Processor, error) {
 		return newZigzagJoiner(
+			ctx,
 			&flowCtx,
 			0, /* processorID */
 			&execinfrapb.ZigzagJoinerSpec{

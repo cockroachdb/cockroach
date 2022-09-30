@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -445,6 +446,13 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	for i := 0; i < numStores; i++ {
 		cps := onDiskCheckpointPaths(i)
 		assert.Len(t, cps, 1)
+		metric := tc.GetFirstStoreFromServer(t, i).Metrics().RdbCheckpoints
+		testutils.SucceedsSoon(t, func() error {
+			if got, want := metric.Value(), int64(1); got != want {
+				return errors.Errorf("%s is %d, want %d", metric.Name, got, want)
+			}
+			return nil
+		})
 
 		// Create a new store on top of checkpoint location inside existing in mem
 		// VFS to verify its contents.

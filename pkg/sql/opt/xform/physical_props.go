@@ -11,6 +11,7 @@
 package xform
 
 import (
+	"context"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -34,12 +35,12 @@ import (
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
 func CanProvidePhysicalProps(
-	evalCtx *eval.Context, e memo.RelExpr, required *physical.Required,
+	ctx context.Context, evalCtx *eval.Context, e memo.RelExpr, required *physical.Required,
 ) bool {
 	// All operators can provide the Presentation and LimitHint properties, so no
 	// need to check for that.
 	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
-	canProvideDistribution := e.Op() == opt.DistributeOp || distribution.CanProvide(evalCtx, e, &required.Distribution)
+	canProvideDistribution := e.Op() == opt.DistributeOp || distribution.CanProvide(ctx, evalCtx, e, &required.Distribution)
 	return canProvideOrdering && canProvideDistribution
 }
 

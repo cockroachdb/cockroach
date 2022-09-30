@@ -100,7 +100,7 @@ func TestExternalHashAggregator(t *testing.T) {
 			}
 			log.Infof(ctx, "diskSpillingEnabled=%t/spillForced=%t/memoryLimitBytes=%d/numRepartitions=%d/%s", cfg.diskSpillingEnabled, cfg.spillForced, cfg.memoryLimitBytes, numForcedRepartitions, tc.name)
 			constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
-				&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
+				ctx, &evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 			)
 			require.NoError(t, err)
 			verifier := colexectestutils.OrderedVerifier

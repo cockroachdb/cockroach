@@ -76,6 +76,7 @@ var trPool = sync.Pool{
 
 // newTableReader creates a tableReader.
 func newTableReader(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	spec *execinfrapb.TableReaderSpec,
@@ -112,7 +113,7 @@ func newTableReader(
 	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
 	for i := range spec.FetchSpec.KeyAndSuffixColumns {
 		if err := typedesc.EnsureTypeIsHydrated(
-			flowCtx.EvalCtx.Ctx(), spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
+			ctx, spec.FetchSpec.KeyAndSuffixColumns[i].Type, &resolver,
 		); err != nil {
 			return nil, err
 		}
@@ -125,6 +126,7 @@ func newTableReader(
 
 	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
+		ctx,
 		tr,
 		post,
 		resultTypes,
@@ -146,7 +148,7 @@ func newTableReader(
 
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
-		flowCtx.EvalCtx.Context,
+		ctx,
 		row.FetcherInitArgs{
 			Txn:                        flowCtx.Txn,
 			Reverse:                    spec.Reverse,
@@ -170,7 +172,7 @@ func newTableReader(
 		tr.MakeSpansCopy()
 	}
 
-	if execstats.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx.CollectStats) {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		tr.fetcher = newRowFetcherStatCollector(&fetcher)
 		tr.ExecStatsForTrace = tr.execStatsForTrace
 	} else {

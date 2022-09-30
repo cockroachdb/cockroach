@@ -63,6 +63,7 @@ go_test(
         "//pkg/util/quotapool",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

@@ -13,6 +13,8 @@
 package storageparam
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -41,7 +43,11 @@ type Setter interface {
 // Set sets the given storage parameters using the
 // given observer.
 func Set(
-	semaCtx *tree.SemaContext, evalCtx *eval.Context, params tree.StorageParams, setter Setter,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	params tree.StorageParams,
+	setter Setter,
 ) error {
 	for _, sp := range params {
 		key := string(sp.Key)
@@ -55,7 +61,7 @@ func Set(
 		expr := paramparse.UnresolvedNameToStrVal(sp.Value)
 
 		// Convert the expressions to a datum.
-		typedExpr, err := tree.TypeCheck(evalCtx.Context, expr, semaCtx, types.Any)
+		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
 		if err != nil {
 			return err
 		}

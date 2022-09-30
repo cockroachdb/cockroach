@@ -12,6 +12,7 @@ package physical
 
 import (
 	"bytes"
+	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -110,7 +111,11 @@ func (d *Distribution) FromLocality(locality roachpb.Locality) {
 // FromIndexScan sets the Distribution that results from scanning the given
 // index with the given constraint c (c can be nil).
 func (d *Distribution) FromIndexScan(
-	evalCtx *eval.Context, tabMeta *opt.TableMeta, ord cat.IndexOrdinal, c *constraint.Constraint,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	tabMeta *opt.TableMeta,
+	ord cat.IndexOrdinal,
+	c *constraint.Constraint,
 ) {
 	tab := tabMeta.Table
 	index := tab.Index(ord)
@@ -183,7 +188,7 @@ func (d *Distribution) FromIndexScan(
 		if !regionsPopulated {
 			// If the above methods failed to find a distribution, then the
 			// distribution is all regions in the database.
-			regionsNames, ok := tabMeta.GetRegionsInDatabase(evalCtx.Planner)
+			regionsNames, ok := tabMeta.GetRegionsInDatabase(ctx, evalCtx.Planner)
 			if !ok && evalCtx.SessionData().EnforceHomeRegion {
 				err := pgerror.New(pgcode.QueryHasNoHomeRegion,
 					"Query has no home region. Try accessing only tables defined in multi-region databases.")
