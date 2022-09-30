@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
@@ -210,10 +211,6 @@ func TestJSONRoundTrip(t *testing.T) {
 		`"\uffff"`,
 		`"\\"`,
 		`"\""`,
-		// We don't expect to get any invalid UTF8, but check one anyway. We could do
-		// a validation that the input is valid UTF8, but that seems wasteful when it
-		// should be checked higher up.
-		string([]byte{'"', 0xa7, '"'}),
 		`[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]`,
 	}
 	for i, tc := range testCases {
@@ -243,6 +240,30 @@ func TestJSONRoundTrip(t *testing.T) {
 			}
 		})
 	}
+
+	for _, impl := range []ParseJSONImplType{UseStdGoJSON, UseJSONIter} {
+		t.Run(fmt.Sprintf("invalid utf/%s", impl), func(t *testing.T) {
+			defer TestingSetParseJSONImpl(impl)()
+			// We don't expect to get any invalid UTF8, but check one anyway. We could do
+			// a validation that the input is valid UTF8, but that seems wasteful when it
+			// should be checked higher up.
+			invalid := string([]byte{'"', 0xa7, '"'})
+
+			j, err := ParseJSON(invalid)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			expect := string([]rune{'"', utf8.RuneError, '"'})
+			runDecodedAndEncoded(t, "invalid utf", j, func(t *testing.T, j JSON) {
+				j2, err := ParseJSON(j.String())
+				if err != nil {
+					t.Fatalf("error while parsing %v: %s", j.String(), err)
+				}
+				require.Equal(t, expect, j2.String())
+			})
+		})
+	}
 }
 
 func TestJSONErrors(t *testing.T) {
@@ -255,15 +276,17 @@ func TestJSONErrors(t *testing.T) {
 		{`1 2 3`, `trailing characters after JSON document`},
 		// Here the decoder just grabs the 0 and leaves the 1. JSON numbers can't have
 		// leading 0s.
-		{`01`, `trailing characters after JSON document`},
-		{`{foo: 1}`, `invalid character 'f' looking for beginning of object key string`},
-		{`{'foo': 1}`, `invalid character '\'' looking for beginning of object key string`},
-		{`{"foo": 01}`, `invalid character '1' after object key:value pair`},
-		{`{`, `unexpected EOF`},
-		{`"\v"`, `invalid character 'v' in string escape code`},
-		{`"\x00"`, `invalid character 'x' in string escape code`},
-		{string([]byte{'"', '\n', '"'}), `invalid character`},
-		{string([]byte{'"', 8, '"'}), `invalid character`},
+		{`01`, `leading 0 not allowed`},
+		{`--01`, `could not parse: --01`},
+		{`-`, `unable to decode JSON`},
+		{`{foo: 1}`, `expect " after {, but found f`},
+		{`{'foo': 1}`, `expect " after {, but found '`},
+		{`{"foo": 01}`, `leading 0 not allowed`},
+		{`{`, `unable to decode JSON`},
+		{`"\v"`, `invalid escape char after \`},
+		{`"\x00"`, `invalid escape char after \`},
+		{string([]byte{'"', '\n', '"'}), `invalid control character`},
+		{string([]byte{'"', 8, '"'}), `invalid control character`},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
@@ -855,7 +878,7 @@ func TestJSONExists(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		left, err := Random(20, rng)
 		require.NoError(t, err)
-		right := randomJSONString(rng).(string)
+		right := randomJSONString(rng, defaultRandStrLen).(string)
 		require.NoError(t, err)
 
 		var exists bool
@@ -1860,7 +1883,7 @@ func TestEncodeExistsJSONInvertedIndexSpans(t *testing.T) {
 		// Generate two random JSONs and evaluate the result of `left ? right`.
 		left, err := Random(20, rng)
 		require.NoError(t, err)
-		right := randomJSONString(rng).(string)
+		right := randomJSONString(rng, defaultRandStrLen).(string)
 		require.NoError(t, err)
 
 		var exists bool
