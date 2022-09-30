@@ -19,9 +19,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -42,6 +47,26 @@ func TestApplier(t *testing.T) {
 	type testCase struct {
 		name string
 		step Step
+	}
+
+	var sstValueHeader enginepb.MVCCValueHeader
+	sstValueHeader.KVNemesisSeq.Set(1)
+	sstSpan := roachpb.Span{Key: roachpb.Key(k1), EndKey: roachpb.Key(k4)}
+	sstTS := hlc.Timestamp{WallTime: 1}
+	sstFile := &storage.MemFile{}
+	{
+		st := cluster.MakeTestingClusterSettings()
+		w := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
+		defer w.Close()
+
+		require.NoError(t, w.PutMVCC(storage.MVCCKey{Key: roachpb.Key(k1), Timestamp: sstTS},
+			storage.MVCCValue{MVCCValueHeader: sstValueHeader, Value: roachpb.MakeValueFromString("v1")}))
+		require.NoError(t, w.PutMVCC(storage.MVCCKey{Key: roachpb.Key(k2), Timestamp: sstTS},
+			storage.MVCCValue{MVCCValueHeader: sstValueHeader}))
+		require.NoError(t, w.PutMVCCRangeKey(
+			storage.MVCCRangeKey{StartKey: roachpb.Key(k3), EndKey: roachpb.Key(k4), Timestamp: sstTS},
+			storage.MVCCValue{MVCCValueHeader: sstValueHeader}))
+		require.NoError(t, w.Finish())
 	}
 
 	a := MakeApplier(env, db, db)
@@ -146,6 +171,9 @@ func TestApplier(t *testing.T) {
 		},
 		{
 			"zcfg-again", step(changeZone(ChangeZoneType_ToggleGlobalReads)),
+		},
+		{
+			"addsstable", step(addSSTable(sstFile.Data(), sstSpan, sstTS, sstValueHeader.KVNemesisSeq.Get(), true)),
 		},
 	}
 
