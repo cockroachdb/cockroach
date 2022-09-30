@@ -488,7 +488,7 @@ func (mb *mutationBuilder) ensureWithID() {
 	}
 
 	mb.withID = mb.b.factory.Memo().NextWithID()
-	mb.md.AddWithBinding(mb.withID, mb.outScope.expr)
+	mb.md.AddWithBinding(mb.withID, mb.outScope.expr, false /* canInlineInPlace */)
 }
 
 // fkCheckHelper is a type associated with a single FK constraint and is used to

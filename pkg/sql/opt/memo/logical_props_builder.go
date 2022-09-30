@@ -943,7 +943,7 @@ func (b *logicalPropsBuilder) buildWithProps(with *WithExpr, rel *props.Relation
 
 func (b *logicalPropsBuilder) buildWithScanProps(withScan *WithScanExpr, rel *props.Relational) {
 	BuildSharedProps(withScan, &rel.Shared, b.evalCtx)
-	boundExpr := b.mem.Metadata().WithBinding(withScan.With).(RelExpr)
+	boundExpr := b.mem.Metadata().WithBinding(withScan.With).BoundExpr.(RelExpr)
 	bindingProps := boundExpr.Relational()
 
 	// Side Effects
