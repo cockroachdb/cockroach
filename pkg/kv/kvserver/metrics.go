@@ -541,30 +541,28 @@ var (
 		"SSTables",
 		metric.Unit_COUNT,
 	)[0]
-)
 
-var metaRdbBytesIngested = storageLevelMetricMetadata(
-	"bytes-ingested",
-	"Number of bytes ingested directly into Level %d",
-	"Bytes",
-	metric.Unit_BYTES,
-)
+	metaRdbBytesIngested = storageLevelMetricMetadata(
+		"bytes-ingested",
+		"Number of bytes ingested directly into Level %d",
+		"Bytes",
+		metric.Unit_BYTES,
+	)
 
-var metaRdbLevelSize = storageLevelMetricMetadata(
-	"level-size",
-	"Size of the SSTables in level %d",
-	"Bytes",
-	metric.Unit_BYTES,
-)
+	metaRdbLevelSize = storageLevelMetricMetadata(
+		"level-size",
+		"Size of the SSTables in level %d",
+		"Bytes",
+		metric.Unit_BYTES,
+	)
 
-var metaRdbLevelScores = storageLevelMetricMetadata(
-	"level-score",
-	"Compaction score of level %d",
-	"Score",
-	metric.Unit_COUNT,
-)
+	metaRdbLevelScores = storageLevelMetricMetadata(
+		"level-score",
+		"Compaction score of level %d",
+		"Score",
+		metric.Unit_COUNT,
+	)
 
-var (
 	metaRdbWriteStalls = metric.Metadata{
 		Name:        "storage.write-stalls",
 		Help:        "Number of instances of intentional write stalls to backpressure incoming writes",
@@ -578,6 +576,27 @@ var (
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
+	metaRdbCheckpoints = metric.Metadata{
+		Name: "storage.checkpoints",
+		Help: `The number of checkpoint directories found in storage.
+
+This is the number of directories found in the auxiliary/checkpoints directory.
+Each represents an immutable point-in-time storage engine checkpoint. They are
+cheap (consisting mostly of hard links), but over time they effectively become a
+full copy of the old state, which increases their relative cost. Checkpoints
+must be deleted once acted upon (e.g. copied elsewhere or investigated).
+
+A likely cause of having a checkpoint is that one of the ranges in this store
+had inconsistent data among its replicas. Such checkpoint directories are
+located in auxiliary/checkpoints/rN_at_M, where N is the range ID, and M is the
+Raft applied index at which this checkpoint was taken.`,
+
+		Measurement: "Directories",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+var (
 	// Disk health metrics.
 	metaDiskSlow = metric.Metadata{
 		Name:        "storage.disk-slow",
@@ -1734,6 +1753,8 @@ type StoreMetrics struct {
 	RdbWriteStalls              *metric.Gauge
 	RdbWriteStallNanos          *metric.Gauge
 
+	RdbCheckpoints *metric.Gauge
+
 	// Disk health metrics.
 	DiskSlow    *metric.Gauge
 	DiskStalled *metric.Gauge
@@ -2248,6 +2269,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbLevelScore:               rdbLevelScore,
 		RdbWriteStalls:              metric.NewGauge(metaRdbWriteStalls),
 		RdbWriteStallNanos:          metric.NewGauge(metaRdbWriteStallNanos),
+
+		RdbCheckpoints: metric.NewGauge(metaRdbCheckpoints),
 
 		// Disk health metrics.
 		DiskSlow:    metric.NewGauge(metaDiskSlow),
