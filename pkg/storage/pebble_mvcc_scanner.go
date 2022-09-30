@@ -312,7 +312,7 @@ type pebbleMVCCScanner struct {
 	// pointIter is a point synthesizing iterator that wraps and replaces parent
 	// when an MVCC range tombstone is encountered. A separate reference to it is
 	// kept in order to release it back to its pool when the scanner is done.
-	pointIter *pointSynthesizingIter
+	pointIter *PointSynthesizingIter
 	// memAccount is used to account for the size of the scan results.
 	memAccount *mon.BoundAccount
 	// lockTable is used to determine whether keys are locked in the in-memory
@@ -1213,7 +1213,7 @@ func (p *pebbleMVCCScanner) enablePointSynthesis() {
 				p.parent.UnsafeKey()))
 		}
 	}
-	p.pointIter = newPointSynthesizingIterAtParent(p.parent)
+	p.pointIter = NewPointSynthesizingIterAtParent(p.parent)
 	p.parent = p.pointIter
 	if util.RaceEnabled {
 		if ok, _ := p.parent.Valid(); !ok {

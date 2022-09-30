@@ -731,6 +731,12 @@ func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
 	i.updateIgnoreTime()
 }
 
+// IgnoringTime returns true if the previous positioning operation ignored time
+// bounds.
+func (i *MVCCIncrementalIterator) IgnoringTime() bool {
+	return i.ignoringTime
+}
+
 // NumCollectedIntents returns number of intents encountered during iteration.
 // This is only the case when intent aggregation is enabled, otherwise it is
 // always 0.

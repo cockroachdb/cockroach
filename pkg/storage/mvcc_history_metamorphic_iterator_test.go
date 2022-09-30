@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 //
 
-package storage
+package storage_test
 
 import (
 	"bytes"
@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ type metamorphicIterator struct {
 	seed int64
 	t    *testing.T
 	r    *rand.Rand
-	it   SimpleMVCCIterator
+	it   storage.SimpleMVCCIterator
 	// isForward is true if the wrapped iterator is in forward mode at the
 	// beginning of moveAround. We then need to leave the iterator in forward mode
 	// because the caller might subsequently invoke NextKey which is illegal on an
@@ -47,12 +48,14 @@ type metamorphicIterator struct {
 // - a metamorphicMVCCIterator, if `it` is an MVCCIterator
 // - a metamorphicMVCCIncrementalIterator, if `it` is an MVCCIncrementalIterator
 // a metamorphicIterator otherwise.
-func newMetamorphicIterator(t *testing.T, seed int64, it SimpleMVCCIterator) SimpleMVCCIterator {
+func newMetamorphicIterator(
+	t *testing.T, seed int64, it storage.SimpleMVCCIterator,
+) storage.SimpleMVCCIterator {
 	iter := &metamorphicIterator{t: t, seed: seed, r: rand.New(rand.NewSource(seed)), it: it}
-	if _, isMVCC := it.(MVCCIterator); isMVCC {
+	if _, isMVCC := it.(storage.MVCCIterator); isMVCC {
 		return &metamorphicMVCCIterator{metamorphicIterator: iter}
 	}
-	if _, isIncremental := it.(*MVCCIncrementalIterator); isIncremental {
+	if _, isIncremental := it.(*storage.MVCCIncrementalIterator); isIncremental {
 		return &metamorphicMVCCIncrementalIterator{metamorphicIterator: iter}
 	}
 	return iter
@@ -100,8 +103,8 @@ func (m *metamorphicIterator) moveAround() {
 	}
 
 	cur := m.it.UnsafeKey().Clone()
-	mvccIt, _ := m.it.(MVCCIterator)
-	iit, _ := m.it.(*MVCCIncrementalIterator)
+	mvccIt, _ := m.it.(storage.MVCCIterator)
+	iit, _ := m.it.(*storage.MVCCIncrementalIterator)
 	var resetActions []action
 
 	actions := []action{
@@ -124,7 +127,7 @@ func (m *metamorphicIterator) moveAround() {
 		},
 		{
 			"SeekGE(Max)",
-			func() { m.it.SeekGE(MVCCKeyMax) },
+			func() { m.it.SeekGE(storage.MVCCKeyMax) },
 		},
 	}
 
@@ -149,7 +152,7 @@ func (m *metamorphicIterator) moveAround() {
 			},
 		}, action{
 			"SeekLT(Max)",
-			func() { mvccIt.SeekLT(MVCCKeyMax) },
+			func() { mvccIt.SeekLT(storage.MVCCKeyMax) },
 		})
 		// Can only leave iterator in reverse mode if it's in reverse
 		// initially, otherwise caller wouldn't be allowed to invoke NextKey
@@ -170,7 +173,7 @@ func (m *metamorphicIterator) moveAround() {
 
 	hasPoint, _ := m.it.HasPointAndRange()
 	rangeKeys := m.it.RangeKeys().Clone()
-	var rangeKeysIgnoringTime MVCCRangeKeyStack
+	var rangeKeysIgnoringTime storage.MVCCRangeKeyStack
 	if iit != nil {
 		rangeKeysIgnoringTime = iit.RangeKeysIgnoringTime()
 	}
@@ -189,9 +192,9 @@ func (m *metamorphicIterator) moveAround() {
 	choice := actions[m.r.Intn(len(actions))]
 	printfln("action: %s", choice)
 
-	// NB: if this is an incr iter that ignores time, we can't expect SeekGE(cur) to
+	// NB: if this is an incr iter it may be ignoring time, so we can't expect SeekGE(cur) to
 	// be able to retrieve the current key, as SeekGE always respects the time bound.
-	if iit == nil || !iit.ignoringTime {
+	if iit == nil || !iit.IgnoringTime() {
 		resetActions = append(resetActions, action{
 			"SeekGE(cur)",
 			func() {
@@ -209,10 +212,10 @@ func (m *metamorphicIterator) moveAround() {
 				if bytes.Compare(cur.Key, roachpb.LocalMax) >= 0 {
 					// Make sure we don't put a global-only iter into local keyspace.
 					printfln("seeking to LocalMax")
-					m.it.SeekGE(MakeMVCCMetadataKey(roachpb.LocalMax))
+					m.it.SeekGE(storage.MakeMVCCMetadataKey(roachpb.LocalMax))
 				} else {
 					printfln("seeking to KeyMin")
-					m.it.SeekGE(NilKey)
+					m.it.SeekGE(storage.NilKey)
 				}
 				for {
 					valid, err := m.it.Valid()
@@ -239,7 +242,7 @@ func (m *metamorphicIterator) moveAround() {
 		resetActions = append(resetActions, action{
 			"SeekLT(max) && RevIterate",
 			func() {
-				mvccIt.SeekLT(MVCCKeyMax) // NB: incompatible with IsPrefix, so we excluded that above
+				mvccIt.SeekLT(storage.MVCCKeyMax) // NB: incompatible with IsPrefix, so we excluded that above
 				for {
 					valid, err := m.it.Valid()
 					require.Nil(m.t, err)
@@ -260,7 +263,7 @@ func (m *metamorphicIterator) moveAround() {
 	resetAction.do()
 	{
 		hasPoint2, _ := m.it.HasPointAndRange() // circumvent hated shadowing lint
-		var rangeKeysIgnoringTime2 MVCCRangeKeyStack
+		var rangeKeysIgnoringTime2 storage.MVCCRangeKeyStack
 		if iit != nil {
 			rangeKeysIgnoringTime2 = iit.RangeKeysIgnoringTime()
 		}
@@ -287,7 +290,7 @@ func (m *metamorphicIterator) Close() {
 	m.it.Close()
 }
 
-func (m *metamorphicIterator) SeekGE(key MVCCKey) {
+func (m *metamorphicIterator) SeekGE(key storage.MVCCKey) {
 	m.isForward = true
 	m.it.SeekGE(key)
 	m.moveAround()
@@ -309,7 +312,7 @@ func (m *metamorphicIterator) NextKey() {
 	m.moveAround()
 }
 
-func (m *metamorphicIterator) UnsafeKey() MVCCKey {
+func (m *metamorphicIterator) UnsafeKey() storage.MVCCKey {
 	return m.it.UnsafeKey()
 }
 
@@ -325,7 +328,7 @@ func (m *metamorphicIterator) RangeBounds() roachpb.Span {
 	return m.it.RangeBounds()
 }
 
-func (m *metamorphicIterator) RangeKeys() MVCCRangeKeyStack {
+func (m *metamorphicIterator) RangeKeys() storage.MVCCRangeKeyStack {
 	return m.it.RangeKeys()
 }
 
@@ -340,56 +343,56 @@ type metamorphicMVCCIterator struct {
 	*metamorphicIterator
 }
 
-var _ MVCCIterator = (*metamorphicMVCCIterator)(nil)
+var _ storage.MVCCIterator = (*metamorphicMVCCIterator)(nil)
 
-func (m *metamorphicMVCCIterator) SeekLT(key MVCCKey) {
-	m.it.(MVCCIterator).SeekLT(key)
+func (m *metamorphicMVCCIterator) SeekLT(key storage.MVCCKey) {
+	m.it.(storage.MVCCIterator).SeekLT(key)
 	m.moveAround()
 }
 
 func (m *metamorphicMVCCIterator) Prev() {
-	m.it.(MVCCIterator).Prev()
+	m.it.(storage.MVCCIterator).Prev()
 	m.moveAround()
 }
 
 func (m *metamorphicMVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	m.it.(MVCCIterator).SeekIntentGE(key, txnUUID)
+	m.it.(storage.MVCCIterator).SeekIntentGE(key, txnUUID)
 	m.moveAround()
 }
 
-func (m *metamorphicMVCCIterator) Key() MVCCKey {
-	return m.it.(MVCCIterator).Key()
+func (m *metamorphicMVCCIterator) Key() storage.MVCCKey {
+	return m.it.(storage.MVCCIterator).Key()
 }
 
 func (m *metamorphicMVCCIterator) UnsafeRawKey() []byte {
-	return m.it.(MVCCIterator).UnsafeRawKey()
+	return m.it.(storage.MVCCIterator).UnsafeRawKey()
 }
 
 func (m *metamorphicMVCCIterator) UnsafeRawMVCCKey() []byte {
-	return m.it.(MVCCIterator).UnsafeRawMVCCKey()
+	return m.it.(storage.MVCCIterator).UnsafeRawMVCCKey()
 }
 
 func (m *metamorphicMVCCIterator) Value() []byte {
-	return m.it.(MVCCIterator).Value()
+	return m.it.(storage.MVCCIterator).Value()
 }
 
 func (m *metamorphicMVCCIterator) ValueProto(msg protoutil.Message) error {
-	return m.it.(MVCCIterator).ValueProto(msg)
+	return m.it.(storage.MVCCIterator).ValueProto(msg)
 }
 
 func (m *metamorphicMVCCIterator) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
-) (MVCCKey, error) {
-	return m.it.(MVCCIterator).FindSplitKey(start, end, minSplitKey, targetSize)
+) (storage.MVCCKey, error) {
+	return m.it.(storage.MVCCIterator).FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
-func (m *metamorphicMVCCIterator) Stats() IteratorStats {
+func (m *metamorphicMVCCIterator) Stats() storage.IteratorStats {
 	// TODO(tbg): these will be wrong since we do extra movement.
-	return m.it.(MVCCIterator).Stats()
+	return m.it.(storage.MVCCIterator).Stats()
 }
 
 func (m *metamorphicMVCCIterator) IsPrefix() bool {
-	return m.it.(MVCCIterator).IsPrefix()
+	return m.it.(storage.MVCCIterator).IsPrefix()
 }
 
 type metamorphicMVCCIncrementalIterator struct {
@@ -398,29 +401,29 @@ type metamorphicMVCCIncrementalIterator struct {
 
 var _ mvccIncrementalIteratorI = (*metamorphicMVCCIncrementalIterator)(nil)
 
-func (m *metamorphicMVCCIncrementalIterator) RangeKeysIgnoringTime() MVCCRangeKeyStack {
-	return m.it.(*MVCCIncrementalIterator).RangeKeysIgnoringTime()
+func (m *metamorphicMVCCIncrementalIterator) RangeKeysIgnoringTime() storage.MVCCRangeKeyStack {
+	return m.it.(*storage.MVCCIncrementalIterator).RangeKeysIgnoringTime()
 }
 
 func (m *metamorphicMVCCIncrementalIterator) RangeKeyChangedIgnoringTime() bool {
 	if m.seed != 0 {
 		return m.rangeKeyChangedIgnoringTime
 	}
-	return m.it.(*MVCCIncrementalIterator).RangeKeyChangedIgnoringTime()
+	return m.it.(*storage.MVCCIncrementalIterator).RangeKeyChangedIgnoringTime()
 }
 
 func (m *metamorphicMVCCIncrementalIterator) NextIgnoringTime() {
-	m.it.(*MVCCIncrementalIterator).NextIgnoringTime()
+	m.it.(*storage.MVCCIncrementalIterator).NextIgnoringTime()
 	m.isForward = true
 	m.moveAround()
 }
 
 func (m *metamorphicMVCCIncrementalIterator) NextKeyIgnoringTime() {
-	m.it.(*MVCCIncrementalIterator).NextKeyIgnoringTime()
+	m.it.(*storage.MVCCIncrementalIterator).NextKeyIgnoringTime()
 	m.isForward = true
 	m.moveAround()
 }
 
 func (m *metamorphicMVCCIncrementalIterator) TryGetIntentError() error {
-	return m.it.(*MVCCIncrementalIterator).TryGetIntentError()
+	return m.it.(*storage.MVCCIncrementalIterator).TryGetIntentError()
 }
