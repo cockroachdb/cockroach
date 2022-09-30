@@ -712,18 +712,7 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 		isInternal,
 	) {
 		f := opc.optimizer.Factory()
-		// EvalContext() has the context with the already closed span, so we
-		// need to update with the current context.
-		// The replacement of the context here isn't ideal, but the current
-		// implementation of contexts would need to change
-		// significantly to accommodate this case.
 		evalCtx := opc.p.EvalContext()
-		oldCtx := evalCtx.Context
-		evalCtx.Context = ctx
-		defer func() {
-			evalCtx.Context = oldCtx
-		}()
-
 		f.Init(evalCtx, &opc.catalog)
 		f.FoldingControl().AllowStableFolds()
 		bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, &opc.catalog, f, opc.p.stmt.AST)
