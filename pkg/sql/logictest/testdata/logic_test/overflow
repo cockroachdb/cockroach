@@ -17,3 +17,43 @@ INSERT INTO large_numbers VALUES (-9223372036854775808),(-1)
 
 statement error integer out of range
 SELECT sum_int(a) FROM large_numbers
+
+subtest regression_88128
+
+statement ok
+CREATE TABLE t88128 (i INT)
+
+statement ok
+INSERT INTO t88128 VALUES (100000)
+
+# Ensure that the optimizer does not simplify the filter by adding the constant
+# subtrahend to the right side of the comparison when the addition would
+# overflow.
+query B
+SELECT i - 1000 < 9223372036854775800 FROM t88128
+----
+true
+
+# Ensure that the optimizer does not simplify the filter by adding the constant
+# subtrahend to the right side of the comparison when the addition would
+# underflow.
+query B
+SELECT i - (-1000) > -9223372036854775800 FROM t88128
+----
+true
+
+# Ensure that the optimizer does not simplify the filter by subtracting the
+# constant addend to the right side of the comparison when the subtraction would
+# underflow.
+query B
+SELECT i + 1000 > -9223372036854775800 FROM t88128
+----
+true
+
+# Ensure that the optimizer does not simplify the filter by subtracting the
+# constant addend to the right side of the comparison when the subtraction would
+# overflow.
+query B
+SELECT i + (-1000) < 9223372036854775800 FROM t88128
+----
+true
