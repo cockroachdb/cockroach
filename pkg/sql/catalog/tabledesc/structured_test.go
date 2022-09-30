@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kr/pretty"
@@ -366,7 +367,8 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					KeyColumnNames:      []string{"foo", "bar"},
 					KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				Privileges:     catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				CreateAsOfTime: hlc.Timestamp{WallTime: 1},
 			},
 			upgraded: &descpb.TableDescriptor{
 				FormatVersion:    descpb.InterleavedFormatVersion,
@@ -399,7 +401,8 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 					Version:             descpb.LatestIndexDescriptorVersion,
 					ConstraintID:        1,
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				Privileges:     catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				CreateAsOfTime: hlc.Timestamp{WallTime: 1},
 			},
 		},
 		{ // 2
@@ -446,7 +449,8 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Version:             descpb.SecondaryIndexFamilyFormatVersion,
 					},
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				Privileges:     catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				CreateAsOfTime: hlc.Timestamp{WallTime: 1},
 			},
 			upgraded: nil,
 		},
@@ -533,7 +537,8 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Version:             descpb.EmptyArraysInInvertedIndexesVersion,
 					},
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				Privileges:     catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				CreateAsOfTime: hlc.Timestamp{WallTime: 1},
 			},
 			upgraded: &descpb.TableDescriptor{
 				FormatVersion:    descpb.InterleavedFormatVersion,
@@ -586,7 +591,8 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 						Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 					},
 				},
-				Privileges: catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				Privileges:     catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
+				CreateAsOfTime: hlc.Timestamp{WallTime: 1},
 			},
 		},
 	}

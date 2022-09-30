@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // DatabaseDescriptorBuilder is an extension of catalog.DescriptorBuilder
@@ -33,29 +35,46 @@ type DatabaseDescriptorBuilder interface {
 }
 
 type databaseDescriptorBuilder struct {
-	original      *descpb.DatabaseDescriptor
-	maybeModified *descpb.DatabaseDescriptor
-
+	original             *descpb.DatabaseDescriptor
+	maybeModified        *descpb.DatabaseDescriptor
+	mvccTimestamp        hlc.Timestamp
 	isUncommittedVersion bool
 	changes              catalog.PostDeserializationChanges
 }
 
 var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
 
-// NewBuilder creates a new catalog.DescriptorBuilder object for building
-// database descriptors.
+// NewBuilder returns a new DatabaseDescriptorBuilder instance by delegating to
+// NewBuilderWithMVCCTimestamp with an empty MVCC timestamp.
+//
+// Callers must assume that the given protobuf has already been treated with the
+// MVCC timestamp beforehand.
 func NewBuilder(desc *descpb.DatabaseDescriptor) DatabaseDescriptorBuilder {
-	return newBuilder(desc, false, /* isUncommittedVersion */
-		catalog.PostDeserializationChanges{})
+	return NewBuilderWithMVCCTimestamp(desc, hlc.Timestamp{})
+}
+
+// NewBuilderWithMVCCTimestamp creates a new DatabaseDescriptorBuilder instance
+// for building table descriptors.
+func NewBuilderWithMVCCTimestamp(
+	desc *descpb.DatabaseDescriptor, mvccTimestamp hlc.Timestamp,
+) DatabaseDescriptorBuilder {
+	return newBuilder(
+		desc,
+		mvccTimestamp,
+		false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{},
+	)
 }
 
 func newBuilder(
 	desc *descpb.DatabaseDescriptor,
+	mvccTimestamp hlc.Timestamp,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
 ) DatabaseDescriptorBuilder {
 	return &databaseDescriptorBuilder{
 		original:             protoutil.Clone(desc).(*descpb.DatabaseDescriptor),
+		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
 	}
@@ -68,8 +87,23 @@ func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() error {
+func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() (err error) {
+	defer func() {
+		err = errors.Wrapf(err, "database %q (%d)", ddb.original.Name, ddb.original.ID)
+	}()
+	// Set the ModificationTime field before doing anything else.
+	// Other changes may depend on it.
+	mustSetModTime, err := descpb.MustSetModificationTime(
+		ddb.original.ModificationTime, ddb.mvccTimestamp, ddb.original.Version,
+	)
+	if err != nil {
+		return err
+	}
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+	if mustSetModTime {
+		ddb.maybeModified.ModificationTime = ddb.mvccTimestamp
+		ddb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+	}
 
 	createdDefaultPrivileges := false
 	removedIncompatibleDatabasePrivs := false

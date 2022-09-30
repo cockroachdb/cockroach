@@ -20,11 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -38,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -988,28 +984,6 @@ func (l *internalLookupCtx) GetSchemaName(
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding
 // database descriptor using the table's ID.
 type tableLookupFn = *internalLookupCtx
-
-// newInternalLookupCtxFromDescriptorProtos "unwraps" the descriptors into the
-// appropriate implementation of Descriptor before constructing a new
-// internalLookupCtx. It also hydrates any table descriptors with enum
-// information. It is intended only for use when dealing with backups.
-func newInternalLookupCtxFromDescriptorProtos(
-	ctx context.Context, rawDescs []descpb.Descriptor,
-) (*internalLookupCtx, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "sql.newInternalLookupCtxFromDescriptorProtos")
-	defer sp.Finish()
-
-	var c nstree.MutableCatalog
-	for i := range rawDescs {
-		desc := descbuilder.NewBuilder(&rawDescs[i]).BuildImmutable()
-		c.UpsertDescriptorEntry(desc)
-	}
-	if err := descs.HydrateCatalog(ctx, c); err != nil {
-		return nil, err
-	}
-	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), nil /* prefix */)
-	return lCtx, nil
-}
 
 // newInternalLookupCtx provides cached access to a set of descriptors for use
 // in virtual tables.

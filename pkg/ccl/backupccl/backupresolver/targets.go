@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -284,11 +285,18 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 		if objMap == nil {
 			objMap = make(map[string]descpb.ID)
 		}
-		if _, ok := objMap[desc.GetName()]; ok {
-			return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
-				kind, parentDesc.GetName(), scName, desc.GetName(), desc.GetID(), objMap[desc.GetName()])
+		descName := desc.GetName()
+		// Handle special case of system.namespace table which used to be named
+		// system.namespace2.
+		if desc.GetID() == keys.NamespaceTableID &&
+			desc.GetPostDeserializationChanges().Contains(catalog.UpgradedNamespaceName) {
+			descName = catconstants.PreMigrationNamespaceTableName
 		}
-		objMap[desc.GetName()] = desc.GetID()
+		if _, ok := objMap[descName]; ok {
+			return errors.Errorf("duplicate %s name: %q.%q.%q used for ID %d and %d",
+				kind, parentDesc.GetName(), scName, descName, desc.GetID(), objMap[descName])
+		}
+		objMap[descName] = desc.GetID()
 		r.ObjsByName[parentDesc.GetID()][scName] = objMap
 
 		objIDsMap := r.ObjIDsBySchema[parentDesc.GetID()]

@@ -166,11 +166,11 @@ CREATE TABLE db.t (
 			exDeps := ti.newExecDeps(txn, descriptors)
 			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
-			require.Equal(t, c.orig(), orig)
+			require.Equal(t, c.orig().TableDesc(), orig.TableDesc())
 			require.NoError(t, scexec.ExecuteStage(ctx, exDeps, c.ops()))
 			_, after, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
-			require.Equal(t, c.exp(), after)
+			require.Equal(t, c.exp().TableDesc(), after.TableDesc())
 			return nil
 		}))
 	}

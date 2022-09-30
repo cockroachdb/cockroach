@@ -169,18 +169,18 @@ func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState 
 // It overrides the wrapper's implementation to deal with the fact that
 // mutable has overridden the definition of IsUncommittedVersion.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.SchemaDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.SchemaDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.SchemaDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.SchemaDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
 }
 
 // ValidateSelf implements the catalog.Descriptor interface.
 func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
-	vea.Report(catalog.ValidateName(desc.GetName(), "descriptor"))
+	vea.Report(catalog.ValidateName(desc))
 	if desc.GetID() == descpb.InvalidID {
 		vea.Report(fmt.Errorf("invalid schema ID %d", desc.GetID()))
 	}
