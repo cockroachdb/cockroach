@@ -173,7 +173,7 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 	// Exit early with an error if the function is undergoing a declarative schema
 	// change, before we try to get job IDs and update job statuses later. See
 	// createOrUpdateSchemaChangeJob.
-	if fnMutable.GetDeclarativeSchemaChangerState() != nil {
+	if catalog.HasConcurrentDeclarativeSchemaChange(fnMutable) {
 		return scerrors.ConcurrentSchemaChangeError(fnMutable)
 	}
 

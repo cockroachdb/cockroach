@@ -344,7 +344,7 @@ func (p *planner) initiateDropTable(
 	// Exit early with an error if the table is undergoing a declarative schema
 	// change, before we try to get job IDs and update job statuses later. See
 	// createOrUpdateSchemaChangeJob.
-	if tableDesc.GetDeclarativeSchemaChangerState() != nil {
+	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
 		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 

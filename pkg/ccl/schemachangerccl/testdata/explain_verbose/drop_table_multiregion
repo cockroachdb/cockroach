@@ -538,6 +538,10 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 105
+                  - 107
+                  - 108
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
