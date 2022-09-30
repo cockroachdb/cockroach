@@ -653,9 +653,11 @@ func (coord *GrantCoordinator) GetWorkQueue(workKind WorkKind) *WorkQueue {
 func (coord *GrantCoordinator) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
 	ctx := coord.ambientCtx.AnnotateCtx(context.Background())
 
-	if coord.lastCPULoadSamplePeriod != 0 && coord.lastCPULoadSamplePeriod != samplePeriod &&
-		KVAdmissionControlEnabled.Get(&coord.settings.SV) {
-		log.Infof(ctx, "CPULoad switching to period %s", samplePeriod.String())
+	if log.V(1) {
+		if coord.lastCPULoadSamplePeriod != 0 && coord.lastCPULoadSamplePeriod != samplePeriod &&
+			KVAdmissionControlEnabled.Get(&coord.settings.SV) {
+			log.Infof(ctx, "CPULoad switching to period %s", samplePeriod.String())
+		}
 	}
 	coord.lastCPULoadSamplePeriod = samplePeriod
 
