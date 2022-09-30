@@ -306,6 +306,8 @@ func runBackupProcessor(
 		//  *2). See #49798.
 		numSenders := int(kvserver.ExportRequestsLimit.Get(&clusterSettings.SV)) * 2
 
+		logExport := log.Every(10 * time.Second)
+
 		return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
 			readTime := spec.BackupEndTime.GoTime()
 
@@ -390,8 +392,13 @@ func runBackupProcessor(
 						Source:                   roachpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,
 					}
-					log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",
-						span.span, span.attempts+1, header.UserPriority.String())
+					if span.attempts > 0 || logExport.ShouldLog() {
+						log.Infof(ctx, "sending ExportRequest for span %s (attempt %d, priority %s)",
+							span.span, span.attempts+1, header.UserPriority.String())
+					} else {
+						log.VEventf(ctx, 1, "sending ExportRequest for span %s (attempt %d, priority %s)",
+							span.span, span.attempts+1, header.UserPriority.String())
+					}
 					var rawRes roachpb.Response
 					var pErr *roachpb.Error
 					var reqSentTime time.Time
