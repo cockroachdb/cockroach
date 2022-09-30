@@ -682,7 +682,7 @@ func (c *CustomFuncs) numAllowedValues(
 	filters := *constraints.(*memo.FiltersExpr)
 	// For each ANDed check constraint...
 	for i := 0; i < len(filters); i++ {
-		filter := filters[i]
+		filter := &filters[i]
 		// This must be some type of comparison operation, or an OR or AND
 		// expression. These operations have at least 2 children.
 		if filter.Condition.ChildCount() < 2 {

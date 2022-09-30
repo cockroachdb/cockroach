@@ -2040,3 +2040,58 @@ project
  │    └── 82 [type=int]
  └── projections
       └── '1971-10-24' [as=date:19, type=date]
+
+# Regression test for #88455 - don't double-count selectivity for OR expressions
+# with tight constraints in join ON conditions.
+exec-ddl
+CREATE TABLE t0_88455 (c0 INT);
+----
+
+exec-ddl
+CREATE TABLE t1_88455 (c0 INT);
+----
+
+exec-ddl
+ALTER TABLE t0_88455 INJECT STATISTICS '[
+  {
+    "columns": [
+    "c0"
+    ],
+    "created_at": "2022-08-09 09:00:00.00000",
+    "distinct_count": 13,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 13
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE t1_88455 INJECT STATISTICS '[
+  {
+    "columns": [
+    "c0"
+    ],
+    "created_at": "2022-08-09 09:00:00.00000",
+    "distinct_count": 5,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 5
+  }
+]'
+----
+
+opt format=show-stats
+SELECT * FROM t0_88455 LEFT OUTER JOIN t1_88455 ON t0_88455.c0<1 OR t0_88455.c0>1;
+----
+left-join (cross)
+ ├── columns: c0:1(int) c0:5(int)
+ ├── stats: [rows=21.66667]
+ ├── scan t0_88455
+ │    ├── columns: t0_88455.c0:1(int)
+ │    └── stats: [rows=13, distinct(1)=13, null(1)=0]
+ ├── scan t1_88455
+ │    ├── columns: t1_88455.c0:5(int)
+ │    └── stats: [rows=5]
+ └── filters
+      └── (t0_88455.c0:1 < 1) OR (t0_88455.c0:1 > 1) [type=bool, outer=(1), constraints=(/1: (/NULL - /0] [/2 - ]; tight)]
