@@ -259,12 +259,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			// Servers start at 0, but NodeID starts at 1.
 			store, err := tc.Servers[repl.NodeID-1].Stores().GetStore(repl.StoreID)
 			require.NoError(t, err)
-			if s != *store.Ident {
-				t.Errorf("BadChecksumReportDiff called from follower (StoreIdent = %v)", s)
+			if !assert.Equal(t, *store.Ident, s) {
 				return
 			}
-			if len(diff) != 1 {
-				t.Errorf("diff length = %d, diff = %v", len(diff), diff)
+			if !assert.Len(t, diff, 1) {
 				return
 			}
 			d := diff[0]
@@ -284,19 +282,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 +    value:"\x00\x00\x00\x00\x01T"
 +    raw mvcc_key/value: 6500000000000000007b000003db0d 000000000154
 `
-			if act != exp {
-				// We already logged the actual one above.
-				t.Errorf("expected:\n%s\ngot:\n%s", exp, act)
-			}
-
+			assert.Equal(t, exp, act)
 			close(notifyReportDiff)
 		}
 	// s2 (index 1) will panic.
 	notifyFatal := make(chan struct{})
 	testKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal = func(s roachpb.StoreIdent) {
 		store := tc.GetFirstStoreFromServer(t, 1)
-		if s != *store.Ident {
-			t.Errorf("OnBadChecksumFatal called from %v", s)
+		if !assert.Equal(t, *store.Ident, s) {
 			return
 		}
 		close(notifyFatal)
