@@ -113,11 +113,7 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 	)
 
 	defer tc.Stopper().Stop(context.Background())
-	ts := tc.Servers[0]
-	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	store := tc.GetFirstStoreFromServer(t, 0)
 
 	// Write something to the DB.
 	putArgs := putArgs([]byte("a"), []byte("b"))
@@ -199,11 +195,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 	defer tc.Stopper().Stop(context.Background())
 
-	ts := tc.Servers[0]
-	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	store := tc.GetFirstStoreFromServer(t, 0)
 	checkArgs := roachpb.CheckConsistencyRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    []byte("a"),
@@ -306,11 +298,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// s2 (index 1) will panic.
 	notifyFatal := make(chan struct{}, 1)
 	testKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal = func(s roachpb.StoreIdent) {
-		ts := tc.Servers[1]
-		store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
+		store := tc.GetFirstStoreFromServer(t, 1)
 		if s != *store.Ident {
 			t.Errorf("OnBadChecksumFatal called from %v", s)
 			return
@@ -345,11 +333,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(context.Background())
 
-	ts := tc.Servers[0]
-	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	store := tc.GetFirstStoreFromServer(t, 0)
 	// Write something to the DB.
 	pArgs := putArgs([]byte("a"), []byte("b"))
 	if _, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), pArgs); err != nil {
@@ -377,17 +361,13 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	onDiskCheckpointPaths := func(nodeIdx int) []string {
-		testServer := tc.Servers[nodeIdx]
 		fs, pErr := stickyEngineRegistry.GetUnderlyingFS(
 			base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(nodeIdx), 10)})
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		testStore, pErr := testServer.Stores().GetStore(testServer.GetFirstStoreID())
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		checkpointPath := filepath.Join(testStore.Engine().GetAuxiliaryDir(), "checkpoints")
+		store := tc.GetFirstStoreFromServer(t, nodeIdx)
+		checkpointPath := filepath.Join(store.Engine().GetAuxiliaryDir(), "checkpoints")
 		checkpoints, _ := fs.List(checkpointPath)
 		var checkpointPaths []string
 		for _, cpDirName := range checkpoints {
@@ -414,14 +394,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	// Write some arbitrary data only to store 1. Inconsistent key "e"!
-	ts1 := tc.Servers[1]
-	store1, pErr := ts1.Stores().GetStore(ts1.GetFirstStoreID())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	store1 := tc.GetFirstStoreFromServer(t, 1)
 	var val roachpb.Value
 	val.SetInt(42)
-	diffTimestamp = ts.Clock().Now()
+	diffTimestamp = tc.Server(0).Clock().Now()
 	if err := storage.MVCCPut(
 		context.Background(), store1.Engine(), nil, diffKey, diffTimestamp, hlc.ClockTimestamp{}, val, nil,
 	); err != nil {
@@ -674,18 +650,14 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	}
 
 	// Force a run of the consistency queue, otherwise it might take a while.
-	ts := tc.Servers[0]
-	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	store := tc.GetFirstStoreFromServer(t, 0)
 	if err := store.ForceConsistencyQueueProcess(); err != nil {
 		t.Fatal(err)
 	}
 
 	// The stats should magically repair themselves. We'll first do a quick check
 	// and then a full recomputation.
-	repl, _, err := ts.Stores().GetReplicaForRangeID(ctx, rangeID)
+	repl, _, err := tc.Servers[0].Stores().GetReplicaForRangeID(ctx, rangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
