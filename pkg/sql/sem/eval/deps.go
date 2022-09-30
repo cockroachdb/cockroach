@@ -161,6 +161,11 @@ type HasPrivilegeSpecifier struct {
 	// Only one of ColumnName, ColumnAttNum is filled.
 	ColumnName   *tree.Name
 	ColumnAttNum *uint32
+
+	// Function privilege
+	// This needs to be a user-defined function OID. Builtin function OIDs won't
+	// work since they're not descriptors based.
+	FunctionOID *oid.Oid
 }
 
 // TypeResolver is an interface for resolving types and type OIDs.
