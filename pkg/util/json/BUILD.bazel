@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/unique",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_json_iterator_go//:go",
     ],
 )
 
