@@ -10,10 +10,7 @@
 
 package settings
 
-import (
-	"context"
-	"strings"
-)
+import "context"
 
 // Setting is the interface exposing the metadata for a cluster setting.
 //
@@ -137,10 +134,3 @@ const (
 	// In short: "Go ahead but be careful."
 	Public
 )
-
-// AdminOnly returns whether the setting can only be viewed and modified by
-// superusers. Otherwise, users with the MODIFYCLUSTERSETTING role privilege can
-// do so.
-func AdminOnly(name string) bool {
-	return !strings.HasPrefix(name, "sql.defaults.")
-}

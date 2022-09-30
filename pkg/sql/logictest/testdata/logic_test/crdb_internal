@@ -1154,3 +1154,37 @@ query B
 SELECT crdb_internal.unsafe_clear_gossip_info('unknown key')
 ----
 false
+
+# Verify users with VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING can view non sql.defaults cluster settings.
+
+user root
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING TO testuser
+
+user testuser
+
+query T
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
+true
+
+user root
+
+statement ok
+REVOKE SYSTEM VIEWCLUSTERSETTING FROM testuser
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+user testuser
+
+query T
+SELECT value FROM crdb_internal.cluster_settings WHERE variable IN ('diagnostics.reporting.enabled')
+----
+true
+
+user root
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser

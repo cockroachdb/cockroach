@@ -14,7 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
@@ -54,4 +57,19 @@ func (p *GlobalPrivilege) GetName() string {
 	// TODO(richardjcai): Turn this into a const map somewhere.
 	// GetName can return none since SystemCluster is not named and is 1 of 1.
 	return ""
+}
+
+// ID implements the cat.Object interface.
+func (p *GlobalPrivilege) ID() cat.StableID {
+	return cat.StableID(descpb.InvalidID)
+}
+
+// PostgresDescriptorID implements the cat.Object interface.
+func (p *GlobalPrivilege) PostgresDescriptorID() catid.DescID {
+	return descpb.InvalidID
+}
+
+// Equals implements the cat.Object interface.
+func (p *GlobalPrivilege) Equals(otherObject cat.Object) bool {
+	return p.ID() == otherObject.ID()
 }
