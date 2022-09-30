@@ -36,10 +36,8 @@ upsert descriptor #104
   -    partitioning: {}
   -    sharded: {}
   -    version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
   +  indexes: []
-  +  modificationTime: {}
+     modificationTime: {}
   +  mutations:
   +  - direction: DROP
   +    index:
@@ -92,6 +90,10 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -103,14 +105,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     id: 104
-     indexes: []
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     mutations:
-     - direction: DROP
   ...
          version: 3
        mutationId: 2
@@ -146,10 +140,8 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
      indexes: []
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
+     modificationTime: {}
   -  mutations:
   -  - direction: DROP
   -    index:
@@ -173,7 +165,6 @@ upsert descriptor #104
   -      version: 3
   -    mutationId: 2
   -    state: DELETE_ONLY
-  +  modificationTime: {}
   +  mutations: []
      name: t
      nextColumnId: 3

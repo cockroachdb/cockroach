@@ -35,19 +35,19 @@ const (
 	Any DescriptorType = "any"
 
 	// Database is for database descriptors.
-	Database = "database"
+	Database DescriptorType = "database"
 
 	// Table is for table descriptors.
-	Table = "relation"
+	Table DescriptorType = "relation"
 
 	// Type is for type descriptors.
-	Type = "type"
+	Type DescriptorType = "type"
 
 	// Schema is for schema descriptors.
-	Schema = "schema"
+	Schema DescriptorType = "schema"
 
 	// Function is for function descriptors.
-	Function = "function"
+	Function DescriptorType = "function"
 )
 
 // MutationPublicationFilter is used by MakeFirstMutationPublic to filter the

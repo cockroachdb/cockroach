@@ -22,9 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -124,9 +128,9 @@ func (s *TestState) WithTxn(fn func(s *TestState)) {
 			return nil
 		})
 		_ = u.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
-			d = descbuilder.NewBuilderWithMVCCTimestamp(d.DescriptorProto(), s.mvccTimestamp()).BuildImmutable()
+			d = resetModificationTime(d)
 			s.committed.UpsertDescriptorEntry(d)
-			s.uncommitted.UpsertDescriptorEntry(d.NewBuilder().BuildExistingMutable())
+			s.uncommitted.UpsertDescriptorEntry(d)
 			return nil
 		})
 		s.LogSideEffectf("commit transaction #%d", s.txnCounter)
@@ -268,7 +272,7 @@ func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 func (s *TestState) descriptorDiff(desc catalog.Descriptor) string {
 	var old protoutil.Message
 	if d, _ := s.mustReadImmutableDescriptor(desc.GetID()); d != nil {
-		old = d.DescriptorProto()
+		old = resetModificationTime(d).DescriptorProto()
 	}
 	return sctestutils.ProtoDiff(old, desc.DescriptorProto(), sctestutils.DiffArgs{
 		Indent:       "  ",
@@ -289,4 +293,21 @@ func (s *TestState) descriptorDiff(desc catalog.Descriptor) string {
 			}
 		}
 	})
+}
+
+func resetModificationTime(d catalog.Descriptor) catalog.Descriptor {
+	mut := d.NewBuilder().BuildCreatedMutable()
+	switch m := mut.(type) {
+	case *tabledesc.Mutable:
+		m.ModificationTime.Reset()
+	case *dbdesc.Mutable:
+		m.ModificationTime.Reset()
+	case *typedesc.Mutable:
+		m.ModificationTime.Reset()
+	case *schemadesc.Mutable:
+		m.ModificationTime.Reset()
+	case *funcdesc.Mutable:
+		m.ModificationTime.Reset()
+	}
+	return mut.ImmutableCopy()
 }

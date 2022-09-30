@@ -380,7 +380,7 @@ func TestValidateTableDesc(t *testing.T) {
 		err  string
 		desc descpb.TableDescriptor
 	}{
-		{`empty table name`,
+		{`empty relation name`,
 			descpb.TableDescriptor{}},
 		{`invalid table ID 0`,
 			descpb.TableDescriptor{ID: 0, Name: "foo"}},

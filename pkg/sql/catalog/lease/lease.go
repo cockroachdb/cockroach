@@ -307,12 +307,11 @@ func getDescriptorsFromStoreForInterval(
 				}
 
 				// Construct a plain descriptor.
-				value := roachpb.Value{RawBytes: descContent}
-				var desc descpb.Descriptor
-				if err := value.GetProto(&desc); err != nil {
+				value := roachpb.Value{RawBytes: descContent, Timestamp: k.Timestamp}
+				descBuilder, err := descbuilder.FromSerializedValue(&value)
+				if err != nil {
 					return err
 				}
-				descBuilder := descbuilder.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
 
 				// Construct a historical descriptor with expiration.
 				histDesc := historicalDescriptor{
@@ -1092,7 +1091,7 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 					}
 				}
 
-				id, version, name, state, _, err := descpb.GetDescriptorMetadata(desc)
+				id, version, name, state, err := descpb.GetDescriptorMetadata(desc)
 				if err != nil {
 					log.Fatalf(ctx, "invalid descriptor %v: %v", desc, err)
 				}
@@ -1133,27 +1132,22 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- *desc
 		if len(ev.Value.RawBytes) == 0 {
 			return
 		}
-		var descriptor descpb.Descriptor
-		if err := ev.Value.GetProto(&descriptor); err != nil {
+		b, err := descbuilder.FromSerializedValue(&ev.Value)
+		if err != nil {
 			logcrash.ReportOrPanic(ctx, &m.storage.settings.SV,
 				"%s: unable to unmarshal descriptor %v", ev.Key, ev.Value)
+		}
+		if b == nil {
 			return
 		}
-		if descriptor.Union == nil {
-			return
-		}
-		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(&descriptor, ev.Value.Timestamp)
-		id, version, name, _, _, err := descpb.GetDescriptorMetadata(&descriptor)
-		if err != nil {
-			panic(err)
-		}
+		mut := b.BuildCreatedMutable()
 		if log.V(2) {
 			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
-				ev.Key, id, name, version)
+				ev.Key, mut.GetID(), mut.GetName(), mut.GetVersion())
 		}
 		select {
 		case <-ctx.Done():
-		case descUpdateCh <- &descriptor:
+		case descUpdateCh <- mut.DescriptorProto():
 		}
 	}
 	// Ignore errors here because they indicate that the server is shutting down.

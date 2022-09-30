@@ -32,9 +32,7 @@ upsert descriptor #106
        name: primary
      formatVersion: 3
      id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
+     modificationTime: {}
   +  mutations:
   +  - column:
   +      defaultExpr: nextval(107:::REGCLASS)
@@ -130,14 +128,6 @@ upsert descriptor #107
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: sq1
-     parentId: 104
-  ...
        start: "1"
      unexposedParentSchemaId: 105
   -  version: "1"
@@ -167,6 +157,10 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
 upsert descriptor #107
   ...
      createAsOfTime:
@@ -179,6 +173,10 @@ upsert descriptor #107
      dependedOnBy:
      - byId: true
   ...
+       start: "1"
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
 create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')"
   descriptor IDs: [106 107]
 # end PreCommitPhase
@@ -190,14 +188,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 5 MutationType ops
 upsert descriptor #106
-  ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
        direction: ADD
        mutationId: 1
@@ -219,14 +209,6 @@ upsert descriptor #106
   +  version: "3"
 upsert descriptor #107
   ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: sq1
-     parentId: 104
-  ...
        start: "1"
      unexposedParentSchemaId: 105
   -  version: "2"
@@ -241,14 +223,6 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 4 MutationType ops
 upsert descriptor #106
   ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
          version: 4
        mutationId: 1
   -    state: BACKFILLING
@@ -262,14 +236,6 @@ upsert descriptor #106
   +  version: "4"
 upsert descriptor #107
   ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
-  +  modificationTime: {}
-     name: sq1
-     parentId: 104
-  ...
        start: "1"
      unexposedParentSchemaId: 105
   -  version: "3"
@@ -279,14 +245,6 @@ commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 4 MutationType ops
 upsert descriptor #106
-  ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000005"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 1
@@ -300,14 +258,6 @@ upsert descriptor #106
   -  version: "4"
   +  version: "5"
 upsert descriptor #107
-  ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000005"
-  +  modificationTime: {}
-     name: sq1
-     parentId: 104
   ...
        start: "1"
      unexposedParentSchemaId: 105
@@ -323,14 +273,6 @@ begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 4 MutationType ops
 upsert descriptor #106
   ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000006"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
          version: 4
        mutationId: 1
   -    state: MERGING
@@ -343,14 +285,6 @@ upsert descriptor #106
   -  version: "5"
   +  version: "6"
 upsert descriptor #107
-  ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000006"
-  +  modificationTime: {}
-     name: sq1
-     parentId: 104
   ...
        start: "1"
      unexposedParentSchemaId: 105
@@ -387,11 +321,7 @@ upsert descriptor #106
        targetRanks: <redacted>
        targets: <redacted>
   ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000008"
-  +  modificationTime: {}
+     modificationTime: {}
      mutations:
   -  - column:
   -      defaultExpr: nextval(107:::REGCLASS)
@@ -500,14 +430,6 @@ upsert descriptor #107
      dependedOnBy:
      - byId: true
   ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000008"
-  +  modificationTime: {}
-     name: sq1
-     parentId: 104
-  ...
        start: "1"
      unexposedParentSchemaId: 105
   -  version: "6"
@@ -520,12 +442,6 @@ begin transaction #11
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
 upsert descriptor #106
   ...
-     formatVersion: 3
-     id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000010"
-  +  modificationTime: {}
-     mutations:
      - direction: DROP
        index:
   -      constraintId: 3
@@ -571,14 +487,6 @@ upsert descriptor #106
   +  version: "8"
 upsert descriptor #107
   ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000010"
-  +  modificationTime: {}
-     name: sq1
-     parentId: 104
-  ...
        start: "1"
      unexposedParentSchemaId: 105
   -  version: "7"
@@ -610,10 +518,8 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
-     formatVersion: 3
      id: 106
-  -  modificationTime:
-  -    wallTime: "1640995200000000011"
+     modificationTime: {}
   -  mutations:
   -  - direction: DROP
   -    index:
@@ -637,7 +543,6 @@ upsert descriptor #106
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
-  +  modificationTime: {}
   +  mutations: []
      name: tbl
      nextColumnId: 3
@@ -656,14 +561,6 @@ upsert descriptor #107
   -    jobId: "1"
      dependedOnBy:
      - byId: true
-  ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000011"
-  +  modificationTime: {}
-     name: sq1
-     parentId: 104
   ...
        start: "1"
      unexposedParentSchemaId: 105

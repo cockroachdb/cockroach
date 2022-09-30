@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -546,9 +545,10 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 		require.NotEmpty(t, row)
 		bytes, err := hex.DecodeString(row[0])
 		require.NoError(t, err)
-		var descProto descpb.Descriptor
-		require.NoError(t, protoutil.Unmarshal(bytes, &descProto))
-		b := descbuilder.NewBuilderWithMVCCTimestamp(&descProto, hlc.Timestamp{WallTime: 1})
+		b, err := descbuilder.FromBytesAndMVCCTimestamp(bytes, hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		require.NotNil(t, b)
+		require.Equal(t, catalog.Table, b.DescriptorType())
 		desc := b.BuildImmutable().(catalog.TableDescriptor)
 		test(desc)
 	}

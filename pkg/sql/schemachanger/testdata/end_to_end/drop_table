@@ -22,6 +22,14 @@ increment telemetry for sql.schema.drop_table
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 add synthetic descriptor #107:
   ...
+     formatVersion: 3
+     id: 107
+  -  modificationTime: {}
+  +  modificationTime:
+  +    wallTime: "1640995200000000001"
+     name: t
+     nextColumnId: 4
+  ...
      replacementOf:
        time: {}
   +  state: DROP
@@ -50,14 +58,6 @@ upsert descriptor #107
   +  dropTime: <redacted>"
      families:
      - columnIds:
-  ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
-     name: t
-     nextColumnId: 4
   ...
      replacementOf:
        time: {}
@@ -94,14 +94,6 @@ upsert descriptor #107
   -    targets: <redacted>
      dropTime: <redacted>"
      families:
-  ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     name: t
-     nextColumnId: 4
   ...
      state: DROP
      unexposedParentSchemaId: 106

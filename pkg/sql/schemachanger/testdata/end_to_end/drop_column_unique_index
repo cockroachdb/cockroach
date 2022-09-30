@@ -39,11 +39,8 @@ upsert descriptor #106
        - x
        name: primary
   ...
-       unique: true
        version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
+     modificationTime: {}
   +  mutations:
   +  - column:
   +      defaultExpr: 3.14:::DECIMAL
@@ -158,6 +155,10 @@ upsert descriptor #106
      families:
      - columnIds:
   ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "11"
+  +  version: "12"
 create job #1 (non-cancelable: false): "ALTER TABLE t.public.test DROP COLUMN pi"
   descriptor IDs: [106]
 # end PreCommitPhase
@@ -169,14 +170,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 3 MutationType ops
 upsert descriptor #106
-  ...
-       unique: true
-       version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 3
@@ -199,14 +192,6 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
 upsert descriptor #106
   ...
-       unique: true
-       version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
          version: 4
        mutationId: 3
   -    state: BACKFILLING
@@ -223,14 +208,6 @@ commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
 upsert descriptor #106
-  ...
-       unique: true
-       version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000005"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 3
@@ -252,14 +229,6 @@ commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 3 MutationType ops
 upsert descriptor #106
-  ...
-       unique: true
-       version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000006"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 3
@@ -287,14 +256,6 @@ upsert descriptor #106
   -    revertible: true
        targetRanks: <redacted>
        targets: <redacted>
-  ...
-       unique: true
-       version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000008"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
        direction: DROP
        mutationId: 3
@@ -397,14 +358,6 @@ begin transaction #11
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #106
   ...
-       unique: true
-       version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000010"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
      - direction: DROP
        index:
   -      constraintId: 6
@@ -486,10 +439,8 @@ upsert descriptor #106
        - x
        name: primary
   ...
-       unique: true
        version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000011"
+     modificationTime: {}
   -  mutations:
   -  - column:
   -      defaultExpr: 3.14:::DECIMAL
@@ -532,7 +483,6 @@ upsert descriptor #106
   -      version: 4
   -    mutationId: 3
   -    state: DELETE_ONLY
-  +  modificationTime: {}
   +  mutations: []
      name: test
      nextColumnId: 5

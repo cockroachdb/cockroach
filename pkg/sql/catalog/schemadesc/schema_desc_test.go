@@ -80,7 +80,7 @@ func TestValidateSchemaSelf(t *testing.T) {
 		desc descpb.SchemaDescriptor
 	}{
 		{ // 0
-			err:  `empty descriptor name`,
+			err:  `empty schema name`,
 			desc: descpb.SchemaDescriptor{},
 		},
 		{ // 1

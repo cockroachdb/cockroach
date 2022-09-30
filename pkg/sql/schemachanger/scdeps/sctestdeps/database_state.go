@@ -65,13 +65,11 @@ ORDER BY id`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		descProto := &descpb.Descriptor{}
-		err = protoutil.Unmarshal(descBytes, descProto)
+		b, err := descbuilder.FromBytesAndMVCCTimestamp(descBytes, ts)
 		if err != nil {
 			t.Fatal(err)
 		}
-		b := descbuilder.NewBuilderWithMVCCTimestamp(descProto, ts)
-		if err := b.RunPostDeserializationChanges(); err != nil {
+		if err = b.RunPostDeserializationChanges(); err != nil {
 			t.Fatal(err)
 		}
 		desc := b.BuildCreatedMutable()

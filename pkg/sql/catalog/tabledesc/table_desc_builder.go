@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -36,18 +37,34 @@ type TableDescriptorBuilder interface {
 type tableDescriptorBuilder struct {
 	original                   *descpb.TableDescriptor
 	maybeModified              *descpb.TableDescriptor
-	changes                    catalog.PostDeserializationChanges
-	skipFKsWithNoMatchingTable bool
+	mvccTimestamp              hlc.Timestamp
 	isUncommittedVersion       bool
+	skipFKsWithNoMatchingTable bool
+	changes                    catalog.PostDeserializationChanges
 }
 
 var _ TableDescriptorBuilder = &tableDescriptorBuilder{}
 
-// NewBuilder creates a new catalog.DescriptorBuilder object for building
-// table descriptors.
+// NewBuilder returns a new TableDescriptorBuilder instance by delegating to
+// NewBuilderWithMVCCTimestamp with an empty MVCC timestamp.
+//
+// Callers must assume that the given protobuf has already been treated with the
+// MVCC timestamp beforehand.
 func NewBuilder(desc *descpb.TableDescriptor) TableDescriptorBuilder {
-	return newBuilder(desc, false, /* isUncommittedVersion */
-		catalog.PostDeserializationChanges{})
+	return NewBuilderWithMVCCTimestamp(desc, hlc.Timestamp{})
+}
+
+// NewBuilderWithMVCCTimestamp creates a new TableDescriptorBuilder instance
+// for building table descriptors.
+func NewBuilderWithMVCCTimestamp(
+	desc *descpb.TableDescriptor, mvccTimestamp hlc.Timestamp,
+) TableDescriptorBuilder {
+	return newBuilder(
+		desc,
+		mvccTimestamp,
+		false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{},
+	)
 }
 
 // NewBuilderForFKUpgrade should be used when attempting to upgrade the
@@ -58,8 +75,12 @@ func NewBuilder(desc *descpb.TableDescriptor) TableDescriptorBuilder {
 func NewBuilderForFKUpgrade(
 	desc *descpb.TableDescriptor, skipFKsWithNoMatchingTable bool,
 ) TableDescriptorBuilder {
-	b := newBuilder(desc, false, /* isUncommittedVersion */
-		catalog.PostDeserializationChanges{})
+	b := newBuilder(
+		desc,
+		hlc.Timestamp{},
+		false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{},
+	)
 	b.skipFKsWithNoMatchingTable = skipFKsWithNoMatchingTable
 	return b
 }
@@ -80,11 +101,13 @@ func NewUnsafeImmutable(desc *descpb.TableDescriptor) catalog.TableDescriptor {
 
 func newBuilder(
 	desc *descpb.TableDescriptor,
+	mvccTimestamp hlc.Timestamp,
 	isUncommittedVersion bool,
 	changes catalog.PostDeserializationChanges,
 ) *tableDescriptorBuilder {
 	return &tableDescriptorBuilder{
 		original:             protoutil.Clone(desc).(*descpb.TableDescriptor),
+		mvccTimestamp:        mvccTimestamp,
 		isUncommittedVersion: isUncommittedVersion,
 		changes:              changes,
 	}
@@ -97,18 +120,28 @@ func (tdb *tableDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() error {
-	var err error
-
-	prevChanges := tdb.changes
-	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
-	tdb.changes, err = maybeFillInDescriptor(tdb.maybeModified)
+func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
+	defer func() {
+		err = errors.Wrapf(err, "table %q (%d)", tdb.original.Name, tdb.original.ID)
+	}()
+	// Set the ModificationTime field before doing anything else.
+	// Other changes may depend on it.
+	mustSetModTime, err := descpb.MustSetModificationTime(
+		tdb.original.ModificationTime, tdb.mvccTimestamp, tdb.original.Version,
+	)
 	if err != nil {
 		return err
 	}
-	prevChanges.ForEach(func(change catalog.PostDeserializationChangeType) {
-		tdb.changes.Add(change)
-	})
+	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
+	if mustSetModTime {
+		tdb.maybeModified.ModificationTime = tdb.mvccTimestamp
+		tdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
+	}
+	c, err := maybeFillInDescriptor(tdb.maybeModified)
+	if err != nil {
+		return err
+	}
+	c.ForEach(tdb.changes.Add)
 	return nil
 }
 
@@ -224,6 +257,7 @@ func maybeFillInDescriptor(
 			changes.Add(change)
 		}
 	}
+	set(catalog.SetCreateAsOfTimeUsingModTime, maybeSetCreateAsOfTime(desc))
 	set(catalog.UpgradedFormatVersion, maybeUpgradeFormatVersion(desc))
 	set(catalog.FixedIndexEncodingType, maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex))
 	set(catalog.UpgradedIndexFormatVersion, maybeUpgradePrimaryIndexFormatVersion(desc))
@@ -791,6 +825,27 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 
 	}
 	return desc.NextConstraintID != initialConstraintID
+}
+
+// maybeSetCreateAsOfTime ensures that the CreateAsOfTime field is set.
+//
+// CreateAsOfTime is used for CREATE TABLE ... AS ... and was introduced in
+// v19.1. In general it is not critical to set except for tables in the ADD
+// state which were created from CTAS so we should not assert on its not
+// being set. It's not always sensical to set it from the passed MVCC
+// timestamp. However, starting in 19.2 the CreateAsOfTime and
+// ModificationTime fields are both unset for the first Version of a
+// TableDescriptor and the code relies on the value being set based on the
+// MVCC timestamp.
+func maybeSetCreateAsOfTime(desc *descpb.TableDescriptor) (hasChanged bool) {
+	if !desc.CreateAsOfTime.IsEmpty() || desc.Version > 1 || desc.ModificationTime.IsEmpty() {
+		return false
+	}
+	// The expectation is that this is only set when the version is 2.
+	// For any version greater than that, this is not accurate but better than
+	// nothing at all.
+	desc.CreateAsOfTime = desc.ModificationTime
+	return true
 }
 
 // maybeUpgradeSequenceReference attempts to upgrade by-name sequence references.

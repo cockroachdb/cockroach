@@ -33,8 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -843,19 +847,13 @@ func GetBackupIndexAtTime(
 // (latest) backup with a StartTime >= asOf.
 func LoadSQLDescsFromBackupsAtTime(
 	backupManifests []backuppb.BackupManifest, asOf hlc.Timestamp,
-) ([]catalog.Descriptor, backuppb.BackupManifest) {
+) ([]catalog.Descriptor, backuppb.BackupManifest, error) {
 	lastBackupManifest := backupManifests[len(backupManifests)-1]
 
-	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
-		ret := make([]catalog.Descriptor, 0, len(raw))
-		for i := range raw {
-			ret = append(ret, descbuilder.NewBuilder(&raw[i]).BuildExistingMutable())
-		}
-		return ret
-	}
 	if asOf.IsEmpty() {
 		if lastBackupManifest.DescriptorCoverage != tree.AllDescriptors {
-			return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+			descs, err := BackupManifestDescriptors(&lastBackupManifest)
+			return descs, lastBackupManifest, err
 		}
 
 		// Cluster backups with revision history may have included previous database
@@ -872,10 +870,11 @@ func LoadSQLDescsFromBackupsAtTime(
 		lastBackupManifest = b
 	}
 	if len(lastBackupManifest.DescriptorChanges) == 0 {
-		return unwrapDescriptors(lastBackupManifest.Descriptors), lastBackupManifest
+		descs, err := BackupManifestDescriptors(&lastBackupManifest)
+		return descs, lastBackupManifest, err
 	}
 
-	byID := make(map[descpb.ID]*descpb.Descriptor, len(lastBackupManifest.Descriptors))
+	byID := make(map[descpb.ID]catalog.DescriptorBuilder, len(lastBackupManifest.Descriptors))
 	for _, rev := range lastBackupManifest.DescriptorChanges {
 		if asOf.Less(rev.Time) {
 			break
@@ -883,15 +882,21 @@ func LoadSQLDescsFromBackupsAtTime(
 		if rev.Desc == nil {
 			delete(byID, rev.ID)
 		} else {
-			byID[rev.ID] = rev.Desc
+			byID[rev.ID] = newDescriptorBuilder(rev.Desc, rev.Time)
 		}
 	}
 
 	allDescs := make([]catalog.Descriptor, 0, len(byID))
-	for _, raw := range byID {
+	for _, b := range byID {
+		if b == nil {
+			continue
+		}
 		// A revision may have been captured before it was in a DB that is
 		// backed up -- if the DB is missing, filter the object.
-		desc := descbuilder.NewBuilder(raw).BuildExistingMutable()
+		if err := b.RunPostDeserializationChanges(); err != nil {
+			return nil, backuppb.BackupManifest{}, err
+		}
+		desc := b.BuildCreatedMutable()
 		var isObject bool
 		switch d := desc.(type) {
 		case catalog.TableDescriptor:
@@ -908,7 +913,7 @@ func LoadSQLDescsFromBackupsAtTime(
 		}
 		allDescs = append(allDescs, desc)
 	}
-	return allDescs, lastBackupManifest
+	return allDescs, lastBackupManifest, nil
 }
 
 // SanitizeLocalityKV returns a sanitized version of the input string where all
@@ -1057,6 +1062,65 @@ func CheckForPreviousBackup(
 // TempCheckpointFileNameForJob returns temporary filename for backup manifest checkpoint.
 func TempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 	return fmt.Sprintf("%s-%d", BackupManifestCheckpointName, jobID)
+}
+
+// BackupManifestDescriptors returns the descriptors encoded in the manifest as
+// a slice of mutable descriptors.
+func BackupManifestDescriptors(
+	backupManifest *backuppb.BackupManifest,
+) ([]catalog.Descriptor, error) {
+	ret := make([]catalog.Descriptor, 0, len(backupManifest.Descriptors))
+	for i := range backupManifest.Descriptors {
+		b := newDescriptorBuilder(&backupManifest.Descriptors[i], backupManifest.EndTime)
+		if b == nil {
+			continue
+		}
+		if err := b.RunPostDeserializationChanges(); err != nil {
+			return nil, err
+		}
+		ret = append(ret, b.BuildCreatedMutable())
+	}
+	return ret, nil
+}
+
+// NewDescriptorForManifest returns a descriptor instance for a protobuf
+// to be added to a backup manifest or in a backup job.
+// In these cases, we know that the ModificationTime field has already correctly
+// been set in the descriptor protobuf, because this descriptor has been read
+// from storage and therefore has been updated using the MVCC timestamp.
+func NewDescriptorForManifest(descProto *descpb.Descriptor) catalog.Descriptor {
+	b := newDescriptorBuilder(descProto, hlc.Timestamp{})
+	if b == nil {
+		return nil
+	}
+	// No need to call RunPostDeserializationChanges, because the descriptor has
+	// been read from storage and therefore this has been called already.
+	//
+	// Return a mutable descriptor because that's what the call sites assume.
+	// TODO(postamar): revisit that assumption.
+	return b.BuildCreatedMutable()
+}
+
+// newDescriptorBuilder constructs a catalog.DescriptorBuilder instance
+// initialized using the descriptor protobuf message and a fake MVCC timestamp
+// for the purpose of setting the descriptor's ModificationTime field to a
+// valid value if it's still unset.
+func newDescriptorBuilder(
+	descProto *descpb.Descriptor, fakeMVCCTimestamp hlc.Timestamp,
+) catalog.DescriptorBuilder {
+	tbl, db, typ, sc, f := descpb.GetDescriptors(descProto)
+	if tbl != nil {
+		return tabledesc.NewBuilderWithMVCCTimestamp(tbl, fakeMVCCTimestamp)
+	} else if db != nil {
+		return dbdesc.NewBuilderWithMVCCTimestamp(db, fakeMVCCTimestamp)
+	} else if typ != nil {
+		return typedesc.NewBuilderWithMVCCTimestamp(typ, fakeMVCCTimestamp)
+	} else if sc != nil {
+		return schemadesc.NewBuilderWithMVCCTimestamp(sc, fakeMVCCTimestamp)
+	} else if f != nil {
+		return funcdesc.NewBuilderWithMVCCTimestamp(f, fakeMVCCTimestamp)
+	}
+	return nil
 }
 
 // WriteBackupManifestCheckpoint writes a new BACKUP-CHECKPOINT MANIFEST and

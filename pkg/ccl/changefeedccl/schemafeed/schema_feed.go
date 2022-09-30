@@ -712,13 +712,11 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 				}
 
 				// Unmarshal the descriptor.
-				value := roachpb.Value{RawBytes: unsafeValue}
-				var desc descpb.Descriptor
-				if err := value.GetProto(&desc); err != nil {
+				value := roachpb.Value{RawBytes: unsafeValue, Timestamp: k.Timestamp}
+				b, err := descbuilder.FromSerializedValue(&value)
+				if err != nil {
 					return err
 				}
-
-				b := descbuilder.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
 				if b != nil && (b.DescriptorType() == catalog.Table || b.DescriptorType() == catalog.Type) {
 					descriptors = append(descriptors, b.BuildImmutable())
 				}

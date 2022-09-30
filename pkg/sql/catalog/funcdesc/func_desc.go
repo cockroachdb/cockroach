@@ -147,12 +147,12 @@ func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState 
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(&desc.FunctionDescriptor, desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(&desc.FunctionDescriptor, hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(&desc.FunctionDescriptor, desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(&desc.FunctionDescriptor, hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
 }
 
 // GetReferencedDescIDs implements the catalog.Descriptor interface.
@@ -173,7 +173,7 @@ func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 
 // ValidateSelf implements the catalog.Descriptor interface.
 func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
-	vea.Report(catalog.ValidateName(desc.Name, "function"))
+	vea.Report(catalog.ValidateName(desc))
 	if desc.GetID() == descpb.InvalidID {
 		vea.Report(errors.AssertionFailedf("invalid ID %d", desc.GetID()))
 	}

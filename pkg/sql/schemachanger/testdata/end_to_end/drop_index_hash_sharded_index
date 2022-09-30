@@ -64,8 +64,13 @@ upsert descriptor #104
   -    partitioning: {}
   -    sharded:
   -      columnNames:
+  -      - j
+  -      isSharded: true
+  -      name: crdb_internal_j_shard_16
+  -      shardBuckets: 16
+  -    version: 3
   +  indexes: []
-  +  modificationTime: {}
+     modificationTime: {}
   +  mutations:
   +  - direction: DROP
   +    index:
@@ -83,13 +88,7 @@ upsert descriptor #104
   +      - 2
   +      keyColumnNames:
   +      - crdb_internal_column_3_name_placeholder
-         - j
-  -      isSharded: true
-  -      name: crdb_internal_j_shard_16
-  -      shardBuckets: 16
-  -    version: 3
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
+  +      - j
   +      keySuffixColumnIds:
   +      - 1
   +      name: crdb_internal_index_2_name_placeholder
@@ -158,6 +157,10 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "8"
+  +  version: "9"
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -169,14 +172,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
 upsert descriptor #104
-  ...
-     id: 104
-     indexes: []
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     mutations:
-     - direction: DROP
   ...
          version: 3
        mutationId: 2
@@ -219,10 +214,8 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     id: 104
      indexes: []
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
+     modificationTime: {}
   -  mutations:
   -  - direction: DROP
   -    index:
@@ -267,7 +260,6 @@ upsert descriptor #104
   -    direction: DROP
   -    mutationId: 2
   -    state: DELETE_ONLY
-  +  modificationTime: {}
   +  mutations: []
      name: t
      nextColumnId: 4

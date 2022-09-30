@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -899,19 +901,14 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			var desc descpb.Descriptor
-			err = res.ValueProto(&desc)
+			b, err := descbuilder.FromSerializedValue(res.Value)
 			if err != nil {
 				return err
 			}
-			_, dbDesc, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, res.Value.Timestamp)
-			require.NotNil(t, dbDesc)
-			for name := range dbDesc.Schemas {
-				if name == dbName {
-					exists = true
-					break
-				}
-			}
+			require.NotNil(t, b)
+			require.Equal(t, catalog.Database, b.DescriptorType())
+			db := b.BuildImmutable().(catalog.DatabaseDescriptor)
+			exists = db.GetSchemaID(dbName) != descpb.InvalidID
 			return nil
 		}))
 		return exists
