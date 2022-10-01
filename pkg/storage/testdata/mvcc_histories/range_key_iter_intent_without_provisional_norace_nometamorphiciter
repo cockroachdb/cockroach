@@ -2,6 +2,8 @@
 # values. The initial setup will fail when it's scanning the data afterwards,
 # but the data is still written so that's fine.
 #
+# The test uses put_rangekey directly on the engine to omit conflict checks.
+#
 # This test does not run under race, because the error behavior differs due
 # to additional (costly) assertions. We want to test that we are reasonably
 # resistant to invariant violations even when not under race.

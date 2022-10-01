@@ -70,11 +70,36 @@ meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0
 data: "i"/7.000000000,0 -> /BYTES/i7
 stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
 
-# error on intent, no tombstones should be written
+# Error on intent, no tombstones should be written. We try both the
+# point tombstone and range tombstone paths.
 run stats error
 del_range_pred k=a end=p ts=6 startTime=1
 ----
 >> del_range_pred k=a end=p ts=6 startTime=1
+stats: no change
+>> at end:
+rangekey: {f-h\x00}/[5.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/3.000000000,0 -> /BYTES/b3
+data: "d"/5.000000000,0 -> /<empty>
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "d"/1.000000000,0 -> /BYTES/d1
+data: "e"/2.000000000,0 -> /BYTES/e2
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /BYTES/h4
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+stats: key_count=8 key_bytes=160 val_count=12 val_bytes=111 range_key_count=2 range_key_bytes=27 range_val_count=2 live_count=3 live_bytes=111 gc_bytes_age=17863 intent_count=1 intent_bytes=19 separated_intent_count=1 intent_age=93
+error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+
+run stats error
+del_range_pred k=i end=+i ts=6 startTime=1
+----
+>> del_range_pred k=i end=+i ts=6 startTime=1
 stats: no change
 >> at end:
 rangekey: {f-h\x00}/[5.000000000,0=/<empty>]

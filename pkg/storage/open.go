@@ -101,6 +101,17 @@ func MaxSize(size int64) ConfigOption {
 	}
 }
 
+// BlockSize sets the engine block size, primarily for testing purposes.
+func BlockSize(size int) ConfigOption {
+	return func(cfg *engineConfig) error {
+		for i := range cfg.Opts.Levels {
+			cfg.Opts.Levels[i].BlockSize = size
+			cfg.Opts.Levels[i].IndexBlockSize = size
+		}
+		return nil
+	}
+}
+
 // MaxWriterConcurrency sets the concurrency of the sstable Writers. A concurrency
 // of 0 implies no parallelism in the Writer, and a concurrency of 1 or more implies
 // parallelism in the Writer. Currently, there's no difference between a concurrency
@@ -168,6 +179,14 @@ func Hook(hookFunc func(*base.StorageConfig) error) ConfigOption {
 		}
 		return hookFunc(&cfg.PebbleConfig.StorageConfig)
 	}
+}
+
+// If enables the given option if enable is true.
+func If(enable bool, opt ConfigOption) ConfigOption {
+	if enable {
+		return opt
+	}
+	return func(cfg *engineConfig) error { return nil }
 }
 
 // A Location describes where the storage engine's data will be written. A

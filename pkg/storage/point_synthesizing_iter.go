@@ -25,11 +25,11 @@ import (
 // pointSynthesizingIterPool reuses pointSynthesizingIters to avoid allocations.
 var pointSynthesizingIterPool = sync.Pool{
 	New: func() interface{} {
-		return &pointSynthesizingIter{}
+		return &PointSynthesizingIter{}
 	},
 }
 
-// pointSynthesizingIter wraps an MVCCIterator, and synthesizes MVCC point keys
+// PointSynthesizingIter wraps an MVCCIterator, and synthesizes MVCC point keys
 // for MVCC range keys above existing point keys (not below), and at the start
 // of range keys (truncated to iterator bounds). It does not emit MVCC range
 // keys at all, since these would appear to conflict with the synthesized point
@@ -42,7 +42,7 @@ var pointSynthesizingIterPool = sync.Pool{
 // rangeKeysEnd specifies where to end point synthesis at the current position,
 // i.e. the first range key below an existing point key.
 //
-// The relative positioning of pointSynthesizingIter and the underlying iterator
+// The relative positioning of PointSynthesizingIter and the underlying iterator
 // is as follows in the forward direction:
 //
 //   - atPoint=true: rangeKeysIdx points to a range key following the point key,
@@ -60,7 +60,7 @@ var pointSynthesizingIterPool = sync.Pool{
 // in reverse.
 //
 // See also assertInvariants() which asserts positioning invariants.
-type pointSynthesizingIter struct {
+type PointSynthesizingIter struct {
 	// iter is the underlying MVCC iterator.
 	iter MVCCIterator
 
@@ -124,13 +124,13 @@ type pointSynthesizingIter struct {
 	rangeKeyChanged bool
 }
 
-var _ MVCCIterator = (*pointSynthesizingIter)(nil)
+var _ MVCCIterator = (*PointSynthesizingIter)(nil)
 
-// newPointSynthesizingIter creates a new pointSynthesizingIter, or gets one
+// NewPointSynthesizingIter creates a new pointSynthesizingIter, or gets one
 // from the pool.
-func newPointSynthesizingIter(parent MVCCIterator) *pointSynthesizingIter {
-	iter := pointSynthesizingIterPool.Get().(*pointSynthesizingIter)
-	*iter = pointSynthesizingIter{
+func NewPointSynthesizingIter(parent MVCCIterator) *PointSynthesizingIter {
+	iter := pointSynthesizingIterPool.Get().(*PointSynthesizingIter)
+	*iter = PointSynthesizingIter{
 		iter:   parent,
 		prefix: parent.IsPrefix(),
 		// Reuse pooled byte slices.
@@ -141,10 +141,10 @@ func newPointSynthesizingIter(parent MVCCIterator) *pointSynthesizingIter {
 	return iter
 }
 
-// newPointSynthesizingIterAtParent creates a new pointSynthesizingIter and
+// NewPointSynthesizingIterAtParent creates a new pointSynthesizingIter and
 // loads the position from the parent iterator.
-func newPointSynthesizingIterAtParent(parent MVCCIterator) *pointSynthesizingIter {
-	iter := newPointSynthesizingIter(parent)
+func NewPointSynthesizingIterAtParent(parent MVCCIterator) *PointSynthesizingIter {
+	iter := NewPointSynthesizingIter(parent)
 	iter.rangeKeyChanged = true // force range key detection
 	if ok, err := iter.updateIter(); ok && err == nil {
 		iter.updateSeekGEPosition(parent.UnsafeKey())
@@ -156,14 +156,14 @@ func newPointSynthesizingIterAtParent(parent MVCCIterator) *pointSynthesizingIte
 //
 // Close will also close the underlying iterator. Use release() to release it
 // back to the pool without closing the parent iterator.
-func (i *pointSynthesizingIter) Close() {
+func (i *PointSynthesizingIter) Close() {
 	i.iter.Close()
 	i.release()
 }
 
 // release releases the iterator back into the pool.
-func (i *pointSynthesizingIter) release() {
-	*i = pointSynthesizingIter{
+func (i *PointSynthesizingIter) release() {
+	*i = PointSynthesizingIter{
 		// Reuse slices.
 		rangeKeysBuf:   i.rangeKeysBuf[:0],
 		rangeKeysPos:   i.rangeKeysPos[:0],
@@ -174,14 +174,14 @@ func (i *pointSynthesizingIter) release() {
 
 // iterNext is a convenience function that calls iter.Next()
 // and returns the value of updateIter().
-func (i *pointSynthesizingIter) iterNext() (bool, error) {
+func (i *PointSynthesizingIter) iterNext() (bool, error) {
 	i.iter.Next()
 	return i.updateIter()
 }
 
 // iterPrev is a convenience function that calls iter.Prev()
 // and returns the value of updateIter().
-func (i *pointSynthesizingIter) iterPrev() (bool, error) {
+func (i *PointSynthesizingIter) iterPrev() (bool, error) {
 	i.iter.Prev()
 	return i.updateIter()
 }
@@ -189,7 +189,7 @@ func (i *pointSynthesizingIter) iterPrev() (bool, error) {
 // updateIter memoizes the iterator fields from the underlying iterator, and
 // also keeps track of rangeKeyChanged. It must be called after every iterator
 // positioning operation, and returns the iterator validity/error.
-func (i *pointSynthesizingIter) updateIter() (bool, error) {
+func (i *PointSynthesizingIter) updateIter() (bool, error) {
 	if i.iterValid, i.iterErr = i.iter.Valid(); i.iterValid {
 		i.iterHasPoint, i.iterHasRange = i.iter.HasPointAndRange()
 		i.iterKey = i.iter.UnsafeKey()
@@ -208,7 +208,7 @@ func (i *pointSynthesizingIter) updateIter() (bool, error) {
 // iterator state. It must be called very time the pointSynthesizingIter moves
 // to a new key position, i.e. after exhausting all point/range keys at the
 // current position. rangeKeysIdx and rangeKeysEnd are reset.
-func (i *pointSynthesizingIter) updateRangeKeys() {
+func (i *PointSynthesizingIter) updateRangeKeys() {
 	if !i.iterHasRange {
 		i.clearRangeKeys()
 		return
@@ -265,7 +265,7 @@ func (i *pointSynthesizingIter) updateRangeKeys() {
 
 // extendRangeKeysEnd extends i.rangeKeysEnd below the current point key's
 // timestamp in the underlying iterator. It never reduces i.rangeKeysEnd.
-func (i *pointSynthesizingIter) extendRangeKeysEnd() {
+func (i *PointSynthesizingIter) extendRangeKeysEnd() {
 	if i.iterHasPoint && i.atRangeKeysPos && !i.iterKey.Timestamp.IsEmpty() {
 		if l := len(i.rangeKeys); i.rangeKeysEnd < l {
 			i.rangeKeysEnd = sort.Search(l-i.rangeKeysEnd, func(idx int) bool {
@@ -278,7 +278,7 @@ func (i *pointSynthesizingIter) extendRangeKeysEnd() {
 // updateAtPoint updates i.atPoint according to whether the synthesizing
 // iterator is positioned on the real point key in the underlying iterator.
 // Requires i.rangeKeys to have been positioned first.
-func (i *pointSynthesizingIter) updateAtPoint() {
+func (i *PointSynthesizingIter) updateAtPoint() {
 	if !i.iterHasPoint {
 		i.atPoint = false
 	} else if len(i.rangeKeys) == 0 {
@@ -297,7 +297,7 @@ func (i *pointSynthesizingIter) updateAtPoint() {
 // updatePosition updates the synthesizing iterator for the position of the
 // underlying iterator. This may step the underlying iterator to position it
 // correctly relative to bare range keys.
-func (i *pointSynthesizingIter) updatePosition() {
+func (i *PointSynthesizingIter) updatePosition() {
 	if !i.iterHasRange {
 		// Fast path: no range keys, so just clear range keys and bail out.
 		i.atPoint = i.iterHasPoint
@@ -333,7 +333,7 @@ func (i *pointSynthesizingIter) updatePosition() {
 
 // clearRangeKeys resets the iterator by clearing out all range key state.
 // gcassert:inline
-func (i *pointSynthesizingIter) clearRangeKeys() {
+func (i *PointSynthesizingIter) clearRangeKeys() {
 	if len(i.rangeKeys) != 0 {
 		i.rangeKeys = i.rangeKeys[:0]
 		i.rangeKeysPos = i.rangeKeysPos[:0]
@@ -349,7 +349,7 @@ func (i *pointSynthesizingIter) clearRangeKeys() {
 }
 
 // SeekGE implements MVCCIterator.
-func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
+func (i *PointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 	i.reverse = false
 	i.iter.SeekGE(seekKey)
 	if ok, _ := i.updateIter(); !ok {
@@ -360,7 +360,7 @@ func (i *pointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 }
 
 // SeekIntentGE implements MVCCIterator.
-func (i *pointSynthesizingIter) SeekIntentGE(seekKey roachpb.Key, txnUUID uuid.UUID) {
+func (i *PointSynthesizingIter) SeekIntentGE(seekKey roachpb.Key, txnUUID uuid.UUID) {
 	i.reverse = false
 	i.iter.SeekIntentGE(seekKey, txnUUID)
 	if ok, _ := i.updateIter(); !ok {
@@ -372,7 +372,7 @@ func (i *pointSynthesizingIter) SeekIntentGE(seekKey roachpb.Key, txnUUID uuid.U
 
 // updateSeekGEPosition updates the iterator state following a SeekGE call, or
 // to load the parent iterator's position in newPointSynthesizingIterAtParent.
-func (i *pointSynthesizingIter) updateSeekGEPosition(seekKey MVCCKey) {
+func (i *PointSynthesizingIter) updateSeekGEPosition(seekKey MVCCKey) {
 
 	// Fast path: no range key, so just reset the iterator and bail out.
 	if !i.iterHasRange {
@@ -420,7 +420,7 @@ func (i *pointSynthesizingIter) updateSeekGEPosition(seekKey MVCCKey) {
 }
 
 // Next implements MVCCIterator.
-func (i *pointSynthesizingIter) Next() {
+func (i *PointSynthesizingIter) Next() {
 	// When changing direction, flip the relative positioning with iter.
 	if i.reverse {
 		i.reverse = false
@@ -456,7 +456,7 @@ func (i *pointSynthesizingIter) Next() {
 }
 
 // NextKey implements MVCCIterator.
-func (i *pointSynthesizingIter) NextKey() {
+func (i *PointSynthesizingIter) NextKey() {
 	// When changing direction, flip the relative positioning with iter.
 	//
 	// NB: This isn't really supported by the MVCCIterator interface, but we have
@@ -481,7 +481,7 @@ func (i *pointSynthesizingIter) NextKey() {
 }
 
 // SeekLT implements MVCCIterator.
-func (i *pointSynthesizingIter) SeekLT(seekKey MVCCKey) {
+func (i *PointSynthesizingIter) SeekLT(seekKey MVCCKey) {
 	i.reverse = true
 	i.iter.SeekLT(seekKey)
 	if ok, _ := i.updateIter(); !ok {
@@ -539,7 +539,7 @@ func (i *pointSynthesizingIter) SeekLT(seekKey MVCCKey) {
 }
 
 // Prev implements MVCCIterator.
-func (i *pointSynthesizingIter) Prev() {
+func (i *PointSynthesizingIter) Prev() {
 	// When changing direction, flip the relative positioning with iter.
 	if !i.reverse {
 		i.reverse = true
@@ -575,7 +575,7 @@ func (i *pointSynthesizingIter) Prev() {
 }
 
 // Valid implements MVCCIterator.
-func (i *pointSynthesizingIter) Valid() (bool, error) {
+func (i *PointSynthesizingIter) Valid() (bool, error) {
 	valid := i.iterValid ||
 		// On synthetic point key.
 		(i.iterErr == nil && !i.atPoint && i.rangeKeysIdx >= 0 && i.rangeKeysIdx < i.rangeKeysEnd)
@@ -590,12 +590,12 @@ func (i *pointSynthesizingIter) Valid() (bool, error) {
 }
 
 // Key implements MVCCIterator.
-func (i *pointSynthesizingIter) Key() MVCCKey {
+func (i *PointSynthesizingIter) Key() MVCCKey {
 	return i.UnsafeKey().Clone()
 }
 
 // UnsafeKey implements MVCCIterator.
-func (i *pointSynthesizingIter) UnsafeKey() MVCCKey {
+func (i *PointSynthesizingIter) UnsafeKey() MVCCKey {
 	if i.atPoint {
 		return i.iterKey
 	}
@@ -609,7 +609,7 @@ func (i *pointSynthesizingIter) UnsafeKey() MVCCKey {
 }
 
 // UnsafeRawKey implements MVCCIterator.
-func (i *pointSynthesizingIter) UnsafeRawKey() []byte {
+func (i *PointSynthesizingIter) UnsafeRawKey() []byte {
 	if i.atPoint {
 		return i.iter.UnsafeRawKey()
 	}
@@ -617,7 +617,7 @@ func (i *pointSynthesizingIter) UnsafeRawKey() []byte {
 }
 
 // UnsafeRawMVCCKey implements MVCCIterator.
-func (i *pointSynthesizingIter) UnsafeRawMVCCKey() []byte {
+func (i *PointSynthesizingIter) UnsafeRawMVCCKey() []byte {
 	if i.atPoint {
 		return i.iter.UnsafeRawMVCCKey()
 	}
@@ -625,7 +625,7 @@ func (i *pointSynthesizingIter) UnsafeRawMVCCKey() []byte {
 }
 
 // Value implements MVCCIterator.
-func (i *pointSynthesizingIter) Value() []byte {
+func (i *PointSynthesizingIter) Value() []byte {
 	if v := i.UnsafeValue(); v != nil {
 		return append([]byte{}, v...)
 	}
@@ -633,7 +633,7 @@ func (i *pointSynthesizingIter) Value() []byte {
 }
 
 // UnsafeValue implements MVCCIterator.
-func (i *pointSynthesizingIter) UnsafeValue() []byte {
+func (i *PointSynthesizingIter) UnsafeValue() []byte {
 	if i.atPoint {
 		return i.iter.UnsafeValue()
 	}
@@ -644,49 +644,49 @@ func (i *pointSynthesizingIter) UnsafeValue() []byte {
 }
 
 // ValueProto implements MVCCIterator.
-func (i *pointSynthesizingIter) ValueProto(msg protoutil.Message) error {
+func (i *PointSynthesizingIter) ValueProto(msg protoutil.Message) error {
 	return protoutil.Unmarshal(i.UnsafeValue(), msg)
 }
 
 // HasPointAndRange implements MVCCIterator.
-func (i *pointSynthesizingIter) HasPointAndRange() (bool, bool) {
+func (i *PointSynthesizingIter) HasPointAndRange() (bool, bool) {
 	return true, false
 }
 
 // RangeBounds implements MVCCIterator.
-func (i *pointSynthesizingIter) RangeBounds() roachpb.Span {
+func (i *PointSynthesizingIter) RangeBounds() roachpb.Span {
 	return roachpb.Span{}
 }
 
 // RangeKeys implements MVCCIterator.
-func (i *pointSynthesizingIter) RangeKeys() MVCCRangeKeyStack {
+func (i *PointSynthesizingIter) RangeKeys() MVCCRangeKeyStack {
 	return MVCCRangeKeyStack{}
 }
 
 // RangeKeyChanged implements MVCCIterator.
-func (i *pointSynthesizingIter) RangeKeyChanged() bool {
+func (i *PointSynthesizingIter) RangeKeyChanged() bool {
 	return false
 }
 
 // FindSplitKey implements MVCCIterator.
-func (i *pointSynthesizingIter) FindSplitKey(
+func (i *PointSynthesizingIter) FindSplitKey(
 	start, end, minSplitKey roachpb.Key, targetSize int64,
 ) (MVCCKey, error) {
 	return i.iter.FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
 // Stats implements MVCCIterator.
-func (i *pointSynthesizingIter) Stats() IteratorStats {
+func (i *PointSynthesizingIter) Stats() IteratorStats {
 	return i.iter.Stats()
 }
 
 // IsPrefix implements the MVCCIterator interface.
-func (i *pointSynthesizingIter) IsPrefix() bool {
+func (i *PointSynthesizingIter) IsPrefix() bool {
 	return i.prefix
 }
 
 // assertInvariants asserts iterator invariants. The iterator must be valid.
-func (i *pointSynthesizingIter) assertInvariants() error {
+func (i *PointSynthesizingIter) assertInvariants() error {
 	// Check general MVCCIterator API invariants.
 	if err := assertMVCCIteratorInvariants(i); err != nil {
 		return err
