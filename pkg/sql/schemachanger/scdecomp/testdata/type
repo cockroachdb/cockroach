@@ -235,7 +235,6 @@ ElementState:
       - 105
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -264,7 +263,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -314,7 +312,6 @@ ElementState:
       - 107
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: true
     tableId: 108
     type:
@@ -341,7 +338,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -367,7 +363,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -393,7 +388,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: true
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -419,7 +413,6 @@ ElementState:
     computeExpr: null
     familyId: 0
     isNullable: false
-    isRelationBeingDropped: false
     isVirtual: false
     tableId: 108
     type:
@@ -452,7 +445,6 @@ ElementState:
 - SecondaryIndexPartial:
     expr: g::STRING = 'hi':::STRING
     indexId: 2
-    isRelationBeingDropped: false
     referencedColumnIds:
     - 2
     tableId: 108
