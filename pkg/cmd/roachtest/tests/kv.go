@@ -56,7 +56,6 @@ func registerKV(r registry.Registry) {
 		disableLoadSplits        bool
 		encryption               bool
 		sequential               bool
-		admissionControlDisabled bool
 		globalMVCCRangeTombstone bool
 		concMultiplier           int
 		ssds                     int
@@ -105,7 +104,6 @@ func registerKV(r registry.Registry) {
 				t.Fatalf("failed to enable tracing: %v", err)
 			}
 		}
-		SetAdmissionControl(ctx, t, c, !opts.admissionControlDisabled)
 
 		t.Status("running workload")
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
@@ -181,8 +179,6 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 8, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0},
 		{nodes: 3, cpus: 32, readPercent: 95},
-		{nodes: 3, cpus: 32, readPercent: 0, admissionControlDisabled: true},
-		{nodes: 3, cpus: 32, readPercent: 95, admissionControlDisabled: true},
 		{nodes: 3, cpus: 32, readPercent: 0, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0, globalMVCCRangeTombstone: true},
@@ -197,10 +193,6 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 8, readPercent: 95, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 3, cpus: 32, readPercent: 95, blockSize: 1 << 16 /* 64 KB */},
-		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 16, /* 64 KB */
-			admissionControlDisabled: true},
-		{nodes: 3, cpus: 32, readPercent: 95, blockSize: 1 << 16, /* 64 KB */
-			admissionControlDisabled: true},
 
 		// Configs with large batch sizes.
 		{nodes: 3, cpus: 8, readPercent: 0, batchSize: 16},
@@ -261,9 +253,6 @@ func registerKV(r registry.Registry) {
 		}
 		if opts.sequential {
 			nameParts = append(nameParts, "seq")
-		}
-		if opts.admissionControlDisabled {
-			nameParts = append(nameParts, "no-admission")
 		}
 		if opts.globalMVCCRangeTombstone {
 			nameParts = append(nameParts, "mvcc-range-keys=global")
