@@ -294,12 +294,12 @@ sudo apt-get update -qqy && sudo apt-get install -qqy grafana-enterprise && sudo
 		if err := c.RepeatRun(ctx, l,
 			os.Stdout,
 			os.Stderr, cfg.PrometheusNode, "permissions",
-			`sudo chmod 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards`,
+			`sudo chmod 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards /etc/grafana/grafana.ini`,
 		); err != nil {
 			return nil, err
 		}
 
-		// Set up grafana config
+		// Set up grafana config.
 		if err := c.PutString(ctx, l, cfg.PrometheusNode, `apiVersion: 1
 
 datasources:
@@ -310,7 +310,6 @@ datasources:
 `, "/etc/grafana/provisioning/datasources/prometheus.yaml", 0777); err != nil {
 			return nil, err
 		}
-
 		if err := c.PutString(ctx, l, cfg.PrometheusNode, `apiVersion: 1
 
 providers:
@@ -324,6 +323,15 @@ providers:
 `, "/etc/grafana/provisioning/dashboards/cockroach.yaml", 0777); err != nil {
 			return nil, err
 		}
+		if err := c.PutString(ctx, l, cfg.PrometheusNode, `
+[auth.anonymous]
+enabled = true
+org_role = Admin
+`,
+			"/etc/grafana/grafana.ini", 0777); err != nil {
+			return nil, err
+		}
+
 		for idx, u := range cfg.Grafana.DashboardURLs {
 			cmd := fmt.Sprintf("curl -fsSL %s -o /var/lib/grafana/dashboards/%d.json", u, idx)
 			if err := c.Run(ctx, l, os.Stdout, os.Stderr, cfg.PrometheusNode, "download dashboard",
