@@ -1969,7 +1969,7 @@ func TestMVCCClearTimeRange(t *testing.T) {
 	t.Run("clear > ts5 (nothing)", func(t *testing.T) {
 		b := eng.NewBatch()
 		defer b.Close()
-		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts5, ts5, nil, nil, 64, 10, kb)
+		_, err := MVCCClearTimeRange(ctx, b, nil, localMax, keyMax, ts5, ts5.Next(), nil, nil, 64, 10, kb)
 		require.NoError(t, err)
 		assertKVs(t, b, ts4, ts4Content)
 		assertKVs(t, b, ts5, ts4Content)
