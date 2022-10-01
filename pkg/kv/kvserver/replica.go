@@ -975,7 +975,7 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
 			// I wish this could be a Fatal, but unfortunately it's possible for the
 			// lease to be incoherent with the descriptor after a leaseholder was
-			// brutally removed through `cockroach debug unsafe-remove-dead-replicas`.
+			// brutally removed through `cockroach debug recover`.
 			log.Errorf(ctx, "leaseholder replica not in descriptor; desc: %s, lease: %s", desc, l)
 			// Let's not return an incoherent lease; for example if we end up
 			// returning it to a client through a br.RangeInfos, the client will freak

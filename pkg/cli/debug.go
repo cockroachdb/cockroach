@@ -11,7 +11,6 @@
 package cli
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -41,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1100,347 +1098,6 @@ func runDebugSyncBench(cmd *cobra.Command, args []string) error {
 	return syncbench.Run(syncBenchOpts)
 }
 
-var debugUnsafeRemoveDeadReplicasCmd = &cobra.Command{
-	Use:   "unsafe-remove-dead-replicas --dead-store-ids=[store ID,...] [path]",
-	Short: "Unsafely attempt to recover a range that has lost quorum (deprecated)",
-	Long: `
-DEPRECATED: use 'debug recover' instead. unsafe-remove-dead-replicas will be
-removed in CockroachDB v23.1.
-
-This command is UNSAFE and should only be used with the supervision of
-a Cockroach Labs engineer. It is a last-resort option to recover data
-after multiple node failures. The recovered data is not guaranteed to
-be consistent. If a suitable backup exists, restore it instead of
-using this tool.
-
-The --dead-store-ids flag takes a comma-separated list of dead store IDs and
-scans this store for any ranges unable to make progress (as indicated by the
-remaining replicas not marked as dead). For each such replica in which the local
-store is the voter with the highest StoreID, the range descriptors will be (only
-when run on that store) rewritten in-place to reflect a replication
-configuration in which the local store is the sole voter (and thus able to make
-progress).
-
-The intention is for the tool to be run against all stores in the cluster, which
-will attempt to recover all ranges in the system for which such an operation is
-necessary. This is the safest and most straightforward option, but incurs global
-downtime. When availability problems are isolated to a small number of ranges,
-it is also possible to restrict the set of nodes to be restarted (all nodes that
-have a store that has the highest voting StoreID in one of the ranges that need
-to be recovered), and to perform the restarts one-by-one (assuming system ranges
-are not affected). With this latter strategy, restarts of additional replicas
-may still be necessary, owing to the fact that the former leaseholder's epoch
-may still be live, even though that leaseholder may now be on the "unrecovered"
-side of the range and thus still unavailable. This case can be detected via the
-range status of the affected range(s) and by restarting the listed leaseholder.
-
-This command will prompt for confirmation before committing its changes.
-
-WARNINGS
-
-This tool may cause previously committed data to be lost. It does not preserve
-atomicity of transactions, so further inconsistencies and undefined behavior may
-result. In the worst case, a corruption of the cluster-internal metadata may
-occur, which would complicate the recovery further. It is recommended to take a
-filesystem-level backup or snapshot of the nodes to be affected before running
-this command (it is not safe to take a filesystem-level backup of a running
-node, but it is possible while the node is stopped). A cluster that had this
-tool used against it is no longer fit for production use. It must be
-re-initialized from a backup.
-
-Before proceeding at the yes/no prompt, review the ranges that are affected to
-consider the possible impact of inconsistencies. Further remediation may be
-necessary after running this tool, including dropping and recreating affected
-indexes, or in the worst case creating a new backup or export of this cluster's
-data for restoration into a brand new cluster. Because of the latter
-possibilities, this tool is a slower means of disaster recovery than restoring
-from a backup.
-
-Must only be used when the dead stores are lost and unrecoverable. If the dead
-stores were to rejoin the cluster after this command was used, data may be
-corrupted.
-
-After this command is used, the node should not be restarted until at least 10
-seconds have passed since it was stopped. Restarting it too early may lead to
-things getting stuck (if it happens, it can be fixed by restarting a second
-time).
-`,
-	Args: cobra.ExactArgs(1),
-	RunE: clierrorplus.MaybeDecorateError(runDebugUnsafeRemoveDeadReplicas),
-}
-
-var removeDeadReplicasOpts struct {
-	deadStoreIDs []int
-}
-
-func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-
-	db, err := OpenEngine(args[0], stopper, storage.MustExist)
-	if err != nil {
-		return err
-	}
-
-	deadStoreIDs := map[roachpb.StoreID]struct{}{}
-	for _, id := range removeDeadReplicasOpts.deadStoreIDs {
-		deadStoreIDs[roachpb.StoreID(id)] = struct{}{}
-	}
-	batch, err := removeDeadReplicas(db, deadStoreIDs)
-	if err != nil {
-		return err
-	} else if batch == nil {
-		fmt.Printf("Nothing to do\n")
-		return nil
-	}
-	defer batch.Close()
-
-	fmt.Printf("Proceed with the above rewrites? [y/N] ")
-
-	reader := bufio.NewReader(os.Stdin)
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	fmt.Printf("\n")
-	if line[0] == 'y' || line[0] == 'Y' {
-		fmt.Printf("Committing\n")
-		if err := batch.Commit(true); err != nil {
-			return err
-		}
-	} else {
-		fmt.Printf("Aborting\n")
-	}
-	return nil
-}
-
-func removeDeadReplicas(
-	db storage.Engine, deadStoreIDs map[roachpb.StoreID]struct{},
-) (storage.Batch, error) {
-	clock := hlc.NewClockWithSystemTimeSource(0 /* maxOffset */)
-
-	ctx := context.Background()
-
-	storeIdent, err := kvserver.ReadStoreIdent(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Printf("Scanning replicas on store %s for dead peers %v\n", storeIdent.String(),
-		removeDeadReplicasOpts.deadStoreIDs)
-
-	if _, ok := deadStoreIDs[storeIdent.StoreID]; ok {
-		return nil, errors.Errorf("this store's ID (%s) marked as dead, aborting", storeIdent.StoreID)
-	}
-
-	var newDescs []roachpb.RangeDescriptor
-
-	err = kvserver.IterateRangeDescriptorsFromDisk(ctx, db, func(desc roachpb.RangeDescriptor) error {
-		numDeadPeers := 0
-		allReplicas := desc.Replicas().Descriptors()
-		maxLiveVoter := roachpb.StoreID(-1)
-		for _, rep := range allReplicas {
-			if _, ok := deadStoreIDs[rep.StoreID]; ok {
-				numDeadPeers++
-				continue
-			}
-			// The designated survivor will be the voter with the highest storeID.
-			// Note that an outgoing voter cannot be designated, as the only
-			// replication change it could make is to turn itself into a learner, at
-			// which point the range is completely messed up.
-			//
-			// Note: a better heuristic might be to choose the leaseholder store, not
-			// the largest store, as this avoids the problem of requests still hanging
-			// after running the tool in a rolling-restart fashion (when the lease-
-			// holder is under a valid epoch and was ont chosen as designated
-			// survivor). However, this choice is less deterministic, as leaseholders
-			// are more likely to change than replication configs. The hanging would
-			// independently be fixed by the below issue, so staying with largest store
-			// is likely the right choice. See:
-			//
-			// https://github.com/cockroachdb/cockroach/issues/33007
-			if rep.IsVoterNewConfig() && rep.StoreID > maxLiveVoter {
-				maxLiveVoter = rep.StoreID
-			}
-		}
-
-		// If there's no dead peer in this group (so can't hope to fix
-		// anything by rewriting the descriptor) or the current store is not the
-		// one we want to turn into the sole voter, don't do anything.
-		if numDeadPeers == 0 {
-			return nil
-		}
-		if storeIdent.StoreID != maxLiveVoter {
-			fmt.Printf("not designated survivor, skipping: %s\n", &desc)
-			return nil
-		}
-
-		// The replica thinks it can make progress anyway, so we leave it alone.
-		if desc.Replicas().CanMakeProgress(func(rep roachpb.ReplicaDescriptor) bool {
-			_, ok := deadStoreIDs[rep.StoreID]
-			return !ok
-		}) {
-			fmt.Printf("replica has not lost quorum, skipping: %s\n", &desc)
-			return nil
-		}
-
-		// We're the designated survivor and the range does not to be recovered.
-		//
-		// Rewrite the range as having a single replica. The winning replica is
-		// picked arbitrarily: the one with the highest store ID. This is not always
-		// the best option: it may lose writes that were committed on another
-		// surviving replica that had applied more of the raft log. However, in
-		// practice when we have multiple surviving replicas but still need this
-		// tool (because the replication factor was 4 or higher), we see that the
-		// logs are nearly always in sync and the choice doesn't matter. Correctly
-		// picking the replica with the longer log would complicate the use of this
-		// tool.
-		newDesc := desc
-		// Rewrite the replicas list. Bump the replica ID so that in case there are
-		// other surviving nodes that were members of the old incarnation of the
-		// range, they no longer recognize this revived replica (because they are
-		// not in sync with it).
-		replicas := []roachpb.ReplicaDescriptor{{
-			NodeID:    storeIdent.NodeID,
-			StoreID:   storeIdent.StoreID,
-			ReplicaID: desc.NextReplicaID,
-		}}
-		newDesc.SetReplicas(roachpb.MakeReplicaSet(replicas))
-		newDesc.NextReplicaID++
-		fmt.Printf("replica has lost quorum, recovering: %s -> %s\n", &desc, &newDesc)
-		newDescs = append(newDescs, newDesc)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if len(newDescs) == 0 {
-		return nil, nil
-	}
-
-	batch := db.NewBatch()
-	for _, desc := range newDescs {
-		// Write the rewritten descriptor to the range-local descriptor
-		// key. We do not update the meta copies of the descriptor.
-		// Instead, we leave them in a temporarily inconsistent state and
-		// they will be overwritten when the cluster recovers and
-		// up-replicates this range from its single copy to multiple
-		// copies. We rely on the fact that all range descriptor updates
-		// start with a CPut on the range-local copy followed by a blind
-		// Put to the meta copy.
-		//
-		// For example, if we have replicas on s1-s4 but s3 and s4 are
-		// dead, we will rewrite the replica on s2 to have s2 as its only
-		// member only. When the cluster is restarted (and the dead nodes
-		// remain dead), the rewritten replica will be the only one able
-		// to make progress. It will elect itself leader and upreplicate.
-		//
-		// The old replica on s1 is untouched by this process. It will
-		// eventually either be overwritten by a new replica when s2
-		// upreplicates, or it will be destroyed by the replica GC queue
-		// after upreplication has happened and s1 is no longer a member.
-		// (Note that in the latter case, consistency between s1 and s2 no
-		// longer matters; the consistency checker will only run on nodes
-		// that the new leader believes are members of the range).
-		//
-		// Note that this tool does not guarantee fully consistent
-		// results; the most recent writes to the raft log may have been
-		// lost. In the most unfortunate cases, this means that we would
-		// be "winding back" a split or a merge, which is almost certainly
-		// to result in irrecoverable corruption (for example, not only
-		// will individual values stored in the meta ranges diverge, but
-		// there will be keys not represented by any ranges or vice
-		// versa).
-		key := keys.RangeDescriptorKey(desc.StartKey)
-		sl := stateloader.Make(desc.RangeID)
-		ms, err := sl.LoadMVCCStats(ctx, batch)
-		if err != nil {
-			return nil, errors.Wrap(err, "loading MVCCStats")
-		}
-		err = storage.MVCCPutProto(ctx, batch, &ms, key, clock.Now(), hlc.ClockTimestamp{}, nil, &desc)
-		if wiErr := (*roachpb.WriteIntentError)(nil); errors.As(err, &wiErr) {
-			if len(wiErr.Intents) != 1 {
-				return nil, errors.Errorf("expected 1 intent, found %d: %s", len(wiErr.Intents), wiErr)
-			}
-			intent := wiErr.Intents[0]
-			// We rely on the property that transactions involving the range
-			// descriptor always start on the range-local descriptor's key. When there
-			// is an intent, this means that it is likely that the transaction did not
-			// commit, so we abort the intent.
-			//
-			// However, this is not guaranteed. For one, applying a command is not
-			// synced to disk, so in theory whichever store becomes the designated
-			// survivor may temporarily have "forgotten" that the transaction
-			// committed in its applied state (it would still have the committed log
-			// entry, as this is durable state, so it would come back once the node
-			// was running, but we don't see that materialized state in
-			// unsafe-remove-dead-replicas). This is unlikely to be a problem in
-			// practice, since we assume that the store was shut down gracefully and
-			// besides, the write likely had plenty of time to make it to durable
-			// storage. More troubling is the fact that the designated survivor may
-			// simply not yet have learned that the transaction committed; it may not
-			// have been in the quorum and could've been slow to catch up on the log.
-			// It may not even have the intent; in theory the remaining replica could
-			// have missed any number of transactions on the range descriptor (even if
-			// they are in the log, they may not yet be applied, and the replica may
-			// not yet have learned that they are committed). This is particularly
-			// troubling when we miss a split, as the right-hand side of the split
-			// will exist in the meta ranges and could even be able to make progress.
-			// For yet another thing to worry about, note that the determinism (across
-			// different nodes) assumed in this tool can easily break down in similar
-			// ways (not all stores are going to have the same view of what the
-			// descriptors are), and so multiple replicas of a range may declare
-			// themselves the designated survivor. Long story short, use of this tool
-			// with or without the presence of an intent can - in theory - really
-			// tear the cluster apart.
-			//
-			// A solution to this would require a global view, where in a first step
-			// we collect from each store in the cluster the replicas present and
-			// compute from that a "recovery plan", i.e. set of replicas that will
-			// form the recovered keyspace. We may then find that no such recovery
-			// plan is trivially achievable, due to any of the above problems. But
-			// in the common case, we do expect one to exist.
-			fmt.Printf("aborting intent: %s (txn %s)\n", key, intent.Txn.ID)
-
-			// A crude form of the intent resolution process: abort the
-			// transaction by deleting its record.
-			txnKey := keys.TransactionKey(intent.Txn.Key, intent.Txn.ID)
-			if _, err := storage.MVCCDelete(ctx, batch, &ms, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
-				return nil, err
-			}
-			update := roachpb.LockUpdate{
-				Span:   roachpb.Span{Key: intent.Key},
-				Txn:    intent.Txn,
-				Status: roachpb.ABORTED,
-			}
-			if _, err := storage.MVCCResolveWriteIntent(ctx, batch, &ms, update); err != nil {
-				return nil, err
-			}
-			// With the intent resolved, we can try again.
-			if err := storage.MVCCPutProto(ctx, batch, &ms, key, clock.Now(), hlc.ClockTimestamp{}, nil, &desc); err != nil {
-				return nil, err
-			}
-		} else if err != nil {
-			batch.Close()
-			return nil, err
-		}
-		// Write the new replica ID to RaftReplicaIDKey.
-		replicas := desc.Replicas().Descriptors()
-		if len(replicas) != 1 {
-			return nil, errors.Errorf("expected 1 replica, got %v", replicas)
-		}
-		if err := sl.SetRaftReplicaID(ctx, batch, replicas[0].ReplicaID); err != nil {
-			return nil, errors.Wrapf(err, "failed to write new replica ID for range %d", desc.RangeID)
-		}
-		// Update MVCC stats.
-		if err := sl.SetMVCCStats(ctx, batch, &ms); err != nil {
-			return nil, errors.Wrap(err, "updating MVCCStats")
-		}
-	}
-
-	return batch, nil
-}
-
 var debugMergeLogsCmd = &cobra.Command{
 	Use:   "merge-logs <log file globs>",
 	Short: "merge multiple log files from different machines into a single stream",
@@ -1635,7 +1292,6 @@ var DebugCommandsRequiringEncryption = []*cobra.Command{
 	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
-	debugUnsafeRemoveDeadReplicasCmd,
 	debugRecoverCollectInfoCmd,
 	debugRecoverExecuteCmd,
 }
@@ -1650,7 +1306,6 @@ var debugCmds = []*cobra.Command{
 	debugRaftLogCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
-	debugUnsafeRemoveDeadReplicasCmd,
 	debugBallastCmd,
 	debugCheckLogConfigCmd,
 	debugDecodeKeyCmd,
@@ -1766,10 +1421,6 @@ func init() {
 	f = debugCompactCmd.Flags()
 	f.IntVarP(&debugCompactOpts.maxConcurrency, "max-concurrency", "c", debugCompactOpts.maxConcurrency,
 		"maximum number of concurrent compactions")
-
-	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
-	f.IntSliceVar(&removeDeadReplicasOpts.deadStoreIDs, "dead-store-ids", nil,
-		"list of dead store IDs")
 
 	f = debugRecoverCollectInfoCmd.Flags()
 	f.VarP(&debugRecoverCollectInfoOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
