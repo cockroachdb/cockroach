@@ -136,6 +136,7 @@ func registerTPCCOverload(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:              name,
 			Owner:             registry.OwnerAdmissionControl,
+			Tags:              []string{`weekly`},
 			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
 			Run:               s.run,
 			EncryptionSupport: registry.EncryptionMetamorphic,
