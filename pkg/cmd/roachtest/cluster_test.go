@@ -86,6 +86,10 @@ func (t testWrapper) VersionsBinaryOverride() map[string]string {
 	panic("implement me")
 }
 
+func (t testWrapper) SkipInit() bool {
+	panic("implement me")
+}
+
 func (t testWrapper) Progress(f float64) {
 	panic("implement me")
 }
