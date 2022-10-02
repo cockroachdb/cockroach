@@ -97,6 +97,7 @@ type testImpl struct {
 	//
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
+	skipInit               bool
 }
 
 // BuildVersion exposes the build version of the cluster
@@ -119,6 +120,10 @@ func (t *testImpl) DeprecatedWorkload() string {
 
 func (t *testImpl) VersionsBinaryOverride() map[string]string {
 	return t.versionsBinaryOverride
+}
+
+func (t *testImpl) SkipInit() bool {
+	return t.skipInit
 }
 
 // Spec returns the TestSpec.
