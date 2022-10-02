@@ -271,7 +271,7 @@ func (rgcq *replicaGCQueue) process(
 		// the use of a snapshot when catching up to the new replica ID.
 		// We don't normally expect to have a *higher* local replica ID
 		// than the one in the meta descriptor, but it's possible after
-		// recovering with unsafe-remove-dead-replicas.
+		// recovering with "debug recover".
 		return false, nil
 	} else if sameRange {
 		// We are no longer a member of this range, but the range still exists.

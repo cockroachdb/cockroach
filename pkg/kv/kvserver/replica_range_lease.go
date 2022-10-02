@@ -1177,10 +1177,8 @@ func (r *Replica) leaseGoodToGoForStatusRLocked(
 			// Hence, an extra check is in order: processRaftCommand makes sure that
 			// lease requests for a replica not in the descriptor are bounced.
 			//
-			// However, this is possible if the `cockroach debug
-			// unsafe-remove-dead-replicas` command has been used, so
-			// this is just a logged error instead of a fatal
-			// assertion.
+			// However, this is possible if the `cockroach debug recover` command has
+			// been used, so this is just a logged error instead of a fatal assertion.
 			log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
 				st.Lease, st.Lease.Replica)
 		}
