@@ -70,7 +70,7 @@ func (d *deleteNode) startExec(params runParams) error {
 
 	if d.run.rowsNeeded {
 		d.run.td.rows = rowcontainer.NewRowContainer(
-			params.EvalContext().Mon.MakeBoundAccount(),
+			params.p.Mon().MakeBoundAccount(),
 			colinfo.ColTypeInfoFromResCols(d.columns))
 	}
 	return d.run.td.init(params.ctx, params.p.txn, params.EvalContext(), &params.EvalContext().Settings.SV)

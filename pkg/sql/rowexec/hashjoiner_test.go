@@ -1046,6 +1046,7 @@ func TestHashJoiner(t *testing.T) {
 				out := &distsqlutils.RowBuffer{}
 				flowCtx := execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
+					Mon:     evalCtx.TestingMon,
 					Cfg: &execinfra.ServerConfig{
 						Settings:    st,
 						TempStorage: tempEngine,
@@ -1130,6 +1131,7 @@ func TestHashJoinerError(t *testing.T) {
 			out := &distsqlutils.RowBuffer{}
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
+				Mon:     evalCtx.TestingMon,
 				Cfg: &execinfra.ServerConfig{
 					Settings:    st,
 					TempStorage: tempEngine,
@@ -1278,6 +1280,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		},
 		DiskMonitor: diskMonitor,
 		EvalCtx:     &evalCtx,
+		Mon:         evalCtx.TestingMon,
 	}
 
 	post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
@@ -1410,6 +1413,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		},
 		DiskMonitor: diskMonitor,
 		EvalCtx:     &evalCtx,
+		Mon:         evalCtx.TestingMon,
 	}
 
 	post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
@@ -1460,6 +1464,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 	defer diskMonitor.Stop(ctx)
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 		},

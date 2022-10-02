@@ -88,7 +88,7 @@ func newMergeJoiner(
 		return nil, err
 	}
 
-	m.MemMonitor = execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "mergejoiner-mem")
+	m.MemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, "mergejoiner-mem")
 
 	var err error
 	m.streamMerger, err = makeStreamMerger(
