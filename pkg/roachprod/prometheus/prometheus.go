@@ -318,6 +318,7 @@ providers:
    folder: ''
    folderUid: ''
    type: file
+   allowUiUpdates: true
    options:
      path: /var/lib/grafana/dashboards
 `, "/etc/grafana/provisioning/dashboards/cockroach.yaml", 0777); err != nil {
