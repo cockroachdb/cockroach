@@ -110,6 +110,7 @@ type testImpl struct {
 	//
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
+	skipInit               bool
 }
 
 func newFailure(squashedErr error, errs []error) failure {
@@ -137,6 +138,10 @@ func (t *testImpl) DeprecatedWorkload() string {
 
 func (t *testImpl) VersionsBinaryOverride() map[string]string {
 	return t.versionsBinaryOverride
+}
+
+func (t *testImpl) SkipInit() bool {
+	return t.skipInit
 }
 
 // Spec returns the TestSpec.

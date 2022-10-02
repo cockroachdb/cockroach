@@ -180,6 +180,7 @@ func (c clustersOpt) validate() error {
 
 type testOpts struct {
 	versionsBinaryOverride map[string]string
+	skipInit               bool
 }
 
 // Run runs tests.
@@ -690,6 +691,7 @@ func (r *testRunner) runWorker(
 			artifactsSpec:          artifactsSpec,
 			l:                      testL,
 			versionsBinaryOverride: topt.versionsBinaryOverride,
+			skipInit:               topt.skipInit,
 			debug:                  debug,
 		}
 		// Now run the test.
