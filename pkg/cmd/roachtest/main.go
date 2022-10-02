@@ -88,6 +88,7 @@ func main() {
 	var httpPort int
 	var debugEnabled bool
 	var runSkipped bool
+	var skipInit bool
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
@@ -263,6 +264,7 @@ Examples:
 			cpuQuota:               cpuQuota,
 			debugEnabled:           debugEnabled,
 			runSkipped:             runSkipped,
+			skipInit:               skipInit,
 			httpPort:               httpPort,
 			parallelism:            parallelism,
 			artifactsDir:           artifacts,
@@ -333,6 +335,8 @@ runner itself.
 			&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
 		cmd.Flags().BoolVar(
 			&runSkipped, "run-skipped", runSkipped, "run skipped tests")
+		cmd.Flags().BoolVar(
+			&skipInit, "skip-init", false, "skip initialization step (imports, table creation, etc.) for tests that support it, useful when re-using clusters with --wipe=false")
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
@@ -400,6 +404,7 @@ type cliCfg struct {
 	count                  int
 	cpuQuota               int
 	debugEnabled           bool
+	skipInit               bool
 	runSkipped             bool
 	httpPort               int
 	parallelism            int
@@ -486,7 +491,10 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	CtrlC(ctx, l, cancel, cr)
 	err = runner.Run(
 		ctx, tests, cfg.count, cfg.parallelism, opt,
-		testOpts{versionsBinaryOverride: cfg.versionsBinaryOverride},
+		testOpts{
+			versionsBinaryOverride: cfg.versionsBinaryOverride,
+			skipInit:               cfg.skipInit,
+		},
 		lopt, nil /* clusterAllocator */)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
