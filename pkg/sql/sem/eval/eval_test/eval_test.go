@@ -145,6 +145,7 @@ func TestEval(t *testing.T) {
 			flowCtx := &execinfra.FlowCtx{
 				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: evalCtx,
+				Mon:     evalCtx.TestingMon,
 			}
 			memMonitor := execinfra.NewTestMemMonitor(ctx, st)
 			defer memMonitor.Stop(ctx)

@@ -146,6 +146,12 @@ func TestMemoIsStale(t *testing.T) {
 	// Initialize context with starting values.
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	evalCtx.SessionData().Database = "t"
+	// MakeTestingEvalContext created a fake planner that can only provide the
+	// memory monitor and will encounter a nil-pointer error when other methods
+	// are accessed. In this test, GetDatabaseSurvivalGoal method will be called
+	// which can handle a case of nil planner but cannot a case when the
+	// planner's GetMultiregionConfig is nil, so we nil out the planner.
+	evalCtx.Planner = nil
 
 	var o xform.Optimizer
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT a, b+1 FROM abcview WHERE c='foo'")

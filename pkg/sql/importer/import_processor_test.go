@@ -236,6 +236,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
@@ -336,6 +337,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
@@ -463,6 +465,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,

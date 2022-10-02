@@ -123,8 +123,8 @@ func newWindower(
 		// production.
 		limit = memRequiredByWindower
 	}
-	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, evalCtx.Mon)
-	limitedMon.StartNoReserved(ctx, evalCtx.Mon)
+	limitedMon := mon.NewMonitorInheritWithLimit("windower-limited", limit, flowCtx.Mon)
+	limitedMon.StartNoReserved(ctx, flowCtx.Mon)
 	w.acc = limitedMon.MakeBoundAccount()
 	// If we have aggregate builtins that aggregate a single datum, we want
 	// them to reuse the same shared memory account with the windower. Notably,

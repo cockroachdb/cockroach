@@ -66,6 +66,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 		},
@@ -160,6 +161,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
+				Mon:     evalCtx.TestingMon,
 				Cfg:     &execinfra.ServerConfig{Settings: s.ClusterSettings()},
 				Txn:     kv.NewTxn(ctx, s.DB(), s.NodeID()),
 				NodeID:  evalCtx.NodeID,

@@ -70,6 +70,7 @@ func runSampleAggregator(
 ) {
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 			DB:       kvDB,

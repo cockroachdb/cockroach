@@ -176,6 +176,8 @@ type planner struct {
 	// a SQL session.
 	isInternalPlanner bool
 
+	monitor *mon.BytesMonitor
+
 	// Corresponding Statement for this query.
 	stmt Statement
 
@@ -362,6 +364,7 @@ func newInternalPlanner(
 		-1, /* increment */
 		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
 	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
+	p.monitor = plannerMon
 
 	smi := &sessionDataMutatorIterator{
 		sds: sds,
@@ -375,7 +378,7 @@ func newInternalPlanner(
 		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
 	}
 
-	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg, plannerMon)
+	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg)
 	p.extendedEvalCtx.Planner = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
 	p.extendedEvalCtx.SessionAccessor = p
@@ -440,7 +443,6 @@ func internalExtendedEvalCtx(
 	txnTimestamp time.Time,
 	stmtTimestamp time.Time,
 	execCfg *ExecutorConfig,
-	plannerMon *mon.BytesMonitor,
 ) extendedEvalContext {
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
@@ -474,7 +476,6 @@ func internalExtendedEvalCtx(
 			TxnImplicit:                    true,
 			TxnIsSingleStmt:                true,
 			Context:                        ctx,
-			Mon:                            plannerMon,
 			TestingKnobs:                   evalContextTestingKnobs,
 			StmtTimestamp:                  stmtTimestamp,
 			TxnTimestamp:                   txnTimestamp,
@@ -514,6 +515,11 @@ func (p *planner) EvalContext() *eval.Context {
 
 func (p *planner) Descriptors() *descs.Collection {
 	return p.extendedEvalCtx.Descs
+}
+
+// Mon is part of the eval.Planner interface.
+func (p *planner) Mon() *mon.BytesMonitor {
+	return p.monitor
 }
 
 // ExecCfg implements the PlanHookState interface.
@@ -1009,11 +1015,16 @@ func (p *planner) WithInternalExecutor(
 }
 
 func (p *planner) resetPlanner(
-	ctx context.Context, txn *kv.Txn, stmtTS time.Time, sd *sessiondata.SessionData,
+	ctx context.Context,
+	txn *kv.Txn,
+	stmtTS time.Time,
+	sd *sessiondata.SessionData,
+	plannerMon *mon.BytesMonitor,
 ) {
 	p.txn = txn
 	p.stmt = Statement{}
 	p.instrumentation = instrumentationHelper{}
+	p.monitor = plannerMon
 
 	p.cancelChecker.Reset(ctx)
 

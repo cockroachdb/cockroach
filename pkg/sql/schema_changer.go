@@ -340,7 +340,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				// subqueries. Note that we intentionally defer the closure of
 				// the account until we return from this method (after the main
 				// query is executed).
-				subqueryResultMemAcc := localPlanner.EvalContext().Mon.MakeBoundAccount()
+				subqueryResultMemAcc := localPlanner.Mon().MakeBoundAccount()
 				defer subqueryResultMemAcc.Close(ctx)
 				if !sc.distSQLPlanner.PlanAndRunSubqueries(
 					ctx, localPlanner, localPlanner.ExtendedEvalContextCopy,

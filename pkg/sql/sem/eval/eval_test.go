@@ -193,7 +193,7 @@ func TestTimeConversion(t *testing.T) {
 
 	for _, test := range tests {
 		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer ctx.Mon.Stop(context.Background())
+		defer ctx.TestingMon.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := parser.ParseExpr(exprStr)
 		if err != nil {

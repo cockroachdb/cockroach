@@ -116,6 +116,7 @@ func TestOrdinality(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
+				Mon:     evalCtx.TestingMon,
 			}
 
 			d, err := newOrdinalityProcessor(context.Background(), &flowCtx, 0 /* processorID */, &os, in, &execinfrapb.PostProcessSpec{}, out)
@@ -164,6 +165,7 @@ func BenchmarkOrdinality(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 	spec := &execinfrapb.OrdinalitySpec{}
 

@@ -1096,6 +1096,7 @@ func TestJoinReader(t *testing.T) {
 							defer evalCtx.Stop(ctx)
 							flowCtx := execinfra.FlowCtx{
 								EvalCtx: &evalCtx,
+								Mon:     evalCtx.TestingMon,
 								Cfg: &execinfra.ServerConfig{
 									Settings:    st,
 									TempStorage: tempEngine,
@@ -1276,6 +1277,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	defer diskMonitor.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
@@ -1391,6 +1393,7 @@ func TestJoinReaderDrain(t *testing.T) {
 
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings:    st,
 			TempStorage: tempEngine,
@@ -1680,6 +1683,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
 		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
+			Mon:     evalCtx.TestingMon,
 			Cfg: &execinfra.ServerConfig{
 				Settings: st,
 			},
@@ -1944,6 +1948,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
 		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
+			Mon:     evalCtx.TestingMon,
 			Cfg: &execinfra.ServerConfig{
 				Settings: st,
 			},

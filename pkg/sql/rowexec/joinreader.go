@@ -440,9 +440,9 @@ func newJoinReader(
 
 	// Initialize memory monitors and bound account for data structures in the joinReader.
 	jr.MemMonitor = mon.NewMonitorInheritWithLimit(
-		"joinreader-mem" /* name */, memoryLimit, flowCtx.EvalCtx.Mon,
+		"joinreader-mem" /* name */, memoryLimit, flowCtx.Mon,
 	)
-	jr.MemMonitor.StartNoReserved(ctx, flowCtx.EvalCtx.Mon)
+	jr.MemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 	jr.memAcc = jr.MemMonitor.MakeBoundAccount()
 
 	if err := jr.initJoinReaderStrategy(ctx, flowCtx, rightTypes, readerType); err != nil {
@@ -488,9 +488,9 @@ func newJoinReader(
 		// We need to use an unlimited monitor for the streamer's budget since
 		// the streamer itself is responsible for staying under the limit.
 		jr.streamerInfo.unlimitedMemMonitor = mon.NewMonitorInheritWithLimit(
-			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.EvalCtx.Mon,
+			"joinreader-streamer-unlimited" /* name */, math.MaxInt64, flowCtx.Mon,
 		)
-		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(ctx, flowCtx.EvalCtx.Mon)
+		jr.streamerInfo.unlimitedMemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		jr.streamerInfo.txnKVStreamerMemAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
 		// The index joiner can rely on the streamer to maintain the input ordering,
@@ -546,7 +546,7 @@ func newJoinReader(
 			LockWaitPolicy:             spec.LockingWaitPolicy,
 			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
 			Alloc:                      &jr.alloc,
-			MemMonitor:                 flowCtx.EvalCtx.Mon,
+			MemMonitor:                 flowCtx.Mon,
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,

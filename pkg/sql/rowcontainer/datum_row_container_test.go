@@ -20,11 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 func TestRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	for _, numCols := range []int{0, 1, 2, 3, 5, 10, 15} {
@@ -78,6 +80,7 @@ func TestRowContainer(t *testing.T) {
 
 func TestRowContainerAtOutOfRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -105,6 +108,7 @@ func TestRowContainerAtOutOfRange(t *testing.T) {
 
 func TestRowContainerZeroCols(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -153,6 +157,9 @@ func TestRowContainerZeroCols(t *testing.T) {
 }
 
 func BenchmarkRowContainerAt(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
 	const numCols = 3
 	const numRows = 1024
 

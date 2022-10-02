@@ -231,6 +231,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		FlowCtx: execinfra.FlowCtx{
 			Cfg:     &execinfra.ServerConfig{},
 			EvalCtx: &evalCtx,
+			Mon:     evalCtx.TestingMon,
 			NodeID:  base.TestingIDContainer,
 		},
 	}
@@ -281,6 +282,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 						},
 					},
 					EvalCtx:     &evalCtx,
+					Mon:         evalCtx.TestingMon,
 					NodeID:      base.TestingIDContainer,
 					DiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
 				},

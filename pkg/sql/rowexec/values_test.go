@@ -49,6 +49,7 @@ func TestValuesProcessor(t *testing.T) {
 				flowCtx := execinfra.FlowCtx{
 					Cfg:     &execinfra.ServerConfig{Settings: st},
 					EvalCtx: evalCtx,
+					Mon:     evalCtx.TestingMon,
 				}
 
 				v, err := newValuesProcessor(context.Background(), &flowCtx, 0 /* processorID */, &spec, &execinfrapb.PostProcessSpec{}, out)
@@ -107,6 +108,7 @@ func BenchmarkValuesProcessor(b *testing.B) {
 	flowCtx := execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 	post := execinfrapb.PostProcessSpec{}
 	output := rowDisposer{}

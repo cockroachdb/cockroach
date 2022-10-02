@@ -297,7 +297,7 @@ func newInvertedJoiner(
 			LockWaitPolicy:             spec.LockingWaitPolicy,
 			LockTimeout:                flowCtx.EvalCtx.SessionData().LockTimeout,
 			Alloc:                      &ij.alloc,
-			MemMonitor:                 flowCtx.EvalCtx.Mon,
+			MemMonitor:                 flowCtx.Mon,
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
@@ -317,7 +317,7 @@ func newInvertedJoiner(
 	ij.spanBuilder.InitWithFetchSpec(flowCtx.EvalCtx, flowCtx.Codec(), &ij.fetchSpec)
 
 	// Initialize memory monitors and row container for index rows.
-	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.EvalCtx.Mon, flowCtx, "invertedjoiner-limited")
+	ij.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "invertedjoiner-limited")
 	ij.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "invertedjoiner-disk")
 	ij.indexRows = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */

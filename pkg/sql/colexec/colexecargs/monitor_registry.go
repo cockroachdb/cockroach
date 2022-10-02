@@ -36,7 +36,7 @@ func (r *MonitorRegistry) GetMonitors() []*mon.BytesMonitor {
 // NewStreamingMemAccount creates a new memory account bound to the monitor in
 // flowCtx.
 func (r *MonitorRegistry) NewStreamingMemAccount(flowCtx *execinfra.FlowCtx) *mon.BoundAccount {
-	streamingMemAccount := flowCtx.EvalCtx.Mon.MakeBoundAccount()
+	streamingMemAccount := flowCtx.Mon.MakeBoundAccount()
 	r.accounts = append(r.accounts, &streamingMemAccount)
 	return &streamingMemAccount
 }
@@ -63,7 +63,7 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategy(
 ) (*mon.BoundAccount, redact.RedactableString) {
 	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
 	bufferingOpMemMonitor := execinfra.NewLimitedMonitor(
-		ctx, flowCtx.EvalCtx.Mon, flowCtx, monitorName,
+		ctx, flowCtx.Mon, flowCtx, monitorName,
 	)
 	r.monitors = append(r.monitors, bufferingOpMemMonitor)
 	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
@@ -90,8 +90,8 @@ func (r *MonitorRegistry) CreateMemAccountForSpillStrategyWithLimit(
 		}
 	}
 	monitorName := r.getMemMonitorName(opName, processorID, "limited" /* suffix */)
-	bufferingOpMemMonitor := mon.NewMonitorInheritWithLimit(monitorName, limit, flowCtx.EvalCtx.Mon)
-	bufferingOpMemMonitor.StartNoReserved(ctx, flowCtx.EvalCtx.Mon)
+	bufferingOpMemMonitor := mon.NewMonitorInheritWithLimit(monitorName, limit, flowCtx.Mon)
+	bufferingOpMemMonitor.StartNoReserved(ctx, flowCtx.Mon)
 	r.monitors = append(r.monitors, bufferingOpMemMonitor)
 	bufferingMemAccount := bufferingOpMemMonitor.MakeBoundAccount()
 	r.accounts = append(r.accounts, &bufferingMemAccount)
@@ -163,7 +163,7 @@ func (r *MonitorRegistry) createUnlimitedMemAccounts(
 	numAccounts int,
 ) (*mon.BytesMonitor, []*mon.BoundAccount) {
 	bufferingOpUnlimitedMemMonitor := execinfra.NewMonitor(
-		ctx, flowCtx.EvalCtx.Mon, monitorName,
+		ctx, flowCtx.Mon, monitorName,
 	)
 	r.monitors = append(r.monitors, bufferingOpUnlimitedMemMonitor)
 	oldLen := len(r.accounts)

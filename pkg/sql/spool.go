@@ -45,7 +45,7 @@ func (s *spoolNode) startExec(params runParams) error {
 	}
 
 	s.rows = rowcontainer.NewRowContainer(
-		params.EvalContext().Mon.MakeBoundAccount(),
+		params.p.Mon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(planColumns(s.source)),
 	)
 

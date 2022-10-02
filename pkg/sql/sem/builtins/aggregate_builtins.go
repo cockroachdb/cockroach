@@ -511,7 +511,7 @@ var aggregates = map[string]builtinDefinition{
 				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stMakeLineAgg{
-					acc: evalCtx.Mon.MakeBoundAccount(),
+					acc: evalCtx.Planner.Mon().MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -785,7 +785,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stUnionAgg{
-					acc: evalCtx.Mon.MakeBoundAccount(),
+					acc: evalCtx.Planner.Mon().MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -975,7 +975,7 @@ type stCollectAgg struct {
 
 func newSTCollectAgg(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &stCollectAgg{
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
 	}
 }
 
@@ -1308,7 +1308,7 @@ const (
 // will be used by the new struct which will operate in "shared" mode
 func makeSingleDatumAggregateBase(evalCtx *eval.Context) singleDatumAggregateBase {
 	if evalCtx.SingleDatumAggMemAccount == nil {
-		newAcc := evalCtx.Mon.MakeBoundAccount()
+		newAcc := evalCtx.Planner.Mon().MakeBoundAccount()
 		return singleDatumAggregateBase{
 			mode: nonSharedSingleDatumAggregateBaseMode,
 			acc:  &newAcc,
@@ -1435,7 +1435,7 @@ type arrayAggregate struct {
 func newArrayAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &arrayAggregate{
 		arr: tree.NewDArray(params[0]),
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
 	}
 }
 
@@ -4517,7 +4517,7 @@ func newPercentileDiscAggregate(
 ) eval.AggregateFunc {
 	return &percentileDiscAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
 	}
 }
 
@@ -4615,7 +4615,7 @@ func newPercentileContAggregate(
 ) eval.AggregateFunc {
 	return &percentileContAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
 	}
 }
 

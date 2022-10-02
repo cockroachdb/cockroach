@@ -725,6 +725,7 @@ func TestMergeJoiner(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
+				Mon:     evalCtx.TestingMon,
 			}
 
 			post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: c.outCols}
@@ -831,6 +832,7 @@ func TestConsumerClosed(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				Cfg:     &execinfra.ServerConfig{Settings: st},
 				EvalCtx: &evalCtx,
+				Mon:     evalCtx.TestingMon,
 			}
 			post := execinfrapb.PostProcessSpec{Projection: true, OutputColumns: outCols}
 			m, err := newMergeJoiner(context.Background(), &flowCtx, 0 /* processorID */, &spec, leftInput, rightInput, &post, out)
@@ -856,6 +858,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
+		Mon:     evalCtx.TestingMon,
 	}
 
 	spec := &execinfrapb.MergeJoinerSpec{

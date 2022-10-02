@@ -169,7 +169,7 @@ func runLocalFlow(
 	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 	var rowBuf distsqlutils.RowBuffer
-	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
+	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.TestingMon, req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func runLocalFlowTenant(
 	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 	var rowBuf distsqlutils.RowBuffer
-	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
+	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.TestingMon, req, &rowBuf, nil /* batchOutput */, distsql.LocalState{})
 	if err != nil {
 		return nil, err
 	}
