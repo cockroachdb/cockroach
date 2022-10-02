@@ -1457,3 +1457,30 @@ func GrafanaURL(
 	}
 	return urlGenerator(c, l, grafanaNode, uConfig)
 }
+
+// Snapshot takes a snapshot of prometheus and stores the snapshot and a script
+// to spin up a docker instance for it to the given directory.
+func Snapshot(ctx context.Context, l *logger.Logger, clusterName string, dumpDir string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+	nodes, err := install.ListNodes("all", len(c.VMs))
+	if err != nil {
+		return err
+	}
+
+	// We assume the last node contains the server.
+	promNode := install.Nodes{nodes[len(nodes)-1]}
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	if err := prometheus.Snapshot(ctx, c, l, promNode, dumpDir); err != nil {
+		l.Printf("failed to get prometheus snapshot: %v", err)
+		return err
+	}
+	return nil
+}
