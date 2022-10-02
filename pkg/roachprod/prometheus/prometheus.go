@@ -367,7 +367,7 @@ func Snapshot(
 		os.Stderr,
 		promNode,
 		"prometheus snapshot",
-		`curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot &&
+		`sudo rm -rf /tmp/prometheus/data/snapshots/* && curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot &&
 	cd /tmp/prometheus && tar cvf prometheus-snapshot.tar.gz data/snapshots`,
 	); err != nil {
 		return err
@@ -375,6 +375,7 @@ func Snapshot(
 	if err := os.WriteFile(filepath.Join(dir, "prometheus-docker-run.sh"), []byte(`#!/bin/sh
 set -eu
 
+rm -rf data/snapshots
 tar xf prometheus-snapshot.tar.gz
 snapdir=$(find data/snapshots -mindepth 1 -maxdepth 1 -type d)
 promyml=$(mktemp)
