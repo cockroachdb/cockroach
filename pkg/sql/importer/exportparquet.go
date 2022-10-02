@@ -131,7 +131,7 @@ func newParquetExporter(sp execinfrapb.ExportSpec, typs []*types.T) (*parquetExp
 	if err != nil {
 		return nil, err
 	}
-	schema := newParquetSchema(parquetColumns)
+	schema := NewParquetSchema(parquetColumns)
 
 	exporter = &parquetExporter{
 		buf:            buf,
@@ -157,6 +157,20 @@ type ParquetColumn struct {
 	// DecodeFn converts a native go type, created by the parquet vendor while
 	// reading a parquet file, into a crdb column value
 	DecodeFn func(interface{}) (tree.Datum, error)
+}
+
+func (pc *ParquetColumn) GetEncoder() (func(datum tree.Datum) (interface{}, error), error) {
+	if pc.encodeFn == nil {
+		return nil, errors.Errorf("Parquet column does not have an encode function")
+	}
+	return pc.encodeFn, nil
+}
+
+func (pc *ParquetColumn) GetColName() (string, error) {
+	if pc.name == "" {
+		return "", errors.Errorf("Parquet column does not have a name")
+	}
+	return pc.name, nil
 }
 
 // newParquetColumns creates a list of parquet columns, given the input relation's column types.
@@ -665,7 +679,7 @@ func NewParquetColumn(typ *types.T, name string, nullable bool) (ParquetColumn, 
 // see docs here:
 //
 //	https://pkg.go.dev/github.com/fraugster/parquet-go/parquetschema#SchemaDefinition
-func newParquetSchema(parquetFields []ParquetColumn) *parquetschema.SchemaDefinition {
+func NewParquetSchema(parquetFields []ParquetColumn) *parquetschema.SchemaDefinition {
 	schemaDefinition := new(parquetschema.SchemaDefinition)
 	schemaDefinition.RootColumn = new(parquetschema.ColumnDefinition)
 	schemaDefinition.RootColumn.SchemaElement = parquet.NewSchemaElement()

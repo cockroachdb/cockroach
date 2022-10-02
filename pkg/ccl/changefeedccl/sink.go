@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -580,4 +581,16 @@ func (s *safeSink) Flush(ctx context.Context) error {
 	s.Lock()
 	defer s.Unlock()
 	return s.wrapped.Flush(ctx)
+}
+
+type SinkWithEncoder interface {
+	Sink
+
+	EncodeAndEmitRow(
+		ctx context.Context,
+		updatedRow cdcevent.Row,
+		topic TopicDescriptor,
+		updated, mvcc hlc.Timestamp,
+		alloc kvevent.Alloc,
+	) error
 }

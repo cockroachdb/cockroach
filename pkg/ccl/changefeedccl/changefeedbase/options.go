@@ -141,9 +141,10 @@ const (
 	OptEnvelopeWrapped       EnvelopeType = `wrapped`
 	OptEnvelopeBare          EnvelopeType = `bare`
 
-	OptFormatJSON FormatType = `json`
-	OptFormatAvro FormatType = `avro`
-	OptFormatCSV  FormatType = `csv`
+	OptFormatJSON    FormatType = `json`
+	OptFormatAvro    FormatType = `avro`
+	OptFormatCSV     FormatType = `csv`
+	OptFormatParquet FormatType = `parquet`
 
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`

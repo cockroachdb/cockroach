@@ -48,15 +48,16 @@ type frontier interface{ Frontier() hlc.Timestamp }
 
 type kvEventToRowConsumer struct {
 	frontier
-	encoder   Encoder
-	scratch   bufalloc.ByteAllocator
-	sink      EventSink
-	cursor    hlc.Timestamp
-	knobs     TestingKnobs
-	decoder   cdcevent.Decoder
-	details   ChangefeedConfig
-	evaluator *cdceval.Evaluator
-	safeExpr  string
+	encoder        Encoder
+	scratch        bufalloc.ByteAllocator
+	sink           EventSink
+	cursor         hlc.Timestamp
+	knobs          TestingKnobs
+	decoder        cdcevent.Decoder
+	details        ChangefeedConfig
+	evaluator      *cdceval.Evaluator
+	safeExpr       string
+	encodingFormat changefeedbase.FormatType
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
@@ -78,12 +79,13 @@ func newEventConsumer(
 	cfg := flowCtx.Cfg
 	evalCtx := flowCtx.EvalCtx
 
+	encodingOpts, err := feed.Opts.GetEncodingOptions()
+	if err != nil {
+		return nil, nil, err
+	}
+
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error
-		encodingOpts, err := feed.Opts.GetEncodingOptions()
-		if err != nil {
-			return nil, err
-		}
 		encoder, err := getEncoder(encodingOpts, feed.Targets)
 		if err != nil {
 			return nil, err
@@ -103,7 +105,7 @@ func newEventConsumer(
 
 	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
-	if numWorkers <= 1 || isSinkless {
+	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
 		c, err := makeConsumer(sink, spanFrontier)
 		if err != nil {
 			return nil, nil, err
@@ -172,6 +174,11 @@ func newKVEventToRowConsumer(
 		}
 	}
 
+	encodingOpts, err := details.Opts.GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
 		encoder:              encoder,
@@ -184,6 +191,7 @@ func newKVEventToRowConsumer(
 		topicNamer:           topicNamer,
 		evaluator:            evaluator,
 		safeExpr:             safeExpr,
+		encodingFormat:       encodingOpts.Format,
 	}, nil
 }
 
@@ -300,6 +308,15 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		evCtx.topic = topic
 	}
 
+	if c.encodingFormat == changefeedbase.OptFormatParquet {
+		if parquetSink, ok := c.sink.(*parquetCloudStorageSink); ok {
+			// Revisit: break the arguments into multiple lines
+			err := parquetSink.EncodeAndEmitRow(ctx, updatedRow, topic, schemaTimestamp, mvccTimestamp, ev.DetachAlloc())
+			if err != nil {
+				return err
+			}
+		}
+	}
 	var keyCopy, valueCopy []byte
 	encodedKey, err := c.encoder.EncodeKey(ctx, updatedRow)
 	if err != nil {

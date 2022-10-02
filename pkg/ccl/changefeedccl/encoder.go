@@ -51,6 +51,8 @@ func getEncoder(
 		return newConfluentAvroEncoder(opts, targets)
 	case changefeedbase.OptFormatCSV:
 		return newCSVEncoder(opts), nil
+	case changefeedbase.OptFormatParquet:
+		return nil, nil
 	default:
 		return nil, errors.AssertionFailedf(`unknown format: %s`, opts.Format)
 	}

@@ -435,6 +435,12 @@ func makeCloudStorageSink(
 	} else {
 		s.metrics = (*sliMetrics)(nil)
 	}
+
+	if encodingOpts.Format == changefeedbase.OptFormatParquet {
+		parquetSinkWithEncoder := makeParquetCloudStorageSink(s)
+		return parquetSinkWithEncoder, nil
+	}
+
 	return s, nil
 }
 
