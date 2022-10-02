@@ -53,7 +53,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 		}
 		// Defensive, since admission control is enabled by default. This test can
 		// fail if admission control is disabled.
-		SetAdmissionControl(ctx, t, c, true)
+		setAdmissionControl(ctx, t, c, true)
 		if _, err := db.ExecContext(ctx,
 			"SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
 			t.Fatalf("failed to disable load based splitting: %v", err)
