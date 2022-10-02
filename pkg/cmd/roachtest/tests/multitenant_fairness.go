@@ -144,7 +144,7 @@ func runMultiTenantFairness(
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.Node(1))
-	SetAdmissionControl(ctx, t, c, s.acEnabled)
+	setAdmissionControl(ctx, t, c, s.acEnabled)
 
 	setRateLimit := func(ctx context.Context, val int, node int) {
 		db := c.Conn(ctx, t.L(), node)
