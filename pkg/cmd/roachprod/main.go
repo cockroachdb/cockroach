@@ -920,10 +920,21 @@ and will scrape from all nodes in the cluster; NOTE: for arm64 clusters, use --a
 var grafanaStopCmd = &cobra.Command{
 	Use:   `grafana-stop <cluster>`,
 	Short: `spins down prometheus and grafana instances on the last node in the cluster`,
-	Long:  `spins down the prometheus and grafana instances on the last node in the cluster`,
 	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.StopGrafana(context.Background(), roachprodLibraryLogger, args[0], grafanaDumpDir)
+		return roachprod.StopGrafana(context.Background(), roachprodLibraryLogger, args[0], "")
+	}),
+}
+
+var grafanaDumpCmd = &cobra.Command{
+	Use:   `grafana-dump <cluster>`,
+	Short: `dump prometheus data to the specified directory`,
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		if grafanaDumpDir == "" {
+			return errors.New("--dump-dir unspecified")
+		}
+		return roachprod.PrometheusSnapshot(context.Background(), roachprodLibraryLogger, args[0], grafanaDumpDir)
 	}),
 }
 
@@ -1023,6 +1034,7 @@ func main() {
 		getProvidersCmd,
 		grafanaStartCmd,
 		grafanaStopCmd,
+		grafanaDumpCmd,
 		grafanaURLCmd,
 	)
 	setBashCompletionFunction()
