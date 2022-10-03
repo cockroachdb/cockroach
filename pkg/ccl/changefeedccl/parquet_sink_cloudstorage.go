@@ -14,21 +14,21 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	pqexporter "github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquetschema"
+	"github.com/google/btree"
 	"github.com/pkg/errors"
 )
 
 type parquetCloudStorageSink struct {
 	baseCloudStorageSink *cloudStorageSink
-
-	valueCache *cache.UnorderedCache
 }
 
 type parquetWriterWrapper struct {
@@ -38,11 +38,28 @@ type parquetWriterWrapper struct {
 	numCols        int
 }
 
+type parquetSinkKey struct {
+	topic    string
+	schemaID int64
+	familyId descpb.FamilyID
+}
+
+func (key parquetSinkKey) Less(other btree.Item) bool {
+	switch other := other.(type) {
+	case cloudStorageSinkKey:
+		if key.topic == other.topic {
+			return key.schemaID < other.schemaID
+		}
+		return key.topic < other.topic
+	default:
+		panic(errors.Errorf("unexpected item type %T", other))
+	}
+}
+
 func makeParquetCloudStorageSink(baseCloudStorageSink *cloudStorageSink) *parquetCloudStorageSink {
 	pcs := &parquetCloudStorageSink{}
 
 	pcs.baseCloudStorageSink = baseCloudStorageSink
-	pcs.valueCache = cache.NewUnorderedCache(encoderCacheConfig)
 
 	return pcs
 }
@@ -77,6 +94,29 @@ func (pqcs *parquetCloudStorageSink) Flush(ctx context.Context) error {
 	return errors.Errorf("Flush for paquet format not implemented yet")
 }
 
+func (pqcs *parquetCloudStorageSink) getOrCreateFile(
+	topic TopicDescriptor, eventMVCC hlc.Timestamp,
+	familyId descpb.FamilyID,
+) (*cloudStorageSinkFile, error) {
+
+	s := pqcs.baseCloudStorageSink
+	name, _ := s.topicNamer.Name(topic)
+	key := parquetSinkKey{name, int64(topic.GetVersion()), familyId}
+
+	if item := s.files.Get(key); item != nil {
+		f := item.(*cloudStorageSinkFile)
+		if eventMVCC.Less(f.oldestMVCC) {
+			f.oldestMVCC = eventMVCC
+		}
+		return f, nil
+	}
+	f := &cloudStorageSinkFile{
+		created:             timeutil.Now(),
+		cloudStorageSinkKey: key,
+		oldestMVCC:          eventMVCC,
+	}
+
+}
 func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
@@ -84,28 +124,27 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	cacheKey := tableIDAndVersion{
-		tableID: updatedRow.TableID, version: updatedRow.Version, familyID: updatedRow.FamilyID,
+	cacheKey := parquetWriterKey{
+		updatedRow.FamilyID,
 	}
 
 	s := pqcs.baseCloudStorageSink
-	v, ok := pqcs.valueCache.Get(cacheKey)
 	var pqww *parquetWriterWrapper
-	file, err := pqcs.baseCloudStorageSink.getOrCreateFile(topic, mvcc)
+	file, err := pqcs.getOrCreateFile(topic, mvcc, updatedRow.FamilyID)
 	if err != nil {
 		return err
 	}
 
-	if !ok {
+	if file.pqww == nil {
 		var err error
 		pqww, err = makeparquetWriterWrapper(ctx, updatedRow, &file.buf)
 		if err != nil {
 			return err
 		}
 
-		pqcs.valueCache.Add(cacheKey, pqww)
+		file.pqww = pqww
 	} else {
-		pqww = v.(*parquetWriterWrapper)
+		pqww = file.pqww
 	}
 
 	i := 0

@@ -69,6 +69,7 @@ type cloudStorageSinkFile struct {
 	buf         bytes.Buffer
 	alloc       kvevent.Alloc
 	oldestMVCC  hlc.Timestamp
+	pqww        *parquetWriterWrapper
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
