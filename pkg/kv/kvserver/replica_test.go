@@ -7559,7 +7559,7 @@ func TestDiffRange(t *testing.T) {
 	// TODO(tschottdorf): this test should really pass the data through a
 	// RocksDB engine to verify that the original snapshots sort correctly.
 
-	require.Empty(t, diffRange(nil, nil))
+	require.Empty(t, DiffRange(nil, nil))
 
 	timestamp := hlc.Timestamp{WallTime: 1729, Logical: 1}
 	value := []byte("foo")
@@ -7598,7 +7598,7 @@ func TestDiffRange(t *testing.T) {
 	}
 
 	// No diff works.
-	require.Empty(t, diffRange(leaderSnapshot, leaderSnapshot))
+	require.Empty(t, DiffRange(leaderSnapshot, leaderSnapshot))
 
 	replicaSnapshot := &roachpb.RaftSnapshotData{
 		KV: []roachpb.RaftSnapshotData_KeyValue{
@@ -7650,7 +7650,7 @@ func TestDiffRange(t *testing.T) {
 		{LeaseHolder: false, Key: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp.Add(0, 1)},
 		{LeaseHolder: true, Key: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp},
 	}
-	diff := diffRange(leaderSnapshot, replicaSnapshot)
+	diff := DiffRange(leaderSnapshot, replicaSnapshot)
 	require.Equal(t, eDiff, diff)
 
 	// Assert the stringifed output. This is what the consistency checker
