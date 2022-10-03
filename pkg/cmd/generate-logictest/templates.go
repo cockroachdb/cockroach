@@ -247,8 +247,9 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "{{ .TestRuleName }}_test",
     size = "enormous",
-    srcs = ["generated_test.go"],
-    args = ["-test.timeout=3595s"],
+    srcs = ["generated_test.go"],{{ if .SqliteLogicTest }}
+    args = ["-test.timeout=7195s"],{{ else }}
+    args = ["-test.timeout=3595s"],{{ end }}
     data = [
         "//c-deps:libgeos",  # keep{{ if .SqliteLogicTest }}
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CclLogicTest }}

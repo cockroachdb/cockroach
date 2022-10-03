@@ -46,3 +46,55 @@ func TestParseQueryXML(t *testing.T) {
 		require.ElementsMatch(t, expectedDataMap[size], sizeToTargets[size])
 	}
 }
+
+func TestExcludeSqliteLogicTests(t *testing.T) {
+	for _, tc := range []struct {
+		in  []string
+		out []string
+	}{
+		{
+			in: []string{
+				"//pkg/jobs:jobs_test",
+				"//pkg/sql/sem/eval:eval_test",
+				"//pkg/sql/sqlitelogictest:sqlitelogictest_test",
+			},
+			out: []string{
+				"//pkg/jobs:jobs_test",
+				"//pkg/sql/sem/eval:eval_test",
+			},
+		},
+		{
+			in: []string{
+				"//pkg/sql/colexec:colexec_test",
+				"//pkg/sql/sem/eval:eval_test",
+			},
+			out: []string{
+				"//pkg/sql/colexec:colexec_test",
+				"//pkg/sql/sem/eval:eval_test",
+			},
+		},
+		{
+			in: []string{
+				"//pkg/ccl/sqlitelogictestccl:sqlitelogictestccl_test",
+				"//pkg/sql/sqlitelogictest:sqlitelogictest_test",
+			},
+			out: []string{},
+		},
+		{
+			in: []string{
+				"//pkg/ccl/sqlitelogictestccl:sqlitelogictestccl_test",
+				"//pkg/jobs:jobs_test",
+				"//pkg/sql/colexec:colexec_test",
+				"//pkg/sql/sem/eval:eval_test",
+				"//pkg/sql/sqlitelogictest:sqlitelogictest_test",
+			},
+			out: []string{
+				"//pkg/jobs:jobs_test",
+				"//pkg/sql/colexec:colexec_test",
+				"//pkg/sql/sem/eval:eval_test",
+			},
+		},
+	} {
+		require.Equal(t, tc.out, excludeSqliteLogicTests(tc.in))
+	}
+}
