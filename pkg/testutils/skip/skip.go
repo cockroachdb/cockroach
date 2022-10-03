@@ -13,6 +13,7 @@ package skip
 import (
 	"flag"
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
@@ -154,4 +155,12 @@ func UnderBench() bool {
 	// test executable with `-test.bench 1`.
 	f := flag.Lookup("test.bench")
 	return f != nil && f.Value.String() != ""
+}
+
+// UnderArm64 skips this test on ARM64.
+func UnderArm64(t SkippableTest, args ...interface{}) {
+	t.Helper()
+	if runtime.GOARCH == "arm64" {
+		t.Skip(append([]interface{}{"disabled under arm64"}, args...))
+	}
 }

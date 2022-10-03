@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 const composeDir = "compose"
@@ -34,6 +35,7 @@ func TestComposeGSSPython(t *testing.T) {
 }
 
 func TestComposeFlyway(t *testing.T) {
+	skip.UnderArm64(t)
 	testCompose(t, filepath.Join("flyway", "docker-compose.yml"), "flyway")
 }
 
