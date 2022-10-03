@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -995,9 +994,6 @@ type StoreConfig struct {
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
 
-	// SQLExecutor is used by the store to execute SQL statements.
-	SQLExecutor sqlutil.InternalExecutor
-
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
 	TimeSeriesDataStore TimeSeriesDataStore
@@ -1228,9 +1224,7 @@ func NewStore(
 			return cfg.LogRangeAndNodeEvents &&
 				logRangeAndNodeEventsEnabled.Get(&cfg.Settings.SV)
 		},
-		&internalExecutorRangeLogWriter{
-			ie: cfg.SQLExecutor,
-		},
+		cfg.RangeLogWriter,
 	)
 
 	s.draining.Store(false)

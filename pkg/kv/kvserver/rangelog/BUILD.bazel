@@ -1,0 +1,19 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "rangelog",
+    srcs = ["rangelog.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/security/username",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sqlutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+get_x_data(name = "get_x_data")
