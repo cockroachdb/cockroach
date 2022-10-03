@@ -58,10 +58,8 @@ func TestCache(t *testing.T) {
 	// have to add a test hook into `DoChan` to make synchronize our calls.
 	for i := 0; i < 5; i++ {
 		go func() {
-			val, err := cache.LoadValueOutsideOfCache(ctx, "test", func(loadCtx context.Context) (interface{}, error) {
-				return "val", nil
-			})
-			require.NoError(t, err)
+			val, found := cache.GetValueLocked("test")
+			require.True(t, found)
 			require.Equal(t, val, "val")
 		}()
 	}

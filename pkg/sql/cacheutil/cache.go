@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 // Cache is a shared cache for hashed passwords and other information used
@@ -53,33 +52,6 @@ func NewCache(account mon.BoundAccount, stopper *stop.Stopper, numSystemTables i
 func (c *Cache) GetValueLocked(key interface{}) (interface{}, bool) {
 	val, ok := c.cache[key]
 	return val, ok
-}
-
-// LoadValueOutsideOfCache loads the value for the given requestKey using the provided
-// function. It ensures that there is only at most one in-flight request for
-// each key at any time.
-func (c *Cache) LoadValueOutsideOfCache(
-	ctx context.Context, requestKey string, fn func(loadCtx context.Context) (interface{}, error),
-) (interface{}, error) {
-	ch, _ := c.populateCacheGroup.DoChan(requestKey, func() (interface{}, error) {
-		// Use a different context to fetch, so that it isn't possible for
-		// one query to timeout and cause all the goroutines that are waiting
-		// to get a timeout error.
-		loadCtx, cancel := c.stopper.WithCancelOnQuiesce(
-			logtags.WithTags(context.Background(), logtags.FromContext(ctx)),
-		)
-		defer cancel()
-		return fn(loadCtx)
-	})
-	select {
-	case res := <-ch:
-		if res.Err != nil {
-			return nil, res.Err
-		}
-		return res.Val, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
 }
 
 // MaybeWriteBackToCache tries to put the key, value into the
