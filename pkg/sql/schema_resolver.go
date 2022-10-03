@@ -425,7 +425,12 @@ func (sr *schemaResolver) ResolveFunction(
 		// name which is not lowercase. So here we try to lowercase the given
 		// function name and find a suggested function name if possible.
 		extraMsg := ""
-		lowerName := tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]))
+		var lowerName tree.UnresolvedName
+		if fn.ExplicitSchema {
+			lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]), strings.ToLower(name.Parts[1]))
+		} else {
+			lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]))
+		}
 		if lowerName != *name {
 			alternative, err := sr.ResolveFunction(ctx, &lowerName, path)
 			if err == nil && alternative != nil {

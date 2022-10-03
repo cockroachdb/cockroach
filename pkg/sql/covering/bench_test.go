@@ -16,7 +16,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,7 +24,7 @@ func BenchmarkOverlapCoveringMerge(b *testing.B) {
 		name   string
 		inputs []Covering
 	}
-	rand.Seed(timeutil.Now().Unix())
+	rand.Seed(0)
 
 	for _, numLayers := range []int{
 		1,      // single backup

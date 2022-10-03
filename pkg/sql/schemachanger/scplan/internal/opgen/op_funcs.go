@@ -54,12 +54,19 @@ func newLogEventOp(e scpb.Element, md *targetsWithElementMap) *scop.LogEvent {
 
 func statementForDropJob(e scpb.Element, md *targetsWithElementMap) scop.StatementForDropJob {
 	stmtID := md.Targets[md.elementToTarget[e]].Metadata.StatementID
+	stmt := redact.RedactableString(md.Statements[stmtID].RedactedStatement).StripMarkers()
+	switch e.(type) {
+	case *scpb.PrimaryIndex:
+		stmt = "removed primary index; " + stmt
+	case *scpb.SecondaryIndex:
+		stmt = "removed secondary index; " + stmt
+	case *scpb.TemporaryIndex:
+		stmt = "removed temporary index; " + stmt
+	}
 	return scop.StatementForDropJob{
 		// Using the redactable string but with stripped markers gives us a
 		// normalized and fully-qualified string value for display use.
-		Statement: redact.RedactableString(
-			md.Statements[stmtID].RedactedStatement,
-		).StripMarkers(),
+		Statement:   stmt,
 		StatementID: stmtID,
 		Rollback:    md.InRollback,
 	}

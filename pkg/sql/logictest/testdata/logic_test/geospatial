@@ -5388,7 +5388,7 @@ SELECT public.ST_AsText('POINT(10.5 20.25)'::geometry)
 ----
 POINT (10.5 20.25)
 
-statement error unknown function: public.log\(\), but log\(\) exists
+statement error pq: unknown function: public.log\(\): function undefined
 SELECT public.log(10)
 
 query TT

@@ -49,10 +49,11 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.TemporaryIndex) *scop.CreateGCJobForIndex {
+				emit(func(this *scpb.TemporaryIndex, md *targetsWithElementMap) *scop.CreateGCJobForIndex {
 					return &scop.CreateGCJobForIndex{
-						TableID: this.TableID,
-						IndexID: this.IndexID,
+						TableID:             this.TableID,
+						IndexID:             this.IndexID,
+						StatementForDropJob: statementForDropJob(this, md),
 					}
 				}),
 				emit(func(this *scpb.TemporaryIndex) *scop.MakeIndexAbsent {

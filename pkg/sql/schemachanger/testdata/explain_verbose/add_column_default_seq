@@ -587,6 +587,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 3
+    │       │     StatementForDropJob:
+    │       │       Statement: removed temporary index; ALTER TABLE db.public.tbl ADD COLUMN l INT8
+    │       │         NOT NULL DEFAULT nextval('db.public.sq1')
     │       │     TableID: 106
     │       │
     │       ├── • MakeIndexAbsent
@@ -629,7 +632,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
+            │       Statement: removed primary index; ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT
+            │         NULL DEFAULT nextval('db.public.sq1')
             │     TableID: 106
             │
             ├── • MakeIndexAbsent

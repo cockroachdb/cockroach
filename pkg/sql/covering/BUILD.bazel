@@ -20,7 +20,6 @@ go_test(
     embed = [":covering"],
     deps = [
         "//pkg/util/leaktest",
-        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
     ],
 )

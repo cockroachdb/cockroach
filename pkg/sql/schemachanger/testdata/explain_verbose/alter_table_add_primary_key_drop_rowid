@@ -803,7 +803,8 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 1
     │       │     StatementForDropJob:
-    │       │       Statement: ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a)
+    │       │       Statement: removed primary index; ALTER TABLE defaultdb.public.t ADD PRIMARY KEY
+    │       │         (a)
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -829,6 +830,9 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 3
+    │       │     StatementForDropJob:
+    │       │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t ADD PRIMARY KEY
+    │       │         (a)
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -842,6 +846,9 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 5
+    │       │     StatementForDropJob:
+    │       │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t ADD PRIMARY KEY
+    │       │         (a)
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -964,7 +971,8 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
             ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a)
+            │       Statement: removed primary index; ALTER TABLE defaultdb.public.t ADD PRIMARY KEY
+            │         (a)
             │     TableID: 104
             │
             ├── • MakeIndexAbsent

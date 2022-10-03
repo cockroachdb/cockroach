@@ -804,7 +804,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
+            │       Statement: removed primary index; ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
@@ -837,7 +837,8 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
+            │       Statement: removed secondary index; ALTER TABLE defaultdb.public.t DROP COLUMN j
+            │         CASCADE
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
@@ -846,6 +847,9 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 4
+            │     StatementForDropJob:
+            │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t DROP COLUMN j
+            │         CASCADE
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
@@ -854,6 +858,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 6
+            │     StatementForDropJob:
+            │       Statement: removed temporary index; CREATE UNIQUE INDEX idx ON defaultdb.public.t
+            │         (k)
+            │       StatementID: 1
             │     TableID: 104
             │
             ├── • MakeIndexAbsent

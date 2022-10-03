@@ -124,7 +124,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 15;
     │       │     IndexID: 4
     │       │     StatementForDropJob:
     │       │       Rollback: true
-    │       │       Statement: ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a)
+    │       │       Statement: removed primary index; ALTER TABLE defaultdb.public.t ADD PRIMARY KEY
+    │       │         (a)
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -184,7 +185,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 15;
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a)
+            │       Statement: removed primary index; ALTER TABLE defaultdb.public.t ADD PRIMARY KEY
+            │         (a)
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
@@ -201,6 +203,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 15;
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 3
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t ADD PRIMARY KEY
+            │         (a)
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
