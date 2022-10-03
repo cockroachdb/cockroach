@@ -61,7 +61,7 @@ func (w *Writer) Write(record []string) error {
 	}
 
 	for _, field := range record {
-		if err := w.WriteField(bytes.NewBufferString(field)); err != nil {
+		if err := w.WriteField(bytes.NewBufferString(field), true /*escape*/); err != nil {
 			return err
 		}
 	}
@@ -83,14 +83,19 @@ func (w *Writer) FinishRecord() (err error) {
 	return err
 }
 
-// WriteField writes an individual field.
-func (w *Writer) WriteField(field *bytes.Buffer) (e error) {
+// WriteField writes an individual field. Setting escape to false warrants that the field
+// doesn't contain w.Comma, w.Escape, a leading space, or exactly "\."
+func (w *Writer) WriteField(field *bytes.Buffer, escape bool) (e error) {
 	if w.midRow {
 		if _, err := w.w.WriteRune(w.Comma); err != nil {
 			return err
 		}
 	}
 	w.midRow = true
+	if !escape {
+		_, e = field.WriteTo(w.w)
+		return e
+	}
 	w.i = 0
 	w.currentRecordNeedsQuotes = false
 	w.scratch.Reset()

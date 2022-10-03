@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -26,7 +27,7 @@ func BenchmarkCSVEncodeWideRow(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	// 1024 columns of three runes each.
-	benchmarkEncodeCSV(b, 1024, 1024*3, 1024)
+	benchmarkEncodeCSV(b, 1024, 1024*3, 1024, types.String)
 }
 
 func BenchmarkCSVEncodeWideRowASCII(b *testing.B) {
@@ -34,7 +35,7 @@ func BenchmarkCSVEncodeWideRowASCII(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	// 1024 columns of three runes each, all ASCII codepoints.
-	benchmarkEncodeCSV(b, 1024, 1024*3, 127)
+	benchmarkEncodeCSV(b, 1024, 1024*3, 127, types.String)
 }
 
 func BenchmarkCSVEncodeWideColumnsASCII(b *testing.B) {
@@ -42,7 +43,7 @@ func BenchmarkCSVEncodeWideColumnsASCII(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	// 3 columns of 1024 runes each, all ASCII codepoints.
-	benchmarkEncodeCSV(b, 3, 1024*3, 127)
+	benchmarkEncodeCSV(b, 3, 1024*3, 127, types.String)
 }
 
 func BenchmarkCSVEncodeWideColumns(b *testing.B) {
@@ -50,10 +51,18 @@ func BenchmarkCSVEncodeWideColumns(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	// 3 columns of 1024 runes each.
-	benchmarkEncodeCSV(b, 3, 1024*3, 1024)
+	benchmarkEncodeCSV(b, 3, 1024*3, 1024, types.String)
 }
 
-func benchmarkEncodeCSV(b *testing.B, numCols int, numChars int, maxCodepoint int) {
+func BenchmarkCSVEncodeWideColumnsBytes(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	// 3 columns of 1024 runes each.
+	benchmarkEncodeCSV(b, 3, 1024*3, 1024, types.Bytes)
+}
+
+func benchmarkEncodeCSV(b *testing.B, numCols int, numChars int, maxCodepoint int, typ *types.T) {
 	encoder := newCSVEncoder(changefeedbase.EncodingOptions{Format: changefeedbase.OptFormatCSV})
 	ctx := context.Background()
 	vals := make([]string, numCols)
@@ -62,7 +71,11 @@ func benchmarkEncodeCSV(b *testing.B, numCols int, numChars int, maxCodepoint in
 	}
 	datums := tree.Datums{}
 	for _, str := range vals {
-		datums = append(datums, tree.NewDString(str))
+		if typ == types.String {
+			datums = append(datums, tree.NewDString(str))
+		} else { // bytes
+			datums = append(datums, tree.NewDBytes(tree.DBytes(str)))
+		}
 	}
 	row := cdcevent.TestingMakeEventRowFromDatums(datums)
 
