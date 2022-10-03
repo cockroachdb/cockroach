@@ -1097,6 +1097,9 @@ type StoreConfig struct {
 	//
 	// TODO(ajwerner): Remove in 22.2.
 	SystemConfigProvider config.SystemConfigProvider
+
+	// RangeLogWriter is used to write entries to the system.rangelog table.
+	RangeLogWriter RangeLogWriter
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -1217,6 +1220,17 @@ func NewStore(
 		nil,
 		math.MaxInt64,
 		cfg.Settings,
+	)
+
+	s.cfg.RangeLogWriter = newWrappedRangeLogWriter(
+		s.metrics.getCounterForRangeLogEventType,
+		func() bool {
+			return cfg.LogRangeAndNodeEvents &&
+				logRangeAndNodeEventsEnabled.Get(&cfg.Settings.SV)
+		},
+		&internalExecutorRangeLogWriter{
+			ie: cfg.SQLExecutor,
+		},
 	)
 
 	s.draining.Store(false)
