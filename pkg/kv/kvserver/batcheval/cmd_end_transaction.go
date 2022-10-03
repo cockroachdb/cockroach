@@ -1139,24 +1139,9 @@ func splitTriggerHelper(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load replica version")
 		}
-		// The RHS should populate RaftAppliedIndexTerm if the LHS is doing so.
-		// Alternatively, we could be more aggressive and also look at the cluster
-		// version, but this is simpler -- if the keyspace occupied by the
-		// original unsplit range has not been migrated yet, by an ongoing
-		// migration, both LHS and RHS will be migrated later.
-		rangeAppliedState, err := sl.LoadRangeAppliedState(ctx, batch)
-		if err != nil {
-			return enginepb.MVCCStats{}, result.Result{},
-				errors.Wrap(err, "unable to load range applied state")
-		}
-		writeRaftAppliedIndexTerm := false
-		if rangeAppliedState.RaftAppliedIndexTerm > 0 {
-			writeRaftAppliedIndexTerm = true
-		}
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
-			*gcThreshold, *gcHint, replicaVersion, writeRaftAppliedIndexTerm,
-			split.WriteGCHint,
+			*gcThreshold, *gcHint, replicaVersion, split.WriteGCHint,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
