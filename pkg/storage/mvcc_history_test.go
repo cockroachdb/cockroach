@@ -154,6 +154,10 @@ var (
 func TestMVCCHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// TODO(storage-team): this prevents us from finding bugs which incorrectly
+	// assume simple value encoding. One way to handle the different stats with
+	// non-simple value encoding would be to duplicate each test file for the
+	// two cases.
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	ctx := context.Background()
