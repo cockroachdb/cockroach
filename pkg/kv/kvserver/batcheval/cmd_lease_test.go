@@ -318,10 +318,11 @@ func TestCheckCanReceiveLease(t *testing.T) {
 				}
 				rngDesc.InternalReplicas = append(rngDesc.InternalReplicas, anotherDesc)
 			}
-			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas(), true)
+			// TODO: add to this test.
+			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas(), true, true)
 			require.Equal(t, tc.eligibleLhRemovalEnabled, err == nil, "err: %v", err)
 
-			err = roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas(), false)
+			err = roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas(), false, true)
 			require.Equal(t, tc.eligibleLhRemovalDisabled, err == nil, "err: %v", err)
 		})
 	}
@@ -330,6 +331,6 @@ func TestCheckCanReceiveLease(t *testing.T) {
 		repDesc := roachpb.ReplicaDescriptor{ReplicaID: 1}
 		rngDesc := roachpb.RangeDescriptor{}
 		require.Regexp(t, "replica.*not found", roachpb.CheckCanReceiveLease(repDesc,
-			rngDesc.Replicas(), true))
+			rngDesc.Replicas(), true, true))
 	})
 }

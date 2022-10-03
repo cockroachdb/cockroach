@@ -81,7 +81,12 @@ func NewReplicaSlice(
 		}
 	}
 	canReceiveLease := func(rDesc roachpb.ReplicaDescriptor) bool {
-		if err := roachpb.CheckCanReceiveLease(rDesc, desc.Replicas(), true /* leaseHolderRemovalAllowed */); err != nil {
+		// NOTE: we pass wasLastLeaseholder = true because we don't know who the
+		// leaseholder is, so it's possible that a VOTER_DEMOTING still holds on to
+		// the lease.
+		if err := roachpb.CheckCanReceiveLease(
+			rDesc, desc.Replicas(), true /* lhRemovalAllowed */, true, /* wasLastLeaseholder */
+		); err != nil {
 			return false
 		}
 		return true

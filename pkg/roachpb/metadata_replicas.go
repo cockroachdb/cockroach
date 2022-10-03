@@ -511,14 +511,16 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // will check voter constraint violations. When changing this method, you need
 // to update replica filter in report to keep it correct.
 func CheckCanReceiveLease(
-	wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet, leaseHolderRemovalAllowed bool,
+	wouldbeLeaseholder ReplicaDescriptor,
+	replDescs ReplicaSet,
+	leaseholderRemovalAllowed, wasLastLeaseholder bool,
 ) error {
 	repDesc, ok := replDescs.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
 		return errReplicaNotFound
 	}
 	if !(repDesc.IsVoterNewConfig() ||
-		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && leaseHolderRemovalAllowed)) {
+		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && leaseholderRemovalAllowed && wasLastLeaseholder)) {
 		// We allow a demoting / incoming voter to receive the lease if there's an incoming voter.
 		// In this case, when exiting the joint config, we will transfer the lease to the incoming
 		// voter.
