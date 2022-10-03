@@ -247,6 +247,7 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 	privilegeObjectPath string,
 	privilegeObjectType privilege.ObjectType,
 ) (*catpb.PrivilegeDescriptor, error) {
+	isCommitted := false
 	var tableVersions []descpb.DescriptorVersion
 	cache := p.ExecCfg().SyntheticPrivilegeCache
 	found, privileges, retErr := func() (bool, *catpb.PrivilegeDescriptor, error) {
@@ -257,6 +258,7 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 		if err != nil {
 			return false, nil, err
 		}
+		isCommitted = !desc.IsUncommittedVersion()
 		version := desc.GetVersion()
 		tableVersions = []descpb.DescriptorVersion{version}
 		if isEligibleForCache := cache.ClearCacheIfStaleLocked(ctx, tableVersions); isEligibleForCache {
@@ -362,6 +364,10 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 		return nil, err
 	}
 
-	cache.MaybeWriteBackToCache(ctx, tableVersions, privilegeObjectPath, val)
+	// Only write back to the cache if the table version is
+	// committed.
+	if isCommitted {
+		cache.MaybeWriteBackToCache(ctx, tableVersions, privilegeObjectPath, val)
+	}
 	return val.(*catpb.PrivilegeDescriptor), nil
 }
