@@ -144,6 +144,23 @@ SELECT enum_first('mysql'::dbs), enum_last('spanner'::dbs)
 postgres cockroach
 
 query T
+SELECT enum_first(null::dbs)
+----
+postgres
+
+query T
+SELECT enum_first(val) FROM unnest(array_append(enum_range(null::dbs),null)) val
+----
+postgres
+postgres
+postgres
+postgres
+postgres
+
+statement error input expression must always resolve to the same enum type
+SELECT enum_first(null)
+
+query T
 SELECT enum_range('cockroach'::dbs)
 ----
 {postgres,mysql,spanner,cockroach}
