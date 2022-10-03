@@ -4220,17 +4220,14 @@ value if you rely on the HLC for accuracy.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
 			ReturnType: tree.IdentityReturnType(0),
-			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
-					return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "argument cannot be NULL")
-				}
-				arg := args[0].(*tree.DEnum)
-				min, ok := arg.MinWriteable()
+			FnWithExprs: makeEnumTypeFunc(func(enumType *types.T) (tree.Datum, error) {
+				enum := tree.DEnum{EnumTyp: enumType}
+				min, ok := enum.MinWriteable()
 				if !ok {
-					return nil, errors.Newf("enum %s contains no values", arg.ResolvedType().Name())
+					return nil, errors.Newf("enum %s contains no values", enumType.Name())
 				}
 				return min, nil
-			},
+			}),
 			Info:              "Returns the first value of the input enum type.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
@@ -4242,17 +4239,14 @@ value if you rely on the HLC for accuracy.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
 			ReturnType: tree.IdentityReturnType(0),
-			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
-					return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "argument cannot be NULL")
-				}
-				arg := args[0].(*tree.DEnum)
-				max, ok := arg.MaxWriteable()
+			FnWithExprs: makeEnumTypeFunc(func(enumType *types.T) (tree.Datum, error) {
+				enum := tree.DEnum{EnumTyp: enumType}
+				max, ok := enum.MaxWriteable()
 				if !ok {
-					return nil, errors.Newf("enum %s contains no values", arg.ResolvedType().Name())
+					return nil, errors.Newf("enum %s contains no values", enumType.Name())
 				}
 				return max, nil
-			},
+			}),
 			Info:              "Returns the last value of the input enum type.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
@@ -4264,29 +4258,24 @@ value if you rely on the HLC for accuracy.`,
 		tree.Overload{
 			Types:      tree.ArgTypes{{"val", types.AnyEnum}},
 			ReturnType: tree.ArrayOfFirstNonNullReturnType(),
-			Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull {
-					return nil, pgerror.Newf(pgcode.NullValueNotAllowed, "argument cannot be NULL")
-				}
-				arg := args[0].(*tree.DEnum)
-				typ := arg.EnumTyp
-				arr := tree.NewDArray(typ)
-				for i := range typ.TypeMeta.EnumData.LogicalRepresentations {
+			FnWithExprs: makeEnumTypeFunc(func(enumType *types.T) (tree.Datum, error) {
+				arr := tree.NewDArray(enumType)
+				for i := range enumType.TypeMeta.EnumData.LogicalRepresentations {
 					// Read-only members should be excluded.
-					if typ.TypeMeta.EnumData.IsMemberReadOnly[i] {
+					if enumType.TypeMeta.EnumData.IsMemberReadOnly[i] {
 						continue
 					}
 					enum := &tree.DEnum{
-						EnumTyp:     typ,
-						PhysicalRep: typ.TypeMeta.EnumData.PhysicalRepresentations[i],
-						LogicalRep:  typ.TypeMeta.EnumData.LogicalRepresentations[i],
+						EnumTyp:     enumType,
+						PhysicalRep: enumType.TypeMeta.EnumData.PhysicalRepresentations[i],
+						LogicalRep:  enumType.TypeMeta.EnumData.LogicalRepresentations[i],
 					}
 					if err := arr.Append(enum); err != nil {
 						return nil, err
 					}
 				}
 				return arr, nil
-			},
+			}),
 			Info:              "Returns all values of the input enum in an ordered array.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
@@ -9281,6 +9270,25 @@ func extractTimeSpanFromTimestamp(
 	default:
 		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unsupported timespan: %s", timeSpan)
 	}
+}
+
+// makeEnumTypeFunc creates a FnWithExprs for a function that takes an enum but only cares about its
+// type.
+func makeEnumTypeFunc(impl func(t *types.T) (tree.Datum, error)) tree.FnWithExprsOverload {
+	return eval.FnWithExprsOverload(func(
+		evalCtx *eval.Context, args tree.Exprs,
+	) (tree.Datum, error) {
+		enumType := args[0].(tree.TypedExpr).ResolvedType()
+		if enumType == types.Unknown || enumType == types.AnyEnum {
+			return nil, errors.WithHint(pgerror.New(pgcode.InvalidParameterValue, "input expression must always resolve to the same enum type"),
+				"Try NULL::yourenumtype")
+		}
+		// This assertion failure is necessary so that the type resolver knows it needs to hydrate.
+		if !enumType.IsHydrated() {
+			return nil, errors.AssertionFailedf("unhydrated type %+v", enumType)
+		}
+		return impl(enumType)
+	})
 }
 
 func truncateTime(fromTime *tree.DTime, timeSpan string) (*tree.DTime, error) {
