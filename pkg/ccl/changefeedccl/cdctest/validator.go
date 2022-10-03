@@ -319,6 +319,13 @@ type validatorRow struct {
 	updated    hlc.Timestamp
 }
 
+// eventKey returns a key that encodes the key and timestamp of a row
+// received from a changefeed. Can be used to keep track of which
+// updates have been seen before in a validator.
+func (row validatorRow) eventKey() string {
+	return fmt.Sprintf("%s|%s", row.key, row.updated.AsOfSystemTime())
+}
+
 // FingerprintValidator verifies that recreating a table from its changefeed
 // will fingerprint the same at all "interesting" points in time.
 type FingerprintValidator struct {
@@ -342,6 +349,7 @@ type FingerprintValidator struct {
 	fprintOrigColumns int
 	fprintTestColumns int
 	buffer            []validatorRow
+	previouslySeen    map[string]struct{}
 
 	failures []string
 }
@@ -423,6 +431,16 @@ func (v *FingerprintValidator) DBFunc(
 	return v
 }
 
+// ValidateDuplicatedEvents enables the validation of duplicated
+// messages in the fingerprint validator. Whenever a row is received
+// with a timestamp lower than the last `resolved` timestamp seen, we
+// verify that the event has been seen before (if it hasn't, that
+// would be a violation of the changefeed guarantees)
+func (v *FingerprintValidator) ValidateDuplicatedEvents() *FingerprintValidator {
+	v.previouslySeen = make(map[string]struct{})
+	return v
+}
+
 // NoteRow implements the Validator interface.
 func (v *FingerprintValidator) NoteRow(
 	ignoredPartition string, key, value string, updated hlc.Timestamp,
@@ -430,11 +448,20 @@ func (v *FingerprintValidator) NoteRow(
 	if v.firstRowTimestamp.IsEmpty() || updated.Less(v.firstRowTimestamp) {
 		v.firstRowTimestamp = updated
 	}
-	v.buffer = append(v.buffer, validatorRow{
-		key:     key,
-		value:   value,
-		updated: updated,
-	})
+
+	row := validatorRow{key: key, value: value, updated: updated}
+	if err := v.maybeValidateDuplicatedEvent(row); err != nil {
+		return err
+	}
+
+	// if this row's timestamp is earlier than the last resolved
+	// timestamp we processed, we can skip it as it is a duplicate
+	if row.updated.Less(v.resolved) {
+		return nil
+	}
+
+	v.buffer = append(v.buffer, row)
+	v.maybeAddSeenEvent(row)
 	return nil
 }
 
@@ -595,6 +622,39 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 		lastFingerprintedAt != resolved {
 		return v.fingerprint(resolved)
 	}
+	return nil
+}
+
+// maybeAddSeenEvent is a no-op if the caller did not call
+// ValidateDuplicatedEvents. Otherwise, we keep a reference to the row
+// key and MVCC timestamp for later validation
+func (v *FingerprintValidator) maybeAddSeenEvent(row validatorRow) {
+	if v.previouslySeen == nil {
+		return
+	}
+
+	v.previouslySeen[row.eventKey()] = struct{}{}
+}
+
+// maybeValidateDuplicatedEvent is a no-op if the caller did not call
+// ValidateDuplicatedEvents. Otherwise, it returns an error if the
+// row's timestamp is older than the `previousResolved` timestamp
+// passed *and* it has not been seen before; that would be a violation
+// of the changefeed's guarantees.
+func (v *FingerprintValidator) maybeValidateDuplicatedEvent(row validatorRow) error {
+	if v.previouslySeen == nil {
+		return nil
+	}
+
+	if v.resolved.LessEq(row.updated) {
+		return nil
+	}
+
+	if _, seen := v.previouslySeen[row.eventKey()]; !seen {
+		return fmt.Errorf("unexpected new event at timestamp %s after resolved timestamp %s",
+			row.updated.AsOfSystemTime(), v.resolved.AsOfSystemTime())
+	}
+
 	return nil
 }
 

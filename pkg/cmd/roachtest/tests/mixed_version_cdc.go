@@ -46,6 +46,12 @@ var (
 	targetTable = "bank"
 
 	timeout = 30 * time.Minute
+	// set a fixed number of operations to be performed by the
+	// workload. Since we are validating events emitted by the
+	// changefeed in this test (ValidateDuplicatedEvents() call),
+	// enforcing a maximum number of operations sets a boundary on the
+	// validator's memory usage
+	maxOps = 12000
 )
 
 func registerCDCMixedVersions(r registry.Registry) {
@@ -79,8 +85,7 @@ type cdcMixedVersionTester struct {
 	kafka           kafkaManager
 	changefeedJobID int
 	validator       *cdctest.CountValidator
-	validatorDone   chan struct{} // validator is no longer waiting for messages
-	validatorStop   bool          // used  to tell the validator to stop validating messages
+	workloadDone    bool
 	cleanup         func()
 }
 
@@ -99,7 +104,6 @@ func newCDCMixedVersionTester(
 		workloadNodes: lastNode,
 		kafkaNodes:    lastNode,
 		monitor:       c.NewMonitor(ctx, crdbNodes),
-		validatorDone: make(chan struct{}),
 	}
 }
 
@@ -127,10 +131,12 @@ func (cmvt *cdcMixedVersionTester) installAndStartWorkload() versionStep {
 		t.Status("installing and running workload")
 		u.c.Run(ctx, cmvt.workloadNodes, "./workload init bank {pgurl:1}")
 		cmvt.monitor.Go(func(ctx context.Context) error {
+			defer func() { cmvt.workloadDone = true }()
 			return u.c.RunE(
 				ctx,
 				cmvt.workloadNodes,
-				fmt.Sprintf("./workload run bank {pgurl%s} --max-rate=10 --tolerate-errors", cmvt.crdbNodes),
+				fmt.Sprintf("./workload run bank {pgurl%s} --max-rate=10 --max-ops %d --tolerate-errors",
+					cmvt.crdbNodes, maxOps),
 			)
 		})
 	}
@@ -171,14 +177,12 @@ func (cmvt *cdcMixedVersionTester) waitForResolvedTimestamps() versionStep {
 	}
 }
 
-// waitForValidator sets the `validatorStop` flag and waits for the
-// validator to finish. This should be done right before the test
-// finishes, to ensure that we won't try to close the database
-// connection while the validator is still trying to use it
-func (cmvt *cdcMixedVersionTester) waitForValidator() versionStep {
+// waitForWorkload waits for the workload to finish
+func (cmvt *cdcMixedVersionTester) waitForWorkload() versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		cmvt.validatorStop = true
-		<-cmvt.validatorDone
+		t.L().Printf("waiting for workload to finish...")
+		cmvt.monitor.Wait()
+		t.L().Printf("workload finished")
 	}
 }
 
@@ -214,14 +218,14 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 			if err != nil {
 				t.Fatal(err)
 			}
-			fprintV.DBFunc(cmvt.cdcDBConn(getConn))
+			fprintV.DBFunc(cmvt.cdcDBConn(getConn)).ValidateDuplicatedEvents()
 			validators := cdctest.Validators{
 				cdctest.NewOrderValidator(tableName),
 				fprintV,
 			}
 			cmvt.validator = cdctest.MakeCountValidator(validators)
 
-			for !cmvt.validatorStop {
+			for !cmvt.workloadDone {
 				m := consumer.Next(ctx)
 				if m == nil {
 					t.L().Printf("end of changefeed")
@@ -248,8 +252,6 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 					cmvt.timestampResolved()
 				}
 			}
-
-			close(cmvt.validatorDone)
 			return nil
 		})
 	}
@@ -386,7 +388,7 @@ func runCDCMixedVersions(
 		waitForUpgradeStep(tester.crdbNodes),
 
 		tester.waitForResolvedTimestamps(),
-		tester.waitForValidator(),
+		tester.waitForWorkload(),
 		tester.assertValid(),
 	).run(ctx, t)
 }
