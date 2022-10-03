@@ -499,6 +499,13 @@ type restoreResumer struct {
 	}
 }
 
+var _ jobs.TraceableJob = &restoreResumer{}
+
+// ForceRealSpan implements the TraceableJob interface.
+func (r *restoreResumer) ForceRealSpan() bool {
+	return true
+}
+
 // remapRelevantStatistics changes the table ID references in the stats
 // from those they had in the backed up database to what they should be
 // in the restored database.

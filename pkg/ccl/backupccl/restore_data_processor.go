@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -71,6 +72,8 @@ type restoreDataProcessor struct {
 	// progress updates are accumulated on this channel. It is populated by the
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan backuppb.RestoreProgress
+
+	agg *bulkutil.TracingAggregator
 }
 
 var (
@@ -161,6 +164,8 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	rd.input.Start(ctx)
 
 	ctx, cancel := context.WithCancel(ctx)
+	ctx, rd.agg = bulkutil.MakeTracingAggregatorWithSpan(ctx, fmt.Sprintf("%s-aggregator", restoreDataProcName), rd.EvalCtx.Tracer)
+
 	rd.cancelWorkersAndWait = func() {
 		cancel()
 		_ = rd.phaseGroup.Wait()
@@ -340,12 +345,16 @@ func (rd *restoreDataProcessor) openSSTs(
 }
 
 func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan mergedSST) error {
-	return ctxgroup.GroupWorkers(ctx, rd.numWorkers, func(ctx context.Context, _ int) error {
+	return ctxgroup.GroupWorkers(ctx, rd.numWorkers, func(ctx context.Context, worker int) error {
 		kr, err := MakeKeyRewriterFromRekeys(rd.FlowCtx.Codec(), rd.spec.TableRekeys, rd.spec.TenantRekeys,
 			false /* restoreTenantFromStream */)
 		if err != nil {
 			return err
 		}
+
+		ctx, agg := bulkutil.MakeTracingAggregatorWithSpan(ctx,
+			fmt.Sprintf("%s-worker-%d-aggregator", restoreDataProcName, worker), rd.EvalCtx.Tracer)
+		defer agg.Close()
 
 		for {
 			done, err := func() (done bool, _ error) {
@@ -552,6 +561,7 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 			sst.cleanup()
 		}
 	}
+	rd.agg.Close()
 	rd.InternalClose()
 }
 
