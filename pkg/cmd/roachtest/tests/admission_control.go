@@ -10,7 +10,16 @@
 
 package tests
 
-import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+)
 
 func registerAdmission(r registry.Registry) {
 	// TODO(irfansharif): Can we write these tests using cgroups instead?
@@ -32,8 +41,27 @@ func registerAdmission(r registry.Registry) {
 	registerMultiStoreOverload(r)
 	registerSnapshotOverload(r)
 	registerTPCCOverload(r)
-
+	registerIndexOverload(r)
 	// TODO(irfansharif): Once registerMultiTenantFairness is unskipped and
 	// observed to be non-flaky for 3-ish months, transfer ownership to the AC
 	// group + re-home it here.
+}
+
+// setupAdmissionControlGrafana sets up prometheus and grafana on the last node of the cluster.
+// It imports the dashboard at http://go.crdb.dev/p/snapshot-admission-control-grafana. As part
+// of setting up the cluster.
+func setupAdmissionControlGrafana(ctx context.Context, t test.Test, c cluster.Cluster) func() {
+	workloadNode := c.Spec().NodeCount
+	t.Status(fmt.Sprintf("setting up prometheus/grafana (<%s)", 2*time.Minute))
+	promCfg := &prometheus.Config{}
+	promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0])
+	promCfg.WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
+	promCfg.WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
+	promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
+		"/", makeWorkloadScrapeNodes(c.Node(workloadNode).InstallNodes()[0], []workloadInstance{
+			{nodes: c.Node(workloadNode)},
+		})))
+	promCfg.WithGrafanaDashboard("http://go.crdb.dev/p/snapshot-admission-control-grafana")
+	_, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, nil)
+	return cleanupFunc
 }
