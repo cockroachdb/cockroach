@@ -336,6 +336,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 15 of 15;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 4
+    │       │     StatementForDropJob:
+    │       │       Rollback: true
+    │       │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t DROP COLUMN j
+    │       │         CASCADE
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -366,7 +370,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 15 of 15;
     │       │     IndexID: 5
     │       │     StatementForDropJob:
     │       │       Rollback: true
-    │       │       Statement: CREATE UNIQUE INDEX idx ON defaultdb.public.t (k)
+    │       │       Statement: removed secondary index; CREATE UNIQUE INDEX idx ON defaultdb.public.t
+    │       │         (k)
     │       │       StatementID: 1
     │       │     TableID: 104
     │       │
@@ -376,6 +381,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 15 of 15;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 6
+    │       │     StatementForDropJob:
+    │       │       Rollback: true
+    │       │       Statement: removed temporary index; CREATE UNIQUE INDEX idx ON defaultdb.public.t
+    │       │         (k)
+    │       │       StatementID: 1
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -419,7 +429,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 15 of 15;
             │     IndexID: 3
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
+            │       Statement: removed primary index; ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
