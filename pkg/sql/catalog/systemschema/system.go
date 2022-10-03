@@ -2072,12 +2072,12 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
-				Name:                "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
-				Validity:            descpb.ConstraintValidity_Validated,
-				ColumnIDs:           []descpb.ColumnID{11},
-				IsNonNullConstraint: false,
-				Hidden:              true,
+				Expr:                  "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Name:                  "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8",
+				Validity:              descpb.ConstraintValidity_Validated,
+				ColumnIDs:             []descpb.ColumnID{11},
+				IsNonNullConstraint:   false,
+				FromHashShardedColumn: true,
 			}}
 		},
 	)
@@ -2168,12 +2168,12 @@ var (
 		),
 		func(tbl *descpb.TableDescriptor) {
 			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
-				Expr:                "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
-				Name:                "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
-				Validity:            descpb.ConstraintValidity_Validated,
-				ColumnIDs:           []descpb.ColumnID{8},
-				IsNonNullConstraint: false,
-				Hidden:              true,
+				Expr:                  "crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Name:                  "check_crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8",
+				Validity:              descpb.ConstraintValidity_Validated,
+				ColumnIDs:             []descpb.ColumnID{8},
+				IsNonNullConstraint:   false,
+				FromHashShardedColumn: true,
 			}}
 		},
 	)

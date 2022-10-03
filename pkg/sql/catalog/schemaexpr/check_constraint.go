@@ -105,11 +105,11 @@ func (b *CheckConstraintBuilder) Build(
 	constraintID := b.desc.TableDesc().GetNextConstraintID()
 	b.desc.TableDesc().NextConstraintID++
 	return &descpb.TableDescriptor_CheckConstraint{
-		Expr:         expr,
-		Name:         name,
-		ColumnIDs:    colIDs.Ordered(),
-		Hidden:       c.Hidden,
-		ConstraintID: constraintID,
+		Expr:                  expr,
+		Name:                  name,
+		ColumnIDs:             colIDs.Ordered(),
+		FromHashShardedColumn: c.FromHashShardedColumn,
+		ConstraintID:          constraintID,
 	}, nil
 }
 
