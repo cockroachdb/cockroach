@@ -339,6 +339,9 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 3
+            │     StatementForDropJob:
+            │       Statement: removed temporary index; CREATE INDEX idx1 ON defaultdb.public.t (v)
+            │         WHERE (v = 'a')
             │     TableID: 106
             │
             ├── • MakeIndexAbsent

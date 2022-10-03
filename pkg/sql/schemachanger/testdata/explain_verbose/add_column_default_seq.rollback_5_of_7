@@ -176,7 +176,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT NULL DEFAULT nextval('db.public.sq1')
+            │       Statement: removed primary index; ALTER TABLE db.public.tbl ADD COLUMN l INT8 NOT
+            │         NULL DEFAULT nextval('db.public.sq1')
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -193,6 +194,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 3
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: removed temporary index; ALTER TABLE db.public.tbl ADD COLUMN l INT8
+            │         NOT NULL DEFAULT nextval('db.public.sq1')
             │     TableID: 106
             │
             ├── • MakeIndexAbsent

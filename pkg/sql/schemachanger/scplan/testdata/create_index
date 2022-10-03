@@ -169,6 +169,9 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGCJobForIndex
       IndexID: 3
+      StatementForDropJob:
+        Statement: removed temporary index; CREATE INDEX id1 ON defaultdb.public.t1 (id,
+          name) STORING (money)
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3
@@ -466,6 +469,9 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.CreateGCJobForIndex
       IndexID: 3
+      StatementForDropJob:
+        Statement: removed temporary index; CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.public.t1
+          (id, name) STORING (money)
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3

@@ -377,6 +377,9 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
   ops:
     *scop.CreateGCJobForIndex
       IndexID: 3
+      StatementForDropJob:
+        Statement: removed temporary index; ALTER TABLE defaultdb.public.foo ADD COLUMN
+          j INT8 NOT NULL DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3
@@ -396,7 +399,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 NOT NULL DEFAULT 123
+        Statement: removed primary index; ALTER TABLE defaultdb.public.foo ADD COLUMN j
+          INT8 NOT NULL DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       EventBase:
@@ -742,6 +746,9 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
   ops:
     *scop.CreateGCJobForIndex
       IndexID: 3
+      StatementForDropJob:
+        Statement: removed temporary index; ALTER TABLE defaultdb.public.foo ADD COLUMN
+          j INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3
@@ -761,7 +768,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN j INT8 DEFAULT 123
+        Statement: removed primary index; ALTER TABLE defaultdb.public.foo ADD COLUMN j
+          INT8 DEFAULT 123
       TableID: 104
     *scop.MakeIndexAbsent
       EventBase:
@@ -1023,6 +1031,9 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
   ops:
     *scop.CreateGCJobForIndex
       IndexID: 3
+      StatementForDropJob:
+        Statement: removed temporary index; ALTER TABLE defaultdb.public.foo ADD COLUMN
+          a INT8 AS (i + 1) STORED
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3
@@ -1042,7 +1053,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.foo ADD COLUMN a INT8 AS (i + 1) STORED
+        Statement: removed primary index; ALTER TABLE defaultdb.public.foo ADD COLUMN a
+          INT8 AS (i + 1) STORED
       TableID: 104
     *scop.MakeIndexAbsent
       EventBase:
@@ -1519,12 +1531,18 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
   ops:
     *scop.CreateGCJobForIndex
       IndexID: 3
+      StatementForDropJob:
+        Statement: removed temporary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY
+          KEY USING COLUMNS (j)
       TableID: 108
     *scop.MakeIndexAbsent
       IndexID: 3
       TableID: 108
     *scop.CreateGCJobForIndex
       IndexID: 5
+      StatementForDropJob:
+        Statement: removed temporary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY
+          KEY USING COLUMNS (j)
       TableID: 108
     *scop.MakeIndexAbsent
       IndexID: 5
@@ -1544,7 +1562,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)
+        Statement: removed primary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY
+          USING COLUMNS (j)
       TableID: 108
     *scop.MakeIndexAbsent
       EventBase:
@@ -1947,7 +1966,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 8 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.baz ADD COLUMN g INT8 UNIQUE DEFAULT 1
+        Statement: removed primary index; ALTER TABLE defaultdb.public.baz ADD COLUMN g
+          INT8 UNIQUE DEFAULT 1
       TableID: 109
     *scop.MakeIndexAbsent
       EventBase:
@@ -1963,12 +1983,18 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 8 MutationType ops
       TableID: 109
     *scop.CreateGCJobForIndex
       IndexID: 3
+      StatementForDropJob:
+        Statement: removed temporary index; ALTER TABLE defaultdb.public.baz ADD COLUMN
+          g INT8 UNIQUE DEFAULT 1
       TableID: 109
     *scop.MakeIndexAbsent
       IndexID: 3
       TableID: 109
     *scop.CreateGCJobForIndex
       IndexID: 5
+      StatementForDropJob:
+        Statement: removed temporary index; ALTER TABLE defaultdb.public.baz ADD COLUMN
+          g INT8 UNIQUE DEFAULT 1
       TableID: 109
     *scop.MakeIndexAbsent
       IndexID: 5
