@@ -247,25 +247,28 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 	privilegeObjectPath string,
 	privilegeObjectType privilege.ObjectType,
 ) (*catpb.PrivilegeDescriptor, error) {
+	_, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(),
+		syntheticprivilege.SystemPrivilegesTableName, tree.ObjectLookupFlagsWithRequired())
+	if err != nil {
+		return nil, err
+	}
+	if !desc.IsUncommittedVersion() {
+		return p.resolvePrivilegesOutsideOfCache(ctx, privilegeObjectName, privilegeObjectPath, privilegeObjectType)
+	}
 	var tableVersions []descpb.DescriptorVersion
 	cache := p.ExecCfg().SyntheticPrivilegeCache
 	found, privileges, retErr := func() (bool, *catpb.PrivilegeDescriptor, error) {
 		cache.Lock()
 		defer cache.Unlock()
-		_, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(),
-			syntheticprivilege.SystemPrivilegesTableName, tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			return false, nil, err
-		}
 		version := desc.GetVersion()
 		tableVersions = []descpb.DescriptorVersion{version}
+
 		if isEligibleForCache := cache.ClearCacheIfStaleLocked(ctx, tableVersions); isEligibleForCache {
 			val, ok := cache.GetValueLocked(privilegeObjectPath)
 			if ok {
 				privilegeDescriptor := val.(*catpb.PrivilegeDescriptor)
 				return true, privilegeDescriptor, nil
 			}
-
 		}
 		return false, nil, nil
 	}()
@@ -274,7 +277,24 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 		return privileges, retErr
 	}
 
-	val, err := cache.LoadValueOutsideOfCache(ctx, privilegeObjectPath, func(loadCtx context.Context) (_ interface{}, retErr error) {
+	privDesc, err := p.resolvePrivilegesOutsideOfCache(ctx, privilegeObjectName, privilegeObjectPath, privilegeObjectType)
+	if err != nil {
+		return nil, err
+	}
+
+	// Only write back to the cache if the table version is
+	// committed.
+	cache.MaybeWriteBackToCache(ctx, tableVersions, privilegeObjectPath, privDesc)
+	return privDesc, nil
+}
+
+func (p *planner) resolvePrivilegesOutsideOfCache(
+	ctx context.Context,
+	privilegeObjectName string,
+	privilegeObjectPath string,
+	privilegeObjectType privilege.ObjectType,
+) (*catpb.PrivilegeDescriptor, error) {
+	val, err := p.ExecCfg().SyntheticPrivilegeCache.LoadValueOutsideOfCache(ctx, privilegeObjectPath, func(loadCtx context.Context) (_ interface{}, retErr error) {
 		query := fmt.Sprintf(
 			`SELECT username, privileges, grant_options FROM system.%s WHERE path='%s'`,
 			catconstants.SystemPrivilegeTableName,
@@ -289,7 +309,7 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 			retErr = errors.CombineErrors(retErr, it.Close())
 		}()
 
-		privileges = &catpb.PrivilegeDescriptor{}
+		privileges := &catpb.PrivilegeDescriptor{}
 		for {
 			ok, err := it.Next(ctx)
 			if err != nil {
@@ -357,11 +377,8 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 		}
 		return privileges, nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
-
-	cache.MaybeWriteBackToCache(ctx, tableVersions, privilegeObjectPath, val)
 	return val.(*catpb.PrivilegeDescriptor), nil
 }
