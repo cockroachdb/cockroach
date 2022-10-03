@@ -794,10 +794,10 @@ func findSplitKeyUsingIterator(
 
 	// We only have to consider no-split spans if our minimum split key possibly
 	// lies before them. Note that the no-split spans are ordered by end-key.
-	noSplitSpans := keys.NoSplitSpans
-	for i := range noSplitSpans {
-		if minSplitKey.Compare(noSplitSpans[i].EndKey) <= 0 {
-			noSplitSpans = noSplitSpans[i:]
+	var noSplitSpans []roachpb.Span
+	for i := range keys.NoSplitSpans {
+		if minSplitKey.Compare(keys.NoSplitSpans[i].EndKey) <= 0 {
+			noSplitSpans = keys.NoSplitSpans[i:]
 			break
 		}
 	}
