@@ -915,6 +915,7 @@ func newNotLeaseHolderError(
 ) *roachpb.NotLeaseHolderError {
 	err := &roachpb.NotLeaseHolderError{
 		RangeID:   rangeDesc.RangeID,
+		RangeDesc: *rangeDesc,
 		CustomMsg: msg,
 	}
 	if proposerStoreID != 0 {

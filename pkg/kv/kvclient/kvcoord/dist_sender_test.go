@@ -1033,6 +1033,118 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 	require.LessOrEqual(t, callsToNode2, 11)
 }
 
+// TestDistSenderIgnodesNLHEBasedOnOldRangeGeneration tests that a
+// NotLeaseHolderError received from a replica that has a stale range descriptor
+// version is ignored, and the next replica is attempted.
+func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tracer := tracing.NewTracer()
+	ctx, getRecording, cancel := tracing.ContextWithRecordingSpan(
+		context.Background(), tracer, "test",
+	)
+	defer cancel()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	rpcContext := rpc.NewInsecureTestingContext(clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
+		require.NoError(t, g.AddInfoProto(
+			gossip.MakeNodeIDKey(n.NodeID),
+			newNodeDesc(n.NodeID),
+			gossip.NodeDescriptorTTL,
+		))
+	}
+
+	oldGeneration := roachpb.RangeGeneration(1)
+	newGeneration := roachpb.RangeGeneration(2)
+	desc := roachpb.RangeDescriptor{
+		RangeID:    1,
+		Generation: newGeneration,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+			{NodeID: 3, StoreID: 3, ReplicaID: 3},
+		},
+	}
+	// Ambiguous lease refers to a replica that is incompatible with the cached
+	// range descriptor.
+	ambiguousLease := roachpb.Lease{
+		Replica: roachpb.ReplicaDescriptor{NodeID: 4, StoreID: 4, ReplicaID: 4},
+	}
+	cachedLease := roachpb.Lease{
+		Replica: desc.InternalReplicas[1],
+	}
+
+	// The cache starts with a lease on node 2, so the first request will be
+	// routed there. That replica will reply with an NLHE with an old descriptor
+	// generation value, which should make the DistSender try the next replica.
+	var calls []roachpb.NodeID
+	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		calls = append(calls, ba.Replica.NodeID)
+		if ba.Replica.NodeID == 2 {
+			reply := &roachpb.BatchResponse{}
+			err := &roachpb.NotLeaseHolderError{
+				Lease: &ambiguousLease,
+				RangeDesc: roachpb.RangeDescriptor{
+					Generation: oldGeneration,
+				},
+			}
+			reply.Error = roachpb.NewError(err)
+			return reply, nil
+		}
+		require.Equal(t, ba.Replica.NodeID, roachpb.NodeID(1))
+		return ba.CreateReply(), nil
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracer},
+		Clock:      clock,
+		NodeDescs:  g,
+		RPCContext: rpcContext,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(sendFn),
+		},
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+	ds := NewDistSender(cfg)
+
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  desc,
+		Lease: cachedLease,
+	})
+
+	get := roachpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
+	_, pErr := kv.SendWrapped(ctx, ds, get)
+	require.Nil(t, pErr)
+
+	require.Equal(t, int64(0), ds.Metrics().RangeLookups.Count())
+	// We expect to backoff and retry the same replica 11 times when we get an
+	// NLHE with stale info. See `sameReplicaRetryLimit`.
+	require.Equal(t, int64(11), ds.Metrics().NextReplicaErrCount.Count())
+	require.Equal(t, int64(11), ds.Metrics().NotLeaseHolderErrCount.Count())
+
+	// Ensure that we called Node 2 11 times and then finally called Node 1.
+	var expectedCalls []roachpb.NodeID
+	for i := 0; i < 11; i++ {
+		expectedCalls = append(expectedCalls, roachpb.NodeID(2))
+	}
+	expectedCalls = append(expectedCalls, roachpb.NodeID(1))
+	require.Equal(t, expectedCalls, calls)
+
+	require.Regexp(
+		t,
+		"backing off due to .* stale info",
+		getRecording().String(),
+	)
+}
+
 func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
