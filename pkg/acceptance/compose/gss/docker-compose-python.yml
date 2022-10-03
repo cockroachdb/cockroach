@@ -6,7 +6,7 @@ services:
       - ./kdc/start.sh:/start.sh
       - keytab:/keytab
   cockroach:
-    image: ubuntu:xenial-20170214
+    image: ubuntu:xenial-20210804
     depends_on:
       - kdc
     command: /cockroach/cockroach --certs-dir=/certs start-single-node --listen-addr cockroach
