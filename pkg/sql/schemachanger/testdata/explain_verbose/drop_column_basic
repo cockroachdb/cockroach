@@ -433,6 +433,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 3
+    │       │     StatementForDropJob:
+    │       │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent

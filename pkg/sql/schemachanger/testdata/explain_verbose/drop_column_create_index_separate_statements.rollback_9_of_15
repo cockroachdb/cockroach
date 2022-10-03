@@ -316,6 +316,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 6
+    │       │     StatementForDropJob:
+    │       │       Rollback: true
+    │       │       Statement: CREATE UNIQUE INDEX idx ON defaultdb.public.t (k)
+    │       │       StatementID: 1
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -356,6 +360,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 4
+    │       │     StatementForDropJob:
+    │       │       Rollback: true
+    │       │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent

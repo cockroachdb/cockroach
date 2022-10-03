@@ -540,6 +540,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 5
+    │       │     StatementForDropJob:
+    │       │       Statement: ALTER TABLE t.public.test DROP COLUMN pi
     │       │     TableID: 106
     │       │
     │       ├── • MakeIndexAbsent

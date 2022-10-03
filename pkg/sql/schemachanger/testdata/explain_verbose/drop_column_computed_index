@@ -601,6 +601,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 4
+    │       │     StatementForDropJob:
+    │       │       Statement: ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent

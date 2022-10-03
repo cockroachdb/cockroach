@@ -380,6 +380,8 @@ PostCommitNonRevertiblePhase stage 2 of 4 with 12 MutationType ops
       TableID: 104
     *scop.CreateGCJobForIndex
       IndexID: 3
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (k)
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3
@@ -390,6 +392,8 @@ PostCommitNonRevertiblePhase stage 2 of 4 with 12 MutationType ops
       TableID: 104
     *scop.CreateGCJobForIndex
       IndexID: 5
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (k)
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 5

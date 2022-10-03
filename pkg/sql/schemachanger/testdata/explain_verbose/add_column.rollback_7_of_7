@@ -190,6 +190,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 3
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
             │     TableID: 106
             │
             ├── • MakeIndexAbsent

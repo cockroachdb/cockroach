@@ -442,6 +442,8 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
       TableID: 108
     *scop.CreateGCJobForIndex
       IndexID: 4
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 4
@@ -1387,6 +1389,8 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
       TableID: 108
     *scop.CreateGCJobForIndex
       IndexID: 4
+      StatementForDropJob:
+        Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 4

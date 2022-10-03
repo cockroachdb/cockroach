@@ -245,6 +245,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 14 of 15;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 3
+    │       │     StatementForDropJob:
+    │       │       Rollback: true
+    │       │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (a)
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -272,6 +275,9 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 14 of 15;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 5
+    │       │     StatementForDropJob:
+    │       │       Rollback: true
+    │       │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (a)
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
