@@ -123,16 +123,30 @@ func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) i
 //
 // The given name is used for logging.
 func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
+	return constantWithMetamorphicTestBoolInternal(name, defaultValue, true /* doLog */)
+}
+
+func constantWithMetamorphicTestBoolInternal(name string, defaultValue bool, doLog bool) bool {
 	if metamorphicBuild {
 		rng.Lock()
 		defer rng.Unlock()
 		if rng.r.Float64() < metamorphicBoolProbability {
 			ret := !defaultValue
-			logMetamorphicValue(name, ret)
+			if doLog {
+				logMetamorphicValue(name, ret)
+			}
 			return ret
 		}
 	}
 	return defaultValue
+}
+
+// ConstantWithMetamorphicTestBoolWithoutLogging is like ConstantWithMetamorphicTestBool
+// except it does not log the value. This is necessary to work around this issue:
+// https://github.com/cockroachdb/cockroach/issues/106667
+// TODO(test-eng): Remove this variant when the issue above is addressed.
+func ConstantWithMetamorphicTestBoolWithoutLogging(name string, defaultValue bool) bool {
+	return constantWithMetamorphicTestBoolInternal(name, defaultValue, false /* doLog */)
 }
 
 // ConstantWithMetamorphicTestChoice is like ConstantWithMetamorphicTestValue except
