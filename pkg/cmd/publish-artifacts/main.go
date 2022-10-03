@@ -95,7 +95,13 @@ type runFlags struct {
 }
 
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
-	for _, platform := range []release.Platform{release.PlatformLinux, release.PlatformLinuxArm, release.PlatformMacOS, release.PlatformWindows} {
+	for _, platform := range []release.Platform{
+		release.PlatformLinux,
+		release.PlatformLinuxArm,
+		release.PlatformMacOS,
+		release.PlatformMacOSArm,
+		release.PlatformWindows,
+	} {
 		var o opts
 		o.Platform = platform
 		o.ReleaseVersions = []string{flags.sha}
