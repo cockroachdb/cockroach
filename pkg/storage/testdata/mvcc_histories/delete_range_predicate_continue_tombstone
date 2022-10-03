@@ -1,0 +1,72 @@
+# Tests that MVCCPredicateDeleteRange will continue a run when encountering
+# tombstones that do not satisfy the predicate.
+# Sets up the following dataset, where x is a tombstone.
+#  T
+#  3  a3          d3      f3  g3
+#  2      x   x       x
+#  1      b1  c1
+#     a   b   c   d   e   f   g
+#
+run stats ok
+put k=b ts=1 v=b1
+put k=c ts=1 v=c1
+del k=b ts=2 localTs=1
+del k=c ts=2 localTs=1
+del k=e ts=2 localTs=1
+put k=a ts=3 v=a3
+put k=d ts=3 v=d3
+put k=f ts=3 v=f3
+put k=g ts=3 v=g3
+----
+>> put k=b ts=1 v=b1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=c ts=1 v=c1
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> del k=b ts=2 localTs=1
+del: "b": found key true
+stats: key_bytes=+12 val_count=+1 val_bytes=+13 live_count=-1 live_bytes=-21 gc_bytes_age=+4508
+>> del k=c ts=2 localTs=1
+del: "c": found key true
+stats: key_bytes=+12 val_count=+1 val_bytes=+13 live_count=-1 live_bytes=-21 gc_bytes_age=+4508
+>> del k=e ts=2 localTs=1
+del: "e": found key false
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+13 gc_bytes_age=+2646
+>> put k=a ts=3 v=a3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=d ts=3 v=d3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=f ts=3 v=f3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> put k=g ts=3 v=g3
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
+>> at end:
+data: "a"/3.000000000,0 -> /BYTES/a3
+data: "b"/2.000000000,0 -> {localTs=1.000000000,0}/<empty>
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/2.000000000,0 -> {localTs=1.000000000,0}/<empty>
+data: "c"/1.000000000,0 -> /BYTES/c1
+data: "d"/3.000000000,0 -> /BYTES/d3
+data: "e"/2.000000000,0 -> {localTs=1.000000000,0}/<empty>
+data: "f"/3.000000000,0 -> /BYTES/f3
+data: "g"/3.000000000,0 -> /BYTES/g3
+stats: key_count=7 key_bytes=122 val_count=9 val_bytes=81 live_count=4 live_bytes=84 gc_bytes_age=11662
+
+# Even though b, c, e do not satisfy the predicate, their latest versions are
+# tombstones, so the run continues and we write [a,g)@4.
+run stats ok
+del_range_pred k=a end=z ts=4 startTime=2 rangeThreshold=3
+----
+>> del_range_pred k=a end=z ts=4 startTime=2 rangeThreshold=3
+stats: range_key_count=+1 range_key_bytes=+14 range_val_count=+1 live_count=-4 live_bytes=-84 gc_bytes_age=+9408
+>> at end:
+rangekey: {a-g\x00}/[4.000000000,0=/<empty>]
+data: "a"/3.000000000,0 -> /BYTES/a3
+data: "b"/2.000000000,0 -> {localTs=1.000000000,0}/<empty>
+data: "b"/1.000000000,0 -> /BYTES/b1
+data: "c"/2.000000000,0 -> {localTs=1.000000000,0}/<empty>
+data: "c"/1.000000000,0 -> /BYTES/c1
+data: "d"/3.000000000,0 -> /BYTES/d3
+data: "e"/2.000000000,0 -> {localTs=1.000000000,0}/<empty>
+data: "f"/3.000000000,0 -> /BYTES/f3
+data: "g"/3.000000000,0 -> /BYTES/g3
+stats: key_count=7 key_bytes=122 val_count=9 val_bytes=81 range_key_count=1 range_key_bytes=14 range_val_count=1 gc_bytes_age=21070

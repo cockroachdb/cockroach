@@ -154,6 +154,11 @@ var (
 func TestMVCCHistories(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// TODO(storage-team): this prevents us from easily finding bugs which
+	// incorrectly assume simple value encoding. We only find bugs where we are
+	// explicitly using the extended encoding by setting a localTs. One way to
+	// handle the different test output with extended value encoding would be to
+	// duplicate each test file for the two cases.
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	ctx := context.Background()
