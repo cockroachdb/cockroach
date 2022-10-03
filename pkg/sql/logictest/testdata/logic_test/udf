@@ -454,7 +454,7 @@ $$
 statement ok
 DROP FUNCTION f_test_drop(INT), f_test_drop(INT);
 
-statement error pq: function public.f_test_drop does not exist
+statement error pq: unknown function: public.f_test_drop\(\): function undefined
 SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
 
 query T
@@ -473,7 +473,7 @@ $$
 statement ok
 DROP FUNCTION f_test_drop(INT);
 
-statement error pq: function sc1.f_test_drop does not exist
+statement error pq: unknown function: sc1.f_test_drop\(\): function undefined
 SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 
 # If there are identical function signatures in different schemas, multiple drop
@@ -514,10 +514,10 @@ DROP FUNCTION f_test_drop();
 DROP FUNCTION f_test_drop();
 COMMIT;
 
-statement error pq: function public.f_test_drop does not exist
+statement error pq: unknown function: public.f_test_drop\(\): function undefined
 SELECT @2 FROM [SHOW CREATE FUNCTION public.f_test_drop];
 
-statement error pq: function sc1.f_test_drop does not exist
+statement error pq: unknown function: sc1.f_test_drop\(\): function undefined
 SELECT @2 FROM [SHOW CREATE FUNCTION sc1.f_test_drop];
 
 statement ok
@@ -1044,7 +1044,7 @@ ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
 statement ok
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_new
 
-statement error pq: function f_test_alter_name does not exist
+statement error pq: unknown function: f_test_alter_name\(\): function undefined
 SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name];
 
 query T
@@ -1063,7 +1063,7 @@ $$
 statement ok
 ALTER FUNCTION f_test_alter_name_new RENAME to f_test_alter_name_diff_in
 
-statement error pq: function f_test_alter_name_new does not exist
+statement error pq: unknown function: f_test_alter_name_new\(\): function undefined
 SELECT @2 FROM [SHOW CREATE FUNCTION f_test_alter_name_new];
 
 query T
@@ -2463,3 +2463,19 @@ subtest subqueries
 # UDFs with subqueries are not currently supported.
 statement error pgcode 0A000 unimplemented: subquery usage inside a function definition
 CREATE FUNCTION rec(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT * FROM t WHERE a = (SELECT max(i) FROM s)'
+
+subtest execute_dropped_function
+
+statement ok
+CREATE FUNCTION f_test_exec_dropped(a int) RETURNS INT LANGUAGE SQL AS $$ SELECT a $$;
+
+query I
+SELECT f_test_exec_dropped(123);
+----
+123
+
+statement ok
+DROP FUNCTION f_test_exec_dropped;
+
+statement error pq: unknown function: f_test_exec_dropped\(\): function undefined
+SELECT f_test_exec_dropped(321);
