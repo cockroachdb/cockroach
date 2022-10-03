@@ -223,6 +223,9 @@ func getColRef(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef,
 		return nil, nil, false
 	}
 	col := cols[s.rnd.Intn(len(cols))]
+	if s.disableDecimals && col.typ.Family() == types.DecimalFamily {
+		return nil, nil, false
+	}
 	return col.typedExpr(), col, true
 }
 
