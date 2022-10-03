@@ -31,8 +31,6 @@ import { selectHasViewActivityRedactedRole } from "src/redux/user";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
-const NODE_ID = getDataFromServer().NodeID;
-
 export function DebugTableLink(props: {
   name: string;
   url: string;
@@ -133,7 +131,11 @@ function NodeIDSelector(props: {
       }}
     >
       {nodeIDs.map(n => {
-        return <option value={n}>{n}</option>;
+        return (
+          <option value={n} key={n}>
+            {n}
+          </option>
+        );
       })}
     </select>
   );
@@ -242,7 +244,7 @@ const StatementDiagnosticsConnected = connect(
 )(StatementDiagnosticsSelector);
 
 export default function Debug() {
-  const [nodeID, setNodeID] = useState<string>(NODE_ID);
+  const [nodeID, setNodeID] = useState<string>(getDataFromServer().NodeID);
   return (
     <div className="section">
       <Helmet title="Debug" />

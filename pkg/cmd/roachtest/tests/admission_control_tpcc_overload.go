@@ -121,20 +121,7 @@ func verifyNodeLiveness(
 	}
 }
 
-func registerTPCCOverloadSpec(r registry.Registry, s tpccOLAPSpec) {
-	name := fmt.Sprintf("overload/tpcc_olap/nodes=%d/cpu=%d/w=%d/c=%d",
-		s.Nodes, s.CPUs, s.Warehouses, s.Concurrency)
-	r.Add(registry.TestSpec{
-		Name:              name,
-		Owner:             registry.OwnerKV,
-		Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
-		Run:               s.run,
-		EncryptionSupport: registry.EncryptionMetamorphic,
-		Timeout:           20 * time.Minute,
-	})
-}
-
-func registerOverload(r registry.Registry) {
+func registerTPCCOverload(r registry.Registry) {
 	specs := []tpccOLAPSpec{
 		{
 			CPUs:        8,
@@ -144,6 +131,16 @@ func registerOverload(r registry.Registry) {
 		},
 	}
 	for _, s := range specs {
-		registerTPCCOverloadSpec(r, s)
+		name := fmt.Sprintf("admission-control/tpcc-olap/nodes=%d/cpu=%d/w=%d/c=%d",
+			s.Nodes, s.CPUs, s.Warehouses, s.Concurrency)
+		r.Add(registry.TestSpec{
+			Name:              name,
+			Owner:             registry.OwnerAdmissionControl,
+			Tags:              []string{`weekly`},
+			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
+			Run:               s.run,
+			EncryptionSupport: registry.EncryptionMetamorphic,
+			Timeout:           20 * time.Minute,
+		})
 	}
 }
