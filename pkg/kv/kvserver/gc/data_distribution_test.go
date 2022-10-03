@@ -68,7 +68,7 @@ func (ds dataDistribution) setupTest(
 			if kv.Key.Timestamp.IsEmpty() {
 				require.NoError(t, eng.PutUnversioned(kv.Key.Key, kv.Value))
 			} else {
-				require.NoError(t, eng.PutRawMVCC(kv.Key, kv.Value))
+				require.NoError(t, eng.PutMVCC(kv.Key, storage.MVCCValue{Value: roachpb.Value{RawBytes: kv.Value}}))
 			}
 		} else {
 			// TODO(ajwerner): Decide if using MVCCPut is worth it.

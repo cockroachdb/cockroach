@@ -557,6 +557,8 @@ func getExpectationsGenerator(
 				}
 
 				// Apply GC checks to produce expected state.
+				v, err := storage.DecodeMVCCValue(history[i].Value)
+				require.NoError(t, err)
 				switch {
 				case gcThreshold.Less(history[i].Key.Timestamp):
 					// Any value above threshold including intents that have no timestamp.
@@ -564,14 +566,14 @@ func getExpectationsGenerator(
 						pending = append(pending, history[i].MVCCKeyValue)
 					}
 					i++
-				case history[i].Key.Timestamp.LessEq(gcThreshold) && len(history[i].Value) > 0:
+				case history[i].Key.Timestamp.LessEq(gcThreshold) && !v.IsTombstone():
 					// First value on or under threshold should be preserved, but the rest
 					// of history should be skipped.
 					pending = append(pending, history[i].MVCCKeyValue)
 					i++
 					stop = true
 				default:
-					// This is ts <= threshold and v == nil
+					// This is ts <= threshold and v.IsTombstone().
 					stop = true
 				}
 			}
