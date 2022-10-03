@@ -91,6 +91,11 @@ SELECT
 				ELSE
 					e'\n-- Warning: Partitioned table with no zone configurations.'
         END
+        ,
+        /* TODO(janexing): How to avoid printing the contraints that's already in the create stmt */
+        CASE WHEN (SELECT string_agg(details, E'\n') FROM [SHOW CONSTRAINTS FROM %[7]s] WHERE validated='f' AND constraint_type != 'PRIMARY KEY') IS NOT NULL THEN 
+            concat(E'\n', (SELECT string_agg(details, E'\n') FROM [SHOW CONSTRAINTS FROM %[7]s] WHERE validated='f' AND constraint_type != 'PRIMARY KEY'), ' NOT VALID') 
+        END
     ) AS create_statement
 FROM
     %[4]s.crdb_internal.create_statements
@@ -302,6 +307,7 @@ func (d *delegator) showTableDetails(
 		resName.CatalogName.String(), // note: CatalogName.String() != Catalog()
 		lexbase.EscapeSQLString(resName.Schema()),
 		dataSource.PostgresDescriptorID(),
+		lexbase.EncodeSQLStringBare(resName.String()),
 	)
 
 	return parse(fullQuery)

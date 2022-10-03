@@ -129,6 +129,13 @@ func EscapeSQLString(in string) string {
 	return buf.String()
 }
 
+// EncodeSQLStringBare encode a string without adding surrounding single quote.
+func EncodeSQLStringBare(in string) string {
+	var buf bytes.Buffer
+	EncodeSQLStringWithFlags(&buf, in, EncBareStrings)
+	return buf.String()
+}
+
 // EncodeSQLStringWithFlags writes a string literal to buf. All
 // unicode and non-printable characters are escaped. flags controls
 // the output format: if encodeBareString is set, the output string
