@@ -1230,10 +1230,10 @@ func (node *ForeignKeyConstraintTableDef) SetIfNotExists() {
 // CheckConstraintTableDef represents a check constraint within a CREATE
 // TABLE statement.
 type CheckConstraintTableDef struct {
-	Name        Name
-	Expr        Expr
-	Hidden      bool
-	IfNotExists bool
+	Name                  Name
+	Expr                  Expr
+	FromHashShardedColumn bool
+	IfNotExists           bool
 }
 
 // SetName implements the ConstraintTableDef interface.

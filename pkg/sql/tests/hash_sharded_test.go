@@ -65,7 +65,7 @@ func verifyTableDescriptorState(
 		if err != nil {
 			t.Fatal(err)
 		}
-		if usesShard && check.Hidden {
+		if usesShard && check.FromHashShardedColumn {
 			foundCheckConstraint = true
 			break
 		}
