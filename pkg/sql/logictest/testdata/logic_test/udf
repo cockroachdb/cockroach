@@ -1849,6 +1849,18 @@ test           sc_test_show_grants  f_test_show_grants(int8, text, oid)  u_test_
 statement ok
 SET search_path = public;
 
+subtest udf_create_privilege
+
+statement ok
+CREATE SCHEMA sc_test_priv;
+
+user testuser
+
+statement error pq: user testuser does not have CREATE privilege on schema sc_test_priv
+CREATE FUNCTION sc_test_priv.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+user root
+
 subtest execution
 
 statement ok
