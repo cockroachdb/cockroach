@@ -20,9 +20,8 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
-	"flag"
-	"math/rand"
 	"net/url"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -44,55 +44,32 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TenantModeFlagName is the exported name of the tenantMode flag, for use
-// in other packages.
-const TenantModeFlagName = "tenantMode"
-
-var tenantModeFlag = flag.String(
-	TenantModeFlagName, tenantModeDefault,
-	"tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default "+
-		"which alternates between tenant and no-tenant mode probabilistically. Note that the two force "+
-		"modes are ignored if the test is already forced to run in one of the two modes.")
-
-const (
-	tenantModeForceTenant   = "forceTenant"
-	tenantModeForceNoTenant = "forceNoTenant"
-	tenantModeDefault       = "default"
-)
-
 // ShouldStartDefaultTestTenant determines whether a default test tenant
 // should be started for test servers or clusters, to serve SQL traffic by
-// default. It defaults to 50% probability, but can be overridden by the
-// tenantMode test flag or the COCKROACH_TEST_TENANT_MODE environment variable.
-// If both the environment variable and the test flag are set, the environment
-// variable wins out.
+// default.
+// This can be overridden either via the build tag `metamorphic_disable`
+// or just for test tenants via COCKROACH_TEST_TENANT.
 func ShouldStartDefaultTestTenant(t testing.TB) bool {
-	var defaultProbabilityOfStartingTestTenant = 0.5
 	if skip.UnderBench() {
 		// Until #83461 is resolved, we want to make sure that we don't use the
 		// multi-tenant setup so that the comparison against old single-tenant
 		// SHAs in the benchmarks is fair.
-		defaultProbabilityOfStartingTestTenant = 0
-	}
-	var probabilityOfStartingDefaultTestTenant float64
-
-	tenantModeTestString, envSet := envutil.EnvString("COCKROACH_TEST_TENANT_MODE", 0)
-	if !envSet {
-		tenantModeTestString = *tenantModeFlag
+		return false
 	}
 
-	switch tenantModeTestString {
-	case tenantModeForceTenant:
-		probabilityOfStartingDefaultTestTenant = 1.0
-	case tenantModeForceNoTenant:
-		probabilityOfStartingDefaultTestTenant = 0.0
-	case tenantModeDefault:
-		probabilityOfStartingDefaultTestTenant = defaultProbabilityOfStartingTestTenant
-	default:
-		t.Fatal("invalid setting of tenantMode flag")
+	// Obey the env override if present.
+	if str, present := envutil.EnvString("COCKROACH_TEST_TENANT", 0); present {
+		v, err := strconv.ParseBool(str)
+		if err != nil {
+			panic(err)
+		}
+		return v
 	}
 
-	return rand.Float64() <= probabilityOfStartingDefaultTestTenant
+	// Note: we ask the metamorphic framework for a "disable" value, instead
+	// of an "enable" value, because it probabilistically returns its default value
+	// more often than not and that is what we want.
+	return !util.ConstantWithMetamorphicTestBool("disable-test-tenant", false)
 }
 
 // TestServerInterface defines test server functionality that tests need; it is
