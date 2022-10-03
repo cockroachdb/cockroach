@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
@@ -653,7 +654,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ScanMaxIdleTime:          cfg.ScanMaxIdleTime,
 		HistogramWindowInterval:  cfg.HistogramWindowInterval(),
 		StorePool:                storePool,
-		SQLExecutor:              internalExecutor,
 		LogRangeAndNodeEvents:    cfg.EventLogEnabled,
 		RangeDescriptorCache:     distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:      tsDB,
@@ -667,6 +667,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
 		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
+		RangeLogWriter:           rangelog.NewWriter(internalExecutor),
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -1654,7 +1655,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// range logs. We do it as a separate stage to log events early just in case
 	// startup fails, and write to range log once the server is running as we need
 	// to run sql statements to update rangelog.
-	publishPendingLossOfQuorumRecoveryEvents(ctx, s.node.stores, s.stopper)
+	publishPendingLossOfQuorumRecoveryEvents(
+		ctx, s.node.execCfg.InternalExecutor, s.node.stores, s.stopper,
+	)
 
 	log.Event(ctx, "server initialized")
 

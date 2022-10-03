@@ -113,6 +113,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptprovider",
         "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/kv/kvserver/rangefeed",
+        "//pkg/kv/kvserver/rangelog",
         "//pkg/kv/kvserver/reports",
         "//pkg/multitenant",
         "//pkg/multitenant/multitenantio",

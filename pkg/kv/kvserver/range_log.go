@@ -12,15 +12,11 @@ package kvserver
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -65,7 +61,7 @@ func (w *wrappedRangeLogWriter) WriteRangeLogEvent(
 	if c := w.getCounter(event.EventType); c != nil {
 		c.Inc(1)
 	}
-	if w.shouldWrite() {
+	if w.shouldWrite() && w.underlying != nil {
 		return w.underlying.WriteRangeLogEvent(ctx, txn, event)
 	}
 	return nil
@@ -82,56 +78,6 @@ func maybeLogRangeLogEvent(ctx context.Context, event kvserverpb.RangeLogEvent) 
 	}
 	log.Infof(ctx, "Range Event: %q, range: %d, info: %s",
 		event.EventType, event.RangeID, info)
-}
-
-// internalExecutorRangeLogWriter implements RangeLogWriter using the
-// InternalExecutor.
-type internalExecutorRangeLogWriter struct {
-	ie sqlutil.InternalExecutor
-}
-
-// WriteRangeLogEvent implements RangeLogWriter. It writes the event to the
-// system.rangelog table in the provided transaction.
-func (s *internalExecutorRangeLogWriter) WriteRangeLogEvent(
-	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
-) error {
-	const insertEventTableStmt = `
-	INSERT INTO system.rangelog (
-		timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
-	)
-	VALUES(
-		$1, $2, $3, $4, $5, $6
-	)
-	`
-	args := []interface{}{
-		event.Timestamp,
-		event.RangeID,
-		event.StoreID,
-		event.EventType.String(),
-		nil, // otherRangeID
-		nil, // info
-	}
-	if event.OtherRangeID != 0 {
-		args[4] = event.OtherRangeID
-	}
-	if event.Info != nil {
-		infoBytes, err := json.Marshal(*event.Info)
-		if err != nil {
-			return err
-		}
-		args[5] = string(infoBytes)
-	}
-
-	rows, err := s.ie.ExecEx(ctx, "log-range-event", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		insertEventTableStmt, args...)
-	if err != nil {
-		return err
-	}
-	if rows != 1 {
-		return errors.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
-	}
-	return nil
 }
 
 // logSplit logs a range split event into the event table. The affected range is
