@@ -294,7 +294,17 @@ func (gc GarbageCollector) Filter(keys []storage.MVCCKey, values [][]byte) (int,
 
 	// Now keys[i].Timestamp is <= gc.expiration, but the key-value pair is still
 	// "visible" at timestamp gc.expiration (and up to the next version).
-	if deleted := len(values[i]) == 0; deleted {
+	var isTombstone bool
+	{
+		if v, err := storage.DecodeMVCCValue(values[i]); err == nil {
+			isTombstone = v.IsTombstone()
+		} else {
+			// Filter is sometimes called by test code (TestGarbageCollectorFilter)
+			// that is not using valid MVCCValues. Just ignore this error.
+			isTombstone = len(values[i]) == 0
+		}
+	}
+	if isTombstone {
 		// We don't have to keep a delete visible (since GCing it does not change
 		// the outcome of the read). Note however that we can't touch deletes at
 		// higher timestamps immediately preceding this one, since they're above
