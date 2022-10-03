@@ -720,13 +720,32 @@ func TestGC(t *testing.T) {
 		{name: "delete_merges_rages", data: deleteMergesRanges},
 		{name: "avoid_merging_different_ts", data: avoidMergingDifferentTs},
 	} {
-		t.Run(d.name, func(t *testing.T) {
-			runTest(t, d.data)
+		t.Run(d.name+"-simple-encoding", func(t *testing.T) {
+			runTest(t, d.data, false)
+		})
+		t.Run(d.name+"-extended-encoding", func(t *testing.T) {
+			runTest(t, d.data, true)
 		})
 	}
 }
 
-func runTest(t *testing.T, data string) {
+func doTransformTombstonesToExtended(t *testing.T, td tableData) tableData {
+	for i := range td {
+		if len(td[i].value.Key.Key) > 0 && td[i].value.Key.IsValue() && len(td[i].value.Value) == 0 {
+			v := storage.MVCCValue{
+				MVCCValueHeader: enginepb.MVCCValueHeader{},
+				Value:           roachpb.Value{RawBytes: td[i].value.Value},
+			}
+			v.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 1}
+			var err error
+			td[i].value.Value, err = storage.EncodeMVCCValue(v)
+			require.NoError(t, err)
+		}
+	}
+	return td
+}
+
+func runTest(t *testing.T, data string, transformTombstonesToExtended bool) {
 	ctx := context.Background()
 	tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
 	desc := roachpb.RangeDescriptor{
@@ -738,6 +757,9 @@ func runTest(t *testing.T, data string) {
 	defer eng.Close()
 
 	dataItems, gcTS, now := readTableData(t, desc.StartKey.AsRawKey(), data)
+	if transformTombstonesToExtended {
+		dataItems = doTransformTombstonesToExtended(t, dataItems)
+	}
 	ds := dataItems.fullDistribution()
 	stats := ds.setupTest(t, eng, desc)
 	snap := eng.NewSnapshot()
