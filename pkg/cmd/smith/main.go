@@ -73,6 +73,7 @@ var (
 		"CompareMode":                             sqlsmith.CompareMode(),
 		"PostgresMode":                            sqlsmith.PostgresMode(),
 		"MutatingMode":                            sqlsmith.MutatingMode(),
+		"DisableDecimals":                         sqlsmith.DisableDecimals(),
 	}
 	smitherOpts []string
 )
