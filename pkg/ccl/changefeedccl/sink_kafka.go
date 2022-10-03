@@ -475,6 +475,8 @@ func (s *kafkaSink) workerLoop() {
 		var ackError error
 
 		select {
+		case <-s.ctx.Done():
+			return
 		case <-s.stopWorkerCh:
 			return
 		case m := <-s.producer.Successes():
@@ -553,6 +555,7 @@ func (s *kafkaSink) finishProducerMessage(ackMsg *sarama.ProducerMessage, ackErr
 func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryErr error) error {
 	lastSendErr := retryErr
 	activeConfig := s.kafkaCfg
+	log.Infof(s.ctx, "kafka sink handling %d buffered messages for internal retry", len(msgs))
 
 	// Ensure memory for messages are always cleaned up
 	defer func() {
