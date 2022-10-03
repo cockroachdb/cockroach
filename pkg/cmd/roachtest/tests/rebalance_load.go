@@ -15,6 +15,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -156,6 +157,9 @@ func registerRebalanceLoad(r registry.Registry) {
 			Owner:   registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if runtime.GOARCH == "arm64" {
+					t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+				}
 				if c.IsLocal() {
 					concurrency = 32
 					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
