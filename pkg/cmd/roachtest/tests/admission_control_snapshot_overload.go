@@ -89,17 +89,19 @@ func registerSnapshotOverload(r registry.Registry) {
 			}
 
 			t.Status(fmt.Sprintf("setting up prometheus/grafana (<%s)", 2*time.Minute))
-			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0])
-			promCfg.WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
-			promCfg.WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
-			promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
-				"/", makeWorkloadScrapeNodes(c.Node(workloadNode).InstallNodes()[0], []workloadInstance{
-					{nodes: c.Node(workloadNode)},
-				})))
-			promCfg.WithGrafanaDashboard("http://go.crdb.dev/p/snapshot-admission-control-grafana")
-			_, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, nil)
-			defer cleanupFunc()
+			{
+				promCfg := &prometheus.Config{}
+				promCfg.WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0])
+				promCfg.WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
+				promCfg.WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
+				promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig("workload",
+					"/", makeWorkloadScrapeNodes(c.Node(workloadNode).InstallNodes()[0], []workloadInstance{
+						{nodes: c.Node(workloadNode)},
+					})))
+				promCfg.WithGrafanaDashboard("http://go.crdb.dev/p/snapshot-admission-control-grafana")
+				_, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, nil)
+				defer cleanupFunc()
+			}
 
 			var constraints []string
 			for i := 1; i <= crdbNodes; i++ {
