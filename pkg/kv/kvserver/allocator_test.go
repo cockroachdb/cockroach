@@ -1697,9 +1697,14 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		// node 1 because it's draining.
 		{existing: existing, leaseholder: 3, check: true, expected: 2, conf: emptySpanConfig()},
 		{existing: existing, leaseholder: 3, check: false, expected: 2, conf: emptySpanConfig()},
-		// Verify that lease preferences dont impact draining
+		// Verify that lease preferences dont impact draining.
+		// If the store that is within the lease preferences (store 1) is draining,
+		// we'd like the lease to stay on the next best store (which is store 2).
 		{existing: existing, leaseholder: 2, check: true, expected: 0, conf: roachpb.SpanConfig{LeasePreferences: preferDC1}},
-		{existing: existing, leaseholder: 2, check: false, expected: 0, conf: roachpb.SpanConfig{LeasePreferences: preferDC1}},
+		// If the current lease on store 2 needs to be shed (indicated by
+		// checkTransferLeaseSource = false), and store 1 is draining, then store 3
+		// is the only reasonable lease transfer target.
+		{existing: existing, leaseholder: 2, check: false, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferDC1}},
 		{existing: existing, leaseholder: 2, check: true, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferRegion1}},
 		{existing: existing, leaseholder: 2, check: false, expected: 3, conf: roachpb.SpanConfig{LeasePreferences: preferRegion1}},
 	}
@@ -1969,7 +1974,10 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 				context.Background(),
 				emptySpanConfig(),
 				c.existing,
-				c.leaseholder,
+				&mockRepl{
+					storeID:           c.leaseholder,
+					replicationFactor: int32(len(c.existing)),
+				},
 				nil, /* replicaStats */
 			)
 			if c.expected != result {
@@ -2031,7 +2039,10 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 				context.Background(),
 				emptySpanConfig(),
 				c.existing,
-				c.leaseholder,
+				&mockRepl{
+					storeID:           c.leaseholder,
+					replicationFactor: int32(len(c.existing)),
+				},
 				nil, /* replicaStats */
 			)
 			if c.expected != result {
@@ -2072,7 +2083,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 			context.Background(),
 			emptySpanConfig(),
 			replicas(1, 2, 3),
-			2,
+			&mockRepl{storeID: 2, replicationFactor: 3},
 			nil, /* replicaStats */
 		)
 		require.Equal(t, expected, result)
@@ -2211,7 +2222,10 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 				context.Background(),
 				conf,
 				c.existing,
-				c.leaseholder,
+				&mockRepl{
+					storeID:           c.leaseholder,
+					replicationFactor: int32(len(c.existing)),
+				},
 				nil, /* replicaStats */
 			)
 			expectTransfer := c.expectedCheckTrue != 0
@@ -2306,7 +2320,10 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 		expectedCheckFalse roachpb.StoreID /* checkTransferLeaseSource = false */
 	}{
 		{1, replicas(1, 3, 5), preferEast, 0, 3},
-		{1, replicas(1, 2, 3), preferEast, 0, 2},
+		// When `checkTransferLeaseSource` = false, we'd expect either store 2 or 3
+		// to be produced by `TransferLeaseTarget` (since both of them have
+		// less-than-mean leases). In this case, the rng should produce 3.
+		{1, replicas(1, 2, 3), preferEast, 0, 3},
 		{3, replicas(1, 3, 5), preferEast, 0, 1},
 		{5, replicas(1, 4, 5), preferEast, 1, 1},
 		{5, replicas(3, 4, 5), preferEast, 3, 3},
