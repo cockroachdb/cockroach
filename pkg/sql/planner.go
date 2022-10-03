@@ -475,7 +475,6 @@ func internalExtendedEvalCtx(
 			TxnReadOnly:                    false,
 			TxnImplicit:                    true,
 			TxnIsSingleStmt:                true,
-			Context:                        ctx,
 			TestingKnobs:                   evalContextTestingKnobs,
 			StmtTimestamp:                  stmtTimestamp,
 			TxnTimestamp:                   txnTimestamp,
@@ -490,6 +489,7 @@ func internalExtendedEvalCtx(
 		Descs:           tables,
 		indexUsageStats: indexUsageStats,
 	}
+	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)
 	return ret
 }
