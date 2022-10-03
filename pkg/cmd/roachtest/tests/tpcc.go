@@ -724,14 +724,6 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMax:   gceOrAws(cloud, 3000, 3500),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
-		Nodes:                    3,
-		CPUs:                     16,
-		AdmissionControlDisabled: true,
-
-		LoadWarehouses: gceOrAws(cloud, 3500, 3900),
-		EstimatedMax:   gceOrAws(cloud, 3000, 3500),
-	})
-	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
 		CPUs:  16,
 
@@ -833,14 +825,13 @@ func (l tpccBenchLoadConfig) numLoadNodes(d tpccBenchDistribution) int {
 }
 
 type tpccBenchSpec struct {
-	Owner                    registry.Owner // defaults to Test-Eng
-	Nodes                    int
-	CPUs                     int
-	HighMem                  bool
-	Chaos                    bool
-	AdmissionControlDisabled bool
-	Distribution             tpccBenchDistribution
-	LoadConfig               tpccBenchLoadConfig
+	Owner        registry.Owner // defaults to Test-Eng
+	Nodes        int
+	CPUs         int
+	HighMem      bool
+	Chaos        bool
+	Distribution tpccBenchDistribution
+	LoadConfig   tpccBenchLoadConfig
 
 	// The number of warehouses to load into the cluster before beginning
 	// benchmarking. Should be larger than EstimatedMax and should be a
@@ -898,9 +889,6 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	}
 	if b.Chaos {
 		nameParts = append(nameParts, "chaos")
-	}
-	if b.AdmissionControlDisabled {
-		nameParts = append(nameParts, "no-admission")
 	}
 
 	opts := []spec.Option{spec.CPU(b.CPUs), spec.HighMem(b.HighMem)}
@@ -1078,7 +1066,6 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	// Don't encrypt in tpccbench tests.
 	startOpts, settings := b.startOpts()
 	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
-	SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	useHAProxy := b.Chaos
 	const restartWait = 15 * time.Second
 	{
@@ -1131,7 +1118,6 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), roachNodes)
 		startOpts, settings := b.startOpts()
 		c.Start(ctx, t.L(), startOpts, settings, roachNodes)
-		SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	}
 
 	s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
