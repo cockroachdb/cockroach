@@ -283,3 +283,60 @@ ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser3
 
 statement error pq: role testuser3 cannot be dropped because some objects depend on it\nprivileges for default privileges on new relations belonging to role root in database test\ntestuser3 has global 'EXTERNALCONNECTION' privilege\ntestuser3 has global 'MODIFYCLUSTERSETTING' privilege
 DROP USER testuser3
+
+# Do not cache privileges if the system.privileges table is uncommitted.
+statement ok
+CREATE USER testuser4
+
+statement ok
+REVOKE SELECT ON crdb_internal.tables FROM public
+
+query B
+SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
+----
+false
+
+statement ok
+BEGIN
+
+statement ok
+GRANT SELECT ON crdb_internal.tables TO testuser4
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1,2
+----
+public     /vtable/crdb_internal/tables  {}                                         {}
+root       /global/                      {MODIFYCLUSTERSETTING}                     {}
+testuser   /externalconn/foo             {USAGE}                                    {}
+testuser   /global/                      {MODIFYCLUSTERSETTING}                     {}
+testuser   /vtable/crdb_internal/tables  {SELECT}                                   {}
+testuser2  /externalconn/foo             {USAGE}                                    {}
+testuser2  /global/                      {MODIFYCLUSTERSETTING}                     {}
+testuser3  /global/                      {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+testuser4  /vtable/crdb_internal/tables  {SELECT}                                   {}
+
+# This should not cache the uncommitted privilege.
+query B
+SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
+----
+true
+
+statement ok
+ROLLBACK
+
+query TTTT
+SELECT * FROM system.privileges ORDER BY 1,2
+----
+public     /vtable/crdb_internal/tables  {}                                         {}
+root       /global/                      {MODIFYCLUSTERSETTING}                     {}
+testuser   /externalconn/foo             {USAGE}                                    {}
+testuser   /global/                      {MODIFYCLUSTERSETTING}                     {}
+testuser   /vtable/crdb_internal/tables  {SELECT}                                   {}
+testuser2  /externalconn/foo             {USAGE}                                    {}
+testuser2  /global/                      {MODIFYCLUSTERSETTING}                     {}
+testuser3  /global/                      {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
+
+query B
+SELECT has_table_privilege('testuser4', 'crdb_internal.tables', 'SELECT')
+----
+false
