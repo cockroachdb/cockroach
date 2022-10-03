@@ -1,4 +1,5 @@
 FROM ubuntu:18.04
+ARG TARGETPLATFORM
 
 # This Dockerfile bundles several language runtimes and test frameworks into one
 # container for our acceptance tests.
@@ -28,23 +29,14 @@ FROM ubuntu:18.04
 RUN apt-get update \
  && apt-get install --yes --no-install-recommends ca-certificates curl
 
-# The forward reference version is the oldest version from which we support
-# upgrading. The bidirectional reference version is the oldest version that we
-# support upgrading from and downgrading to.
-ENV FORWARD_REFERENCE_VERSION="v2.0.0"
-ENV BIDIRECTIONAL_REFERENCE_VERSION="v2.0.0"
-RUN mkdir /opt/forward-reference-version /opt/bidirectional-reference-version \
- && curl -fsSL https://binaries.cockroachdb.com/cockroach-${FORWARD_REFERENCE_VERSION}.linux-amd64.tgz \
-    | tar xz -C /opt/forward-reference-version --strip-components=1 \
- && curl -fsSL https://binaries.cockroachdb.com/cockroach-${BIDIRECTIONAL_REFERENCE_VERSION}.linux-amd64.tgz \
-    | tar xz -C /opt/bidirectional-reference-version --strip-components=1
-
-RUN apt-get install --yes --no-install-recommends openjdk-8-jdk \
- && curl -fsSL https://github.com/cockroachdb/finagle-postgres/archive/94b1325270.tar.gz | tar xz \
- && cd finagle-postgres-* \
- && ./sbt assembly \
- && mv target/scala-2.11/finagle-postgres-tests.jar /opt/finagle-postgres-tests.jar \
- && rm -rf /finagle-postgres-* ~/.ivy2
+RUN case ${TARGETPLATFORM} in \
+    "linux/amd64") URL=https://download.visualstudio.microsoft.com/download/pr/8159607a-e686-4ead-ac99-b4c97290a5fd/ec6070b1b2cc0651ebe57cf1bd411315/dotnet-sdk-6.0.401-linux-x64.tar.gz ;; \
+    "linux/arm64") URL=https://download.visualstudio.microsoft.com/download/pr/a567a07f-af9d-451a-834c-a746ac299e6b/1d9d74b54cf580f93cad71a6bf7b32be/dotnet-sdk-6.0.401-linux-arm64.tar.gz ;; \
+   esac \
+ && curl -sL -o dotnet.tar.gz $URL \
+ && mkdir -p /usr/share/dotnet \
+ && tar -zxf dotnet.tar.gz -C /usr/share/dotnet \
+ && ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
 
 RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d/yarn.asc \
  && echo "deb https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list \
@@ -54,10 +46,7 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
  && curl https://packages.erlang-solutions.com/erlang-solutions_2.0_all.deb > erlang-solutions_2.0_all.deb && dpkg -i erlang-solutions_2.0_all.deb \
  && apt-get update \
  && apt-get install --yes --no-install-recommends \
-    dotnet-sdk-2.1 \
-    dotnet-runtime-2.1 \
     expect \
-    elixir \
     esl-erlang \
     libc6-dev \
     libcurl4 \
@@ -78,8 +67,14 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
     xmlstarlet \
     yarn
 
-RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.0.0/autouseradd-1.0.0-amd64.tar.gz \
-    | tar xz -C /usr --strip-components 1
+RUN case ${TARGETPLATFORM} in \
+    "linux/amd64") ARCH=amd64; SHASUM=442dae58b727a79f81368127fac141d7f95501ffa05f8c48943d27c4e807deb7 ;; \
+    "linux/arm64") ARCH=arm64; SHASUM=b216bebfbe30c3c156144cff07233654e23025e26ab5827058c9b284e130599e ;; \
+   esac \
+  && curl -fsSL "https://github.com/benesch/autouseradd/releases/download/1.3.0/autouseradd-1.3.0-$ARCH.tar.gz" -o autouseradd.tar.gz \
+  && echo "$SHASUM autouseradd.tar.gz" | sha256sum -c - \
+  && tar xzf autouseradd.tar.gz --strip-components 1 \
+  && rm autouseradd.tar.gz
 
 # When system packages are not available for a language's PostgreSQL driver,
 # fall back to using that language's package manager. The high-level process
