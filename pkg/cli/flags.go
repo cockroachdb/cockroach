@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -302,8 +301,7 @@ func init() {
 			flag.Hidden = true
 		}
 		if flag.Name == logflags.ShowLogsName ||
-			flag.Name == logflags.TestLogConfigName ||
-			flag.Name == serverutils.TenantModeFlagName {
+			flag.Name == logflags.TestLogConfigName {
 			// test-only flag
 			flag.Hidden = true
 		}
