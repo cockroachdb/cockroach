@@ -290,6 +290,30 @@ func generateTestsTimeouts() {
 		log.Fatal(err)
 	}
 	for size, timeout := range testSizeToDefaultTimeout {
+		if size == "enormous" {
+			// Exclude sqlite logic tests since they have a custom timeout that
+			// exceeds the default 1h.
+			pkgs := targets[size]
+			for i := 0; i < len(pkgs); i++ {
+				var excluded bool
+				for _, toExclude := range []string{
+					"//pkg/ccl/sqlitelogictestccl",
+					"//pkg/sql/sqlitelogictest",
+				} {
+					if strings.HasPrefix(pkgs[i], toExclude) {
+						excluded = true
+						break
+					}
+				}
+				if !excluded {
+					continue
+				}
+				copy(pkgs[i:], pkgs[i+1:])
+				pkgs = pkgs[:len(pkgs)-1]
+				i--
+			}
+			targets[size] = pkgs
+		}
 		// Let the `go test` process timeout 5 seconds before bazel attempts to kill it.
 		// Note that if this causes issues such as not having enough time to run normally
 		// (because of the 5 seconds taken) then the troubled test target size must be bumped
