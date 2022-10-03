@@ -110,6 +110,8 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 					platform = release.PlatformLinuxArm
 				case "crossmacosbase":
 					platform = release.PlatformMacOS
+				case "crossmacosarmbase":
+					platform = release.PlatformMacOSArm
 				case "crosswindowsbase":
 					platform = release.PlatformWindows
 					path += ".exe"
@@ -168,6 +170,8 @@ func TestProvisional(t *testing.T) {
 				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary v0.0.1-alpha release' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosbase",
 				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-apple-darwin21.2 official-binary v0.0.1-alpha release' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosarmbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
 					"'--workspace_status_command=." +
 					"/build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary v0.0.1-alpha release' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crosswindowsbase",
@@ -186,6 +190,10 @@ func TestProvisional(t *testing.T) {
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
 				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-11.0-aarch64.unsigned.tgz CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-11.0-aarch64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-11.0-aarch64.unsigned.tgz CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-11.0-aarch64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.windows-6.2-amd64.zip CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.windows-6.2-amd64.zip.sha256sum CONTENTS <sha256sum>",
 				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.windows-6.2-amd64.zip CONTENTS <binary stuff>",
@@ -214,6 +222,9 @@ func TestProvisional(t *testing.T) {
 				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosbase",
 				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-apple-darwin21.2 official-binary' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosarmbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=force_build_cdeps --config=with_ui --config" +
+					"=crossmacosarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crosswindowsbase",
 				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crosswindowsbase",
@@ -256,6 +267,14 @@ func TestProvisional(t *testing.T) {
 					"'--workspace_status_command=./build/bazelutil/stamp." +
 					"sh x86_64-apple-darwin19 official-binary' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosbase",
 				"s3://cockroach/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib",
+				"s3://cockroach/cockroach/cockroach.darwin-aarch64.unsigned.00SHA00 CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-apple-darwin21.2 official-binary' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosarmbase",
+				"s3://cockroach/cockroach/cockroach.darwin-aarch64.unsigned.LATEST/no-cache REDIRECT /cockroach/cockroach.darwin-aarch64.unsigned.00SHA00",
+				"s3://cockroach/cockroach/cockroach-sql.darwin-aarch64.unsigned.00SHA00 CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-apple-darwin21.2 official-binary' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosarmbase",
+				"s3://cockroach/cockroach/cockroach-sql.darwin-aarch64.unsigned.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.darwin-aarch64.unsigned.00SHA00",
+				"s3://cockroach/cockroach/lib/libgeos.darwin-aarch64.unsigned.00SHA00.dylib CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-apple-darwin21.2 official-binary' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosarmbase",
+				"s3://cockroach/cockroach/lib/libgeos.darwin-aarch64.unsigned.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.darwin-aarch64.unsigned.00SHA00.dylib",
+				"s3://cockroach/cockroach/lib/libgeos_c.darwin-aarch64.unsigned.00SHA00.dylib CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh aarch64-apple-darwin21.2 official-binary' -c opt --config=ci --config=force_build_cdeps --config=with_ui --config=crossmacosarmbase",
+				"s3://cockroach/cockroach/lib/libgeos_c.darwin-aarch64.unsigned.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-aarch64.unsigned.00SHA00.dylib",
 				"s3://cockroach/cockroach/cockroach.windows-amd64.00SHA00.exe " +
 					"CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
 					"'--workspace_status_command=./build/bazelutil/stamp." +
@@ -357,6 +376,10 @@ func TestBless(t *testing.T) {
 					"REDIRECT cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-10.9-amd64.tgz.sha256sum/no-cache " +
 					"REDIRECT cockroach-v0.0.1.darwin-10.9-amd64.tgz.sha256sum",
+				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-11.0-aarch64.unsigned.tgz/no-cache " +
+					"REDIRECT cockroach-v0.0.1.darwin-11.0-aarch64.unsigned.tgz",
+				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-11.0-aarch64.unsigned.tgz.sha256sum/no-cache " +
+					"REDIRECT cockroach-v0.0.1.darwin-11.0-aarch64.unsigned.tgz.sha256sum",
 				"s3://binaries.cockroachdb.com/cockroach-latest.windows-6.2-amd64.zip/no-cache " +
 					"REDIRECT cockroach-v0.0.1.windows-6.2-amd64.zip",
 				"s3://binaries.cockroachdb.com/cockroach-latest.windows-6.2-amd64.zip.sha256sum/no-cache " +
