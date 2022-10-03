@@ -43,7 +43,7 @@ func GetStorage(ctx context.Context, cfg FixtureConfig) (cloud.ExternalStorage, 
 		nil, /* blobClientFactory */
 		username.SQLUsername{},
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)

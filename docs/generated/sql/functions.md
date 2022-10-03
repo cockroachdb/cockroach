@@ -877,6 +877,19 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
+### Fuzzy String Matching functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
 ### ID generation functions
 
 <table>
@@ -978,10 +991,6 @@ available replica will error.</p>
 </span></td><td>Leakproof</td></tr>
 <tr><td><a name="fnv64a"></a><code>fnv64a(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 64-bit FNV-1a hash value of a set of values.</p>
 </span></td><td>Leakproof</td></tr>
-<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="decimal.html">decimal</a>, b1: <a href="decimal.html">decimal</a>, b2: <a href="decimal.html">decimal</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="int.html">int</a>, b1: <a href="int.html">int</a>, b2: <a href="int.html">int</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
@@ -1007,16 +1016,20 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.pb_to_json"></a><code>crdb_internal.pb_to_json(pbname: <a href="string.html">string</a>, data: <a href="bytes.html">bytes</a>, emit_defaults: <a href="bool.html">bool</a>, emit_redacted: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Converts protocol message to its JSONB representation.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
-</span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
-</span></td><td>Volatile</td></tr>
+<tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="json_array_elements_text"></a><code>json_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_length"></a><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_build_array"></a><code>json_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="json_build_object"></a><code>json_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="json_each"></a><code>json_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="json_each_text"></a><code>json_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_extract_path"></a><code>json_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_extract_path_text"></a><code>json_extract_path_text(jsonb, <a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the JSON value as text pointed to by the variadic arguments.</p>
@@ -1025,6 +1038,10 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_object"></a><code>json_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="json_populate_record"></a><code>json_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="json_populate_recordset"></a><code>json_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="json_remove_path"></a><code>json_remove_path(val: jsonb, path: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Remove the specified path from the JSON object.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_set"></a><code>json_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -1037,12 +1054,20 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_valid"></a><code>json_valid(string: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the given string is a valid JSON or not</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_array_elements"></a><code>jsonb_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_array_elements_text"></a><code>jsonb_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_array_length"></a><code>jsonb_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="jsonb_each"></a><code>jsonb_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_each_text"></a><code>jsonb_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_exists_any"></a><code>jsonb_exists_any(json: jsonb, array: <a href="string.html">string</a>[]) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether any of the strings in the text array exist as top-level keys or array elements</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_extract_path"></a><code>jsonb_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -1057,6 +1082,10 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_object"></a><code>jsonb_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_populate_record"></a><code>jsonb_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="jsonb_populate_recordset"></a><code>jsonb_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_pretty"></a><code>jsonb_pretty(val: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given JSON value as a STRING indented and with newlines.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_set"></a><code>jsonb_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
@@ -1249,38 +1278,14 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_expandarray"></a><code>information_schema._pg_expandarray(input: anyelement[]) &rarr; tuple{anyelement AS x, int AS n}</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows with an index</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="json_array_elements"></a><code>json_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_array_elements_text"></a><code>json_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_each"></a><code>json_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="json_each_text"></a><code>json_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="json_object_keys"></a><code>json_object_keys(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="json_populate_record"></a><code>json_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="json_populate_recordset"></a><code>json_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
-</span></td><td>Stable</td></tr>
 <tr><td><a name="json_to_record"></a><code>json_to_record(input: jsonb) &rarr; tuple</code></td><td><span class="funcdesc"><p>Builds an arbitrary record from a JSON object.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="json_to_recordset"></a><code>json_to_recordset(input: jsonb) &rarr; tuple</code></td><td><span class="funcdesc"><p>Builds an arbitrary set of records from a JSON array of objects.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="jsonb_array_elements"></a><code>jsonb_array_elements(input: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of JSON values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_array_elements_text"></a><code>jsonb_array_elements_text(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Expands a JSON array to a set of text values.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_each"></a><code>jsonb_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_each_text"></a><code>jsonb_each_text(input: jsonb) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs. The returned values will be of type text.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_object_keys"></a><code>jsonb_object_keys(input: jsonb) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns sorted set of keys in the outermost JSON object.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_populate_record"></a><code>jsonb_populate_record(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the object in from_json to a row whose columns match the record type defined by base.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="jsonb_populate_recordset"></a><code>jsonb_populate_recordset(base: anyelement, from_json: jsonb) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Expands the outermost array of objects in from_json to a set of rows whose columns match the record type defined by base</p>
-</span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_to_record"></a><code>jsonb_to_record(input: jsonb) &rarr; tuple</code></td><td><span class="funcdesc"><p>Builds an arbitrary record from a JSON object.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_to_recordset"></a><code>jsonb_to_recordset(input: jsonb) &rarr; tuple</code></td><td><span class="funcdesc"><p>Builds an arbitrary set of records from a JSON array of objects.</p>
@@ -1409,12 +1414,14 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="_st_dfullywithinexclusive"></a><code>_st_dfullywithinexclusive(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.</p>
 <p>This function variant does not utilize any spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive. Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function variant does not utilize any spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -1423,12 +1430,14 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geometry_a is within distance units of geometry_b, inclusive.</p>
 <p>This function variant does not utilize any spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="_st_dwithinexclusive"></a><code>_st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="_st_dwithinexclusive"></a><code>_st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive. Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function variant does not utilize any spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="_st_dwithinexclusive"></a><code>_st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="_st_dwithinexclusive"></a><code>_st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -1876,10 +1885,12 @@ from the given Geometry.</p>
 <tr><td><a name="st_disjoint"></a><code>st_disjoint(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a does not overlap, touch or is within geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_distance"></a><code>st_distance(geography_a: geography, geography_b: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geography_a and geography_b.  Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_distance"></a><code>st_distance(geography_a: geography, geography_b: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geography_a and geography_b.  Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_distance"></a><code>st_distance(geography_a: geography, geography_b: geography, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geography_a and geography_b.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_distance"></a><code>st_distance(geography_a: geography, geography_b: geography, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geography_a and geography_b.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td><td>Immutable</td></tr>
@@ -1891,16 +1902,19 @@ from the given Geometry.</p>
 <tr><td><a name="st_distancesphere"></a><code>st_distancesphere(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geometry_a and geometry_b assuming the coordinates represent lng/lat points on a sphere.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_distancespheroid"></a><code>st_distancespheroid(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geometry_a and geometry_b assuming the coordinates represent lng/lat points on a spheroid.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_distancespheroid"></a><code>st_distancespheroid(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geometry_a and geometry_b assuming the coordinates represent lng/lat points on a spheroid.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive. Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -1913,12 +1927,14 @@ from the given Geometry.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_dwithinexclusive"></a><code>st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_dwithinexclusive"></a><code>st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive. Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_dwithinexclusive"></a><code>st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_dwithinexclusive"></a><code>st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -2450,19 +2466,13 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the default index configuration.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography, settings: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the index configuration specified
-by the settings parameter.</p>
-<p>The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX … WITH (…),
-e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
-SELECT ST_S2Covering(geography, ‘s2_max_level=15,s2_level_mod=3’).</p>
+<tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography, settings: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the index configuration specified by the settings parameter.</p>
+<p>The settings parameter uses the same format as the parameters inside the <code>WITH</code> in <code>CREATE INDEX ... WITH (...)</code>, e.g. <code>CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3)</code> can be tried using <code>SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3')</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_s2covering"></a><code>st_s2covering(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry which represents the S2 covering used by the index using the default index configuration.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_s2covering"></a><code>st_s2covering(geometry: geometry, settings: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry which represents the S2 covering used by the index using the index configuration specified
-by the settings parameter.</p>
-<p>The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX … WITH (…),
-e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
-SELECT ST_S2Covering(geometry, ‘s2_max_level=15,s2_level_mod=3’).</p>
+<tr><td><a name="st_s2covering"></a><code>st_s2covering(geometry: geometry, settings: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry which represents the S2 covering used by the index using the index configuration specified by the settings parameter.</p>
+<p>The settings parameter uses the same format as the parameters inside the <code>WITH</code> in <code>CREATE INDEX ... WITH (...)</code>, e.g. <code>CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3)</code> can be tried using <code>SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3')</code></p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_scale"></a><code>st_scale(g: geometry, factor: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry scaled by taking in a Geometry as the factor.</p>
 </span></td><td>Immutable</td></tr>
@@ -2628,9 +2638,9 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tbody>
 <tr><td><a name="crdb_internal.complete_replication_stream"></a><code>crdb_internal.complete_replication_stream(stream_id: <a href="int.html">int</a>, successful_ingestion: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used on the producer side to complete and clean up a replication stream.‘successful_ingestion’ indicates whether the stream ingestion finished successfully.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.complete_stream_ingestion_job"></a><code>crdb_internal.complete_stream_ingestion_job(job_id: <a href="int.html">int</a>, cutover_ts: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used to signal a running stream ingestion job to complete. The job will eventually stop ingesting, revert to the specified timestamp and leave the cluster in a consistent state. The specified timestamp can only be specified up to the microsecond. This function does not wait for the job to reach a terminal state, but instead returns the job id as soon as it has signaled the job to complete. This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the job has left the cluster in a consistent state.</p>
+<tr><td><a name="crdb_internal.complete_stream_ingestion_job"></a><code>crdb_internal.complete_stream_ingestion_job(job_id: <a href="int.html">int</a>, cutover_ts: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used to signal a running stream ingestion job to complete. The job will eventually stop ingesting, revert to the specified timestamp and leave the cluster in a consistent state. The specified timestamp can only be specified up to the microsecond. This function does not wait for the job to reach a terminal state, but instead returns the job id as soon as it has signaled the job to complete. This builtin can be used in conjunction with <code>SHOW JOBS WHEN COMPLETE</code> to ensure that the job has left the cluster in a consistent state.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.replication_stream_progress"></a><code>crdb_internal.replication_stream_progress(stream_id: <a href="int.html">int</a>, frontier_ts: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function can be used on the consumer side to heartbeat its replication progress to a replication stream in the source cluster. The returns a StreamReplicationStatus message that indicates stream status (ACTIVE, PAUSED, INACTIVE, or STATUS_UNKNOWN_RETRY).</p>
+<tr><td><a name="crdb_internal.replication_stream_progress"></a><code>crdb_internal.replication_stream_progress(stream_id: <a href="int.html">int</a>, frontier_ts: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function can be used on the consumer side to heartbeat its replication progress to a replication stream in the source cluster. The returns a StreamReplicationStatus message that indicates stream status (<code>ACTIVE</code>, <code>PAUSED</code>, <code>INACTIVE</code>, or <code>STATUS_UNKNOWN_RETRY</code>).</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.replication_stream_spec"></a><code>crdb_internal.replication_stream_spec(stream_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function can be used on the consumer side to get a replication stream specification for the specified stream. The consumer will later call ‘stream_partition’ to a partition with the spec to start streaming.</p>
 </span></td><td>Volatile</td></tr>
@@ -2929,8 +2939,6 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="similar_to_escape"></a><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> on <code>delimiter</code> and return the value in the <code>return_index_pos</code>  position (starting at 1).</p>
 <p>For example, <code>split_part('123.456.789.0','.',3)</code>returns <code>789</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -3019,8 +3027,8 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><a name="crdb_internal.assignment_cast"></a><code>crdb_internal.assignment_cast(val: anyelement, type: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used internally to perform assignment casts during mutations.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.check_consistency"></a><code>crdb_internal.check_consistency(stats_only: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail, interval AS duration}</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range. an empty start or end key is treated as the minimum and maximum possible, respectively. stats_only should only be set to false when targeting a small number of ranges to avoid overloading the cluster. Each returned row contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), and verbose detail.</p>
-<p>Example usage:
-SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
+<p>Example usage:</p>
+<p><code>SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')</code></p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.check_password_hash_format"></a><code>crdb_internal.check_password_hash_format(password: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function checks whether a string is a precomputed password hash. Returns the hash algorithm.</p>
 </span></td><td>Immutable</td></tr>
@@ -3111,6 +3119,8 @@ active for the current transaction.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="crdb_internal.range_stats"></a><code>crdb_internal.range_stats(key: <a href="bytes.html">bytes</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This function is used to retrieve range statistics information as a JSON object.</p>
 </span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.read_file"></a><code>crdb_internal.read_file(uri: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Read the content of the file at the supplied external storage URI</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.repair_ttl_table_scheduled_job"></a><code>crdb_internal.repair_ttl_table_scheduled_job(oid: oid) &rarr; void</code></td><td><span class="funcdesc"><p>Repairs the scheduled job for a TTL table if it is missing.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.request_statement_bundle"></a><code>crdb_internal.request_statement_bundle(stmtFingerprint: <a href="string.html">string</a>, samplingProbability: <a href="float.html">float</a>, minExecutionLatency: <a href="interval.html">interval</a>, expiresAfter: <a href="interval.html">interval</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Used to request statement bundle for a given statement fingerprint
@@ -3154,6 +3164,8 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="crdb_internal.validate_ttl_scheduled_jobs"></a><code>crdb_internal.validate_ttl_scheduled_jobs() &rarr; void</code></td><td><span class="funcdesc"><p>Validate all TTL tables have a valid scheduled job attached.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.void_func"></a><code>crdb_internal.void_func() &rarr; void</code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="crdb_internal.write_file"></a><code>crdb_internal.write_file(data: <a href="bytes.html">bytes</a>, uri: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Write the content passed to a file at the supplied external storage URI</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="current_database"></a><code>current_database() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current database.</p>
 </span></td><td>Stable</td></tr>

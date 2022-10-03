@@ -123,7 +123,7 @@ func TestPutHttp(t *testing.T) {
 		defer cleanup()
 		cloudtestutils.CheckExportStore(t, srv.String(), false, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -145,7 +145,7 @@ func TestPutHttp(t *testing.T) {
 
 		cloudtestutils.CheckExportStore(t, combined.String(), true, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -173,7 +173,7 @@ func TestPutHttp(t *testing.T) {
 		}
 		s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings, blobs.TestEmptyBlobClientFactory,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
 		)
@@ -331,7 +331,7 @@ func TestCanDisableHttp(t *testing.T) {
 
 	s, err := cloud.MakeExternalStorage(context.Background(), cloudpb.ExternalStorage{Provider: cloudpb.ExternalStorageProvider_http}, conf, testSettings, blobs.TestEmptyBlobClientFactory,
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)
@@ -354,7 +354,7 @@ func TestCanDisableOutbound(t *testing.T) {
 	} {
 		s, err := cloud.MakeExternalStorage(context.Background(), cloudpb.ExternalStorage{Provider: provider}, conf, testSettings, blobs.TestEmptyBlobClientFactory,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
 		)
@@ -388,7 +388,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 	require.NoError(t, err)
 	s, err := cloud.MakeExternalStorage(context.Background(), conf, base.ExternalIODirConfig{}, testSettings, nil,
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)

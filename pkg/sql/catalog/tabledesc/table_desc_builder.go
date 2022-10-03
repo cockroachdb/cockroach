@@ -41,6 +41,8 @@ type tableDescriptorBuilder struct {
 	isUncommittedVersion       bool
 	skipFKsWithNoMatchingTable bool
 	changes                    catalog.PostDeserializationChanges
+	// This is the raw bytes (tag + data) of the table descriptor in storage.
+	rawBytesInStorage []byte
 }
 
 var _ TableDescriptorBuilder = &tableDescriptorBuilder{}
@@ -174,6 +176,11 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	return err
 }
 
+// SetRawBytesInStorage implements the catalog.DescriptorBuilder interface.
+func (tdb *tableDescriptorBuilder) SetRawBytesInStorage(rawBytes []byte) {
+	tdb.rawBytesInStorage = append([]byte(nil), rawBytes...) // deep-copy
+}
+
 // BuildImmutable implements the catalog.DescriptorBuilder interface.
 func (tdb *tableDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 	return tdb.BuildImmutableTable()
@@ -188,6 +195,7 @@ func (tdb *tableDescriptorBuilder) BuildImmutableTable() catalog.TableDescriptor
 	imm := makeImmutable(desc)
 	imm.changes = tdb.changes
 	imm.isUncommittedVersion = tdb.isUncommittedVersion
+	imm.rawBytesInStorage = append([]byte(nil), tdb.rawBytesInStorage...) // deep-copy
 	return imm
 }
 
@@ -204,8 +212,9 @@ func (tdb *tableDescriptorBuilder) BuildExistingMutableTable() *Mutable {
 	}
 	return &Mutable{
 		wrapper: wrapper{
-			TableDescriptor: *tdb.maybeModified,
-			changes:         tdb.changes,
+			TableDescriptor:   *tdb.maybeModified,
+			changes:           tdb.changes,
+			rawBytesInStorage: append([]byte(nil), tdb.rawBytesInStorage...), // deep-copy
 		},
 		original: makeImmutable(tdb.original),
 	}
@@ -225,8 +234,9 @@ func (tdb *tableDescriptorBuilder) BuildCreatedMutableTable() *Mutable {
 	}
 	return &Mutable{
 		wrapper: wrapper{
-			TableDescriptor: *desc,
-			changes:         tdb.changes,
+			TableDescriptor:   *desc,
+			changes:           tdb.changes,
+			rawBytesInStorage: append([]byte(nil), tdb.rawBytesInStorage...), // deep-copy
 		},
 	}
 }

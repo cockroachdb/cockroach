@@ -138,6 +138,11 @@ type Collection struct {
 
 var _ catalog.Accessor = (*Collection)(nil)
 
+// GetDeletedDescs returns the deleted descriptors of the collection.
+func (tc *Collection) GetDeletedDescs() catalog.DescriptorIDSet {
+	return tc.deletedDescs
+}
+
 // MaybeUpdateDeadline updates the deadline in a given transaction
 // based on the leased descriptors in this collection. This update is
 // only done when a deadline exists.
@@ -269,6 +274,20 @@ func (tc *Collection) WriteDescToBatch(
 			return err
 		}
 	}
+	// Retrieve the expected bytes of `desc` in storage.
+	// If this is the first time we write to `desc` in the transaction, its
+	// expected bytes will be retrieved when we read it into this desc.Collection,
+	// and carried over in it.
+	// If, however, this is not the first time we write to `desc` in the transaction,
+	// which means it has existed in `tc.uncommitted`, we will retrieve the expected
+	// bytes from there.
+	var expected []byte
+	if exist := tc.uncommitted.getUncommittedByID(desc.GetID()); exist != nil {
+		expected = exist.GetRawBytesInStorage()
+	} else {
+		expected = desc.GetRawBytesInStorage()
+	}
+
 	if err := tc.AddUncommittedDescriptor(ctx, desc); err != nil {
 		return err
 	}
@@ -277,7 +296,7 @@ func (tc *Collection) WriteDescToBatch(
 	if kvTrace {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, proto)
 	}
-	b.Put(descKey, proto)
+	b.CPut(descKey, proto, expected)
 	return nil
 }
 

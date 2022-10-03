@@ -169,45 +169,46 @@ func temporarySchemaSessionID(scName string) (bool, clusterunique.ID, error) {
 func cleanupSessionTempObjects(
 	ctx context.Context,
 	settings *cluster.Settings,
-	cf *descs.CollectionFactory,
+	ief sqlutil.InternalExecutorFactory,
 	db *kv.DB,
 	codec keys.SQLCodec,
 	sessionID clusterunique.ID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return cf.TxnWithExecutor(ctx, db, nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-		ie sqlutil.InternalExecutor,
-	) error {
-		// We are going to read all database descriptor IDs, then for each database
-		// we will drop all the objects under the temporary schema.
-		allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
-		if err != nil {
-			return err
-		}
-		for _, dbDesc := range allDbDescs {
-			if err := cleanupSchemaObjects(
-				ctx,
-				txn,
-				descsCol,
-				codec,
-				ie,
-				dbDesc,
-				tempSchemaName,
-			); err != nil {
+	return ief.(descs.TxnManager).DescsTxnWithExecutor(
+		ctx, db, nil /* sessionData */, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+			ie sqlutil.InternalExecutor,
+		) error {
+			// We are going to read all database descriptor IDs, then for each database
+			// we will drop all the objects under the temporary schema.
+			allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
+			if err != nil {
 				return err
 			}
-			// Even if no objects were found under the temporary schema, the schema
-			// itself may still exist (eg. a temporary table was created and then
-			// dropped). So we remove the namespace table entry of the temporary
-			// schema.
-			key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
-			if _, err := txn.Del(ctx, key); err != nil {
-				return err
+			for _, dbDesc := range allDbDescs {
+				if err := cleanupSchemaObjects(
+					ctx,
+					txn,
+					descsCol,
+					codec,
+					ie,
+					dbDesc,
+					tempSchemaName,
+				); err != nil {
+					return err
+				}
+				// Even if no objects were found under the temporary schema, the schema
+				// itself may still exist (eg. a temporary table was created and then
+				// dropped). So we remove the namespace table entry of the temporary
+				// schema.
+				key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
+				if _, err := txn.Del(ctx, key); err != nil {
+					return err
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 }
 
 // cleanupSchemaObjects removes all objects that is located within a dbID and schema.
@@ -400,11 +401,12 @@ type TemporaryObjectCleaner struct {
 	db       *kv.DB
 	codec    keys.SQLCodec
 	// statusServer gives access to the SQLStatus service.
-	statusServer           serverpb.SQLStatusServer
-	isMeta1LeaseholderFunc isMeta1LeaseholderFunc
-	testingKnobs           ExecutorTestingKnobs
-	metrics                *temporaryObjectCleanerMetrics
-	collectionFactory      *descs.CollectionFactory
+	statusServer            serverpb.SQLStatusServer
+	isMeta1LeaseholderFunc  isMeta1LeaseholderFunc
+	testingKnobs            ExecutorTestingKnobs
+	metrics                 *temporaryObjectCleanerMetrics
+	collectionFactory       *descs.CollectionFactory
+	internalExecutorFactory sqlutil.InternalExecutorFactory
 }
 
 // temporaryObjectCleanerMetrics are the metrics for TemporaryObjectCleaner
@@ -430,19 +432,21 @@ func NewTemporaryObjectCleaner(
 	statusServer serverpb.SQLStatusServer,
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
+	ief sqlutil.InternalExecutorFactory,
 	cf *descs.CollectionFactory,
 ) *TemporaryObjectCleaner {
 	metrics := makeTemporaryObjectCleanerMetrics()
 	registry.AddMetricStruct(metrics)
 	return &TemporaryObjectCleaner{
-		settings:               settings,
-		db:                     db,
-		codec:                  codec,
-		statusServer:           statusServer,
-		isMeta1LeaseholderFunc: isMeta1LeaseholderFunc,
-		testingKnobs:           testingKnobs,
-		metrics:                metrics,
-		collectionFactory:      cf,
+		settings:                settings,
+		db:                      db,
+		codec:                   codec,
+		statusServer:            statusServer,
+		isMeta1LeaseholderFunc:  isMeta1LeaseholderFunc,
+		testingKnobs:            testingKnobs,
+		metrics:                 metrics,
+		internalExecutorFactory: ief,
+		collectionFactory:       cf,
 	}
 }
 
@@ -590,7 +594,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 				return cleanupSessionTempObjects(
 					ctx,
 					c.settings,
-					c.collectionFactory,
+					c.internalExecutorFactory,
 					c.db,
 					c.codec,
 					sessionID,

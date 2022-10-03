@@ -49,6 +49,9 @@ type immutable struct {
 	// changed represents how the descriptor was changed after
 	// RunPostDeserializationChanges.
 	changes catalog.PostDeserializationChanges
+
+	// This is the raw bytes (tag + data) of the schema descriptor in storage.
+	rawBytesInStorage []byte
 }
 
 func (desc *immutable) SchemaKind() catalog.ResolvedSchemaKind {
@@ -68,6 +71,16 @@ func (desc *immutable) GetFunction(name string) (descpb.SchemaDescriptor_Functio
 // SkipNamespace implements the descriptor interface.
 func (desc *immutable) SkipNamespace() bool {
 	return false
+}
+
+// GetRawBytesInStorage implements the catalog.Descriptor interface.
+func (desc *immutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
+}
+
+// GetRawBytesInStorage implements the catalog.Descriptor interface.
+func (desc *Mutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
 }
 
 // SafeMessage makes Mutable a SafeMessager.
@@ -169,12 +182,16 @@ func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState 
 // It overrides the wrapper's implementation to deal with the fact that
 // mutable has overridden the definition of IsUncommittedVersion.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.SchemaDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b := newBuilder(desc.SchemaDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b.SetRawBytesInStorage(desc.GetRawBytesInStorage())
+	return b
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.SchemaDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b := newBuilder(desc.SchemaDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b.SetRawBytesInStorage(desc.GetRawBytesInStorage())
+	return b
 }
 
 // ValidateSelf implements the catalog.Descriptor interface.
