@@ -142,6 +142,8 @@ message IgnoredSeqNumRange {
 
 // MVCCValueHeader holds MVCC-level metadata for a versioned value.
 // Used by storage.MVCCValue.
+//
+// NB: Make sure to update MVCCValueHeader.IsEmpty() when adding fields.
 message MVCCValueHeader {
   option (gogoproto.equal) = true;
 
