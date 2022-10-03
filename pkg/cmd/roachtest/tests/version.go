@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -220,6 +221,9 @@ func registerVersion(r registry.Registry) {
 			Owner:   registry.OwnerTestEng,
 			Cluster: r.MakeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if runtime.GOARCH == "arm64" {
+					t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+				}
 				pred, err := PredecessorVersion(*t.BuildVersion())
 				if err != nil {
 					t.Fatal(err)
