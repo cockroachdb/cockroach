@@ -284,7 +284,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
 			require.NoError(t, err)
 			require.Equal(t, db.GetVersion(), immByNameAfter.GetVersion())
-			require.Equal(t, mut.ImmutableCopy(), immByNameAfter)
+			require.Equal(t, mut.ImmutableCopy().DescriptorProto(), immByNameAfter.DescriptorProto())
 
 			_, immByIDAfter, err := descriptors.GetImmutableDatabaseByID(ctx, txn, db.GetID(), flags)
 			require.NoError(t, err)
@@ -733,7 +733,7 @@ func TestDescriptorCache(t *testing.T) {
 			}
 			found := cat.LookupDescriptorEntry(mut.ID)
 			require.NotEmpty(t, found)
-			require.Equal(t, mut.ImmutableCopy(), found)
+			require.Equal(t, mut.ImmutableCopy().DescriptorProto(), found.DescriptorProto())
 			return nil
 		}))
 	})
@@ -768,7 +768,7 @@ func TestDescriptorCache(t *testing.T) {
 				return err
 			}
 			require.Len(t, dbDescs, 4)
-			require.Equal(t, mut.ImmutableCopy(), dbDescs[0])
+			require.Equal(t, mut.ImmutableCopy().DescriptorProto(), dbDescs[0].DescriptorProto())
 			return nil
 		}))
 	})
@@ -1036,7 +1036,7 @@ SELECT id
 	ec := s.ExecutorConfig().(sql.ExecutorConfig)
 	codec := ec.Codec
 	descIDGen := ec.DescIDGenerator
-	require.NoError(t, s.CollectionFactory().(*descs.CollectionFactory).TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
+	require.NoError(t, ec.InternalExecutorFactory.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		checkImmutableDescriptor := func(id descpb.ID, expName string, f func(t *testing.T, desc catalog.Descriptor)) error {

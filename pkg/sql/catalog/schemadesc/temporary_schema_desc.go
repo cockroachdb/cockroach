@@ -54,6 +54,7 @@ func (p temporary) GetParentID() descpb.ID { return p.parentID }
 func (p temporary) GetPrivileges() *catpb.PrivilegeDescriptor {
 	return catpb.NewTemporarySchemaPrivilegeDescriptor()
 }
+func (p temporary) GetRawBytesInStorage() []byte { return nil }
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
 func (p temporary) GetPrivilegeDescriptor(

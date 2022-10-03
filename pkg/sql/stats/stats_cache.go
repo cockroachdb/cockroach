@@ -72,8 +72,7 @@ type TableStatisticsCache struct {
 	SQLExecutor sqlutil.InternalExecutor
 	Settings    *cluster.Settings
 
-	// Used to resolve descriptors.
-	collectionFactory *descs.CollectionFactory
+	internalExecutorFactory descs.TxnManager
 
 	// Used when decoding KV from the range feed.
 	datumAlloc tree.DatumAlloc
@@ -121,13 +120,13 @@ func NewTableStatisticsCache(
 	db *kv.DB,
 	sqlExecutor sqlutil.InternalExecutor,
 	settings *cluster.Settings,
-	cf *descs.CollectionFactory,
+	ief descs.TxnManager,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
-		ClientDB:          db,
-		SQLExecutor:       sqlExecutor,
-		Settings:          settings,
-		collectionFactory: cf,
+		ClientDB:                db,
+		SQLExecutor:             sqlExecutor,
+		Settings:                settings,
+		internalExecutorFactory: ief,
 	}
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy:      cache.CacheLRU,
@@ -602,7 +601,7 @@ func (sc *TableStatisticsCache) parseStats(
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
 			//
 			// TODO(ajwerner): We now do delete members from enum types. See #67050.
-			if err := sc.collectionFactory.Txn(ctx, sc.ClientDB, func(
+			if err := sc.internalExecutorFactory.DescsTxn(ctx, sc.ClientDB, func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 			) error {
 				resolver := descs.NewDistSQLTypeResolver(descriptors, txn)

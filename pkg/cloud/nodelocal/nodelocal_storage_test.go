@@ -33,7 +33,7 @@ func TestPutLocal(t *testing.T) {
 	cloudtestutils.CheckExportStore(t, dest, false, username.RootUserName(), nil, nil, nil, testSettings)
 	cloudtestutils.CheckListFiles(t, "nodelocal://0/listing-test/basepath", username.RootUserName(),
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		testSettings,
 	)

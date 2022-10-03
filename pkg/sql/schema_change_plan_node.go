@@ -132,7 +132,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			)
 		}
 		blocked := false
-		if err := p.ExecCfg().CollectionFactory.Txn(ctx, p.ExecCfg().DB, func(
+		if err := p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			if err := txn.SetFixedTimestamp(ctx, now); err != nil {

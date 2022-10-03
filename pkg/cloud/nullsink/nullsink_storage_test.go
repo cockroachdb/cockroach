@@ -40,7 +40,7 @@ func TestNullSinkReadAndWrite(t *testing.T) {
 		nil, /* Cluster Settings */
 		nil, /* blobClientFactory */
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)

@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -88,7 +88,7 @@ func checkMetadata(
 		blobs.TestEmptyBlobClientFactory,
 		username.RootUserName(),
 		tc.Servers[0].InternalExecutor().(*sql.InternalExecutor),
-		tc.Servers[0].CollectionFactory().(*descs.CollectionFactory),
+		tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
 		tc.Servers[0].DB(),
 		nil, /* limiters */
 	)

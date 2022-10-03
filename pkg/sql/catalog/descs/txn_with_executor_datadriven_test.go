@@ -51,7 +51,6 @@ func TestTxnWithExecutorDataDriven(t *testing.T) {
 	datadriven.Walk(t, testutils.TestDataPath(t, ""), func(t *testing.T, path string) {
 		s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
-		cf := s.CollectionFactory().(*descs.CollectionFactory)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
@@ -70,7 +69,8 @@ func TestTxnWithExecutorDataDriven(t *testing.T) {
 				searchPath = sessiondata.MakeSearchPath(strings.Split(sp, ","))
 			}
 			sd.SearchPath = &searchPath
-			err = cf.TxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
+			ief := s.InternalExecutorFactory().(descs.TxnManager)
+			err = ief.DescsTxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 			) error {
 				for _, stmt := range stmts {

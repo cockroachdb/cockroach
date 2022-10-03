@@ -2648,25 +2648,62 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 	}))
 	defer dataSrv.Close()
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	cdcTestNamed(t, "import fails changefeed", func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
-		t.Run("import fails changefeed", func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
-			defer sqlDB.Exec(t, `DROP TABLE for_import`)
-			sqlDB.Exec(t, `INSERT INTO for_import VALUES (0, NULL)`)
-			forImport := feed(t, f, `CREATE CHANGEFEED FOR for_import `)
-			defer closeFeed(t, forImport)
-			assertPayloads(t, forImport, []string{
-				`for_import: [0]->{"after": {"a": 0, "b": null}}`,
-			})
-			sqlDB.Exec(t, `IMPORT INTO for_import CSV DATA ($1)`, dataSrv.URL)
-			requireErrorSoon(context.Background(), t, forImport,
-				regexp.MustCompile(`CHANGEFEED cannot target offline table: for_import \(offline reason: "importing"\)`))
+		sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
+		defer sqlDB.Exec(t, `DROP TABLE for_import`)
+		sqlDB.Exec(t, `INSERT INTO for_import VALUES (0, NULL)`)
+		forImport := feed(t, f, `CREATE CHANGEFEED FOR for_import `)
+		defer closeFeed(t, forImport)
+		assertPayloads(t, forImport, []string{
+			`for_import: [0]->{"after": {"a": 0, "b": null}}`,
 		})
-	}
+		sqlDB.Exec(t, `IMPORT INTO for_import CSV DATA ($1)`, dataSrv.URL)
+		requireErrorSoon(context.Background(), t, forImport,
+			regexp.MustCompile(`CHANGEFEED cannot target offline table: for_import \(offline reason: "importing"\)`))
+	})
 
-	cdcTest(t, testFn)
+	cdcTestNamedWithSystem(t, "reverted import fails changefeed with earlier cursor", func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sysSQLDB := sqlutils.MakeSQLRunner(s.SystemDB)
+		sysSQLDB.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.small_write_size = '1'")
+		sysSQLDB.Exec(t, "SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true")
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE for_import (a INT PRIMARY KEY, b INT)`)
+
+		var start string
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&start)
+		sqlDB.Exec(t, "INSERT INTO for_import VALUES (0, 10);")
+
+		// Start an import job which will immediately pause after ingestion
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';")
+		go func() {
+			sqlDB.ExpectErr(t, `pause point`, `IMPORT INTO for_import CSV DATA ($1);`, dataSrv.URL)
+		}()
+		sqlDB.CheckQueryResultsRetry(
+			t,
+			fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='IMPORT' AND status='%s'`, jobs.StatusPaused),
+			[][]string{{"1"}},
+		)
+
+		// Cancel to trigger a revert and verify revert completion
+		var jobID string
+		sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='IMPORT'`).Scan(&jobID)
+		sqlDB.Exec(t, `CANCEL JOB $1`, jobID)
+		sqlDB.CheckQueryResultsRetry(
+			t,
+			fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='IMPORT' AND status='%s'`, jobs.StatusCanceled),
+			[][]string{{"1"}},
+		)
+		sqlDB.CheckQueryResultsRetry(t, "SELECT count(*) FROM for_import", [][]string{{"1"}})
+
+		// Changefeed should fail regardless
+		forImport := feed(t, f, `CREATE CHANGEFEED FOR for_import WITH cursor=$1`, start)
+		defer closeFeed(t, forImport)
+		requireErrorSoon(context.Background(), t, forImport,
+			regexp.MustCompile(`CHANGEFEED cannot target offline table: for_import \(offline reason: "importing"\)`))
+	})
 }
 
 func TestChangefeedRestartMultiNode(t *testing.T) {

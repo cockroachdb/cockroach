@@ -21,19 +21,21 @@ import (
 
 // systemTableIDResolver is the implementation for catalog.SystemTableIDResolver.
 type systemTableIDResolver struct {
-	collectionFactory *CollectionFactory
-	db                *kv.DB
+	collectionFactory       *CollectionFactory
+	internalExecutorFactory TxnManager
+	db                      *kv.DB
 }
 
 var _ catalog.SystemTableIDResolver = (*systemTableIDResolver)(nil)
 
 // MakeSystemTableIDResolver creates an object that implements catalog.SystemTableIDResolver.
 func MakeSystemTableIDResolver(
-	collectionFactory *CollectionFactory, db *kv.DB,
+	collectionFactory *CollectionFactory, internalExecutorFactory TxnManager, db *kv.DB,
 ) catalog.SystemTableIDResolver {
 	return &systemTableIDResolver{
-		collectionFactory: collectionFactory,
-		db:                db,
+		collectionFactory:       collectionFactory,
+		internalExecutorFactory: internalExecutorFactory,
+		db:                      db,
 	}
 }
 
@@ -43,7 +45,7 @@ func (r *systemTableIDResolver) LookupSystemTableID(
 ) (descpb.ID, error) {
 
 	var id descpb.ID
-	if err := r.collectionFactory.Txn(ctx, r.db, func(
+	if err := r.internalExecutorFactory.DescsTxn(ctx, r.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *Collection,
 	) (err error) {
 		id, err = descriptors.stored.LookupDescriptorID(

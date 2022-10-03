@@ -96,8 +96,8 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 		require.NoError(t, rows.Close())
 	}
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
-	cf := execCfg.CollectionFactory
-	require.NoError(t, cf.TxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
+	ief := execCfg.InternalExecutorFactory
+	require.NoError(t, ief.DescsTxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		ie sqlutil.InternalExecutor,
 	) error {

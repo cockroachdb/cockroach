@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -40,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -111,6 +113,8 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 }
 
 // MakeInternalExecutor creates an InternalExecutor.
+// TODO (janexing): usage of it should be deprecated with `DescsTxnWithExecutor()`
+// or `RunWithoutTxn()`.
 func MakeInternalExecutor(
 	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
 ) InternalExecutor {
@@ -119,55 +123,6 @@ func MakeInternalExecutor(
 		mon:        monitor,
 		memMetrics: memMetrics,
 	}
-}
-
-// newInternalExecutorWithTxn creates an Internal Executor with txn related
-// information, and also a function that can be called to commit the txn.
-// This function should only be used in the implementation of
-// descs.CollectionFactory's InternalExecutorFactoryWithTxn.
-// TODO (janexing): This function will be soon refactored after we change
-// the internal executor infrastructure with a single conn executor for all
-// sql statement executions within a txn.
-func newInternalExecutorWithTxn(
-	s *Server,
-	sd *sessiondata.SessionData,
-	txn *kv.Txn,
-	memMetrics MemoryMetrics,
-	monitor *mon.BytesMonitor,
-	descCol *descs.Collection,
-) (*InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
-	schemaChangerState := &SchemaChangerState{
-		mode: sd.NewSchemaChangerMode,
-	}
-	ie := InternalExecutor{
-		s:          s,
-		mon:        monitor,
-		memMetrics: memMetrics,
-		extraTxnState: &extraTxnState{
-			txn:                    txn,
-			descCollection:         descCol,
-			jobs:                   new(jobsCollection),
-			schemaChangeJobRecords: make(map[descpb.ID]*jobs.Record),
-			schemaChangerState:     schemaChangerState,
-		},
-	}
-	ie.s.populateMinimalSessionData(sd)
-	ie.sessionDataStack = sessiondata.NewStack(sd)
-
-	commitTxnFunc := func(ctx context.Context) error {
-		defer func() {
-			ie.extraTxnState.jobs.reset()
-			ie.releaseSchemaChangeJobRecords()
-		}()
-		if err := ie.commitTxn(ctx); err != nil {
-			return err
-		}
-		return ie.s.cfg.JobRegistry.Run(
-			ctx, ie.s.cfg.InternalExecutor, *ie.extraTxnState.jobs,
-		)
-	}
-
-	return &ie, commitTxnFunc
 }
 
 // MakeInternalExecutorMemMonitor creates and starts memory monitor for an
@@ -1286,12 +1241,6 @@ type InternalExecutorFactory struct {
 	monitor    *mon.BytesMonitor
 }
 
-// MemoryMonitor returns the monitor which should be used when constructing
-// things in the context of an internal executor created by this factory.
-func (ief *InternalExecutorFactory) MemoryMonitor() *mon.BytesMonitor {
-	return ief.monitor
-}
-
 // NewInternalExecutorFactory returns a new internal executor factory.
 func NewInternalExecutorFactory(
 	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
@@ -1304,10 +1253,11 @@ func NewInternalExecutorFactory(
 }
 
 var _ sqlutil.InternalExecutorFactory = &InternalExecutorFactory{}
-var _ descs.InternalExecutorFactoryWithTxn = &InternalExecutorFactory{}
+var _ descs.TxnManager = &InternalExecutorFactory{}
 
 // NewInternalExecutor constructs a new internal executor.
-// TODO (janexing): this should be deprecated soon.
+// TODO (janexing): usage of it should be deprecated with `DescsTxnWithExecutor()`
+// or `RunWithoutTxn()`.
 func (ief *InternalExecutorFactory) NewInternalExecutor(
 	sd *sessiondata.SessionData,
 ) sqlutil.InternalExecutor {
@@ -1316,12 +1266,14 @@ func (ief *InternalExecutorFactory) NewInternalExecutor(
 	return &ie
 }
 
-// NewInternalExecutorWithTxn creates an internal executor with txn-related info,
-// such as descriptor collection and schema change job records, etc. It should
-// be called only after InternalExecutorFactory.NewInternalExecutor is already
-// called to construct the InternalExecutorFactory with required server info.
-// This function should only be used under CollectionFactory.TxnWithExecutor().
-func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
+// newInternalExecutorWithTxn creates an internal executor with txn-related info,
+// such as descriptor collection and schema change job records, etc.
+// This function should only be used under
+// InternalExecutorFactory.DescsTxnWithExecutor().
+// TODO (janexing): This function will be soon refactored after we change
+// the internal executor infrastructure with a single conn executor for all
+// sql statement executions within a txn.
+func (ief *InternalExecutorFactory) newInternalExecutorWithTxn(
 	sd *sessiondata.SessionData, sv *settings.Values, txn *kv.Txn, descCol *descs.Collection,
 ) (sqlutil.InternalExecutor, descs.InternalExecutorCommitTxnFunc) {
 	// By default, if not given session data, we initialize a sessionData that
@@ -1335,16 +1287,39 @@ func (ief *InternalExecutorFactory) NewInternalExecutorWithTxn(
 		sd = NewFakeSessionData(sv)
 		sd.UserProto = username.RootUserName().EncodeProto()
 	}
-	ie, commitTxnFunc := newInternalExecutorWithTxn(
-		ief.server,
-		sd,
-		txn,
-		ief.memMetrics,
-		ief.monitor,
-		descCol,
-	)
 
-	return ie, commitTxnFunc
+	schemaChangerState := &SchemaChangerState{
+		mode: sd.NewSchemaChangerMode,
+	}
+	ie := InternalExecutor{
+		s:          ief.server,
+		mon:        ief.monitor,
+		memMetrics: ief.memMetrics,
+		extraTxnState: &extraTxnState{
+			txn:                    txn,
+			descCollection:         descCol,
+			jobs:                   new(jobsCollection),
+			schemaChangeJobRecords: make(map[descpb.ID]*jobs.Record),
+			schemaChangerState:     schemaChangerState,
+		},
+	}
+	ie.s.populateMinimalSessionData(sd)
+	ie.sessionDataStack = sessiondata.NewStack(sd)
+
+	commitTxnFunc := func(ctx context.Context) error {
+		defer func() {
+			ie.extraTxnState.jobs.reset()
+			ie.releaseSchemaChangeJobRecords()
+		}()
+		if err := ie.commitTxn(ctx); err != nil {
+			return err
+		}
+		return ie.s.cfg.JobRegistry.Run(
+			ctx, ie.s.cfg.InternalExecutor, *ie.extraTxnState.jobs,
+		)
+	}
+
+	return &ie, commitTxnFunc
 }
 
 // RunWithoutTxn is to create an internal executor without binding to a txn,
@@ -1354,4 +1329,148 @@ func (ief *InternalExecutorFactory) RunWithoutTxn(
 ) error {
 	ie := ief.NewInternalExecutor(nil /* sessionData */)
 	return run(ctx, ie)
+}
+
+type kvTxnFunc = func(context.Context, *kv.Txn) error
+
+// ApplyTxnOptions is to apply the txn options and returns the txn generator
+// function.
+func ApplyTxnOptions(
+	db *kv.DB, opts ...sqlutil.TxnOption,
+) func(ctx context.Context, f kvTxnFunc) error {
+	var config sqlutil.TxnConfig
+	for _, opt := range opts {
+		opt.Apply(&config)
+	}
+	run := db.Txn
+
+	if config.GetSteppingEnabled() {
+
+		run = func(ctx context.Context, f kvTxnFunc) error {
+			return db.TxnWithSteppingEnabled(ctx, sessiondatapb.Normal, f)
+		}
+	}
+	return run
+}
+
+// DescsTxnWithExecutor enables callers to run transactions with a *Collection
+// such that all retrieved immutable descriptors are properly leased and all mutable
+// descriptors are handled. The function deals with verifying the two version
+// invariant and retrying when it is violated. Callers need not worry that they
+// write mutable descriptors multiple times. The call will explicitly wait for
+// the leases to drain on old versions of descriptors modified or deleted in the
+// transaction; callers do not need to call lease.WaitForOneVersion.
+// It also enables using internal executor to run sql queries in a txn manner.
+//
+// The passed transaction is pre-emptively anchored to the system config key on
+// the system tenant.
+func (ief *InternalExecutorFactory) DescsTxnWithExecutor(
+	ctx context.Context,
+	db *kv.DB,
+	sd *sessiondata.SessionData,
+	f descs.TxnWithExecutorFunc,
+	opts ...sqlutil.TxnOption,
+) error {
+	run := ApplyTxnOptions(db, opts...)
+
+	// Waits for descriptors that were modified, skipping
+	// over ones that had their descriptor wiped.
+	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
+		// Wait for a single version on leased descriptors.
+		for _, ld := range modifiedDescriptors {
+			waitForNoVersion := deletedDescs.Contains(ld.ID)
+			retryOpts := retry.Options{
+				InitialBackoff: time.Millisecond,
+				Multiplier:     1.5,
+				MaxBackoff:     time.Second,
+			}
+			// Detect unpublished ones.
+			if waitForNoVersion {
+				err := ief.server.cfg.LeaseManager.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				if err != nil {
+					return err
+				}
+			} else {
+				_, err := ief.server.cfg.LeaseManager.WaitForOneVersion(ctx, ld.ID, retryOpts)
+				// If the descriptor has been deleted, just wait for leases to drain.
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					err = ief.server.cfg.LeaseManager.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				}
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	cf := ief.server.cfg.CollectionFactory
+	for {
+		var withNewVersion []lease.IDVersion
+		var deletedDescs catalog.DescriptorIDSet
+		if err := run(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			withNewVersion, deletedDescs = nil, catalog.DescriptorIDSet{}
+			descsCol := cf.NewCollection(
+				ctx, nil, /* temporarySchemaProvider */
+				ief.monitor,
+			)
+			defer descsCol.ReleaseAll(ctx)
+			ie, commitTxnFn := ief.newInternalExecutorWithTxn(sd, &cf.GetClusterSettings().SV, txn, descsCol)
+			if err := f(ctx, txn, descsCol, ie); err != nil {
+				return err
+			}
+			deletedDescs = descsCol.GetDeletedDescs()
+			withNewVersion, err = descsCol.GetOriginalPreviousIDVersionsForUncommitted()
+			if err != nil {
+				return err
+			}
+			return commitTxnFn(ctx)
+		}); descs.IsTwoVersionInvariantViolationError(err) {
+			continue
+		} else {
+			if err == nil {
+				err = waitForDescriptors(withNewVersion, deletedDescs)
+			}
+			return err
+		}
+	}
+}
+
+// DescsTxn is similar to DescsTxnWithExecutor, but without an internal executor
+// involved.
+func (ief *InternalExecutorFactory) DescsTxn(
+	ctx context.Context,
+	db *kv.DB,
+	f func(context.Context, *kv.Txn, *descs.Collection) error,
+	opts ...sqlutil.TxnOption,
+) error {
+	return ief.DescsTxnWithExecutor(
+		ctx,
+		db,
+		nil, /* sessionData */
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, _ sqlutil.InternalExecutor) error {
+			return f(ctx, txn, descriptors)
+		},
+		opts...,
+	)
+}
+
+// TxnWithExecutor is to run queries with internal executor in a transactional
+// manner.
+func (ief *InternalExecutorFactory) TxnWithExecutor(
+	ctx context.Context,
+	db *kv.DB,
+	sd *sessiondata.SessionData,
+	f func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+	opts ...sqlutil.TxnOption,
+) error {
+	return ief.DescsTxnWithExecutor(
+		ctx,
+		db,
+		sd,
+		func(ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor) error {
+			return f(ctx, txn, ie)
+		},
+		opts...,
+	)
 }

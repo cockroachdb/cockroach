@@ -881,7 +881,7 @@ func externalStorageFactory(
 	return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
 		nil, blobs.TestBlobServiceClient(workdir),
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)

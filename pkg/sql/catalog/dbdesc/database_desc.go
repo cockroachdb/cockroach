@@ -48,6 +48,9 @@ type immutable struct {
 	// changed represents whether or not the descriptor was changed
 	// after RunPostDeserializationChanges.
 	changes catalog.PostDeserializationChanges
+
+	// This is the raw bytes (tag + data) of the database descriptor in storage.
+	rawBytesInStorage []byte
 }
 
 // Mutable wraps a database descriptor and provides methods
@@ -142,7 +145,9 @@ func (desc *immutable) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.DatabaseDesc(), hlc.Timestamp{}, desc.isUncommittedVersion, desc.changes)
+	b := newBuilder(desc.DatabaseDesc(), hlc.Timestamp{}, desc.isUncommittedVersion, desc.changes)
+	b.SetRawBytesInStorage(desc.GetRawBytesInStorage())
+	return b
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
@@ -150,7 +155,9 @@ func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
 // It overrides the wrapper's implementation to deal with the fact that
 // mutable has overridden the definition of IsUncommittedVersion.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.DatabaseDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b := newBuilder(desc.DatabaseDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b.SetRawBytesInStorage(desc.GetRawBytesInStorage())
+	return b
 }
 
 // IsMultiRegion implements the DatabaseDescriptor interface.
@@ -519,6 +526,16 @@ func (desc *immutable) GetPrivilegeDescriptor(
 // SkipNamespace implements the descriptor interface.
 func (desc *immutable) SkipNamespace() bool {
 	return false
+}
+
+// GetRawBytesInStorage implements the catalog.Descriptor interface.
+func (desc *immutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
+}
+
+// GetRawBytesInStorage implements the catalog.Descriptor interface.
+func (desc *Mutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
 }
 
 // maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the

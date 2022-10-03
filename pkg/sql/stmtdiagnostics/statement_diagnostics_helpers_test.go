@@ -16,10 +16,10 @@ import (
 )
 
 // TestingFindRequest exports findRequest for testing purposes.
-func (r *Registry) TestingFindRequest(requestID RequestID) bool {
+func (r *Registry) TestingFindRequest(requestID int64) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.findRequestLocked(requestID)
+	return r.findRequestLocked(RequestID(requestID))
 }
 
 // InsertRequestInternal exposes the form of insert which returns the request ID

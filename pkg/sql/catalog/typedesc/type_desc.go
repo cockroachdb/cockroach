@@ -98,6 +98,9 @@ type immutable struct {
 	// changes represents how descriptor was changes	after
 	// RunPostDeserializationChanges.
 	changes catalog.PostDeserializationChanges
+
+	// This is the raw bytes (tag + data) of the type descriptor in storage.
+	rawBytesInStorage []byte
 }
 
 // UpdateCachedFieldsOnModifiedMutable refreshes the immutable field by
@@ -188,12 +191,16 @@ func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState 
 // It overrides the wrapper's implementation to deal with the fact that
 // mutable has overridden the definition of IsUncommittedVersion.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.TypeDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b := newBuilder(desc.TypeDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b.SetRawBytesInStorage(desc.GetRawBytesInStorage())
+	return b
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.TypeDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b := newBuilder(desc.TypeDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
+	b.SetRawBytesInStorage(desc.GetRawBytesInStorage())
+	return b
 }
 
 // PrimaryRegionName implements the TypeDescriptor interface.
@@ -1045,6 +1052,16 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 // SkipNamespace implements the descriptor interface.
 func (desc *immutable) SkipNamespace() bool {
 	return false
+}
+
+// GetRawBytesInStorage implements the catalog.Descriptor interface.
+func (desc *immutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
+}
+
+// GetRawBytesInStorage implements the catalog.Descriptor interface.
+func (desc *Mutable) GetRawBytesInStorage() []byte {
+	return desc.rawBytesInStorage
 }
 
 // GetIDClosure implements the TypeDescriptor interface.

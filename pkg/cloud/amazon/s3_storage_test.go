@@ -48,7 +48,7 @@ func makeS3Storage(
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
 		clientFactory,
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)
@@ -83,7 +83,7 @@ func TestPutS3(t *testing.T) {
 			"backup-test-default"), base.ExternalIODirConfig{}, testSettings,
 			blobs.TestEmptyBlobClientFactory, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
 		)
@@ -112,7 +112,7 @@ func TestPutS3(t *testing.T) {
 			cloud.AuthParam, cloud.AuthParamImplicit,
 		), false, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings)
 	})
@@ -122,11 +122,15 @@ func TestPutS3(t *testing.T) {
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
-		cloudtestutils.CheckListFiles(t, uri, user, nil, nil, nil, testSettings)
+		cloudtestutils.CheckListFiles(t, uri, user,
+			nil, /* ie */
+			nil, /* ief */
+			nil, /* kvDB */
+			testSettings)
 	})
 
 	// Tests that we can put an object with server side encryption specified.
@@ -151,7 +155,7 @@ func TestPutS3(t *testing.T) {
 			false,
 			user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -169,7 +173,7 @@ func TestPutS3(t *testing.T) {
 			false,
 			user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings)
 	})
@@ -242,13 +246,13 @@ func TestPutS3AssumeRole(t *testing.T) {
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
 		cloudtestutils.CheckListFiles(t, uri, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -260,13 +264,13 @@ func TestPutS3AssumeRole(t *testing.T) {
 		)
 		cloudtestutils.CheckExportStore(t, uri, false, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
 		cloudtestutils.CheckListFiles(t, uri, user,
 			nil, /* ie */
-			nil, /* cf */
+			nil, /* ief */
 			nil, /* kvDB */
 			testSettings,
 		)
@@ -301,7 +305,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 					)
 					cloudtestutils.CheckNoPermission(t, roleURI, user,
 						nil, /* ie */
-						nil, /* cf */
+						nil, /* ief */
 						nil, /* kvDB */
 						testSettings,
 					)
@@ -321,7 +325,7 @@ func TestPutS3AssumeRole(t *testing.T) {
 
 				cloudtestutils.CheckExportStore(t, uri, false, user,
 					nil, /* ie */
-					nil, /* cf */
+					nil, /* ief */
 					nil, /* kvDB */
 					testSettings,
 				)
@@ -365,7 +369,7 @@ func TestPutS3Endpoint(t *testing.T) {
 
 	cloudtestutils.CheckExportStore(t, u.String(), false, user,
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		testSettings,
 	)
@@ -441,7 +445,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
 		clientFactory,
 		nil, /* ie */
-		nil, /* cf */
+		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
 	)
