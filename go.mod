@@ -94,8 +94,8 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/guptarohit/asciigraph v0.5.5
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
-	github.com/jackc/pgconn v1.12.1
-	github.com/jackc/pgproto3/v2 v2.3.0
+	github.com/jackc/pgconn v1.13.1-0.20221001150415-49cbf4659151
+	github.com/jackc/pgproto3/v2 v2.3.1
 	github.com/jackc/pgtype v1.11.0
 	github.com/jackc/pgx/v4 v4.16.1
 	github.com/jaegertracing/jaeger v1.18.1
