@@ -425,6 +425,10 @@ func (desc *Mutable) RemoveFunction(name string, id descpb.ID) {
 				updated = append(updated, ol)
 			}
 		}
+		if len(updated) == 0 {
+			delete(desc.Functions, name)
+			return
+		}
 		desc.Functions[name] = descpb.SchemaDescriptor_Function{
 			Name:      name,
 			Overloads: updated,
