@@ -177,7 +177,7 @@ message ColumnType {
   //
   // TODO(postamar): remove this when we can have more expressive rule defs
   //  See the dep rules for how this is used, and why it's not ideal.
-  bool is_relation_being_dropped = 10;
+  bool is_relation_being_dropped = 10 [deprecated = true];
 }
 
 message ColumnFamily {
@@ -243,7 +243,7 @@ message SecondaryIndexPartial {
   //
   // TODO(postamar): remove this when we can have more expressive rule defs
   //  See the dep rules for how this is used, and why it's not ideal.
-  bool is_relation_being_dropped = 10;
+  bool is_relation_being_dropped = 10 [deprecated = true];
 }
 
 // SchemaParent models the schema to parent database relationship.
