@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
@@ -242,48 +244,75 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 
 // SynthesizePrivilegeDescriptor is part of the Planner interface.
 func (p *planner) SynthesizePrivilegeDescriptor(
-	ctx context.Context,
-	privilegeObjectName string,
-	privilegeObjectPath string,
-	privilegeObjectType privilege.ObjectType,
+	ctx context.Context, privilegeObjectPath string, privilegeObjectType privilege.ObjectType,
 ) (*catpb.PrivilegeDescriptor, error) {
+	_, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(),
+		syntheticprivilege.SystemPrivilegesTableName, tree.ObjectLookupFlagsWithRequired())
+	if err != nil {
+		return nil, err
+	}
+	if desc.IsUncommittedVersion() {
+		return p.synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
+			ctx, p.Txn(), privilegeObjectPath, privilegeObjectType,
+		)
+	}
 	var tableVersions []descpb.DescriptorVersion
 	cache := p.ExecCfg().SyntheticPrivilegeCache
-	found, privileges, retErr := func() (bool, *catpb.PrivilegeDescriptor, error) {
+	found, privileges, retErr := func() (bool, catpb.PrivilegeDescriptor, error) {
 		cache.Lock()
 		defer cache.Unlock()
-		_, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(),
-			syntheticprivilege.SystemPrivilegesTableName, tree.ObjectLookupFlagsWithRequired())
-		if err != nil {
-			return false, nil, err
-		}
 		version := desc.GetVersion()
 		tableVersions = []descpb.DescriptorVersion{version}
+
 		if isEligibleForCache := cache.ClearCacheIfStaleLocked(ctx, tableVersions); isEligibleForCache {
 			val, ok := cache.GetValueLocked(privilegeObjectPath)
 			if ok {
-				privilegeDescriptor := val.(*catpb.PrivilegeDescriptor)
-				return true, privilegeDescriptor, nil
+				return true, val.(catpb.PrivilegeDescriptor), nil
 			}
-
 		}
-		return false, nil, nil
+		return false, catpb.PrivilegeDescriptor{}, nil
 	}()
 
 	if found {
-		return privileges, retErr
+		return &privileges, retErr
 	}
 
-	val, err := cache.LoadValueOutsideOfCache(ctx, privilegeObjectPath, func(loadCtx context.Context) (_ interface{}, retErr error) {
-		query := fmt.Sprintf(
-			`SELECT username, privileges, grant_options FROM system.%s WHERE path='%s'`,
-			catconstants.SystemPrivilegeTableName,
-			privilegeObjectPath)
+	val, err := cache.LoadValueOutsideOfCacheSingleFlight(ctx, fmt.Sprintf("%s-%d", privilegeObjectPath, desc.GetVersion()),
+		func(loadCtx context.Context) (_ interface{}, retErr error) {
+			return p.synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
+				ctx, nil /* txn */, privilegeObjectPath, privilegeObjectType)
+		})
+	if err != nil {
+		return nil, err
+	}
+	privDesc := val.(*catpb.PrivilegeDescriptor)
+	// Only write back to the cache if the table version is
+	// committed.
+	cache.MaybeWriteBackToCache(ctx, tableVersions, privilegeObjectPath, *privDesc)
+	return privDesc, nil
+}
 
-		it, err := p.QueryIteratorEx(ctx, `get-system-privileges`,
+// synthesizePrivilegeDescriptorFromSystemPrivilegesTable reads from the
+// system.privileges table to create the PrivilegeDescriptor from the
+// corresponding privilege object. This is only used if the we cannot
+// resolve the PrivilegeDescriptor from the cache.
+func (p *planner) synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
+	ctx context.Context,
+	txn *kv.Txn,
+	privilegeObjectPath string,
+	privilegeObjectType privilege.ObjectType,
+) (privileges *catpb.PrivilegeDescriptor, retErr error) {
+
+	query := fmt.Sprintf(
+		`SELECT username, privileges, grant_options FROM system.%s WHERE path='%s'`,
+		catconstants.SystemPrivilegeTableName,
+		privilegeObjectPath)
+
+	err := p.ExecCfg().InternalExecutorFactory.RunWithoutTxn(ctx, func(ctx context.Context, ie sqlutil.InternalExecutor) error {
+		it, err := ie.QueryIteratorEx(ctx, `get-system-privileges`, txn,
 			sessiondata.NodeUserSessionDataOverride, query)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer func() {
 			retErr = errors.CombineErrors(retErr, it.Close())
@@ -293,7 +322,7 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 		for {
 			ok, err := it.Next(ctx)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if !ok {
 				break
@@ -313,11 +342,11 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 			}
 			privs, err := privilege.ListFromStrings(privilegeStrings)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			grantOptions, err := privilege.ListFromStrings(grantOptionStrings)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			privsWithGrantOption := privilege.ListFromBitField(
 				privs.ToBitField()&grantOptions.ToBitField(),
@@ -352,16 +381,10 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 
 		// We use InvalidID to skip checks on the root/admin roles having
 		// privileges.
-		if err := privileges.Validate(descpb.InvalidID, privilegeObjectType, privilegeObjectName, privilege.GetValidPrivilegesForObject(privilegeObjectType)); err != nil {
-			return nil, err
+		if err := privileges.Validate(descpb.InvalidID, privilegeObjectType, privilegeObjectPath, privilege.GetValidPrivilegesForObject(privilegeObjectType)); err != nil {
+			return err
 		}
-		return privileges, nil
+		return nil
 	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	cache.MaybeWriteBackToCache(ctx, tableVersions, privilegeObjectPath, val)
-	return val.(*catpb.PrivilegeDescriptor), nil
+	return privileges, err
 }
