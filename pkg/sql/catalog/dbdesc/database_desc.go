@@ -142,7 +142,7 @@ func (desc *immutable) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.DatabaseDesc(), desc.isUncommittedVersion, desc.changes)
+	return newBuilder(desc.DatabaseDesc(), hlc.Timestamp{}, desc.isUncommittedVersion, desc.changes)
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
@@ -150,7 +150,7 @@ func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
 // It overrides the wrapper's implementation to deal with the fact that
 // mutable has overridden the definition of IsUncommittedVersion.
 func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
-	return newBuilder(desc.DatabaseDesc(), desc.IsUncommittedVersion(), desc.changes)
+	return newBuilder(desc.DatabaseDesc(), hlc.Timestamp{}, desc.IsUncommittedVersion(), desc.changes)
 }
 
 // IsMultiRegion implements the DatabaseDescriptor interface.
@@ -226,7 +226,7 @@ func (desc *immutable) GetNonDroppedSchemaName(schemaID descpb.ID) string {
 // is at least one read and write user.
 func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
-	vea.Report(catalog.ValidateName(desc.GetName(), "descriptor"))
+	vea.Report(catalog.ValidateName(desc))
 	if desc.GetID() == descpb.InvalidID {
 		vea.Report(fmt.Errorf("invalid database ID %d", desc.GetID()))
 	}

@@ -94,7 +94,7 @@ func createBackupRecoveryEvent(
 
 	multiRegion := false
 	for i := range initialDetails.ResolvedTargets {
-		_, db, _, _, _ := descpb.FromDescriptor(&initialDetails.ResolvedTargets[i])
+		_, db, _, _, _ := descpb.GetDescriptors(&initialDetails.ResolvedTargets[i])
 		if db != nil {
 			if db.RegionConfig != nil {
 				multiRegion = true
@@ -192,7 +192,7 @@ func getLargestScope(fullCluster bool, requestedDescriptors []descpb.Descriptor)
 	// Log the largest scope from the targets.
 	for i := range requestedDescriptors {
 		var scope targetScope
-		tbl, db, _, sc, _ := descpb.FromDescriptor(&requestedDescriptors[i])
+		tbl, db, _, sc, _ := descpb.GetDescriptors(&requestedDescriptors[i])
 		if tbl != nil {
 			scope = tableScope
 		} else if sc != nil {

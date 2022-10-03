@@ -19,12 +19,11 @@ import (
 )
 
 // ValidateName validates a name.
-func ValidateName(name, typ string) error {
-	if len(name) == 0 {
-		return pgerror.Newf(pgcode.Syntax, "empty %s name", typ)
+func ValidateName(desc Descriptor) error {
+	if len(desc.GetName()) > 0 {
+		return nil
 	}
-	// TODO(pmattis): Do we want to be more restrictive than this?
-	return nil
+	return pgerror.Newf(pgcode.Syntax, "empty %s name", desc.DescriptorType())
 }
 
 type inactiveDescriptorError struct {

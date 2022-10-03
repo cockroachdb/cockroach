@@ -917,9 +917,10 @@ func insufficientPrivilegeError(
 ) error {
 	// For consistency Postgres, we report the error message as not
 	// having a privilege on the object type "relation".
-	typeForError := object.GetObjectType()
-	if typeForError == privilege.VirtualTable || typeForError == privilege.Table || typeForError == privilege.Sequence {
-		typeForError = catalog.Table
+	objType := object.GetObjectType()
+	typeForError := string(objType)
+	if objType == privilege.VirtualTable || objType == privilege.Table || objType == privilege.Sequence {
+		typeForError = "relation"
 	}
 
 	// If kind is 0 (no-privilege is 0), we return that the user has no privileges.

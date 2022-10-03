@@ -33,12 +33,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -668,20 +667,47 @@ func backupShowerDefault(
 			var rows []tree.Datums
 			for layer, manifest := range info.manifests {
 				ctx, sp := tracing.ChildSpan(ctx, "backupccl.backupShowerDefault.fn.layer")
+				descriptors, err := backupinfo.BackupManifestDescriptors(&manifest)
+				if err != nil {
+					return nil, err
+				}
+				var hydratedDescriptors []catalog.Descriptor
+				showCreate := func(dbName string, tbl catalog.TableDescriptor) (string, error) {
+					if len(hydratedDescriptors) == 0 {
+						var c nstree.MutableCatalog
+						for _, desc := range descriptors {
+							c.UpsertDescriptorEntry(desc)
+						}
+						if err := descs.HydrateCatalog(ctx, c); err != nil {
+							return "", err
+						}
+						hydratedDescriptors = c.OrderedDescriptors()
+					}
+					return p.ShowCreate(
+						ctx,
+						dbName,
+						hydratedDescriptors,
+						tbl,
+						sql.ShowCreateDisplayOptions{
+							FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
+							IgnoreComments: true,
+						},
+					)
+				}
 
 				// Map database ID to descriptor name.
 				dbIDToName := make(map[descpb.ID]string)
 				schemaIDToName := make(map[descpb.ID]string)
 				schemaIDToName[keys.PublicSchemaIDForBackup] = catconstants.PublicSchemaName
-				for i := range manifest.Descriptors {
-					_, db, _, schema, _ := descpb.FromDescriptor(&manifest.Descriptors[i])
-					if db != nil {
-						if _, ok := dbIDToName[db.ID]; !ok {
-							dbIDToName[db.ID] = db.Name
+				for _, desc := range descriptors {
+					switch d := desc.(type) {
+					case catalog.DatabaseDescriptor:
+						if _, ok := dbIDToName[d.GetID()]; !ok {
+							dbIDToName[d.GetID()] = d.GetName()
 						}
-					} else if schema != nil {
-						if _, ok := schemaIDToName[schema.ID]; !ok {
-							schemaIDToName[schema.ID] = schema.Name
+					case catalog.SchemaDescriptor:
+						if _, ok := schemaIDToName[d.GetID()]; !ok {
+							schemaIDToName[d.GetID()] = d.GetName()
 						}
 					}
 				}
@@ -710,9 +736,8 @@ func backupShowerDefault(
 					}
 				}
 				var row tree.Datums
-				for i := range manifest.Descriptors {
-					descriptor := &manifest.Descriptors[i]
 
+				for _, desc := range descriptors {
 					var dbName string
 					var parentSchemaName string
 					var descriptorType string
@@ -724,8 +749,6 @@ func backupShowerDefault(
 					dataSizeDatum := tree.DNull
 					rowCountDatum := tree.DNull
 					fileSizeDatum := tree.DNull
-
-					desc := descbuilder.NewBuilder(descriptor).BuildExistingMutable()
 
 					descriptorName := desc.GetName()
 					switch desc := desc.(type) {
@@ -762,12 +785,7 @@ func backupShowerDefault(
 						// In all other cases we discard these results and so it is wasteful
 						// to construct the SQL representation of the table's schema.
 						if showSchemas {
-							displayOptions := sql.ShowCreateDisplayOptions{
-								FKDisplayMode:  sql.OmitMissingFKClausesFromCreate,
-								IgnoreComments: true,
-							}
-							createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-								tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable(), displayOptions)
+							createStmt, err := showCreate(dbName, desc)
 							if err != nil {
 								// We expect that we might get an error here due to X-DB
 								// references, which were possible on 20.2 betas and rcs.
@@ -795,7 +813,7 @@ func backupShowerDefault(
 						row = append(row, createStmtDatum)
 					}
 					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
-						row = append(row, tree.NewDString(showPrivileges(ctx, descriptor)))
+						row = append(row, tree.NewDString(showPrivileges(ctx, desc)))
 						owner := desc.GetPrivileges().Owner().SQLIdentifier()
 						row = append(row, tree.NewDString(owner))
 					}
@@ -948,31 +966,18 @@ func nullIfZero(i descpb.ID) tree.Datum {
 	return tree.NewDInt(tree.DInt(i))
 }
 
-func showPrivileges(ctx context.Context, descriptor *descpb.Descriptor) string {
+func showPrivileges(ctx context.Context, desc catalog.Descriptor) string {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.showPrivileges")
 	defer span.Finish()
 	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
 
 	var privStringBuilder strings.Builder
 
-	b := descbuilder.NewBuilder(descriptor)
-	if b == nil {
+	if desc == nil {
 		return ""
 	}
-	var objectType privilege.ObjectType
-	switch b.DescriptorType() {
-	case catalog.Database:
-		objectType = privilege.Database
-	case catalog.Table:
-		objectType = privilege.Table
-	case catalog.Type:
-		objectType = privilege.Type
-	case catalog.Schema:
-		objectType = privilege.Schema
-	default:
-		return ""
-	}
-	privDesc := b.BuildImmutable().GetPrivileges()
+	privDesc := desc.GetPrivileges()
+	objectType := desc.GetObjectType()
 	if privDesc == nil {
 		return ""
 	}
@@ -987,12 +992,13 @@ func showPrivileges(ctx context.Context, descriptor *descpb.Descriptor) string {
 				privsWithGrantOption = append(privsWithGrantOption, priv.Kind.String())
 			}
 		}
+
 		if len(privsWithGrantOption) > 0 {
 			privStringBuilder.WriteString("GRANT ")
 			privStringBuilder.WriteString(strings.Join(privsWithGrantOption, ", "))
 			privStringBuilder.WriteString(" ON ")
 			privStringBuilder.WriteString(strings.ToUpper(string(objectType)) + " ")
-			privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
+			privStringBuilder.WriteString(desc.GetName())
 			privStringBuilder.WriteString(" TO ")
 			privStringBuilder.WriteString(userPriv.User.SQLIdentifier())
 			privStringBuilder.WriteString(" WITH GRANT OPTION; ")
@@ -1010,7 +1016,7 @@ func showPrivileges(ctx context.Context, descriptor *descpb.Descriptor) string {
 			privStringBuilder.WriteString(strings.Join(privsWithoutGrantOption, ", "))
 			privStringBuilder.WriteString(" ON ")
 			privStringBuilder.WriteString(strings.ToUpper(string(objectType)) + " ")
-			privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))
+			privStringBuilder.WriteString(desc.GetName())
 			privStringBuilder.WriteString(" TO ")
 			privStringBuilder.WriteString(userPriv.User.SQLIdentifier())
 			privStringBuilder.WriteString("; ")
@@ -1053,11 +1059,12 @@ var backupShowerDoctor = backupShower{
 		var namespaceTable doctor.NamespaceTable
 		// Extract all the descriptors from the given manifest and generate the
 		// namespace and descriptor tables needed by doctor.
-		descriptors, _ := backupinfo.LoadSQLDescsFromBackupsAtTime(info.manifests, hlc.Timestamp{})
+		descriptors, _, err := backupinfo.LoadSQLDescsFromBackupsAtTime(info.manifests, hlc.Timestamp{})
+		if err != nil {
+			return nil, err
+		}
 		for _, desc := range descriptors {
-			builder := desc.NewBuilder()
-			mutDesc := builder.BuildCreatedMutable()
-			bytes, err := protoutil.Marshal(mutDesc.DescriptorProto())
+			bytes, err := protoutil.Marshal(desc.DescriptorProto())
 			if err != nil {
 				return nil, err
 			}

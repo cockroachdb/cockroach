@@ -34,11 +34,9 @@ upsert descriptor #104
   +    - crdb_internal_column_2_name_placeholder
        defaultColumnId: 1
        name: primary
-     formatVersion: 3
+  ...
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
+     modificationTime: {}
   +  mutations:
   +  - column:
   +      defaultExpr: unique_rowid()
@@ -174,6 +172,10 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (a)"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -185,14 +187,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 15 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 1
@@ -215,14 +209,6 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 15 with 3 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
          version: 4
        mutationId: 1
   -    state: BACKFILLING
@@ -239,14 +225,6 @@ commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 15 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000005"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 1
@@ -269,14 +247,6 @@ begin transaction #8
 ## PostCommitPhase stage 6 of 15 with 3 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000006"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
          version: 4
        mutationId: 1
   -    state: MERGING
@@ -297,14 +267,6 @@ commit transaction #9
 begin transaction #10
 ## PostCommitPhase stage 8 of 15 with 8 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000008"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
      - direction: ADD
        index:
@@ -461,14 +423,6 @@ begin transaction #11
 ## PostCommitPhase stage 9 of 15 with 3 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000010"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
          version: 4
        mutationId: 1
   -    state: DELETE_ONLY
@@ -490,14 +444,6 @@ begin transaction #13
 ## PostCommitPhase stage 11 of 15 with 3 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000011"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
          version: 4
        mutationId: 1
   -    state: BACKFILLING
@@ -514,14 +460,6 @@ commit transaction #13
 begin transaction #14
 ## PostCommitPhase stage 12 of 15 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000013"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 1
@@ -543,14 +481,6 @@ commit transaction #15
 begin transaction #16
 ## PostCommitPhase stage 14 of 15 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000014"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
          version: 4
        mutationId: 1
@@ -578,14 +508,6 @@ upsert descriptor #104
   -    revertible: true
        targetRanks: <redacted>
        targets: <redacted>
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000016"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
        direction: DROP
        mutationId: 1
@@ -629,14 +551,6 @@ commit transaction #18
 begin transaction #19
 ## PostCommitNonRevertiblePhase stage 2 of 4 with 12 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000018"
-  +  modificationTime: {}
-     mutations:
-     - column:
   ...
      - direction: DROP
        index:
@@ -776,14 +690,6 @@ begin transaction #20
 ## PostCommitNonRevertiblePhase stage 3 of 4 with 3 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000019"
-  +  modificationTime: {}
-     mutations:
-     - column:
-  ...
          version: 4
        mutationId: 1
   -    state: WRITE_ONLY
@@ -825,10 +731,9 @@ upsert descriptor #104
   -    - crdb_internal_column_2_name_placeholder
        defaultColumnId: 1
        name: primary
-     formatVersion: 3
+  ...
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000020"
+     modificationTime: {}
   -  mutations:
   -  - column:
   -      defaultExpr: unique_rowid()
@@ -868,7 +773,6 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
-  +  modificationTime: {}
   +  mutations: []
      name: t
      nextColumnId: 3

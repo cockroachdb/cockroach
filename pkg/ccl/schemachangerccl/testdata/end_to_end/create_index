@@ -16,11 +16,8 @@ checking for feature: CREATE INDEX
 ## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000000"
-  +  modificationTime: {}
+     modificationTime: {}
   +  mutations:
   +  - direction: ADD
   +    index:
@@ -127,6 +124,10 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
 create job #1 (non-cancelable: false): "CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -138,14 +139,6 @@ commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 7 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000001"
-  +  modificationTime: {}
-     mutations:
-     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -168,14 +161,6 @@ begin transaction #5
 ## PostCommitPhase stage 3 of 7 with 3 MutationType ops
 upsert descriptor #104
   ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000003"
-  +  modificationTime: {}
-     mutations:
-     - direction: ADD
-  ...
          version: 4
        mutationId: 1
   -    state: BACKFILLING
@@ -192,14 +177,6 @@ commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 7 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000005"
-  +  modificationTime: {}
-     mutations:
-     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -221,14 +198,6 @@ commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 7 with 3 MutationType ops
 upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000006"
-  +  modificationTime: {}
-     mutations:
-     - direction: ADD
   ...
          version: 4
        mutationId: 1
@@ -259,8 +228,6 @@ upsert descriptor #104
   ...
      formatVersion: 3
      id: 104
-  -  modificationTime:
-  -    wallTime: "1640995200000000008"
   +  indexes:
   +  - createdAtNanos: "1640998800000000000"
   +    createdExplicitly: true
@@ -291,7 +258,7 @@ upsert descriptor #104
   +    storeColumnNames:
   +    - money
   +    version: 4
-  +  modificationTime: {}
+     modificationTime: {}
      mutations:
   -  - direction: ADD
   +  - direction: DROP
@@ -373,10 +340,8 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-       - money
        version: 4
-  -  modificationTime:
-  -    wallTime: "1640995200000000010"
+     modificationTime: {}
   -  mutations:
   -  - direction: DROP
   -    index:
@@ -411,7 +376,6 @@ upsert descriptor #104
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY
-  +  modificationTime: {}
   +  mutations: []
      name: t1
      nextColumnId: 4

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -1321,16 +1322,15 @@ func (b *systemConfigBuilder) addTableDesc(id int, tableDesc descpb.TableDescrip
 	}
 	// Write the table to the SystemConfig, in the descriptors table.
 	k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))
-	desc := &descpb.Descriptor{
-		Union: &descpb.Descriptor_Table{
-			Table: &tableDesc,
-		},
-	}
+	pb := tabledesc.NewBuilder(&tableDesc).BuildCreatedMutable().DescriptorProto()
 	// Use a bogus timestamp for the descriptor modification time.
 	ts := hlc.Timestamp{WallTime: 123}
-	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(desc, ts)
+	mut, err := descbuilder.BuildMutable(nil /* original */, pb, ts)
+	if err != nil {
+		panic(err)
+	}
 	var v roachpb.Value
-	if err := v.SetProto(desc); err != nil {
+	if err := v.SetProto(mut.DescriptorProto()); err != nil {
 		panic(err)
 	}
 	b.kv = append(b.kv, roachpb.KeyValue{Key: k, Value: v})
