@@ -122,7 +122,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')
+            │       Statement: removed secondary index; CREATE INDEX idx1 ON defaultdb.public.t (v)
+            │         WHERE (v = 'a')
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -131,6 +132,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 3
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: removed temporary index; CREATE INDEX idx1 ON defaultdb.public.t (v)
+            │         WHERE (v = 'a')
             │     TableID: 106
             │
             ├── • MakeIndexAbsent

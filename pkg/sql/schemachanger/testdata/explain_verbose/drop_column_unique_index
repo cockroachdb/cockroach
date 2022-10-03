@@ -540,6 +540,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 5
+    │       │     StatementForDropJob:
+    │       │       Statement: removed temporary index; ALTER TABLE t.public.test DROP COLUMN pi
     │       │     TableID: 106
     │       │
     │       ├── • MakeIndexAbsent
@@ -625,7 +627,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE t.public.test DROP COLUMN pi
+            │       Statement: removed primary index; ALTER TABLE t.public.test DROP COLUMN pi
             │     TableID: 106
             │
             ├── • MakeIndexAbsent

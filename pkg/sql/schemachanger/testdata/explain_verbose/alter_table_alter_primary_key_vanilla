@@ -630,6 +630,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 3
+    │       │     StatementForDropJob:
+    │       │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY
+    │       │         KEY USING COLUMNS (j)
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -638,6 +641,9 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
     │       │
     │       ├── • CreateGCJobForIndex
     │       │     IndexID: 5
+    │       │     StatementForDropJob:
+    │       │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY
+    │       │         KEY USING COLUMNS (j)
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
@@ -680,7 +686,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j)
+            │       Statement: removed primary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY
+            │         USING COLUMNS (j)
             │     TableID: 104
             │
             ├── • MakeIndexAbsent

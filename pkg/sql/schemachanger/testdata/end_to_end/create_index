@@ -331,7 +331,7 @@ upsert descriptor #106
   -  version: "7"
   +  version: "8"
 write *eventpb.FinishSchemaChange to event log
-create job #2 (non-cancelable: true): "GC for "
+create job #2 (non-cancelable: true): "GC for removed temporary index; CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable

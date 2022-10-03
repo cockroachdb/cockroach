@@ -258,7 +258,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
             ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
-            │       Statement: DROP INDEX defaultdb.public.t@idx CASCADE
+            │       Statement: removed secondary index; DROP INDEX defaultdb.public.t@idx CASCADE
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
