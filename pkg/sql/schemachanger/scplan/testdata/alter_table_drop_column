@@ -355,7 +355,8 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 2
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
+        Statement: removed secondary index; ALTER TABLE defaultdb.public.foo DROP COLUMN
+          v1 CASCADE
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 2
@@ -442,6 +443,9 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
       TableID: 108
     *scop.CreateGCJobForIndex
       IndexID: 4
+      StatementForDropJob:
+        Statement: removed temporary index; ALTER TABLE defaultdb.public.foo DROP COLUMN
+          v1 CASCADE
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 4
@@ -469,7 +473,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 9 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v1 CASCADE
+        Statement: removed primary index; ALTER TABLE defaultdb.public.foo DROP COLUMN v1
+          CASCADE
       TableID: 107
     *scop.MakeIndexAbsent
       EventBase:
@@ -1296,7 +1301,8 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 2
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
+        Statement: removed secondary index; ALTER TABLE defaultdb.public.foo DROP COLUMN
+          v2 CASCADE
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 2
@@ -1383,6 +1389,9 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
       TableID: 108
     *scop.CreateGCJobForIndex
       IndexID: 4
+      StatementForDropJob:
+        Statement: removed temporary index; ALTER TABLE defaultdb.public.foo DROP COLUMN
+          v2 CASCADE
       TableID: 107
     *scop.MakeIndexAbsent
       IndexID: 4
@@ -1413,7 +1422,8 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 10 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
-        Statement: ALTER TABLE defaultdb.public.foo DROP COLUMN v2 CASCADE
+        Statement: removed primary index; ALTER TABLE defaultdb.public.foo DROP COLUMN v2
+          CASCADE
       TableID: 107
     *scop.MakeIndexAbsent
       EventBase:

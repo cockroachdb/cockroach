@@ -81,7 +81,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 2
       StatementForDropJob:
-        Statement: DROP INDEX defaultdb.public.t1@idx1 CASCADE
+        Statement: removed secondary index; DROP INDEX defaultdb.public.t1@idx1 CASCADE
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 2
@@ -237,7 +237,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 4
       StatementForDropJob:
-        Statement: DROP INDEX defaultdb.public.t1@idx2 CASCADE
+        Statement: removed secondary index; DROP INDEX defaultdb.public.t1@idx2 CASCADE
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 4
@@ -466,7 +466,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 6
       StatementForDropJob:
-        Statement: DROP INDEX defaultdb.public.t1@idx3 CASCADE
+        Statement: removed secondary index; DROP INDEX defaultdb.public.t1@idx3 CASCADE
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 6
@@ -756,7 +756,7 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 8
       StatementForDropJob:
-        Statement: DROP INDEX defaultdb.public.t1@idx4 CASCADE
+        Statement: removed secondary index; DROP INDEX defaultdb.public.t1@idx4 CASCADE
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 8

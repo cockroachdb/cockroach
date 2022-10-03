@@ -379,7 +379,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-create job #2 (non-cancelable: true): "GC for "
+create job #2 (non-cancelable: true): "GC for removed temporary index; ALTER TABLE defaultdb.public.t DROP COLUMN j"
   descriptor IDs: [104]
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 3 MutationType ops pending"
 commit transaction #11
@@ -461,7 +461,7 @@ upsert descriptor #104
   -  version: "8"
   +  version: "9"
 write *eventpb.FinishSchemaChange to event log
-create job #3 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j"
+create job #3 (non-cancelable: true): "GC for removed primary index; ALTER TABLE defaultdb.public.t DROP COLUMN j"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 commit transaction #12

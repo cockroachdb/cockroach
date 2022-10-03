@@ -385,7 +385,7 @@ upsert descriptor #104
   -  version: "7"
   +  version: "8"
 write *eventpb.FinishSchemaChange to event log
-create job #2 (non-cancelable: true): "GC for "
+create job #2 (non-cancelable: true): "GC for removed temporary index; CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 commit transaction #11
