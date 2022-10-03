@@ -457,13 +457,16 @@ func processReplicatedKeyRange(
 		}
 		// No more values in buffer or next value has different key.
 		isNewestPoint := s.curIsNewest()
-		if isGarbage(threshold, s.cur, s.next, isNewestPoint, s.firstRangeTombstoneTsAtOrBelowGC) {
+		if garbage, err :=
+			isGarbage(threshold, s.cur, s.next, isNewestPoint, s.firstRangeTombstoneTsAtOrBelowGC); garbage && err == nil {
 			keyBytes := int64(s.cur.Key.EncodedSize())
 			batchGCKeysBytes += keyBytes
 			haveGarbageForThisKey = true
 			gcTimestampForThisKey = s.cur.Key.Timestamp
 			info.AffectedVersionsKeyBytes += keyBytes
 			info.AffectedVersionsValBytes += int64(len(s.cur.Value))
+		} else if err != nil {
+			return false, err
 		}
 		// We bump how many keys were processed when we reach newest key and looking
 		// if key has garbage or if garbage for this key was included in previous
@@ -665,10 +668,10 @@ func isGarbage(
 	cur, next *storage.MVCCKeyValue,
 	isNewestPoint bool,
 	firstRangeTombstoneTsAtOrBelowGC hlc.Timestamp,
-) bool {
+) (bool, error) {
 	// If the value is not at or below the threshold then it's not garbage.
 	if belowThreshold := cur.Key.Timestamp.LessEq(threshold); !belowThreshold {
-		return false
+		return false, nil
 	}
 	if cur.Key.Timestamp.Less(firstRangeTombstoneTsAtOrBelowGC) {
 		if util.RaceEnabled {
@@ -677,12 +680,24 @@ func isGarbage(
 					firstRangeTombstoneTsAtOrBelowGC.String(), threshold.String()))
 			}
 		}
-		return true
+		return true, nil
 	}
+	// Possible premature optimization, but may help in workloads where most
+	// keys are rapidly inserted and deleted, making tombstones quite common.
 	isDelete := len(cur.Value) == 0
-	if isNewestPoint && !isDelete {
-		return false
+	if !isDelete {
+		v, err := storage.DecodeMVCCValue(cur.Value)
+		if err != nil {
+			return false, err
+		}
+		isDelete = v.IsTombstone()
 	}
+	if isNewestPoint && !isDelete {
+		return false, nil
+	}
+	// INVARIANT: !isNewestPoint || isDelete
+	// Therefore !isDelete => !isNewestPoint, which can be restated as
+	// !isDelete => next != nil. We verify this invariant here.
 	// If this value is not a delete, then we need to make sure that the next
 	// value is also at or below the threshold.
 	// NB: This doesn't need to check whether next is nil because we know
@@ -690,7 +705,7 @@ func isGarbage(
 	if !isDelete && next == nil {
 		panic("huh")
 	}
-	return isDelete || next.Key.Timestamp.LessEq(threshold)
+	return isDelete || next.Key.Timestamp.LessEq(threshold), nil
 }
 
 // processLocalKeyRange scans the local range key entries, consisting of
