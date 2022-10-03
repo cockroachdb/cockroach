@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -1172,6 +1173,7 @@ func (r *DistSQLReceiver) Push(
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
 		r.SetError(r.ctx.Err())
 	}
+	r.stats.networkEgressEstimate += int64(row.Size())
 	if r.status != execinfra.NeedMoreRows {
 		return r.status
 	}
@@ -1226,6 +1228,7 @@ func (r *DistSQLReceiver) PushBatch(
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
 		r.SetError(r.ctx.Err())
 	}
+	r.stats.networkEgressEstimate += colmem.GetBatchMemSize(batch)
 	if r.status != execinfra.NeedMoreRows {
 		return r.status
 	}
