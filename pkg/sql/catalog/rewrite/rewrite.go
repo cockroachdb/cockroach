@@ -163,6 +163,15 @@ func TableDescs(
 			}
 		}
 
+		origUniqueWithoutIndexConstraints := table.UniqueWithoutIndexConstraints
+		table.UniqueWithoutIndexConstraints = nil
+		for _, unique := range origUniqueWithoutIndexConstraints {
+			if rewrite, ok := descriptorRewrites[unique.TableID]; ok {
+				unique.TableID = rewrite.ID
+				table.UniqueWithoutIndexConstraints = append(table.UniqueWithoutIndexConstraints, unique)
+			}
+		}
+
 		if table.IsSequence() && table.SequenceOpts.HasOwner() {
 			if ownerRewrite, ok := descriptorRewrites[table.SequenceOpts.SequenceOwner.OwnerTableID]; ok {
 				table.SequenceOpts.SequenceOwner.OwnerTableID = ownerRewrite.ID
