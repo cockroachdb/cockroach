@@ -83,9 +83,9 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	evalCtx := &eval.Context{
-		Context: ctx,
-		Codec:   s.ExecutorConfig().(sql.ExecutorConfig).Codec,
+		Codec: s.ExecutorConfig().(sql.ExecutorConfig).Codec,
 	}
+	evalCtx.SetDeprecatedContext(ctx)
 
 	registry := s.JobRegistry().(*jobs.Registry)
 	testCases := []struct {

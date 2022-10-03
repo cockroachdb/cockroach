@@ -45,10 +45,9 @@ func (b buildCtx) EvalCtx() *eval.Context {
 }
 
 func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
-	return &eval.Context{
+	evalCtx := &eval.Context{
 		ClusterID:          d.ClusterID(),
 		SessionDataStack:   sessiondata.NewStack(d.SessionData()),
-		Context:            ctx,
 		Planner:            &faketreeeval.DummyEvalPlanner{},
 		PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
 		SessionAccessor:    &faketreeeval.DummySessionAccessor{},
@@ -59,4 +58,6 @@ func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
 		Settings:           d.ClusterSettings(),
 		Codec:              d.Codec(),
 	}
+	evalCtx.SetDeprecatedContext(ctx)
+	return evalCtx
 }

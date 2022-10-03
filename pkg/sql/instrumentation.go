@@ -265,7 +265,7 @@ func (ih *instrumentationHelper) Setup(
 			ih.traceMetadata = make(execNodeTraceMetadata)
 		}
 		// Make sure that the builtins use the correct context.
-		ih.evalCtx.Context = newCtx
+		ih.evalCtx.SetDeprecatedContext(newCtx)
 	}()
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {

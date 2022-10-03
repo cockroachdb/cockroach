@@ -2500,10 +2500,7 @@ func createSchemaChangeEvalCtx(
 		ExecCfg: execCfg,
 		Descs:   descriptors,
 		Context: eval.Context{
-			SessionDataStack: sessiondata.NewStack(sd),
-			// TODO(andrei): This is wrong (just like on the main code path on
-			// setupFlow). Each processor should override Ctx with its own context.
-			Context:            ctx,
+			SessionDataStack:   sessiondata.NewStack(sd),
 			Planner:            &faketreeeval.DummyEvalPlanner{},
 			PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
 			SessionAccessor:    &faketreeeval.DummySessionAccessor{},
@@ -2521,6 +2518,9 @@ func createSchemaChangeEvalCtx(
 			Tracer:             execCfg.AmbientCtx.Tracer,
 		},
 	}
+	// TODO(andrei): This is wrong (just like on the main code path on
+	// setupFlow). Each processor should override Ctx with its own context.
+	evalCtx.SetDeprecatedContext(ctx)
 	// The backfill is going to use the current timestamp for the various
 	// functions, like now(), that need it.  It's possible that the backfill has
 	// been partially performed already by another SchemaChangeManager with
