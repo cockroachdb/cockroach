@@ -40,7 +40,7 @@ func (e *ExternalConnectionPrivilege) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	if planner.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
-		return planner.SynthesizePrivilegeDescriptor(ctx, e.GetName(), e.GetPath(),
+		return planner.SynthesizePrivilegeDescriptor(ctx, e.GetPath(),
 			e.GetObjectType())
 	}
 	return catpb.NewPrivilegeDescriptor(
