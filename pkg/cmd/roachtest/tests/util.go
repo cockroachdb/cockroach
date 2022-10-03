@@ -37,7 +37,7 @@ func WaitFor3XReplication(ctx context.Context, t test.Test, db *gosql.DB) error 
 func WaitForReplication(
 	ctx context.Context, t test.Test, db *gosql.DB, replicationFactor int,
 ) error {
-	t.L().Printf("waiting for initial up-replication...")
+	t.L().Printf("waiting for initial up-replication... (<%s)", 2*time.Minute)
 	tStart := timeutil.Now()
 	var oldN int
 	for {
@@ -114,8 +114,12 @@ func setAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 	if !enabled {
 		val = "false"
 	}
-	for _, setting := range []string{"admission.kv.enabled", "admission.sql_kv_response.enabled",
-		"admission.sql_sql_response.enabled"} {
+	for _, setting := range []string{
+		"admission.kv.enabled",
+		"admission.sql_kv_response.enabled",
+		"admission.sql_sql_response.enabled",
+		"admission.elastic_cpu.enabled",
+	} {
 		if _, err := db.ExecContext(
 			ctx, "SET CLUSTER SETTING "+setting+" = '"+val+"'"); err != nil {
 			t.Fatalf("failed to set admission control to %t: %v", enabled, err)

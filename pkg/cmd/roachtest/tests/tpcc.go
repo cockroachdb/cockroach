@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -52,13 +53,14 @@ const (
 )
 
 type tpccOptions struct {
-	Warehouses     int
-	ExtraRunArgs   string
-	ExtraSetupArgs string
-	Chaos          func() Chaos                // for late binding of stopper
-	During         func(context.Context) error // for running a function during the test
-	Duration       time.Duration               // if zero, TPCC is not invoked
-	SetupType      tpccSetupType
+	Warehouses         int
+	ExtraRunArgs       string
+	ExtraSetupArgs     string
+	Chaos              func() Chaos                // for late binding of stopper
+	During             func(context.Context) error // for running a function during the test
+	Duration           time.Duration               // if zero, TPCC is not invoked
+	SetupType          tpccSetupType
+	EstimatedSetupTime time.Duration
 	// PrometheusConfig, if set, overwrites the default prometheus config settings.
 	PrometheusConfig *prometheus.Config
 	// DisablePrometheus will force prometheus to not start up.
@@ -86,6 +88,8 @@ type tpccOptions struct {
 	//
 	// TODO(tbg): remove this once https://github.com/cockroachdb/cockroach/issues/74705 is completed.
 	EnableCircuitBreakers bool
+	// SkipPostRunCheck, if set, skips post TPC-C run checks.
+	SkipPostRunCheck bool
 }
 
 type workloadInstance struct {
@@ -125,6 +129,7 @@ func setupTPCC(
 	// Randomize starting with encryption-at-rest enabled.
 	crdbNodes = c.Range(1, c.Spec().NodeCount-1)
 	workloadNode = c.Node(c.Spec().NodeCount)
+
 	if c.IsLocal() {
 		opts.Warehouses = 1
 	}
@@ -134,10 +139,12 @@ func setupTPCC(
 			// NB: workloadNode also needs ./cockroach because
 			// of `./cockroach workload` for usingImport.
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-			// We still use bare workload, though we could likely replace
-			// those with ./cockroach workload as well.
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+			settings := install.MakeClusterSettings()
+			if c.IsLocal() {
+				settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=200ms")
+				settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+			}
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, crdbNodes)
 		}
 	}
 
@@ -149,29 +156,39 @@ func setupTPCC(
 			_, err := db.Exec(`SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '15s'`)
 			require.NoError(t, err)
 		}
-		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), crdbNodes[0]))
-		require.NoError(t, err)
+
+		if t.SkipInit() {
+			return
+		}
+
+		require.NoError(t, WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), crdbNodes[0])))
+
+		estimatedSetupTimeStr := ""
+		if opts.EstimatedSetupTime != 0 {
+			estimatedSetupTimeStr = fmt.Sprintf(" (<%s)", opts.EstimatedSetupTime)
+		}
+
 		switch opts.SetupType {
 		case usingExistingData:
 			// Do nothing.
 		case usingImport:
-			t.Status("loading fixture")
+			t.Status("loading fixture" + estimatedSetupTimeStr)
 			c.Run(ctx, crdbNodes[:1], tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs))
 		case usingInit:
-			t.Status("initializing tables")
+			t.Status("initializing tables" + estimatedSetupTimeStr)
 			extraArgs := opts.ExtraSetupArgs
 			if !t.BuildVersion().AtLeast(version.MustParse("v20.2.0")) {
 				extraArgs += " --deprecated-fk-indexes"
 			}
 			cmd := fmt.Sprintf(
-				"./workload init tpcc --warehouses=%d %s {pgurl:1}",
+				"./cockroach workload init tpcc --warehouses=%d %s {pgurl:1}",
 				opts.Warehouses, extraArgs,
 			)
 			c.Run(ctx, workloadNode, cmd)
 		default:
 			t.Fatal("unknown tpcc setup type")
 		}
-		t.Status("")
+		t.Status("finished tpc-c setup")
 	}()
 	return crdbNodes, workloadNode
 }
@@ -223,7 +240,6 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		rampDuration = 30 * time.Second
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
-	t.Status("waiting")
 	m := c.NewMonitor(ctx, crdbNodes)
 	for i := range workloadInstances {
 		// Make a copy of i for the goroutine.
@@ -235,7 +251,8 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 			if len(workloadInstances) > 1 {
 				statsPrefix = fmt.Sprintf("workload_%d.", i)
 			}
-			t.WorkerStatus(fmt.Sprintf("running tpcc idx %d on %s", i, pgURLs[i]))
+			t.WorkerStatus(fmt.Sprintf("running tpcc worker=%d warehouses=%d ramp=%s duration=%s on %s (<%s)",
+				i, opts.Warehouses, rampDuration, opts.Duration, pgURLs[i], time.Minute))
 			cmd := fmt.Sprintf(
 				"./cockroach workload run tpcc --warehouses=%d --histograms="+t.PerfArtifactsDir()+"/%sstats.json "+
 					opts.ExtraRunArgs+" --ramp=%s --duration=%s --prometheus-port=%d --pprofport=%d %s %s",
@@ -260,8 +277,10 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 	m.Wait()
 
-	c.Run(ctx, workloadNode, fmt.Sprintf(
-		"./cockroach workload check tpcc --warehouses=%d {pgurl:1}", opts.Warehouses))
+	if !opts.SkipPostRunCheck {
+		c.Run(ctx, workloadNode, fmt.Sprintf(
+			"./cockroach workload check tpcc --warehouses=%d {pgurl:1}", opts.Warehouses))
+	}
 
 	// Check no errors from metrics.
 	if ep != nil {
@@ -1447,15 +1466,21 @@ func setupPrometheusForRoachtest(
 		}
 	}
 	if c.IsLocal() {
-		t.Skip("skipping test as prometheus is needed, but prometheus does not yet work locally")
+		t.Status("ignoring prometheus setup given --local was specified")
 		return nil, func() {}
 	}
 
-	if err := c.StartGrafana(ctx, t.L(), cfg); err != nil {
+	t.Status(fmt.Sprintf("setting up prometheus/grafana (<%s)", 2*time.Minute))
+
+	quietLogger, err := t.L().ChildLogger("start-grafana", logger.QuietStdout, logger.QuietStderr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.StartGrafana(ctx, quietLogger, cfg); err != nil {
 		t.Fatal(err)
 	}
 	cleanupFunc := func() {
-		if err := c.StopGrafana(ctx, t.L(), t.ArtifactsDir()); err != nil {
+		if err := c.StopGrafana(ctx, quietLogger, t.ArtifactsDir()); err != nil {
 			t.L().ErrorfCtx(ctx, "Error(s) shutting down prom/grafana %s", err)
 		}
 	}
