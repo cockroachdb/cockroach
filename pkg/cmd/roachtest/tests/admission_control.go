@@ -34,6 +34,7 @@ func registerAdmission(r registry.Registry) {
 	registerSnapshotOverload(r)
 	registerTPCCOverload(r)
 	registerTPCCSevereOverload(r)
+	registerIndexOverload(r)
 
 	// TODO(irfansharif): Once registerMultiTenantFairness is unskipped and
 	// observed to be non-flaky for 3-ish months, transfer ownership to the AC
