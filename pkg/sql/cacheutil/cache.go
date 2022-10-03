@@ -55,10 +55,10 @@ func (c *Cache) GetValueLocked(key interface{}) (interface{}, bool) {
 	return val, ok
 }
 
-// LoadValueOutsideOfCache loads the value for the given requestKey using the provided
+// LoadValueOutsideOfCacheSingleFlight loads the value for the given requestKey using the provided
 // function. It ensures that there is only at most one in-flight request for
 // each key at any time.
-func (c *Cache) LoadValueOutsideOfCache(
+func (c *Cache) LoadValueOutsideOfCacheSingleFlight(
 	ctx context.Context, requestKey string, fn func(loadCtx context.Context) (interface{}, error),
 ) (interface{}, error) {
 	ch, _ := c.populateCacheGroup.DoChan(requestKey, func() (interface{}, error) {
