@@ -20,7 +20,6 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
-	"flag"
 	"math/rand"
 	"net/url"
 	"strings"
@@ -47,10 +46,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TenantModeFlagName is the exported name of the tenantMode flag, for use
-// in other packages.
-const TenantModeFlagName = "tenantMode"
-
 // TenantSkipCCLBinaryMessage is the message we return any time we need to
 // skip a test due to the lack of a CCL binary.
 const TenantSkipCCLBinaryMessage = "skipping due to lack of CCL binary"
@@ -59,49 +54,20 @@ const TenantSkipCCLBinaryMessage = "skipping due to lack of CCL binary"
 // encountered an error due to the lack of a CCL binary.
 const RequiresCCLBinaryMessage = "requires a CCL binary"
 
-var tenantModeFlag = flag.String(
-	TenantModeFlagName, tenantModeDefault,
-	"tenantMode in which to run tests. Options are forceTenant, forceNoTenant, and default "+
-		"which alternates between tenant and no-tenant mode probabilistically. Note that the two force "+
-		"modes are ignored if the test is already forced to run in one of the two modes.")
-
-const (
-	tenantModeForceTenant   = "forceTenant"
-	tenantModeForceNoTenant = "forceNoTenant"
-	tenantModeDefault       = "default"
-)
-
 // ShouldStartDefaultTestTenant determines whether a default test tenant
 // should be started for test servers or clusters, to serve SQL traffic by
 // default. It defaults to 50% probability, but can be overridden by the
-// tenantMode test flag or the COCKROACH_TEST_TENANT_MODE environment variable.
-// If both the environment variable and the test flag are set, the environment
-// variable wins out.
+// the COCKROACH_TEST_TENANT_MODE environment variable.
 func ShouldStartDefaultTestTenant(t testing.TB) bool {
-	var defaultProbabilityOfStartingTestTenant = 0.5
+	defaultProbabilityOfStartingTestTenant := 0.5
 	if skip.UnderBench() {
 		// Until #83461 is resolved, we want to make sure that we don't use the
 		// multi-tenant setup so that the comparison against old single-tenant
 		// SHAs in the benchmarks is fair.
 		defaultProbabilityOfStartingTestTenant = 0
 	}
-	var probabilityOfStartingDefaultTestTenant float64
-
-	tenantModeTestString, envSet := envutil.EnvString("COCKROACH_TEST_TENANT_MODE", 0)
-	if !envSet {
-		tenantModeTestString = *tenantModeFlag
-	}
-
-	switch tenantModeTestString {
-	case tenantModeForceTenant:
-		probabilityOfStartingDefaultTestTenant = 1.0
-	case tenantModeForceNoTenant:
-		probabilityOfStartingDefaultTestTenant = 0.0
-	case tenantModeDefault:
-		probabilityOfStartingDefaultTestTenant = defaultProbabilityOfStartingTestTenant
-	default:
-		t.Fatal("invalid setting of tenantMode flag")
-	}
+	probabilityOfStartingTestTenant := envutil.EnvOrDefaultFloat64(
+		"COCKROACH_TEST_TENANT_MODE", defaultProbabilityOfStartingTestTenant)
 
 	if rand.Float64() > probabilityOfStartingDefaultTestTenant {
 		return false
