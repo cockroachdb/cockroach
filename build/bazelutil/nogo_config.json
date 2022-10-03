@@ -727,7 +727,16 @@
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "cockroach/pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code",
+            "pkg/sql/conn_executor.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/instrumentation.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/planner.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/schema_changer.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/distsql/server.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/execinfra/processorsbase.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/importer/import_table_creation.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/row/expr_walker_test.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/schemachanger/scbuild/tree_context_builder.go$": "temporary exclusion until deprecatedContext is removed from eval.Context"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"
