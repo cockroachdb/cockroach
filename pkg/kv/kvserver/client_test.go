@@ -46,14 +46,11 @@ func getArgs(key roachpb.Key) *roachpb.GetRequest {
 	}
 }
 
-// putArgs returns a PutRequest and PutResponse pair addressed to
-// the default replica for the specified key / value.
+// putArgs returns a PutRequest for the specified key / value.
 func putArgs(key roachpb.Key, value []byte) *roachpb.PutRequest {
 	return &roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: key,
-		},
-		Value: roachpb.MakeValueFromBytes(value),
+		RequestHeader: roachpb.RequestHeader{Key: key},
+		Value:         roachpb.MakeValueFromBytes(value),
 	}
 }
 

@@ -11,7 +11,6 @@
 package kvserver_test
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	io "io"
@@ -22,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -239,59 +237,17 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 
+	// The cluster has 3 node, with 1 store per node. The test writes a few KVs to
+	// a range, which gets replicated to all 3 stores. Then it manually replaces
+	// an entry in s2. The consistency check must detect this and terminate n2/s2.
 	const numStores = 3
-	testKnobs := kvserver.StoreTestingKnobs{
-		DisableConsistencyQueue: true,
-	}
-
+	testKnobs := kvserver.StoreTestingKnobs{DisableConsistencyQueue: true}
 	var tc *testcluster.TestCluster
 
-	// s1 will report a diff with inconsistent key "e", and only s2 has that
-	// write (s3 agrees with s1).
-	diffKey := []byte("e")
-	var diffTimestamp hlc.Timestamp
-	notifyReportDiff := make(chan struct{})
-	testKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff =
-		func(s roachpb.StoreIdent, diff kvserver.ReplicaSnapshotDiffSlice) {
-			rangeDesc := tc.LookupRangeOrFatal(t, diffKey)
-			repl, err := tc.FindRangeLeaseHolder(rangeDesc, nil)
-			require.NoError(t, err)
-			// Servers start at 0, but NodeID starts at 1.
-			store, err := tc.Servers[repl.NodeID-1].Stores().GetStore(repl.StoreID)
-			require.NoError(t, err)
-			if !assert.Equal(t, *store.Ident, s) {
-				return
-			}
-			if !assert.Len(t, diff, 1) {
-				return
-			}
-			d := diff[0]
-			if d.LeaseHolder || !bytes.Equal(diffKey, d.Key) || diffTimestamp != d.Timestamp {
-				t.Errorf("diff = %v", d)
-			}
-
-			// mock this out for a consistent string below.
-			diff[0].Timestamp = hlc.Timestamp{Logical: 987, WallTime: 123}
-
-			act := diff.String()
-
-			exp := `--- leaseholder
-+++ follower
-+0.000000123,987 "e"
-+    ts:1970-01-01 00:00:00.000000123 +0000 UTC
-+    value:"\x00\x00\x00\x00\x01T"
-+    raw mvcc_key/value: 6500000000000000007b000003db0d 000000000154
-`
-			assert.Equal(t, exp, act)
-			close(notifyReportDiff)
-		}
-	// s2 (index 1) will panic.
 	notifyFatal := make(chan struct{})
 	testKnobs.ConsistencyTestingKnobs.OnBadChecksumFatal = func(s roachpb.StoreIdent) {
-		store := tc.GetFirstStoreFromServer(t, 1)
-		if !assert.Equal(t, *store.Ident, s) {
-			return
-		}
+		store := tc.GetFirstStoreFromServer(t, 1) // only s2 must terminate
+		require.Equal(t, *store.Ident, s)
 		close(notifyFatal)
 	}
 
@@ -315,27 +271,23 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(context.Background())
 
-	store := tc.GetFirstStoreFromServer(t, 0)
 	// Write something to the DB.
-	pArgs := putArgs([]byte("a"), []byte("b"))
-	if _, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), pArgs); err != nil {
-		t.Fatal(err)
-	}
-	pArgs = putArgs([]byte("c"), []byte("d"))
-	if _, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), pArgs); err != nil {
-		t.Fatal(err)
+	store := tc.GetFirstStoreFromServer(t, 0)
+	for k, v := range map[string]string{"a": "b", "c": "d"} {
+		_, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(),
+			putArgs([]byte(k), []byte(v)))
+		require.NoError(t, err.GoError())
 	}
 
 	runConsistencyCheck := func() *roachpb.CheckConsistencyResponse {
-		checkArgs := roachpb.CheckConsistencyRequest{
-			RequestHeader: roachpb.RequestHeader{
-				// span of keys that include "a" & "c".
+		req := roachpb.CheckConsistencyRequest{
+			RequestHeader: roachpb.RequestHeader{ // keys span that includes "a" & "c"
 				Key:    []byte("a"),
 				EndKey: []byte("z"),
 			},
 			Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
 		}
-		resp, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), &checkArgs)
+		resp, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), &req)
 		require.NoError(t, err.GoError())
 		return resp.(*roachpb.CheckConsistencyResponse)
 	}
@@ -355,17 +307,18 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	// Run the check the first time, it shouldn't find anything.
-	respOK := runConsistencyCheck()
-	assert.Len(t, respOK.Result, 1)
-	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, respOK.Result[0].Status)
+	resp := runConsistencyCheck()
+	require.Len(t, resp.Result, 1)
+	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, resp.Result[0].Status)
 	select {
-	case <-notifyReportDiff:
-		t.Fatal("unexpected diff")
 	case <-notifyFatal:
 		t.Fatal("unexpected panic")
-	default:
+	case <-time.After(time.Second): // the panic may come asynchronously
+		// TODO(pavelkalinnikov): track the full lifecycle of the check in testKnobs
+		// on each replica, to make checks more reliable. E.g., instead of waiting
+		// for panic, ensure the task has started, wait until it exits, and only
+		// then check whether it panicked.
 	}
-
 	// No checkpoints should have been created.
 	for i := 0; i < numStores; i++ {
 		assert.Empty(t, onDiskCheckpointPaths(i))
@@ -375,28 +328,29 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	store1 := tc.GetFirstStoreFromServer(t, 1)
 	var val roachpb.Value
 	val.SetInt(42)
-	diffTimestamp = tc.Server(0).Clock().Now()
+	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
 	require.NoError(t, storage.MVCCPut(context.Background(), store1.Engine(), nil,
-		diffKey, diffTimestamp, hlc.ClockTimestamp{}, val, nil))
+		roachpb.Key("e"), tc.Server(0).Clock().Now(), hlc.ClockTimestamp{}, val, nil))
 
 	// Run consistency check again, this time it should find something.
-	resp := runConsistencyCheck()
-
-	select {
-	case <-notifyReportDiff:
-	case <-time.After(5 * time.Second):
-		t.Fatal("CheckConsistency() failed to report a diff as expected")
-	}
+	resp = runConsistencyCheck()
 	select {
 	case <-notifyFatal:
 	case <-time.After(5 * time.Second):
 		t.Fatal("CheckConsistency() failed to panic as expected")
 	}
 
-	// Checkpoints should have been created on all stores and they're not empty.
+	require.Len(t, resp.Result, 1)
+	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT, resp.Result[0].Status)
+	assert.Contains(t, resp.Result[0].Detail, `[minority]`)
+	assert.Contains(t, resp.Result[0].Detail, `stats`)
+
+	// Checkpoints should have been created on all stores. Load replica snapshots
+	// from them.
+	snaps := make([]roachpb.RaftSnapshotData, numStores)
 	for i := 0; i < numStores; i++ {
 		cps := onDiskCheckpointPaths(i)
-		assert.Len(t, cps, 1)
+		require.Len(t, cps, 1)
 		metric := tc.GetFirstStoreFromServer(t, i).Metrics().RdbCheckpoints
 		testutils.SucceedsSoon(t, func() error {
 			if got, want := metric.Value(), int64(1); got != want {
@@ -405,25 +359,41 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			return nil
 		})
 
-		// Create a new store on top of checkpoint location inside existing in mem
+		// Create a new store on top of checkpoint location inside existing in-mem
 		// VFS to verify its contents.
 		fs, err := stickyEngineRegistry.GetUnderlyingFS(base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10)})
 		assert.NoError(t, err)
 		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], storage.CacheSize(1<<20))
 		defer cpEng.Close()
 
-		// The range is specified using only global keys, since the implementation
-		// may use an intentInterleavingIter.
-		ms, err := storage.ComputeStats(cpEng, keys.LocalMax, roachpb.KeyMax, 0 /* nowNanos */)
-		assert.NoError(t, err)
+		// Find the problematic range in the storage.
+		var desc *roachpb.RangeDescriptor
+		require.NoError(t, kvserver.IterateRangeDescriptorsFromDisk(context.Background(), cpEng,
+			func(rd roachpb.RangeDescriptor) error {
+				if rd.RangeID == resp.Result[0].RangeID {
+					desc = &rd
+				}
+				return nil
+			}))
+		require.NotNil(t, desc)
 
-		assert.NotZero(t, ms.KeyBytes)
+		// Load the content of the problematic range.
+		snap, err := kvserver.LoadRaftSnapshotDataForTesting(context.Background(), *desc, cpEng)
+		require.NoError(t, err)
+		snaps[i] = snap
 	}
 
-	assert.Len(t, resp.Result, 1)
-	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT, resp.Result[0].Status)
-	assert.Contains(t, resp.Result[0].Detail, `[minority]`)
-	assert.Contains(t, resp.Result[0].Detail, `stats`)
+	assert.Empty(t, kvserver.DiffRange(&snaps[0], &snaps[2])) // s1 and s3 agree
+	diff := kvserver.DiffRange(&snaps[0], &snaps[1])
+	diff[0].Timestamp = hlc.Timestamp{Logical: 987, WallTime: 123} // for determinism
+	wantDiff := `--- leaseholder
++++ follower
++0.000000123,987 "e"
++    ts:1970-01-01 00:00:00.000000123 +0000 UTC
++    value:"\x00\x00\x00\x00\x01T"
++    raw mvcc_key/value: 6500000000000000007b000003db0d 000000000154
+`
+	assert.Equal(t, wantDiff, diff.String())
 
 	// A death rattle should have been written on s2 (store index 1).
 	eng := store1.Engine()
