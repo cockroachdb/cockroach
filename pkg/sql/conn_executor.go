@@ -2815,7 +2815,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
 	evalCtx.IVarContainer = nil
-	evalCtx.Context.Context = ex.Ctx()
+	evalCtx.SetDeprecatedContext(ex.Ctx())
 	evalCtx.Txn = txn
 	evalCtx.PrepareOnly = false
 	evalCtx.SkipNormalize = false
