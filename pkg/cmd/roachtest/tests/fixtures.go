@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"time"
 
@@ -55,6 +56,9 @@ func registerFixtures(r registry.Registry) {
 		t test.Test,
 		c cluster.Cluster,
 	) {
+		if runtime.GOARCH == "arm64" {
+			t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+		}
 		fixtureVersion := strings.TrimPrefix(t.BuildVersion().String(), "v")
 		makeVersionFixtureAndFatal(ctx, t, c, fixtureVersion)
 	}
