@@ -262,3 +262,21 @@ NULL  10    1
 20    NULL  1
 20    20    1
 25    NULL  1
+
+# Regression test for #88993 where a limit pushed down into a union of scans
+# caused incorrect query results.
+statement ok
+CREATE TABLE t88993 (
+  a INT,
+  b INT,
+  c INT,
+  INDEX (b, c, a) PARTITION BY LIST (b, c) (
+    PARTITION p1 VALUES IN ((11, 50))
+  )
+);
+INSERT INTO t88993 (a, b, c) VALUES (1, 10, 150), (0, 11, 100);
+
+query I
+SELECT min(a) FROM t88993
+----
+0
