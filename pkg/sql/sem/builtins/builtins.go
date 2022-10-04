@@ -5201,6 +5201,10 @@ value if you rely on the HLC for accuracy.`,
 						Key: key,
 					},
 				})
+				if ctx.Txn == nil { // can occur during backfills
+					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+						"cannot use crdb_internal.lease_holder in this context")
+				}
 				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching leaseholder")
 				}
