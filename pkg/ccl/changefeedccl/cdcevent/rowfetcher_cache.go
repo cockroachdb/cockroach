@@ -217,10 +217,13 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 
 	var spec descpb.IndexFetchSpec
 
-	// TODO (zinger): Make fetchColumnIDs only the family and the primary key.
-	// This seems to cause an error without further work but would be more efficient.
+	relevantColumns, err := getRelevantColumnsForFamily(tableDesc, familyDesc)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), tableDesc.PublicColumnIDs(),
+		&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), relevantColumns,
 	); err != nil {
 		return nil, nil, err
 	}
@@ -235,10 +238,6 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	); err != nil {
 		return nil, nil, err
 	}
-
-	// Necessary because virtual columns are not populated.
-	// TODO(radu): should we stop requesting those columns from the fetcher?
-	rf.IgnoreUnexpectedNulls = true
 
 	c.fetchers.Add(idVer, f)
 	return rf, familyDesc, nil
