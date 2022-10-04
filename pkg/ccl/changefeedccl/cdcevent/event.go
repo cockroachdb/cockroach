@@ -47,7 +47,7 @@ type Metadata struct {
 // Decoder is an interface for decoding KVs into cdc event row.
 type Decoder interface {
 	// DecodeKV decodes specified key value to Row.
-	DecodeKV(ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp) (Row, error)
+	DecodeKV(ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp, includeVirtual bool) (Row, error)
 }
 
 // Row holds a row corresponding to an event.
@@ -250,7 +250,7 @@ func NewEventDescriptor(
 
 	// Remaining columns go in same order as public columns.
 	inFamily := catalog.MakeTableColSet(family.ColumnIDs...)
-	relevantCols, err := getRelevantColumnsForFamily(desc, family)
+	relevantCols, err := getRelevantColumnsForFamily(desc, family, includeVirtualColumns)
 	if err != nil {
 		return nil, err
 	}
@@ -411,9 +411,9 @@ func NewEventDecoder(
 
 // DecodeKV decodes key value at specified schema timestamp.
 func (d *eventDecoder) DecodeKV(
-	ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp,
+	ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp, includeVirtual bool,
 ) (Row, error) {
-	if err := d.initForKey(ctx, kv.Key, schemaTS); err != nil {
+	if err := d.initForKey(ctx, kv.Key, schemaTS, includeVirtual); err != nil {
 		return Row{}, err
 	}
 
@@ -444,14 +444,14 @@ func (d *eventDecoder) DecodeKV(
 // initForKey initializes decoder state to prepare it to decode
 // key/value at specified timestamp.
 func (d *eventDecoder) initForKey(
-	ctx context.Context, key roachpb.Key, schemaTS hlc.Timestamp,
+	ctx context.Context, key roachpb.Key, schemaTS hlc.Timestamp, includeVirtual bool,
 ) error {
 	desc, familyID, err := d.rfCache.tableDescForKey(ctx, key, schemaTS)
 	if err != nil {
 		return err
 	}
 
-	fetcher, family, err := d.rfCache.RowFetcherForColumnFamily(desc, familyID)
+	fetcher, family, err := d.rfCache.RowFetcherForColumnFamily(desc, familyID, includeVirtual)
 	if err != nil {
 		return err
 	}
@@ -647,7 +647,7 @@ func TestingMakeEventRowFromEncDatums(
 // including only primary key columns, columns in the specified familyDesc,
 // and virtual columns.
 func getRelevantColumnsForFamily(
-	tableDesc catalog.TableDescriptor, familyDesc *descpb.ColumnFamilyDescriptor,
+	tableDesc catalog.TableDescriptor, familyDesc *descpb.ColumnFamilyDescriptor, includeVirtual bool,
 ) ([]descpb.ColumnID, error) {
 	columns := tableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
 	for _, colID := range familyDesc.ColumnIDs {
@@ -660,9 +660,11 @@ func getRelevantColumnsForFamily(
 		}
 	}
 
-	for _, col := range tableDesc.PublicColumns() {
-		if col.IsVirtual() {
-			columns.Add(col.GetID())
+	if includeVirtual {
+		for _, col := range tableDesc.PublicColumns() {
+			if col.IsVirtual() {
+				columns.Add(col.GetID())
+			}
 		}
 	}
 

@@ -639,7 +639,7 @@ func decodeRowErr(
 	} else {
 		kv.Value = v.Value
 	}
-	return decoder.DecodeKV(context.Background(), kv, v.Timestamp())
+	return decoder.DecodeKV(context.Background(), kv, v.Timestamp(), false)
 }
 
 func decodeRow(

@@ -61,35 +61,35 @@ CREATE TABLE foo (
 	for _, tc := range []struct {
 		family          *descpb.ColumnFamilyDescriptor
 		includeVirtual  bool
-		expectedKeyCols []ResultColumn
-		expectedColumns []ResultColumn
-		expectedUDTCols []ResultColumn
+		expectedKeyCols []string
+		expectedColumns []string
+		expectedUDTCols []string
 	}{
 		{
 			family:          mainFamily,
 			includeVirtual:  false,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "a", "b", "e"),
-			expectedUDTCols: expectResultColumns(t, tableDesc, "e"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"a", "b", "e"},
+			expectedUDTCols: []string{"e"},
 		},
 		{
 			family:          mainFamily,
 			includeVirtual:  true,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "a", "b", "d", "e"),
-			expectedUDTCols: expectResultColumns(t, tableDesc, "e"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"a", "b", "d", "e"},
+			expectedUDTCols: []string{"e"},
 		},
 		{
 			family:          cFamily,
 			includeVirtual:  false,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "c"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"c"},
 		},
 		{
 			family:          cFamily,
 			includeVirtual:  true,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "c", "d"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"c", "d"},
 		},
 	} {
 		t.Run(fmt.Sprintf("%s/includeVirtual=%t", tc.family.Name, tc.includeVirtual), func(t *testing.T) {
@@ -104,9 +104,9 @@ CREATE TABLE foo (
 
 			// Verify primary key and family columns are as expected.
 			r := Row{EventDescriptor: ed}
-			require.Equal(t, tc.expectedKeyCols, slurpColumns(t, r.ForEachKeyColumn()))
-			require.Equal(t, tc.expectedColumns, slurpColumns(t, r.ForEachColumn()))
-			require.Equal(t, tc.expectedUDTCols, slurpColumns(t, r.ForEachUDTColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedKeyCols), slurpColumns(t, r.ForEachKeyColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedColumns), slurpColumns(t, r.ForEachColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedUDTCols), slurpColumns(t, r.ForEachUDTColumn()))
 		})
 	}
 }
@@ -317,7 +317,7 @@ CREATE TABLE foo (
 					expect, tc.expectOnlyCFamily = tc.expectOnlyCFamily[0], tc.expectOnlyCFamily[1:]
 				}
 				updatedRow, err := decoder.DecodeKV(
-					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp())
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp(), tc.includeVirtual)
 
 				if expect.expectUnwatchedErr {
 					require.ErrorIs(t, err, ErrUnwatchedFamily)
@@ -334,7 +334,7 @@ CREATE TABLE foo (
 				}
 
 				prevRow, err := decoder.DecodeKV(
-					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, v.Timestamp())
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, v.Timestamp(), tc.includeVirtual)
 				require.NoError(t, err)
 
 				// prevRow always has key columns initialized.
@@ -361,7 +361,7 @@ func mustGetFamily(
 }
 
 func expectResultColumns(
-	t *testing.T, desc catalog.TableDescriptor, colNames ...string,
+	t *testing.T, desc catalog.TableDescriptor, includeVirtual bool, colNames []string,
 ) (res []ResultColumn) {
 	t.Helper()
 
@@ -387,7 +387,7 @@ func expectResultColumns(
 		if _, ok := colNamesSet[colName]; ok {
 			colNamesSet[colName] = idx
 			idx++
-		} else if col.IsVirtual() || desc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
+		} else if (includeVirtual && col.IsVirtual()) || desc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
 			idx++
 		}
 	}
