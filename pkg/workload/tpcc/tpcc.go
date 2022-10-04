@@ -424,7 +424,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 			return nil
 		},
-		PostLoad: func(db *gosql.DB) error {
+		PostLoad: func(_ context.Context, db *gosql.DB) error {
 			if w.fks {
 				// We avoid validating foreign keys because we just generated
 				// the data set and don't want to scan over the entire thing

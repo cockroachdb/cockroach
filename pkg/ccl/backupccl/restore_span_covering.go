@@ -50,7 +50,7 @@ var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	"backup.restore_span.target_size",
 	"target size to which base spans of a restore are merged to produce a restore span (0 disables)",
-	0, //TODO(dt): make this something like 384 << 20,
+	384<<20,
 )
 
 // makeSimpleImportSpans partitions the spans of requiredSpans into a covering

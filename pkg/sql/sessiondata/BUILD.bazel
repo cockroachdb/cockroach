@@ -19,7 +19,6 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sessiondatapb",
         "//pkg/util/duration",
-        "//pkg/util/iterutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",

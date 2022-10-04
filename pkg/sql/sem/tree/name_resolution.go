@@ -129,12 +129,12 @@ type QualifiedNameResolver interface {
 // SearchPath encapsulates the ordered list of schemas in the current database
 // to search during name resolution.
 type SearchPath interface {
+	// NumElements returns the number of elements in the SearchPath.
+	NumElements() int
 
-	// IterateSearchPath calls the passed function for every element of the
-	// SearchPath in order. If an error is returned, iteration stops. If the
-	// error is iterutil.StopIteration, no error will be returned from the
-	// method.
-	IterateSearchPath(func(schema string) error) error
+	// GetSchema returns the schema at the ord offset in the SearchPath.
+	// Note that it will return the empty string if the ordinal is out of range.
+	GetSchema(ord int) string
 }
 
 // EmptySearchPath is a SearchPath with no members.
@@ -142,9 +142,8 @@ var EmptySearchPath SearchPath = emptySearchPath{}
 
 type emptySearchPath struct{}
 
-func (emptySearchPath) IterateSearchPath(func(string) error) error {
-	return nil
-}
+func (emptySearchPath) NumElements() int       { return 0 }
+func (emptySearchPath) GetSchema(i int) string { return "" }
 
 func newInvColRef(n *UnresolvedName) error {
 	return pgerror.NewWithDepthf(1, pgcode.InvalidColumnReference,

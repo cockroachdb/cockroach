@@ -146,7 +146,6 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/ipaddr",
-        "//pkg/util/iterutil",
         "//pkg/util/json",
         "//pkg/util/pretty",
         "//pkg/util/stringencoding",

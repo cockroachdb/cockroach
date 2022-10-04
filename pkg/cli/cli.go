@@ -39,6 +39,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/movr"      // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"      // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpch"      // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ttlbench"  // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttllogger" // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"      // registers workloads
 	"github.com/cockroachdb/errors"

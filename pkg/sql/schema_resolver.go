@@ -334,7 +334,8 @@ func (sr *schemaResolver) canResolveDescUnderSchema(
 	case catalog.SchemaUserDefined:
 		return sr.authAccessor.CheckPrivilegeForUser(ctx, scDesc, privilege.USAGE, sr.sessionDataStack.Top().User())
 	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", kind))
+		forLog := kind // prevents kind from escaping
+		panic(errors.AssertionFailedf("unknown schema kind %d", forLog))
 	}
 }
 
@@ -400,23 +401,23 @@ func (sr *schemaResolver) ResolveFunction(
 		sc := prefix.Schema
 		udfDef, _ = sc.GetResolvedFuncDefinition(fn.Object())
 	} else {
-		if err := path.IterateSearchPath(func(schema string) error {
+		for i, n := 0, path.NumElements(); i < n; i++ {
+			schema := path.GetSchema(i)
 			found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), schema)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if !found {
-				return nil
+				continue
 			}
 			curUdfDef, found := prefix.Schema.GetResolvedFuncDefinition(fn.Object())
 			if !found {
-				return nil
+				continue
 			}
-
 			udfDef, err = udfDef.MergeWith(curUdfDef)
-			return err
-		}); err != nil {
-			return nil, err
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
