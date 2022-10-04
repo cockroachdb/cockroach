@@ -126,6 +126,7 @@ ALL_TESTS = [
     "//pkg/internal/rsg:rsg_test",
     "//pkg/internal/sqlsmith:sqlsmith_test",
     "//pkg/internal/team:team_test",
+    "//pkg/jobs/joberror:joberror_test",
     "//pkg/jobs/jobsprotectedts:jobsprotectedts_test",
     "//pkg/jobs:jobs_test",
     "//pkg/keys:keys_test",

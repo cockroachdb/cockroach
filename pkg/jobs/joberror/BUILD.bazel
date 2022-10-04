@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "joberror",
@@ -11,6 +11,20 @@ go_library(
         "//pkg/util/circuit",
         "//pkg/util/grpcutil",
         "//pkg/util/sysutil",
+        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "joberror_test",
+    srcs = ["errors_test.go"],
+    embed = [":joberror"],
+    deps = [
+        "//pkg/util/circuit",
+        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
     ],
 )
