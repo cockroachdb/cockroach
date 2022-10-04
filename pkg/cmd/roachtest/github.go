@@ -32,6 +32,14 @@ type githubIssues struct {
 	teamLoader   func() (team.Map, error)
 }
 
+type issueCategory int
+
+const (
+	clusterCreationErr issueCategory = iota
+	sshErr
+	otherErr
+)
+
 func newGithubIssues(
 	disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts, l *logger.Logger,
 ) *githubIssues {
@@ -59,9 +67,28 @@ func (g *githubIssues) shouldPost(t test.Test) bool {
 		t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
 }
 
-func (g *githubIssues) createPostRequest(t test.Test, message string) issues.PostRequest {
+func (g *githubIssues) createPostRequest(
+	t test.Test, cat issueCategory, message string,
+) issues.PostRequest {
 	var mention []string
 	var projColID int
+
+	issueOwner := t.Spec().(*registry.TestSpec).Owner
+	issueName := t.Name()
+
+	// Overrides to shield eng teams from potential flakes
+	if cat == clusterCreationErr {
+		issueOwner = registry.OwnerDevInf
+		issueName = "cluster_creation"
+	} else if cat == sshErr {
+		issueOwner = registry.OwnerTestEng
+		issueName = "ssh_problem"
+	}
+
+	teams, err := g.teamLoader()
+	if err != nil {
+		t.Fatalf("could not load teams: %v", err)
+	}
 
 	// Issues posted from roachtest are identifiable as such and
 	// they are also release blockers (this label may be removed
@@ -72,12 +99,7 @@ func (g *githubIssues) createPostRequest(t test.Test, message string) issues.Pos
 		labels = append(labels, "release-blocker")
 	}
 
-	teams, err := g.teamLoader()
-	if err != nil {
-		t.Fatalf("could not load teams: %v", err)
-	}
-
-	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(t.Spec().(*registry.TestSpec).Owner), team.PurposeRoachtest); ok {
+	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(issueOwner), team.PurposeRoachtest); ok {
 		for _, alias := range sl {
 			mention = append(mention, "@"+string(alias))
 			if label := teams[alias].Label; label != "" {
@@ -115,7 +137,7 @@ func (g *githubIssues) createPostRequest(t test.Test, message string) issues.Pos
 		MentionOnCreate: mention,
 		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
-		TestName:        t.Name(),
+		TestName:        issueName,
 		Message:         message,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
@@ -133,7 +155,7 @@ func (g *githubIssues) createPostRequest(t test.Test, message string) issues.Pos
 	}
 }
 
-func (g *githubIssues) MaybePost(t test.Test, message string) error {
+func (g *githubIssues) MaybePost(t test.Test, cat issueCategory, message string) error {
 	if !g.shouldPost(t) {
 		return nil
 	}
@@ -141,6 +163,6 @@ func (g *githubIssues) MaybePost(t test.Test, message string) error {
 	return g.issuePoster(
 		context.Background(),
 		issues.UnitTestFormatter,
-		g.createPostRequest(t, message),
+		g.createPostRequest(t, cat, message),
 	)
 }
