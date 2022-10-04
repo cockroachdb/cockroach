@@ -67,7 +67,8 @@ cd /tmp/go$GOVERS/go
 git apply /bootstrap/diff.patch
 cd ..
 
-for CONFIG in linux_amd64 linux_arm64 darwin_amd64 windows_amd64; do
+ALL_CONFIGS='linux_amd64 linux_arm64 darwin_amd64 windows_amd64'
+for CONFIG in $ALL_CONFIGS; do
     case $CONFIG in
         linux_amd64)
             CC_FOR_TARGET=/x-tools/x86_64-unknown-linux-gnu/bin/x86_64-unknown-linux-gnu-cc
@@ -100,10 +101,15 @@ for CONFIG in linux_amd64 linux_arm64 darwin_amd64 windows_amd64; do
     cd ../..
     rm -rf /tmp/go$GOVERS/go/pkg/${GOOS}_$GOARCH/cmd
     if [ $CONFIG != linux_amd64 ]; then
-        rm go/bin/go go/bin/gofmt
         mv go/bin/${GOOS}_$GOARCH/* go/bin
-        rm -r go/bin/${GOOS}_$GOARCH
     fi
+    for OTHER_CONFIG in $ALL_CONFIGS; do
+        if [ $CONFIG == $OTHER_CONFIG ]; then
+            continue
+        fi
+        rm -rf go/bin/$CONFIG
+        rm -rf go/pkg/$CONFIG
+    done
     tar cf - go | gzip -9 > /artifacts/go$GOVERS.$GOOS-$GOARCH.tar.gz
     rm -rf go/bin
 done
