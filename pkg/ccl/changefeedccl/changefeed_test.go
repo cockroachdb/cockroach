@@ -6376,7 +6376,7 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+	t.Run(`kafka`, kafkaTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		knobs := f.(*kafkaFeedFactory).knobs
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
@@ -6416,7 +6416,11 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 				`foo: [6]->{"after": {"a": 6}}`,
 			})
 		})
+	}))
 
+	t.Run(`kafka`, kafkaTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		knobs := f.(*kafkaFeedFactory).knobs
+		sqlDB := sqlutils.MakeSQLRunner(db)
 		t.Run(`succeed against a large backfill`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE large (a INT PRIMARY KEY)`)
 			sqlDB.Exec(t, `INSERT INTO large (a) SELECT * FROM generate_series(1, 2000);`)
@@ -6441,53 +6445,57 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 			}
 			assertPayloads(t, foo, expected)
 		})
+	}))
 
-		// Validate that different failure scenarios result in a full changefeed retry
-		sqlDB.Exec(t, `CREATE TABLE errors (a INT PRIMARY KEY);`)
-		sqlDB.Exec(t, `INSERT INTO errors (a) SELECT * FROM generate_series(1, 1000);`)
-		for _, failTest := range []struct {
-			failInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
-			errMsg          string
-		}{
-			{
-				func(m *sarama.ProducerMessage, client kafkaClient) error {
+	for _, failTest := range []struct {
+		failInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
+		errMsg          string
+	}{
+		{
+			func(m *sarama.ProducerMessage, client kafkaClient) error {
+				return sarama.ErrMessageSizeTooLarge
+			},
+			"kafka server: Message was too large, server rejected it to avoid allocation error",
+		},
+		{
+			func(m *sarama.ProducerMessage, client kafkaClient) error {
+				return errors.Errorf("unrelated error")
+			},
+			"unrelated error",
+		},
+		{
+			func(m *sarama.ProducerMessage, client kafkaClient) error {
+				maxMessages := client.Config().Producer.Flush.MaxMessages
+				if maxMessages == 0 || maxMessages > 250 {
 					return sarama.ErrMessageSizeTooLarge
-				},
-				"kafka server: Message was too large, server rejected it to avoid allocation error",
+				}
+				return errors.Errorf("unrelated error mid-retry")
 			},
-			{
-				func(m *sarama.ProducerMessage, client kafkaClient) error {
-					return errors.Errorf("unrelated error")
-				},
-				"unrelated error",
-			},
-			{
-				func(m *sarama.ProducerMessage, client kafkaClient) error {
-					maxMessages := client.Config().Producer.Flush.MaxMessages
-					if maxMessages == 0 || maxMessages > 250 {
+			"unrelated error mid-retry",
+		},
+		{
+			func() func(m *sarama.ProducerMessage, client kafkaClient) error {
+				// Trigger an internal retry for the first message but have successive
+				// messages throw a non-retryable error. This can happen in practice
+				// when the second message is on a different topic to the first.
+				startedBuffering := false
+				return func(m *sarama.ProducerMessage, client kafkaClient) error {
+					if !startedBuffering {
+						startedBuffering = true
 						return sarama.ErrMessageSizeTooLarge
 					}
-					return errors.Errorf("unrelated error mid-retry")
-				},
-				"unrelated error mid-retry",
-			},
-			{
-				func() func(m *sarama.ProducerMessage, client kafkaClient) error {
-					// Trigger an internal retry for the first message but have successive
-					// messages throw a non-retryable error. This can happen in practice
-					// when the second message is on a different topic to the first.
-					startedBuffering := false
-					return func(m *sarama.ProducerMessage, client kafkaClient) error {
-						if !startedBuffering {
-							startedBuffering = true
-							return sarama.ErrMessageSizeTooLarge
-						}
-						return errors.Errorf("unrelated error mid-buffering")
-					}
-				}(),
-				"unrelated error mid-buffering",
-			},
-		} {
+					return errors.Errorf("unrelated error mid-buffering")
+				}
+			}(),
+			"unrelated error mid-buffering",
+		},
+	} {
+		t.Run(`kafka`, kafkaTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+			knobs := f.(*kafkaFeedFactory).knobs
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			// Validate that different failure scenarios result in a full changefeed retry
+			sqlDB.Exec(t, `CREATE TABLE errors (a INT PRIMARY KEY);`)
+			sqlDB.Exec(t, `INSERT INTO errors (a) SELECT * FROM generate_series(1, 1000);`)
 			t.Run(fmt.Sprintf(`eventually surface error for retry: %s`, failTest.errMsg), func(t *testing.T) {
 				knobs.kafkaInterceptor = failTest.failInterceptor
 				foo := feed(t, f, `CREATE CHANGEFEED FOR errors WITH kafka_sink_config='{"Flush": {"MaxMessages": 0}}'`)
@@ -6508,8 +6516,6 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 					return nil
 				})
 			})
-		}
+		}))
 	}
-
-	t.Run(`kafka`, kafkaTest(testFn))
 }
