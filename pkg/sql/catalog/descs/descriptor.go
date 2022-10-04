@@ -89,7 +89,9 @@ func (tc *Collection) getDescriptorsByID(
 ) (descs []catalog.Descriptor, err error) {
 	// Override flags.
 	flags.Required = true
-	log.VEventf(ctx, 2, "looking up descriptors for ids %v", ids)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "looking up descriptors for ids %v", ids)
+	}
 	descs = make([]catalog.Descriptor, len(ids))
 	vls := make([]catalog.ValidationLevel, len(ids))
 	{
