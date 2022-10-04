@@ -37,12 +37,14 @@ func RunNemesis(
 		return nil, fmt.Errorf("numSteps must be >0, got %v", numSteps)
 	}
 
+	dataSpan := GeneratorDataSpan()
+
 	g, err := MakeGenerator(config, newGetReplicasFn(dbs...))
 	if err != nil {
 		return nil, err
 	}
 	a := MakeApplier(env, dbs...)
-	w, err := Watch(ctx, env, dbs, GeneratorDataSpan())
+	w, err := Watch(ctx, env, dbs, dataSpan)
 	if err != nil {
 		return nil, err
 	}
@@ -96,12 +98,15 @@ func RunNemesis(
 	defer kvs.Close()
 	failures := Validate(allSteps, kvs)
 
+	// Run consistency checks across the data span, primarily to check the
+	// accuracy of evaluated MVCC stats.
+	failures = append(failures, env.CheckConsistency(ctx, dataSpan)...)
+
 	if len(failures) > 0 {
 		log.Infof(ctx, "reproduction steps:\n%s", printRepro(stepsByWorker))
 		log.Infof(ctx, "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
 
-		span := GeneratorDataSpan()
-		scanKVs, err := dbs[0].Scan(ctx, span.Key, span.EndKey, -1)
+		scanKVs, err := dbs[0].Scan(ctx, dataSpan.Key, dataSpan.EndKey, -1)
 		if err != nil {
 			log.Infof(ctx, "could not scan actual latest values: %+v", err)
 		} else {

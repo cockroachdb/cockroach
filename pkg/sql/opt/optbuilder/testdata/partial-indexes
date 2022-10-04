@@ -325,6 +325,10 @@ update partial_indexes
  ├── fetch columns: a:6 b:7 c:8
  ├── update-mapping:
  │    └── a_new:11 => a:1
+ ├── return-mapping:
+ │    ├── a_new:11 => a:1
+ │    ├── b:7 => b:2
+ │    └── c:8 => c:3
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
  ├── partial index del columns: partial_index_put1:12 partial_index_del2:14 partial_index_put3:15 partial_index_put4:16
  └── project
@@ -357,6 +361,7 @@ UPDATE partial_indexes SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE partial_
 update partial_indexes
  ├── columns: <none>
  ├── fetch columns: a:6 b:7 c:8
+ ├── passthrough columns: column1:11
  ├── update-mapping:
  │    └── column1:11 => a:1
  ├── partial index put columns: partial_index_put1:12 partial_index_put2:13 partial_index_put3:15 partial_index_put4:16
@@ -556,8 +561,12 @@ project
  └── update t61520 [as=t]
       ├── columns: a:1!null rowid:2!null column1:9
       ├── fetch columns: a:5 rowid:6
+      ├── passthrough columns: column1:9
       ├── update-mapping:
       │    └── a_cast:10 => a:1
+      ├── return-mapping:
+      │    ├── a_cast:10 => a:1
+      │    └── rowid:6 => rowid:2
       ├── partial index put columns: partial_index_put1:11
       ├── partial index del columns: partial_index_del1:12
       └── project

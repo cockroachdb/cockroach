@@ -1863,6 +1863,10 @@ sort
       │    │    ├── x:6 => abc.a:1
       │    │    ├── y:7 => abc.b:2
       │    │    └── z:8 => abc.c:3
+      │    ├── return-mapping:
+      │    │    ├── x:6 => abc.a:1
+      │    │    ├── y:7 => abc.b:2
+      │    │    └── z:8 => abc.c:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    ├── key: (1-3)
@@ -1905,6 +1909,10 @@ sort
       │    │    ├── b:7 => xyz.x:1
       │    │    ├── c:8 => xyz.y:2
       │    │    └── d:9 => xyz.z:3
+      │    ├── return-mapping:
+      │    │    ├── b:7 => xyz.x:1
+      │    │    ├── c:8 => xyz.y:2
+      │    │    └── d:9 => xyz.z:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    └── scan abcd@cd
@@ -1943,6 +1951,10 @@ sort
       │    │    ├── b:7 => xyz.x:1
       │    │    ├── c:8 => xyz.y:2
       │    │    └── d:9 => xyz.z:3
+      │    ├── return-mapping:
+      │    │    ├── b:7 => xyz.x:1
+      │    │    ├── c:8 => xyz.y:2
+      │    │    └── d:9 => xyz.z:3
       │    ├── cardinality: [0 - 2]
       │    ├── volatile, mutations
       │    └── scan abcd@cd
@@ -1973,6 +1985,10 @@ with &1
  ├── insert abc
  │    ├── columns: abc.a:1!null abc.b:2!null abc.c:3!null
  │    ├── insert-mapping:
+ │    │    ├── x:6 => abc.a:1
+ │    │    ├── y:7 => abc.b:2
+ │    │    └── z:8 => abc.c:3
+ │    ├── return-mapping:
  │    │    ├── x:6 => abc.a:1
  │    │    ├── y:7 => abc.b:2
  │    │    └── z:8 => abc.c:3
@@ -2016,6 +2032,12 @@ sort
       │         ├── update-mapping:
       │         │    ├── a_new:15 => abcd.a:1
       │         │    └── b_new:16 => abcd.b:2
+      │         ├── return-mapping:
+      │         │    ├── a_new:15 => abcd.a:1
+      │         │    ├── b_new:16 => abcd.b:2
+      │         │    ├── abcd.c:10 => abcd.c:3
+      │         │    ├── abcd.d:11 => abcd.d:4
+      │         │    └── rowid:12 => rowid:5
       │         ├── volatile, mutations
       │         ├── key: (5)
       │         ├── fd: ()-->(1,2), (5)-->(3,4)
@@ -2063,6 +2085,12 @@ sort
       │         ├── fetch columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12
       │         ├── update-mapping:
       │         │    └── b_new:15 => abcd.b:2
+      │         ├── return-mapping:
+      │         │    ├── abcd.a:8 => abcd.a:1
+      │         │    ├── b_new:15 => abcd.b:2
+      │         │    ├── abcd.c:10 => abcd.c:3
+      │         │    ├── abcd.d:11 => abcd.d:4
+      │         │    └── rowid:12 => rowid:5
       │         ├── cardinality: [0 - 10]
       │         ├── volatile, mutations
       │         ├── key: (5)
@@ -2117,6 +2145,12 @@ sort
       │         ├── fetch columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12
       │         ├── update-mapping:
       │         │    └── b_new:15 => abcd.b:2
+      │         ├── return-mapping:
+      │         │    ├── abcd.a:8 => abcd.a:1
+      │         │    ├── b_new:15 => abcd.b:2
+      │         │    ├── abcd.c:10 => abcd.c:3
+      │         │    ├── abcd.d:11 => abcd.d:4
+      │         │    └── rowid:12 => rowid:5
       │         ├── cardinality: [0 - 10]
       │         ├── volatile, mutations
       │         ├── key: (5)
@@ -2253,6 +2287,12 @@ sort
       │    └── delete abcd
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12
+      │         ├── return-mapping:
+      │         │    ├── abcd.a:8 => abcd.a:1
+      │         │    ├── abcd.b:9 => abcd.b:2
+      │         │    ├── abcd.c:10 => abcd.c:3
+      │         │    ├── abcd.d:11 => abcd.d:4
+      │         │    └── rowid:12 => rowid:5
       │         ├── volatile, mutations
       │         ├── key: (5)
       │         ├── fd: (5)-->(1-4)
@@ -2290,6 +2330,12 @@ sort
       │    └── delete abcd
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12
+      │         ├── return-mapping:
+      │         │    ├── abcd.a:8 => abcd.a:1
+      │         │    ├── abcd.b:9 => abcd.b:2
+      │         │    ├── abcd.c:10 => abcd.c:3
+      │         │    ├── abcd.d:11 => abcd.d:4
+      │         │    └── rowid:12 => rowid:5
       │         ├── cardinality: [0 - 10]
       │         ├── volatile, mutations
       │         ├── key: (5)
@@ -2334,6 +2380,12 @@ sort
       │    └── delete abcd
       │         ├── columns: abcd.a:1 abcd.b:2 abcd.c:3 abcd.d:4 rowid:5!null
       │         ├── fetch columns: abcd.a:8 abcd.b:9 abcd.c:10 abcd.d:11 rowid:12
+      │         ├── return-mapping:
+      │         │    ├── abcd.a:8 => abcd.a:1
+      │         │    ├── abcd.b:9 => abcd.b:2
+      │         │    ├── abcd.c:10 => abcd.c:3
+      │         │    ├── abcd.d:11 => abcd.d:4
+      │         │    └── rowid:12 => rowid:5
       │         ├── cardinality: [0 - 10]
       │         ├── volatile, mutations
       │         ├── key: (5)
