@@ -87,7 +87,7 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 // context.
 func GetScanStats(ctx context.Context, recording tracingpb.Recording) (ss ScanStats) {
 	if recording == nil {
-		recording = tracing.SpanFromContext(ctx).GetConfiguredRecording()
+		recording = tracing.SpanFromContext(ctx).GetRecording(tracingpb.RecordingStructured)
 	}
 	var ev roachpb.ScanStats
 	for i := range recording {
