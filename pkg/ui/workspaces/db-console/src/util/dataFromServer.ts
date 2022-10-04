@@ -8,6 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import IFeatureFlags = cockroach.server.serverpb.IFeatureFlags;
+
 export interface DataFromServer {
   ExperimentalUseLogin: boolean;
   LoginEnabled: boolean;
@@ -18,6 +21,7 @@ export interface DataFromServer {
   OIDCAutoLogin: boolean;
   OIDCLoginEnabled: boolean;
   OIDCButtonText: string;
+  FeatureFlags: IFeatureFlags;
 }
 // Tell TypeScript about `window.dataFromServer`, which is set in a script
 // tag in index.html, the contents of which are generated in a Go template
@@ -44,7 +48,12 @@ export function fetchDataFromServer(): Promise<DataFromServer> {
 }
 
 export function getDataFromServer(): DataFromServer {
-  return window.dataFromServer || ({} as DataFromServer);
+  return (
+    window.dataFromServer ||
+    ({
+      FeatureFlags: {},
+    } as DataFromServer)
+  );
 }
 
 export function setDataFromServer(d: DataFromServer) {
