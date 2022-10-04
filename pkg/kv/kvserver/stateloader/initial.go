@@ -29,15 +29,6 @@ import (
 const (
 	raftInitialLogIndex = 10
 	raftInitialLogTerm  = 5
-
-	// RaftLogTermSignalForAddRaftAppliedIndexTermMigration is never persisted
-	// in the state machine or in HardState. It is only used in
-	// AddRaftAppliedIndexTermMigration to signal to the below raft code that
-	// the migration should happen when applying the raft log entry that
-	// contains ReplicatedEvalResult.State.RaftAppliedIndexTerm equal to this
-	// value. It is less than raftInitialLogTerm since that ensures it will
-	// never be used under normal operation.
-	RaftLogTermSignalForAddRaftAppliedIndexTermMigration = 3
 )
 
 // WriteInitialReplicaState sets up a new Range, but without writing an
@@ -56,7 +47,6 @@ func WriteInitialReplicaState(
 	gcThreshold hlc.Timestamp,
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
-	writeRaftAppliedIndexTerm bool,
 	gcHintsAllowed bool,
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(desc.RangeID)
@@ -66,9 +56,7 @@ func WriteInitialReplicaState(
 		Index: raftInitialLogIndex,
 	}
 	s.RaftAppliedIndex = s.TruncatedState.Index
-	if writeRaftAppliedIndexTerm {
-		s.RaftAppliedIndexTerm = s.TruncatedState.Term
-	}
+	s.RaftAppliedIndexTerm = s.TruncatedState.Term
 	s.Desc = &roachpb.RangeDescriptor{
 		RangeID: desc.RangeID,
 	}
@@ -128,8 +116,7 @@ func WriteInitialRangeState(
 
 	if _, err := WriteInitialReplicaState(
 		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
-		replicaVersion, true, /* 22.1:AddRaftAppliedIndexTermMigration */
-		true, /* 22.2: GCHintInReplicaState */
+		replicaVersion, true, /* 22.2: GCHintInReplicaState */
 	); err != nil {
 		return err
 	}

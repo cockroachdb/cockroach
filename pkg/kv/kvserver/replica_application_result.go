@@ -92,8 +92,6 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// replica state for this batch.
 	if haveState := r.State != nil; haveState {
 		r.State.Stats = nil
-		// Reset the signal used to execute the AddRaftAppliedIndexTermMigration.
-		r.State.RaftAppliedIndexTerm = 0
 		if *r.State == (kvserverpb.ReplicaState{}) {
 			r.State = nil
 		}
