@@ -2143,13 +2143,6 @@ func TestTenantLogicCCL_cluster_locks_tenant(
 	runCCLLogicTest(t, "cluster_locks_tenant")
 }
 
-func TestTenantLogicCCL_crdb_internal_tenant(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "crdb_internal_tenant")
-}
-
 func TestTenantLogicCCL_new_schema_changer(
 	t *testing.T,
 ) {
