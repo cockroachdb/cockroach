@@ -1727,6 +1727,10 @@ with &1
  │         │    ├── column1:11 => uv.u:6
  │         │    ├── column2:12 => uv.v:7
  │         │    └── rowid_default:13 => rowid:8
+ │         ├── return-mapping:
+ │         │    ├── column1:11 => uv.u:6
+ │         │    ├── column2:12 => uv.v:7
+ │         │    └── rowid_default:13 => rowid:8
  │         ├── cardinality: [1 - 1]
  │         ├── volatile, mutations
  │         ├── key: ()

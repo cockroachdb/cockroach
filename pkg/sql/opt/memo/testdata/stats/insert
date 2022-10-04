@@ -49,6 +49,10 @@ with &1
  │    │    ├── b:7 => xyz.x:1
  │    │    ├── a:6 => xyz.y:2
  │    │    └── c:8 => xyz.z:3
+ │    ├── return-mapping:
+ │    │    ├── b:7 => xyz.x:1
+ │    │    ├── a:6 => xyz.y:2
+ │    │    └── c:8 => xyz.z:3
  │    ├── volatile, mutations
  │    ├── stats: [rows=200, distinct(1)=1, null(1)=0, distinct(2)=200, null(2)=0, distinct(3)=130.264, null(3)=2]
  │    ├── fd: ()-->(1), (2)-->(3)
@@ -93,6 +97,10 @@ INSERT INTO xyz (x, y, z) SELECT b, a, c FROM abc WHERE False RETURNING *
 insert xyz
  ├── columns: x:1(string!null) y:2(int!null) z:3(float)
  ├── insert-mapping:
+ │    ├── b:7 => x:1
+ │    ├── a:6 => y:2
+ │    └── c:8 => z:3
+ ├── return-mapping:
  │    ├── b:7 => x:1
  │    ├── a:6 => y:2
  │    └── c:8 => z:3

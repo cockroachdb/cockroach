@@ -222,6 +222,7 @@ UPDATE uniq SET w = other.w, x = other.x FROM other
 update uniq
  ├── columns: <none>
  ├── fetch columns: uniq.k:8 uniq.v:9 uniq.w:10 uniq.x:11 uniq.y:12
+ ├── passthrough columns: other.k:15 other.v:16 other.w:17 other.x:18 other.y:19 rowid:20 other.crdb_internal_mvcc_timestamp:21 other.tableoid:22
  ├── update-mapping:
  │    ├── other.w:17 => uniq.w:3
  │    └── other.x:18 => uniq.x:4
@@ -416,6 +417,7 @@ UPDATE uniq_overlaps_pk SET a = k, d = v FROM other
 update uniq_overlaps_pk
  ├── columns: <none>
  ├── fetch columns: uniq_overlaps_pk.a:7 uniq_overlaps_pk.b:8 uniq_overlaps_pk.c:9 uniq_overlaps_pk.d:10
+ ├── passthrough columns: k:13 v:14 w:15 x:16 y:17 rowid:18 other.crdb_internal_mvcc_timestamp:19 other.tableoid:20
  ├── update-mapping:
  │    ├── k:13 => uniq_overlaps_pk.a:1
  │    └── v:14 => uniq_overlaps_pk.d:4
@@ -575,6 +577,7 @@ UPDATE uniq_hidden_pk SET a = k FROM other
 update uniq_hidden_pk
  ├── columns: <none>
  ├── fetch columns: uniq_hidden_pk.a:8 uniq_hidden_pk.b:9 uniq_hidden_pk.c:10 uniq_hidden_pk.d:11 uniq_hidden_pk.rowid:12
+ ├── passthrough columns: k:15 v:16 w:17 x:18 y:19 other.rowid:20 other.crdb_internal_mvcc_timestamp:21 other.tableoid:22
  ├── update-mapping:
  │    └── k:15 => uniq_hidden_pk.a:1
  ├── input binding: &1
@@ -775,6 +778,7 @@ UPDATE uniq_partial SET a = other.w, b = other.x FROM other
 update uniq_partial
  ├── columns: <none>
  ├── fetch columns: uniq_partial.k:7 uniq_partial.a:8 uniq_partial.b:9 uniq_partial.c:10
+ ├── passthrough columns: other.k:13 v:14 w:15 x:16 y:17 rowid:18 other.crdb_internal_mvcc_timestamp:19 other.tableoid:20
  ├── update-mapping:
  │    ├── w:15 => uniq_partial.a:2
  │    └── x:16 => uniq_partial.b:3
@@ -958,6 +962,7 @@ UPDATE uniq_partial_overlaps_pk SET a = k FROM other
 update uniq_partial_overlaps_pk
  ├── columns: <none>
  ├── fetch columns: uniq_partial_overlaps_pk.a:7 uniq_partial_overlaps_pk.b:8 uniq_partial_overlaps_pk.c:9 uniq_partial_overlaps_pk.d:10
+ ├── passthrough columns: k:13 v:14 w:15 x:16 y:17 rowid:18 other.crdb_internal_mvcc_timestamp:19 other.tableoid:20
  ├── update-mapping:
  │    └── k:13 => uniq_partial_overlaps_pk.a:1
  ├── input binding: &1
@@ -1072,6 +1077,7 @@ UPDATE uniq_partial_hidden_pk SET a = k FROM other
 update uniq_partial_hidden_pk
  ├── columns: <none>
  ├── fetch columns: uniq_partial_hidden_pk.a:6 uniq_partial_hidden_pk.b:7 uniq_partial_hidden_pk.rowid:8
+ ├── passthrough columns: k:11 v:12 w:13 x:14 y:15 other.rowid:16 other.crdb_internal_mvcc_timestamp:17 other.tableoid:18
  ├── update-mapping:
  │    └── k:11 => uniq_partial_hidden_pk.a:1
  ├── input binding: &1

@@ -1263,6 +1263,10 @@ with &1
  │    │    ├── column1:6 => abc.a:1
  │    │    ├── b_default:7 => abc.b:2
  │    │    └── b_default:7 => abc.c:3
+ │    ├── return-mapping:
+ │    │    ├── column1:6 => abc.a:1
+ │    │    ├── b_default:7 => abc.b:2
+ │    │    └── b_default:7 => abc.c:3
  │    └── project
  │         ├── columns: b_default:7 column1:6!null
  │         ├── values
@@ -1317,6 +1321,10 @@ with &1
  │    └── insert abc
  │         ├── columns: abc.a:1!null b:2!null c:3!null
  │         ├── insert-mapping:
+ │         │    ├── column1:6 => abc.a:1
+ │         │    ├── column2:7 => b:2
+ │         │    └── column3:8 => c:3
+ │         ├── return-mapping:
  │         │    ├── column1:6 => abc.a:1
  │         │    ├── column2:7 => b:2
  │         │    └── column3:8 => c:3

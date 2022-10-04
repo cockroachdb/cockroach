@@ -567,6 +567,10 @@ with &1
  │    ├── fetch columns: xyz.x:6 xyz.y:7 xyz.z:8
  │    ├── update-mapping:
  │    │    └── y_new:11 => xyz.y:2
+ │    ├── return-mapping:
+ │    │    ├── xyz.x:6 => xyz.x:1
+ │    │    ├── y_new:11 => xyz.y:2
+ │    │    └── xyz.z:8 => xyz.z:3
  │    └── project
  │         ├── columns: y_new:11 xyz.x:6!null xyz.y:7 xyz.z:8 xyz.crdb_internal_mvcc_timestamp:9 xyz.tableoid:10
  │         ├── scan xyz
@@ -629,6 +633,13 @@ project
       ├── update-mapping:
       │    ├── a_new:17 => a:1
       │    └── a_new:17 => e:5
+      ├── return-mapping:
+      │    ├── a_new:17 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    ├── a_new:17 => e:5
+      │    └── rowid:14 => rowid:6
       └── project
            ├── columns: d_comp:18 a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 a_new:17!null
            ├── project
@@ -661,6 +672,13 @@ project
  │    ├── update-mapping:
  │    │    ├── a_new:17 => a:1
  │    │    └── a_new:17 => e:5
+ │    ├── return-mapping:
+ │    │    ├── a_new:17 => a:1
+ │    │    ├── b:10 => b:2
+ │    │    ├── c:11 => c:3
+ │    │    ├── d:12 => d:4
+ │    │    ├── a_new:17 => e:5
+ │    │    └── rowid:14 => rowid:6
  │    └── project
  │         ├── columns: d_comp:18 a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 a_new:17!null
  │         ├── project
@@ -698,6 +716,13 @@ with &1
  │         ├── update-mapping:
  │         │    ├── a_new:17 => abcde.a:1
  │         │    └── a_new:17 => abcde.e:5
+ │         ├── return-mapping:
+ │         │    ├── a_new:17 => abcde.a:1
+ │         │    ├── abcde.b:10 => abcde.b:2
+ │         │    ├── abcde.c:11 => abcde.c:3
+ │         │    ├── abcde.d:12 => abcde.d:4
+ │         │    ├── a_new:17 => abcde.e:5
+ │         │    └── rowid:14 => rowid:6
  │         └── project
  │              ├── columns: d_comp:18 abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 a_new:17!null
  │              ├── project
@@ -746,6 +771,13 @@ project
       ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
       ├── fetch columns: a:9 b:10 c:11 d:12 e:13 rowid:14
       ├── update-mapping:
+      │    └── rowid_new:17 => rowid:6
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    ├── e:13 => e:5
       │    └── rowid_new:17 => rowid:6
       └── project
            ├── columns: d_comp:18 a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16 rowid_new:17!null
@@ -1230,6 +1262,13 @@ project
       ├── update-mapping:
       │    ├── b_new:25 => abcde1.b:2
       │    └── d_comp:26 => abcde1.d:4
+      ├── return-mapping:
+      │    ├── abcde1.a:9 => abcde1.a:1
+      │    ├── b_new:25 => abcde1.b:2
+      │    ├── abcde1.c:11 => abcde1.c:3
+      │    ├── d_comp:26 => abcde1.d:4
+      │    ├── abcde1.e:13 => abcde1.e:5
+      │    └── abcde1.rowid:14 => abcde1.rowid:6
       └── project
            ├── columns: d_comp:26 abcde1.a:9!null abcde1.b:10 abcde1.c:11 abcde1.d:12 abcde1.e:13 abcde1.rowid:14!null abcde1.crdb_internal_mvcc_timestamp:15 abcde1.tableoid:16 b_new:25
            ├── project

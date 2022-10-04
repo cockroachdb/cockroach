@@ -143,6 +143,10 @@ project
       │    ├── column1:6 => a:1
       │    ├── column2:7 => b:2
       │    └── v_comp:8 => v:3
+      ├── return-mapping:
+      │    ├── column1:6 => a:1
+      │    ├── column2:7 => b:2
+      │    └── v_comp:8 => v:3
       └── project
            ├── columns: v_comp:8!null column1:6!null column2:7!null
            ├── values
@@ -223,6 +227,10 @@ project
  └── delete t
       ├── columns: a:1!null b:2 v:3
       ├── fetch columns: a:6 b:7 v:8
+      ├── return-mapping:
+      │    ├── a:6 => a:1
+      │    ├── b:7 => b:2
+      │    └── v:8 => v:3
       └── select
            ├── columns: a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10
            ├── project
@@ -285,6 +293,10 @@ project
  └── delete t
       ├── columns: a:1!null b:2 v:3!null
       ├── fetch columns: a:6 b:7 v:8
+      ├── return-mapping:
+      │    ├── a:6 => a:1
+      │    ├── b:7 => b:2
+      │    └── v:8 => v:3
       └── select
            ├── columns: a:6!null b:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
            ├── project
@@ -327,6 +339,10 @@ project
  └── delete t_idx
       ├── columns: a:1!null b:2 v:3
       ├── fetch columns: a:6 b:7 v:8
+      ├── return-mapping:
+      │    ├── a:6 => a:1
+      │    ├── b:7 => b:2
+      │    └── v:8 => v:3
       └── select
            ├── columns: a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10
            ├── project
@@ -389,6 +405,10 @@ project
  └── delete t_idx
       ├── columns: a:1!null b:2 v:3!null
       ├── fetch columns: a:6 b:7 v:8
+      ├── return-mapping:
+      │    ├── a:6 => a:1
+      │    ├── b:7 => b:2
+      │    └── v:8 => v:3
       └── select
            ├── columns: a:6!null b:7 v:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
            ├── project
@@ -601,6 +621,10 @@ project
       ├── update-mapping:
       │    ├── b_new:11 => b:2
       │    └── v_comp:12 => v:3
+      ├── return-mapping:
+      │    ├── a:6 => a:1
+      │    ├── b_new:11 => b:2
+      │    └── v_comp:12 => v:3
       └── project
            ├── columns: v_comp:12 a:6!null b:7 v:8 crdb_internal_mvcc_timestamp:9 tableoid:10 b_new:11
            ├── project
@@ -630,6 +654,12 @@ project
       ├── update-mapping:
       │    ├── b_new:15 => b:2
       │    └── v_comp:16 => v:4
+      ├── return-mapping:
+      │    ├── a:8 => a:1
+      │    ├── b_new:15 => b:2
+      │    ├── c:10 => c:3
+      │    ├── v_comp:16 => v:4
+      │    └── w:12 => w:5
       └── project
            ├── columns: v_comp:16 w_comp:17 a:8!null b:9 c:10 v:11 w:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15
            ├── project
@@ -823,6 +853,10 @@ project
       ├── columns: a:1!null b:2!null v:3!null
       ├── arbiter indexes: t_pkey
       ├── insert-mapping:
+      │    ├── column1:6 => a:1
+      │    ├── column2:7 => b:2
+      │    └── v_comp:8 => v:3
+      ├── return-mapping:
       │    ├── column1:6 => a:1
       │    ├── column2:7 => b:2
       │    └── v_comp:8 => v:3

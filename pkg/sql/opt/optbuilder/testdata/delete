@@ -245,6 +245,10 @@ with &1
  ├── delete xyz
  │    ├── columns: xyz.x:1!null xyz.y:2 xyz.z:3!null
  │    ├── fetch columns: xyz.x:6 xyz.y:7 xyz.z:8
+ │    ├── return-mapping:
+ │    │    ├── xyz.x:6 => xyz.x:1
+ │    │    ├── xyz.y:7 => xyz.y:2
+ │    │    └── xyz.z:8 => xyz.z:3
  │    └── select
  │         ├── columns: xyz.x:6!null xyz.y:7 xyz.z:8!null xyz.crdb_internal_mvcc_timestamp:9 xyz.tableoid:10
  │         ├── scan xyz
@@ -300,6 +304,13 @@ project
  └── delete abcde
       ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
       ├── fetch columns: a:9 b:10 c:11 d:12 e:13 rowid:14
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    ├── e:13 => e:5
+      │    └── rowid:14 => rowid:6
       └── select
            ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
            ├── scan abcde
@@ -321,6 +332,13 @@ project
  ├── delete abcde [as=foo]
  │    ├── columns: a:1!null b:2 c:3 d:4 e:5 rowid:6!null
  │    ├── fetch columns: a:9 b:10 c:11 d:12 e:13 rowid:14
+ │    ├── return-mapping:
+ │    │    ├── a:9 => a:1
+ │    │    ├── b:10 => b:2
+ │    │    ├── c:11 => c:3
+ │    │    ├── d:12 => d:4
+ │    │    ├── e:13 => e:5
+ │    │    └── rowid:14 => rowid:6
  │    └── select
  │         ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
  │         ├── scan abcde [as=foo]
@@ -347,6 +365,13 @@ with &1
  │    └── delete abcde
  │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3 abcde.d:4 abcde.e:5 rowid:6!null
  │         ├── fetch columns: abcde.a:9 abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14
+ │         ├── return-mapping:
+ │         │    ├── abcde.a:9 => abcde.a:1
+ │         │    ├── abcde.b:10 => abcde.b:2
+ │         │    ├── abcde.c:11 => abcde.c:3
+ │         │    ├── abcde.d:12 => abcde.d:4
+ │         │    ├── abcde.e:13 => abcde.e:5
+ │         │    └── rowid:14 => rowid:6
  │         └── limit
  │              ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
  │              ├── internal-ordering: +10
@@ -402,6 +427,9 @@ DELETE FROM mutation WHERE m=1 RETURNING *
 delete mutation
  ├── columns: m:1!null n:2
  ├── fetch columns: m:7 n:8 o:9 p:10
+ ├── return-mapping:
+ │    ├── m:7 => m:1
+ │    └── n:8 => n:2
  └── select
       ├── columns: m:7!null n:8 o:9 p:10 crdb_internal_mvcc_timestamp:11 tableoid:12
       ├── scan mutation
