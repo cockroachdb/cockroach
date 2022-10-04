@@ -106,7 +106,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 			require.NoError(b, err)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				desc, _, err := resolver.ResolveExistingObject(ctx, rs, uon, tc.flags)
+				desc, _, err := resolver.ResolveExistingObject(ctx, rs, &uon, tc.flags)
 				require.NoError(b, err)
 				require.NotNil(b, desc)
 			}
