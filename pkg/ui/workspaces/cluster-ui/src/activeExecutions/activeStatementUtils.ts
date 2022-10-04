@@ -121,6 +121,7 @@ export function getActiveExecutionsFromSessions(
           user: session.username,
           clientAddress: session.client_address,
           isFullScan: query.is_full_scan || false, // Or here is for conversion in case the field is null.
+          planGist: query.plan_gist,
         };
 
         statements.push(activeStmt);

@@ -697,7 +697,7 @@ func showConstraintClause(
 	f *tree.FmtCtx,
 ) error {
 	for _, e := range desc.AllActiveAndInactiveChecks() {
-		if e.Hidden {
+		if e.FromHashShardedColumn {
 			continue
 		}
 		f.WriteString(",\n\t")

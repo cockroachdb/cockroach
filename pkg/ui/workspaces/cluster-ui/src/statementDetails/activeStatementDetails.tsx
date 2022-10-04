@@ -8,34 +8,32 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Button } from "src/button";
 import Helmet from "react-helmet";
 import { commonStyles } from "src/common";
 import classNames from "classnames/bind";
-import { Link, useHistory, match } from "react-router-dom";
-import { Col, Row } from "antd";
-import "antd/lib/col/style";
-import "antd/lib/row/style";
-import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-
-import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
+import { useHistory, match } from "react-router-dom";
+import { Col, Row, Tabs } from "antd";
+import { ActiveStatementDetailsOverviewTab } from "./activeStatementDetailsOverviewTab";
+import { SqlBox, SqlBoxSize } from "src/sql/box";
+import { getExplainPlanFromGist } from "../api/decodePlanGistApi";
 import { getMatchParamByName } from "src/util/query";
-import { executionIdAttr, DATE_FORMAT_24_UTC, Duration } from "../util";
+import { executionIdAttr } from "../util";
 import {
   ActiveStatement,
   ExecutionContentionDetails,
 } from "src/activeExecutions";
-import { StatusIcon } from "src/activeExecutions/statusIcon";
 
+import "antd/lib/tabs/style";
+import "antd/lib/col/style";
+import "antd/lib/row/style";
 import styles from "./statementDetails.module.scss";
-import { SqlBox, SqlBoxSize } from "src/sql/box";
-import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
 const cx = classNames.bind(styles);
-const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 export type ActiveStatementDetailsStateProps = {
+  isTenant?: boolean;
   contentionDetails?: ExecutionContentionDetails;
   statement: ActiveStatement;
   match: match;
@@ -45,10 +43,16 @@ export type ActiveStatementDetailsDispatchProps = {
   refreshLiveWorkload: () => void;
 };
 
+enum TabKeysEnum {
+  OVERVIEW = "overview",
+  EXPLAIN = "explain",
+}
+
 export type ActiveStatementDetailsProps = ActiveStatementDetailsStateProps &
   ActiveStatementDetailsDispatchProps;
 
 export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
+  isTenant,
   contentionDetails,
   statement,
   match,
@@ -56,6 +60,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
 }) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
+  const [explain, setExplain] = useState<string>(null);
 
   useEffect(() => {
     if (statement == null) {
@@ -63,6 +68,20 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
       refreshLiveWorkload();
     }
   }, [refreshLiveWorkload, statement]);
+
+  const onTabClick = (key: TabKeysEnum) => {
+    if (
+      !isTenant &&
+      key === TabKeysEnum.EXPLAIN &&
+      statement?.planGist &&
+      !explain
+    ) {
+      // Get the explain plan.
+      getExplainPlanFromGist({ planGist: statement.planGist }).then(res => {
+        setExplain(res.explainPlan || res.error);
+      });
+    }
+  };
 
   const returnToActiveStatements = () => {
     history.push("/sql-activity?tab=Statements&view=active");
@@ -96,91 +115,27 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
             />
           </Col>
         </Row>
-        {statement && (
-          <Row gutter={24}>
-            <Col className="gutter-row" span={12}>
-              <SummaryCard className={cx("summary-card")}>
-                <Row>
-                  <Col>
-                    <SummaryCardItem
-                      label="Start Time (UTC)"
-                      value={statement.start.format(DATE_FORMAT_24_UTC)}
-                    />
-                    <SummaryCardItem
-                      label="Elapsed Time"
-                      value={Duration(
-                        statement.elapsedTime.asMilliseconds() * 1e6,
-                      )}
-                    />
-                    <SummaryCardItem
-                      label="Status"
-                      value={
-                        <>
-                          <StatusIcon status={statement.status} />
-                          {statement.status}
-                        </>
-                      }
-                    />
-                    <SummaryCardItem
-                      label="Full Scan"
-                      value={statement.isFullScan.toString()}
-                    />
-                  </Col>
-                </Row>
-              </SummaryCard>
-            </Col>
-            <Col className="gutter-row" span={12}>
-              <SummaryCard className={cx("summary-card")}>
-                <SummaryCardItem
-                  label="Application Name"
-                  value={statement.application}
-                />
-                <SummaryCardItem label="User Name" value={statement.user} />
-                <SummaryCardItem
-                  label="Client Address"
-                  value={statement.clientAddress}
-                />
-                <p className={summaryCardStylesCx("summary--card__divider")} />
-                <SummaryCardItem
-                  label="Session ID"
-                  value={
-                    <Link
-                      className={cx("text-link")}
-                      to={`/session/${statement.sessionID}`}
-                    >
-                      {statement.sessionID}
-                    </Link>
-                  }
-                />
-                <SummaryCardItem
-                  label="Transaction Execution ID"
-                  value={
-                    <Link
-                      className={cx("text-link")}
-                      to={`/execution/transaction/${statement.transactionID}`}
-                    >
-                      {statement.transactionID}
-                    </Link>
-                  }
-                />
-              </SummaryCard>
-            </Col>
-          </Row>
-        )}
       </section>
-      {statement && contentionDetails && (
-        <WaitTimeInsightsPanel
-          execType="statement"
-          executionID={statement.statementID}
-          schemaName={contentionDetails.waitInsights?.schemaName}
-          tableName={contentionDetails.waitInsights?.tableName}
-          indexName={contentionDetails.waitInsights?.indexName}
-          databaseName={contentionDetails.waitInsights?.databaseName}
-          waitTime={contentionDetails.waitInsights?.waitTime}
-          waitingExecutions={contentionDetails.waitingExecutions}
-          blockingExecutions={contentionDetails.blockingExecutions}
-        />
-      )}
+      <Tabs
+        className={commonStyles("cockroach--tabs")}
+        defaultActiveKey={TabKeysEnum.OVERVIEW}
+        onTabClick={onTabClick}
+      >
+        <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
+          <ActiveStatementDetailsOverviewTab
+            statement={statement}
+            contentionDetails={contentionDetails}
+          />
+        </Tabs.TabPane>
+        {!isTenant && (
+          <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
+            <SqlBox
+              value={explain || "Not available."}
+              size={SqlBoxSize.custom}
+            />
+          </Tabs.TabPane>
+        )}
+      </Tabs>
     </div>
   );
 };

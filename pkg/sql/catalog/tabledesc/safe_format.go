@@ -341,7 +341,7 @@ func formatSafeCheck(
 	w.Printf("{Columns: ")
 	formatSafeColumnIDs(w, c.ColumnIDs)
 	w.Printf(", Validity: %s", c.Validity.String())
-	if c.Hidden {
+	if c.FromHashShardedColumn {
 		w.Printf(", Hidden: true")
 	}
 	if m != nil {
