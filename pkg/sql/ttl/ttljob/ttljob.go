@@ -54,13 +54,6 @@ var (
 		100,
 		settings.PositiveInt,
 	).WithPublic()
-	defaultRangeConcurrency = settings.RegisterIntSetting(
-		settings.TenantWritable,
-		"sql.ttl.default_range_concurrency",
-		"default amount of ranges to process at once during a TTL delete",
-		1,
-		settings.PositiveInt,
-	).WithPublic()
 	defaultDeleteRateLimit = settings.RegisterIntSetting(
 		settings.TenantWritable,
 		"sql.ttl.default_delete_rate_limit",
@@ -229,7 +222,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		}
 
 		jobID := t.job.ID()
-		rangeConcurrency := getRangeConcurrency(settingsValues, rowLevelTTL)
 		selectBatchSize := getSelectBatchSize(settingsValues, rowLevelTTL)
 		deleteBatchSize := getDeleteBatchSize(settingsValues, rowLevelTTL)
 		deleteRateLimit := getDeleteRateLimit(settingsValues, rowLevelTTL)
@@ -240,7 +232,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				AOST:                        aost,
 				TTLExpr:                     ttlExpr,
 				Spans:                       spans,
-				RangeConcurrency:            rangeConcurrency,
 				SelectBatchSize:             selectBatchSize,
 				DeleteBatchSize:             deleteBatchSize,
 				DeleteRateLimit:             deleteRateLimit,
@@ -248,6 +239,11 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				PreDeleteChangeTableVersion: knobs.PreDeleteChangeTableVersion,
 				PreSelectStatement:          knobs.PreSelectStatement,
 			}
+		}
+
+		jobSpanCount := 0
+		for _, spanPartition := range spanPartitions {
+			jobSpanCount += len(spanPartition.Spans)
 		}
 
 		useDistSQL := execCfg.Settings.Version.IsActive(ctx, clusterversion.TTLDistSQL)
@@ -259,7 +255,9 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			true, /* useReadLock */
 			func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				progress := md.Progress
-				progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL.UseDistSQL = useDistSQL
+				rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
+				rowLevelTTL.UseDistSQL = useDistSQL
+				rowLevelTTL.JobSpanCount = int64(jobSpanCount)
 				ju.UpdateProgress(progress)
 				return nil
 			},
@@ -267,7 +265,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return err
 		}
 
-		if !useDistSQL {
+		if !useDistSQL { // TODO(ewall): Remove !useDistSQL block and ttlProcessorOverride in 23.1
 			var spans []roachpb.Span
 			for _, spanPartition := range spanPartitions {
 				spans = append(spans, spanPartition.Spans...)
@@ -374,14 +372,6 @@ func getDeleteBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
 		bs = defaultDeleteBatchSize.Get(sv)
 	}
 	return bs
-}
-
-func getRangeConcurrency(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
-	rc := ttl.RangeConcurrency
-	if rc == 0 {
-		rc = defaultRangeConcurrency.Get(sv)
-	}
-	return rc
 }
 
 func getDeleteRateLimit(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
