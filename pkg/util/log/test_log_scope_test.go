@@ -51,10 +51,11 @@ func TestDefaultTestLogConfig(t *testing.T) {
 
 				if mostlyInline {
 					// Test configs that prefer stderr send all channels to
-					// stderr at severity INFO, except for HEALTH and STORAGE.
+					// stderr at severity INFO, except for HEALTH, STORAGE, and
+					// KV_DISTRIBUTION.
 					for _, c := range logconfig.AllChannels() {
 						require.True(t, testConfig.Sinks.Stderr.Channels.AllChannels.HasChannel(c))
-						if c == channel.HEALTH || c == channel.STORAGE {
+						if c == channel.HEALTH || c == channel.STORAGE || c == channel.KV_DISTRIBUTION {
 							require.Equal(t, severity.WARNING, testConfig.Sinks.Stderr.Channels.ChannelFilters[c])
 						} else {
 							require.Equal(t, severity.INFO, testConfig.Sinks.Stderr.Channels.ChannelFilters[c])
@@ -72,7 +73,7 @@ func TestDefaultTestLogConfig(t *testing.T) {
 				require.False(t, *testConfig.Sinks.Stderr.Redactable)
 
 				// Output to files enabled, with just 1 file sink for all channels at severity INFO.
-				require.Equal(t, 3, len(testConfig.Sinks.FileGroups))
+				require.Equal(t, 4, len(testConfig.Sinks.FileGroups))
 				fc1, ok := testConfig.Sinks.FileGroups["health"]
 				require.True(t, ok)
 				require.Equal(t, 1, len(fc1.Channels.ChannelFilters))
@@ -83,12 +84,17 @@ func TestDefaultTestLogConfig(t *testing.T) {
 				require.Equal(t, 1, len(fc2.Channels.ChannelFilters))
 				require.Equal(t, severity.INFO, fc2.Channels.ChannelFilters[channel.STORAGE])
 				require.Equal(t, fakeDir, *fc2.Dir)
+				fc3, ok := testConfig.Sinks.FileGroups["kv-distribution"]
+				require.True(t, ok)
+				require.Equal(t, 1, len(fc3.Channels.ChannelFilters))
+				require.Equal(t, severity.INFO, fc3.Channels.ChannelFilters[channel.KV_DISTRIBUTION])
+				require.Equal(t, fakeDir, *fc3.Dir)
 				def, ok := testConfig.Sinks.FileGroups["default"]
 				require.True(t, ok)
 				require.Equal(t, fakeDir, *def.Dir)
 				for _, c := range logconfig.AllChannels() {
 					require.True(t, def.Channels.AllChannels.HasChannel(c), "channel %v", c)
-					if c == channel.HEALTH || c == channel.STORAGE {
+					if c == channel.HEALTH || c == channel.STORAGE || c == channel.KV_DISTRIBUTION {
 						// These two have been selected at severity WARNING.
 						require.Equal(t, severity.WARNING, def.Channels.ChannelFilters[c], "channel %v", c)
 					} else {
