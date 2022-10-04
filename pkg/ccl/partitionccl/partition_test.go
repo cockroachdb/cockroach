@@ -148,9 +148,11 @@ func (pt *partitioningTest) parse() error {
 			return errors.Errorf("expected *tree.CreateTable got %T", stmt)
 		}
 		st := cluster.MakeTestingClusterSettings()
-		parentID, tableID := descpb.ID(bootstrap.TestingUserDescID(0)), descpb.ID(bootstrap.TestingUserDescID(1))
+		parentID := descpb.ID(bootstrap.TestingUserDescID(0))
+		schemaID := descpb.ID(bootstrap.TestingUserDescID(1))
+		tableID := descpb.ID(bootstrap.TestingUserDescID(2))
 		mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
-			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, timeutil.Now().UnixNano())
+			ctx, &semaCtx, st, createTable, parentID, schemaID, tableID, importer.NoFKs, timeutil.Now().UnixNano())
 		if err != nil {
 			return err
 		}

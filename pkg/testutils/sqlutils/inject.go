@@ -15,9 +15,7 @@ import (
 	gosql "database/sql"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -82,11 +80,6 @@ func InjectDescriptors(
 			if err := injectNamespaceEntry(tx, 0, 0, name, id); err != nil {
 				return errors.Wrapf(err, "failed to inject namespace entry for database %d", id)
 			}
-			if err := injectNamespaceEntry(
-				tx, id, 0, tree.PublicSchema, keys.PublicSchemaID,
-			); err != nil {
-				return errors.Wrapf(err, "failed to inject namespace entry for public schema in %d", id)
-			}
 		}
 		// Inject the other descriptors - this won't do much in the way of
 		// validation.
@@ -125,10 +118,6 @@ func getDescriptorParentAndSchema(d *descpb.Descriptor) (parent, schema descpb.I
 		return d.Type.ParentID, d.Type.ParentSchemaID
 	case *descpb.Descriptor_Table:
 		schema := d.Table.UnexposedParentSchemaID
-		// Descriptors from prior to 20.1 carry a 0 schema ID.
-		if schema == 0 {
-			schema = keys.PublicSchemaID
-		}
 		return d.Table.ParentID, schema
 	default:
 		panic(errors.Errorf("unknown descriptor type %T", d))

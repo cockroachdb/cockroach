@@ -49,7 +49,7 @@ func (r *systemTableIDResolver) LookupSystemTableID(
 		ctx context.Context, txn *kv.Txn, descriptors *Collection,
 	) (err error) {
 		id, err = descriptors.stored.LookupDescriptorID(
-			ctx, txn, keys.SystemDatabaseID, keys.PublicSchemaID, tableName,
+			ctx, txn, keys.SystemDatabaseID, keys.SystemPublicSchemaID, tableName,
 		)
 		return err
 	}); err != nil {

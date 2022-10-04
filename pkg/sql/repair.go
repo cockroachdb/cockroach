@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -424,7 +423,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 	flags.IncludeOffline = true
 	validateDescriptor := func() error {
 		desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), descID, flags)
-		if err != nil && descID != keys.PublicSchemaID {
+		if err != nil {
 			return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
 		}
 		invalid := false
@@ -438,10 +437,6 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		case catalog.DatabaseDescriptor:
 			invalid = parentID != descpb.InvalidID || parentSchemaID != descpb.InvalidID
 		default:
-			// The public schema does not have a descriptor.
-			if descID == keys.PublicSchemaID {
-				return nil
-			}
 			return errors.AssertionFailedf(
 				"unexpected descriptor type %T for descriptor %d", desc, descID)
 		}
@@ -468,7 +463,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		return nil
 	}
 	validateParentSchemaDescriptor := func() error {
-		if parentSchemaID == descpb.InvalidID || parentSchemaID == keys.PublicSchemaID {
+		if parentSchemaID == descpb.InvalidID {
 			return nil
 		}
 		schema, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.Txn(), parentSchemaID, flags)

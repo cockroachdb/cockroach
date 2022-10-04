@@ -20,7 +20,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -2258,16 +2257,6 @@ func forEachSchema(
 		switch {
 		case strings.HasPrefix(name, catconstants.PgTempSchemaName):
 			schemas = append(schemas, schemadesc.NewTemporarySchema(name, id, db.GetID()))
-		case name == tree.PublicSchema:
-			// TODO(richardjcai): Remove this in 22.2. In 22.2, only the system
-			// public schema will continue to use keys.PublicSchemaID (29).
-			if id == keys.PublicSchemaID {
-				schemas = append(schemas, schemadesc.GetPublicSchema())
-			} else {
-				// The default case is a user defined schema. Collect the ID to get the
-				// descriptor later.
-				userDefinedSchemaIDs = append(userDefinedSchemaIDs, id)
-			}
 		default:
 			// The default case is a user defined schema. Collect the ID to get the
 			// descriptor later.

@@ -433,12 +433,8 @@ const (
 	ReplicationCriticalLocalitiesTableID = 26
 	ReplicationStatsTableID              = 27
 	ReportsMetaTableID                   = 28
-	// PublicSchemaID refers to old references where Public schemas are
-	// descriptorless.
-	// TODO(richardjcai): This should be fully removed in 22.2.
-	PublicSchemaID = 29 // pseudo
 	// PublicSchemaIDForBackup is used temporarily to determine cases of
-	// PublicSchemaID being used for backup.
+	// the old descriptorless PublicSchemaID being used for backup.
 	// We need to keep this around since backups created prior to 22.1 use 29
 	// as the ID for a virtual public schema. In restores, we look for this 29
 	// and synthesize a public schema with a descriptor when necessary.

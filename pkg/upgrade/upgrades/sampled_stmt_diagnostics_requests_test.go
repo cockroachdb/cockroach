@@ -108,7 +108,7 @@ func getV2StmtDiagReqsDescriptor() *descpb.TableDescriptor {
 		Name:                    "statement_diagnostics_requests",
 		ID:                      keys.StatementDiagnosticsRequestsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},

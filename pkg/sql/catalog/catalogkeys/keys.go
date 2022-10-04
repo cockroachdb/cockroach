@@ -142,12 +142,6 @@ func MakeObjectNameKey(
 	return EncodeNameKey(codec, NewNameKeyComponents(parentID, parentSchemaID, name))
 }
 
-// MakePublicObjectNameKey returns the roachpb.Key for the given object name
-// scoped under the public schema in the given database.
-func MakePublicObjectNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {
-	return EncodeNameKey(codec, NewNameKeyComponents(parentID, keys.PublicSchemaID, name))
-}
-
 // MakeSchemaNameKey returns the roachpb.Key for the given schema name scoped
 // under the given database.
 func MakeSchemaNameKey(codec keys.SQLCodec, parentID descpb.ID, name string) roachpb.Key {

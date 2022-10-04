@@ -355,7 +355,7 @@ func writeNamesToMetadata(
 		} else if tb != nil {
 			names[i].name = tb.Name
 			names[i].parent = tb.ParentID
-			names[i].parentSchema = keys.PublicSchemaID
+			names[i].parentSchema = keys.PublicSchemaIDForBackup
 			if s := tb.UnexposedParentSchemaID; s != descpb.InvalidID {
 				names[i].parentSchema = s
 			}

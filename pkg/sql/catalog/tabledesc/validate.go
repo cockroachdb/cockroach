@@ -63,10 +63,7 @@ func (desc *wrapper) ValidateTxnCommit(
 // this descriptor, including itself.
 func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
-	// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
-	if desc.GetParentSchemaID() != keys.PublicSchemaID {
-		ids.Add(desc.GetParentSchemaID())
-	}
+	ids.Add(desc.GetParentSchemaID())
 	// Collect referenced table IDs in foreign keys.
 	for _, fk := range desc.OutboundFKs {
 		ids.Add(fk.ReferencedTableID)
@@ -137,8 +134,7 @@ func (desc *wrapper) ValidateForwardReferences(
 	}
 
 	// Check that parent schema exists.
-	// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
-	if desc.GetParentSchemaID() != keys.PublicSchemaID && !desc.IsTemporary() {
+	if !desc.IsTemporary() {
 		schemaDesc, err := vdg.GetSchemaDescriptor(desc.GetParentSchemaID())
 		if err != nil {
 			vea.Report(err)

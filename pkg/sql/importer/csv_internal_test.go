@@ -14,7 +14,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -71,6 +70,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 		},
 	}
 	parentID := descpb.ID(bootstrap.TestingMinNonDefaultUserDescID())
+	schemaID := parentID + 1
 	tableID := parentID + 2
 
 	ctx := context.Background()
@@ -86,7 +86,7 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			if !ok {
 				t.Fatal("expected CREATE TABLE statement in table file")
 			}
-			_, err = MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, parentID, keys.PublicSchemaID, tableID, NoFKs, 0)
+			_, err = MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, parentID, schemaID, tableID, NoFKs, 0)
 			if !testutils.IsError(err, tc.error) {
 				t.Fatalf("expected %v, got %+v", tc.error, err)
 			}

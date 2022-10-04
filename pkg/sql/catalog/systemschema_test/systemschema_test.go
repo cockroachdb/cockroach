@@ -107,7 +107,7 @@ func TestValidateSystemSchemaAfterBootStrap(t *testing.T) {
 					ev, ok := event.(*eventpb.SchemaDescriptor)
 					require.Truef(t, ok, "expected a SchemaDescriptor event, instead got %T", event)
 					require.EqualValues(t, meta.SnapshotID, ev.SnapshotID, "unexpected snapshot ID")
-					if ev.DescID == keys.PublicSchemaID && ev.Desc == nil {
+					if ev.DescID == keys.SystemPublicSchemaID && ev.Desc == nil {
 						// The public schema of the system database has no descriptor.
 						continue
 					}

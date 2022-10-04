@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -74,10 +73,11 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	parentID := descpb.ID(bootstrap.TestingUserDescID(0))
-	tableID := descpb.ID(bootstrap.TestingUserDescID(1))
+	schemaID := descpb.ID(bootstrap.TestingUserDescID(1))
+	tableID := descpb.ID(bootstrap.TestingUserDescID(2))
 	semaCtx := makeTestSemaCtx()
 	mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
-		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, timeutil.Now().UnixNano())
+		ctx, &semaCtx, st, createTable, parentID, schemaID, tableID, importer.NoFKs, timeutil.Now().UnixNano())
 	if err != nil {
 		return nil, err
 	}

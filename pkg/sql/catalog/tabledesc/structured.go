@@ -92,9 +92,8 @@ func (desc *wrapper) IsPartitionAllBy() bool {
 // public schema ID is returned in that case.
 func (desc *wrapper) GetParentSchemaID() descpb.ID {
 	parentSchemaID := desc.GetUnexposedParentSchemaID()
-	// TODO(richardjcai): Remove this case in 22.1.
 	if parentSchemaID == descpb.InvalidID {
-		parentSchemaID = keys.PublicSchemaID
+		parentSchemaID = keys.SystemPublicSchemaID
 	}
 	return parentSchemaID
 }

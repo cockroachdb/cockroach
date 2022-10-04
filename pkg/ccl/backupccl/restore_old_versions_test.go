@@ -940,8 +940,8 @@ func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 		row = sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=%d`, restoredDBID))
 		row.Scan(&publicSchemaID)
 
-		if publicSchemaID == keys.PublicSchemaID {
-			t.Fatalf("expected public schema id to not be %d", keys.PublicSchemaID)
+		if publicSchemaID == keys.PublicSchemaIDForBackup {
+			t.Fatalf("expected public schema id to not be %d", keys.PublicSchemaIDForBackup)
 		}
 
 		row = sqlDB.QueryRow(t,
@@ -964,8 +964,8 @@ func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 		row = sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=%d`, parentDBID))
 		row.Scan(&publicSchemaID)
 
-		if publicSchemaID == keys.PublicSchemaID || publicSchemaID == int(descpb.InvalidID) {
-			t.Errorf(fmt.Sprintf("expected public schema id to not be %d or %d, found %d", keys.PublicSchemaID, descpb.InvalidID, publicSchemaID))
+		if publicSchemaID == keys.PublicSchemaIDForBackup || publicSchemaID == int(descpb.InvalidID) {
+			t.Errorf(fmt.Sprintf("expected public schema id to not be %d or %d, found %d", keys.PublicSchemaIDForBackup, descpb.InvalidID, publicSchemaID))
 		}
 
 		sqlDB.CheckQueryResults(t, `SELECT x FROM test.public.t`, [][]string{{"3"}, {"4"}})

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -419,9 +418,6 @@ func (s *TestState) mayGetByName(
 	if id == descpb.InvalidID {
 		return nil
 	}
-	if id == keys.PublicSchemaID {
-		return schemadesc.GetPublicSchema()
-	}
 	desc, _ := s.mustReadImmutableDescriptor(id)
 	return desc
 }
@@ -646,13 +642,11 @@ func (s *TestState) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (st
 	scName := ""
 	if obj.GetParentSchemaID() != descpb.InvalidID {
 		scName = tree.PublicSchema
-		if obj.GetParentSchemaID() != keys.PublicSchemaID {
-			sc, err := s.mustReadImmutableDescriptor(obj.GetParentSchemaID())
-			if err != nil {
-				return "", errors.Wrapf(err, "parent schema for object #%d", id)
-			}
-			scName = sc.GetName()
+		sc, err := s.mustReadImmutableDescriptor(obj.GetParentSchemaID())
+		if err != nil {
+			return "", errors.Wrapf(err, "parent schema for object #%d", id)
 		}
+		scName = sc.GetName()
 	}
 	// Sanity checks:
 	// 1) Both table and types will have both a schema and database name.

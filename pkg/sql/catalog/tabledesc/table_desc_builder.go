@@ -287,10 +287,6 @@ func maybeFillInDescriptor(
 		maybeRemoveDefaultExprFromComputedColumns(desc))
 
 	parentSchemaID := desc.GetUnexposedParentSchemaID()
-	// TODO(richardjcai): Remove this case in 22.2.
-	if parentSchemaID == descpb.InvalidID {
-		parentSchemaID = keys.PublicSchemaID
-	}
 
 	var objectType privilege.ObjectType
 

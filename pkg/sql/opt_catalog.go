@@ -435,16 +435,11 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	}
 	scID := desc.GetParentSchemaID()
 	var scName tree.Name
-	// TODO(richardjcai): Remove this in 22.2.
-	if scID == keys.PublicSchemaID {
-		scName = tree.PublicSchemaName
-	} else {
-		scDesc, err := oc.planner.Descriptors().Direct().MustGetSchemaDescByID(ctx, txn, scID)
-		if err != nil {
-			return cat.DataSourceName{}, err
-		}
-		scName = tree.Name(scDesc.GetName())
+	scDesc, err := oc.planner.Descriptors().Direct().MustGetSchemaDescByID(ctx, txn, scID)
+	if err != nil {
+		return cat.DataSourceName{}, err
 	}
+	scName = tree.Name(scDesc.GetName())
 
 	return tree.MakeTableNameWithSchema(
 			tree.Name(dbDesc.GetName()),

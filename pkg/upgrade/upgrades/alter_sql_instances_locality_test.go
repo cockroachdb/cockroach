@@ -107,7 +107,7 @@ func getDeprecatedSqlInstancesDescriptor() *descpb.TableDescriptor {
 		Name:                    string(catconstants.SQLInstancesTableName),
 		ID:                      keys.SQLInstancesTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "id", ID: 1, Type: types.Int, Nullable: false},

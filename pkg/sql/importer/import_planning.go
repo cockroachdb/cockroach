@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -867,7 +866,7 @@ func importPlanHook(
 			// Due to how we generate and rewrite descriptor ID's for import, we run
 			// into problems when using user defined schemas.
 			publicSchemaID := db.GetSchemaID(tree.PublicSchema)
-			if sc.GetID() != publicSchemaID && sc.GetID() != keys.PublicSchemaID {
+			if sc.GetID() != publicSchemaID {
 				err := errors.New("cannot use IMPORT with a user defined schema")
 				hint := errors.WithHint(err, "create the table with CREATE TABLE and use IMPORT INTO instead")
 				return hint

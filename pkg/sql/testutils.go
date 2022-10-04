@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -59,6 +58,7 @@ func CreateTestTableDescriptor(
 	switch n := stmt.AST.(type) {
 	case *tree.CreateTable:
 		db := dbdesc.NewInitial(parentID, "test", username.RootUserName())
+
 		desc, err := NewTableDesc(
 			ctx,
 			nil, /* txn */
@@ -66,7 +66,7 @@ func CreateTestTableDescriptor(
 			st,
 			n,
 			db,
-			schemadesc.GetPublicSchema(),
+			schemadesc.NewTemporarySchema("tmp", parentID+1, parentID),
 			id,
 			nil,             /* regionConfig */
 			hlc.Timestamp{}, /* creationTime */
@@ -85,7 +85,7 @@ func CreateTestTableDescriptor(
 			st,
 			n.Name.Table(),
 			n.Options,
-			parentID, keys.PublicSchemaID, id,
+			parentID, schemadesc.GetPublicSchema().GetID(), id,
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			tree.PersistencePermanent,

@@ -216,14 +216,6 @@ type byIDLookupContext struct {
 func (q *byIDLookupContext) lookupVirtual(
 	id descpb.ID,
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
-	// TODO(postamar): get rid of descriptorless public schemas
-	if id == keys.PublicSchemaID {
-		if q.flags.RequireMutable {
-			err := catalog.NewMutableAccessToVirtualSchemaError(schemadesc.GetPublicSchema())
-			return nil, catalog.NoValidation, err
-		}
-		return schemadesc.GetPublicSchema(), validate.Write, nil
-	}
 	desc, err := q.tc.virtual.getByID(q.ctx, id, q.flags.RequireMutable)
 	if err != nil || desc == nil {
 		return nil, catalog.NoValidation, err
@@ -442,7 +434,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		// the schema does not exist.
 		//
 		if !db.HasPublicSchemaWithDescriptor() && name == catconstants.PublicSchemaName {
-			return haltLookups, keys.PublicSchemaID, nil
+			return haltLookups, keys.SystemPublicSchemaID, nil
 		}
 		if id := db.GetSchemaID(name); id != descpb.InvalidID {
 			return haltLookups, id, nil

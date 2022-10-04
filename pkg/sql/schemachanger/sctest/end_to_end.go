@@ -304,14 +304,13 @@ func execStatementWithTestDeps(
 }
 
 // prettyNamespaceDump prints the state of the namespace table, minus
-// descriptorless public schema and system database entries.
+// system database entries.
 func prettyNamespaceDump(t *testing.T, tdb *sqlutils.SQLRunner) string {
 	rows := tdb.QueryStr(t, fmt.Sprintf(`
 		SELECT "parentID", "parentSchemaID", name, id
 		FROM system.namespace
-		WHERE id NOT IN (%d, %d) AND "parentID" <> %d
+		WHERE id <> %d AND "parentID" <> %d
 		ORDER BY id ASC`,
-		keys.PublicSchemaID,
 		keys.SystemDatabaseID,
 		keys.SystemDatabaseID,
 	))

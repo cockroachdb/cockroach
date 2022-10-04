@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -169,7 +168,7 @@ func (p *planner) createDatabase(
 	return desc, true, nil
 }
 
-func (p *planner) maybeCreatePublicSchemaWithDescriptor(
+func (p *planner) createPublicSchema(
 	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
 ) (descpb.ID, error) {
 	publicSchemaID, err := p.EvalContext().DescIDGenerator.GenerateUniqueDescID(ctx)
@@ -199,24 +198,6 @@ func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 	}
 
 	return publicSchemaID, nil
-}
-
-func (p *planner) createPublicSchema(
-	ctx context.Context, dbID descpb.ID, database *tree.CreateDatabase,
-) (descpb.ID, error) {
-	publicSchemaID, err := p.maybeCreatePublicSchemaWithDescriptor(ctx, dbID, database)
-	if err != nil {
-		return descpb.InvalidID, err
-	}
-	if publicSchemaID != descpb.InvalidID {
-		return publicSchemaID, nil
-	}
-	// Every database must be initialized with the public schema.
-	key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema)
-	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {
-		return keys.PublicSchemaID, err
-	}
-	return keys.PublicSchemaID, nil
 }
 
 func (p *planner) createDescriptorWithID(

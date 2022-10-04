@@ -18,7 +18,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -599,10 +598,7 @@ func (desc *immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulato
 func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetReferencingDescriptorIDs()...)
 	ids.Add(desc.GetParentID())
-	// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
-	if desc.GetParentSchemaID() != keys.PublicSchemaID {
-		ids.Add(desc.GetParentSchemaID())
-	}
+	ids.Add(desc.GetParentSchemaID())
 	children, err := desc.GetIDClosure()
 	if err != nil {
 		return catalog.DescriptorIDSet{}, err
@@ -627,18 +623,15 @@ func (desc *immutable) ValidateForwardReferences(
 	}
 
 	// Check that the parent schema exists.
-	// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
-	if desc.GetParentSchemaID() != keys.PublicSchemaID {
-		schemaDesc, err := vdg.GetSchemaDescriptor(desc.GetParentSchemaID())
-		vea.Report(err)
-		if schemaDesc != nil && dbDesc != nil && schemaDesc.GetParentID() != dbDesc.GetID() {
-			vea.Report(errors.AssertionFailedf("parent schema %d is in different database %d",
-				desc.GetParentSchemaID(), schemaDesc.GetParentID()))
-		}
-		if schemaDesc != nil && schemaDesc.Dropped() {
-			vea.Report(errors.AssertionFailedf("parent schema %q (%d) is dropped",
-				schemaDesc.GetName(), schemaDesc.GetID()))
-		}
+	schemaDesc, err := vdg.GetSchemaDescriptor(desc.GetParentSchemaID())
+	vea.Report(err)
+	if schemaDesc != nil && dbDesc != nil && schemaDesc.GetParentID() != dbDesc.GetID() {
+		vea.Report(errors.AssertionFailedf("parent schema %d is in different database %d",
+			desc.GetParentSchemaID(), schemaDesc.GetParentID()))
+	}
+	if schemaDesc != nil && schemaDesc.Dropped() {
+		vea.Report(errors.AssertionFailedf("parent schema %q (%d) is dropped",
+			schemaDesc.GetName(), schemaDesc.GetID()))
 	}
 
 	if desc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM && dbDesc != nil {

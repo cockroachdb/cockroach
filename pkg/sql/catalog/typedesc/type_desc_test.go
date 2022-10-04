@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -430,7 +429,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       dbID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "a",
@@ -450,7 +449,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       dbID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
@@ -471,7 +470,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       multiRegionDBID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
 				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
 					PrimaryRegion: "us-east-1",
@@ -495,7 +494,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       dbID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
@@ -516,7 +515,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       multiRegionDBID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
@@ -537,7 +536,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       dbID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
@@ -556,7 +555,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       dbID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
@@ -575,7 +574,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       dbID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
 				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
 					PrimaryRegion: "us-east1",
@@ -597,7 +596,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       dbID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_ALIAS,
 				Privileges:     defaultPrivileges,
 			},
@@ -608,7 +607,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       500,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_ALIAS,
 				Alias:          types.Int,
 				Privileges:     defaultPrivileges,
@@ -644,7 +643,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       multiRegionDBID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
 				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
 					PrimaryRegion: "us-east-1",
@@ -665,7 +664,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:                     "t",
 				ID:                       typeDescID,
 				ParentID:                 dbID,
-				ParentSchemaID:           keys.PublicSchemaID,
+				ParentSchemaID:           30,
 				Kind:                     descpb.TypeDescriptor_ENUM,
 				ArrayTypeID:              typeID,
 				ReferencingDescriptorIDs: []descpb.ID{500},
@@ -678,7 +677,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       multiRegionDBID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
 				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
 					PrimaryRegion: "us-east-1",
@@ -733,7 +732,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       multiRegionDBID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
@@ -751,7 +750,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       multiRegionDBID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
 				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
 					PrimaryRegion: "us-east-2",
@@ -772,7 +771,7 @@ func TestValidateTypeDesc(t *testing.T) {
 				Name:           "t",
 				ID:             typeDescID,
 				ParentID:       multiRegionDBID,
-				ParentSchemaID: keys.PublicSchemaID,
+				ParentSchemaID: 30,
 				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
 				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
 					PrimaryRegion: "us-east-2",

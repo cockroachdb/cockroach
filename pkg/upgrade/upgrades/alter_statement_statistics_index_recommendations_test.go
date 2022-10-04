@@ -110,7 +110,7 @@ func getDeprecatedStatementStatisticsDescriptor() *descpb.TableDescriptor {
 		Name:                    string(catconstants.StatementStatisticsTableName),
 		ID:                      keys.StatementStatisticsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "aggregated_ts", ID: 1, Type: types.TimestampTZ, Nullable: false},

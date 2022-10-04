@@ -106,7 +106,7 @@ func WriteDescriptors(
 		// We also have to put a system.namespace entry for the public schema
 		// if the database does not have a public schema backed by a descriptor.
 		if !desc.HasPublicSchemaWithDescriptor() {
-			b.CPut(catalogkeys.MakeSchemaNameKey(codec, desc.GetID(), tree.PublicSchema), keys.PublicSchemaID, nil)
+			b.CPut(catalogkeys.MakeSchemaNameKey(codec, desc.GetID(), tree.PublicSchema), keys.SystemPublicSchemaID, nil)
 		}
 	}
 

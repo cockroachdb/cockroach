@@ -279,13 +279,8 @@ func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewIn
 // publicSchemaID.
 func WithPublicSchemaID(publicSchemaID descpb.ID) NewInitialOption {
 	return func(desc *descpb.DatabaseDescriptor) {
-		// TODO(richardjcai): Remove this in 22.2. If the public schema id is
-		// keys.PublicSchemaID, we do not add an entry as the public schema does
-		// not have a descriptor.
-		if publicSchemaID != keys.PublicSchemaID {
-			desc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
-				tree.PublicSchema: {ID: publicSchemaID},
-			}
+		desc.Schemas = map[string]descpb.DatabaseDescriptor_SchemaInfo{
+			tree.PublicSchema: {ID: publicSchemaID},
 		}
 	}
 }

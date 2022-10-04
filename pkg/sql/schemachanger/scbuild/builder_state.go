@@ -994,7 +994,7 @@ func (b *builderState) readDescriptor(id catid.DescID) catalog.Descriptor {
 	if id == catid.InvalidDescID {
 		panic(errors.AssertionFailedf("invalid descriptor ID %d", id))
 	}
-	if id == keys.SystemPublicSchemaID || id == keys.PublicSchemaIDForBackup || id == keys.PublicSchemaID {
+	if id == keys.SystemPublicSchemaID || id == keys.PublicSchemaIDForBackup {
 		panic(scerrors.NotImplementedErrorf(nil /* n */, "descriptorless public schema %d", id))
 	}
 	if tempSchema := b.tempSchemas[id]; tempSchema != nil {

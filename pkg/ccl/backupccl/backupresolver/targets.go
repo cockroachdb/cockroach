@@ -117,11 +117,7 @@ func (r *DescriptorResolver) LookupSchema(
 	if scID, ok := schemas[scName]; ok {
 		dbDesc, dbOk := r.DescByID[dbID].(catalog.DatabaseDescriptor)
 		scDesc, scOk := r.DescByID[scID].(catalog.SchemaDescriptor)
-		// TODO(richardjcai): We should remove the check for keys.PublicSchemaID
-		// in 22.2, when we're guaranteed to not have synthesized public schemas
-		// for the non-system databases.
-		if !scOk && scID == keys.SystemPublicSchemaID ||
-			!scOk && scID == keys.PublicSchemaIDForBackup {
+		if !scOk && (scID == keys.SystemPublicSchemaID || scID == keys.PublicSchemaIDForBackup) {
 			scDesc, scOk = schemadesc.GetPublicSchema(), true
 		}
 		if dbOk && scOk {
@@ -160,14 +156,10 @@ func (r *DescriptorResolver) LookupObject(
 	if scMap, ok := r.ObjsByName[dbID]; ok {
 		if objMap, ok := scMap[scName]; ok {
 			if objID, ok := objMap[obName]; ok {
-				if scID == keys.PublicSchemaID {
-					resolvedPrefix.Schema = schemadesc.GetPublicSchema()
-				} else {
-					resolvedPrefix.Schema, ok = r.DescByID[scID].(catalog.SchemaDescriptor)
-					if !ok {
-						return false, resolvedPrefix, nil, errors.AssertionFailedf(
-							"expected schema for ID %d, got %T", scID, r.DescByID[scID])
-					}
+				resolvedPrefix.Schema, ok = r.DescByID[scID].(catalog.SchemaDescriptor)
+				if !ok {
+					return false, resolvedPrefix, nil, errors.AssertionFailedf(
+						"expected schema for ID %d, got %T", scID, r.DescByID[scID])
 				}
 				return true, resolvedPrefix, r.DescByID[objID], nil
 			}

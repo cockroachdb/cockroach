@@ -217,7 +217,7 @@ func getDeprecatedSystemUsersTable() *descpb.TableDescriptor {
 		Name:                    "users",
 		ID:                      keys.UsersTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "username", ID: 1, Type: types.String},

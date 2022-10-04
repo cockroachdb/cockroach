@@ -447,8 +447,6 @@ CREATE TABLE crdb_internal.tables (
 			descs := all.OrderedDescriptors()
 			dbNames := make(map[descpb.ID]string)
 			scNames := make(map[descpb.ID]string)
-			// TODO(richardjcai): Remove this case for keys.PublicSchemaID in 22.2.
-			scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
 			// Record database descriptors for name lookups.
 			for _, desc := range descs {
 				if dbDesc, ok := desc.(catalog.DatabaseDescriptor); ok {
@@ -3702,10 +3700,6 @@ CREATE TABLE crdb_internal.zones (
 			return err
 		}
 		resolveID := func(id uint32) (parentID, parentSchemaID uint32, name string, err error) {
-			// TODO(richardjcai): Remove logic for keys.PublicSchemaID in 22.2.
-			if id == keys.PublicSchemaID {
-				return 0, 0, string(tree.PublicSchemaName), nil
-			}
 			if entry, ok := namespace[descpb.ID(id)]; ok {
 				return uint32(entry.GetParentID()), uint32(entry.GetParentSchemaID()), entry.GetName(), nil
 			}

@@ -1026,7 +1026,7 @@ func TestZoneSpecifiers(t *testing.T) {
 		return 0, fmt.Errorf("%q not found", name)
 	}
 	resolveID := func(id uint32) (parentID, parentSchemaID uint32, name string, err error) {
-		if id == keys.PublicSchemaID {
+		if id == keys.SystemPublicSchemaID {
 			return 0, 0, string(tree.PublicSchemaName), nil
 		}
 		for entry, entryID := range namespace {

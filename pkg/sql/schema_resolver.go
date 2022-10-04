@@ -111,7 +111,7 @@ func (sr *schemaResolver) LookupObject(
 				publicSchemaID := dbDesc.GetSchemaID(tree.PublicSchema)
 				return true, prefix, typedesc.MakeSimpleAlias(alias, publicSchemaID), nil
 			}
-			return true, prefix, typedesc.MakeSimpleAlias(alias, keys.PublicSchemaID), nil
+			return true, prefix, typedesc.MakeSimpleAlias(alias, keys.SystemPublicSchemaID), nil
 		}
 	}
 

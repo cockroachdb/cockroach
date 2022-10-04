@@ -168,9 +168,6 @@ func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
 	switch ne.GetID() {
 	case descpb.InvalidID:
 		return errors.New("invalid descriptor ID")
-	case keys.PublicSchemaID:
-		// The public schema doesn't have a descriptor.
-		return nil
 	default:
 		isSchema := ne.GetParentID() != keys.RootNamespaceID && ne.GetParentSchemaID() == keys.RootNamespaceID
 		if isSchema && strings.HasPrefix(ne.GetName(), "pg_temp_") {

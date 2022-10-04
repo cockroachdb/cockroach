@@ -41,7 +41,7 @@ func TestCreateSystemTable(t *testing.T) {
 	fakeTable := descpb.TableDescriptor{
 		Name:                    "fake_table",
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "id", ID: 1, Type: types.Uuid, Nullable: false},
 		},

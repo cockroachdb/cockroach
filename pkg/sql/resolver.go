@@ -966,7 +966,7 @@ func (l *internalLookupCtx) GetSchemaName(
 	// assume that its public schema ID is 29. This is valid since we cannot
 	// drop the public schema in v21.2 or v22.1.
 	if !dbDesc.HasPublicSchemaWithDescriptor() {
-		if id == keys.PublicSchemaID {
+		if id == keys.SystemPublicSchemaID {
 			return tree.PublicSchema, true, nil
 		}
 	}
@@ -1090,9 +1090,7 @@ func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (catalog.SchemaDescripto
 
 // getSchemaNameByID returns the schema name given an ID for a schema.
 func (l *internalLookupCtx) getSchemaNameByID(id descpb.ID) (string, error) {
-	// TODO(richardjcai): Remove this in 22.2, once it is guaranteed that
-	//    public schemas are regular UDS.
-	if id == keys.PublicSchemaID {
+	if id == keys.SystemPublicSchemaID {
 		return tree.PublicSchema, nil
 	}
 	schema, err := l.getSchemaByID(id)
@@ -1137,16 +1135,11 @@ func getTableNameFromTableDescriptor(
 		return tree.TableName{}, err
 	}
 	var parentSchemaName tree.Name
-	// TODO(richardjcai): Remove this in 22.2.
-	if table.GetParentSchemaID() == keys.PublicSchemaID {
-		parentSchemaName = tree.PublicSchemaName
-	} else {
-		parentSchema, err := l.getSchemaByID(table.GetParentSchemaID())
-		if err != nil {
-			return tree.TableName{}, err
-		}
-		parentSchemaName = tree.Name(parentSchema.GetName())
+	parentSchema, err := l.getSchemaByID(table.GetParentSchemaID())
+	if err != nil {
+		return tree.TableName{}, err
 	}
+	parentSchemaName = tree.Name(parentSchema.GetName())
 	tableName = tree.MakeTableNameWithSchema(tree.Name(tableDbDesc.GetName()),
 		parentSchemaName, tree.Name(table.GetName()))
 	tableName.ExplicitCatalog = tableDbDesc.GetName() != dbPrefix
@@ -1164,16 +1157,11 @@ func getTypeNameFromTypeDescriptor(
 		return typeName, err
 	}
 	var parentSchemaName string
-	// TODO(richardjcai): Remove this in 22.2.
-	if typ.GetParentSchemaID() == keys.PublicSchemaID {
-		parentSchemaName = tree.PublicSchema
-	} else {
-		parentSchema, err := l.getSchemaByID(typ.GetParentSchemaID())
-		if err != nil {
-			return typeName, err
-		}
-		parentSchemaName = parentSchema.GetName()
+	parentSchema, err := l.getSchemaByID(typ.GetParentSchemaID())
+	if err != nil {
+		return typeName, err
 	}
+	parentSchemaName = parentSchema.GetName()
 	typeName = tree.MakeQualifiedTypeName(tableDbDesc.GetName(),
 		parentSchemaName, typ.GetName())
 	return typeName, nil
@@ -1187,18 +1175,11 @@ func getFunctionNameFromFunctionDescriptor(
 	if err != nil {
 		return fnName, err
 	}
-	var scName string
-	// TODO(richardjcai): Remove this in 22.2.
-	if fn.GetParentSchemaID() == keys.PublicSchemaID {
-		scName = tree.PublicSchema
-	} else {
-		sc, err := l.getSchemaByID(fn.GetParentSchemaID())
-		if err != nil {
-			return fnName, err
-		}
-		scName = sc.GetName()
+	sc, err := l.getSchemaByID(fn.GetParentSchemaID())
+	if err != nil {
+		return fnName, err
 	}
-	return tree.MakeQualifiedFunctionName(db.GetName(), scName, fn.GetName()), nil
+	return tree.MakeQualifiedFunctionName(db.GetName(), sc.GetName(), fn.GetName()), nil
 }
 
 // ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.

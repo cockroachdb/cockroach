@@ -74,7 +74,7 @@ func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
 	if table != nil {
 		parentSchemaID := table.GetUnexposedParentSchemaID()
 		if parentSchemaID == descpb.InvalidID {
-			parentSchemaID = keys.PublicSchemaID
+			parentSchemaID = keys.SystemPublicSchemaID
 		}
 		catprivilege.MaybeFixPrivileges(
 			&table.Privileges,
@@ -315,7 +315,7 @@ func TestExamineDescriptors(t *testing.T) {
 					ID: 52,
 					DescBytes: func() []byte {
 						desc := &descpb.Descriptor{Union: &descpb.Descriptor_Type{
-							Type: &descpb.TypeDescriptor{Name: "type", ID: 52, ParentID: 51, ParentSchemaID: keys.PublicSchemaID},
+							Type: &descpb.TypeDescriptor{Name: "type", ID: 52, ParentID: 51, ParentSchemaID: 53},
 						}}
 						res, err := protoutil.Marshal(desc)
 						require.NoError(t, err)
@@ -325,7 +325,7 @@ func TestExamineDescriptors(t *testing.T) {
 			},
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 51},
-				{NameInfo: descpb.NameInfo{ParentID: 51, ParentSchemaID: keys.PublicSchemaID, Name: "type"}, ID: 52},
+				{NameInfo: descpb.NameInfo{ParentID: 51, ParentSchemaID: 53, Name: "type"}, ID: 52},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
   ParentID  51, ParentSchemaID 29: type "type" (52): arrayTypeID 0 does not exist for "ENUM": referenced type ID 0: referenced descriptor not found
@@ -366,8 +366,8 @@ func TestExamineDescriptors(t *testing.T) {
 		},
 		{ // 13
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{Name: "foo"}, ID: keys.PublicSchemaID},
-				{NameInfo: descpb.NameInfo{Name: "bar"}, ID: keys.PublicSchemaID},
+				{NameInfo: descpb.NameInfo{Name: "foo"}, ID: 53},
+				{NameInfo: descpb.NameInfo{Name: "bar"}, ID: 53},
 				{NameInfo: descpb.NameInfo{Name: "pg_temp_foo", ParentID: 123}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "causes_error"}, ID: 2},
 			},

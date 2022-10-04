@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -1918,7 +1917,7 @@ func TestValidateTableDesc(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "primary",
@@ -1938,7 +1937,7 @@ func TestValidateTableDesc(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "primary",
@@ -1971,7 +1970,7 @@ func TestValidateTableDesc(t *testing.T) {
 				ID:                      52,
 				ParentID:                1,
 				FormatVersion:           descpb.InterleavedFormatVersion,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				ViewQuery:               "SELECT * FROM foo",
 				DependsOn:               []descpb.ID{51},
 				NextColumnID:            2,
@@ -2317,7 +2316,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				FormatVersion:           descpb.InterleavedFormatVersion,
 				OutboundFKs: []descpb.ForeignKeyConstraint{
 					{
@@ -2337,7 +2336,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ID:                      51,
 				Name:                    "foo",
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				FormatVersion:           descpb.InterleavedFormatVersion,
 				OutboundFKs: []descpb.ForeignKeyConstraint{
 					{
@@ -2353,7 +2352,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ID:                      52,
 				Name:                    "baz",
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				FormatVersion:           descpb.InterleavedFormatVersion,
 			}},
 		},
@@ -2363,7 +2362,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				FormatVersion:           descpb.InterleavedFormatVersion,
 				InboundFKs: []descpb.ForeignKeyConstraint{
 					{
@@ -2382,7 +2381,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ID:                      51,
 				Name:                    "foo",
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				FormatVersion:           descpb.InterleavedFormatVersion,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:   1,
@@ -2402,7 +2401,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ID:                      52,
 				Name:                    "baz",
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				FormatVersion:           descpb.InterleavedFormatVersion,
 			}},
 		},
@@ -2412,7 +2411,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "bar",
@@ -2435,7 +2434,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "bar",
@@ -2458,7 +2457,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "bar",
@@ -2481,7 +2480,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				Checks: []*descpb.TableDescriptor_CheckConstraint{
 					{
 						Expr: "a::@100500",
@@ -2495,7 +2494,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "bar",
@@ -2531,7 +2530,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "primary",
@@ -2549,7 +2548,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "bar",
 				ID:                      52,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				ViewQuery:               "SELECT * FROM foo",
 				DependsOn:               []descpb.ID{51},
 				Columns: []descpb.ColumnDescriptor{
@@ -2563,7 +2562,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "primary",
@@ -2581,7 +2580,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "bar",
 				ID:                      52,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				ViewQuery:               "SELECT a FROM foo",
 				Columns: []descpb.ColumnDescriptor{
 					{Name: "a", ID: 1, Type: types.Int},
@@ -2594,7 +2593,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				ViewQuery:               "SELECT a FROM bar",
 				DependsOn:               []descpb.ID{52},
 				Columns: []descpb.ColumnDescriptor{
@@ -2605,7 +2604,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "bar",
 				ID:                      52,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "primary",
@@ -2625,7 +2624,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				SequenceOpts: &descpb.TableDescriptor_SequenceOpts{
 					Increment: 1,
 				},
@@ -2637,7 +2636,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "bar",
 				ID:                      52,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "primary",
@@ -2658,7 +2657,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				SequenceOpts: &descpb.TableDescriptor_SequenceOpts{
 					Increment: 1,
 				},
@@ -2670,7 +2669,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "bar",
 				ID:                      52,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID:             1,
 					Name:           "primary",
@@ -2689,7 +2688,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				DependedOnBy: []descpb.TableDescriptor_Reference{
 					{ID: 100},
 				},
@@ -2701,7 +2700,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				Name:                    "foo",
 				ID:                      51,
 				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
+				UnexposedParentSchemaID: 30,
 				DependsOn:               []descpb.ID{100},
 			},
 		},

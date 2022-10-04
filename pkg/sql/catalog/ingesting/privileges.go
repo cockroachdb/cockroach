@@ -13,7 +13,6 @@ package ingesting
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -128,11 +127,7 @@ func getIngestingPrivilegesForTableOrSchema(
 			targetObject = privilege.Tables
 			schemaID := desc.GetParentSchemaID()
 
-			// TODO(adityamaru): Remove in 22.2 once we are sure not to see synthentic public schema descriptors
-			// in a mixed version state.
-			if schemaID == keys.PublicSchemaID {
-				schemaDefaultPrivileges = nil
-			} else if schema, ok := wroteSchemas[schemaID]; ok {
+			if schema, ok := wroteSchemas[schemaID]; ok {
 				// Check if the schema is part of the objects being restored. If it is,
 				// the schema's privileges have already been processed before we would
 				// process any of the table's being restored. So, it is correct to use the

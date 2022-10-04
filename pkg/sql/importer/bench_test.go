@@ -66,7 +66,7 @@ func toTableDescriptor(
 	parentID := descpb.ID(keys.SystemDatabaseID)
 	testSettings := cluster.MakeTestingClusterSettings()
 	tableDesc, err := importer.MakeTestingSimpleTableDescriptor(
-		ctx, &semaCtx, testSettings, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, ts.UnixNano())
+		ctx, &semaCtx, testSettings, createTable, parentID, keys.SystemPublicSchemaID, tableID, importer.NoFKs, ts.UnixNano())
 	if err != nil {
 		return nil, err
 	}

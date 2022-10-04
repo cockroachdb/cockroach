@@ -99,7 +99,6 @@ func nonTableDescriptorRangeCount() int64 {
 		keys.SystemRangesID,
 		keys.TimeseriesRangesID,
 		keys.LivenessRangesID,
-		keys.PublicSchemaID, // TODO(richardjcai): Remove this in 22.2.
 		keys.TenantsRangesID,
 	}))
 }

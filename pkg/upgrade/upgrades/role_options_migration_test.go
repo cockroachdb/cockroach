@@ -223,7 +223,7 @@ func getDeprecatedSystemRoleOptionsTable() *descpb.TableDescriptor {
 		Name:                    "role_options",
 		ID:                      keys.RoleOptionsTableID,
 		ParentID:                keys.SystemDatabaseID,
-		UnexposedParentSchemaID: keys.PublicSchemaID,
+		UnexposedParentSchemaID: keys.SystemPublicSchemaID,
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "username", ID: 1, Type: types.String},
