@@ -60,6 +60,12 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
 	}
 
+	if err := params.p.canCreateOnSchema(
+		params.ctx, n.scDesc.GetID(), n.dbDesc.GetID(), params.p.User(), skipCheckPublicSchema,
+	); err != nil {
+		return err
+	}
+
 	for _, dep := range n.planDeps {
 		if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "the function cannot refer to other databases")

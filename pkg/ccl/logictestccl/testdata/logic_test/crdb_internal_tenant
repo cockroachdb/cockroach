@@ -5,23 +5,10 @@ SELECT count(distinct(node_id)), count(*)  FROM crdb_internal.node_runtime_info
 ----
 1 12
 
-query IT
-SELECT node_id, name FROM crdb_internal.leases ORDER BY name
+query I
+SELECT sign(count(*)) FROM crdb_internal.leases
 ----
-0  eventlog
-0  jobs
-0  locations
-0  protected_ts_meta
-0  protected_ts_records
-0  public
-0  role_members
-0  role_options
-0  scheduled_jobs
-0  settings
-0  statement_diagnostics_requests
-0  table_statistics
-0  test
-0  users
+1
 
 query error database "crdb_internal" does not exist
 ALTER DATABASE crdb_internal RENAME TO not_crdb_internal
