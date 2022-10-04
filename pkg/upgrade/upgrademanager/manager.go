@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,6 +45,7 @@ type Manager struct {
 	deps     upgrade.SystemDeps
 	lm       *lease.Manager
 	ie       sqlutil.InternalExecutor
+	ief      descs.TxnManager
 	jr       *jobs.Registry
 	codec    keys.SQLCodec
 	settings *cluster.Settings
@@ -72,6 +74,7 @@ func NewManager(
 	deps upgrade.SystemDeps,
 	lm *lease.Manager,
 	ie sqlutil.InternalExecutor,
+	ief descs.TxnManager,
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
@@ -85,6 +88,7 @@ func NewManager(
 		deps:     deps,
 		lm:       lm,
 		ie:       ie,
+		ief:      ief,
 		jr:       jr,
 		codec:    codec,
 		settings: settings,
@@ -411,12 +415,13 @@ func (m *Manager) checkPreconditions(
 			continue
 		}
 		if err := tm.Precondition(ctx, v, upgrade.TenantDeps{
-			DB:               m.deps.DB,
-			Codec:            m.codec,
-			Settings:         m.settings,
-			LeaseManager:     m.lm,
-			InternalExecutor: m.ie,
-			JobRegistry:      m.jr,
+			DB:                      m.deps.DB,
+			Codec:                   m.codec,
+			Settings:                m.settings,
+			LeaseManager:            m.lm,
+			InternalExecutor:        m.ie,
+			InternalExecutorFactory: m.ief,
+			JobRegistry:             m.jr,
 		}); err != nil {
 			return errors.Wrapf(
 				err,

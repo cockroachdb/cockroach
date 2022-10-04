@@ -1663,6 +1663,17 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), publishDescriptors); err != nil {
 		return err
 	}
+
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
+		"restore.after_publishing_descriptors"); err != nil {
+		return err
+	}
+	if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+
 	// Reload the details as we may have updated the job.
 	details = r.job.Details().(jobspb.RestoreDetails)
 	p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
@@ -1688,16 +1699,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		details = r.job.Details().(jobspb.RestoreDetails)
 
 		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
-	}
-
-	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
-		"restore.after_publishing_descriptors"); err != nil {
-		return err
-	}
-	if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
-		if err := fn(); err != nil {
 			return err
 		}
 	}

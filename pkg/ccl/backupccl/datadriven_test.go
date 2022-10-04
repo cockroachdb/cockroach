@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -370,6 +371,9 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, server string, user string)
 //     Creates a symlink from the testdata path to the file IO path, so that we
 //     can restore precreated backup. src-path and dest-path are comma seperated
 //     paths that will be joined.
+//
+//   - "sleep ms=TIME"
+//     Sleep for TIME milliseconds.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -646,6 +650,20 @@ func TestDataDriven(t *testing.T) {
 				}
 				require.NoError(t, err)
 
+				return ""
+
+			case "sleep":
+				var msStr string
+				if d.HasArg("ms") {
+					d.ScanArgs(t, "ms", &msStr)
+				} else {
+					t.Fatalf("must specify sleep time in ms")
+				}
+				ms, err := strconv.ParseInt(msStr, 10, 64)
+				if err != nil {
+					t.Fatalf("invalid sleep time: %v", err)
+				}
+				time.Sleep(time.Duration(ms) * time.Millisecond)
 				return ""
 
 			case "backup":

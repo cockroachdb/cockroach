@@ -1023,7 +1023,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgrade.TestingKnobs)
 		migrationMgr := upgrademanager.NewManager(
-			systemDeps, leaseMgr, cfg.circularInternalExecutor, jobRegistry, codec,
+			systemDeps, leaseMgr, cfg.circularInternalExecutor, cfg.internalExecutorFactory, jobRegistry, codec,
 			cfg.Settings, knobs,
 		)
 		execCfg.UpgradeJobDeps = migrationMgr

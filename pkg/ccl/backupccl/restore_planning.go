@@ -1357,6 +1357,14 @@ func doRestorePlan(
 		return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
 	}
 
+	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
+		// We do this before resolving the backup manifest since resolving the
+		// backup manifest can take a while.
+		if err := checkForConflictingDescriptors(ctx, p.ExecCfg()); err != nil {
+			return err
+		}
+	}
+
 	var fullyResolvedSubdir string
 
 	if strings.EqualFold(subdir, backupbase.LatestFileName) {
@@ -1521,31 +1529,6 @@ func doRestorePlan(
 		clusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version
 		if clusterVersion.Less(binaryVersion) {
 			return clusterRestoreDuringUpgradeErr(clusterVersion, binaryVersion)
-		}
-
-		// Ensure that no user descriptors exist for a full cluster restore.
-		var allDescs []catalog.Descriptor
-		if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			txn.SetDebugName("count-user-descs")
-			all, err := col.GetAllDescriptors(ctx, txn)
-			allDescs = all.OrderedDescriptors()
-			return err
-		}); err != nil {
-			return errors.Wrap(err, "looking up user descriptors during restore")
-		}
-		if allUserDescs := filteredUserCreatedDescriptors(allDescs); len(allUserDescs) > 0 {
-			userDescriptorNames := make([]string, 0, 20)
-			for i, desc := range allUserDescs {
-				if i == 20 {
-					userDescriptorNames = append(userDescriptorNames, "...")
-					break
-				}
-				userDescriptorNames = append(userDescriptorNames, desc.GetName())
-			}
-			return errors.Errorf(
-				"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors: %s",
-				len(allUserDescs), strings.Join(userDescriptorNames, ", "),
-			)
 		}
 	}
 
@@ -1944,6 +1927,40 @@ func collectRestoreTelemetry(
 		descsByTablePattern, restoreDBs, debugPauseOn, applicationName)
 }
 
+// checkForConflictingDescriptors checks for user-created descriptors that would
+// create a conflict when doing a full cluster restore.
+//
+// Because we remap all descriptors, we only care about namespace conflicts.
+func checkForConflictingDescriptors(ctx context.Context, execCfg *sql.ExecutorConfig) error {
+	var allDescs []catalog.Descriptor
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+		txn.SetDebugName("count-user-descs")
+		all, err := col.GetAllDescriptors(ctx, txn)
+		if err != nil {
+			return err
+		}
+		allDescs = all.OrderedDescriptors()
+		return err
+	}); err != nil {
+		return errors.Wrap(err, "looking up user descriptors during restore")
+	}
+	if allUserDescs := filteredUserCreatedDescriptors(allDescs); len(allUserDescs) > 0 {
+		userDescriptorNames := make([]string, 0, 20)
+		for i, desc := range allUserDescs {
+			if i == 20 {
+				userDescriptorNames = append(userDescriptorNames, "...")
+				break
+			}
+			userDescriptorNames = append(userDescriptorNames, desc.GetName())
+		}
+		return errors.Errorf(
+			"full cluster restore can only be run on a cluster with no tables or databases but found %d descriptors: %s",
+			len(allUserDescs), strings.Join(userDescriptorNames, ", "),
+		)
+	}
+	return nil
+}
+
 func filteredUserCreatedDescriptors(
 	allDescs []catalog.Descriptor,
 ) (userDescs []catalog.Descriptor) {
@@ -1964,6 +1981,11 @@ func filteredUserCreatedDescriptors(
 
 	userDescs = make([]catalog.Descriptor, 0, len(allDescs))
 	for _, desc := range allDescs {
+		if desc.Dropped() {
+			// Exclude dropped descriptors since they should no longer have namespace
+			// entries.
+			continue
+		}
 		if catalog.IsSystemDescriptor(desc) {
 			// Exclude system descriptors.
 			continue
