@@ -61,35 +61,36 @@ CREATE TABLE foo (
 	for _, tc := range []struct {
 		family          *descpb.ColumnFamilyDescriptor
 		includeVirtual  bool
-		expectedKeyCols []ResultColumn
-		expectedColumns []ResultColumn
-		expectedUDTCols []ResultColumn
+		expectedKeyCols []string
+		expectedColumns []string
+		expectedUDTCols []string
 	}{
 		{
 			family:          mainFamily,
 			includeVirtual:  false,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "a", "b", "e"),
-			expectedUDTCols: expectResultColumns(t, tableDesc, "e"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"a", "b", "e"},
+			expectedUDTCols: []string{"e"},
 		},
 		{
 			family:          mainFamily,
 			includeVirtual:  true,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "a", "b", "d", "e"),
-			expectedUDTCols: expectResultColumns(t, tableDesc, "e"),
+			expectedKeyCols: []string{"b", "a"},
+			// Virtual columns are ordered last.
+			expectedColumns: []string{"a", "b", "e", "d"},
+			expectedUDTCols: []string{"e"},
 		},
 		{
 			family:          cFamily,
 			includeVirtual:  false,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "c"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"c"},
 		},
 		{
 			family:          cFamily,
 			includeVirtual:  true,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "c", "d"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"c", "d"},
 		},
 	} {
 		t.Run(fmt.Sprintf("%s/includeVirtual=%t", tc.family.Name, tc.includeVirtual), func(t *testing.T) {
@@ -104,9 +105,9 @@ CREATE TABLE foo (
 
 			// Verify primary key and family columns are as expected.
 			r := Row{EventDescriptor: ed}
-			require.Equal(t, tc.expectedKeyCols, slurpColumns(t, r.ForEachKeyColumn()))
-			require.Equal(t, tc.expectedColumns, slurpColumns(t, r.ForEachColumn()))
-			require.Equal(t, tc.expectedUDTCols, slurpColumns(t, r.ForEachUDTColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedKeyCols), slurpColumns(t, r.ForEachKeyColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedColumns), slurpColumns(t, r.ForEachColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedUDTCols), slurpColumns(t, r.ForEachUDTColumn()))
 		})
 	}
 }
@@ -176,8 +177,9 @@ CREATE TABLE foo (
 			includeVirtual: true,
 			expectMainFamily: []decodeExpectation{
 				{
-					keyValues:   []string{"second test", "1"},
-					allValues:   []string{"1", "second test", "NULL", "inactive"},
+					keyValues: []string{"second test", "1"},
+					// Virtual column placeholders are added last in the order.
+					allValues:   []string{"1", "second test", "inactive", "NULL"},
 					prevDeleted: true,
 				},
 			},
@@ -361,9 +363,49 @@ func mustGetFamily(
 }
 
 func expectResultColumns(
-	t *testing.T, desc catalog.TableDescriptor, colNames ...string,
+	t *testing.T, desc catalog.TableDescriptor, includeVirtual bool, colNames []string,
 ) (res []ResultColumn) {
 	t.Helper()
+
+	// Map the column names to the expected ordinality.
+	//
+	// The ordinality values in EventDescriptor.keyCols,
+	// EventDescriptor.valueCols, and EventDescriptor.udtCols (which are indexes
+	// into a rowenc.EncDatumRow) are calculated in the following manner: Start
+	// with catalog.TableDescriptor.PublicColumns() and keep (i) the primary key
+	// columns, (ii) columns in a specified family, and (iii) virtual columns (
+	// which may be outside the specified family). The
+	// remaining columns get filtered out. The position of a particular column in
+	// this array determines its ordinality.
+	//
+	// This function generates ordinality in the same manner, except it uses
+	// colNames instead of a column family descriptor when filtering columns.
+	colNamesSet := make(map[string]int)
+	for _, colName := range colNames {
+		colNamesSet[colName] = -1
+	}
+	virtualCols := map[string]struct{}{}
+	idx := 0
+	for _, col := range desc.PublicColumns() {
+		colName := string(col.ColName())
+		if _, ok := colNamesSet[colName]; ok {
+			if includeVirtual && col.IsVirtual() {
+				virtualCols[colName] = struct{}{}
+			} else {
+				colNamesSet[colName] = idx
+				idx++
+			}
+		} else if desc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
+			idx++
+		} else if includeVirtual && col.IsVirtual() {
+			virtualCols[colName] = struct{}{}
+		}
+	}
+	for colName := range virtualCols {
+		colNamesSet[colName] = idx
+		idx++
+	}
+
 	for _, colName := range colNames {
 		col, err := desc.FindColumnWithName(tree.Name(colName))
 		require.NoError(t, err)
@@ -374,7 +416,7 @@ func expectResultColumns(
 				TableID:        desc.GetID(),
 				PGAttributeNum: uint32(col.GetPGAttributeNum()),
 			},
-			ord:       col.Ordinal(),
+			ord:       colNamesSet[colName],
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		})
 	}

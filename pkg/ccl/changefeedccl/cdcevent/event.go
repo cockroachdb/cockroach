@@ -131,16 +131,21 @@ func (r Row) HasValues() bool {
 func (r Row) forEachDatum(fn DatumFn, colIndexes []int) error {
 	for _, colIdx := range colIndexes {
 		col := r.cols[colIdx]
-		if col.ord >= len(r.datums) {
-			return errors.AssertionFailedf("index [%d] out of range for column %q", col.ord, col.Name)
-		}
-		encDatum := r.datums[col.ord]
-		if err := encDatum.EnsureDecoded(col.Typ, r.alloc); err != nil {
-			return errors.Wrapf(err, "error decoding column %q as type %s", col.Name, col.Typ.String())
-		}
+		if col.ord < len(r.datums) {
+			encDatum := r.datums[col.ord]
+			if err := encDatum.EnsureDecoded(col.Typ, r.alloc); err != nil {
+				return errors.Wrapf(err, "error decoding column %q as type %s", col.Name, col.Typ.String())
+			}
 
-		if err := fn(encDatum.Datum, col); err != nil {
-			return iterutil.Map(err)
+			if err := fn(encDatum.Datum, col); err != nil {
+				return iterutil.Map(err)
+			}
+		} else {
+			// If there is a colIdx which tries to reference a column outside r.cols,
+			// this is a signal to insert null values as placeholders for virtual columns.
+			if err := fn(tree.DNull, col); err != nil {
+				return iterutil.Map(err)
+			}
 		}
 	}
 	return nil
@@ -248,23 +253,35 @@ func NewEventDescriptor(
 		primaryKeyOrdinal.Set(desc.PublicColumns()[ord].GetID(), i)
 	}
 
-	// Remaining columns go in same order as public columns.
+	// Remaining columns go in same order as public columns,
+	// with the exception that virtual columns are reordered
+	// to be at the end.
 	inFamily := catalog.MakeTableColSet(family.ColumnIDs...)
-	for ord, col := range desc.PublicColumns() {
+	virtualCols := map[catalog.Column]struct{}{}
+	last := 0
+	for _, col := range desc.PublicColumns() {
 		isInFamily := inFamily.Contains(col.GetID())
 		virtual := col.IsVirtual() && includeVirtualColumns
-		isValueCol := isInFamily || virtual
 		pKeyOrd, isPKey := primaryKeyOrdinal.Get(col.GetID())
-		if isValueCol || isPKey {
-			colIdx := addColumn(col, ord)
-			if isValueCol {
+		if isInFamily || isPKey {
+			colIdx := addColumn(col, last)
+			if isInFamily {
 				sd.valueCols = append(sd.valueCols, colIdx)
 			}
 
 			if isPKey {
 				sd.keyCols[pKeyOrd] = colIdx
 			}
+			last++
+		} else if virtual {
+			virtualCols[col] = struct{}{}
 		}
+	}
+
+	for col := range virtualCols {
+		addColumn(col, last)
+		sd.valueCols = append(sd.valueCols, last)
+		last++
 	}
 
 	return &sd, nil
@@ -632,4 +649,25 @@ func TestingMakeEventRowFromEncDatums(
 		deleted:         deleted,
 		alloc:           &alloc,
 	}
+}
+
+// getRelevantColumnsForFamily returns an array of column ids for public columns
+// including only primary key columns and columns in the specified familyDesc,
+// If includeVirtual is true, virtual columns, which may be outside the specified
+// family, will be included.
+func getRelevantColumnsForFamily(
+	tableDesc catalog.TableDescriptor, familyDesc *descpb.ColumnFamilyDescriptor,
+) ([]descpb.ColumnID, error) {
+	columns := tableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
+	for _, colID := range familyDesc.ColumnIDs {
+		col, err := tableDesc.FindColumnWithID(colID)
+		if err != nil {
+			return nil, err
+		}
+		if col.Public() {
+			columns.Add(colID)
+		}
+	}
+
+	return columns.Ordered(), nil
 }
