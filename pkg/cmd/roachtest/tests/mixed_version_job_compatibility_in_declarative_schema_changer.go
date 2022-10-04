@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -83,6 +84,9 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if runtime.GOARCH == "arm64" {
+				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+			}
 			// An empty string means that the cockroach binary specified by flag
 			// `cockroach` will be used.
 			const mainVersion = ""

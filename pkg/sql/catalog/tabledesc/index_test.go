@@ -428,6 +428,8 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
+	// Test relies on legacy schema changer testing knobs.
+	tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
 	// Populate the test cluster with all manner of indexes and index mutations.
 	tdb.Exec(t, "CREATE SEQUENCE s")
 	tdb.Exec(t, "CREATE MATERIALIZED VIEW v AS SELECT 1 AS e, 2 AS f")
@@ -435,9 +437,8 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 	tdb.Exec(t, "CREATE TABLE t (a INT NOT NULL PRIMARY KEY, b INT, c INT, d INT NOT NULL, INDEX tsec (b), UNIQUE (c))")
 	// Wait for schema changes to complete.
 	q := fmt.Sprintf(
-		`SELECT count(*) FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s') AND status <> 'succeeded'`,
+		`SELECT count(*) FROM [SHOW JOBS] WHERE job_type = '%s' AND status <> 'succeeded'`,
 		jobspb.TypeSchemaChange,
-		jobspb.TypeNewSchemaChange,
 	)
 	tdb.CheckQueryResultsRetry(t, q, [][]string{{"0"}})
 	// Hang on ALTER PRIMARY KEY finalization.

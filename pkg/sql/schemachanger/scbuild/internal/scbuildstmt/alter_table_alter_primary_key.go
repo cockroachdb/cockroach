@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -68,8 +70,8 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 	// be removed to fully support `ALTER PRIMARY KEY`.
 	fallBackIfConcurrentSchemaChange(b, t, tbl.TableID)
 	fallBackIfRequestToBeSharded(t)
-	fallBackIfSecondaryIndexExists(b, t, tbl.TableID)
 	fallBackIfShardedIndexExists(b, t, tbl.TableID)
+	fallBackIfPartitionedIndexExists(b, t, tbl.TableID)
 	fallBackIfRegionalByRowTable(b, t, tbl.TableID)
 	fallBackIfDescColInRowLevelTTLTables(b, tbl.TableID, t)
 	fallBackIfZoneConfigExists(b, t.n, tbl.TableID)
@@ -318,19 +320,18 @@ func fallBackIfRequestToBeSharded(t alterPrimaryKeySpec) {
 	}
 }
 
-// fallBackIfSecondaryIndexExists panics with an unimplemented
-// error if there exists secondary indexes on the table, which might
-// need to be rewritten.
-func fallBackIfSecondaryIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
-	_, _, sie := scpb.FindSecondaryIndex(b.QueryByID(tableID))
-	if sie != nil {
-		panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY on a table with secondary index "+
-			"is not yet supported because they might need to be rewritten."))
-	}
+// fallBackIfPartitionedIndexExists panics with an unimplemented error
+// if there exists partitioned indexes on the table.
+func fallBackIfPartitionedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
+	tableElts := b.QueryByID(tableID).Filter(notAbsentTargetFilter)
+	scpb.ForEachIndexPartitioning(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, _ *scpb.IndexPartitioning) {
+		panic(scerrors.NotImplementedErrorf(t.n,
+			"ALTER PRIMARY KEY on a table with index partitioning is not yet supported"))
+	})
 }
 
 // fallBackIfShardedIndexExists panics with an unimplemented
-// error if there exists shared secondary indexes on the table.
+// error if there exists sharded indexes on the table.
 func fallBackIfShardedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
 	tableElts := b.QueryByID(tableID).Filter(notAbsentTargetFilter)
 	var hasSecondary bool
@@ -550,9 +551,88 @@ func makeShardedDescriptor(b BuildCtx, t alterPrimaryKeySpec) *catpb.ShardedDesc
 func recreateAllSecondaryIndexes(
 	b BuildCtx, tbl *scpb.Table, newPrimaryIndex, sourcePrimaryIndex *scpb.PrimaryIndex,
 ) {
-	// TODO(postamar): implement in 23.1
-	// Nothing needs to be done because fallBackIfSecondaryIndexExists ensures
-	// that there are no secondary indexes by the time this function is called.
+	publicTableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
+	// Generate all possible key suffix columns.
+	var newKeySuffix []indexColumnSpec
+	{
+		scpb.ForEachIndexColumn(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
+			if ic.IndexID == newPrimaryIndex.IndexID && ic.Kind == scpb.IndexColumn_KEY {
+				newKeySuffix = append(newKeySuffix, indexColumnSpec{
+					columnID:  ic.ColumnID,
+					kind:      scpb.IndexColumn_KEY_SUFFIX,
+					direction: ic.Direction,
+				})
+			}
+		})
+	}
+	// Recreate each secondary index.
+	scpb.ForEachSecondaryIndex(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
+		out := makeIndexSpec(b, idx.TableID, idx.IndexID)
+		var idxColIDs catalog.TableColSet
+		inColumns := make([]indexColumnSpec, 0, len(out.columns))
+		// Determine which columns end up in the new secondary index.
+		{
+			var largestKeyOrdinal uint32
+			var invertedColumnID catid.ColumnID
+			for _, ic := range out.columns {
+				// First, add all key columns.
+				// Also determine the ID of the inverted column, if applicable.
+				if ic.Kind == scpb.IndexColumn_KEY {
+					idxColIDs.Add(ic.ColumnID)
+					inColumns = append(inColumns, indexColumnSpec{
+						columnID:  ic.ColumnID,
+						kind:      scpb.IndexColumn_KEY,
+						direction: ic.Direction,
+					})
+					if idx.IsInverted && ic.OrdinalInKind >= largestKeyOrdinal {
+						largestKeyOrdinal = ic.OrdinalInKind
+						invertedColumnID = ic.ColumnID
+					}
+				}
+			}
+			// Next, add all the stored columns.
+			for _, ic := range out.columns {
+				if ic.Kind == scpb.IndexColumn_STORED && !idxColIDs.Contains(ic.ColumnID) {
+					idxColIDs.Add(ic.ColumnID)
+					inColumns = append(inColumns, indexColumnSpec{
+						columnID: ic.ColumnID,
+						kind:     scpb.IndexColumn_STORED,
+					})
+				}
+			}
+			// Finally, determine the key suffix columns: add all primary key columns
+			// which have not already been added to the secondary index.
+			for _, ics := range newKeySuffix {
+				if !idxColIDs.Contains(ics.columnID) {
+					idxColIDs.Add(ics.columnID)
+					inColumns = append(inColumns, ics)
+				} else if idx.IsInverted && invertedColumnID == ics.columnID {
+					// In an inverted index, the inverted column's value is not equal to
+					// the actual data in the row for that column. As a result, if the
+					// inverted column happens to also be in the primary key, it's crucial
+					// that the index key still be suffixed with that full primary key
+					// value to preserve the index semantics.
+					// However, this functionality is not supported by the execution
+					// engine, so prevent it by returning an error.
+					_, _, cn := scpb.FindColumnName(publicTableElts.Filter(hasColumnIDAttrFilter(invertedColumnID)))
+					var colName string
+					if cn != nil {
+						colName = cn.Name
+					} else {
+						colName = fmt.Sprintf("#%d", invertedColumnID)
+					}
+					panic(unimplemented.NewWithIssuef(84405,
+						"primary key column %s cannot be present in an inverted index",
+						colName,
+					))
+				}
+			}
+		}
+		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns)
+		out.apply(b.Drop)
+		in.apply(b.Add)
+		temp.apply(b.AddTransient)
+	})
 }
 
 // maybeAddUniqueIndexForOldPrimaryKey constructs and adds all necessary elements
