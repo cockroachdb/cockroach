@@ -2025,6 +2025,37 @@ SELECT one_nth(0)
 statement error pgcode 22012 division by zero
 SELECT int_identity((1/0)::INT)
 
+# Test that tracing spans are created for each UDF invocation and for each
+# statement in the UDF body.
+statement ok
+CREATE TABLE trace_tab (
+  a INT PRIMARY KEY
+);
+INSERT INTO trace_tab VALUES (1), (2), (3);
+CREATE FUNCTION trace_fn(i INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT 'no-op';
+  SELECT i;
+$$
+
+statement ok
+SET tracing = on
+
+statement ok
+SELECT trace_fn(a) FROM trace_tab
+
+statement ok
+SET tracing = off
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message ~ 'udf'
+----
+=== SPAN START: udf-stmt-trace_fn-0 ===
+=== SPAN START: udf-stmt-trace_fn-1 ===
+=== SPAN START: udf-stmt-trace_fn-0 ===
+=== SPAN START: udf-stmt-trace_fn-1 ===
+=== SPAN START: udf-stmt-trace_fn-0 ===
+=== SPAN START: udf-stmt-trace_fn-1 ===
+
 
 subtest args
 
