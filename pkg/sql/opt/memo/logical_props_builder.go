@@ -1854,8 +1854,13 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 		card = props.Cardinality{Min: 0, Max: left.Max}
 		card = card.Limit(right.Max)
 
-	case opt.ExceptOp, opt.ExceptAllOp:
+	case opt.ExceptOp:
 		// Use left Max cardinality.
+		card = props.Cardinality{Min: 0, Max: left.Max}
+
+	case opt.ExceptAllOp:
+		// Use left Max cardinality. Cardinality cannot be less than left Min minus
+		// right Max.
 		card = props.Cardinality{Min: 0, Max: left.Max}
 		if left.Min > right.Max {
 			card.Min = left.Min - right.Max
