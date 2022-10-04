@@ -111,10 +111,6 @@ type propBuf struct {
 		// heartbeats and then expect other replicas to take the lease without
 		// worrying about Raft).
 		allowLeaseProposalWhenNotLeader bool
-		// allowLeaseTransfersWhenTargetMayNeedSnapshot, if set, makes the proposal
-		// buffer allow lease request proposals even when the proposer cannot prove
-		// that the lease transfer target does not need a Raft snapshot.
-		allowLeaseTransfersWhenTargetMayNeedSnapshot bool
 		// dontCloseTimestamps inhibits the closing of timestamps.
 		dontCloseTimestamps bool
 	}
@@ -699,7 +695,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 		newLease := p.command.ReplicatedEvalResult.State.Lease
 		newLeaseTarget := newLease.Replica.ReplicaID
 		snapStatus := raftutil.ReplicaMayNeedSnapshot(&status, firstIndex, newLeaseTarget)
-		if snapStatus != raftutil.NoSnapshotNeeded && !b.testing.allowLeaseTransfersWhenTargetMayNeedSnapshot {
+		if snapStatus != raftutil.NoSnapshotNeeded && !p.Request.Requests[0].GetTransferLease().BypassSafetyChecks {
 			b.p.rejectProposalWithLeaseTransferRejectedLocked(ctx, p, newLease, snapStatus)
 			return true
 		}

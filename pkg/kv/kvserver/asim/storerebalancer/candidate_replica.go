@@ -111,7 +111,9 @@ func (sr *simulatorReplica) Stats() *replicastats.RatedSummary {
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica.
-func (sr *simulatorReplica) AdminTransferLease(ctx context.Context, target roachpb.StoreID) error {
+func (sr *simulatorReplica) AdminTransferLease(
+	ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool,
+) error {
 	if !sr.state.ValidTransfer(sr.repl.Range(), state.StoreID(target)) {
 		return errors.Errorf(
 			"unable to transfer lease for r%d to store %d, invalid transfer.",

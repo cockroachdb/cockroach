@@ -398,13 +398,16 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 	// range when they are being proposed.
 	var scratchRangeID int64
 	shouldFailProposal := func(args kvserverbase.ProposalFilterArgs) bool {
-		// Block if a ChangeReplicas command is removing a node from our range.
 		return args.Req.RangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) &&
 			args.Req.IsSingleTransferLeaseRequest()
 	}
+	const failureMsg = "injected lease transfer"
 	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 		if shouldFailProposal(args) {
-			return roachpb.NewErrorf("Injecting lease transfer failure")
+			// The lease transfer should be configured to bypass safety checks.
+			// See maybeTransferLeaseDuringLeaveJoint for an explanation.
+			require.True(t, args.Req.Requests[0].GetTransferLease().BypassSafetyChecks)
+			return roachpb.NewErrorf(failureMsg)
 		}
 		return nil
 	}
@@ -430,7 +433,7 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 			{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
 		})
 	require.Error(t, err)
-	require.Regexp(t, "Injecting lease transfer failure", err)
+	require.Regexp(t, failureMsg, err)
 
 	// We're now in a joint configuration, n1 already revoked its lease but all
 	// other replicas think n1 is the leaseholder. As long as n1 is alive, it is

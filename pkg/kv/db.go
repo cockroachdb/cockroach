@@ -649,7 +649,18 @@ func (db *DB) AdminTransferLease(
 	ctx context.Context, key interface{}, target roachpb.StoreID,
 ) error {
 	b := &Batch{}
-	b.adminTransferLease(key, target)
+	b.adminTransferLease(key, target, false /* bypassSafetyChecks */)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
+// AdminTransferLeaseBypassingSafetyChecks is like AdminTransferLease, but
+// configures the lease transfer to bypass safety checks. See the comment on
+// AdminTransferLeaseRequest.BypassSafetyChecks for details.
+func (db *DB) AdminTransferLeaseBypassingSafetyChecks(
+	ctx context.Context, key interface{}, target roachpb.StoreID,
+) error {
+	b := &Batch{}
+	b.adminTransferLease(key, target, true /* bypassSafetyChecks */)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
