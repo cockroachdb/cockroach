@@ -44,14 +44,12 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						if _caseInsensitive {
@@ -64,7 +62,7 @@ func (p projPrefixBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						if _caseInsensitive {
@@ -126,14 +124,12 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						if _caseInsensitive {
@@ -146,7 +142,7 @@ func (p projSuffixBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						if _caseInsensitive {
@@ -208,14 +204,12 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						if _caseInsensitive {
@@ -228,7 +222,7 @@ func (p projContainsBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						if _caseInsensitive {
@@ -290,14 +284,12 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -322,7 +314,7 @@ func (p projSkeletonBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -418,14 +410,12 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bool()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Match(arg) != _negate
@@ -435,7 +425,7 @@ func (p projRegexpBytesBytesConstOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Match(arg) != _negate

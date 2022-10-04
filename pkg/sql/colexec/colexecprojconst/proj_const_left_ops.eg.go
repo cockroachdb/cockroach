@@ -68,14 +68,12 @@ func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -87,7 +85,7 @@ func (p projBitandInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -144,14 +142,12 @@ func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -163,7 +159,7 @@ func (p projBitandInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -220,14 +216,12 @@ func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -239,7 +233,7 @@ func (p projBitandInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -296,14 +290,12 @@ func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -315,7 +307,7 @@ func (p projBitandInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -372,14 +364,12 @@ func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -391,7 +381,7 @@ func (p projBitandInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -448,14 +438,12 @@ func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -467,7 +455,7 @@ func (p projBitandInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -524,14 +512,12 @@ func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -543,7 +529,7 @@ func (p projBitandInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -600,14 +586,12 @@ func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -619,7 +603,7 @@ func (p projBitandInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -676,14 +660,12 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -695,7 +677,7 @@ func (p projBitandInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -754,16 +736,17 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls() && !p.calledOnNullInput
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -780,9 +763,12 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -796,7 +782,9 @@ func (p projBitandDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
+			if !p.calledOnNullInput {
+				projVec.SetNulls(_outNulls.Or(*colNulls))
+			}
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -856,14 +844,12 @@ func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -875,7 +861,7 @@ func (p projBitorInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -932,14 +918,12 @@ func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -951,7 +935,7 @@ func (p projBitorInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1008,14 +992,12 @@ func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1027,7 +1009,7 @@ func (p projBitorInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1084,14 +1066,12 @@ func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1103,7 +1083,7 @@ func (p projBitorInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1160,14 +1140,12 @@ func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1179,7 +1157,7 @@ func (p projBitorInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1236,14 +1214,12 @@ func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1255,7 +1231,7 @@ func (p projBitorInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1312,14 +1288,12 @@ func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1331,7 +1305,7 @@ func (p projBitorInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1388,14 +1362,12 @@ func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1407,7 +1379,7 @@ func (p projBitorInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1464,14 +1436,12 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1483,7 +1453,7 @@ func (p projBitorInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1542,16 +1512,17 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls() && !p.calledOnNullInput
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -1568,9 +1539,12 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -1584,7 +1558,9 @@ func (p projBitorDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
+			if !p.calledOnNullInput {
+				projVec.SetNulls(_outNulls.Or(*colNulls))
+			}
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -1644,14 +1620,12 @@ func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1663,7 +1637,7 @@ func (p projBitxorInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1720,14 +1694,12 @@ func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1739,7 +1711,7 @@ func (p projBitxorInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1796,14 +1768,12 @@ func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1815,7 +1785,7 @@ func (p projBitxorInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1872,14 +1842,12 @@ func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1891,7 +1859,7 @@ func (p projBitxorInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -1948,14 +1916,12 @@ func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -1967,7 +1933,7 @@ func (p projBitxorInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2024,14 +1990,12 @@ func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2043,7 +2007,7 @@ func (p projBitxorInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2100,14 +2064,12 @@ func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2119,7 +2081,7 @@ func (p projBitxorInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2176,14 +2138,12 @@ func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2195,7 +2155,7 @@ func (p projBitxorInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2252,14 +2212,12 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2271,7 +2229,7 @@ func (p projBitxorInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2330,16 +2288,17 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls() && !p.calledOnNullInput
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -2356,9 +2315,12 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -2372,7 +2334,9 @@ func (p projBitxorDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
+			if !p.calledOnNullInput {
+				projVec.SetNulls(_outNulls.Or(*colNulls))
+			}
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -2432,14 +2396,12 @@ func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2458,7 +2420,7 @@ func (p projPlusDecimalConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2536,14 +2498,12 @@ func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2562,7 +2522,7 @@ func (p projPlusDecimalConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2640,14 +2600,12 @@ func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2666,7 +2624,7 @@ func (p projPlusDecimalConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2744,14 +2702,12 @@ func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2769,7 +2725,7 @@ func (p projPlusDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2844,14 +2800,12 @@ func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2869,7 +2823,7 @@ func (p projPlusInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -2944,14 +2898,12 @@ func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -2969,7 +2921,7 @@ func (p projPlusInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -3044,14 +2996,12 @@ func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -3069,7 +3019,7 @@ func (p projPlusInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -3144,14 +3094,12 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -3171,7 +3119,7 @@ func (p projPlusInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -3254,14 +3202,12 @@ func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -3284,7 +3230,7 @@ func (p projPlusInt16ConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -3374,14 +3320,12 @@ func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -3399,7 +3343,7 @@ func (p projPlusInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -3474,14 +3418,12 @@ func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -3499,7 +3441,7 @@ func (p projPlusInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -3574,14 +3516,12 @@ func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -3599,7 +3539,7 @@ func (p projPlusInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -3674,14 +3614,12 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -3701,7 +3639,7 @@ func (p projPlusInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -3784,14 +3722,12 @@ func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -3814,7 +3750,7 @@ func (p projPlusInt32ConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -3904,14 +3840,12 @@ func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -3929,7 +3863,7 @@ func (p projPlusInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4004,14 +3938,12 @@ func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -4029,7 +3961,7 @@ func (p projPlusInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4104,14 +4036,12 @@ func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -4129,7 +4059,7 @@ func (p projPlusInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4204,14 +4134,12 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -4231,7 +4159,7 @@ func (p projPlusInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4314,14 +4242,12 @@ func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -4344,7 +4270,7 @@ func (p projPlusInt64ConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4434,14 +4360,12 @@ func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -4456,7 +4380,7 @@ func (p projPlusFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4522,14 +4446,12 @@ func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Timestamp()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						t_res := duration.Add(p.constArg, arg)
@@ -4544,7 +4466,7 @@ func (p projPlusTimestampConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4610,14 +4532,12 @@ func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Timestamp()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						t_res := duration.Add(arg, p.constArg)
@@ -4632,7 +4552,7 @@ func (p projPlusIntervalConstTimestampOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4698,14 +4618,12 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Add(arg)
@@ -4715,7 +4633,7 @@ func (p projPlusIntervalConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4768,14 +4686,12 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -4798,7 +4714,7 @@ func (p projPlusIntervalConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -4890,14 +4806,12 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -4920,7 +4834,7 @@ func (p projPlusDatumConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5010,14 +4924,12 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5040,7 +4952,7 @@ func (p projPlusDatumConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5130,14 +5042,12 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5160,7 +5070,7 @@ func (p projPlusDatumConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5250,14 +5160,12 @@ func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5280,7 +5188,7 @@ func (p projPlusDatumConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5368,14 +5276,12 @@ func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5394,7 +5300,7 @@ func (p projMinusDecimalConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -5472,14 +5378,12 @@ func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5498,7 +5402,7 @@ func (p projMinusDecimalConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -5576,14 +5480,12 @@ func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5602,7 +5504,7 @@ func (p projMinusDecimalConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -5680,14 +5582,12 @@ func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5705,7 +5605,7 @@ func (p projMinusDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -5780,14 +5680,12 @@ func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5805,7 +5703,7 @@ func (p projMinusInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -5880,14 +5778,12 @@ func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -5905,7 +5801,7 @@ func (p projMinusInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -5980,14 +5876,12 @@ func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6005,7 +5899,7 @@ func (p projMinusInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -6080,14 +5974,12 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6107,7 +5999,7 @@ func (p projMinusInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -6190,14 +6082,12 @@ func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6220,7 +6110,7 @@ func (p projMinusInt16ConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -6310,14 +6200,12 @@ func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6335,7 +6223,7 @@ func (p projMinusInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -6410,14 +6298,12 @@ func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6435,7 +6321,7 @@ func (p projMinusInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -6510,14 +6396,12 @@ func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6535,7 +6419,7 @@ func (p projMinusInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -6610,14 +6494,12 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6637,7 +6519,7 @@ func (p projMinusInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -6720,14 +6602,12 @@ func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6750,7 +6630,7 @@ func (p projMinusInt32ConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -6840,14 +6720,12 @@ func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6865,7 +6743,7 @@ func (p projMinusInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -6940,14 +6818,12 @@ func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -6965,7 +6841,7 @@ func (p projMinusInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -7040,14 +6916,12 @@ func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -7065,7 +6939,7 @@ func (p projMinusInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -7140,14 +7014,12 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -7167,7 +7039,7 @@ func (p projMinusInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -7250,14 +7122,12 @@ func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -7280,7 +7150,7 @@ func (p projMinusInt64ConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -7370,14 +7240,12 @@ func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -7392,7 +7260,7 @@ func (p projMinusFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -7458,14 +7326,12 @@ func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -7478,7 +7344,7 @@ func (p projMinusTimestampConstTimestampOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -7538,14 +7404,12 @@ func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Timestamp()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						t_res := duration.Add(p.constArg, arg.Mul(-1))
@@ -7560,7 +7424,7 @@ func (p projMinusTimestampConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -7626,14 +7490,12 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Sub(arg)
@@ -7643,7 +7505,7 @@ func (p projMinusIntervalConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -7696,14 +7558,12 @@ func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -7726,7 +7586,7 @@ func (p projMinusIntervalConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -7816,14 +7676,12 @@ func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -7842,7 +7700,7 @@ func (p projMinusJSONConstBytesOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -7918,14 +7776,12 @@ func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -7940,7 +7796,7 @@ func (p projMinusJSONConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8004,14 +7860,12 @@ func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8026,7 +7880,7 @@ func (p projMinusJSONConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8090,14 +7944,12 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8112,7 +7964,7 @@ func (p projMinusJSONConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8178,16 +8030,17 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls() && !p.calledOnNullInput
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -8204,9 +8057,12 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -8220,7 +8076,9 @@ func (p projMinusDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
+			if !p.calledOnNullInput {
+				projVec.SetNulls(_outNulls.Or(*colNulls))
+			}
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -8282,14 +8140,12 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8312,7 +8168,7 @@ func (p projMinusDatumConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8402,14 +8258,12 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8432,7 +8286,7 @@ func (p projMinusDatumConstBytesOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8522,14 +8376,12 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8552,7 +8404,7 @@ func (p projMinusDatumConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8642,14 +8494,12 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8672,7 +8522,7 @@ func (p projMinusDatumConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8762,14 +8612,12 @@ func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8792,7 +8640,7 @@ func (p projMinusDatumConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8880,14 +8728,12 @@ func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -8906,7 +8752,7 @@ func (p projMultDecimalConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -8984,14 +8830,12 @@ func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -9010,7 +8854,7 @@ func (p projMultDecimalConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -9088,14 +8932,12 @@ func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -9114,7 +8956,7 @@ func (p projMultDecimalConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -9192,14 +9034,12 @@ func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -9217,7 +9057,7 @@ func (p projMultDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -9292,14 +9132,12 @@ func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -9314,7 +9152,7 @@ func (p projMultDecimalConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -9380,14 +9218,12 @@ func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -9413,7 +9249,7 @@ func (p projMultInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -9512,14 +9348,12 @@ func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -9545,7 +9379,7 @@ func (p projMultInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -9644,14 +9478,12 @@ func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -9677,7 +9509,7 @@ func (p projMultInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -9776,14 +9608,12 @@ func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -9803,7 +9633,7 @@ func (p projMultInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -9884,14 +9714,12 @@ func (p projMultInt16ConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
@@ -9901,7 +9729,7 @@ func (p projMultInt16ConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -9952,14 +9780,12 @@ func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -9985,7 +9811,7 @@ func (p projMultInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -10084,14 +9910,12 @@ func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -10117,7 +9941,7 @@ func (p projMultInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -10216,14 +10040,12 @@ func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -10249,7 +10071,7 @@ func (p projMultInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -10348,14 +10170,12 @@ func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -10375,7 +10195,7 @@ func (p projMultInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -10456,14 +10276,12 @@ func (p projMultInt32ConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
@@ -10473,7 +10291,7 @@ func (p projMultInt32ConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -10524,14 +10342,12 @@ func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -10557,7 +10373,7 @@ func (p projMultInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -10656,14 +10472,12 @@ func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -10689,7 +10503,7 @@ func (p projMultInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -10788,14 +10602,12 @@ func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -10821,7 +10633,7 @@ func (p projMultInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -10920,14 +10732,12 @@ func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -10947,7 +10757,7 @@ func (p projMultInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11028,14 +10838,12 @@ func (p projMultInt64ConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = arg.Mul(int64(p.constArg))
@@ -11045,7 +10853,7 @@ func (p projMultInt64ConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11096,14 +10904,12 @@ func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -11118,7 +10924,7 @@ func (p projMultFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11184,14 +10990,12 @@ func (p projMultFloat64ConstIntervalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = arg.MulFloat(float64(p.constArg))
@@ -11201,7 +11005,7 @@ func (p projMultFloat64ConstIntervalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11252,14 +11056,12 @@ func (p projMultIntervalConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
@@ -11269,7 +11071,7 @@ func (p projMultIntervalConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11320,14 +11122,12 @@ func (p projMultIntervalConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
@@ -11337,7 +11137,7 @@ func (p projMultIntervalConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11388,14 +11188,12 @@ func (p projMultIntervalConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.Mul(int64(arg))
@@ -11405,7 +11203,7 @@ func (p projMultIntervalConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11456,14 +11254,12 @@ func (p projMultIntervalConstFloat64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 						projCol[i] = p.constArg.MulFloat(float64(arg))
@@ -11473,7 +11269,7 @@ func (p projMultIntervalConstFloat64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11524,14 +11320,12 @@ func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -11546,7 +11340,7 @@ func (p projMultIntervalConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11612,14 +11406,12 @@ func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -11642,7 +11434,7 @@ func (p projDivDecimalConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11732,14 +11524,12 @@ func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -11762,7 +11552,7 @@ func (p projDivDecimalConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11852,14 +11642,12 @@ func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -11882,7 +11670,7 @@ func (p projDivDecimalConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -11972,14 +11760,12 @@ func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -12001,7 +11787,7 @@ func (p projDivDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -12088,14 +11874,12 @@ func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -12117,7 +11901,7 @@ func (p projDivInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -12204,14 +11988,12 @@ func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -12233,7 +12015,7 @@ func (p projDivInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -12320,14 +12102,12 @@ func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -12349,7 +12129,7 @@ func (p projDivInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -12436,14 +12216,12 @@ func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -12467,7 +12245,7 @@ func (p projDivInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -12560,14 +12338,12 @@ func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -12589,7 +12365,7 @@ func (p projDivInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -12676,14 +12452,12 @@ func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -12705,7 +12479,7 @@ func (p projDivInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -12792,14 +12566,12 @@ func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -12821,7 +12593,7 @@ func (p projDivInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -12908,14 +12680,12 @@ func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -12939,7 +12709,7 @@ func (p projDivInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13032,14 +12802,12 @@ func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13061,7 +12829,7 @@ func (p projDivInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13148,14 +12916,12 @@ func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13177,7 +12943,7 @@ func (p projDivInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13264,14 +13030,12 @@ func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13293,7 +13057,7 @@ func (p projDivInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13380,14 +13144,12 @@ func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13411,7 +13173,7 @@ func (p projDivInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13504,14 +13266,12 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13530,7 +13290,7 @@ func (p projDivFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13608,14 +13368,12 @@ func (p projDivIntervalConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13629,7 +13387,7 @@ func (p projDivIntervalConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13692,14 +13450,12 @@ func (p projDivIntervalConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13713,7 +13469,7 @@ func (p projDivIntervalConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13776,14 +13532,12 @@ func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13797,7 +13551,7 @@ func (p projDivIntervalConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13860,14 +13614,12 @@ func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Interval()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13881,7 +13633,7 @@ func (p projDivIntervalConstFloat64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -13944,14 +13696,12 @@ func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -13974,7 +13724,7 @@ func (p projFloorDivDecimalConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -14064,14 +13814,12 @@ func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -14094,7 +13842,7 @@ func (p projFloorDivDecimalConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -14184,14 +13932,12 @@ func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -14214,7 +13960,7 @@ func (p projFloorDivDecimalConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -14304,14 +14050,12 @@ func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -14333,7 +14077,7 @@ func (p projFloorDivDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -14420,14 +14164,12 @@ func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -14444,7 +14186,7 @@ func (p projFloorDivInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -14516,14 +14258,12 @@ func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -14540,7 +14280,7 @@ func (p projFloorDivInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -14612,14 +14352,12 @@ func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -14636,7 +14374,7 @@ func (p projFloorDivInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -14708,14 +14446,12 @@ func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -14739,7 +14475,7 @@ func (p projFloorDivInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -14832,14 +14568,12 @@ func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -14856,7 +14590,7 @@ func (p projFloorDivInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -14928,14 +14662,12 @@ func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -14952,7 +14684,7 @@ func (p projFloorDivInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -15024,14 +14756,12 @@ func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -15048,7 +14778,7 @@ func (p projFloorDivInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -15120,14 +14850,12 @@ func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -15151,7 +14879,7 @@ func (p projFloorDivInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -15244,14 +14972,12 @@ func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -15268,7 +14994,7 @@ func (p projFloorDivInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -15340,14 +15066,12 @@ func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -15364,7 +15088,7 @@ func (p projFloorDivInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -15436,14 +15160,12 @@ func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -15460,7 +15182,7 @@ func (p projFloorDivInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -15532,14 +15254,12 @@ func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -15563,7 +15283,7 @@ func (p projFloorDivInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -15656,14 +15376,12 @@ func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -15682,7 +15400,7 @@ func (p projFloorDivFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -15760,14 +15478,12 @@ func (p projModDecimalConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -15790,7 +15506,7 @@ func (p projModDecimalConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -15880,14 +15596,12 @@ func (p projModDecimalConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -15910,7 +15624,7 @@ func (p projModDecimalConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16000,14 +15714,12 @@ func (p projModDecimalConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16030,7 +15742,7 @@ func (p projModDecimalConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16120,14 +15832,12 @@ func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16149,7 +15859,7 @@ func (p projModDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16236,14 +15946,12 @@ func (p projModInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16260,7 +15968,7 @@ func (p projModInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16332,14 +16040,12 @@ func (p projModInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16356,7 +16062,7 @@ func (p projModInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16428,14 +16134,12 @@ func (p projModInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16452,7 +16156,7 @@ func (p projModInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16524,14 +16228,12 @@ func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16555,7 +16257,7 @@ func (p projModInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16648,14 +16350,12 @@ func (p projModInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16672,7 +16372,7 @@ func (p projModInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16744,14 +16444,12 @@ func (p projModInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16768,7 +16466,7 @@ func (p projModInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16840,14 +16538,12 @@ func (p projModInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16864,7 +16560,7 @@ func (p projModInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -16936,14 +16632,12 @@ func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -16967,7 +16661,7 @@ func (p projModInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17060,14 +16754,12 @@ func (p projModInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -17084,7 +16776,7 @@ func (p projModInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17156,14 +16848,12 @@ func (p projModInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -17180,7 +16870,7 @@ func (p projModInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17252,14 +16942,12 @@ func (p projModInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -17276,7 +16964,7 @@ func (p projModInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17348,14 +17036,12 @@ func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -17379,7 +17065,7 @@ func (p projModInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17472,14 +17158,12 @@ func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -17498,7 +17182,7 @@ func (p projModFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17576,14 +17260,12 @@ func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -17602,7 +17284,7 @@ func (p projPowDecimalConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17680,14 +17362,12 @@ func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -17706,7 +17386,7 @@ func (p projPowDecimalConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17784,14 +17464,12 @@ func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -17810,7 +17488,7 @@ func (p projPowDecimalConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17888,14 +17566,12 @@ func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -17913,7 +17589,7 @@ func (p projPowDecimalConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -17988,14 +17664,12 @@ func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -18019,7 +17693,7 @@ func (p projPowInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -18112,14 +17786,12 @@ func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -18143,7 +17815,7 @@ func (p projPowInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -18236,14 +17908,12 @@ func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -18267,7 +17937,7 @@ func (p projPowInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -18360,14 +18030,12 @@ func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -18387,7 +18055,7 @@ func (p projPowInt16ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -18468,14 +18136,12 @@ func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -18499,7 +18165,7 @@ func (p projPowInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -18592,14 +18258,12 @@ func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -18623,7 +18287,7 @@ func (p projPowInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -18716,14 +18380,12 @@ func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -18747,7 +18409,7 @@ func (p projPowInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -18840,14 +18502,12 @@ func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -18867,7 +18527,7 @@ func (p projPowInt32ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -18948,14 +18608,12 @@ func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -18979,7 +18637,7 @@ func (p projPowInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -19072,14 +18730,12 @@ func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19103,7 +18759,7 @@ func (p projPowInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -19196,14 +18852,12 @@ func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19227,7 +18881,7 @@ func (p projPowInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -19320,14 +18974,12 @@ func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Decimal()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19347,7 +18999,7 @@ func (p projPowInt64ConstDecimalOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -19428,14 +19080,12 @@ func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Float64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19450,7 +19100,7 @@ func (p projPowFloat64ConstFloat64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -19516,14 +19166,12 @@ func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19540,7 +19188,7 @@ func (p projConcatBytesConstBytesOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19610,14 +19258,12 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19633,7 +19279,7 @@ func (p projConcatJSONConstJSONOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19702,16 +19348,17 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls() && !p.calledOnNullInput
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -19728,9 +19375,12 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
+						if colNulls.NullAt(i) {
+							arg = tree.DNull
+						}
 
 						_res, err := eval.BinaryOp(_overloadHelper.EvalCtx, _overloadHelper.BinOp, p.constArg.(tree.Datum), arg.(tree.Datum))
 						if err != nil {
@@ -19744,7 +19394,9 @@ func (p projConcatDatumConstDatumOp) Next() coldata.Batch {
 					}
 				}
 			}
-			projVec.SetNulls(_outNulls.Or(*colNulls))
+			if !p.calledOnNullInput {
+				projVec.SetNulls(_outNulls.Or(*colNulls))
+			}
 		} else {
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
@@ -19804,14 +19456,12 @@ func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19829,7 +19479,7 @@ func (p projLShiftInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -19904,14 +19554,12 @@ func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -19929,7 +19577,7 @@ func (p projLShiftInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -20004,14 +19652,12 @@ func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20029,7 +19675,7 @@ func (p projLShiftInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -20104,14 +19750,12 @@ func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20129,7 +19773,7 @@ func (p projLShiftInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -20204,14 +19848,12 @@ func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20229,7 +19871,7 @@ func (p projLShiftInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -20304,14 +19946,12 @@ func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20329,7 +19969,7 @@ func (p projLShiftInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -20404,14 +20044,12 @@ func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20429,7 +20067,7 @@ func (p projLShiftInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -20504,14 +20142,12 @@ func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20529,7 +20165,7 @@ func (p projLShiftInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -20604,14 +20240,12 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20629,7 +20263,7 @@ func (p projLShiftInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -20706,14 +20340,12 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20736,7 +20368,7 @@ func (p projLShiftDatumConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20826,14 +20458,12 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20856,7 +20486,7 @@ func (p projLShiftDatumConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20946,14 +20576,12 @@ func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -20976,7 +20604,7 @@ func (p projLShiftDatumConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21064,14 +20692,12 @@ func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21089,7 +20715,7 @@ func (p projRShiftInt16ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -21164,14 +20790,12 @@ func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21189,7 +20813,7 @@ func (p projRShiftInt16ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -21264,14 +20888,12 @@ func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21289,7 +20911,7 @@ func (p projRShiftInt16ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -21364,14 +20986,12 @@ func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21389,7 +21009,7 @@ func (p projRShiftInt32ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -21464,14 +21084,12 @@ func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21489,7 +21107,7 @@ func (p projRShiftInt32ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -21564,14 +21182,12 @@ func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21589,7 +21205,7 @@ func (p projRShiftInt32ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -21664,14 +21280,12 @@ func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21689,7 +21303,7 @@ func (p projRShiftInt64ConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -21764,14 +21378,12 @@ func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21789,7 +21401,7 @@ func (p projRShiftInt64ConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -21864,14 +21476,12 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Int64()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21889,7 +21499,7 @@ func (p projRShiftInt64ConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						//gcassert:bce
 						arg := col.Get(i)
@@ -21966,14 +21576,12 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -21996,7 +21604,7 @@ func (p projRShiftDatumConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22086,14 +21694,12 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22116,7 +21722,7 @@ func (p projRShiftDatumConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22206,14 +21812,12 @@ func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Datum()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22236,7 +21840,7 @@ func (p projRShiftDatumConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22324,14 +21928,12 @@ func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22353,7 +21955,7 @@ func (p projJSONFetchValJSONConstBytesOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22438,14 +22040,12 @@ func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22464,7 +22064,7 @@ func (p projJSONFetchValJSONConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22540,14 +22140,12 @@ func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22566,7 +22164,7 @@ func (p projJSONFetchValJSONConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22642,14 +22240,12 @@ func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22668,7 +22264,7 @@ func (p projJSONFetchValJSONConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22744,14 +22340,12 @@ func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22782,7 +22376,7 @@ func (p projJSONFetchTextJSONConstBytesOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22894,14 +22488,12 @@ func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -22929,7 +22521,7 @@ func (p projJSONFetchTextJSONConstInt16Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -23032,14 +22624,12 @@ func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -23067,7 +22657,7 @@ func (p projJSONFetchTextJSONConstInt32Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -23170,14 +22760,12 @@ func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -23205,7 +22793,7 @@ func (p projJSONFetchTextJSONConstInt64Op) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -23308,14 +22896,12 @@ func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.JSON()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -23334,7 +22920,7 @@ func (p projJSONFetchValPathJSONConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -23410,14 +22996,12 @@ func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
 		col := col
 		projCol := projVec.Bytes()
 		_outNulls := projVec.Nulls()
-
-		hasNullsAndNotCalledOnNullInput := vec.Nulls().MaybeHasNulls()
-		if hasNullsAndNotCalledOnNullInput {
+		if vec.Nulls().MaybeHasNulls() {
 			colNulls := vec.Nulls()
 			if sel := batch.Selection(); sel != nil {
 				sel = sel[:n]
 				for _, i := range sel {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
@@ -23446,7 +23030,7 @@ func (p projJSONFetchTextPathJSONConstDatumOp) Next() coldata.Batch {
 				_ = projCol.Get(n - 1)
 				_ = col.Get(n - 1)
 				for i := 0; i < n; i++ {
-					if !colNulls.NullAt(i) {
+					if p.calledOnNullInput || !colNulls.NullAt(i) {
 						// We only want to perform the projection operation if the value is not null.
 						arg := col.Get(i)
 
