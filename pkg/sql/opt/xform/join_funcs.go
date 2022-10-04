@@ -320,7 +320,7 @@ func (c *CustomFuncs) GenerateLookupJoinsWithVirtualCols(
 // canGenerateLookupJoins makes a best-effort to filter out cases where no
 // joins can be constructed based on the join's filters and flags. It may miss
 // some cases that will be filtered out later.
-func canGenerateLookupJoins(
+func (c *CustomFuncs) canGenerateLookupJoins(
 	input memo.RelExpr, joinFlags memo.JoinFlags, leftCols, rightCols opt.ColSet, on memo.FiltersExpr,
 ) bool {
 	if joinFlags.Has(memo.DisallowLookupJoinIntoRight) {
@@ -334,8 +334,9 @@ func canGenerateLookupJoins(
 	// can be used for lookups. Since the current implementation does not
 	// deduplicate the resulting spans, only plan a lookup join with no equalities
 	// when the input has one row, or if a lookup join is forced.
-	if input.Relational().Cardinality.IsZeroOrOne() ||
-		joinFlags.Has(memo.AllowOnlyLookupJoinIntoRight) {
+	if c.e.evalCtx.SessionData().VariableInequalityLookupJoinEnabled &&
+		(input.Relational().Cardinality.IsZeroOrOne() ||
+			joinFlags.Has(memo.AllowOnlyLookupJoinIntoRight)) {
 		cmp, _, _ := memo.ExtractJoinConditionColumns(leftCols, rightCols, on, true /* inequality */)
 		return len(cmp) > 0
 	}
@@ -362,7 +363,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	md := c.e.mem.Metadata()
 	inputProps := input.Relational()
 
-	if !canGenerateLookupJoins(input, joinPrivate.Flags, inputProps.OutputCols, rightCols, on) {
+	if !c.canGenerateLookupJoins(input, joinPrivate.Flags, inputProps.OutputCols, rightCols, on) {
 		return
 	}
 
