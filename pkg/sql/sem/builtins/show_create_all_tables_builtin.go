@@ -71,7 +71,7 @@ func getTopologicallySortedTableIDs(
 		FROM %s.crdb_internal.backward_dependencies
 		WHERE descriptor_id = $1
 		`, dbName)
-		it, err := evalPlanner.QueryIteratorEx(
+		it, err := evalPlanner.QueryIterator(
 			ctx,
 			"crdb_internal.show_create_all_tables",
 			sessiondata.NoSessionDataOverride,
@@ -160,7 +160,7 @@ func getTableIDs(
 		AND is_virtual = FALSE
 		AND is_temporary = FALSE
 		`, dbName)
-	it, err := evalPlanner.QueryIteratorEx(
+	it, err := evalPlanner.QueryIterator(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		sessiondata.NoSessionDataOverride,
@@ -249,7 +249,7 @@ func getCreateStatement(
 		FROM %s.crdb_internal.create_statements
 		WHERE descriptor_id = $1
 	`, dbName)
-	row, err := evalPlanner.QueryRowEx(
+	row, err := evalPlanner.QueryRow(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		sessiondata.NoSessionDataOverride,
@@ -279,7 +279,7 @@ func getAlterStatements(
 		FROM %s.crdb_internal.create_statements
 		WHERE descriptor_id = $1
 	`, statementType, dbName)
-	row, err := evalPlanner.QueryRowEx(
+	row, err := evalPlanner.QueryRow(
 		ctx,
 		"crdb_internal.show_create_all_tables",
 		sessiondata.NoSessionDataOverride,

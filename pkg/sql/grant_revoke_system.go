@@ -280,7 +280,7 @@ func (p *planner) SynthesizePrivilegeDescriptor(
 			catconstants.SystemPrivilegeTableName,
 			privilegeObjectPath)
 
-		it, err := p.QueryIteratorEx(ctx, `get-system-privileges`,
+		it, err := p.QueryIterator(ctx, `get-system-privileges`,
 			sessiondata.NodeUserSessionDataOverride, query)
 		if err != nil {
 			return nil, err

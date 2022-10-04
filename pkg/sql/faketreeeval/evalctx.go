@@ -420,7 +420,7 @@ func (ep *DummyEvalPlanner) ResolveType(
 }
 
 // QueryRowEx is part of the eval.Planner interface.
-func (ep *DummyEvalPlanner) QueryRowEx(
+func (ep *DummyEvalPlanner) QueryRow(
 	ctx context.Context,
 	opName string,
 	session sessiondata.InternalExecutorOverride,
@@ -431,7 +431,7 @@ func (ep *DummyEvalPlanner) QueryRowEx(
 }
 
 // QueryIteratorEx is part of the eval.Planner interface.
-func (ep *DummyEvalPlanner) QueryIteratorEx(
+func (ep *DummyEvalPlanner) QueryIterator(
 	ctx context.Context,
 	opName string,
 	override sessiondata.InternalExecutorOverride,

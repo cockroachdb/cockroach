@@ -915,12 +915,12 @@ func initInternalExecutor(ctx context.Context, p *planner) sqlutil.InternalExecu
 	return ie
 }
 
-// QueryRowEx executes the supplied SQL statement and returns a single row, or
+// QueryRow executes the supplied SQL statement and returns a single row, or
 // nil if no row is found, or an error if more that one row is returned.
 //
 // The fields set in session that are set override the respective fields if
 // they have previously been set through SetSessionData().
-func (p *planner) QueryRowEx(
+func (p *planner) QueryRow(
 	ctx context.Context,
 	opName string,
 	override sessiondata.InternalExecutorOverride,
@@ -931,9 +931,11 @@ func (p *planner) QueryRowEx(
 	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
-// ExecEx is like Exec, but allows the caller to override some session data
-// fields (e.g. the user).
-func (p *planner) ExecEx(
+// Exec executes the supplied SQL statement and returns the number of rows
+// affected (not like the full results; see QueryIterator()). If no user has
+// been previously set through SetSessionData, the statement is executed as
+// the root user.
+func (p *planner) Exec(
 	ctx context.Context,
 	opName string,
 	override sessiondata.InternalExecutorOverride,
@@ -944,13 +946,13 @@ func (p *planner) ExecEx(
 	return ie.ExecEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
-// QueryIteratorEx executes the query, returning an iterator that can be used
+// QueryIterator executes the query, returning an iterator that can be used
 // to get the results. If the call is successful, the returned iterator
 // *must* be closed.
 //
 // The fields set in session that are set override the respective fields if they
 // have previously been set through SetSessionData().
-func (p *planner) QueryIteratorEx(
+func (p *planner) QueryIterator(
 	ctx context.Context,
 	opName string,
 	override sessiondata.InternalExecutorOverride,
@@ -962,11 +964,11 @@ func (p *planner) QueryIteratorEx(
 	return rows.(eval.InternalRows), err
 }
 
-// QueryBufferedEx executes the supplied SQL statement and returns the resulting
+// QueryBuffered executes the supplied SQL statement and returns the resulting
 // rows (meaning all of them are buffered at once).
 // The fields set in session that are set override the respective fields if they
 // have previously been set through SetSessionData().
-func (p *planner) QueryBufferedEx(
+func (p *planner) QueryBuffered(
 	ctx context.Context,
 	opName string,
 	session sessiondata.InternalExecutorOverride,
@@ -977,9 +979,9 @@ func (p *planner) QueryBufferedEx(
 	return ie.QueryBufferedEx(ctx, opName, p.Txn(), session, stmt, qargs...)
 }
 
-// QueryRowExWithCols is like QueryRowEx, additionally returning the computed
+// QueryRowWithCols is like QueryRowEx, additionally returning the computed
 // ResultColumns of the input query.
-func (p *planner) QueryRowExWithCols(
+func (p *planner) QueryRowWithCols(
 	ctx context.Context,
 	opName string,
 	session sessiondata.InternalExecutorOverride,
@@ -990,9 +992,9 @@ func (p *planner) QueryRowExWithCols(
 	return ie.QueryRowExWithCols(ctx, opName, p.Txn(), session, stmt, qargs...)
 }
 
-// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the
+// QueryBufferedWithCols is like QueryBuffered, additionally returning the
 // computed ResultColumns of the input query.
-func (p *planner) QueryBufferedExWithCols(
+func (p *planner) QueryBufferedWithCols(
 	ctx context.Context,
 	opName string,
 	session sessiondata.InternalExecutorOverride,

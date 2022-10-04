@@ -2342,7 +2342,7 @@ func makePayloadsForTraceGenerator(
 									) SELECT *
 										FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`
 
-	it, err := ctx.Planner.QueryIteratorEx(
+	it, err := ctx.Planner.QueryIterator(
 		ctx.Ctx(),
 		"crdb_internal.payloads_for_trace",
 		sessiondata.NoSessionDataOverride,
