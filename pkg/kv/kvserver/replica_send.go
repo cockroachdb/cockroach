@@ -400,6 +400,12 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	var requestEvalKind concurrency.RequestEvalKind
 	var g *concurrency.Guard
 	defer func() {
+		// Handle load-based splitting, if necessary.
+		if pErr == nil {
+			spansRead, _, _ := r.collectSpansRead(ba, br)
+			r.recordBatchForLoadBasedSplitting(ctx, ba, spansRead)
+		}
+
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
 			r.concMgr.FinishReq(g)
@@ -411,7 +417,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// commands and wait even if the circuit breaker is tripped.
 		pp = poison.Policy_Wait
 	}
-	for first := true; ; first = false {
+	for {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
 			return nil, nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
@@ -429,11 +435,6 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			if err != nil {
 				return nil, nil, roachpb.NewError(err)
 			}
-		}
-
-		// Handle load-based splitting, if necessary.
-		if first {
-			r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
 		}
 
 		// Acquire latches to prevent overlapping requests from executing until
