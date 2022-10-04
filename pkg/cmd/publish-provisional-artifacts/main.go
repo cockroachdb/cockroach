@@ -154,7 +154,13 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		updateLatest = true
 	}
 
-	platforms := []release.Platform{release.PlatformLinux, release.PlatformMacOS, release.PlatformWindows, release.PlatformLinuxArm}
+	platforms := []release.Platform{
+		release.PlatformLinux,
+		release.PlatformMacOS,
+		release.PlatformMacOSArm,
+		release.PlatformWindows,
+		release.PlatformLinuxArm,
+	}
 	var cockroachBuildOpts []opts
 	for _, platform := range platforms {
 		var o opts
