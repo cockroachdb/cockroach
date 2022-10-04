@@ -154,7 +154,8 @@ func NewUnresolvedObjectName(
 	}
 	for i := 0; i < lastCheck; i++ {
 		if len(u.Parts[i]) == 0 {
-			return nil, newInvTableNameError(u)
+			forErr := u
+			return UnresolvedObjectName{}, newInvTableNameError(&forErr)
 		}
 	}
 	return u, nil
