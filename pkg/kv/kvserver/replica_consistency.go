@@ -149,10 +149,7 @@ func (r *Replica) checkConsistencyImpl(
 			minoritySnap := results[shaToIdxs[minoritySHA][0]].Response.Snapshot
 			curSnap := results[shaToIdxs[sha][0]].Response.Snapshot
 			if sha != minoritySHA && minoritySnap != nil && curSnap != nil {
-				diff := diffRange(curSnap, minoritySnap)
-				if report := r.store.cfg.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
-					report(*r.store.Ident, diff)
-				}
+				diff := DiffRange(curSnap, minoritySnap)
 				buf.Printf("====== diff(%x, [minority]) ======\n%v", redact.Safe(sha), diff)
 			}
 		}
@@ -492,6 +489,20 @@ func (*Replica) computeChecksumDone(
 type replicaHash struct {
 	SHA512                    [sha512.Size]byte
 	PersistedMS, RecomputedMS enginepb.MVCCStats
+}
+
+// LoadRaftSnapshotDataForTesting returns all the KV data of the given range.
+// Only for testing.
+func LoadRaftSnapshotDataForTesting(
+	ctx context.Context, rd roachpb.RangeDescriptor, store storage.Reader,
+) (roachpb.RaftSnapshotData, error) {
+	var r *Replica
+	var snap roachpb.RaftSnapshotData
+	lim := quotapool.NewRateLimiter("test", 1<<20, 1<<20)
+	if _, err := r.sha512(ctx, rd, store, &snap, roachpb.ChecksumMode_CHECK_FULL, lim); err != nil {
+		return roachpb.RaftSnapshotData{}, err
+	}
+	return snap, nil
 }
 
 // sha512 computes the SHA512 hash of all the replica data at the snapshot.

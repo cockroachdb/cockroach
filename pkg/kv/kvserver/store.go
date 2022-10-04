@@ -1133,9 +1133,7 @@ type ConsistencyTestingKnobs struct {
 	// If non-nil, OnBadChecksumFatal is called by CheckConsistency() (instead of
 	// calling log.Fatal) on a checksum mismatch.
 	OnBadChecksumFatal func(roachpb.StoreIdent)
-	// If non-nil, BadChecksumReportDiff is called by CheckConsistency() on a
-	// checksum mismatch to report the diff between snapshots.
-	BadChecksumReportDiff      func(roachpb.StoreIdent, ReplicaSnapshotDiffSlice)
+
 	ConsistencyQueueResultHook func(response roachpb.CheckConsistencyResponse)
 }
 

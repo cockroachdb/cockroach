@@ -37,16 +37,16 @@ func (c *CustomFuncs) CommuteInequality(
 
 // FoldBinaryCheckOverflow attempts to evaluate a binary expression with
 // constant inputs. The only operations supported are plus and minus. It returns
-// a constant expression as if all the following criteria are met:
+// a constant expression if all the following criteria are met:
 //
 //  1. The right datum is an integer, float, decimal, or interval. This
 //     restriction can be lifted for any type that we can construct a zero value
 //     of. The zero value of the right type is required in order to check for
-//     overflow/underflow (see #4).
+//     overflow/underflow (see #5).
 //  2. An overload function for the given operator and input types exists and
 //     has an appropriate volatility.
 //  3. The result type of the overload is equivalent to the type of left. This
-//     is required in order to check for overflow/underflow (see #4).
+//     is required in order to check for overflow/underflow (see #5).
 //  4. The evaluation causes no error.
 //  5. The evaluation does not overflow or underflow.
 //
