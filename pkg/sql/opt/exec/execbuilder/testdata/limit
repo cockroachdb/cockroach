@@ -552,3 +552,24 @@ vectorized: true
 └── • virtual table
       table: pg_type@pg_type_oid_idx
       spans: [/1 - /1000]
+
+# Regression test for #69685 - a limit cannot be pushed below a window function
+# if its order-by references the window function.
+query T
+EXPLAIN SELECT * FROM generate_series(1, 10) ORDER BY row_number() OVER () LIMIT 1;
+----
+distribution: local
+vectorized: true
+·
+• top-k
+│ estimated row count: 1
+│ order: +row_number
+│ k: 1
+│
+└── • window
+    │ estimated row count: 10
+    │
+    └── • project set
+        │ estimated row count: 10
+        │
+        └── • emptyrow
