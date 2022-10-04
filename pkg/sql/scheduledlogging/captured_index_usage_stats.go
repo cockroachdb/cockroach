@@ -72,6 +72,9 @@ type CaptureIndexUsageStatsTestingKnobs struct {
 	// scheduled interval in the case that the logging duration exceeds the
 	// default scheduled interval duration.
 	getOverlapDuration func() time.Duration
+	// onScheduleComplete allows tests to hook into when the current schedule
+	// is completed to check for the expected logs.
+	onScheduleComplete func()
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
@@ -104,17 +107,14 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) durationOnOverlap() time.Durati
 }
 
 func (s *CaptureIndexUsageStatsLoggingScheduler) durationUntilNextInterval() time.Duration {
-	// If telemetry is disabled, return the disabled interval duration.
-	if !telemetryCaptureIndexUsageStatsEnabled.Get(&s.st.SV) {
-		return telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval.Get(&s.st.SV)
-	}
+	loggingDur := s.getLoggingDuration()
 	// If the previous logging operation took longer than or equal to the set
 	// schedule interval, schedule the next interval immediately.
-	if s.getLoggingDuration() >= telemetryCaptureIndexUsageStatsInterval.Get(&s.st.SV) {
+	if loggingDur >= telemetryCaptureIndexUsageStatsInterval.Get(&s.st.SV) {
 		return s.durationOnOverlap()
 	}
 	// Otherwise, schedule the next interval normally.
-	return telemetryCaptureIndexUsageStatsInterval.Get(&s.st.SV)
+	return telemetryCaptureIndexUsageStatsInterval.Get(&s.st.SV) - loggingDur
 }
 
 // Start starts the capture index usage statistics logging scheduler.
@@ -146,7 +146,15 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
+				if !telemetryCaptureIndexUsageStatsEnabled.Get(&s.st.SV) {
+					timer.Reset(telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval.Get(&s.st.SV))
+					continue
+				}
 				s.currentCaptureStartTime = timeutil.Now()
+				err := captureIndexUsageStats(ctx, s.ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
+				if err != nil {
+					log.Warningf(ctx, "error capturing index usage stats: %+v", err)
+				}
 				dur := s.durationUntilNextInterval()
 				if dur < time.Second {
 					// Avoid intervals that are too short, to prevent a hot
@@ -154,14 +162,8 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 					dur = time.Second
 				}
 				timer.Reset(dur)
-
-				if !telemetryCaptureIndexUsageStatsEnabled.Get(&s.st.SV) {
-					continue
-				}
-
-				err := captureIndexUsageStats(ctx, s.ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
-				if err != nil {
-					log.Warningf(ctx, "error capturing index usage stats: %+v", err)
+				if s.knobs != nil && s.knobs.onScheduleComplete != nil {
+					s.knobs.onScheduleComplete()
 				}
 			}
 		}
