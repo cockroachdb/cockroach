@@ -1805,6 +1805,8 @@ func revalidateIndexes(
 			if err := sql.ValidateForwardIndexes(
 				ctx,
 				job.ID(),
+				execCfg.Codec,
+				execCfg.DB,
 				tableDesc.MakePublic(),
 				forward,
 				runner,
@@ -1825,6 +1827,7 @@ func revalidateIndexes(
 				ctx,
 				job.ID(),
 				execCfg.Codec,
+				execCfg.DB,
 				tableDesc.MakePublic(),
 				inverted,
 				runner,

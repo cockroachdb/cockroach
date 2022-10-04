@@ -130,7 +130,8 @@ func TestDistBackfill2(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 1,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				UseDatabase: "test",
+				DisableDefaultTestTenant: true,
+				UseDatabase:              "test",
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
 						BeforeExecute: func(ctx context.Context, sql string) {
@@ -138,7 +139,7 @@ func TestDistBackfill2(t *testing.T) {
 								fmt.Printf("%s\n", sql)
 								ch <- struct{}{}
 								<-ch2
-								time.Sleep(time.Second * 30)
+								time.Sleep(time.Second * 120)
 							}
 						},
 					},
@@ -160,15 +161,13 @@ func TestDistBackfill2(t *testing.T) {
 		n*n,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowEnglishFn),
 	)
-	_, err := tc.ServerConn(0).Exec("ALTER DATABASE test CONFIGURE ZONE USING gc.ttlseconds = 1")
+	_, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.poll_interval='10ms'")
+	require.NoError(t, err)
+	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1ms'")
+	require.NoError(t, err)
+	_, err = tc.ServerConn(0).Exec("ALTER DATABASE test CONFIGURE ZONE USING gc.ttlseconds = 1")
 	require.NoError(t, err)
 	_, err = tc.ServerConn(0).Exec("ALTER TABLE test.numtostr CONFIGURE ZONE USING gc.ttlseconds = 1")
-	require.NoError(t, err)
-	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING jobs.registry.interval.adopt='1s'")
-	require.NoError(t, err)
-	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING jobs.registry.retry.max_delay='1s'")
-	require.NoError(t, err)
-	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.protectedts.poll_interval='5s'")
 	require.NoError(t, err)
 	ctx := context.Background()
 	db, _ := tc.ServerConn(0).Conn(ctx)

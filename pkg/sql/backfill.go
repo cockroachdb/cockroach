@@ -1482,6 +1482,8 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 			return ValidateForwardIndexes(
 				ctx,
 				sc.job.ID(),
+				sc.execCfg.Codec,
+				sc.db,
 				tableDesc,
 				forwardIndexes,
 				runHistoricalTxn,
@@ -1498,6 +1500,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 				ctx,
 				sc.job.ID(),
 				sc.execCfg.Codec,
+				sc.db,
 				tableDesc,
 				invertedIndexes,
 				runHistoricalTxn,
@@ -1524,7 +1527,9 @@ func (e InvalidIndexesError) Error() string {
 	return fmt.Sprintf("found %d invalid indexes", len(e.Indexes))
 }
 
-const indexValidationProtectTimeStampDuration = time.Second * 1000
+// indexValidationProtectTimeStampGCPct wait 80% of the GC time before adding
+// a protected timestmap record.
+const indexValidationProtectTimeStampGCPct = 80
 
 // ValidateInvertedIndexes checks that the indexes have entries for
 // all the items of data in rows.
@@ -1537,6 +1542,7 @@ func ValidateInvertedIndexes(
 	ctx context.Context,
 	jobID jobspb.JobID,
 	codec keys.SQLCodec,
+	db *kv.DB,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
@@ -1544,7 +1550,7 @@ func ValidateInvertedIndexes(
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
 	protectedTSProvider protectedts.Provider,
-) error {
+) (err error) {
 	protectedTSAdded := sync.Once{}
 	grp := ctxgroup.WithContext(ctx)
 	invalid := make(chan descpb.IndexID, len(indexes))
@@ -1552,24 +1558,45 @@ func ValidateInvertedIndexes(
 	expectedCount := make([]int64, len(indexes))
 	countReady := make([]chan struct{}, len(indexes))
 
+	var removeProtectedTS func(ctx context.Context) error
+	defer func() {
+		if removeProtectedTS != nil {
+			removeErr := removeProtectedTS(ctx)
+			if removeErr != nil {
+				if err != nil {
+					err = errors.WithSecondaryError(err, removeErr)
+				} else {
+					err = removeErr
+				}
+			}
+		}
+	}()
+
 	var addProtectedTS = func() error {
 		var err error
 		protectedTSAdded.Do(func() {
 			protectedtsID := uuid.MakeV4()
 			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
 			ts := hlc.Timestamp{}
-			err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			err = runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				ts = txn.ReadTimestamp()
 				return nil
 			})
 			if err != nil {
-				panic(err)
+				return
 			}
 			rec := jobsprotectedts.MakeRecord(protectedtsID,
 				int64(jobID), ts, nil, jobsprotectedts.Jobs, target)
-			err = protectedTSProvider.Protect(ctx, nil, rec)
+			err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return protectedTSProvider.Protect(ctx, txn, rec)
+			})
 			if err != nil {
 				return
+			}
+			removeProtectedTS = func(ctx context.Context) error {
+				return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return protectedTSProvider.Release(ctx, txn, protectedtsID)
+				})
 			}
 		})
 		return err
@@ -1585,29 +1612,64 @@ func ValidateInvertedIndexes(
 			// KV scan can be used to get the index length.
 			// TODO (lucy): Switch to using DistSQL to get the count, so that we get
 			// distributed execution and avoid bypassing the SQL decoding
+			var waitBeforeProtectedTS time.Duration
 			start := timeutil.Now()
-			var idxLen int64
-			span := tableDesc.IndexSpan(codec, idx.GetID())
-			key := span.Key
-			endKey := span.EndKey
 			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
-				for {
-					kvs, err := txn.Scan(ctx, key, endKey, 1000000)
-					if err != nil {
-						return err
-					}
-					if len(kvs) == 0 {
-						break
-					}
-					idxLen += int64(len(kvs))
-					key = kvs[len(kvs)-1].Key.PrefixEnd()
+				_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, codec, tableDesc.GetID(), nil, "", true)
+				if err != nil {
+					return err
 				}
+				waitBeforeProtectedTS = ((time.Duration(zoneCfg.GC.TTLSeconds) * time.Second) *
+					indexValidationProtectTimeStampGCPct) / 100
 				return nil
 			}); err != nil {
 				return err
 			}
-			log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
-				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
+
+			var completeChannel = make(chan error)
+			var idxLenErr error
+			var idxLen int64
+			go func() {
+				defer close(completeChannel)
+				span := tableDesc.IndexSpan(codec, idx.GetID())
+				key := span.Key
+				endKey := span.EndKey
+				if idxLenErr = runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
+					for {
+						kvs, err := txn.Scan(ctx, key, endKey, 1000000)
+						if err != nil {
+							return err
+						}
+						if len(kvs) == 0 {
+							break
+						}
+						idxLen += int64(len(kvs))
+						key = kvs[len(kvs)-1].Key.PrefixEnd()
+					}
+					return nil
+				}); idxLenErr != nil {
+					return
+				}
+				log.Infof(ctx, "inverted index %s/%s count = %d, took %s",
+					tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
+			}()
+
+			protectedTSTimer := time.After(waitBeforeProtectedTS)
+			waitingForCount := true
+			for waitingForCount {
+				select {
+				case <-completeChannel:
+					waitingForCount = false
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-protectedTSTimer:
+					err := addProtectedTS()
+					if err != nil {
+						return err
+					}
+				}
+			}
+
 			for {
 				select {
 				case <-countReady[i]:
@@ -1624,7 +1686,7 @@ func ValidateInvertedIndexes(
 							idx.GetName(), errors.Safe(expectedCount[i]), errors.Safe(idxLen))
 					}
 					return nil
-				case <-time.After(indexValidationProtectTimeStampDuration):
+				case <-protectedTSTimer:
 					err := addProtectedTS()
 					if err != nil {
 						return err
@@ -1757,6 +1819,8 @@ func countExpectedRowsForInvertedIndex(
 func ValidateForwardIndexes(
 	ctx context.Context,
 	jobID jobspb.JobID,
+	codec keys.SQLCodec,
+	db *kv.DB,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
@@ -1764,7 +1828,7 @@ func ValidateForwardIndexes(
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
 	protectedTSProvider protectedts.Provider,
-) error {
+) (err error) {
 	protectedTSAdded := sync.Once{}
 	grp := ctxgroup.WithContext(ctx)
 
@@ -1775,24 +1839,45 @@ func ValidateForwardIndexes(
 	// Close when table count is ready.
 	tableCountsReady := make(chan struct{})
 
+	var removeProtectedTS func(ctx context.Context) error
+	defer func() {
+		if removeProtectedTS != nil {
+			removeErr := removeProtectedTS(ctx)
+			if removeErr != nil {
+				if err != nil {
+					err = errors.WithSecondaryError(err, removeErr)
+				} else {
+					err = removeErr
+				}
+			}
+		}
+	}()
+
 	var addProtectedTS = func() error {
 		var err error
 		protectedTSAdded.Do(func() {
 			protectedtsID := uuid.MakeV4()
 			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
 			ts := hlc.Timestamp{}
-			err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			err = runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				ts = txn.ReadTimestamp()
 				return nil
 			})
 			if err != nil {
-				panic(err)
+				return
 			}
 			rec := jobsprotectedts.MakeRecord(protectedtsID,
 				int64(jobID), ts, nil, jobsprotectedts.Jobs, target)
-			err = protectedTSProvider.Protect(ctx, nil, rec)
+			err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return protectedTSProvider.Protect(ctx, txn, rec)
+			})
 			if err != nil {
 				return
+			}
+			removeProtectedTS = func(ctx context.Context) error {
+				return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return protectedTSProvider.Release(ctx, txn, protectedtsID)
+				})
 			}
 		})
 		return err
@@ -1802,20 +1887,58 @@ func ValidateForwardIndexes(
 	for _, idx := range indexes {
 		// Shadow idx to prevent its value from changing within each gorountine.
 		idx := idx
-
 		grp.GoCtx(func(ctx context.Context) error {
-			start := timeutil.Now()
-			idxLen, err := countIndexRowsAndMaybeCheckUniqueness(ctx, tableDesc, idx, withFirstMutationPublic, runHistoricalTxn, execOverride)
-			if err != nil {
+			// FIXME: Modify this a bit..
+			var waitBeforeProtectedTS time.Duration
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
+				_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, codec, tableDesc.GetID(), nil, "", true)
+				if err != nil {
+					return err
+				}
+				waitBeforeProtectedTS = ((time.Duration(zoneCfg.GC.TTLSeconds) * time.Second) *
+					indexValidationProtectTimeStampGCPct) / 100
+				return nil
+			}); err != nil {
 				return err
 			}
-			log.Infof(ctx, "validation: index %s/%s row count = %d, time so far %s",
-				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
+
+			var completeChannel = make(chan error)
+			var idxLenErr error
+			var idxLen int64
+			go func() {
+				defer close(completeChannel)
+				start := timeutil.Now()
+				idxLen, idxLenErr = countIndexRowsAndMaybeCheckUniqueness(ctx, tableDesc, idx, withFirstMutationPublic, runHistoricalTxn, execOverride)
+				if idxLenErr != nil {
+					return
+				}
+				log.Infof(ctx, "validation: index %s/%s row count = %d, time so far %s",
+					tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
+			}()
 
 			// Now compare with the row count in the table.
+			waitTimer := time.After(waitBeforeProtectedTS)
+			stillWaiting := true
+			for stillWaiting {
+				select {
+				case <-completeChannel:
+					if idxLenErr != nil {
+						return idxLenErr
+					}
+					stillWaiting = false
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-waitTimer:
+					err := addProtectedTS()
+					if err != nil {
+						return err
+					}
+				}
+			}
 			for {
 				select {
 				case <-tableCountsReady:
+					// Both counts are ready.
 					expectedCount := tableRowCount
 					// If the index is a partial index, the expected number of rows
 					// is different than the total number of rows in the table.
@@ -1844,14 +1967,13 @@ func ValidateForwardIndexes(
 
 					}
 					return nil
-					// FIXME: This should be in the select...
-				case <-time.After(indexValidationProtectTimeStampDuration):
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-waitTimer:
 					err := addProtectedTS()
 					if err != nil {
 						return err
 					}
-				case <-ctx.Done():
-					return ctx.Err()
 				}
 			}
 		})
