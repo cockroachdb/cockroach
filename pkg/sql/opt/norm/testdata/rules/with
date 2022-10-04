@@ -407,6 +407,12 @@ with &1 (foo)
  │    │    ├── f_default:10 => a.f:3
  │    │    ├── s_default:11 => a.s:4
  │    │    └── j_default:12 => a.j:5
+ │    ├── return-mapping:
+ │    │    ├── column1:8 => a.k:1
+ │    │    ├── i_default:9 => a.i:2
+ │    │    ├── f_default:10 => a.f:3
+ │    │    ├── s_default:11 => a.s:4
+ │    │    └── j_default:12 => a.j:5
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── key: ()
@@ -558,6 +564,8 @@ with &2 (cte)
  │    ├── insert-mapping:
  │    │    ├── column1:5 => t.public.child.c:1
  │    │    └── column2:6 => t.public.child.p:2
+ │    ├── return-mapping:
+ │    │    └── column1:5 => t.public.child.c:1
  │    ├── input binding: &1
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations

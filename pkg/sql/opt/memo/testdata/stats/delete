@@ -47,6 +47,10 @@ with &1
  ├── delete xyz
  │    ├── columns: xyz.x:1(string!null) xyz.y:2(int!null) xyz.z:3(float!null)
  │    ├── fetch columns: xyz.x:6(string) xyz.y:7(int) xyz.z:8(float)
+ │    ├── return-mapping:
+ │    │    ├── xyz.x:6 => xyz.x:1
+ │    │    ├── xyz.y:7 => xyz.y:2
+ │    │    └── xyz.z:8 => xyz.z:3
  │    ├── volatile, mutations
  │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=9.56179, null(2)=0, distinct(3)=1, null(3)=0]
  │    ├── key: (1)
@@ -87,6 +91,10 @@ DELETE FROM xyz WHERE False RETURNING *
 delete xyz
  ├── columns: x:1(string!null) y:2(int!null) z:3(float)
  ├── fetch columns: x:6(string) y:7(int) z:8(float)
+ ├── return-mapping:
+ │    ├── x:6 => x:1
+ │    ├── y:7 => y:2
+ │    └── z:8 => z:3
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]

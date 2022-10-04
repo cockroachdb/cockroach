@@ -10068,6 +10068,8 @@ with &1
  │    │    │    ├── b_default:20 => abc.b:8
  │    │    │    ├── b_default:20 => abc.c:9
  │    │    │    └── rowid_default:21 => abc.rowid:10
+ │    │    ├── return-mapping:
+ │    │    │    └── rowid_default:21 => abc.rowid:10
  │    │    ├── volatile, mutations
  │    │    └── project
  │    │         ├── columns: b_default:20 rowid_default:21 "?column?":19!null
