@@ -30,6 +30,7 @@ var _ = kvtenantccl.Connector{}
 // TestTenantZip tests the operation of zip for a tenant server.
 func TestTenantZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 89192, "flaky test")
 
 	skip.UnderRace(t, "test too slow under race")
 	tenantDir, tenantDirCleanupFn := testutils.TempDir(t)
