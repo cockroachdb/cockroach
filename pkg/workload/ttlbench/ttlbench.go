@@ -47,7 +47,8 @@ type ttlBench struct {
 	rowMessageLength     int
 	expiredRowPercentage int
 	ttlBatchSize         int
-	ttlRangeConcurrency  int
+	rangeMinBytes        int
+	rangeMaxBytes        int
 }
 
 var ttlBenchMeta = workload.Meta{
@@ -73,7 +74,8 @@ Note: Ops is a no-op and no histograms are used. Benchmarking is done inside Hoo
 		flags.IntVar(&g.rowMessageLength, `row-message-length`, 128, `length of row message`)
 		flags.IntVar(&g.expiredRowPercentage, `expired-row-percentage`, 50, `percentage of rows that are expired`)
 		flags.IntVar(&g.ttlBatchSize, `ttl-batch-size`, 500, `size of TTL SELECT and DELETE batches`)
-		flags.IntVar(&g.ttlRangeConcurrency, `ttl-range-concurrency`, 1, `number of concurrent ranges to process per node`)
+		flags.IntVar(&g.rangeMinBytes, `range-min-bytes`, 134217728, `minimum number of bytes in range before merging`)
+		flags.IntVar(&g.rangeMaxBytes, `range-max-bytes`, 536870912, `maximum number of bytes in range before splitting`)
 		g.connFlags = workload.NewConnFlags(flags)
 		return g
 	},
@@ -100,7 +102,8 @@ func printJobState(ctx context.Context, db *gosql.DB) (retErr error) {
 				FROM crdb_internal.jobs AS crdb_j
 				JOIN system.jobs as sys_j ON crdb_j.job_id = sys_j.id
 				WHERE crdb_j.job_type = 'ROW LEVEL TTL'
-        ORDER BY crdb_j.finished DESC
+				ORDER BY crdb_j.finished DESC
+				LIMIT 1;
 			`)
 	if err != nil {
 		return err
@@ -132,6 +135,7 @@ func printJobState(ctx context.Context, db *gosql.DB) (retErr error) {
 func getLeaseholderToRangeIDsString(leaseholderToRangeIDs map[string][]string) (string, error) {
 	sortedLeaseholders := make([]int, len(leaseholderToRangeIDs))
 	i := 0
+	maxRangeIDLength := 0
 	for leaseholder := range leaseholderToRangeIDs {
 		leaseholderInt, err := strconv.Atoi(leaseholder)
 		if err != nil {
@@ -139,18 +143,30 @@ func getLeaseholderToRangeIDsString(leaseholderToRangeIDs map[string][]string) (
 		}
 		sortedLeaseholders[i] = leaseholderInt
 		i++
+		for _, rangeID := range leaseholderToRangeIDs[leaseholder] {
+			rangeIDLength := len(rangeID)
+			if rangeIDLength > maxRangeIDLength {
+				maxRangeIDLength = rangeIDLength
+			}
+		}
 	}
 	sort.Ints(sortedLeaseholders)
 
 	var sb strings.Builder
+	numLeaseholders := len(sortedLeaseholders)
+	numLeaseholdersDigits := len(strconv.Itoa(numLeaseholders))
+	leaseholderPadding := strconv.Itoa(numLeaseholdersDigits)
+	rangeIDPadding := strconv.Itoa(maxRangeIDLength)
 	for _, leaseholder := range sortedLeaseholders {
 		leaseholderString := strconv.Itoa(leaseholder)
-		sb.WriteString(fmt.Sprintf("leaseholder=%-3s", leaseholderString))
-		sb.WriteString(" rangeIDs=[\n")
+		sb.WriteString(fmt.Sprintf("leaseholder=%-"+leaseholderPadding+"s rangeIDs=[\n", leaseholderString))
 		for i, rangeID := range leaseholderToRangeIDs[leaseholderString] {
-			sb.WriteString(fmt.Sprintf("%6s", rangeID))
+			sb.WriteString(fmt.Sprintf("%"+rangeIDPadding+"s ", rangeID))
 			const rangesPerLine = 10
-			if i%rangesPerLine == rangesPerLine-1 {
+			rangeLineIdx := i % rangesPerLine
+			// Add newline after rangesPerLine ranges have been printed
+			// unless it's the last range because the newline will be printed below.
+			if rangeLineIdx == rangesPerLine-1 && rangeLineIdx != len(leaseholderToRangeIDs)-1 {
 				sb.WriteString("\n")
 			}
 		}
@@ -228,9 +244,16 @@ func waitForDistribution(ctx context.Context, db *gosql.DB) error {
 
 func (t *ttlBench) Hooks() workload.Hooks {
 	return workload.Hooks{
-		// Clear the table in case a previous run left records.
 		PreCreate: func(db *gosql.DB) error {
-			_, err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", ttlTableName))
+			// Clear the table in case a previous run left records.
+			if _, err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", ttlTableName)); err != nil {
+				return err
+			}
+			// Configure min/max range bytes.
+			_, err := db.Exec(fmt.Sprintf(
+				"ALTER DATABASE %s CONFIGURE ZONE USING range_min_bytes = %d, range_max_bytes = %d",
+				ttlBenchMeta.Name, t.rangeMinBytes, t.rangeMaxBytes,
+			))
 			return err
 		},
 		// The actual benchmarking happens here.
@@ -255,8 +278,8 @@ func (t *ttlBench) Hooks() workload.Hooks {
 
 			// Enable TTL job after records have been inserted.
 			ttlStatement := fmt.Sprintf(
-				"ALTER TABLE %s SET (ttl_expiration_expression = 'expire_at', ttl_label_metrics = true, ttl_job_cron = '* * * * *', ttl_select_batch_size=%d, ttl_delete_batch_size=%d, ttl_range_concurrency=%d);",
-				ttlTableName, t.ttlBatchSize, t.ttlBatchSize, t.ttlRangeConcurrency,
+				"ALTER TABLE %s SET (ttl_expiration_expression = 'expire_at', ttl_label_metrics = true, ttl_job_cron = '* * * * *', ttl_select_batch_size=%d, ttl_delete_batch_size=%d);",
+				ttlTableName, t.ttlBatchSize, t.ttlBatchSize,
 			)
 			_, err = db.ExecContext(ctx, ttlStatement)
 			if err != nil {
@@ -352,10 +375,6 @@ func (t *ttlBench) Tables() []workload.Table {
 	ttlBatchSize := t.ttlBatchSize
 	if ttlBatchSize < 0 {
 		panic(fmt.Sprintf("invalid ttl-batch-size %d", ttlBatchSize))
-	}
-	ttlRangeConcurrency := t.ttlRangeConcurrency
-	if ttlRangeConcurrency < 0 {
-		panic(fmt.Sprintf("invalid ttl-range-concurrency %d", ttlRangeConcurrency))
 	}
 	rowCount := int64(0)
 	return []workload.Table{

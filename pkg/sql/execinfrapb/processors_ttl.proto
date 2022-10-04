@@ -59,9 +59,8 @@ message TTLSpec {
   // flow.
   repeated roachpb.Span spans = 5 [(gogoproto.nullable) = false];
 
-  // RangeConcurrency controls how many ranges a single ttlProcessor processes
-  // in parallel.
-  optional int64 range_concurrency = 6 [(gogoproto.nullable) = false];
+  // RangeConcurrency is based on the number of spans and is no longer configurable.
+  reserved 6;
 
   // SelectBatchSize controls the batch size for SELECTs.
   optional int64 select_batch_size = 7 [(gogoproto.nullable) = false];

@@ -12,6 +12,7 @@ package ttljob
 
 import (
 	"context"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -76,7 +77,7 @@ func (t *ttlProcessor) getWorkFields() (
 	return flowCtx.Descriptors, serverCfg.DB, serverCfg.Codec, serverCfg.JobRegistry, flowCtx.NodeID.SQLInstanceID()
 }
 
-func (t *ttlProcessor) getRangeFields() (
+func (t *ttlProcessor) getSpanFields() (
 	*settings.Values,
 	sqlutil.InternalExecutor,
 	*kv.DB,
@@ -102,7 +103,6 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	ttlSpec := t.ttlSpec
 	descsCol, db, codec, jobRegistry, sqlInstanceID := t.getWorkFields()
 	details := ttlSpec.RowLevelTTLDetails
-	rangeConcurrency := ttlSpec.RangeConcurrency
 
 	deleteRateLimit := ttlSpec.DeleteRateLimit
 	deleteRateLimiter := quotapool.NewRateLimiter(
@@ -162,28 +162,33 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	)
 
 	group := ctxgroup.WithContext(ctx)
+	processorSpanCount := int64(len(ttlSpec.Spans))
+	processorConcurrency := int64(runtime.GOMAXPROCS(0))
+	if processorSpanCount < processorConcurrency {
+		processorConcurrency = processorSpanCount
+	}
 	err := func() error {
-		rangeChan := make(chan rangeToProcess, rangeConcurrency)
-		defer close(rangeChan)
-		for i := int64(0); i < rangeConcurrency; i++ {
+		spanChan := make(chan spanToProcess, processorConcurrency)
+		defer close(spanChan)
+		for i := int64(0); i < processorConcurrency; i++ {
 			group.GoCtx(func(ctx context.Context) error {
-				for rangeToProcess := range rangeChan {
+				for spanToProcess := range spanChan {
 					start := timeutil.Now()
-					rangeRowCount, err := t.runTTLOnRange(
+					spanRowCount, err := t.runTTLOnSpan(
 						ctx,
 						metrics,
-						rangeToProcess,
+						spanToProcess,
 						pkColumns,
 						relationName,
 						deleteRateLimiter,
 					)
 					// add before returning err in case of partial success
-					atomic.AddInt64(&processorRowCount, rangeRowCount)
+					atomic.AddInt64(&processorRowCount, spanRowCount)
 					metrics.RangeTotalDuration.RecordValue(int64(timeutil.Since(start)))
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
-						for rangeToProcess = range rangeChan {
+						for spanToProcess = range spanChan {
 						}
 						return err
 					}
@@ -192,7 +197,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			})
 		}
 
-		// Iterate over every range to feed work for the goroutine processors.
+		// Iterate over every span to feed work for the goroutine processors.
 		var alloc tree.DatumAlloc
 		for _, span := range ttlSpec.Spans {
 			startPK, err := keyToDatums(roachpb.RKey(span.Key), codec, pkTypes, &alloc)
@@ -203,7 +208,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			rangeChan <- rangeToProcess{
+			spanChan <- spanToProcess{
 				startPK: startPK,
 				endPK:   endPK,
 			}
@@ -230,9 +235,11 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			rowLevelTTL.JobRowCount += processorRowCount
 			processorID := t.ProcessorID
 			rowLevelTTL.ProcessorProgresses = append(rowLevelTTL.ProcessorProgresses, jobspb.RowLevelTTLProcessorProgress{
-				ProcessorID:       processorID,
-				SQLInstanceID:     sqlInstanceID,
-				ProcessorRowCount: processorRowCount,
+				ProcessorID:          processorID,
+				SQLInstanceID:        sqlInstanceID,
+				ProcessorRowCount:    processorRowCount,
+				ProcessorSpanCount:   processorSpanCount,
+				ProcessorConcurrency: processorConcurrency,
 			})
 			ju.UpdateProgress(progress)
 			log.VInfof(
@@ -246,15 +253,15 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	)
 }
 
-// rangeRowCount should be checked even if the function returns an error because it may have partially succeeded
-func (t *ttlProcessor) runTTLOnRange(
+// spanRowCount should be checked even if the function returns an error because it may have partially succeeded
+func (t *ttlProcessor) runTTLOnSpan(
 	ctx context.Context,
 	metrics rowLevelTTLMetrics,
-	rangeToProcess rangeToProcess,
+	spanToProcess spanToProcess,
 	pkColumns []string,
 	relationName string,
 	deleteRateLimiter *quotapool.RateLimiter,
-) (rangeRowCount int64, err error) {
+) (spanRowCount int64, err error) {
 	metrics.NumActiveRanges.Inc(1)
 	defer metrics.NumActiveRanges.Dec(1)
 
@@ -265,7 +272,7 @@ func (t *ttlProcessor) runTTLOnRange(
 	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
-	settingsValues, ie, db, descsCol := t.getRangeFields()
+	settingsValues, ie, db, descsCol := t.getSpanFields()
 
 	selectBatchSize := ttlSpec.SelectBatchSize
 	selectBuilder := makeSelectQueryBuilder(
@@ -273,7 +280,7 @@ func (t *ttlProcessor) runTTLOnRange(
 		cutoff,
 		pkColumns,
 		relationName,
-		rangeToProcess,
+		spanToProcess,
 		ttlSpec.AOST,
 		selectBatchSize,
 		ttlExpr,
@@ -299,14 +306,14 @@ func (t *ttlProcessor) runTTLOnRange(
 			},
 			preSelectStatement,
 		); err != nil {
-			return rangeRowCount, err
+			return spanRowCount, err
 		}
 	}
 
 	for {
 		// Check the job is enabled on every iteration.
 		if err := checkEnabled(settingsValues); err != nil {
-			return rangeRowCount, err
+			return spanRowCount, err
 		}
 
 		// Step 1. Fetch some rows we want to delete using a historical
@@ -315,7 +322,7 @@ func (t *ttlProcessor) runTTLOnRange(
 		expiredRowsPKs, err := selectBuilder.run(ctx, ie)
 		metrics.SelectDuration.RecordValue(int64(timeutil.Since(start)))
 		if err != nil {
-			return rangeRowCount, errors.Wrapf(err, "error selecting rows to delete")
+			return spanRowCount, errors.Wrapf(err, "error selecting rows to delete")
 		}
 		numExpiredRows := int64(len(expiredRowsPKs))
 		metrics.RowSelections.Inc(numExpiredRows)
@@ -359,10 +366,10 @@ func (t *ttlProcessor) runTTLOnRange(
 
 				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
 				metrics.RowDeletions.Inc(batchRowCount)
-				rangeRowCount += batchRowCount
+				spanRowCount += batchRowCount
 				return nil
 			}); err != nil {
-				return rangeRowCount, errors.Wrapf(err, "error during row deletion")
+				return spanRowCount, errors.Wrapf(err, "error during row deletion")
 			}
 		}
 
@@ -375,10 +382,10 @@ func (t *ttlProcessor) runTTLOnRange(
 		}
 	}
 
-	return rangeRowCount, nil
+	return spanRowCount, nil
 }
 
-// keyToDatums translates a RKey on a range for a table to the appropriate datums.
+// keyToDatums translates a RKey on a span for a table to the appropriate datums.
 func keyToDatums(
 	key roachpb.RKey, codec keys.SQLCodec, pkTypes []*types.T, alloc *tree.DatumAlloc,
 ) (tree.Datums, error) {
@@ -387,7 +394,7 @@ func keyToDatums(
 
 	// Decode the datums ourselves, instead of using rowenc.DecodeKeyVals.
 	// We cannot use rowenc.DecodeKeyVals because we may not have the entire PK
-	// as the key for the range (e.g. a PK (a, b) may only be split on (a)).
+	// as the key for the span (e.g. a PK (a, b) may only be split on (a)).
 	rKey, err := codec.StripTenantPrefix(rKey)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error decoding tenant prefix of %x", key)
