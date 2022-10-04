@@ -12,6 +12,7 @@ package insights
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -31,6 +32,7 @@ type concurrentBufferIngester struct {
 
 	eventBufferCh chan *eventBuffer
 	registry      *lockingRegistry
+	running       uint64
 }
 
 var _ Provider = &concurrentBufferIngester{}
@@ -57,11 +59,14 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 	// This task pulls buffers from the channel and forwards them along to the
 	// underlying registry.
 	_ = stopper.RunAsyncTask(ctx, "insights-ingester", func(ctx context.Context) {
+		atomic.StoreUint64(&i.running, 1)
+
 		for {
 			select {
 			case events := <-i.eventBufferCh:
 				i.ingest(events)
 			case <-stopper.ShouldQuiesce():
+				atomic.StoreUint64(&i.running, 0)
 				return
 			}
 		}
@@ -153,7 +158,9 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIng
 			return bufferSize
 		},
 		func(currentWriterIndex int64) {
-			i.eventBufferCh <- i.guard.eventBuffer
+			if atomic.LoadUint64(&i.running) == 1 {
+				i.eventBufferCh <- i.guard.eventBuffer
+			}
 			i.guard.eventBuffer = &eventBuffer{}
 		},
 	)

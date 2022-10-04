@@ -125,6 +125,43 @@ func TestIngester_Disabled(t *testing.T) {
 	require.Nil(t, ingester.guard.eventBuffer[0])
 }
 
+func TestIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *testing.T) {
+	// We have seen some tests hanging in CI, implicating this ingester in
+	// their goroutine dumps. We reproduce what we think is happening here,
+	// observing high volumes of SQL traffic after our consumer has shut down.
+	// - https://github.com/cockroachdb/cockroach/issues/87673
+	// - https://github.com/cockroachdb/cockroach/issues/88087
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+
+	registry := newRegistry(cluster.MakeTestingClusterSettings(), &fakeDetector{stubEnabled: true})
+	ingester := newConcurrentBufferIngester(registry)
+	ingester.Start(ctx, stopper)
+
+	// Simulate a shutdown and wait for the consumer of the ingester's channel to stop.
+	stopper.Stop(ctx)
+	<-stopper.IsStopped()
+
+	// Send a high volume of SQL observations into the ingester.
+	done := make(chan struct{})
+	go func() {
+		// We push enough observations to fill the ingester's channel at least
+		// twice. With no consumer of the channel running and no safeguards in
+		// place, this operation would block, which would be bad.
+		for i := 0; i < 2*bufferSize+1; i++ {
+			ingester.ObserveStatement(clusterunique.ID{}, &Statement{})
+		}
+		done <- struct{}{}
+	}()
+
+	select {
+	case <-done:
+		// Success!
+	case <-time.After(time.Second):
+		t.Fatal("Did not finish writing observations into the ingester within the expected time; the operation is probably blocked.")
+	}
+}
+
 type testEvent struct {
 	sessionID, transactionID, statementID uint64
 }
