@@ -125,6 +125,9 @@ var ttlAutomaticColumnNotice = pgnotice.Newf("ttl_automatic_column is no longer 
 	"Setting ttl_expire_after automatically creates a TTL column. " +
 	"Resetting ttl_expire_after removes the automatically created column.")
 
+var ttlRangeConcurrencyNotice = pgnotice.Newf("ttl_range_concurrency is based on the number of spans " +
+	"and is nis no longer configurable.")
+
 var tableParams = map[string]tableParam{
 	`fillfactor`: {
 		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
@@ -307,23 +310,14 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	// todo(wall): remove in 23.1
 	`ttl_range_concurrency`: {
 		onSet: func(po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-			val, err := paramparse.DatumAsInt(evalCtx, key, datum)
-			if err != nil {
-				return err
-			}
-			if err := tabledesc.ValidateTTLRangeConcurrency(key, val); err != nil {
-				return err
-			}
-			rowLevelTTL := po.getOrCreateRowLevelTTL()
-			rowLevelTTL.RangeConcurrency = val
+			evalCtx.ClientNoticeSender.BufferClientNotice(evalCtx.Context, ttlRangeConcurrencyNotice)
 			return nil
 		},
 		onReset: func(po *Setter, evalCtx *eval.Context, key string) error {
-			if po.hasRowLevelTTL() {
-				po.UpdatedRowLevelTTL.RangeConcurrency = 0
-			}
+			evalCtx.ClientNoticeSender.BufferClientNotice(evalCtx.Context, ttlRangeConcurrencyNotice)
 			return nil
 		},
 	},

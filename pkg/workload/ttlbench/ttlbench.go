@@ -47,7 +47,6 @@ type ttlBench struct {
 	rowMessageLength     int
 	expiredRowPercentage int
 	ttlBatchSize         int
-	ttlRangeConcurrency  int
 }
 
 var ttlBenchMeta = workload.Meta{
@@ -73,7 +72,6 @@ Note: Ops is a no-op and no histograms are used. Benchmarking is done inside Hoo
 		flags.IntVar(&g.rowMessageLength, `row-message-length`, 128, `length of row message`)
 		flags.IntVar(&g.expiredRowPercentage, `expired-row-percentage`, 50, `percentage of rows that are expired`)
 		flags.IntVar(&g.ttlBatchSize, `ttl-batch-size`, 500, `size of TTL SELECT and DELETE batches`)
-		flags.IntVar(&g.ttlRangeConcurrency, `ttl-range-concurrency`, 1, `number of concurrent ranges to process per node`)
 		g.connFlags = workload.NewConnFlags(flags)
 		return g
 	},
@@ -255,8 +253,8 @@ func (t *ttlBench) Hooks() workload.Hooks {
 
 			// Enable TTL job after records have been inserted.
 			ttlStatement := fmt.Sprintf(
-				"ALTER TABLE %s SET (ttl_expiration_expression = 'expire_at', ttl_label_metrics = true, ttl_job_cron = '* * * * *', ttl_select_batch_size=%d, ttl_delete_batch_size=%d, ttl_range_concurrency=%d);",
-				ttlTableName, t.ttlBatchSize, t.ttlBatchSize, t.ttlRangeConcurrency,
+				"ALTER TABLE %s SET (ttl_expiration_expression = 'expire_at', ttl_label_metrics = true, ttl_job_cron = '* * * * *', ttl_select_batch_size=%d, ttl_delete_batch_size=%d);",
+				ttlTableName, t.ttlBatchSize, t.ttlBatchSize,
 			)
 			_, err = db.ExecContext(ctx, ttlStatement)
 			if err != nil {
@@ -352,10 +350,6 @@ func (t *ttlBench) Tables() []workload.Table {
 	ttlBatchSize := t.ttlBatchSize
 	if ttlBatchSize < 0 {
 		panic(fmt.Sprintf("invalid ttl-batch-size %d", ttlBatchSize))
-	}
-	ttlRangeConcurrency := t.ttlRangeConcurrency
-	if ttlRangeConcurrency < 0 {
-		panic(fmt.Sprintf("invalid ttl-range-concurrency %d", ttlRangeConcurrency))
 	}
 	rowCount := int64(0)
 	return []workload.Table{
