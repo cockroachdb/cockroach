@@ -98,6 +98,12 @@ project
       │    ├── b_new:17 => b:2
       │    ├── d_comp:19 => d:4
       │    └── e_default:18 => e:6
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b_new:17 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d_comp:19 => d:4
+      │    └── rowid:13 => rowid:5
       ├── volatile, mutations
       ├── key: (5)
       ├── fd: ()-->(1,2), (5)-->(3,4), (3)-->(4)
@@ -172,6 +178,12 @@ project
       │    ├── b_new:17 => b:2
       │    ├── d_comp:19 => d:4
       │    └── e_default:18 => e:6
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b_new:17 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d_comp:19 => d:4
+      │    └── rowid:13 => rowid:5
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       ├── key: ()
@@ -244,6 +256,12 @@ project
       ├── update-mapping:
       │    ├── a_new:17 => a:1
       │    └── e_default:18 => e:6
+      ├── return-mapping:
+      │    ├── a_new:17 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    └── rowid:13 => rowid:5
       ├── volatile, mutations
       ├── key: (5)
       ├── fd: ()-->(1), (2)==(3), (3)==(2), (5)-->(2-4), (2)-->(4)

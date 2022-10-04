@@ -96,6 +96,12 @@ project
       │    ├── d_comp:17 => d:4
       │    ├── rowid_default:15 => rowid:5
       │    └── e_default:16 => e:6
+      ├── return-mapping:
+      │    ├── y:10 => a:1
+      │    ├── y:10 => b:2
+      │    ├── c_default:14 => c:3
+      │    ├── d_comp:17 => d:4
+      │    └── rowid_default:15 => rowid:5
       ├── cardinality: [0 - 10]
       ├── volatile, mutations
       ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
@@ -163,6 +169,12 @@ project
       │    ├── d_comp:17 => d:4
       │    ├── rowid_default:15 => rowid:5
       │    └── e_default:16 => e:6
+      ├── return-mapping:
+      │    ├── y:10 => a:1
+      │    ├── y:10 => b:2
+      │    ├── c_default:14 => c:3
+      │    ├── d_comp:17 => d:4
+      │    └── rowid_default:15 => rowid:5
       ├── volatile, mutations
       ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
       └── project
@@ -209,6 +221,12 @@ insert abcde
  │    ├── d_comp:14 => d:4
  │    ├── rowid_default:12 => rowid:5
  │    └── e_default:13 => e:6
+ ├── return-mapping:
+ │    ├── column1:9 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── c_default:11 => c:3
+ │    ├── d_comp:14 => d:4
+ │    └── rowid_default:12 => rowid:5
  ├── cardinality: [1 - 1]
  ├── volatile, mutations
  ├── key: ()
@@ -266,6 +284,12 @@ project
       │    ├── d_comp:18 => d:4
       │    ├── rowid_default:16 => rowid:5
       │    └── e_default:17 => e:6
+      ├── return-mapping:
+      │    ├── y:10 => a:1
+      │    ├── int8:14 => b:2
+      │    ├── c_default:15 => c:3
+      │    ├── d_comp:18 => d:4
+      │    └── rowid_default:16 => rowid:5
       ├── volatile, mutations
       ├── fd: ()-->(1,3), (2)-->(4)
       └── project

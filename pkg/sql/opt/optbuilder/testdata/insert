@@ -344,6 +344,13 @@ project
       │    ├── d_comp:13 => d:4
       │    ├── "?column?":9 => e:5
       │    └── rowid_default:12 => rowid:6
+      ├── return-mapping:
+      │    ├── "?column?":9 => a:1
+      │    ├── b_default:10 => b:2
+      │    ├── c_default:11 => c:3
+      │    ├── d_comp:13 => d:4
+      │    ├── "?column?":9 => e:5
+      │    └── rowid_default:12 => rowid:6
       └── project
            ├── columns: d_comp:13 "?column?":9!null b_default:10 c_default:11!null rowid_default:12
            ├── project
@@ -370,6 +377,13 @@ project
  ├── insert abcde [as=foo]
  │    ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
  │    ├── insert-mapping:
+ │    │    ├── "?column?":9 => a:1
+ │    │    ├── b_default:10 => b:2
+ │    │    ├── c_default:11 => c:3
+ │    │    ├── d_comp:13 => d:4
+ │    │    ├── "?column?":9 => e:5
+ │    │    └── rowid_default:12 => rowid:6
+ │    ├── return-mapping:
  │    │    ├── "?column?":9 => a:1
  │    │    ├── b_default:10 => b:2
  │    │    ├── c_default:11 => c:3
@@ -407,6 +421,13 @@ with &1
  │    └── insert abcde
  │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5!null rowid:6!null
  │         ├── insert-mapping:
+ │         │    ├── column1:9 => abcde.a:1
+ │         │    ├── b_default:10 => abcde.b:2
+ │         │    ├── c_default:11 => abcde.c:3
+ │         │    ├── d_comp:13 => abcde.d:4
+ │         │    ├── column1:9 => abcde.e:5
+ │         │    └── rowid_default:12 => rowid:6
+ │         ├── return-mapping:
  │         │    ├── column1:9 => abcde.a:1
  │         │    ├── b_default:10 => abcde.b:2
  │         │    ├── c_default:11 => abcde.c:3
@@ -556,6 +577,13 @@ with &1
  │         │    ├── d_comp:13 => abcde.d:4
  │         │    ├── column1:9 => abcde.e:5
  │         │    └── rowid_default:12 => rowid:6
+ │         ├── return-mapping:
+ │         │    ├── column1:9 => abcde.a:1
+ │         │    ├── b_default:10 => abcde.b:2
+ │         │    ├── c_default:11 => abcde.c:3
+ │         │    ├── d_comp:13 => abcde.d:4
+ │         │    ├── column1:9 => abcde.e:5
+ │         │    └── rowid_default:12 => rowid:6
  │         └── project
  │              ├── columns: d_comp:13 column1:9!null b_default:10 c_default:11!null rowid_default:12
  │              ├── project
@@ -686,6 +714,13 @@ project
       │    ├── d_comp:13 => d:4
       │    ├── column1:9 => e:5
       │    └── column2:10 => rowid:6
+      ├── return-mapping:
+      │    ├── column1:9 => a:1
+      │    ├── b_default:11 => b:2
+      │    ├── c_default:12 => c:3
+      │    ├── d_comp:13 => d:4
+      │    ├── column1:9 => e:5
+      │    └── column2:10 => rowid:6
       └── project
            ├── columns: d_comp:13 column1:9!null column2:10!null b_default:11 c_default:12!null
            ├── project
@@ -708,6 +743,13 @@ RETURNING *, rowid
 insert abcde
  ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
  ├── insert-mapping:
+ │    ├── column3:11 => a:1
+ │    ├── column2:10 => b:2
+ │    ├── column1:9 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column3:11 => e:5
+ │    └── column4:12 => rowid:6
+ ├── return-mapping:
  │    ├── column3:11 => a:1
  │    ├── column2:10 => b:2
  │    ├── column1:9 => c:3
@@ -827,6 +869,13 @@ project
       │    ├── d_comp:17 => d:4
       │    ├── y:10 => e:5
       │    └── rowid_default:16 => rowid:6
+      ├── return-mapping:
+      │    ├── y:10 => a:1
+      │    ├── x:14 => b:2
+      │    ├── c_default:15 => c:3
+      │    ├── d_comp:17 => d:4
+      │    ├── y:10 => e:5
+      │    └── rowid_default:16 => rowid:6
       └── project
            ├── columns: d_comp:17!null y:10 x:14!null c_default:15!null rowid_default:16
            ├── project
@@ -850,6 +899,13 @@ INSERT INTO abcde (rowid, a) VALUES (1, 2) RETURNING *, rowid
 insert abcde
  ├── columns: a:1!null b:2 c:3!null d:4 e:5!null rowid:6!null
  ├── insert-mapping:
+ │    ├── column2:10 => a:1
+ │    ├── b_default:11 => b:2
+ │    ├── c_default:12 => c:3
+ │    ├── d_comp:13 => d:4
+ │    ├── column2:10 => e:5
+ │    └── column1:9 => rowid:6
+ ├── return-mapping:
  │    ├── column2:10 => a:1
  │    ├── b_default:11 => b:2
  │    ├── c_default:12 => c:3
@@ -880,6 +936,13 @@ with &1
  │    └── insert abcde
  │         ├── columns: abcde.a:1!null abcde.b:2 abcde.c:3!null abcde.d:4 abcde.e:5 rowid:6!null
  │         ├── insert-mapping:
+ │         │    ├── "?column?":14 => abcde.a:1
+ │         │    ├── y:10 => abcde.b:2
+ │         │    ├── c_default:15 => abcde.c:3
+ │         │    ├── d_comp:17 => abcde.d:4
+ │         │    ├── "?column?":14 => abcde.e:5
+ │         │    └── rowid_default:16 => rowid:6
+ │         ├── return-mapping:
  │         │    ├── "?column?":14 => abcde.a:1
  │         │    ├── y:10 => abcde.b:2
  │         │    ├── c_default:15 => abcde.c:3
@@ -1085,6 +1148,9 @@ insert mutation
  │    ├── column2:9 => n:2
  │    ├── o_default:10 => o:3
  │    └── p_comp:11 => p:4
+ ├── return-mapping:
+ │    ├── column1:8 => m:1
+ │    └── column2:9 => n:2
  ├── check columns: check1:12
  └── project
       ├── columns: check1:12!null column1:8!null column2:9!null o_default:10!null p_comp:11!null

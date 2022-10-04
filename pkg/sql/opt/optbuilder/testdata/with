@@ -663,6 +663,10 @@ with &1 (t)
            │    ├── "?column?":12 => x.a:6
            │    ├── b_default:13 => b:7
            │    └── rowid_default:14 => rowid:8
+           ├── return-mapping:
+           │    ├── "?column?":12 => x.a:6
+           │    ├── b_default:13 => b:7
+           │    └── rowid_default:14 => rowid:8
            └── project
                 ├── columns: b_default:13 rowid_default:14 "?column?":12
                 ├── project
@@ -693,6 +697,10 @@ with &1 (t)
            ├── fetch columns: x.a:11 b:12 rowid:13
            ├── update-mapping:
            │    └── a_new:17 => x.a:6
+           ├── return-mapping:
+           │    ├── a_new:17 => x.a:6
+           │    ├── b:12 => b:7
+           │    └── rowid:13 => rowid:8
            └── project
                 ├── columns: a_new:17 x.a:11 b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
                 ├── scan x
@@ -720,6 +728,10 @@ with &1 (t)
       └── delete x
            ├── columns: x.a:6!null b:7 rowid:8!null
            ├── fetch columns: x.a:11 b:12 rowid:13
+           ├── return-mapping:
+           │    ├── x.a:11 => x.a:6
+           │    ├── b:12 => b:7
+           │    └── rowid:13 => rowid:8
            └── select
                 ├── columns: x.a:11!null b:12 rowid:13!null crdb_internal_mvcc_timestamp:14 tableoid:15
                 ├── scan x
@@ -1444,6 +1456,10 @@ with &2
  │         │    ├── column1:12 => x.a:7
  │         │    ├── column2:13 => x.b:8
  │         │    └── rowid_default:14 => rowid:9
+ │         ├── return-mapping:
+ │         │    ├── column1:12 => x.a:7
+ │         │    ├── column2:13 => x.b:8
+ │         │    └── rowid_default:14 => rowid:9
  │         └── project
  │              ├── columns: rowid_default:14 column1:12!null column2:13!null
  │              ├── values
@@ -1667,6 +1683,9 @@ explain
       │    └── insert y
       │         ├── columns: y.a:1!null rowid:2!null
       │         ├── insert-mapping:
+      │         │    ├── column1:5 => y.a:1
+      │         │    └── rowid_default:6 => rowid:2
+      │         ├── return-mapping:
       │         │    ├── column1:5 => y.a:1
       │         │    └── rowid_default:6 => rowid:2
       │         └── project

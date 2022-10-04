@@ -1457,6 +1457,7 @@ WHERE ci.cardid = Updates.c AND ci.dealerid = 1
 update cardsinfo [as=ci]
  ├── columns: <none>
  ├── fetch columns: ci.dealerid:21 ci.cardid:22 buyprice:23 sellprice:24 discount:25 desiredinventory:26 actualinventory:27 maxinventory:28 ci.version:29 discountbuyprice:30 notes:31 oldinventory:32 ci.extra:33
+ ├── passthrough columns: c:36 q:37
  ├── update-mapping:
  │    ├── actualinventory_new:49 => actualinventory:12
  │    ├── discountbuyprice_cast:53 => discountbuyprice:15

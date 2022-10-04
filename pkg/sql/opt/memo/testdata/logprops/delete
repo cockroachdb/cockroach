@@ -61,6 +61,12 @@ project
  └── delete abcde
       ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    └── rowid:13 => rowid:5
       ├── volatile, mutations
       ├── key: (5)
       ├── fd: ()-->(1), (5)-->(2-4), (2,3)-->(4)
@@ -102,6 +108,12 @@ project
  └── delete abcde
       ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    └── rowid:13 => rowid:5
       ├── cardinality: [0 - 1]
       ├── volatile, mutations
       ├── key: ()
@@ -142,6 +154,12 @@ project
  └── delete abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
       ├── fetch columns: a:9(int) b:10(int) c:11(int) d:12(int) rowid:13(int) e:14(int)
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    └── rowid:13 => rowid:5
       ├── volatile, mutations
       ├── key: (5)
       ├── fd: (2)==(3), (3)==(2), (5)-->(1-4), (2)-->(4)

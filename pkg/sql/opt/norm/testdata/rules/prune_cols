@@ -2071,6 +2071,9 @@ DELETE FROM a RETURNING k, s
 delete a
  ├── columns: k:1!null s:4
  ├── fetch columns: k:7 s:10
+ ├── return-mapping:
+ │    ├── k:7 => k:1
+ │    └── s:10 => s:4
  ├── volatile, mutations
  ├── key: (1)
  ├── fd: (1)-->(4)
@@ -3052,6 +3055,9 @@ project
       ├── fetch columns: a:8 b:9 c:10 d:11
       ├── update-mapping:
       │    └── c_new:15 => c:3
+      ├── return-mapping:
+      │    ├── a:8 => a:1
+      │    └── b:9 => b:2
       ├── volatile, mutations
       ├── key: (1)
       ├── fd: (1)-->(2)
@@ -4066,6 +4072,9 @@ project
  └── delete virt
       ├── columns: a:1!null v:3
       ├── fetch columns: a:6 v:8
+      ├── return-mapping:
+      │    ├── a:6 => a:1
+      │    └── v:8 => v:3
       ├── volatile, mutations
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -4306,6 +4315,15 @@ project
       ├── fetch columns: a:11 b:12 c:13 d:14 e:15 f:16 g:17 rowid:18
       ├── update-mapping:
       │    └── a_new:21 => a:1
+      ├── return-mapping:
+      │    ├── a_new:21 => a:1
+      │    ├── b:12 => b:2
+      │    ├── c:13 => c:3
+      │    ├── d:14 => d:4
+      │    ├── e:15 => e:5
+      │    ├── f:16 => f:6
+      │    ├── g:17 => g:7
+      │    └── rowid:18 => rowid:8
       ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1-7)
@@ -4336,6 +4354,10 @@ project
       ├── fetch columns: a:11 d:14 e:15 f:16 g:17 rowid:18
       ├── update-mapping:
       │    └── d_new:21 => d:4
+      ├── return-mapping:
+      │    ├── a:11 => a:1
+      │    ├── d_new:21 => d:4
+      │    └── rowid:18 => rowid:8
       ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1,4), (1)~~>(4,8)
@@ -4363,6 +4385,9 @@ project
       ├── fetch columns: a:11 rowid:18
       ├── update-mapping:
       │    └── a_new:21 => a:1
+      ├── return-mapping:
+      │    ├── a_new:21 => a:1
+      │    └── rowid:18 => rowid:8
       ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1)
@@ -4393,6 +4418,11 @@ project
       ├── update-mapping:
       │    ├── a_new:21 => a:1
       │    └── a:11 => b:2
+      ├── return-mapping:
+      │    ├── a_new:21 => a:1
+      │    ├── a:11 => b:2
+      │    ├── c:13 => c:3
+      │    └── rowid:18 => rowid:8
       ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1-3), (2)~~>(1,3,8)
@@ -4426,6 +4456,11 @@ with &1
  │         ├── fetch columns: returning_test.a:11 returning_test.b:12 returning_test.c:13 rowid:18
  │         ├── update-mapping:
  │         │    └── a_new:21 => returning_test.a:1
+ │         ├── return-mapping:
+ │         │    ├── a_new:21 => returning_test.a:1
+ │         │    ├── returning_test.b:12 => returning_test.b:2
+ │         │    ├── returning_test.c:13 => returning_test.c:3
+ │         │    └── rowid:18 => rowid:8
  │         ├── volatile, mutations
  │         ├── key: (8)
  │         ├── fd: (8)-->(1-3)
@@ -4467,6 +4502,11 @@ with &1
  │         ├── fetch columns: returning_test.a:11 returning_test.b:12 returning_test.c:13 rowid:18
  │         ├── update-mapping:
  │         │    └── a_new:21 => returning_test.a:1
+ │         ├── return-mapping:
+ │         │    ├── a_new:21 => returning_test.a:1
+ │         │    ├── returning_test.b:12 => returning_test.b:2
+ │         │    ├── returning_test.c:13 => returning_test.c:3
+ │         │    └── rowid:18 => rowid:8
  │         ├── volatile, mutations
  │         ├── key: (8)
  │         ├── fd: (8)-->(1-3)
@@ -4514,6 +4554,11 @@ with &2
  │         ├── fetch columns: returning_test.a:23 returning_test.b:24 returning_test.c:25 rowid:30
  │         ├── update-mapping:
  │         │    └── a_new:33 => returning_test.a:13
+ │         ├── return-mapping:
+ │         │    ├── a_new:33 => returning_test.a:13
+ │         │    ├── returning_test.b:24 => returning_test.b:14
+ │         │    ├── returning_test.c:25 => returning_test.c:15
+ │         │    └── rowid:30 => rowid:20
  │         ├── volatile, mutations
  │         ├── key: (20)
  │         ├── fd: (20)-->(13-15)
@@ -4642,6 +4687,11 @@ project
  └── delete returning_test
       ├── columns: a:1!null b:2 d:4 rowid:8!null
       ├── fetch columns: a:11 b:12 d:14 rowid:18
+      ├── return-mapping:
+      │    ├── a:11 => a:1
+      │    ├── b:12 => b:2
+      │    ├── d:14 => d:4
+      │    └── rowid:18 => rowid:8
       ├── volatile, mutations
       ├── key: (8)
       ├── fd: (8)-->(1,2,4), (1)-->(2,4,8)
@@ -4756,9 +4806,12 @@ RETURNING
 update abcde
  ├── columns: a:1!null b:16 c:17
  ├── fetch columns: abcde.a:8 abcde.b:9 abcde.c:10 abcde.d:11 abcde.e:12
+ ├── passthrough columns: "family".b:16 "family".c:17
  ├── update-mapping:
  │    ├── "family".b:16 => abcde.b:2
  │    └── "family".c:17 => abcde.c:3
+ ├── return-mapping:
+ │    └── abcde.a:8 => abcde.a:1
  ├── volatile, mutations
  ├── key: (1)
  ├── fd: (1)-->(16,17)
