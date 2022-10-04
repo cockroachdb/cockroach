@@ -695,6 +695,7 @@ func (r *Replica) computeChecksumPostApply(
 
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
+	r.raftMu.AssertHeld()
 	snap := r.store.engine.NewSnapshot()
 	if cc.Checkpoint {
 		sl := stateloader.Make(r.RangeID)
