@@ -44,6 +44,7 @@ go_test(
         "//pkg/roachpb:with-mocks",
         "//pkg/rpc",
         "//pkg/settings/cluster",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
