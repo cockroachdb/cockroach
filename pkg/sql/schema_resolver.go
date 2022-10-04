@@ -334,7 +334,8 @@ func (sr *schemaResolver) canResolveDescUnderSchema(
 	case catalog.SchemaUserDefined:
 		return sr.authAccessor.CheckPrivilegeForUser(ctx, scDesc, privilege.USAGE, sr.sessionDataStack.Top().User())
 	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", kind))
+		forLog := kind // prevents kind from escaping
+		panic(errors.AssertionFailedf("unknown schema kind %d", forLog))
 	}
 }
 
