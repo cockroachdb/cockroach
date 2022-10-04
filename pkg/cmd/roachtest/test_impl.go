@@ -69,6 +69,10 @@ type testImpl struct {
 		syncutil.RWMutex
 		done bool
 
+		// cancel, if set, is called from the t.Fatal() family of functions when the
+		// test is being marked as failed (i.e. when the failed field above is also
+		// set). This is used to cancel the context passed to t.spec.Run(), so async
+		// test goroutines can be notified.
 		cancel  func()
 		failLoc struct {
 			file string
@@ -81,11 +85,6 @@ type testImpl struct {
 		// NB: the first failure is not always the relevant one due to:
 		// https://github.com/cockroachdb/cockroach/issues/44436
 		errors []error
-		// If len(errors)>0, this indicates whether the test timed out
-		// cancel, if set, is called from the t.Fatal() family of functions when the
-		// test is being marked as failed (i.e. when the failed field above is also
-		// set). This is used to cancel the context passed to t.spec.Run(), so async
-		// test goroutines can be notified.
 
 		// status is a map from goroutine id to status set by that goroutine. A
 		// special goroutine is indicated by runnerID; that one provides the test's

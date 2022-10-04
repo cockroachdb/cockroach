@@ -588,24 +588,16 @@ func (r *testRunner) runWorker(
 			// N.B. cluster creation must have failed...
 			// We don't want to prematurely abort the test suite since it's likely a transient issue.
 			// Instead, let's report an infrastructure issue, mark the test as failed and continue with the next test.
-			// Note, we fake the test name so that all cluster creation errors are posted to the same github issue.
-			oldName := t.spec.Name
-			oldOwner := t.spec.Owner
+
 			// Generate failure reason and mark the test failed to preclude fetching (cluster) artifacts.
 			t.addFailure(clusterCreateErr)
 			issueOutput := "test %s was skipped due to %s"
-			issueOutput = fmt.Sprintf(issueOutput, oldName, t.FailureMsg())
-			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
-			t.spec.Name = "cluster_creation"
-			t.spec.Owner = registry.OwnerDevInf
+			issueOutput = fmt.Sprintf(issueOutput, t.spec.Name, t.FailureMsg())
 
-			if err := github.MaybePost(t, issueOutput); err != nil {
+			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
+			if err := github.MaybePost(t, clusterCreationErr, issueOutput); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
-
-			// Restore test name and owner.
-			t.spec.Name = oldName
-			t.spec.Owner = oldOwner
 		} else {
 			// Tell the cluster that, from now on, it will be run "on behalf of this
 			// test".
@@ -794,7 +786,14 @@ func (r *testRunner) runTest(
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
 
-			if err := github.MaybePost(t, output); err != nil {
+			cat := otherErr
+
+			// This will override the created issue's owner as it is likely due to an SSH flake
+			if strings.Contains(output, "SSH_PROBLEM") {
+				cat = sshErr
+			}
+
+			if err := github.MaybePost(t, cat, output); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		} else {
