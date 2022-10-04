@@ -1230,7 +1230,19 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 	}
 	log.VEventf(ctx, 2, "leaseholder %v is being removed through an atomic "+
 		"replication change, transferring lease to %v", voterDemotingTarget, voterIncomingTarget)
-	err = r.store.DB().AdminTransferLease(ctx, r.startKey, voterIncomingTarget.StoreID)
+	// We bypass safety checks when transferring the lease to the VOTER_INCOMING.
+	// We do so because we could get stuck without a path to exit the joint
+	// configuration if we rejected this lease transfer while waiting to confirm
+	// that the target is up-to-date on its log. That confirmation may never
+	// arrive if the target is dead or partitioned away, and while we'd rather not
+	// transfer the lease to a dead node, at least we have a mechanism to recovery
+	// from that state. We also just sent the VOTER_INCOMING a snapshot (as a
+	// LEARNER, before promotion), so it is unlikely that the replica is actually
+	// dead or behind on its log.
+	// TODO(nvanbenschoten): this isn't great. Instead of bypassing safety checks,
+	// we should build a mechanism to choose an alternate lease transfer target
+	// after some amount of time.
+	err = r.store.DB().AdminTransferLeaseBypassingSafetyChecks(ctx, r.startKey, voterIncomingTarget.StoreID)
 	if err != nil {
 		return err
 	}
@@ -3637,7 +3649,7 @@ func (r *Replica) adminScatter(
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
 			if targetStoreID != r.store.StoreID() {
 				log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
-				if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
+				if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
 					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
 				}
 			}

@@ -1589,7 +1589,7 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 	origLease, _ := l.replica0.GetLease()
 	{
 		// Transferring the lease to ourself should be a no-op.
-		if err := l.replica0.AdminTransferLease(ctx, l.replica0Desc.StoreID); err != nil {
+		if err := l.replica0.AdminTransferLease(ctx, l.replica0Desc.StoreID, false /* bypassSafetyChecks */); err != nil {
 			t.Fatal(err)
 		}
 		newLease, _ := l.replica0.GetLease()
@@ -1601,12 +1601,12 @@ func TestLeaseExpirationBasedRangeTransfer(t *testing.T) {
 	{
 		// An invalid target should result in an error.
 		const expected = "unable to find store .* in range"
-		if err := l.replica0.AdminTransferLease(ctx, 1000); !testutils.IsError(err, expected) {
+		if err := l.replica0.AdminTransferLease(ctx, 1000, false /* bypassSafetyChecks */); !testutils.IsError(err, expected) {
 			t.Fatalf("expected %s, but found %v", expected, err)
 		}
 	}
 
-	if err := l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID); err != nil {
+	if err := l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID, false /* bypassSafetyChecks */); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1651,7 +1651,7 @@ func TestLeaseExpirationBasedRangeTransferWithExtension(t *testing.T) {
 	l := setupLeaseTransferTest(t)
 	defer l.tc.Stopper().Stop(ctx)
 	// Ensure that replica1 has the lease.
-	if err := l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID); err != nil {
+	if err := l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID, false /* bypassSafetyChecks */); err != nil {
 		t.Fatal(err)
 	}
 	l.checkHasLease(t, 1)
@@ -1673,7 +1673,7 @@ func TestLeaseExpirationBasedRangeTransferWithExtension(t *testing.T) {
 	transferErrCh := make(chan error)
 	go func() {
 		// Transfer back from replica1 to replica0.
-		err := l.replica1.AdminTransferLease(context.Background(), l.replica0Desc.StoreID)
+		err := l.replica1.AdminTransferLease(context.Background(), l.replica0Desc.StoreID, false /* bypassSafetyChecks */)
 		// Ignore not leaseholder errors which can arise due to re-proposals.
 		if errors.HasType(err, (*roachpb.NotLeaseHolderError)(nil)) {
 			err = nil
@@ -1738,7 +1738,7 @@ func TestLeaseExpirationBasedDrainTransferWithExtension(t *testing.T) {
 	l := setupLeaseTransferTest(t)
 	defer l.tc.Stopper().Stop(ctx)
 	// Ensure that replica1 has the lease.
-	if err := l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID); err != nil {
+	if err := l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID, false /* bypassSafetyChecks */); err != nil {
 		t.Fatal(err)
 	}
 	l.checkHasLease(t, 1)
@@ -1791,7 +1791,7 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 
 		// Ensure that replica1 has the lease, and that replica0 has also picked up
 		// on the lease transfer.
-		require.NoError(t, l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID))
+		require.NoError(t, l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID, false /* bypassSafetyChecks */))
 		l.checkHasLease(t, 1)
 		preLease, _ := l.replica1.GetLease()
 		require.Eventually(t, func() bool {
@@ -2780,9 +2780,6 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						AllowLeaseTransfersWhenTargetMayNeedSnapshot: true,
-					},
 					Server: &server.TestingKnobs{
 						WallClock: manualClock,
 					},
@@ -2872,7 +2869,11 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		// Finally, transfer the lease to node 2 while it is still unavailable and
 		// behind. We try to avoid this case when picking new leaseholders in practice,
 		// but we're never 100% successful.
-		tc.TransferRangeLeaseOrFatal(t, *repl0.Desc(), tc.Target(2))
+		// NOTE: we bypass safety checks because the target node is behind on its log,
+		// so the lease transfer would be rejected otherwise.
+		err = tc.Servers[0].DB().AdminTransferLeaseBypassingSafetyChecks(ctx,
+			repl0.Desc().StartKey.AsRawKey(), tc.Target(2).StoreID)
+		require.Nil(t, err)
 
 		// Remove the partition. A snapshot to node 2 should follow. This snapshot
 		// will inform node 2 that it is the new leaseholder for the range. Node 2
