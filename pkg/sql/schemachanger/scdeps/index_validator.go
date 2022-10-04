@@ -108,14 +108,14 @@ func (iv indexValidator) ValidateInvertedIndexes(
 // this constructor was called.
 func (iv indexValidator) makeHistoricalInternalExecTxnRunner() sqlutil.HistoricalInternalExecTxnRunner {
 	now := iv.db.Clock().Now()
-	return func(ctx context.Context, fn sqlutil.InternalExecFn) error {
+	return sqlutil.NewHistoricalInternalExecTxnRunner(func(ctx context.Context, fn sqlutil.InternalExecFn) error {
 		validationTxn := iv.db.NewTxn(ctx, "validation")
 		err := validationTxn.SetFixedTimestamp(ctx, now)
 		if err != nil {
 			return err
 		}
 		return fn(ctx, validationTxn, iv.ieFactory.NewInternalExecutor(iv.newFakeSessionData(&iv.settings.SV)))
-	}
+	}, now)
 }
 
 // NewIndexValidator creates a IndexValidator interface

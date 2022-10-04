@@ -171,16 +171,17 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 	readAsOf hlc.Timestamp,
 ) sqlutil.HistoricalInternalExecTxnRunner {
-	runner := func(ctx context.Context, retryable sqlutil.InternalExecFn) error {
-		return sc.fixedTimestampTxn(ctx, readAsOf, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-		) error {
-			// We need to re-create the evalCtx since the txn may retry.
-			ie := sc.ieFactory.NewInternalExecutor(NewFakeSessionData(sc.execCfg.SV()))
-			return retryable(ctx, txn, ie)
-		})
-	}
-	return runner
+	return sqlutil.NewHistoricalInternalExecTxnRunner(
+		func(ctx context.Context, retryable sqlutil.InternalExecFn) error {
+			return sc.fixedTimestampTxn(ctx, readAsOf, func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			) error {
+				// We need to re-create the evalCtx since the txn may retry.
+				ie := sc.ieFactory.NewInternalExecutor(NewFakeSessionData(sc.execCfg.SV()))
+				return retryable(ctx, txn, ie)
+			})
+		},
+		readAsOf)
 }
 
 func (sc *SchemaChanger) fixedTimestampTxn(
@@ -1575,18 +1576,17 @@ func ValidateInvertedIndexes(
 	var addProtectedTS = func() error {
 		var err error
 		protectedTSAdded.Do(func() {
+			// If we are not running a historical query, nothing to do here.
+			if runHistoricalTxn.ReadAsOf().IsEmpty() {
+				return
+			}
 			protectedtsID := uuid.MakeV4()
 			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
-			ts := hlc.Timestamp{}
-			err = runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-				ts = txn.ReadTimestamp()
-				return nil
-			})
 			if err != nil {
 				return
 			}
 			rec := jobsprotectedts.MakeRecord(protectedtsID,
-				int64(jobID), ts, nil, jobsprotectedts.Jobs, target)
+				int64(jobID), runHistoricalTxn.ReadAsOf(), nil, jobsprotectedts.Jobs, target)
 			err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return protectedTSProvider.Protect(ctx, txn, rec)
 			})
@@ -1614,7 +1614,7 @@ func ValidateInvertedIndexes(
 			// distributed execution and avoid bypassing the SQL decoding
 			var waitBeforeProtectedTS time.Duration
 			start := timeutil.Now()
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
+			if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
 				_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, codec, tableDesc.GetID(), nil, "", true)
 				if err != nil {
 					return err
@@ -1634,7 +1634,7 @@ func ValidateInvertedIndexes(
 				span := tableDesc.IndexSpan(codec, idx.GetID())
 				key := span.Key
 				endKey := span.EndKey
-				if idxLenErr = runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
+				if idxLenErr = runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
 					for {
 						kvs, err := txn.Scan(ctx, key, endKey, 1000000)
 						if err != nil {
@@ -1765,7 +1765,7 @@ func countExpectedRowsForInvertedIndex(
 	}
 
 	var expectedCount int64
-	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		var stmt string
 		geoConfig := idx.GetGeoConfig()
 		if geoConfig.IsEmpty() {
@@ -1856,18 +1856,17 @@ func ValidateForwardIndexes(
 	var addProtectedTS = func() error {
 		var err error
 		protectedTSAdded.Do(func() {
+			// If we are not running a historical query, nothing to do here.
+			if runHistoricalTxn.ReadAsOf().IsEmpty() {
+				return
+			}
 			protectedtsID := uuid.MakeV4()
 			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
-			ts := hlc.Timestamp{}
-			err = runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-				ts = txn.ReadTimestamp()
-				return nil
-			})
 			if err != nil {
 				return
 			}
 			rec := jobsprotectedts.MakeRecord(protectedtsID,
-				int64(jobID), ts, nil, jobsprotectedts.Jobs, target)
+				int64(jobID), runHistoricalTxn.ReadAsOf(), nil, jobsprotectedts.Jobs, target)
 			err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				return protectedTSProvider.Protect(ctx, txn, rec)
 			})
@@ -1890,7 +1889,7 @@ func ValidateForwardIndexes(
 		grp.GoCtx(func(ctx context.Context) error {
 			// FIXME: Modify this a bit..
 			var waitBeforeProtectedTS time.Duration
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
+			if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor) error {
 				_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, codec, tableDesc.GetID(), nil, "", true)
 				if err != nil {
 					return err
@@ -2033,7 +2032,7 @@ func populateExpectedCounts(
 		desc = fakeDesc
 	}
 	var tableRowCount int64
-	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		var s strings.Builder
 		for _, idx := range indexes {
 			// For partial indexes, count the number of rows in the table
@@ -2144,7 +2143,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 
 	// Retrieve the row count in the index.
 	var idxLen int64
-	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.GetID())
 		// If the index is a partial index the predicate must be added
 		// as a filter to the query to force scanning the index.

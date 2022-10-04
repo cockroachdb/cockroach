@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // InternalExecutor is meant to be used by layers below SQL in the system that
@@ -222,7 +223,44 @@ type InternalExecutorFactory interface {
 // InternalExecFn is the type of functions that operates using an internalExecutor.
 type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
 
+// HistoricalInternalExecTxnRunnerFn callback for executing with the internal executor
+// at a fixed timestamp.
+type HistoricalInternalExecTxnRunnerFn func(ctx context.Context, fn InternalExecFn) error
+
 // HistoricalInternalExecTxnRunner is like historicalTxnRunner except it only
 // passes the fn the exported InternalExecutor instead of the whole unexported
-// extendedEvalContenxt, so it can be implemented outside pkg/sql.
-type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+// extendedEvalContext, so it can be implemented outside pkg/sql.
+type HistoricalInternalExecTxnRunner interface {
+	// Exec executes the callback at a given timestamp.
+	Exec(ctx context.Context, fn InternalExecFn) error
+	// ReadAsOf returns the timestamp that the historical txn executor is running
+	// at.
+	ReadAsOf() hlc.Timestamp
+}
+
+// historicalInternalExecTxnRunner implements HistoricalInternalExecTxnRunner.
+type historicalInternalExecTxnRunner struct {
+	execHistoricalTxn HistoricalInternalExecTxnRunnerFn
+	readAsOf          hlc.Timestamp
+}
+
+// Exec implements HistoricalInternalExecTxnRunner.Exec.
+func (ht *historicalInternalExecTxnRunner) Exec(ctx context.Context, fn InternalExecFn) error {
+	return ht.execHistoricalTxn(ctx, fn)
+}
+
+// ReadAsOf implements HistoricalInternalExecTxnRunner.ReadAsOf.
+func (ht *historicalInternalExecTxnRunner) ReadAsOf() hlc.Timestamp {
+	return ht.readAsOf
+}
+
+// NewHistoricalInternalExecTxnRunner constructs a new historical internal
+// executor.
+func NewHistoricalInternalExecTxnRunner(
+	fn HistoricalInternalExecTxnRunnerFn, readAsOf hlc.Timestamp,
+) HistoricalInternalExecTxnRunner {
+	return &historicalInternalExecTxnRunner{
+		execHistoricalTxn: fn,
+		readAsOf:          readAsOf,
+	}
+}
