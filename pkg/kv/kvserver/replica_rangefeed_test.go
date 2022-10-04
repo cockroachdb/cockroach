@@ -830,7 +830,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 			if raftStatus != nil && raftStatus.RaftState == raft.StateFollower {
 				return nil
 			}
-			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1))
+			err = repl.AdminTransferLease(ctx, roachpb.StoreID(1), false /* bypassSafetyChecks */)
 			// NB: errors.Wrapf(nil, ...) returns nil.
 			// nolint:errwrap
 			return errors.Errorf("not raft follower: %+v, transferred lease: %v", raftStatus, err)

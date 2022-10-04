@@ -197,6 +197,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	status kvserverpb.LeaseStatus,
 	startKey roachpb.Key,
 	transfer bool,
+	bypassSafetyChecks bool,
 ) *leaseRequestHandle {
 	if nextLease, ok := p.RequestPending(); ok {
 		if nextLease.Replica.ReplicaID == nextLeaseHolder.ReplicaID {
@@ -291,11 +292,19 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	var leaseReq roachpb.Request
 	if transfer {
 		leaseReq = &roachpb.TransferLeaseRequest{
-			RequestHeader: reqHeader,
-			Lease:         reqLease,
-			PrevLease:     status.Lease,
+			RequestHeader:      reqHeader,
+			Lease:              reqLease,
+			PrevLease:          status.Lease,
+			BypassSafetyChecks: bypassSafetyChecks,
 		}
 	} else {
+		if bypassSafetyChecks {
+			// TODO(nvanbenschoten): we could support a similar bypassSafetyChecks
+			// flag for RequestLeaseRequest, which would disable the protection in
+			// propBuf.maybeRejectUnsafeProposalLocked. For now, we use a testing
+			// knob.
+			log.Fatal(ctx, "bypassSafetyChecks not supported for RequestLeaseRequest")
+		}
 		minProposedTS := p.repl.mu.minLeaseProposedTS
 		leaseReq = &roachpb.RequestLeaseRequest{
 			RequestHeader: reqHeader,
@@ -817,7 +826,8 @@ func (r *Replica) requestLeaseLocked(
 		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(err))
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
+		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(),
+		false /* transfer */, false /* bypassSafetyChecks */)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. Only the
@@ -842,7 +852,9 @@ func (r *Replica) requestLeaseLocked(
 // replica. Otherwise, a NotLeaseHolderError is returned.
 //
 // AdminTransferLease implements the ReplicaLeaseMover interface.
-func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID) error {
+func (r *Replica) AdminTransferLease(
+	ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool,
+) error {
 	// initTransferHelper inits a transfer if no extension is in progress.
 	// It returns a channel for waiting for the result of a pending
 	// extension (if any is in progress) and a channel for waiting for the
@@ -896,7 +908,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		raftStatus := r.raftStatusRLocked()
 		raftFirstIndex := r.raftFirstIndexRLocked()
 		snapStatus := raftutil.ReplicaMayNeedSnapshot(raftStatus, raftFirstIndex, nextLeaseHolder.ReplicaID)
-		if snapStatus != raftutil.NoSnapshotNeeded && !r.store.TestingKnobs().AllowLeaseTransfersWhenTargetMayNeedSnapshot {
+		if snapStatus != raftutil.NoSnapshotNeeded && !bypassSafetyChecks {
 			r.store.metrics.LeaseTransferErrorCount.Inc(1)
 			log.VEventf(ctx, 2, "not initiating lease transfer because the target %s may "+
 				"need a snapshot: %s", nextLeaseHolder, snapStatus)
@@ -905,7 +917,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		}
 
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(
-			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
+			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true /* transfer */, bypassSafetyChecks,
 		)
 		return nil, transfer, nil
 	}
