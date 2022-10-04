@@ -4,7 +4,7 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 
 /* test */
 ALTER TABLE db.public.tbl ADD COLUMN j INT;
-EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 2;
+EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 1;
 ----
 • Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8; 
 │

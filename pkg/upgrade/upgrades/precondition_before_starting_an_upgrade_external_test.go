@@ -45,29 +45,41 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
-	require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Settings: settings,
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          v0,
+	type testSetup struct {
+		parentID       descpb.ID
+		parentSchemaID descpb.ID
+		sqlDB          *gosql.DB
+		tdb            *sqlutils.SQLRunner
+		cleanup        func()
+	}
+	setupTestCluster := func() testSetup {
+		settings := cluster.MakeTestingClusterSettingsWithVersions(v1, v0, false /* initializeVersion */)
+		require.NoError(t, clusterversion.Initialize(ctx, v0, &settings.SV))
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Settings: settings,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
+						BinaryVersionOverride:          v0,
+					},
 				},
 			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	sqlDB := tc.ServerConn(0)
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-
-	var parentID, parentSchemaID descpb.ID
-	tdb.Exec(t, "CREATE TABLE temp_tbl()")
-	tdb.QueryRow(t, `SELECT "parentID", "parentSchemaID" FROM system.namespace WHERE name = 'temp_tbl'`).
-		Scan(&parentID, &parentSchemaID)
+		})
+		sqlDB := tc.ServerConn(0)
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		var parentID, parentSchemaID descpb.ID
+		tdb.Exec(t, "CREATE TABLE temp_tbl()")
+		tdb.QueryRow(t, `SELECT "parentID", "parentSchemaID" FROM system.namespace WHERE name = 'temp_tbl'`).
+			Scan(&parentID, &parentSchemaID)
+		return testSetup{
+			parentID:       parentID,
+			parentSchemaID: parentSchemaID,
+			sqlDB:          sqlDB,
+			tdb:            tdb,
+			cleanup:        func() { tc.Stopper().Stop(ctx) },
+		}
+	}
 
 	// One subtest for each precondition we wish to test.
 	t.Run("upgrade fails if there exists invalid descriptors", func(t *testing.T) {
@@ -95,14 +107,15 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 			104 so that it does collide with system tables that are allowed IDs below
 			100.
 		*/
-
+		ts := setupTestCluster()
+		defer ts.cleanup()
 		const tableDescriptorToInject = "0a85020a01741868203228023a0042260a016910011a0c080110401800300050146000200030006800700078008001008801009801004802524c0a077072696d61727910011801220169300140004a10080010001a00200028003000380040005a007a0408002000800100880100900104980101a20106080012001800a80100b20100ba010060026a1d0a090a0561646d696e10020a080a04726f6f7410021204726f6f741802800101880103980100b201120a077072696d61727910001a016920012800b80101c20100d201080835100018012000e80100f2010408001200f801008002009202009a020a08f084c3bfb1c1ccfe16b20200b80200c0021dc80200e00200f00200"
 
 		// Decode and insert the table descriptor.
-		decodeTableDescriptorAndInsert(t, ctx, sqlDB, tableDescriptorToInject, parentID, parentSchemaID)
+		decodeTableDescriptorAndInsert(t, ctx, ts.sqlDB, tableDescriptorToInject, ts.parentID, ts.parentSchemaID)
 
 		// Attempt to upgrade the cluster version and expect to see a failure
-		_, err := sqlDB.Exec(`SET CLUSTER SETTING version = $1`, v1.String())
+		_, err := ts.sqlDB.Exec(`SET CLUSTER SETTING version = $1`, v1.String())
 		require.Error(t, err, "upgrade should be refused because precondition is violated.")
 		require.Equal(t, "pq: verifying precondition for version 22.1-2: "+
 			"there exists invalid descriptors as listed below; fix these descriptors before attempting to upgrade again:\n"+
@@ -110,9 +123,19 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 			"invalid descriptor: defaultdb.public.temp_tbl (104) because 'no matching name info found in non-dropped relation \"t\"'",
 			strings.ReplaceAll(err.Error(), "1000022", "22"))
 		// The cluster version should remain at `v0`.
-		tdb.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v0.String()}})
+		ts.tdb.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v0.String()}})
 	})
+	t.Run("upgrade correctly identifies broken userfiles", func(t *testing.T) {
+		ts := setupTestCluster()
+		defer ts.cleanup()
 
+		decodeTableDescriptorAndInsert(t, ctx, ts.sqlDB, brokenUserfileFilesTable, ts.parentID, ts.parentSchemaID)
+		decodeTableDescriptorAndInsert(t, ctx, ts.sqlDB, brokenUserfilePayloadTable, ts.parentID, ts.parentSchemaID)
+
+		_, err := ts.sqlDB.Exec(`SET CLUSTER SETTING version = $1`, v1.String())
+		require.NoError(t, err)
+		ts.tdb.CheckQueryResults(t, "SHOW CLUSTER SETTING version", [][]string{{v1.String()}})
+	})
 	// other preconditions to test here, one per `t.Run()`.
 }
 

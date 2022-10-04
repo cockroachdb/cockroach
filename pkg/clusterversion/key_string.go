@@ -47,11 +47,12 @@ func _() {
 	_ = x[PrioritizeSnapshots-35]
 	_ = x[EnableLeaseUpgrade-36]
 	_ = x[SupportAssumeRoleAuth-37]
+	_ = x[FixUserfileRelatedDescriptorCorruption-38]
 }
 
-const _Key_name = "invalidVersionKeyV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTableGCHintInReplicaStateUpdateInvalidColumnIDsInSequenceBackReferencesTTLDistSQLPrioritizeSnapshotsEnableLeaseUpgradeSupportAssumeRoleAuth"
+const _Key_name = "invalidVersionKeyV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTableGCHintInReplicaStateUpdateInvalidColumnIDsInSequenceBackReferencesTTLDistSQLPrioritizeSnapshotsEnableLeaseUpgradeSupportAssumeRoleAuthFixUserfileRelatedDescriptorCorruption"
 
-var _Key_index = [...]uint16{0, 17, 22, 31, 46, 86, 120, 154, 176, 196, 215, 248, 267, 287, 308, 343, 377, 407, 460, 474, 495, 526, 559, 590, 624, 646, 675, 702, 733, 766, 784, 808, 836, 855, 875, 921, 931, 950, 968, 989}
+var _Key_index = [...]uint16{0, 17, 22, 31, 46, 86, 120, 154, 176, 196, 215, 248, 267, 287, 308, 343, 377, 407, 460, 474, 495, 526, 559, 590, 624, 646, 675, 702, 733, 766, 784, 808, 836, 855, 875, 921, 931, 950, 968, 989, 1027}
 
 func (i Key) String() string {
 	i -= -1

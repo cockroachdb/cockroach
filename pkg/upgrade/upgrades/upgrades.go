@@ -159,6 +159,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		updateInvalidColumnIDsInSequenceBackReferences,
 	),
+	upgrade.NewTenantUpgrade("fix corrupt user-file related table descriptors",
+		toCV(clusterversion.FixUserfileRelatedDescriptorCorruption),
+		NoPrecondition,
+		fixInvalidObjectsThatLookLikeBadUserfileConstraint,
+	),
 }
 
 func init() {

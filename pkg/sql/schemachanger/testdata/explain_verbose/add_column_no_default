@@ -101,38 +101,41 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │                 DescriptorIDs:
 │                 - 106
 │                 JobID: 1
-│                 RunningStatus: PostCommitPhase stage 1 of 2 with 1 MutationType op pending
+│                 RunningStatus: PostCommitPhase stage 1 of 1 with 1 MutationType op pending
 │                 Statements:
 │                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8
 │                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
 │                   statementtag: ALTER TABLE
 │
-└── • PostCommitPhase
+├── • PostCommitPhase
+│   │
+│   └── • Stage 1 of 1 in PostCommitPhase
+│       │
+│       ├── • 1 element transitioning toward PUBLIC
+│       │   │
+│       │   └── • Column:{DescID: 106, ColumnID: 2}
+│       │       │ DELETE_ONLY → WRITE_ONLY
+│       │       │
+│       │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │             rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│       │
+│       └── • 3 Mutation operations
+│           │
+│           ├── • MakeDeleteOnlyColumnWriteOnly
+│           │     ColumnID: 2
+│           │     TableID: 106
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 106
+│           │
+│           └── • UpdateSchemaChangerJob
+│                 IsNonCancelable: true
+│                 JobID: 1
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+│
+└── • PostCommitNonRevertiblePhase
     │
-    ├── • Stage 1 of 2 in PostCommitPhase
-    │   │
-    │   ├── • 1 element transitioning toward PUBLIC
-    │   │   │
-    │   │   └── • Column:{DescID: 106, ColumnID: 2}
-    │   │       │ DELETE_ONLY → WRITE_ONLY
-    │   │       │
-    │   │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
-    │   │             rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
-    │   │
-    │   └── • 3 Mutation operations
-    │       │
-    │       ├── • MakeDeleteOnlyColumnWriteOnly
-    │       │     ColumnID: 2
-    │       │     TableID: 106
-    │       │
-    │       ├── • SetJobStateOnDescriptor
-    │       │     DescriptorID: 106
-    │       │
-    │       └── • UpdateSchemaChangerJob
-    │             JobID: 1
-    │             RunningStatus: PostCommitPhase stage 2 of 2 with 2 MutationType ops pending
-    │
-    └── • Stage 2 of 2 in PostCommitPhase
+    └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
         ├── • 1 element transitioning toward PUBLIC
         │   │
