@@ -116,12 +116,12 @@ fi
 # Define the artifacts base dir, within which both the built binaries and the
 # artifacts will be stored.
 sha=$(git rev-parse --short HEAD)
-abase="artifacts/${sha}"
 # If local changes are detected use separate artifacts dir and force rebuild.
 if [ -n "$(git status --porcelain --untracked-files=no)" ] ; then
-  abase="${abase}-dirty"
+  sha="${sha}-dirty"
   force_build=${force_build:-y}
 fi
+abase="artifacts/${sha}"
 mkdir -p "${abase}"
 trap 'echo Build artifacts dir is ${abase}' EXIT
 
@@ -133,8 +133,9 @@ cr="${abase}/cockroach${local}"
 # This is the artifacts dir we'll pass to the roachtest invocation. It's
 # disambiguated by a timestamp because one often ends up invoking roachtest on
 # the same SHA multiple times and artifacts shouldn't mix.
-a="${abase}/$(date '+%H%M%S')"
-ln -fs "${a}" "artifacts/latest"
+timestamp=$(date '+%H%M%S')
+a="${abase}/${timestamp}"
+ln -fs "${sha}/${timestamp}" "artifacts/latest"
 
 if [ ! -f "${cr}" ] || [ "${force_build}" = "y" ]; then
   if [ -z "${local}" ]; then
