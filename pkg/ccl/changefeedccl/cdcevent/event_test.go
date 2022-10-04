@@ -364,6 +364,34 @@ func expectResultColumns(
 	t *testing.T, desc catalog.TableDescriptor, colNames ...string,
 ) (res []ResultColumn) {
 	t.Helper()
+
+	// Map the column names to the expected ordinality.
+	//
+	// The ordinality values in EventDescriptor.keyCols,
+	// EventDescriptor.valueCols, and EventDescriptor.udtCols (which are indexes
+	// into a rowenc.EncDatumRow) are calculated in the following manner: Start
+	// with catalog.TableDescriptor.PublicColumns() and keep (i) the primary key
+	// columns, (ii) columns in a specified family, and (iii) virtual columns. The
+	// remaining columns get filtered out. The position of a particular column in
+	// this array determines its ordinality.
+	//
+	// This function generates ordinality in the same manner, except it uses
+	// colNames instead of a column family descriptor when filtering columns.
+	colNamesSet := make(map[string]int)
+	for _, colName := range colNames {
+		colNamesSet[colName] = -1
+	}
+	idx := 0
+	for _, col := range desc.PublicColumns() {
+		colName := string(col.ColName())
+		if _, ok := colNamesSet[colName]; ok {
+			colNamesSet[colName] = idx
+			idx++
+		} else if col.IsVirtual() || desc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
+			idx++
+		}
+	}
+
 	for _, colName := range colNames {
 		col, err := desc.FindColumnWithName(tree.Name(colName))
 		require.NoError(t, err)
@@ -374,7 +402,7 @@ func expectResultColumns(
 				TableID:        desc.GetID(),
 				PGAttributeNum: uint32(col.GetPGAttributeNum()),
 			},
-			ord:       col.Ordinal(),
+			ord:       colNamesSet[colName],
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		})
 	}

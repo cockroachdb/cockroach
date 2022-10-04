@@ -250,7 +250,16 @@ func NewEventDescriptor(
 
 	// Remaining columns go in same order as public columns.
 	inFamily := catalog.MakeTableColSet(family.ColumnIDs...)
-	for ord, col := range desc.PublicColumns() {
+	relevantCols, err := getRelevantColumnsForFamily(desc, family)
+	if err != nil {
+		return nil, err
+	}
+	for ord, colID := range relevantCols {
+		col, err := desc.FindColumnWithID(colID)
+		if err != nil {
+			return nil, err
+		}
+
 		isInFamily := inFamily.Contains(col.GetID())
 		virtual := col.IsVirtual() && includeVirtualColumns
 		isValueCol := isInFamily || virtual
@@ -632,4 +641,30 @@ func TestingMakeEventRowFromEncDatums(
 		deleted:         deleted,
 		alloc:           &alloc,
 	}
+}
+
+// getRelevantColumnsForFamily returns an array of column ids for public columns
+// including only primary key columns, columns in the specified familyDesc,
+// and virtual columns.
+func getRelevantColumnsForFamily(
+	tableDesc catalog.TableDescriptor, familyDesc *descpb.ColumnFamilyDescriptor,
+) ([]descpb.ColumnID, error) {
+	columns := tableDesc.GetPrimaryIndex().CollectKeyColumnIDs()
+	for _, colID := range familyDesc.ColumnIDs {
+		col, err := tableDesc.FindColumnWithID(colID)
+		if err != nil {
+			return nil, err
+		}
+		if col.Public() {
+			columns.Add(colID)
+		}
+	}
+
+	for _, col := range tableDesc.PublicColumns() {
+		if col.IsVirtual() {
+			columns.Add(col.GetID())
+		}
+	}
+
+	return columns.Ordered(), nil
 }
