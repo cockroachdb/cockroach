@@ -40,7 +40,7 @@ CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl = 'on')
 
 subtest end
 
-subtest todo_add_subtests
+subtest ttl_automatic_column_notice
 
 query T noticetrace
 CREATE TABLE tbl_ttl_automatic_column (id INT PRIMARY KEY, text TEXT) WITH (ttl_automatic_column = 'on')
@@ -51,6 +51,24 @@ query T noticetrace
 ALTER TABLE tbl_ttl_automatic_column RESET (ttl_automatic_column)
 ----
 NOTICE: ttl_automatic_column is no longer used. Setting ttl_expire_after automatically creates a TTL column. Resetting ttl_expire_after removes the automatically created column.
+
+subtest end
+
+subtest ttl_range_concurrency_notice
+
+query T noticetrace
+CREATE TABLE tbl_ttl_range_concurrency (id INT PRIMARY KEY, text TEXT) WITH (ttl_range_concurrency = 2)
+----
+NOTICE: ttl_range_concurrency is no longer configurable.
+
+query T noticetrace
+ALTER TABLE tbl_ttl_range_concurrency RESET (ttl_range_concurrency)
+----
+NOTICE: ttl_range_concurrency is no longer configurable.
+
+subtest end
+
+subtest todo_add_subtests
 
 statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
 CREATE TABLE tbl (
@@ -432,12 +450,12 @@ CREATE TABLE tbl (
   id INT PRIMARY KEY,
   text TEXT,
   FAMILY (id, text)
-) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 50, ttl_range_concurrency = 2, ttl_delete_rate_limit = 100, ttl_pause = true, ttl_row_stats_poll_interval = '1 minute', ttl_label_metrics = true)
+) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 50, ttl_delete_rate_limit = 100, ttl_pause = true, ttl_row_stats_poll_interval = '1 minute', ttl_label_metrics = true)
 
 query T
 SELECT reloptions FROM pg_class WHERE relname = 'tbl'
 ----
-{ttl='on',ttl_expire_after='00:10:00':::INTERVAL,ttl_job_cron='@hourly',ttl_select_batch_size=50,ttl_range_concurrency=2,ttl_delete_rate_limit=100,ttl_pause=true,ttl_row_stats_poll_interval='1m0s',ttl_label_metrics=true}
+{ttl='on',ttl_expire_after='00:10:00':::INTERVAL,ttl_job_cron='@hourly',ttl_select_batch_size=50,ttl_delete_rate_limit=100,ttl_pause=true,ttl_row_stats_poll_interval='1m0s',ttl_label_metrics=true}
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
@@ -448,7 +466,7 @@ CREATE TABLE public.tbl (
                                                                                                                                                                                                                                                                                             crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
                                                                                                                                                                                                                                                                                             CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
                                                                                                                                                                                                                                                                                             FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_select_batch_size = 50, ttl_range_concurrency = 2, ttl_delete_rate_limit = 100, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_select_batch_size = 50, ttl_delete_rate_limit = 100, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
 
 statement ok
 ALTER TABLE tbl SET (ttl_delete_batch_size = 100)
@@ -462,16 +480,13 @@ CREATE TABLE public.tbl (
                                                                                                                                                                                                                                                                                                                          crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
                                                                                                                                                                                                                                                                                                                          CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
                                                                                                                                                                                                                                                                                                                          FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_select_batch_size = 50, ttl_delete_batch_size = 100, ttl_range_concurrency = 2, ttl_delete_rate_limit = 100, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly', ttl_select_batch_size = 50, ttl_delete_batch_size = 100, ttl_delete_rate_limit = 100, ttl_pause = true, ttl_row_stats_poll_interval = '1m0s', ttl_label_metrics = true)
 
 statement error "ttl_select_batch_size" must be at least 1
 ALTER TABLE tbl SET (ttl_select_batch_size = -1)
 
 statement error "ttl_delete_batch_size" must be at least 1
 ALTER TABLE tbl SET (ttl_delete_batch_size = -1)
-
-statement error "ttl_range_concurrency" must be at least 1
-ALTER TABLE tbl SET (ttl_range_concurrency = -1)
 
 statement error "ttl_delete_rate_limit" must be at least 1
 ALTER TABLE tbl SET (ttl_delete_rate_limit = -1)
@@ -480,7 +495,7 @@ statement error "ttl_row_stats_poll_interval" must be at least 1
 ALTER TABLE tbl SET (ttl_row_stats_poll_interval = '-1 second')
 
 statement ok
-ALTER TABLE tbl RESET (ttl_delete_batch_size, ttl_select_batch_size, ttl_range_concurrency, ttl_delete_rate_limit, ttl_pause, ttl_row_stats_poll_interval)
+ALTER TABLE tbl RESET (ttl_delete_batch_size, ttl_select_batch_size, ttl_delete_rate_limit, ttl_pause, ttl_row_stats_poll_interval)
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
