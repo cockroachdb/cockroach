@@ -1036,3 +1036,20 @@ INSERT INTO t72881 VALUES ('foo'::STRING)
 # Regression test for #72881. Computed columns can't have a DEFAULT expr.
 statement error pgcode 42P16 computed column "v" cannot also have a DEFAULT expression
 ALTER TABLE t72881 ALTER COLUMN v SET DEFAULT 'foo'
+
+subtest regression_88128
+
+statement ok
+CREATE TABLE t88128 (t TIME);
+INSERT INTO t88128 VALUES ('10:00:00');
+ALTER TABLE t88128 ADD COLUMN b1 BOOL as (t - '5 hrs'::INTERVAL < '23:00:00'::TIME) STORED;
+ALTER TABLE t88128 ADD COLUMN b2 BOOL as (t + '5 hrs'::INTERVAL > '01:00:00'::TIME) STORED
+
+query BBBB colnames
+SELECT
+  b1, t - '5 hrs'::INTERVAL < '23:00:00'::TIME AS expected_b1,
+  b2, t + '5 hrs'::INTERVAL > '01:00:00'::TIME AS expected_b2
+FROM t88128
+----
+b1    expected_b1  b2    expected_b2
+true  true         true  true

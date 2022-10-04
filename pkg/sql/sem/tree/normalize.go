@@ -248,235 +248,94 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		// We loop attempting to simplify the comparison expression. As a
 		// pre-condition, we know there is at least one variable in the expression
 		// tree or we would not have entered this code path.
-		exprCopied := false
-		for {
-			if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
-				return DNull
-			}
-
-			if v.isConst(expr.Left) {
-				switch expr.Right.(type) {
-				case *BinaryExpr, VariableExpr:
-					break
-				default:
-					return expr
-				}
-
-				invertedOp, err := invertComparisonOp(expr.Operator)
-				if err != nil {
-					v.err = err
-					return expr
-				}
-
-				// The left side is const and the right side is a binary expression or a
-				// variable. Flip the comparison op so that the right side is const and
-				// the left side is a binary expression or variable.
-				// Create a new ComparisonExpr so the function cache isn't reused.
-				if !exprCopied {
-					exprCopy := *expr
-					expr = &exprCopy
-					exprCopied = true
-				}
-
-				expr = NewTypedComparisonExpr(invertedOp, expr.TypedRight(), expr.TypedLeft())
-			} else if !v.isConst(expr.Right) {
-				return expr
-			}
-
-			left, ok := expr.Left.(*BinaryExpr)
-			if !ok {
-				return expr
-			}
-			// The right is const and the left side is a binary expression. Rotate the
-			// comparison combining portions that are const.
-
-			switch {
-			case v.isConst(left.Right) &&
-				(left.Operator.Symbol == Plus || left.Operator.Symbol == Minus || left.Operator.Symbol == Div):
-
-				//        cmp          cmp
-				//       /   \        /   \
-				//    [+-/]   2  ->  a   [-+*]
-				//   /     \            /     \
-				//  a       1          2       1
-				var op BinaryOperator
-				switch left.Operator.Symbol {
-				case Plus:
-					op = MakeBinaryOperator(Minus)
-				case Minus:
-					op = MakeBinaryOperator(Plus)
-				case Div:
-					op = MakeBinaryOperator(Mult)
-					if expr.Operator.Symbol != EQ {
-						// In this case, we must remember to *flip* the inequality if the
-						// divisor is negative, since we are in effect multiplying both sides
-						// of the inequality by a negative number.
-						divisor, err := left.TypedRight().Eval(v.ctx)
-						if err != nil {
-							v.err = err
-							return expr
-						}
-						if divisor.Compare(v.ctx, DZero) < 0 {
-							if !exprCopied {
-								exprCopy := *expr
-								expr = &exprCopy
-								exprCopied = true
-							}
-
-							invertedOp, err := invertComparisonOp(expr.Operator)
-							if err != nil {
-								v.err = err
-								return expr
-							}
-							expr = NewTypedComparisonExpr(invertedOp, expr.TypedLeft(), expr.TypedRight())
-						}
-					}
-				}
-
-				newBinExpr := newBinExprIfValidOverload(op,
-					expr.TypedRight(), left.TypedRight())
-				if newBinExpr == nil {
-					// Substitution is not possible type-wise. Nothing else to do.
-					break
-				}
-
-				newRightExpr, err := newBinExpr.Eval(v.ctx)
-				if err != nil {
-					// In the case of an error during Eval, give up on normalizing this
-					// expression. There are some expected errors here if, for example,
-					// normalization produces a result that overflows an int64.
-					break
-				}
-
-				if !exprCopied {
-					exprCopy := *expr
-					expr = &exprCopy
-					exprCopied = true
-				}
-
-				expr.Left = left.Left
-				expr.Right = newRightExpr
-				expr.memoizeFn()
-				if !isVar(v.ctx, expr.Left, true /*allowConstPlaceholders*/) {
-					// Continue as long as the left side of the comparison is not a
-					// variable.
-					continue
-				}
-
-			case v.isConst(left.Left) && (left.Operator.Symbol == Plus || left.Operator.Symbol == Minus):
-				//       cmp              cmp
-				//      /   \            /   \
-				//    [+-]   2  ->     [+-]   a
-				//   /    \           /    \
-				//  1      a         1      2
-
-				op := expr.Operator
-				var newBinExpr *BinaryExpr
-
-				switch left.Operator.Symbol {
-				case Plus:
-					//
-					// (A + X) cmp B => X cmp (B - C)
-					//
-					newBinExpr = newBinExprIfValidOverload(
-						MakeBinaryOperator(Minus),
-						expr.TypedRight(),
-						left.TypedLeft(),
-					)
-				case Minus:
-					//
-					// (A - X) cmp B => X cmp' (A - B)
-					//
-					newBinExpr = newBinExprIfValidOverload(
-						MakeBinaryOperator(Minus),
-						left.TypedLeft(),
-						expr.TypedRight(),
-					)
-					op, v.err = invertComparisonOp(op)
-					if v.err != nil {
-						return expr
-					}
-				}
-
-				if newBinExpr == nil {
-					break
-				}
-
-				newRightExpr, err := newBinExpr.Eval(v.ctx)
-				if err != nil {
-					break
-				}
-
-				if !exprCopied {
-					exprCopy := *expr
-					expr = &exprCopy
-					exprCopied = true
-				}
-
-				expr.Operator = op
-				expr.Left = left.Right
-				expr.Right = newRightExpr
-				expr.memoizeFn()
-				if !isVar(v.ctx, expr.Left, true /*allowConstPlaceholders*/) {
-					// Continue as long as the left side of the comparison is not a
-					// variable.
-					continue
-				}
-
-			case expr.Operator.Symbol == EQ && left.Operator.Symbol == JSONFetchVal && v.isConst(left.Right) &&
-				v.isConst(expr.Right):
-				// This is a JSONB inverted index normalization, changing things of the form
-				// x->y=z to x @> {y:z} which can be used to build spans for inverted index
-				// lookups.
-
-				if left.TypedRight().ResolvedType().Family() != types.StringFamily {
-					break
-				}
-
-				str, err := left.TypedRight().Eval(v.ctx)
-				if err != nil {
-					break
-				}
-				// Check that we still have a string after evaluation.
-				if _, ok := str.(*DString); !ok {
-					break
-				}
-
-				rhs, err := expr.TypedRight().Eval(v.ctx)
-				if err != nil {
-					break
-				}
-
-				rjson := rhs.(*DJSON).JSON
-				t := rjson.Type()
-				if t == json.ObjectJSONType || t == json.ArrayJSONType {
-					// We can't make this transformation in cases like
-					//
-					//   a->'b' = '["c"]',
-					//
-					// because containment is not equivalent to equality for non-scalar types.
-					break
-				}
-
-				j := json.NewObjectBuilder(1)
-				j.Add(string(*str.(*DString)), rjson)
-
-				dj, err := MakeDJSON(j.Build())
-				if err != nil {
-					break
-				}
-
-				typedJ, err := dj.TypeCheck(v.ctx.Context, nil, types.Jsonb)
-				if err != nil {
-					break
-				}
-
-				return NewTypedComparisonExpr(MakeComparisonOperator(Contains), left.TypedLeft(), typedJ)
-			}
-
-			// We've run out of work to do.
-			break
+		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
+			return DNull
 		}
+
+		if v.isConst(expr.Left) {
+			switch expr.Right.(type) {
+			case *BinaryExpr, VariableExpr:
+				break
+			default:
+				return expr
+			}
+
+			invertedOp, err := invertComparisonOp(expr.Operator)
+			if err != nil {
+				v.err = err
+				return expr
+			}
+
+			// The left side is const and the right side is a binary expression or a
+			// variable. Flip the comparison op so that the right side is const and
+			// the left side is a binary expression or variable.
+			// Create a new ComparisonExpr so the function cache isn't reused.
+			exprCopy := *expr
+			expr = &exprCopy
+
+			expr = NewTypedComparisonExpr(invertedOp, expr.TypedRight(), expr.TypedLeft())
+		} else if !v.isConst(expr.Right) {
+			return expr
+		}
+
+		left, ok := expr.Left.(*BinaryExpr)
+		if !ok {
+			return expr
+		}
+		// The right is const and the left side is a binary expression. Rotate the
+		// comparison combining portions that are const.
+
+		if expr.Operator.Symbol == EQ && left.Operator.Symbol == JSONFetchVal && v.isConst(left.Right) &&
+			v.isConst(expr.Right) {
+			// This is a JSONB inverted index normalization, changing things of the form
+			// x->y=z to x @> {y:z} which can be used to build spans for inverted index
+			// lookups.
+
+			if left.TypedRight().ResolvedType().Family() != types.StringFamily {
+				break
+			}
+
+			str, err := left.TypedRight().Eval(v.ctx)
+			if err != nil {
+				break
+			}
+			// Check that we still have a string after evaluation.
+			if _, ok := str.(*DString); !ok {
+				break
+			}
+
+			rhs, err := expr.TypedRight().Eval(v.ctx)
+			if err != nil {
+				break
+			}
+
+			rjson := rhs.(*DJSON).JSON
+			t := rjson.Type()
+			if t == json.ObjectJSONType || t == json.ArrayJSONType {
+				// We can't make this transformation in cases like
+				//
+				//   a->'b' = '["c"]',
+				//
+				// because containment is not equivalent to equality for non-scalar types.
+				break
+			}
+
+			j := json.NewObjectBuilder(1)
+			j.Add(string(*str.(*DString)), rjson)
+
+			dj, err := MakeDJSON(j.Build())
+			if err != nil {
+				break
+			}
+
+			typedJ, err := dj.TypeCheck(v.ctx.Context, nil, types.Jsonb)
+			if err != nil {
+				break
+			}
+
+			return NewTypedComparisonExpr(MakeComparisonOperator(Contains), left.TypedLeft(), typedJ)
+		}
+
 	case In, NotIn:
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
 		// be normalized.
@@ -683,11 +542,11 @@ func (expr *Tuple) normalize(v *NormalizeVisitor) TypedExpr {
 // unchanged and that resulting expression tree is still well-typed.
 // Example normalizations:
 //
-//   (a)                   -> a
-//   a = 1 + 1             -> a = 2
-//   a + 1 = 2             -> a = 1
-//   a BETWEEN b AND c     -> (a >= b) AND (a <= c)
-//   a NOT BETWEEN b AND c -> (a < b) OR (a > c)
+//	(a)                   -> a
+//	a = 1 + 1             -> a = 2
+//	a + 1 = 2             -> a = 1
+//	a BETWEEN b AND c     -> (a >= b) AND (a <= c)
+//	a NOT BETWEEN b AND c -> (a < b) OR (a > c)
 func (ctx *EvalContext) NormalizeExpr(typedExpr TypedExpr) (TypedExpr, error) {
 	v := MakeNormalizeVisitor(ctx)
 	expr, _ := WalkExpr(&v, typedExpr)
