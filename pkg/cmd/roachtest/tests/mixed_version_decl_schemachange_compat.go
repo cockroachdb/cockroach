@@ -56,8 +56,8 @@ func fetchCorpusToTmpDir(
 			versionNumber,
 			corpusFilePath))
 	if err != nil {
-		t.Fatalf("Missing validation corpus for %v (%v)", versionNumber, err)
 		cleanupFn()
+		t.Fatalf("Missing validation corpus for %v (%v)", versionNumber, err)
 	}
 	t.L().Printf("Fetched validation corpus for %v", versionNumber)
 	return corpusFilePath, cleanupFn
