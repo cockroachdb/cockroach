@@ -136,13 +136,24 @@ func (*UnresolvedObjectName) tableExpr() {}
 func NewUnresolvedObjectName(
 	numParts int, parts [3]string, annotationIdx AnnotationIdx,
 ) (*UnresolvedObjectName, error) {
-	u := &UnresolvedObjectName{
+	n, err := MakeUnresolvedObjectName(numParts, parts, annotationIdx)
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+func MakeUnresolvedObjectName(
+	numParts int, parts [3]string, annotationIdx AnnotationIdx,
+) (UnresolvedObjectName, error) {
+	u := UnresolvedObjectName{
 		NumParts:      numParts,
 		Parts:         parts,
 		AnnotatedNode: AnnotatedNode{AnnIdx: annotationIdx},
 	}
 	if u.NumParts < 1 {
-		return nil, newInvTableNameError(u)
+		forErr := u
+		return UnresolvedObjectName{}, newInvTableNameError(&forErr)
 	}
 
 	// Check that all the parts specified are not empty.
