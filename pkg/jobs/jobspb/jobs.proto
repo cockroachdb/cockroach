@@ -1019,12 +1019,18 @@ message RowLevelTTLDetails {
 }
 
 message RowLevelTTLProgress {
+
   // JobRowCount is the number of deleted rows for the entire TTL job.
   int64 job_row_count = 1;
+
   // ProcessorProgresses is the progress per DistSQL processor.
   repeated RowLevelTTLProcessorProgress processor_progresses = 2 [(gogoproto.nullable)=false];
 
+  // UseDistSQL is true if the TTL job distributed the work to DistSQL processors (requires cluster v22.2).
   bool use_dist_sql = 3 [(gogoproto.customname) = "UseDistSQL"];
+
+  // JobSpanCount is the number of spans for the entire TTL job.
+  int64 job_span_count = 4;
 }
 
 message RowLevelTTLProcessorProgress {
@@ -1041,6 +1047,12 @@ message RowLevelTTLProcessorProgress {
 
   // ProcessorRowCount is the row count of the DistSQL processor.
   int64 processor_row_count = 3;
+
+  // ProcessorSpanCount is the number of spans of the DistSQL processor;
+  int64 processor_span_count = 4;
+
+  // ProcessorConcurrency is the number parallel tasks the processor will do at once.
+  int64 processor_concurrency = 5;
 }
 
 message SchemaTelemetryDetails {

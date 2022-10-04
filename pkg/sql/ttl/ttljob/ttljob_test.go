@@ -238,9 +238,14 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRowsJobOnly(
 	require.Equal(t, 1, jobCount)
 }
 
+type processor struct {
+	spanCount int64
+	rowCount  int64
+}
+
 func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 	t *testing.T,
-	expectedSQLInstanceIDToProcessorRowCountMap map[base.SQLInstanceID]int64,
+	expectedSQLInstanceIDToProcessorMap map[base.SQLInstanceID]*processor,
 	expectedUseDistSQL bool,
 ) {
 	rows := h.sqlDB.Query(t, `
@@ -264,6 +269,7 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 		processorProgresses := rowLevelTTLProgress.ProcessorProgresses
 		processorIDs := make(map[int32]struct{}, len(processorProgresses))
 		sqlInstanceIDs := make(map[base.SQLInstanceID]struct{}, len(processorProgresses))
+		expectedJobSpanCount := int64(0)
 		expectedJobRowCount := int64(0)
 		for i, processorProgress := range rowLevelTTLProgress.ProcessorProgresses {
 			processorID := processorProgress.ProcessorID
@@ -273,12 +279,18 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 			require.NotContains(t, sqlInstanceIDs, sqlInstanceID, i)
 			sqlInstanceIDs[sqlInstanceID] = struct{}{}
 
-			expectedProcessorRowCount, ok := expectedSQLInstanceIDToProcessorRowCountMap[sqlInstanceID]
+			expectedProcessor, ok := expectedSQLInstanceIDToProcessorMap[sqlInstanceID]
 			require.True(t, ok, i)
-			require.Equal(t, expectedProcessorRowCount, processorProgress.ProcessorRowCount)
 
+			expectedProcessorSpanCount := expectedProcessor.spanCount
+			require.Equal(t, expectedProcessorSpanCount, processorProgress.ProcessorSpanCount)
+			expectedJobSpanCount += expectedProcessorSpanCount
+
+			expectedProcessorRowCount := expectedProcessor.rowCount
+			require.Equal(t, expectedProcessorRowCount, processorProgress.ProcessorRowCount)
 			expectedJobRowCount += expectedProcessorRowCount
 		}
+		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobSpanCount)
 		require.Equal(t, expectedJobRowCount, rowLevelTTLProgress.JobRowCount)
 		require.Equal(t, expectedUseDistSQL, rowLevelTTLProgress.UseDistSQL)
 		jobCount++
@@ -314,7 +326,7 @@ func TestRowLevelTTLInterruptDuringExecution(t *testing.T) {
 
 	createTable := `CREATE TABLE t (
 	id INT PRIMARY KEY
-) WITH (ttl_expire_after = '10 minutes', ttl_range_concurrency = 2);
+) WITH (ttl_expire_after = '10 minutes');
 ALTER TABLE t SPLIT AT VALUES (1), (2);
 INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, now() - '1 month');`
 
@@ -379,7 +391,7 @@ func TestRowLevelTTLJobDisabled(t *testing.T) {
 		}
 		return fmt.Sprintf(`CREATE TABLE t (
 	id INT PRIMARY KEY
-) WITH (ttl_expire_after = '10 minutes', ttl_range_concurrency = 2%s);
+) WITH (ttl_expire_after = '10 minutes'%s);
 INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, now() - '1 month');`, pauseStr)
 	}
 
@@ -515,7 +527,9 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 			}
 			require.NotEqual(t, -1, leaseHolderServerIdx)
 
-			const rowsPerRange = 10
+			const expiredRowsPerRange = 5
+			const nonExpiredRowsPerRange = 5
+			const rowsPerRange = expiredRowsPerRange + nonExpiredRowsPerRange
 			type rangeSplit struct {
 				sqlInstanceID base.SQLInstanceID
 				offset        int
@@ -559,7 +573,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 			nonExpiredTs := ts.Add(time.Hour * 24 * 30)
 			expiredTs := ts.Add(-time.Hour)
 			const insertStatement = `INSERT INTO tbl VALUES ($1, $2)`
-			expectedSQLInstanceIDToProcessorRowCountMap := make(map[base.SQLInstanceID]int64, numRanges)
+			expectedSQLInstanceIDToProcessorMap := make(map[base.SQLInstanceID]*processor, numRanges)
 			expectedUseDistSQL := version == 0
 			for _, rangeSplit := range rangeSplits {
 				offset := rangeSplit.offset
@@ -569,13 +583,19 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 					expectedNumNonExpiredRows++
 					sqlDB.Exec(t, insertStatement, i, expiredTs)
 					i++
-					expectedSQLInstanceID := rangeSplit.sqlInstanceID
-					// one node deletes all rows in 22.1
-					if !expectedUseDistSQL {
-						expectedSQLInstanceID = leaseHolderSQLInstanceID
-					}
-					expectedSQLInstanceIDToProcessorRowCountMap[expectedSQLInstanceID]++
 				}
+				expectedSQLInstanceID := rangeSplit.sqlInstanceID
+				// one node deletes all rows in 22.1
+				if !expectedUseDistSQL {
+					expectedSQLInstanceID = leaseHolderSQLInstanceID
+				}
+				expectedProcessor, ok := expectedSQLInstanceIDToProcessorMap[expectedSQLInstanceID]
+				if !ok {
+					expectedProcessor = &processor{}
+					expectedSQLInstanceIDToProcessorMap[expectedSQLInstanceID] = expectedProcessor
+				}
+				expectedProcessor.spanCount++
+				expectedProcessor.rowCount += expiredRowsPerRange
 			}
 
 			// Force the schedule to execute.
@@ -583,7 +603,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 
 			// Verify results
 			th.verifyNonExpiredRows(t, tableName, expirationExpr, expectedNumNonExpiredRows)
-			th.verifyExpiredRows(t, expectedSQLInstanceIDToProcessorRowCountMap, expectedUseDistSQL)
+			th.verifyExpiredRows(t, expectedSQLInstanceIDToProcessorMap, expectedUseDistSQL)
 		})
 	}
 }
@@ -668,7 +688,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			createTable: `CREATE TABLE tbl (
 	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 	text TEXT
-) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = 50, ttl_delete_batch_size = 10, ttl_range_concurrency = 3)`,
+) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = 50, ttl_delete_batch_size = 10)`,
 			numExpiredRows:    1001,
 			numNonExpiredRows: 5,
 			numSplits:         10,
@@ -705,7 +725,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	"quote-kw-col" TIMESTAMPTZ,
 	text TEXT,
 	PRIMARY KEY (id, other_col, "quote-kw-col")
-) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = 50, ttl_delete_batch_size = 10, ttl_range_concurrency = 3)`,
+) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = 50, ttl_delete_batch_size = 10)`,
 			numExpiredRows:    1001,
 			numNonExpiredRows: 5,
 			numSplits:         10,
@@ -719,7 +739,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	text TEXT,
 	INDEX text_idx (text),
 	PRIMARY KEY (id, other_col, "quote-kw-col")
-) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = 50, ttl_delete_batch_size = 10, ttl_range_concurrency = 3)`,
+) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = 50, ttl_delete_batch_size = 10)`,
 			postSetup: []string{
 				`ALTER INDEX tbl@text_idx SPLIT AT VALUES ('bob')`,
 			},
@@ -758,12 +778,11 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	rand_col_2 %s,
 	text TEXT,
 	PRIMARY KEY (id, rand_col_1, rand_col_2)
-) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = %d, ttl_delete_batch_size = %d, ttl_range_concurrency = %d)`,
+) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = %d, ttl_delete_batch_size = %d)`,
 					randgen.RandTypeFromSlice(rng, indexableTyps).SQLString(),
 					randgen.RandTypeFromSlice(rng, indexableTyps).SQLString(),
 					1+rng.Intn(100),
 					1+rng.Intn(100),
-					1+rng.Intn(3),
 				),
 				numSplits:         1 + rng.Intn(9),
 				numExpiredRows:    rng.Intn(2000),
