@@ -54,6 +54,6 @@ true
 # constant addend to the right side of the comparison when the subtraction would
 # overflow.
 query B
-SELECT i + 1000 > -9223372036854775800 FROM t88128
+SELECT i + (-1000) < 9223372036854775800 FROM t88128
 ----
 true

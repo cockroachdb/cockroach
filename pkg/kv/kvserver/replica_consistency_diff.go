@@ -79,8 +79,8 @@ func (rsds ReplicaSnapshotDiffSlice) String() string {
 	return redact.StringWithoutMarkers(rsds)
 }
 
-// diffs the two kv dumps between the lease holder and the replica.
-func diffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
+// DiffRange diffs the two KV dumps between the leaseholder and the replica.
+func DiffRange(l, r *roachpb.RaftSnapshotData) ReplicaSnapshotDiffSlice {
 	if l == nil || r == nil {
 		return nil
 	}
