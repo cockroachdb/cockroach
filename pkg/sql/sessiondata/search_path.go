@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 // DefaultSearchPath is the search path used by virgin sessions.
@@ -292,15 +291,31 @@ func (iter *SearchPathIter) Next() (path string, ok bool) {
 	return "", false
 }
 
-// IterateSearchPath iterates the search path. If a non-nil error is
-// returned, iteration is stopped. If iterutils.StopIteration() is returned
-// from the iteration function,  a nil error is returned to the caller.
-func (s *SearchPath) IterateSearchPath(f func(schema string) error) error {
+// NumElements returns the number of elements in the search path.
+func (s *SearchPath) NumElements() int {
+	// TODO(ajwerner): Refactor this so that we don't need to do an O(N)
+	// operation to find the number of elements. In practice it doesn't matter
+	// much because search paths tend to be short.
 	iter := s.Iter()
-	for schema, ok := iter.Next(); ok; schema, ok = iter.Next() {
-		if err := f(schema); err != nil {
-			return iterutil.Map(err)
-		}
+	var i int
+	for _, ok := iter.Next(); ok; _, ok = iter.Next() {
+		i++
 	}
-	return nil
+	return i
+}
+
+// GetSchema returns the ith schema element if it is in range.
+func (s *SearchPath) GetSchema(ord int) string {
+	// TODO(ajwerner): Refactor this so that we don't need to do an O(n)
+	// operation to find the nth element. In practice it doesn't matter
+	// much because search paths tend to be short.
+	iter := s.Iter()
+	var i int
+	for schema, ok := iter.Next(); ok; schema, ok = iter.Next() {
+		if ord == i {
+			return schema
+		}
+		i++
+	}
+	return ""
 }

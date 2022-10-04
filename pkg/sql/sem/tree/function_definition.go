@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -292,15 +291,10 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	if explicitSchema != "" {
 		findMatches(explicitSchema)
 	} else {
-		err := searchPath.IterateSearchPath(func(schema string) error {
-			findMatches(schema)
-			if found {
-				return iterutil.StopIteration()
+		for i, n := 0, searchPath.NumElements(); i < n; i++ {
+			if findMatches(searchPath.GetSchema(i)); found {
+				break
 			}
-			return nil
-		})
-		if err != nil {
-			return QualifiedOverload{}, err
 		}
 	}
 
@@ -430,15 +424,13 @@ func GetBuiltinFuncDefinition(
 
 	// If not in pg_catalog, go through search path.
 	var resolvedDef *ResolvedFunctionDefinition
-	if err := searchPath.IterateSearchPath(func(schema string) error {
+	for i, n := 0, searchPath.NumElements(); i < n; i++ {
+		schema := searchPath.GetSchema(i)
 		fullName := schema + "." + fName.Object()
 		if def, ok := ResolvedBuiltinFuncDefs[fullName]; ok {
 			resolvedDef = def
-			return iterutil.StopIteration()
+			break
 		}
-		return nil
-	}); err != nil {
-		return nil, err
 	}
 
 	return resolvedDef, nil
