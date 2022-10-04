@@ -378,6 +378,66 @@ type batchExecutionFn func(
 var _ batchExecutionFn = (*Replica).executeWriteBatch
 var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
 
+func getTrueSpans(
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
+) *spanset.SpanSet {
+	if br != nil {
+		if len(ba.Requests) != len(br.Responses) {
+			log.KvDistribution.Errorf(ctx,
+				"Requests and responses should be equal lengths: # of requests = %d, # of responses = %d",
+				len(ba.Requests), len(br.Responses))
+		} else {
+			spans := spanset.New()
+			for i, union := range br.Responses {
+				baInner := ba.Requests[i].GetInner()
+				var isReverse bool
+				switch baInner.(type) {
+				case *roachpb.ReverseScanRequest:
+					isReverse = true
+				}
+				resumeSpan := union.GetInner().Header().ResumeSpan
+				if resumeSpan == nil {
+					spans.AddNonMVCC(spanset.SpanAccess(0), baInner.Header().Span())
+				} else if !isReverse {
+					// Not reverse (->)
+					// Request:    [key...............endKey)
+					// ResumeSpan:          [key......endKey)
+					// True span:  [key......key)
+					//
+					// Assumptions:
+					// resumeSpan.EndKey == baInner.Header().EndKey
+					// baInner.Header().Key <= resumeKey
+					// We don't check these assumptions because comparing keys could
+					// add potentially significant overhead.
+					resumeKey := resumeSpan.Key
+					spans.AddNonMVCC(spanset.SpanAccess(0), roachpb.Span{
+						Key:    baInner.Header().Key,
+						EndKey: resumeKey,
+					})
+				} else {
+					// Reverse (<-)
+					// Request:    [key...............endKey)
+					// ResumeSpan: [key......endKey)
+					// True span:           [endKey...endKey)
+					//
+					// Assumptions:
+					// resumeSpan.Key == baInner.Header().Key
+					// resumeEndKey <= baInner.Header().EndKey
+					// We don't check these assumptions because comparing keys could
+					// add potentially significant overhead.
+					resumeEndKey := resumeSpan.EndKey
+					spans.AddNonMVCC(spanset.SpanAccess(0), roachpb.Span{
+						Key:    resumeEndKey,
+						EndKey: baInner.Header().EndKey,
+					})
+				}
+			}
+			return spans
+		}
+	}
+	return nil
+}
+
 // executeBatchWithConcurrencyRetries is the entry point for client (non-admin)
 // requests that execute against the range's state. The method coordinates the
 // execution of requests that may require multiple retries due to interactions
@@ -400,6 +460,12 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	var requestEvalKind concurrency.RequestEvalKind
 	var g *concurrency.Guard
 	defer func() {
+		// Handle load-based splitting, if necessary.
+		spans := getTrueSpans(ctx, ba, br)
+		if spans != nil {
+			r.recordBatchForLoadBasedSplitting(ctx, ba, spans)
+		}
+
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
 			r.concMgr.FinishReq(g)
@@ -411,7 +477,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// commands and wait even if the circuit breaker is tripped.
 		pp = poison.Policy_Wait
 	}
-	for first := true; ; first = false {
+	for {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
 			return nil, nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
@@ -429,11 +495,6 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			if err != nil {
 				return nil, nil, roachpb.NewError(err)
 			}
-		}
-
-		// Handle load-based splitting, if necessary.
-		if first {
-			r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
 		}
 
 		// Acquire latches to prevent overlapping requests from executing until
