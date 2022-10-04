@@ -1487,6 +1487,7 @@ type state struct {
 	batch      Batch
 	rng        *rand.Rand
 	key        roachpb.Key
+	inline     bool
 	isLocalKey bool
 	internal   struct {
 		ms  *enginepb.MVCCStats
@@ -1541,6 +1542,7 @@ func (s *randomTest) step(t *testing.T) {
 		}
 	} else {
 		s.TS = hlc.Timestamp{}
+		s.inline = true
 	}
 
 	restart := s.Txn != nil && s.rng.Intn(2) == 0
@@ -1656,6 +1658,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 
 		mvccRangeDel := !s.isLocalKey && s.Txn == nil && s.rng.Intn(2) == 0
 		var mvccRangeDelKey, mvccRangeDelEndKey roachpb.Key
+		var predicates roachpb.DeleteRangePredicates
 		if mvccRangeDel {
 			mvccRangeDelKey = keys.LocalMax
 			mvccRangeDelEndKey = roachpb.KeyMax
@@ -1671,6 +1674,10 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			case 4:
 				mvccRangeDelEndKey = s.key.Prevish(10)
 			}
+
+			if !s.inline && s.rng.Intn(2) == 0 {
+				predicates.StartTime.WallTime = s.rng.Int63n(s.TS.WallTime + 1)
+			}
 		}
 
 		returnKeys := !mvccRangeDel && (s.rng.Intn(2) == 0)
@@ -1678,14 +1685,17 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		if !mvccRangeDel {
 			max = s.rng.Int63n(5)
 		}
-		desc := fmt.Sprintf("mvccRangeDel=%s, returnKeys=%t, max=%d", roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey}, returnKeys, max)
 
+		var desc string
 		var err error
 		if !mvccRangeDel {
+			desc = fmt.Sprintf("mvccDeleteRange=%s, returnKeys=%t, max=%d", keySpan, returnKeys, max)
 			_, _, _, err = MVCCDeleteRange(
 				ctx, s.batch, s.MSDelta, keySpan.Key, keySpan.EndKey, max, s.TS, hlc.ClockTimestamp{}, s.Txn, returnKeys,
 			)
-		} else {
+		} else if predicates == (roachpb.DeleteRangePredicates{}) {
+			desc = fmt.Sprintf("mvccDeleteRangeUsingTombstone=%s",
+				roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey})
 			const idempotent = false
 			const maxIntents = 0 // unlimited
 			msCovered := (*enginepb.MVCCStats)(nil)
@@ -1693,10 +1703,42 @@ func TestMVCCStatsRandomized(t *testing.T) {
 				ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey, s.TS, hlc.ClockTimestamp{}, nil, /* leftPeekBound */
 				nil /* rightPeekBound */, idempotent, maxIntents, msCovered,
 			)
+		} else {
+			rangeTombstoneThreshold := s.rng.Int63n(5)
+			desc = fmt.Sprintf("mvccPredicateDeleteRange=%s, predicates=%s, rangeTombstoneThreshold=%d",
+				roachpb.Span{Key: mvccRangeDelKey, EndKey: mvccRangeDelEndKey}, predicates, rangeTombstoneThreshold)
+			const maxIntents = 0 // unlimited
+			_, err = MVCCPredicateDeleteRange(ctx, s.batch, s.MSDelta, mvccRangeDelKey, mvccRangeDelEndKey,
+				s.TS, hlc.ClockTimestamp{}, nil /* leftPeekBound */, nil, /* rightPeekBound */
+				predicates, 0, 0, rangeTombstoneThreshold, maxIntents)
 		}
 		if err != nil {
 			return false, desc + ": " + err.Error()
 		}
+		return true, desc
+	}
+
+	actions["ClearTimeRange"] = func(s *state) (bool, string) {
+		if s.inline {
+			return false, ""
+		}
+		keySpan := currentKeySpan(s)
+
+		// TODO(erikgrinaker): MVCCClearTimeRange has known stats bugs when data
+		// exists above endTime. For now, use MaxTimestamp. See:
+		// https://github.com/cockroachdb/cockroach/issues/88909
+		startTime := hlc.Timestamp{WallTime: rand.Int63n(s.TS.WallTime + 1)}
+		endTime := hlc.MaxTimestamp
+		clearRangeThreshold := int(s.rng.Int63n(5))
+
+		desc := fmt.Sprintf("mvccClearTimeRange=%s, startTime=%s, endTime=%s", keySpan, startTime, endTime)
+		_, err := MVCCClearTimeRange(ctx, s.batch, s.MSDelta, keySpan.Key, keySpan.EndKey,
+			startTime, endTime, nil /* leftPeekBound */, nil /* rightPeekBound */, clearRangeThreshold, 0, 0)
+		if err != nil {
+			desc += " " + err.Error()
+			return false, desc + ": " + err.Error()
+		}
+
 		return true, desc
 	}
 	actions["EnsureTxn"] = func(s *state) (bool, string) {
