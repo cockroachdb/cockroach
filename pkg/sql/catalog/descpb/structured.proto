@@ -943,11 +943,12 @@ message TableDescriptor {
     repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
       (gogoproto.casttype) = "ColumnID"];
     optional bool is_non_null_constraint = 6 [(gogoproto.nullable) = false];
-    // Hidden is set to true for hash-sharded column check constraints.
+    // FromHashShardedColumn is set to true for hash-sharded column check
+    // constraints.
     // Previously, this field was used to hide these constraints in the output
     // of SHOW CREATE TABLE. We no longer them in order to make the output to be
     // round-trippable, but we still set this field for now. See #68031.
-    optional bool hidden = 7 [(gogoproto.nullable) = false];
+    optional bool from_hash_sharded_column = 7 [(gogoproto.nullable) = false];
     // Used within the table descriptor to uniquely identify individual
     // constraints.
     optional uint32 constraint_id = 8 [(gogoproto.customname) = "ConstraintID",
