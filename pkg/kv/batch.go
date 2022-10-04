@@ -735,7 +735,9 @@ func (b *Batch) adminUnsplit(splitKeyIn interface{}) {
 
 // adminTransferLease is only exported on DB. It is here for symmetry with the
 // other operations.
-func (b *Batch) adminTransferLease(key interface{}, target roachpb.StoreID) {
+func (b *Batch) adminTransferLease(
+	key interface{}, target roachpb.StoreID, bypassSafetyChecks bool,
+) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -745,7 +747,8 @@ func (b *Batch) adminTransferLease(key interface{}, target roachpb.StoreID) {
 		RequestHeader: roachpb.RequestHeader{
 			Key: k,
 		},
-		Target: target,
+		Target:             target,
+		BypassSafetyChecks: bypassSafetyChecks,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
