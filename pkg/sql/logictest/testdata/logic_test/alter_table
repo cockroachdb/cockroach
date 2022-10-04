@@ -2673,3 +2673,17 @@ CREATE TABLE t1_non_indexable (n INT8);
 
 statement error pq: unimplemented: column x is of type char\[\] and thus is not indexable
 ALTER TABLE t1_non_indexable ADD COLUMN x CHAR(256)[] UNIQUE;
+
+subtest regression_89025
+
+statement ok
+CREATE TABLE t_89025 (i int primary key);
+
+statement ok
+INSERT INTO t_89025 VALUES (1)
+
+statement error pgcode 0A000 cannot use crdb_internal\.lease_holder in this context
+ALTER TABLE t_89025 ADD COLUMN j INT DEFAULT (crdb_internal.lease_holder('a'));
+
+statement ok
+DROP TABLE t_89025
