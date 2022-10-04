@@ -1986,12 +1986,15 @@ ALTER TABLE t DROP COLUMN c
 statement ok
 INSERT INTO t (a) VALUES (7), (8), (9)
 
+# Use this lag query because the sequence is non-transactional and we may have
+# restarted.
+
 query II
-SELECT * FROM t ORDER BY a
+SELECT a, b - lag(b, 1) OVER (ORDER BY a) FROM t ORDER BY a;
 ----
-7  1
-8  4
-9  7
+7  NULL
+8  3
+9  3
 
 statement error pq: cannot insert into column "b"\nDETAIL: Column "b" is an identity column defined as GENERATED ALWAYS
 INSERT INTO t (a, b) VALUES (10, 2)
