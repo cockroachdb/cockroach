@@ -174,3 +174,17 @@ query BB
 SELECT 'nan'::decimal IS NAN, 'nan'::decimal IS NOT NAN
 ----
 true  false
+
+statement ok
+CREATE TABLE t87605 (col2 FLOAT8 NULL)
+
+statement ok
+insert into t87605 values (1.234567890123456e+13), (1.234567890123456e+6)
+
+# Regression test for issue #87605.
+# The floor division operator `//` should not be folded away.
+query F
+SELECT ((col2::FLOAT8 // 1.0:::FLOAT8::FLOAT8)::FLOAT8) FROM t87605@[0] ORDER BY 1
+----
+1.234567e+06
+1.2345678901234e+13
