@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -32,6 +33,39 @@ func (e *Env) anyNode() *gosql.DB {
 	// NOTE: There is currently no need to round-robin through the sql gateways,
 	// so we always just return the first DB.
 	return e.sqlDBs[0]
+}
+
+// CheckConsistency runs a consistency check on all ranges in the given span,
+// primarily to verify that MVCC stats are accurate. Any failures are returned
+// as a list of errors. RANGE_CONSISTENT_STATS_ESTIMATED is considered a
+// success, since stats estimates are fine (if unfortunate).
+func (e *Env) CheckConsistency(ctx context.Context, span roachpb.Span) []error {
+	rows, err := e.anyNode().QueryContext(ctx, fmt.Sprintf(`
+		SELECT range_id, start_key_pretty, status, detail
+		FROM crdb_internal.check_consistency(false, b'\x%x', b'\x%x')
+		ORDER BY range_id ASC`,
+		span.Key, span.EndKey,
+	))
+	if err != nil {
+		return []error{err}
+	}
+	defer rows.Close()
+
+	var failures []error
+	for rows.Next() {
+		var rangeID int
+		var key, status, detail string
+		if err := rows.Scan(&rangeID, &key, &status, &detail); err != nil {
+			return []error{err}
+		}
+		switch status {
+		case roachpb.CheckConsistencyResponse_RANGE_CONSISTENT.String():
+		case roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED.String():
+		default:
+			failures = append(failures, errors.Errorf("range %d (%s) %s: %s", rangeID, key, status, detail))
+		}
+	}
+	return failures
 }
 
 // SetClosedTimestampInterval sets the kv.closed_timestamp.target_duration
