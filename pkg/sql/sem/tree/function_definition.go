@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -292,15 +291,10 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	if explicitSchema != "" {
 		findMatches(explicitSchema)
 	} else {
-		err := searchPath.IterateSearchPath(func(schema string) error {
-			findMatches(schema)
-			if found {
-				return iterutil.StopIteration()
+		for i, n := 0, searchPath.NumElements(); i < n; i++ {
+			if findMatches(searchPath.GetSchema(i)); found {
+				break
 			}
-			return nil
-		})
-		if err != nil {
-			return QualifiedOverload{}, err
 		}
 	}
 
@@ -386,14 +380,15 @@ func QualifyBuiltinFunctionDefinition(
 // GetBuiltinFuncDefinitionOrFail is similar to GetBuiltinFuncDefinition but
 // returns an error if function is not found.
 func GetBuiltinFuncDefinitionOrFail(
-	fName *FunctionName, searchPath SearchPath,
+	fName FunctionName, searchPath SearchPath,
 ) (*ResolvedFunctionDefinition, error) {
 	def, err := GetBuiltinFuncDefinition(fName, searchPath)
 	if err != nil {
 		return nil, err
 	}
 	if def == nil {
-		return nil, errors.Wrapf(ErrFunctionUndefined, "unknown function: %s()", ErrString(fName))
+		forError := fName // prevent fName from escaping
+		return nil, errors.Wrapf(ErrFunctionUndefined, "unknown function: %s()", ErrString(&forError))
 	}
 	return def, nil
 }
@@ -409,7 +404,7 @@ func GetBuiltinFuncDefinitionOrFail(
 // error is still checked and return from the function signature just in case
 // we change the iterating function in the future.
 func GetBuiltinFuncDefinition(
-	fName *FunctionName, searchPath SearchPath,
+	fName FunctionName, searchPath SearchPath,
 ) (*ResolvedFunctionDefinition, error) {
 	if fName.ExplicitSchema {
 		return ResolvedBuiltinFuncDefs[fName.Schema()+"."+fName.Object()], nil
@@ -429,15 +424,13 @@ func GetBuiltinFuncDefinition(
 
 	// If not in pg_catalog, go through search path.
 	var resolvedDef *ResolvedFunctionDefinition
-	if err := searchPath.IterateSearchPath(func(schema string) error {
+	for i, n := 0, searchPath.NumElements(); i < n; i++ {
+		schema := searchPath.GetSchema(i)
 		fullName := schema + "." + fName.Object()
 		if def, ok := ResolvedBuiltinFuncDefs[fullName]; ok {
 			resolvedDef = def
-			return iterutil.StopIteration()
+			break
 		}
-		return nil
-	}); err != nil {
-		return nil, err
 	}
 
 	return resolvedDef, nil

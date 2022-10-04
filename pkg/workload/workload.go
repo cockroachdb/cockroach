@@ -123,7 +123,7 @@ type Hooks struct {
 	// PostLoad is called after workload tables are created workload data is
 	// loaded. It called after restoring a fixture. This, for example, is where
 	// creating foreign keys should go. Implementations should be idempotent.
-	PostLoad func(*gosql.DB) error
+	PostLoad func(context.Context, *gosql.DB) error
 	// PostRun is called after workload run has ended, with the duration of the
 	// run. This is where any post-run special printing or validation can be done.
 	PostRun func(time.Duration) error

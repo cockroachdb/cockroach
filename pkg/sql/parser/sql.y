@@ -13665,7 +13665,6 @@ typed_literal:
         // types, return an unimplemented error message.
         var typ tree.ResolvableTypeReference
         var ok bool
-        var err error
         var unimp int
         typ, ok, unimp = types.TypeForNonKeywordTypeName(typName)
         if !ok {
@@ -13674,8 +13673,9 @@ typed_literal:
               // In this case, we don't think this type is one of our
               // known unsupported types, so make a type reference for it.
               aIdx := sqllex.(*lexer).NewAnnotation()
-              typ, err = name.ToUnresolvedObjectName(aIdx)
+              un, err := name.ToUnresolvedObjectName(aIdx)
               if err != nil { return setErr(sqllex, err) }
+              typ = &un
             case -1:
               return unimplemented(sqllex, "type name " + typName)
             default:
@@ -13688,7 +13688,7 @@ typed_literal:
       aIdx := sqllex.(*lexer).NewAnnotation()
       res, err := name.ToUnresolvedObjectName(aIdx)
       if err != nil { return setErr(sqllex, err) }
-      $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: res, SyntaxMode: tree.CastPrepend}
+      $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: &res, SyntaxMode: tree.CastPrepend}
     }
   }
 | const_typename SCONST

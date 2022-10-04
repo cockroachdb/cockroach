@@ -218,11 +218,11 @@ func MakeUnresolvedName(args ...string) UnresolvedName {
 }
 
 // ToUnresolvedObjectName converts an UnresolvedName to an UnresolvedObjectName.
-func (u *UnresolvedName) ToUnresolvedObjectName(idx AnnotationIdx) (*UnresolvedObjectName, error) {
+func (u *UnresolvedName) ToUnresolvedObjectName(idx AnnotationIdx) (UnresolvedObjectName, error) {
 	if u.NumParts == 4 {
-		return nil, pgerror.Newf(pgcode.Syntax, "improper qualified name (too many dotted names): %s", u)
+		return UnresolvedObjectName{}, pgerror.Newf(pgcode.Syntax, "improper qualified name (too many dotted names): %s", u)
 	}
-	return NewUnresolvedObjectName(
+	return MakeUnresolvedObjectName(
 		u.NumParts,
 		[3]string{u.Parts[0], u.Parts[1], u.Parts[2]},
 		idx,
@@ -230,11 +230,10 @@ func (u *UnresolvedName) ToUnresolvedObjectName(idx AnnotationIdx) (*UnresolvedO
 }
 
 // ToFunctionName converts an UnresolvedName to a FunctionName.
-func (u *UnresolvedName) ToFunctionName() (*FunctionName, error) {
+func (u *UnresolvedName) ToFunctionName() (FunctionName, error) {
 	un, err := u.ToUnresolvedObjectName(NoAnnotation)
 	if err != nil {
-		return nil, errors.Newf("invalid function name: %s", u.String())
+		return FunctionName{}, errors.Newf("invalid function name: %s", u.String())
 	}
-	fn := un.ToFunctionName()
-	return &fn, nil
+	return un.ToFunctionName(), nil
 }
