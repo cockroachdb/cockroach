@@ -168,7 +168,7 @@ inner-join (cross)
  ├── fd: (1)-->(2), (6)-->(7)
  ├── scan g [as=g1]
  │    ├── columns: g1.k:1!null g1.geom:2
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1064.42
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
