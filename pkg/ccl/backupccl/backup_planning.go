@@ -167,11 +167,9 @@ func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID
 	}
 }
 
-// getPublicIndexTableSpans returns all the public index spans of the
-// provided table.
-func getPublicIndexTableSpans(
-	table catalog.TableDescriptor, added map[tableAndIndex]bool, codec keys.SQLCodec,
-) ([]roachpb.Span, error) {
+// includeTableSpans returns true if the backup should include spans for the
+// given table descriptor.
+func includeTableSpans(table *descpb.TableDescriptor) bool {
 	// We do not backup spans for views here as they do not contain data.
 	//
 	// Additionally, because we do not split ranges at view boundaries, it is
@@ -181,7 +179,16 @@ func getPublicIndexTableSpans(
 	// This could lead to a situation where the short GC TTL on the range we are
 	// not backing up causes our protectedts verification to fail when attempting
 	// to backup the view span.
-	if !table.IsPhysicalTable() {
+	return table.IsPhysicalTable()
+}
+
+// getPublicIndexTableSpans returns all the public index spans of the
+// provided table.
+func getPublicIndexTableSpans(
+	table catalog.TableDescriptor, added map[tableAndIndex]bool, codec keys.SQLCodec,
+) ([]roachpb.Span, error) {
+
+	if !includeTableSpans(table.TableDesc()) {
 		return nil, nil
 	}
 
