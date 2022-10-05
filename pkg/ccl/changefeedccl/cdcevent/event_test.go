@@ -62,6 +62,7 @@ CREATE TABLE foo (
 	for _, tc := range []struct {
 		family          *descpb.ColumnFamilyDescriptor
 		includeVirtual  bool
+		keyOnly         bool
 		expectedKeyCols []string
 		expectedColumns []string
 		expectedUDTCols []string
@@ -69,32 +70,51 @@ CREATE TABLE foo (
 		{
 			family:          mainFamily,
 			includeVirtual:  false,
+			keyOnly:         false,
 			expectedKeyCols: []string{"b", "a"},
 			expectedColumns: []string{"a", "b", "e"},
 			expectedUDTCols: []string{"e"},
 		},
 		{
-			family:          mainFamily,
-			includeVirtual:  true,
+			family:         mainFamily,
+			includeVirtual: true,
+			keyOnly:        false,
+
 			expectedKeyCols: []string{"b", "a"},
 			expectedColumns: []string{"a", "b", "d", "e"},
 			expectedUDTCols: []string{"e"},
 		},
 		{
+			family:          mainFamily,
+			includeVirtual:  false,
+			keyOnly:         true,
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"a", "b"},
+		},
+		{
+			family:          mainFamily,
+			includeVirtual:  true,
+			keyOnly:         true,
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"a", "b"},
+		},
+		{
 			family:          cFamily,
 			includeVirtual:  false,
+			keyOnly:         false,
 			expectedKeyCols: []string{"b", "a"},
 			expectedColumns: []string{"c"},
 		},
 		{
 			family:          cFamily,
 			includeVirtual:  true,
+			keyOnly:         false,
 			expectedKeyCols: []string{"b", "a"},
 			expectedColumns: []string{"c", "d"},
 		},
 	} {
-		t.Run(fmt.Sprintf("%s/includeVirtual=%t", tc.family.Name, tc.includeVirtual), func(t *testing.T) {
-			ed, err := NewEventDescriptor(tableDesc, tc.family, tc.includeVirtual, s.Clock().Now())
+		t.Run(fmt.Sprintf("%s/includeVirtual=%t/keyOnly=%t", tc.family.Name, tc.includeVirtual, tc.keyOnly), func(t *testing.T) {
+			ed, err := NewEventDescriptor(tableDesc, tc.family, tc.includeVirtual, tc.keyOnly, s.Clock().Now())
 			require.NoError(t, err)
 
 			// Verify Metadata information for event descriptor.
@@ -154,6 +174,7 @@ CREATE TABLE foo (
 		testName          string
 		familyName        string // Must be set if targetType ChangefeedTargetSpecification_COLUMN_FAMILY
 		includeVirtual    bool
+		keyOnly           bool
 		actions           []string
 		expectMainFamily  []decodeExpectation
 		expectOnlyCFamily []decodeExpectation
@@ -283,6 +304,43 @@ CREATE TABLE foo (
 				},
 			},
 		},
+		{
+			testName:       "main/key_only_cols_with_virtual",
+			familyName:     "main",
+			keyOnly:        true,
+			includeVirtual: true,
+			actions:        []string{"INSERT INTO foo (a, b, c, e) VALUES (1, '8th test', 'c value', 'open')"},
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues:   []string{"8th test", "1"},
+					allValues:   []string{"1", "8th test"},
+					prevDeleted: true,
+				},
+			},
+			expectOnlyCFamily: []decodeExpectation{
+				{
+					expectUnwatchedErr: true,
+				},
+			},
+		},
+		{
+			testName:   "main/key_only_cols",
+			familyName: "main",
+			keyOnly:    true,
+			actions:    []string{"INSERT INTO foo (a, b, c, e) VALUES (1, '9th test', 'c value', 'open')"},
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues:   []string{"9th test", "1"},
+					allValues:   []string{"1", "9th test"},
+					prevDeleted: true,
+				},
+			},
+			expectOnlyCFamily: []decodeExpectation{
+				{
+					expectUnwatchedErr: true,
+				},
+			},
+		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
 			targetType := jobspb.ChangefeedTargetSpecification_EACH_FAMILY
@@ -302,7 +360,7 @@ CREATE TABLE foo (
 			})
 			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 			ctx := context.Background()
-			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual)
+			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual, tc.keyOnly)
 			require.NoError(t, err)
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectOnlyCFamily)
 			for i := 0; i < expectedEvents; i++ {
@@ -318,7 +376,7 @@ CREATE TABLE foo (
 					expect, tc.expectOnlyCFamily = tc.expectOnlyCFamily[0], tc.expectOnlyCFamily[1:]
 				}
 				updatedRow, err := decoder.DecodeKV(
-					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp())
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp(), tc.keyOnly)
 
 				if expect.expectUnwatchedErr {
 					require.ErrorIs(t, err, ErrUnwatchedFamily)
@@ -335,7 +393,7 @@ CREATE TABLE foo (
 				}
 
 				prevRow, err := decoder.DecodeKV(
-					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, v.Timestamp())
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, v.Timestamp(), tc.keyOnly)
 				require.NoError(t, err)
 
 				// prevRow always has key columns initialized.
@@ -518,7 +576,7 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 			})
 			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 			ctx := context.Background()
-			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual)
+			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual, false)
 			require.NoError(t, err)
 
 			expectedEvents := len(tc.expectMainFamily) + len(tc.expectECFamily)
@@ -535,7 +593,7 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 					expect, tc.expectECFamily = tc.expectECFamily[0], tc.expectECFamily[1:]
 				}
 				updatedRow, err := decoder.DecodeKV(
-					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp())
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp(), false)
 
 				if expect.expectUnwatchedErr {
 					require.ErrorIs(t, err, ErrUnwatchedFamily)

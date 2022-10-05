@@ -168,7 +168,8 @@ func newKVEventToRowConsumer(
 	topicNamer *TopicNamer,
 ) (*kvEventToRowConsumer, error) {
 	includeVirtual := details.Opts.IncludeVirtual()
-	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual)
+	keyOnly := details.Opts.KeyOnly()
+	decoder, err := cdcevent.NewEventDecoder(ctx, cfg, details.Targets, includeVirtual, keyOnly)
 
 	if err != nil {
 		return nil, err
@@ -230,13 +231,14 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	schemaTimestamp := ev.KV().Value.Timestamp
 	prevSchemaTimestamp := schemaTimestamp
 	mvccTimestamp := ev.MVCCTimestamp()
+	keyOnly := c.details.Opts.KeyOnly()
 
 	if backfillTs := ev.BackfillTimestamp(); !backfillTs.IsEmpty() {
 		schemaTimestamp = backfillTs
 		prevSchemaTimestamp = schemaTimestamp.Prev()
 	}
 
-	updatedRow, err := c.decoder.DecodeKV(ctx, ev.KV(), schemaTimestamp)
+	updatedRow, err := c.decoder.DecodeKV(ctx, ev.KV(), schemaTimestamp, keyOnly)
 	if err != nil {
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
@@ -251,7 +253,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		if !c.details.Opts.GetFilters().WithDiff {
 			return cdcevent.Row{}, nil
 		}
-		return c.decoder.DecodeKV(ctx, ev.PrevKeyValue(), prevSchemaTimestamp)
+		return c.decoder.DecodeKV(ctx, ev.PrevKeyValue(), prevSchemaTimestamp, keyOnly)
 	}()
 	if err != nil {
 		// Column families are stored contiguously, so we'll get

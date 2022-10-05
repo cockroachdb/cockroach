@@ -243,7 +243,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 				StatementTimeName: tc.desc.GetName(),
 			}
 
-			_, _, err = NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false, tc.splitColFams)
+			_, _, err = NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false, false, tc.splitColFams)
 			if tc.expectErr != "" {
 				require.Regexp(t, tc.expectErr, err)
 				return
@@ -347,7 +347,7 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 				TableID:           tc.desc.GetID(),
 				StatementTimeName: tc.desc.GetName(),
 			}
-			normalized, _, err := NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false, false)
+			normalized, _, err := NormalizeAndValidateSelectForTarget(ctx, execCtx, tc.desc, target, sc, false, false, false)
 			require.NoError(t, err)
 			actual, err := SelectClauseRequiresPrev(context.Background(), *execCtx.SemaCtx(), normalized)
 			require.NoError(t, err)

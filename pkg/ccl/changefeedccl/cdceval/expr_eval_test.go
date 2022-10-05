@@ -417,7 +417,7 @@ CREATE TABLE foo (
 
 			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 			ctx := context.Background()
-			decoder, err := cdcevent.NewEventDecoder(ctx, &serverCfg, targets, false)
+			decoder, err := cdcevent.NewEventDecoder(ctx, &serverCfg, targets, false, false)
 			require.NoError(t, err)
 
 			for _, action := range tc.setupActions {
@@ -639,7 +639,7 @@ func decodeRowErr(
 	} else {
 		kv.Value = v.Value
 	}
-	return decoder.DecodeKV(context.Background(), kv, v.Timestamp())
+	return decoder.DecodeKV(context.Background(), kv, v.Timestamp(), false)
 }
 
 func decodeRow(
