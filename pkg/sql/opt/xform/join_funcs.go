@@ -438,7 +438,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		tableFDs := memo.MakeTableFuncDep(md, scanPrivate.Table)
 		// A lookup join will drop any input row which contains NULLs, so a lax key
 		// is sufficient.
-		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(lookupConstraint.RightSideCols.ToSet())
+		rightKeyCols := lookupConstraint.RightSideCols.ToSet()
+		lookupJoin.LookupColsAreTableKey = tableFDs.ColsAreLaxKey(rightKeyCols)
 
 		// Add input columns and lookup expression columns, since these will be
 		// needed for all join types and cases. Exclude synthesized projection
@@ -495,13 +496,14 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			return
 		}
 
-		_, isPartial := index.Predicate()
-		if isPartial && (joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp) {
+		if joinType == opt.SemiJoinOp || joinType == opt.AntiJoinOp {
 			// Typically, the index must cover all columns from the right in
 			// order to generate a lookup join without an additional index join
-			// (case 1, see function comment). However, if the index is a
-			// partial index, the filters remaining after proving
-			// filter-predicate implication may no longer reference some
+			// (case 1, see function comment). However, there are some cases
+			// where the remaining filters no longer reference some columns.
+			//
+			// 1. If the index is a partial index, the filters remaining after
+			// proving filter-predicate implication may no longer reference some
 			// columns. A lookup semi- or anti-join can be generated if the
 			// columns in the new filters from the right side of the join are
 			// covered by the index. Consider the example:
@@ -517,13 +519,32 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			// Column y is no longer referenced, so a lookup semi-join can be
 			// created despite the partial index not covering y.
 			//
-			// Note that this is a special case that only works for semi- and
+			// 2. If onFilters contain a contradiction or tautology that is not
+			// normalized away, then columns may no longer be referenced in the
+			// remaining filters of the lookup join. Consider the example:
+			//
+			//   CREATE TABLE a (a INT)
+			//   CREATE TABLE xyz (x INT, y INT, z INT, INDEX (x, z))
+			//
+			//   SELECT a FROM a WHERE a IN (
+			//     SELECT z FROM xyz WHERE x = 0 OR y IN (0) AND y > 0
+			//   )
+			//
+			// The filter x = 0 OR y IN (0) AND y > 0 contains a contradiction
+			// that currently is not normalized to false, but a tight constraint
+			// is created for entire filter that constrains x to 0. Because the
+			// filter is tight, there is no remaining filter. Column y is no
+			// longer referenced, so a lookup semi-join can be created despite
+			// the secondary index not covering y.
+			//
+			// Note that these are special cases that only work for semi- and
 			// anti-joins because they never include columns from the right side
 			// in their output columns. Other joins include columns from the
 			// right side in their output columns, so even if the ON filters no
 			// longer reference an un-covered column, they must be fetched (case
 			// 2, see function comment).
-			filterColsFromRight := rightCols.Intersection(onFilters.OuterCols())
+			remainingFilterCols := rightKeyCols.Union(lookupJoin.On.OuterCols())
+			filterColsFromRight := rightCols.Intersection(remainingFilterCols)
 			if filterColsFromRight.SubsetOf(indexCols) {
 				lookupJoin.Cols.UnionWith(filterColsFromRight)
 				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
