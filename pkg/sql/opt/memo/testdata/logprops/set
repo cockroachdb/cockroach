@@ -585,3 +585,57 @@ except-all
            └── eq [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
                 ├── variable: a:6 [type=int]
                 └── variable: b:7 [type=int]
+
+# Regression test for #89101. EXCEPT can have cardinality 0 even if left side
+# has more rows than the right.
+norm
+VALUES (1), (1) EXCEPT VALUES (1)
+----
+except
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
+ ├── right columns: column1:2(int)
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── values
+      ├── columns: column1:2(int!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      ├── prune: (2)
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+# EXCEPT ALL cannot have cardinality lower than min left - max right.
+norm
+VALUES (1), (1) EXCEPT ALL VALUES (1)
+----
+except-all
+ ├── columns: column1:1(int!null)
+ ├── left columns: column1:1(int!null)
+ ├── right columns: column1:2(int)
+ ├── cardinality: [1 - 2]
+ ├── values
+ │    ├── columns: column1:1(int!null)
+ │    ├── cardinality: [2 - 2]
+ │    ├── prune: (1)
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── values
+      ├── columns: column1:2(int!null)
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(2)
+      ├── prune: (2)
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
