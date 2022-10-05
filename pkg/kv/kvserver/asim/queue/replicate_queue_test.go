@@ -130,6 +130,7 @@ func TestReplicateQueue(t *testing.T) {
 				testSettings.ReplicaChangeDelayFn(),
 				s.MakeAllocator(store.StoreID()),
 				start,
+				config.DefaultSimulationSettings(),
 			)
 			s.TickClock(start)
 

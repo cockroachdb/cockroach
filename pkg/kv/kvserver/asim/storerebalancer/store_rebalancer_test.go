@@ -180,18 +180,21 @@ func TestStoreRebalancer(t *testing.T) {
 			s := tc.s
 
 			exchange := state.NewFixedDelayExhange(
-				start,
-				time.Second,
-				time.Second*0, /* no state update delay */
+				testSettings.Start.Add(-testSettings.StateExchangeInterval),
+				testSettings.StateExchangeInterval,
+				testSettings.StateExchangeDelay,
 			)
 
 			// Update the storepool for informing allocator decisions.
-			exchange.Put(state.OffsetTick(start, 0), s.StoreDescriptors()...)
+			exchange.Put(
+				testSettings.Start.Add(-testSettings.StateExchangeInterval),
+				s.StoreDescriptors()...,
+			)
 			s.UpdateStorePool(testingStore, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(testingStore)))
 
 			allocator := s.MakeAllocator(testingStore)
 			changer := state.NewReplicaChanger()
-			controller := op.NewController(changer, allocator, testSettings)
+			controller := op.NewController(changer, allocator, testSettings, testingStore)
 			src := newStoreRebalancerControl(start, testingStore, controller, allocator, testSettings, GetStateRaftStatusFn(s))
 			s.TickClock(start)
 
@@ -201,8 +204,6 @@ func TestStoreRebalancer(t *testing.T) {
 				s.TickClock(state.OffsetTick(start, tick))
 				changer.Tick(state.OffsetTick(start, tick), s)
 				controller.Tick(ctx, state.OffsetTick(start, tick), s)
-				exchange.Put(state.OffsetTick(start, 0), s.StoreDescriptors()...)
-				s.UpdateStorePool(testingStore, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(testingStore)))
 
 				src.Tick(ctx, state.OffsetTick(start, tick), s)
 				resultsPhase = append(resultsPhase, src.rebalancerState.phase)
@@ -299,7 +300,7 @@ func TestStoreRebalancerBalances(t *testing.T) {
 
 			allocator := s.MakeAllocator(testingStore)
 			changer := state.NewReplicaChanger()
-			controller := op.NewController(changer, allocator, testSettings)
+			controller := op.NewController(changer, allocator, testSettings, testingStore)
 			src := newStoreRebalancerControl(start, testingStore, controller, allocator, testSettings, GetStateRaftStatusFn(s))
 			s.TickClock(start)
 

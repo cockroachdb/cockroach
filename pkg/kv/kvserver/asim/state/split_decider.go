@@ -120,7 +120,6 @@ func (s *SplitDecider) SplitKey(tick time.Time, rangeID RangeID) (Key, bool) {
 func (s *SplitDecider) ClearSplitKeys() []RangeID {
 	suggestions := make([]RangeID, len(s.suggestions))
 	copy(suggestions, s.suggestions)
-
 	s.suggestions = []RangeID{}
 	return suggestions
 }

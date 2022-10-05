@@ -148,6 +148,7 @@ func TestSplitQueue(t *testing.T) {
 				testSettings.RangeSplitDelayFn(),
 				tc.splitThreshold,
 				start,
+				testSettings,
 			)
 
 			results := make([]map[int64]int64, 0, 1)

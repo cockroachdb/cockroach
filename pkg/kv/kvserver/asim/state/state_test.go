@@ -53,10 +53,12 @@ func TestRangeSplit(t *testing.T) {
 	// The end key of the lhs should be the start key of the rhs.
 	require.Equal(t, lhs.Descriptor().EndKey, rhs.Descriptor().StartKey)
 	// The lhs inherits the pre-split replicas.
-	require.Equal(t, repl1, lhs.Replicas()[s1.StoreID()])
+	lhsRepl, ok := lhs.Replica(s1.StoreID())
+	require.True(t, ok)
+	require.Equal(t, repl1, lhsRepl)
 	// The rhs should have a replica added to it as well. It should hold the
 	// lease if the lhs replica does.
-	newRepl, ok := rhs.Replicas()[s1.StoreID()]
+	newRepl, ok := rhs.Replica(s1.StoreID())
 	require.True(t, ok)
 	require.Equal(t, repl1.HoldsLease(), newRepl.HoldsLease())
 	// Assert that the lhs now has half the previous load counters.
@@ -232,8 +234,8 @@ func TestAddReplica(t *testing.T) {
 	require.Equal(t, ReplicaID(1), r2repl1.ReplicaID())
 	require.Equal(t, ReplicaID(2), r2repl2.ReplicaID())
 
-	require.Len(t, s1.Replicas(), 2)
-	require.Len(t, s2.Replicas(), 1)
+	require.Len(t, s.Replicas(s1.StoreID()), 2)
+	require.Len(t, s.Replicas(s2.StoreID()), 1)
 }
 
 // TestWorkloadApply asserts that applying workload on a key, will be reflected
