@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -269,33 +270,8 @@ ORDER BY total_reads ASC`
 			return err
 		}
 	}
-	logIndexUsageStatsWithDelay(ctx, allCapturedIndexUsageStats, stopper, loggingDelay)
+	logutil.LogEventsWithDelay(ctx, allCapturedIndexUsageStats, stopper, loggingDelay)
 	return nil
-}
-
-// logIndexUsageStatsWithDelay logs an eventpb.EventPayload at each
-// telemetryCaptureIndexUsageStatsLoggingDelay to avoid exceeding the 10
-// log-line per second limit per node on the telemetry logging pipeline.
-// Currently, this log-line limit is only shared with 1 other telemetry event,
-// SampledQuery, which now has a logging frequency of 8 logs per second.
-func logIndexUsageStatsWithDelay(
-	ctx context.Context, events []logpb.EventPayload, stopper *stop.Stopper, delay time.Duration,
-) {
-	// Log the first event immediately.
-	timer := time.NewTimer(0 * time.Second)
-	defer timer.Stop()
-	for len(events) > 0 {
-		select {
-		case <-stopper.ShouldQuiesce():
-			return
-		case <-timer.C:
-			event := events[0]
-			log.StructuredEvent(ctx, event)
-			events = events[1:]
-			// Apply a delay to subsequent events.
-			timer.Reset(delay)
-		}
-	}
 }
 
 func getAllDatabaseNames(ctx context.Context, ie isql.Executor) (tree.NameList, error) {
