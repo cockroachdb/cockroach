@@ -219,7 +219,7 @@ func (mq *mergeQueue) process(
 
 	lhsDesc := lhsRepl.Desc()
 	lhsStats := lhsRepl.GetMVCCStats()
-	lhsQPS, lhsQPSOK := lhsRepl.GetMaxSplitQPS()
+	lhsQPS, lhsQPSOK := lhsRepl.GetMaxSplitQPS(ctx)
 	minBytes := lhsRepl.GetMinBytes()
 	if lhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: LHS meets minimum size threshold %d with %d bytes",

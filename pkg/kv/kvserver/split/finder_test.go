@@ -13,6 +13,7 @@ package split
 import (
 	"bytes"
 	"context"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestSplitFinderKey verifies the Key() method correctly
@@ -269,5 +271,131 @@ func TestSplitFinderRecorder(t *testing.T) {
 				"%d: expected reservoir: %v, but got reservoir: %v",
 				i, test.expectedReservoir, finder.samples)
 		}
+	}
+}
+
+func TestFinderNoSplitKeyCause(t *testing.T) {
+	samples := [splitKeySampleSize]sample{}
+	for i, idx := range rand.Perm(splitKeySampleSize) {
+		if i < 5 {
+			// insufficient counters
+			samples[idx] = sample{
+				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
+				left:      0,
+				right:     0,
+				contained: splitKeyMinCounter - 1,
+			}
+		} else if i < 7 {
+			// imbalance
+			deviationLeft := rand.Intn(5)
+			deviationRight := rand.Intn(5)
+			samples[idx] = sample{
+				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
+				left:      25 + deviationLeft,
+				right:     15 - deviationRight,
+				contained: int(max(float64(splitKeyMinCounter-40-deviationLeft+deviationRight), float64(40+deviationLeft-deviationRight))),
+			}
+		} else if i < 13 {
+			// imbalance
+			deviationLeft := rand.Intn(5)
+			deviationRight := rand.Intn(5)
+			samples[idx] = sample{
+				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
+				left:      50 + deviationLeft,
+				right:     30 - deviationRight,
+				contained: int(max(float64(splitKeyMinCounter-80-deviationLeft+deviationRight), 0)),
+			}
+		} else {
+			// too many contained
+			contained := int(splitKeyMinCounter*splitKeyContainedThreshold + 1)
+			left := (splitKeyMinCounter - contained) / 2
+			samples[idx] = sample{
+				key:       keys.SystemSQLCodec.TablePrefix(uint32(i)),
+				left:      left,
+				right:     splitKeyMinCounter - left - contained,
+				contained: contained,
+			}
+		}
+	}
+
+	finder := NewFinder(timeutil.Now())
+	finder.samples = samples
+	insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := finder.NoSplitKeyCause()
+	assert.Equal(t, 5, insufficientCounters, "unexpected insufficient counters")
+	assert.Equal(t, 6, imbalance, "unexpected imbalance counters")
+	assert.Equal(t, 7, tooManyContained, "unexpected too many contained counters")
+	assert.Equal(t, 2, imbalanceAndTooManyContained, "unexpected imbalance and too many contained counters")
+}
+
+func TestFinderPopularKeyFrequency(t *testing.T) {
+	uniqueKeySample := [splitKeySampleSize]sample{}
+	for i, idx := range rand.Perm(splitKeySampleSize) {
+		uniqueKeySample[idx] = sample{
+			key: keys.SystemSQLCodec.TablePrefix(uint32(i)),
+		}
+	}
+	twentyPercentPopularKeySample := [splitKeySampleSize]sample{}
+	for i, idx := range rand.Perm(splitKeySampleSize) {
+		var tableID uint32
+		if i <= 15 {
+			tableID = uint32(i / 3)
+		} else {
+			tableID = 6
+		}
+		twentyPercentPopularKeySample[idx] = sample{
+			key: keys.SystemSQLCodec.TablePrefix(tableID),
+		}
+	}
+	twentyFivePercentPopularKeySample := [splitKeySampleSize]sample{}
+	for i, idx := range rand.Perm(splitKeySampleSize) {
+		var tableID uint32
+		if i < 8 || i >= 13 {
+			tableID = uint32(i / 4)
+		} else {
+			tableID = 2
+		}
+		twentyFivePercentPopularKeySample[idx] = sample{
+			key: keys.SystemSQLCodec.TablePrefix(tableID),
+		}
+	}
+	fiftyPercentPopularKeySample := [splitKeySampleSize]sample{}
+	for i, idx := range rand.Perm(splitKeySampleSize) {
+		fiftyPercentPopularKeySample[idx] = sample{
+			key: keys.SystemSQLCodec.TablePrefix(uint32(i / 10)),
+		}
+	}
+	fiftyFivePercentPopularKeySample := [splitKeySampleSize]sample{}
+	for i, idx := range rand.Perm(splitKeySampleSize) {
+		var tableID uint32
+		if i >= 11 {
+			tableID = uint32(1)
+		}
+		fiftyFivePercentPopularKeySample[idx] = sample{
+			key: keys.SystemSQLCodec.TablePrefix(tableID),
+		}
+	}
+	sameKeySample := [splitKeySampleSize]sample{}
+	for _, idx := range rand.Perm(splitKeySampleSize) {
+		sameKeySample[idx] = sample{
+			key: keys.SystemSQLCodec.TablePrefix(0),
+		}
+	}
+
+	testCases := []struct {
+		samples                     [splitKeySampleSize]sample
+		expectedPopularKeyFrequency float64
+	}{
+		{uniqueKeySample, 0.05},
+		{twentyPercentPopularKeySample, 0.2},
+		{twentyFivePercentPopularKeySample, 0.25},
+		{fiftyPercentPopularKeySample, 0.5},
+		{fiftyFivePercentPopularKeySample, 0.55},
+		{sameKeySample, 1},
+	}
+	for i, test := range testCases {
+		finder := NewFinder(timeutil.Now())
+		finder.samples = test.samples
+		popularKeyFrequency := finder.PopularKeyFrequency()
+		assert.Equal(t, test.expectedPopularKeyFrequency, popularKeyFrequency, "unexpected popular key frequency in test %d", i)
 	}
 }

@@ -534,6 +534,10 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			if s.p.InRollback {
 				rollbackStage++
 			}
+			if done {
+				t.Logf("reached final stage, waiting for completion")
+				stageChan = nil // allow the restored jobs to proceed
+			}
 			if shouldFail {
 				s.resume <- errors.Newf("boom %d", i)
 			} else {
@@ -545,7 +549,7 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 		} else {
 			require.NoError(t, err)
 		}
-		stageChan = nil // allow the restored jobs to proceed
+
 		t.Logf("finished")
 
 		for i, b := range backups {

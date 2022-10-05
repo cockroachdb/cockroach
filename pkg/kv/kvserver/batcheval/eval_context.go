@@ -88,7 +88,7 @@ type EvalContext interface {
 	//
 	// NOTE: This should not be used when the load based splitting cluster setting
 	// is disabled.
-	GetMaxSplitQPS() (float64, bool)
+	GetMaxSplitQPS(context.Context) (float64, bool)
 
 	// GetLastSplitQPS returns the Replica's most recent queries/s request rate.
 	//
@@ -96,7 +96,7 @@ type EvalContext interface {
 	// is disabled.
 	//
 	// TODO(nvanbenschoten): remove this method in v22.1.
-	GetLastSplitQPS() float64
+	GetLastSplitQPS(context.Context) float64
 
 	GetGCThreshold() hlc.Timestamp
 	ExcludeDataFromBackup() bool
@@ -240,10 +240,10 @@ func (m *mockEvalCtxImpl) ContainsKey(key roachpb.Key) bool {
 func (m *mockEvalCtxImpl) GetMVCCStats() enginepb.MVCCStats {
 	return m.Stats
 }
-func (m *mockEvalCtxImpl) GetMaxSplitQPS() (float64, bool) {
+func (m *mockEvalCtxImpl) GetMaxSplitQPS(context.Context) (float64, bool) {
 	return m.QPS, true
 }
-func (m *mockEvalCtxImpl) GetLastSplitQPS() float64 {
+func (m *mockEvalCtxImpl) GetLastSplitQPS(context.Context) float64 {
 	return m.QPS
 }
 func (m *mockEvalCtxImpl) CanCreateTxnRecord(
