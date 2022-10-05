@@ -165,11 +165,26 @@ type SimpleMVCCIterator interface {
 	UnsafeKey() MVCCKey
 	// UnsafeValue returns the current point key value as a byte slice.
 	// This must only be called when it is known that the iterator is positioned
-	// at a point value, i.e. HasPointAndRange has returned (true, *).
+	// at a point value, i.e. HasPointAndRange has returned (true, *). If
+	// possible, use MVCCValueLenAndIsTombstone() instead.
 	//
 	// The memory is invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	// Use Value() if that is undesirable.
 	UnsafeValue() []byte
+	// MVCCValueLenAndIsTombstone should be called only for MVCC (i.e.,
+	// UnsafeKey().IsValue()) point values, when the actual point value is not
+	// needed, for example when updating stats and making GC decisions, and it
+	// is sufficient for the caller to know the length (len(UnsafeValue()), and
+	// whether the underlying MVCCValue is a tombstone
+	// (MVCCValue.IsTombstone()). This is an optimization that can allow the
+	// underlying storage layer to avoid retrieving the value.
+	// REQUIRES: HasPointAndRange() has returned (true, *).
+	MVCCValueLenAndIsTombstone() (int, bool, error)
+	// ValueLen can be called for MVCC or non-MVCC values, when only the value
+	// length is needed. This is an optimization that can allow the underlying
+	// storage layer to avoid retrieving the value.
+	// REQUIRES: HasPointAndRange() has returned (true, *).
+	ValueLen() int
 	// HasPointAndRange returns whether the current iterator position has a point
 	// key and/or a range key. Must check Valid() first. At least one of these
 	// will always be true for a valid iterator. For details on range keys, see
@@ -1557,6 +1572,34 @@ func assertSimpleMVCCIteratorInvariants(iter SimpleMVCCIterator) error {
 		}
 		if r := iter.RangeKeys(); !r.IsEmpty() || !r.Bounds.Equal(roachpb.Span{}) {
 			return errors.AssertionFailedf("hasRange=false but RangeKeys=%s", r)
+		}
+	}
+	if hasPoint {
+		value := iter.UnsafeValue()
+		valueLen := iter.ValueLen()
+		if len(value) != valueLen {
+			return errors.AssertionFailedf("length of UnsafeValue %d != ValueLen %d", len(value), valueLen)
+		}
+		if key.IsValue() {
+			valueLen2, isTombstone, err := iter.MVCCValueLenAndIsTombstone()
+			if err == nil {
+				if len(value) != valueLen2 {
+					return errors.AssertionFailedf("length of UnsafeValue %d != MVCCValueLenAndIsTombstone %d",
+						len(value), valueLen2)
+				}
+				if v, err := DecodeMVCCValue(value); err == nil {
+					if isTombstone != v.IsTombstone() {
+						return errors.AssertionFailedf("isTombstone from MVCCValueLenAndIsTombstone %t != MVCCValue.IsTombstone %t",
+							isTombstone, v.IsTombstone())
+					}
+					// Else err != nil. SimpleMVCCIterator is not responsile for data
+					// corruption since it is possible that the implementation of
+					// MVCCValueLenAndIsTombstone is fetching information from a
+					// different part of the store than where the value is stored.
+				}
+			}
+			// Else err != nil. Ignore, since SimpleMVCCIterator is not to be held
+			// responsible for data corruption or tests writing non-MVCCValues.
 		}
 	}
 
