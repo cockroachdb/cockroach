@@ -144,13 +144,16 @@ func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, err
 	case authDefault:
 		fallthrough
 	default:
+		if u.q.Get(credentialsParam) == "" {
+			return nil, errors.New("missing credentials parameter")
+		}
 		err := u.decodeBase64(credentialsParam, &credsJSON)
 		if err != nil {
 			return nil, errors.Wrap(err, "decoding credentials json")
 		}
 		creds, err = google.CredentialsFromJSON(ctx, credsJSON, authScope)
 		if err != nil {
-			return nil, errors.Wrap(err, "creating credentials")
+			return nil, errors.Wrap(err, "creating credentials from json")
 		}
 	}
 
@@ -215,6 +218,9 @@ func MakePubsubSink(
 	case GcpScheme:
 		const regionParam = "region"
 		projectID := pubsubURL.Host
+		if projectID == "" {
+			return nil, errors.New("missing project name")
+		}
 		region := pubsubURL.consumeParam(regionParam)
 		if region == "" {
 			return nil, errors.New("region query parameter not found")
