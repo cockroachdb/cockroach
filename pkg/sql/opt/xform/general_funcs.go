@@ -545,6 +545,7 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 	// UnionAll tree.
 	var noLimitSpans constraint.Spans
 	var last memo.RelExpr
+	spColList := sp.Cols.ToList()
 	queue := list.New()
 	for i, n := 0, spans.Count(); i < n; i++ {
 		if i >= budgetExceededIndex {
@@ -561,23 +562,35 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 		}
 		for j, m := 0, singleKeySpans.Count(); j < m; j++ {
 			// Construct a new Scan for each span.
+			// Note: newHardLimit will be 0 (i.e., no limit) if there are
+			// filters to be applied in a Select.
 			newScanPrivate := c.makeNewScanPrivate(
 				sp,
 				cons.Columns,
 				newHardLimit,
 				singleKeySpans.Get(j),
 			)
-			newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
+			newScanOrLimitedSelect := c.e.f.ConstructScan(newScanPrivate)
 			if !filters.IsTrue() {
-				newScanOrSelect = c.wrapScanInLimitedSelect(
-					newScanOrSelect,
-					sp,
-					newScanPrivate,
-					filters,
-					limit,
+				// If there are filters, apply them and a limit. The limit is
+				// not needed if there are no filters because the scan's hard
+				// limit will be set (see newHardLimit).
+				//
+				// TODO(mgartner/msirek): Converting ColSets to ColLists here is
+				// only safe because column IDs are always allocated in a
+				// consistent, ascending order for each duplicated table in the
+				// metadata. If column ID allocation changes, this could break.
+				newColList := newScanPrivate.Cols.ToList()
+				newScanOrLimitedSelect = c.e.f.ConstructLimit(
+					c.e.f.ConstructSelect(
+						newScanOrLimitedSelect,
+						c.RemapScanColsInFilter(filters, sp, newScanPrivate),
+					),
+					c.IntConst(tree.NewDInt(tree.DInt(limit))),
+					ordering.RemapColumns(spColList, newColList),
 				)
 			}
-			queue.PushBack(newScanOrSelect)
+			queue.PushBack(newScanOrLimitedSelect)
 		}
 	}
 
@@ -652,15 +665,21 @@ func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
 		Columns: cons.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   noLimitSpans,
 	})
+	// TODO(mgartner): We should be able to add a LIMIT above the Scan or Select
+	// below, as long as we remap the original ordering columns. This could
+	// allow a top-k to be planned instead of a sort.
 	newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
 	if !filters.IsTrue() {
-		newScanOrSelect = c.wrapScanInLimitedSelect(newScanOrSelect, sp, newScanPrivate, filters, limit)
+		newScanOrSelect = c.e.f.ConstructSelect(
+			newScanOrSelect,
+			c.RemapScanColsInFilter(filters, sp, newScanPrivate),
+		)
 	}
 	// TODO(mgartner/msirek): Converting ColSets to ColLists here is only safe
 	// because column IDs are always allocated in a consistent, ascending order
 	// for each duplicated table in the metadata. If column ID allocation
 	// changes, this could break.
-	return makeNewUnion(last, newScanOrSelect, sp.Cols.ToList()), true
+	return makeNewUnion(last, newScanOrSelect, spColList), true
 }
 
 // numAllowedValues returns the number of allowed values for a column with a
@@ -709,29 +728,6 @@ func (c *CustomFuncs) numAllowedValues(
 		}
 	}
 	return 0, false
-}
-
-// wrapScanInLimitedSelect wraps "scan" in a SelectExpr with filters mapped from
-// the originalScanPrivate columns to the columns in scan. If limit is non-zero,
-// the SelectExpr is wrapped in a LimitExpr with that limit.
-func (c *CustomFuncs) wrapScanInLimitedSelect(
-	scan memo.RelExpr,
-	originalScanPrivate, newScanPrivate *memo.ScanPrivate,
-	filters memo.FiltersExpr,
-	limit int,
-) (limitedSelect memo.RelExpr) {
-	limitedSelect = c.e.f.ConstructSelect(
-		scan,
-		c.RemapScanColsInFilter(filters, originalScanPrivate, newScanPrivate),
-	)
-	if limit != 0 {
-		limitedSelect = c.e.f.ConstructLimit(
-			limitedSelect,
-			c.IntConst(tree.NewDInt(tree.DInt(limit))),
-			c.EmptyOrdering(),
-		)
-	}
-	return limitedSelect
 }
 
 // indexHasOrderingSequence returns whether the Scan can provide a given
