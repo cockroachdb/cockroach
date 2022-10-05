@@ -1356,7 +1356,7 @@ inner-join (zigzag t2@_hyp_1 t2@_hyp_2)
  ├── left fixed columns: [1] = [2]
  ├── right fixed columns: [2] = [3]
  ├── immutable
- ├── cost: 19.3915122
+ ├── cost: 20.3042149
  ├── fd: ()-->(1,2)
  └── filters
       ├── st_overlaps(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
