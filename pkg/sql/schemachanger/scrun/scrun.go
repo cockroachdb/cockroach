@@ -158,13 +158,15 @@ func executeStage(
 	stageIdx int,
 	stage scplan.Stage,
 ) (err error) {
+
+	log.Infof(ctx, "executing %s (rollback=%v)", stage, p.InRollback)
+
 	if knobs != nil && knobs.BeforeStage != nil {
 		if err := knobs.BeforeStage(p, stageIdx); err != nil {
 			return err
 		}
 	}
 
-	log.Infof(ctx, "executing %s (rollback=%v)", stage, p.InRollback)
 	start := timeutil.Now()
 	defer func() {
 		if log.ExpensiveLogEnabled(ctx, 2) {
