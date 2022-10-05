@@ -215,10 +215,10 @@ creation: CREATE INDEX ON t1 (f) STORING (k, i);
 optimal plan:
 project
  ├── columns: i:2
- ├── cost: 816.218448
+ ├── cost: 814.144374
  └── project
       ├── columns: k:1 i:2 f:3
-      ├── cost: 809.754004
+      ├── cost: 808.716967
       └── distinct-on
            ├── columns: k:1 i:2 f:3 rowid:5!null
            ├── grouping columns: rowid:5!null
