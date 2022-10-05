@@ -331,8 +331,9 @@ func fullClusterTargetsBackup(
 // contain all tables that require an introduction (i.e. a backup from ts=0), if
 // they are also restore targets. This specifically entails checking the
 // following invariant on each table we seek to restore: if the nth backup
-// contains a table in its backupManifest.Descriptors field but the n-1th does
-// not, then that table must be covered by the nth backup's
+// contains an online table in its backupManifest.Descriptors field or
+// backupManifest. DescriptorsChanges field but the n-1th does not contain it in
+// its Descriptors field, then that table must be covered by the nth backup's
 // manifest.IntroducedSpans field. Note: this check assumes that
 // mainBackupManifests are sorted by Endtime and this check only applies to
 // backups with a start time that is less than the restore AOST.
@@ -380,33 +381,61 @@ func checkMissingIntroducedSpans(
 			tablesIntroduced[descpb.ID(tableID)] = struct{}{}
 		}
 
+		requiredIntroduction := func(table *descpb.TableDescriptor) error {
+			if _, required := requiredTables[table.GetID()]; !required {
+				// The table is not required for the restore, so there's no need to check coverage.
+				return nil
+			}
+
+			if !includeTableSpans(table) {
+				return nil
+			}
+
+			if _, introduced := tablesIntroduced[table.GetID()]; introduced {
+				// The table was introduced, thus the table is properly covered at
+				// this point in the backup chain.
+				return nil
+			}
+
+			if _, inPrevBackup := prevTables[table.GetID()]; inPrevBackup {
+				// The table was included in the previous backup, which implies the
+				// table was online at prevBackup.Endtime, and therefore does not need
+				// to be introduced.
+				return nil
+			}
+			tableError := errors.Newf("table %q cannot be safely restored from this backup."+
+				" This backup is affected by issue #88042, which produced incorrect backups after an IMPORT."+
+				" To continue the restore, you can either:"+
+				" 1) restore to a system time before the import completed, %v;"+
+				" 2) restore with a newer backup chain (a full backup [+ incrementals])"+
+				" taken after the current backup target;"+
+				" 3) or remove table %v from the restore targets.",
+				table.Name, mainBackupManifests[i].StartTime.GoTime().String(), table.Name)
+			return errors.WithIssueLink(tableError, errors.IssueLink{
+				IssueURL: "https://www.cockroachlabs.com/docs/advisories/a88042",
+				Detail: `An incremental database backup with revision history can incorrectly backup data for a table 
+that was running an IMPORT at the time of the previous incremental in this chain of backups.`,
+			})
+		}
+
 		// If the table in the current backup was not in prevBackup.Descriptors,
 		// then it needs to be introduced.
 		for _, desc := range mainBackupManifests[i].Descriptors {
 			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil {
-
-				if _, required := requiredTables[table.GetID()]; !required {
-					continue
+				if err := requiredIntroduction(table); err != nil {
+					return err
 				}
+			}
+		}
 
-				_, inPrevBackup := prevTables[table.GetID()]
-
-				_, introduced := tablesIntroduced[table.GetID()]
-
-				if !inPrevBackup && !introduced {
-					tableError := errors.Newf("table %q cannot be safely restored from this backup."+
-						" This backup is affected by issue #88042, which produced incorrect backups after an IMPORT."+
-						" To continue the restore, you can either:"+
-						" 1) restore to a system time before the import completed, %v;"+
-						" 2) restore with a newer backup chain (a full backup [+ incrementals])"+
-						" taken after the current backup target;"+
-						" 3) or remove table %v from the restore targets.",
-						table.Name, mainBackupManifests[i].StartTime.GoTime().String(), table.Name)
-					return errors.WithIssueLink(tableError, errors.IssueLink{
-						IssueURL: "https://www.cockroachlabs.com/docs/advisories/a88042",
-						Detail: `An incremental database backup with revision history can incorrectly backup data for a table 
-that was running an IMPORT at the time of the previous incremental in this chain of backups.`,
-					})
+		// As described in the docstring for getReintroducedSpans(), there are cases
+		// where a descriptor may appear in manifest. DescriptorChanges but not
+		// manifest.Descriptors. If a descriptor is online at any moment during the
+		// backup interval, it needs to be reintroduced.
+		for _, desc := range mainBackupManifests[i].DescriptorChanges {
+			if table, _, _, _ := descpb.FromDescriptor(desc.Desc); table != nil && table.Public() {
+				if err := requiredIntroduction(table); err != nil {
+					return err
 				}
 			}
 		}
