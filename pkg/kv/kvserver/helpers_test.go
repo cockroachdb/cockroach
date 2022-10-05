@@ -248,6 +248,13 @@ func (r *Replica) RaftUnlock() {
 	r.raftMu.Unlock()
 }
 
+func (r *Replica) RaftReportUnreachable(id roachpb.ReplicaID) error {
+	return r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
+		raftGroup.ReportUnreachable(uint64(id))
+		return false /* unquiesceAndWakeLeader */, nil
+	})
+}
+
 // LastAssignedLeaseIndexRLocked returns the last assigned lease index.
 func (r *Replica) LastAssignedLeaseIndex() uint64 {
 	r.mu.RLock()
