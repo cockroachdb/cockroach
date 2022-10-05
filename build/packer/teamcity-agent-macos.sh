@@ -22,6 +22,8 @@ write_plist_file() {
 	<string>agent</string>
 	<key>WorkingDirectory</key>
 	<string>/Users/agent/teamcity</string>
+	<key>SessionCreate</key>
+	<true/>
 	<key>Label</key>
 	<string>jetbrains.teamcity.BuildAgent</string>
 	<key>OnDemand</key>
