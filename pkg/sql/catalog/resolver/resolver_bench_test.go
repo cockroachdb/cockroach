@@ -31,6 +31,7 @@ import (
 )
 
 // BenchmarkResolveExistingObject exercises resolver code to ensure that
+// we do not regress in this important hot path.
 func BenchmarkResolveExistingObject(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
@@ -109,6 +110,91 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				desc, _, err := resolver.ResolveExistingObject(ctx, rs, &uon, tc.flags)
 				require.NoError(b, err)
 				require.NotNil(b, desc)
+			}
+		})
+	}
+}
+
+// BenchmarkResolveFunction exercises resolver code to ensure that
+// we do not regress in this important hot path.
+func BenchmarkResolveFunction(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	for _, tc := range []struct {
+		setup      []string
+		name       tree.UnresolvedName
+		flags      tree.ObjectLookupFlags
+		searchPath string
+	}{
+		{
+			setup: []string{
+				"CREATE FUNCTION foo() RETURNS int IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$",
+			},
+			name:  tree.MakeUnresolvedName("foo"),
+			flags: tree.ObjectLookupFlagsWithRequired(),
+		},
+		{
+			setup: []string{
+				"CREATE SCHEMA sc",
+				"CREATE FUNCTION sc.foo() RETURNS int IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$",
+			},
+			name:  tree.MakeUnresolvedName("sc", "foo"),
+			flags: tree.ObjectLookupFlagsWithRequired(),
+		},
+		{
+			setup: []string{
+				"CREATE SCHEMA sc",
+				"CREATE FUNCTION sc.foo() RETURNS int IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$",
+			},
+			name:       tree.MakeUnresolvedName("foo"),
+			flags:      tree.ObjectLookupFlagsWithRequired(),
+			searchPath: "public,$user,sc",
+		},
+	} {
+		b.Run(strings.Join(tc.setup, ";")+tc.name.String(), func(b *testing.B) {
+			ctx := context.Background()
+			s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			tDB := sqlutils.MakeSQLRunner(sqlDB)
+			for _, stmt := range tc.setup {
+				tDB.Exec(b, stmt)
+			}
+
+			var sessionData sessiondatapb.SessionData
+			{
+				var sessionSerialized []byte
+				tDB.QueryRow(b, "SELECT crdb_internal.serialize_session()").Scan(&sessionSerialized)
+				require.NoError(b, protoutil.Unmarshal(sessionSerialized, &sessionData))
+			}
+
+			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+			txn := kvDB.NewTxn(ctx, "test")
+			p, cleanup := sql.NewInternalPlanner("asdf", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData)
+			defer cleanup()
+
+			// The internal planner overrides the database to "system", here we
+			// change it back.
+			var sp tree.SearchPath
+			{
+				ec := p.(interface{ EvalContext() *eval.Context }).EvalContext()
+				require.NoError(b, ec.SessionAccessor.SetSessionVar(
+					ctx, "database", "defaultdb", false,
+				))
+
+				if tc.searchPath != "" {
+					require.NoError(b, ec.SessionAccessor.SetSessionVar(
+						ctx, "search_path", tc.searchPath, false,
+					))
+				}
+				sp = &ec.SessionData().SearchPath
+			}
+
+			rs := p.(resolver.SchemaResolver)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				fd, err := rs.ResolveFunction(ctx, &tc.name, sp)
+				require.NoError(b, err)
+				require.NotNil(b, fd)
 			}
 		})
 	}
