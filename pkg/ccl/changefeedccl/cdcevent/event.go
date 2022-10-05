@@ -49,7 +49,7 @@ type Metadata struct {
 // Decoder is an interface for decoding KVs into cdc event row.
 type Decoder interface {
 	// DecodeKV decodes specified key value to Row.
-	DecodeKV(ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp) (Row, error)
+	DecodeKV(ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp, keyOnly bool) (Row, error)
 }
 
 // Row holds a row corresponding to an event.
@@ -209,6 +209,7 @@ func NewEventDescriptor(
 	desc catalog.TableDescriptor,
 	family *descpb.ColumnFamilyDescriptor,
 	includeVirtualColumns bool,
+	keyOnly bool,
 	schemaTS hlc.Timestamp,
 ) (*EventDescriptor, error) {
 	sd := EventDescriptor{
@@ -270,20 +271,28 @@ func NewEventDescriptor(
 		isInFamily := inFamily.Contains(col.GetID())
 		virtual := col.IsVirtual() && includeVirtualColumns
 		pKeyOrd, isPKey := primaryKeyOrdinal.Get(col.GetID())
-		if isInFamily || isPKey {
-			colIdx := addColumn(col, ord)
-			if isInFamily {
-				sd.valueCols = append(sd.valueCols, colIdx)
-			}
-
+		if keyOnly {
 			if isPKey {
+				colIdx := addColumn(col, ord)
+				sd.valueCols = append(sd.valueCols, colIdx)
 				sd.keyCols[pKeyOrd] = colIdx
+				ord++
 			}
-			ord++
-		} else if virtual {
-			colIdx := addColumn(col, virtualColOrd)
-			sd.valueCols = append(sd.valueCols, colIdx)
-			ord++
+		} else {
+			if isInFamily || isPKey {
+				colIdx := addColumn(col, ord)
+				ord++
+				if isInFamily {
+					sd.valueCols = append(sd.valueCols, colIdx)
+				}
+				if isPKey {
+					sd.keyCols[pKeyOrd] = colIdx
+				}
+			} else if virtual {
+				colIdx := addColumn(col, virtualColOrd)
+				sd.valueCols = append(sd.valueCols, colIdx)
+				ord++
+			}
 		}
 	}
 
@@ -366,6 +375,7 @@ func getEventDescriptorCached(
 	desc catalog.TableDescriptor,
 	family *descpb.ColumnFamilyDescriptor,
 	includeVirtual bool,
+	keyOnly bool,
 	schemaTS hlc.Timestamp,
 	cache *cache.UnorderedCache,
 ) (*EventDescriptor, error) {
@@ -378,7 +388,7 @@ func getEventDescriptorCached(
 		}
 	}
 
-	ed, err := NewEventDescriptor(desc, family, includeVirtual, schemaTS)
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, keyOnly, schemaTS)
 	if err != nil {
 		return nil, err
 	}
@@ -392,6 +402,7 @@ func NewEventDecoder(
 	cfg *execinfra.ServerConfig,
 	targets changefeedbase.Targets,
 	includeVirtual bool,
+	keyOnly bool,
 ) (Decoder, error) {
 	rfCache, err := newRowFetcherCache(
 		ctx,
@@ -411,7 +422,7 @@ func NewEventDecoder(
 		family *descpb.ColumnFamilyDescriptor,
 		schemaTS hlc.Timestamp,
 	) (*EventDescriptor, error) {
-		return getEventDescriptorCached(desc, family, includeVirtual, schemaTS, eventDescriptorCache)
+		return getEventDescriptorCached(desc, family, includeVirtual, keyOnly, schemaTS, eventDescriptorCache)
 	}
 
 	return &eventDecoder{
@@ -422,9 +433,9 @@ func NewEventDecoder(
 
 // DecodeKV decodes key value at specified schema timestamp.
 func (d *eventDecoder) DecodeKV(
-	ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp,
+	ctx context.Context, kv roachpb.KeyValue, schemaTS hlc.Timestamp, keyOnly bool,
 ) (Row, error) {
-	if err := d.initForKey(ctx, kv.Key, schemaTS); err != nil {
+	if err := d.initForKey(ctx, kv.Key, schemaTS, keyOnly); err != nil {
 		return Row{}, err
 	}
 
@@ -455,14 +466,14 @@ func (d *eventDecoder) DecodeKV(
 // initForKey initializes decoder state to prepare it to decode
 // key/value at specified timestamp.
 func (d *eventDecoder) initForKey(
-	ctx context.Context, key roachpb.Key, schemaTS hlc.Timestamp,
+	ctx context.Context, key roachpb.Key, schemaTS hlc.Timestamp, keyOnly bool,
 ) error {
 	desc, familyID, err := d.rfCache.tableDescForKey(ctx, key, schemaTS)
 	if err != nil {
 		return err
 	}
 
-	fetcher, family, err := d.rfCache.RowFetcherForColumnFamily(desc, familyID)
+	fetcher, family, err := d.rfCache.RowFetcherForColumnFamily(desc, familyID, keyOnly)
 	if err != nil {
 		return err
 	}
@@ -533,7 +544,7 @@ func TestingMakeEventRow(
 		panic(err) // primary column family always exists.
 	}
 	const includeVirtual = false
-	ed, err := NewEventDescriptor(desc, family, includeVirtual, hlc.Timestamp{})
+	ed, err := NewEventDescriptor(desc, family, includeVirtual, false, hlc.Timestamp{})
 	if err != nil {
 		panic(err)
 	}
