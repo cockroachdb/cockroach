@@ -45,6 +45,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/clusterunique",
+        "//pkg/testutils/skip",
         "//pkg/util/stop",
         "//pkg/util/uint128",
         "//pkg/util/uuid",

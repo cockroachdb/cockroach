@@ -124,6 +124,8 @@ func TestInsightsIntegration(t *testing.T) {
 }
 
 func TestInsightsPriorityIntegration(t *testing.T) {
+	skip.WithIssue(t, 89398, "retaining sibling statements may consume too much memory")
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -328,6 +330,8 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 // Testing that the index recommendation is included
 // in the insights table
 func TestInsightsIndexRecommendationIntegration(t *testing.T) {
+	skip.WithIssue(t, 89398, "retaining sibling statements may consume too much memory")
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

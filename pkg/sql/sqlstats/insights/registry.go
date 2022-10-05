@@ -45,7 +45,9 @@ func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.statements[sessionID] = append(r.mu.statements[sessionID], statement)
+	if r.detector.isSlow(statement) {
+		r.mu.statements[sessionID] = append(r.mu.statements[sessionID], statement)
+	}
 }
 
 func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
@@ -57,36 +59,27 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	statements := r.mu.statements[sessionID]
 	delete(r.mu.statements, sessionID)
 
-	slowStatements := make(map[clusterunique.ID]struct{})
 	for _, s := range statements {
-		if r.detector.isSlow(s) {
-			slowStatements[s.ID] = struct{}{}
-		}
-	}
+		var p Problem
+		var c []Cause
 
-	if len(slowStatements) > 0 {
-		for _, s := range statements {
-			var p Problem
-			var c []Cause
-			if _, ok := slowStatements[s.ID]; ok {
-				switch s.Status {
-				case Statement_Completed:
-					p = Problem_SlowExecution
-					c = r.causes.examine(s)
-				case Statement_Failed:
-					// Note that we'll be building better failure support for 23.1.
-					// For now, we only mark failed statements that were also slow.
-					p = Problem_FailedExecution
-				}
-			}
-			r.mu.insights.Add(s.ID, &Insight{
-				Session:     &Session{ID: sessionID},
-				Transaction: transaction,
-				Statement:   s,
-				Problem:     p,
-				Causes:      c,
-			})
+		switch s.Status {
+		case Statement_Completed:
+			p = Problem_SlowExecution
+			c = r.causes.examine(s)
+		case Statement_Failed:
+			// Note that we'll be building better failure support for 23.1.
+			// For now, we only mark failed statements that were also slow.
+			p = Problem_FailedExecution
 		}
+
+		r.mu.insights.Add(s.ID, &Insight{
+			Session:     &Session{ID: sessionID},
+			Transaction: transaction,
+			Statement:   s,
+			Problem:     p,
+			Causes:      c,
+		})
 	}
 }
 
