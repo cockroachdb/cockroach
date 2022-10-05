@@ -376,19 +376,6 @@ func (s *Store) maybeThrottleBatch(
 		}
 		return res, nil
 
-	case *roachpb.ScanInterleavedIntentsRequest:
-		before := timeutil.Now()
-		res, err := s.limiters.ConcurrentScanInterleavedIntents.Begin(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		waited := timeutil.Since(before)
-		if waited > time.Second {
-			log.Infof(ctx, "ScanInterleavedIntents request was delayed by %v", waited)
-		}
-		return res, nil
-
 	default:
 		return nil, nil
 	}

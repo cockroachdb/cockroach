@@ -176,8 +176,6 @@ func (ru RequestUnion) GetInner() Request {
 		return t.Migrate
 	case *RequestUnion_QueryResolvedTimestamp:
 		return t.QueryResolvedTimestamp
-	case *RequestUnion_ScanInterleavedIntents:
-		return t.ScanInterleavedIntents
 	case *RequestUnion_Barrier:
 		return t.Barrier
 	case *RequestUnion_Probe:
@@ -280,8 +278,6 @@ func (ru ResponseUnion) GetInner() Response {
 		return t.Migrate
 	case *ResponseUnion_QueryResolvedTimestamp:
 		return t.QueryResolvedTimestamp
-	case *ResponseUnion_ScanInterleavedIntents:
-		return t.ScanInterleavedIntents
 	case *ResponseUnion_Barrier:
 		return t.Barrier
 	case *ResponseUnion_Probe:
@@ -465,8 +461,6 @@ func (ru *RequestUnion) MustSetInner(r Request) {
 		union = &RequestUnion_Migrate{t}
 	case *QueryResolvedTimestampRequest:
 		union = &RequestUnion_QueryResolvedTimestamp{t}
-	case *ScanInterleavedIntentsRequest:
-		union = &RequestUnion_ScanInterleavedIntents{t}
 	case *BarrierRequest:
 		union = &RequestUnion_Barrier{t}
 	case *ProbeRequest:
@@ -572,8 +566,6 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 		union = &ResponseUnion_Migrate{t}
 	case *QueryResolvedTimestampResponse:
 		union = &ResponseUnion_QueryResolvedTimestamp{t}
-	case *ScanInterleavedIntentsResponse:
-		union = &ResponseUnion_ScanInterleavedIntents{t}
 	case *BarrierResponse:
 		union = &ResponseUnion_Barrier{t}
 	case *ProbeResponse:
@@ -586,7 +578,7 @@ func (ru *ResponseUnion) MustSetInner(r Response) {
 	ru.Value = union
 }
 
-type reqCounts [49]int32
+type reqCounts [48]int32
 
 // getReqCounts returns the number of times each
 // request type appears in the batch.
@@ -684,14 +676,12 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[43]++
 		case *RequestUnion_QueryResolvedTimestamp:
 			counts[44]++
-		case *RequestUnion_ScanInterleavedIntents:
-			counts[45]++
 		case *RequestUnion_Barrier:
-			counts[46]++
+			counts[45]++
 		case *RequestUnion_Probe:
-			counts[47]++
+			counts[46]++
 		case *RequestUnion_IsSpanEmpty:
-			counts[48]++
+			counts[47]++
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", ru))
 		}
@@ -745,7 +735,6 @@ var requestNames = []string{
 	"AdmVerifyProtectedTimestamp",
 	"Migrate",
 	"QueryResolvedTimestamp",
-	"ScanInterleavedIntents",
 	"Barrier",
 	"Probe",
 	"IsSpanEmpty",
@@ -964,10 +953,6 @@ type queryResolvedTimestampResponseAlloc struct {
 	union ResponseUnion_QueryResolvedTimestamp
 	resp  QueryResolvedTimestampResponse
 }
-type scanInterleavedIntentsResponseAlloc struct {
-	union ResponseUnion_ScanInterleavedIntents
-	resp  ScanInterleavedIntentsResponse
-}
 type barrierResponseAlloc struct {
 	union ResponseUnion_Barrier
 	resp  BarrierResponse
@@ -1035,10 +1020,9 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf42 []adminVerifyProtectedTimestampResponseAlloc
 	var buf43 []migrateResponseAlloc
 	var buf44 []queryResolvedTimestampResponseAlloc
-	var buf45 []scanInterleavedIntentsResponseAlloc
-	var buf46 []barrierResponseAlloc
-	var buf47 []probeResponseAlloc
-	var buf48 []isSpanEmptyResponseAlloc
+	var buf45 []barrierResponseAlloc
+	var buf46 []probeResponseAlloc
+	var buf47 []isSpanEmptyResponseAlloc
 
 	for i, r := range ba.Requests {
 		switch r.GetValue().(type) {
@@ -1357,34 +1341,27 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			buf44[0].union.QueryResolvedTimestamp = &buf44[0].resp
 			br.Responses[i].Value = &buf44[0].union
 			buf44 = buf44[1:]
-		case *RequestUnion_ScanInterleavedIntents:
+		case *RequestUnion_Barrier:
 			if buf45 == nil {
-				buf45 = make([]scanInterleavedIntentsResponseAlloc, counts[45])
+				buf45 = make([]barrierResponseAlloc, counts[45])
 			}
-			buf45[0].union.ScanInterleavedIntents = &buf45[0].resp
+			buf45[0].union.Barrier = &buf45[0].resp
 			br.Responses[i].Value = &buf45[0].union
 			buf45 = buf45[1:]
-		case *RequestUnion_Barrier:
+		case *RequestUnion_Probe:
 			if buf46 == nil {
-				buf46 = make([]barrierResponseAlloc, counts[46])
+				buf46 = make([]probeResponseAlloc, counts[46])
 			}
-			buf46[0].union.Barrier = &buf46[0].resp
+			buf46[0].union.Probe = &buf46[0].resp
 			br.Responses[i].Value = &buf46[0].union
 			buf46 = buf46[1:]
-		case *RequestUnion_Probe:
+		case *RequestUnion_IsSpanEmpty:
 			if buf47 == nil {
-				buf47 = make([]probeResponseAlloc, counts[47])
+				buf47 = make([]isSpanEmptyResponseAlloc, counts[47])
 			}
-			buf47[0].union.Probe = &buf47[0].resp
+			buf47[0].union.IsSpanEmpty = &buf47[0].resp
 			br.Responses[i].Value = &buf47[0].union
 			buf47 = buf47[1:]
-		case *RequestUnion_IsSpanEmpty:
-			if buf48 == nil {
-				buf48 = make([]isSpanEmptyResponseAlloc, counts[48])
-			}
-			buf48[0].union.IsSpanEmpty = &buf48[0].resp
-			br.Responses[i].Value = &buf48[0].union
-			buf48 = buf48[1:]
 		default:
 			panic(fmt.Sprintf("unsupported request: %+v", r))
 		}
@@ -1485,8 +1462,6 @@ func CreateRequest(method Method) Request {
 		return &MigrateRequest{}
 	case QueryResolvedTimestamp:
 		return &QueryResolvedTimestampRequest{}
-	case ScanInterleavedIntents:
-		return &ScanInterleavedIntentsRequest{}
 	case Barrier:
 		return &BarrierRequest{}
 	case Probe:

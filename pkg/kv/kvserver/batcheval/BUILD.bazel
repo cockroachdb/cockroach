@@ -42,7 +42,6 @@ go_library(
         "cmd_reverse_scan.go",
         "cmd_revert_range.go",
         "cmd_scan.go",
-        "cmd_scan_interleaved_intents.go",
         "cmd_subsume.go",
         "cmd_truncate_log.go",
         "command.go",
