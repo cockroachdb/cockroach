@@ -524,20 +524,6 @@ func (r *BarrierResponse) combine(c combinable) error {
 var _ combinable = &BarrierResponse{}
 
 // combine implements the combinable interface.
-func (r *ScanInterleavedIntentsResponse) combine(c combinable) error {
-	otherR := c.(*ScanInterleavedIntentsResponse)
-	if r != nil {
-		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
-			return err
-		}
-		r.Intents = append(r.Intents, otherR.Intents...)
-	}
-	return nil
-}
-
-var _ combinable = &ScanInterleavedIntentsResponse{}
-
-// combine implements the combinable interface.
 func (r *QueryLocksResponse) combine(c combinable) error {
 	otherR := c.(*QueryLocksResponse)
 	if r != nil {
@@ -800,9 +786,6 @@ func (*AdminVerifyProtectedTimestampRequest) Method() Method { return AdminVerif
 
 // Method implements the Request interface.
 func (*QueryResolvedTimestampRequest) Method() Method { return QueryResolvedTimestamp }
-
-// Method implements the Request interface.
-func (*ScanInterleavedIntentsRequest) Method() Method { return ScanInterleavedIntents }
 
 // Method implements the Request interface.
 func (*BarrierRequest) Method() Method { return Barrier }
@@ -1082,12 +1065,6 @@ func (r *AdminVerifyProtectedTimestampRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (r *QueryResolvedTimestampRequest) ShallowCopy() Request {
-	shallowCopy := *r
-	return &shallowCopy
-}
-
-// ShallowCopy implements the Request interface.
-func (r *ScanInterleavedIntentsRequest) ShallowCopy() Request {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -1469,9 +1446,8 @@ func (*RangeStatsRequest) flags() flag { return isRead }
 func (*QueryResolvedTimestampRequest) flags() flag {
 	return isRead | isRange | requiresClosedTSOlderThanStorageSnapshot
 }
-func (*ScanInterleavedIntentsRequest) flags() flag { return isRead | isRange }
-func (*BarrierRequest) flags() flag                { return isWrite | isRange }
-func (*IsSpanEmptyRequest) flags() flag            { return isRead | isRange }
+func (*BarrierRequest) flags() flag     { return isWrite | isRange }
+func (*IsSpanEmptyRequest) flags() flag { return isRead | isRange }
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about

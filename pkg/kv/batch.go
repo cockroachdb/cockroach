@@ -279,7 +279,6 @@ func (b *Batch) fillResults(ctx context.Context) {
 			case *roachpb.MigrateRequest:
 			case *roachpb.QueryResolvedTimestampRequest:
 			case *roachpb.BarrierRequest:
-			case *roachpb.ScanInterleavedIntentsRequest:
 			default:
 				if result.Err == nil {
 					result.Err = errors.Errorf("unsupported reply: %T for %T",
@@ -872,27 +871,6 @@ func (b *Batch) queryResolvedTimestamp(s, e interface{}) {
 		return
 	}
 	req := &roachpb.QueryResolvedTimestampRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    begin,
-			EndKey: end,
-		},
-	}
-	b.appendReqs(req)
-	b.initResult(1, 0, notRaw, nil)
-}
-
-func (b *Batch) scanInterleavedIntents(s, e interface{}) {
-	begin, err := marshalKey(s)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	end, err := marshalKey(e)
-	if err != nil {
-		b.initResult(0, 0, notRaw, err)
-		return
-	}
-	req := &roachpb.ScanInterleavedIntentsRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key:    begin,
 			EndKey: end,
