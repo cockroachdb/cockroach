@@ -1793,8 +1793,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// still have corresponding filters in zigzag.On. So we don't need
 	// to iterate through FixedCols here if we are already processing the ON
 	// clause.
-	// TODO(rytaft): use histogram for zig zag join.
-	numUnappliedConjuncts, constrainedCols, _ :=
+	numUnappliedConjuncts, constrainedCols, histCols :=
 		sb.applyFilters(zigzag.On, zigzag, relProps, false /* skipOrTermAccounting */)
 
 	// Application of constraints on inverted indexes needs to be handled a
@@ -1813,10 +1812,12 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// join ends up having a higher row count and therefore higher cost than
 	// a competing index join + constrained scan.
 	tab := sb.md.Table(zigzag.LeftTable)
-	if tab.Index(zigzag.LeftIndex).IsInverted() {
+	leftIndexInverted := tab.Index(zigzag.LeftIndex).IsInverted()
+	rightIndexInverted := tab.Index(zigzag.RightIndex).IsInverted()
+	if leftIndexInverted {
 		numUnappliedConjuncts += float64(len(zigzag.LeftFixedCols) * 2)
 	}
-	if tab.Index(zigzag.RightIndex).IsInverted() {
+	if rightIndexInverted {
 		numUnappliedConjuncts += float64(len(zigzag.RightFixedCols) * 2)
 	}
 
@@ -1833,8 +1834,22 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 
 	// Calculate selectivity and row count
 	// -----------------------------------
-	multiColSelectivity, _ := sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s)
-	s.ApplySelectivity(multiColSelectivity)
+	if !leftIndexInverted && !rightIndexInverted {
+		// A zigzag join is equivalent to a Select with Filters above a base table
+		// scan, in terms of which rows are included in the output. The selectivity
+		// estimate should never deviate between these two operations, so we apply
+		// the exact same calculations here as in buildSelect -> filterRelExpr to
+		// ensure the estimates always match. This is currently only done for
+		// non-inverted indexes where the filters can be pushed to the zigzag join
+		// ON clause.
+		// TODO(msirek): Validate stats for inverted index zigzag join match
+		//               non-zigzag join stats.
+		corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, zigzag, s)
+		s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, zigzag, s, corr))
+	} else {
+		multiColSelectivity, _ := sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s)
+		s.ApplySelectivity(multiColSelectivity)
+	}
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, zigzag, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(zigzag, relProps.NotNullCols, constrainedCols))

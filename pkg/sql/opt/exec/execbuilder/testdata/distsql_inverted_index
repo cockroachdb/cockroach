@@ -53,6 +53,9 @@ INSERT INTO json_tab VALUES
   (33, '[1, "bar"]')
 
 statement ok
+ANALYZE json_tab
+
+statement ok
 ALTER TABLE json_tab SPLIT AT VALUES (10), (20)
 
 statement ok
@@ -76,15 +79,18 @@ distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 0
 │ order: +a
 │
 └── • lookup join
+    │ estimated row count: 0
     │ table: json_tab@json_tab_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> '[1, 2]'
     │
     └── • zigzag join
+          estimated row count: 0
           left table: json_tab@foo_inv
           left columns: (a, b_inverted_key)
           left fixed values: 1 column
@@ -104,15 +110,18 @@ distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 0
 │ order: +a
 │
 └── • lookup join
+    │ estimated row count: 0
     │ table: json_tab@json_tab_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b @> '[1]') AND (b @> '[2]')
     │
     └── • zigzag join
+          estimated row count: 0
           left table: json_tab@foo_inv
           left columns: (a, b_inverted_key)
           left fixed values: 1 column
@@ -132,15 +141,18 @@ distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 0
 │ order: +a
 │
 └── • lookup join
+    │ estimated row count: 0
     │ table: json_tab@json_tab_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> '[[1, 2]]'
     │
     └── • zigzag join
+          estimated row count: 0
           left table: json_tab@foo_inv
           left columns: (a, b_inverted_key)
           left fixed values: 1 column
@@ -171,6 +183,9 @@ INSERT INTO array_tab VALUES
   (5, '{1, 2, 3, 4}')
 
 statement ok
+ANALYZE array_tab
+
+statement ok
 ALTER TABLE array_tab SPLIT AT VALUES (3), (3)
 
 statement ok
@@ -193,15 +208,18 @@ distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 0
 │ order: +a
 │
 └── • lookup join
+    │ estimated row count: 0
     │ table: array_tab@array_tab_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> ARRAY[1,2]
     │
     └── • zigzag join
+          estimated row count: 0
           left table: array_tab@foo_inv
           left columns: (a, b_inverted_key)
           left fixed values: 1 column
