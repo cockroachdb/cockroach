@@ -1304,6 +1304,7 @@ var DebugCommandsRequiringEncryption = []*cobra.Command{
 var debugCmds = []*cobra.Command{
 	debugCheckStoreCmd,
 	debugCompactCmd,
+	debugExtractRangeCmd,
 	debugGCCmd,
 	debugIntentCount,
 	debugKeysCmd,
