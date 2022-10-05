@@ -84,3 +84,18 @@ data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
 data: "a"/44.000000000,0 -> /<empty>
 data: "b"/49.000000000,0 -> /<empty>
+
+# Delete an inline value, both missing and existing.
+run ok
+del k=i
+put k=i v=inline
+del k=i
+----
+del: "i": found key false
+del: "i": found key true
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
