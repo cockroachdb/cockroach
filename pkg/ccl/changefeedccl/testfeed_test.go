@@ -28,8 +28,10 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -523,6 +525,16 @@ func (s *notifyFlushSink) Flush(ctx context.Context) error {
 	return s.Sink.Flush(ctx)
 }
 
+func (s *notifyFlushSink) EncodeAndEmitRow(
+	ctx context.Context,
+	updatedRow cdcevent.Row,
+	topic TopicDescriptor,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	return s.Sink.(SinkWithEncoder).EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc)
+}
+
 var _ Sink = (*notifyFlushSink)(nil)
 
 // feedInjectable is the subset of the
@@ -874,6 +886,7 @@ type cloudFeedFactory struct {
 func makeCloudFeedFactory(
 	srv serverutils.TestTenantInterface, db *gosql.DB, dir string,
 ) cdctest.TestFeedFactory {
+	fmt.Printf("dir is %s\n", dir)
 	return &cloudFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
 			s:  srv,
@@ -917,6 +930,7 @@ func (f *cloudFeedFactory) Feed(
 	// Nodelocal puts its dir under `ExternalIODir`, which is passed into
 	// cloudFeedFactory.
 	feedDir = filepath.Join(f.dir, feedDir)
+	fmt.Printf("xkcd: feed dir: %s\n", feedDir)
 	if err := os.Mkdir(feedDir, 0755); err != nil {
 		return nil, err
 	}
@@ -1096,6 +1110,7 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 		case <-c.shutdown:
 			return nil, c.terminalJobError()
 		}
+		fmt.Printf("xkcd: form next cloudfeed\n")
 
 		if err := filepath.Walk(c.dir, c.walkDir); err != nil {
 			return nil, err

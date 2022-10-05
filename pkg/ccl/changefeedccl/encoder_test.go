@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
@@ -1050,4 +1051,36 @@ func makeTestTypes(rng *rand.Rand, numKeyTypes, numColTypes int) (keyTypes, valT
 	}
 
 	return randTypes(numKeyTypes, true), randTypes(numColTypes, false)
+}
+
+func TestParquetEncoder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		// ctx := context.Background()
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		var ts1 string
+		sqlDB.QueryRow(t,
+			`INSERT INTO foo VALUES (1, 'Berlin') RETURNING cluster_logical_timestamp()`,
+		).Scan(&ts1)
+
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+			`WITH format=%s,initial_scan='only'`, changefeedbase.OptFormatParquet))
+		defer closeFeed(t, foo)
+
+		filename := "/Users/ganeshb/go/src/github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/parquet_encoding_test_files/output.parquet"
+		payload, err := os.ReadFile(filename)
+		require.NoError(t, err)
+
+		fmt.Printf("xkcd: payload size: %d\n", len(payload))
+
+		assertPayloads(t, foo, []string{
+			string(payload),
+		})
+
+	}
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }

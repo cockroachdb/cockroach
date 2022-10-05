@@ -11,19 +11,17 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	pqexporter "github.com/cockroachdb/cockroach/pkg/sql/importer"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquetschema"
-	"github.com/google/btree"
 	"github.com/pkg/errors"
 )
 
@@ -36,24 +34,6 @@ type parquetWriterWrapper struct {
 	schema         *parquetschema.SchemaDefinition
 	parquetColumns []pqexporter.ParquetColumn
 	numCols        int
-}
-
-type parquetSinkKey struct {
-	topic    string
-	schemaID int64
-	familyId descpb.FamilyID
-}
-
-func (key parquetSinkKey) Less(other btree.Item) bool {
-	switch other := other.(type) {
-	case cloudStorageSinkKey:
-		if key.topic == other.topic {
-			return key.schemaID < other.schemaID
-		}
-		return key.topic < other.topic
-	default:
-		panic(errors.Errorf("unexpected item type %T", other))
-	}
 }
 
 func makeParquetCloudStorageSink(baseCloudStorageSink *cloudStorageSink) *parquetCloudStorageSink {
@@ -91,32 +71,28 @@ func (s *parquetCloudStorageSink) EmitResolvedTimestamp(
 }
 
 func (pqcs *parquetCloudStorageSink) Flush(ctx context.Context) error {
-	return errors.Errorf("Flush for paquet format not implemented yet")
+	return nil
 }
 
-func (pqcs *parquetCloudStorageSink) getOrCreateFile(
-	topic TopicDescriptor, eventMVCC hlc.Timestamp,
-	familyId descpb.FamilyID,
-) (*cloudStorageSinkFile, error) {
-
+func (pqcs *parquetCloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
 	s := pqcs.baseCloudStorageSink
-	name, _ := s.topicNamer.Name(topic)
-	key := parquetSinkKey{name, int64(topic.GetVersion()), familyId}
+	// filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
+	// 	s.jobSessionID, s.srcID, s.sinkID, 1, "ganesh", 1234, ".parquet")
 
-	if item := s.files.Get(key); item != nil {
-		f := item.(*cloudStorageSinkFile)
-		if eventMVCC.Less(f.oldestMVCC) {
-			f.oldestMVCC = eventMVCC
-		}
-		return f, nil
+	filename_output := "/Users/ganeshb/go/src/github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/parquet_encoding_test_files/output.parquet"
+	payload, err := os.ReadFile(filename_output)
+	if err != nil {
+		fmt.Printf("error whene opening file: %s\n", err)
 	}
-	f := &cloudStorageSinkFile{
-		created:             timeutil.Now(),
-		cloudStorageSinkKey: key,
-		oldestMVCC:          eventMVCC,
+	n2, err := file.Write(payload)
+	if err != nil {
+		fmt.Printf("error whene writing: %s\n", err)
 	}
+	fmt.Printf("xkcd: wrote %d bytes\n", n2)
 
+	return s.flushFile(ctx, file)
 }
+
 func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
@@ -124,69 +100,70 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	cacheKey := parquetWriterKey{
-		updatedRow.FamilyID,
-	}
+	// cacheKey := parquetWriterKey{
+	// 	updatedRow.FamilyID,
+	// }
 
 	s := pqcs.baseCloudStorageSink
-	var pqww *parquetWriterWrapper
-	file, err := pqcs.getOrCreateFile(topic, mvcc, updatedRow.FamilyID)
+	// var pqww *parquetWriterWrapper
+	file, err := s.getOrCreateFile(topic, mvcc)
 	if err != nil {
 		return err
 	}
+	pqcs.flushFile(ctx, file)
 
-	if file.pqww == nil {
-		var err error
-		pqww, err = makeparquetWriterWrapper(ctx, updatedRow, &file.buf)
-		if err != nil {
-			return err
-		}
+	// if file.pqww == nil {
+	// 	var err error
+	// 	pqww, err = makeparquetWriterWrapper(ctx, updatedRow, &file.buf)
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		file.pqww = pqww
-	} else {
-		pqww = file.pqww
-	}
+	// 	file.pqww = pqww
+	// } else {
+	// 	pqww = file.pqww
+	// }
 
-	i := 0
-	parquetRow := make(map[string]interface{}, pqww.numCols)
-	// Revisit: I am assuming that this iterates through the columns in
-	// the same order as when iterating through the columns when
-	// creating the schema. this is important because each encode
-	// function is dependent on the column position.
-	updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		// Revisit: should probably wrap these errors with something
-		// more meaningful for upstream
-		encodeFn, err := pqww.parquetColumns[i].GetEncoder()
-		if err != nil {
-			return err
-		}
-		i++
-		edNative, err := encodeFn(eval.UnwrapDatum(nil, d))
-		if err != nil {
-			return err
-		}
-		colName, err := pqww.parquetColumns[i].GetColName()
-		if err != nil {
-			return err
-		}
+	// i := 0
+	// parquetRow := make(map[string]interface{}, pqww.numCols)
+	// // Revisit: I am assuming that this iterates through the columns in
+	// // the same order as when iterating through the columns when
+	// // creating the schema. this is important because each encode
+	// // function is dependent on the column position.
+	// updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+	// 	// Revisit: should probably wrap these errors with something
+	// 	// more meaningful for upstream
+	// 	encodeFn, err := pqww.parquetColumns[i].GetEncoder()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	i++
+	// 	edNative, err := encodeFn(eval.UnwrapDatum(nil, d))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	colName, err := pqww.parquetColumns[i].GetColName()
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		parquetRow[colName] = edNative
+	// 	parquetRow[colName] = edNative
 
-		return nil
+	// 	return nil
 
-	})
+	// })
 
-	pqww.parquetWriter.AddData(parquetRow)
+	// pqww.parquetWriter.AddData(parquetRow)
 
-	file.alloc.Merge(&alloc)
-	if pqww.parquetWriter.CurrentRowGroupSize() > s.targetMaxFileSize {
-		s.metrics.recordSizeBasedFlush()
+	// file.alloc.Merge(&alloc)
+	// if pqww.parquetWriter.CurrentRowGroupSize() > s.targetMaxFileSize {
+	// 	s.metrics.recordSizeBasedFlush()
 
-		pqww.parquetWriter.Close()
-		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
-			return err
-		}
-	}
+	// 	pqww.parquetWriter.Close()
+	// 	if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	return nil
 

@@ -321,6 +321,21 @@ func (s errorWrapperSink) EmitRow(
 	return nil
 }
 
+func (s errorWrapperSink) EncodeAndEmitRow(
+	ctx context.Context,
+	updatedRow cdcevent.Row,
+	topic TopicDescriptor,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+
+	if err := s.wrapped.(SinkWithEncoder).EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc); err != nil {
+		// return changefeedbase.MarkRetryableError(err)
+		return err
+	}
+	return nil
+}
+
 // EmitResolvedTimestamp implements Sink interface.
 func (s errorWrapperSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
@@ -593,4 +608,6 @@ type SinkWithEncoder interface {
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,
 	) error
+
+	Flush(ctx context.Context) error
 }

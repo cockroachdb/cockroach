@@ -308,42 +308,45 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		evCtx.topic = topic
 	}
 
+	log.Errorf(ctx, "xkcd: event processing type: %T", c.sink)
 	if c.encodingFormat == changefeedbase.OptFormatParquet {
-		if parquetSink, ok := c.sink.(*parquetCloudStorageSink); ok {
+		if sinkWithEncoder, ok := c.sink.(SinkWithEncoder); ok {
+			log.Errorf(ctx, "xkcd: event processing parquet	")
 			// Revisit: break the arguments into multiple lines
-			err := parquetSink.EncodeAndEmitRow(ctx, updatedRow, topic, schemaTimestamp, mvccTimestamp, ev.DetachAlloc())
+			err := sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, topic, schemaTimestamp, mvccTimestamp, ev.DetachAlloc())
 			if err != nil {
 				return err
 			}
 		}
-	}
-	var keyCopy, valueCopy []byte
-	encodedKey, err := c.encoder.EncodeKey(ctx, updatedRow)
-	if err != nil {
-		return err
-	}
-	c.scratch, keyCopy = c.scratch.Copy(encodedKey, 0 /* extraCap */)
-	// TODO(yevgeniy): Some refactoring is needed in the encoder: namely, prevRow
-	// might not be available at all when working with changefeed expressions.
-	encodedValue, err := c.encoder.EncodeValue(ctx, evCtx, updatedRow, prevRow)
-	if err != nil {
-		return err
-	}
-	c.scratch, valueCopy = c.scratch.Copy(encodedValue, 0 /* extraCap */)
-
-	if c.knobs.BeforeEmitRow != nil {
-		if err := c.knobs.BeforeEmitRow(ctx); err != nil {
+	} else {
+		var keyCopy, valueCopy []byte
+		encodedKey, err := c.encoder.EncodeKey(ctx, updatedRow)
+		if err != nil {
 			return err
 		}
-	}
-	if err := c.sink.EmitRow(
-		ctx, topic,
-		keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, ev.DetachAlloc(),
-	); err != nil {
-		return err
-	}
-	if log.V(3) {
-		log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
+		c.scratch, keyCopy = c.scratch.Copy(encodedKey, 0 /* extraCap */)
+		// TODO(yevgeniy): Some refactoring is needed in the encoder: namely, prevRow
+		// might not be available at all when working with changefeed expressions.
+		encodedValue, err := c.encoder.EncodeValue(ctx, evCtx, updatedRow, prevRow)
+		if err != nil {
+			return err
+		}
+		c.scratch, valueCopy = c.scratch.Copy(encodedValue, 0 /* extraCap */)
+
+		if c.knobs.BeforeEmitRow != nil {
+			if err := c.knobs.BeforeEmitRow(ctx); err != nil {
+				return err
+			}
+		}
+		if err := c.sink.EmitRow(
+			ctx, topic,
+			keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, ev.DetachAlloc(),
+		); err != nil {
+			return err
+		}
+		if log.V(3) {
+			log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
+		}
 	}
 	return nil
 }

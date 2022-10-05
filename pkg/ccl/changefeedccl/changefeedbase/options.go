@@ -290,7 +290,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptCursor:                   timestampOption,
 	OptEndTime:                  timestampOption,
 	OptEnvelope:                 enum("row", "key_only", "wrapped", "deprecated_row", "bare"),
-	OptFormat:                   enum("json", "avro", "csv", "experimental_avro"),
+	OptFormat:                   enum("json", "avro", "csv", "experimental_avro", "parquet"),
 	OptFullTableName:            flagOption,
 	OptKeyInValue:               flagOption,
 	OptTopicInValue:             flagOption,
@@ -919,7 +919,7 @@ func (s StatementOptions) ValidateForCreateChangefeed() error {
 			}
 		}
 	} else {
-		if s.m[OptFormat] == string(OptFormatCSV) {
+		if s.m[OptFormat] == string(OptFormatCSV) || s.m[OptFormat] == string(OptFormatParquet) {
 			return errors.Newf(`%s=%s is only usable with %s`, OptFormat, OptFormatCSV, OptInitialScanOnly)
 		}
 	}

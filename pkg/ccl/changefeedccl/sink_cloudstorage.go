@@ -69,7 +69,6 @@ type cloudStorageSinkFile struct {
 	buf         bytes.Buffer
 	alloc       kvevent.Alloc
 	oldestMVCC  hlc.Timestamp
-	pqww        *parquetWriterWrapper
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -401,6 +400,9 @@ func makeCloudStorageSink(
 		// would require a bit of refactoring.
 		s.ext = `.csv`
 		s.rowDelimiter = []byte{'\n'}
+	case changefeedbase.OptFormatParquet:
+		s.ext = `.parquet`
+		s.rowDelimiter = nil
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, encodingOpts.Format)
@@ -437,7 +439,9 @@ func makeCloudStorageSink(
 		s.metrics = (*sliMetrics)(nil)
 	}
 
+	log.Errorf(ctx, "xkcd: inside makecloud")
 	if encodingOpts.Format == changefeedbase.OptFormatParquet {
+		log.Errorf(ctx, "xkcd: got parquet")
 		parquetSinkWithEncoder := makeParquetCloudStorageSink(s)
 		return parquetSinkWithEncoder, nil
 	}
