@@ -1,11 +1,11 @@
-# Both separated and interleaved intents, and one inline meta.
+# Separated intents, and one inline meta.
 define
 locks
 meta k=a ts=20 txn=1
+meta k=b ts=30 txn=2
 mvcc
 value k=a ts=20 v=a20
 value k=a ts=10 v=a10
-meta k=b ts=30 txn=2
 value k=b ts=30 v=b30
 meta k=c
 value k=d ts=25 v=d25
@@ -64,7 +64,7 @@ next: output: value k=b ts=30.000000000,0 v=b30
 next: output: meta k=c
 next: output: value k=d ts=25.000000000,0 v=d25
 next: output: .
-stats: (interface (dir, seek, step): (fwd, 2, 7), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 0, 0))
+stats: (interface (dir, seek, step): (fwd, 2, 9), (rev, 0, 0)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 0, 0))
 prev: output: value k=d ts=25.000000000,0 v=d25
 prev: output: meta k=c
 prev: output: value k=b ts=30.000000000,0 v=b30
@@ -73,16 +73,16 @@ prev: output: value k=a ts=10.000000000,0 v=a10
 prev: output: value k=a ts=20.000000000,0 v=a20
 prev: output: meta k=a ts=20.000000000,0 txn=1
 prev: output: .
-stats: (interface (dir, seek, step): (fwd, 2, 7), (rev, 0, 13)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 2, 7))
+stats: (interface (dir, seek, step): (fwd, 2, 9), (rev, 0, 11)), (internal (dir, seek, step): (fwd, 2, 7), (rev, 2, 7))
 seek-ge "b"/0,0: output: meta k=b ts=30.000000000,0 txn=2
-stats: (interface (dir, seek, step): (fwd, 4, 7), (rev, 0, 13)), (internal (dir, seek, step): (fwd, 4, 7), (rev, 2, 7))
+stats: (interface (dir, seek, step): (fwd, 4, 9), (rev, 0, 11)), (internal (dir, seek, step): (fwd, 4, 7), (rev, 2, 7))
 next: output: value k=b ts=30.000000000,0 v=b30
 next: output: meta k=c
 prev: output: value k=b ts=30.000000000,0 v=b30
 prev: output: meta k=b ts=30.000000000,0 txn=2
 prev: output: value k=a ts=10.000000000,0 v=a10
 seek-lt "b"/0,0: output: value k=a ts=10.000000000,0 v=a10
-stats: (interface (dir, seek, step): (fwd, 4, 9), (rev, 2, 20)), (internal (dir, seek, step): (fwd, 4, 9), (rev, 5, 14))
+stats: (interface (dir, seek, step): (fwd, 4, 11), (rev, 2, 16)), (internal (dir, seek, step): (fwd, 4, 9), (rev, 5, 14))
 next: output: meta k=b ts=30.000000000,0 txn=2
 prev: output: value k=a ts=10.000000000,0 v=a10
 prev: output: value k=a ts=20.000000000,0 v=a20
@@ -290,17 +290,17 @@ next-key: output: value k=d ts=25.000000000,0 v=d25
 next-key: output: .
 
 
-# Multiple separated intents and multiple interleaved intents.
+# Many separated intents.
 define
 locks
+meta k=a ts=10 txn=1
 meta k=b ts=20 txn=2
+meta k=c ts=30 txn=3
 meta k=d ts=40 txn=4
 meta k=e ts=50 txn=5
 mvcc
-meta k=a ts=10 txn=1
 value k=a ts=10 v=a10
 value k=b ts=20 v=b20
-meta k=c ts=30 txn=3
 value k=c ts=30 v=c30
 value k=d ts=40 v=d40
 value k=e ts=50 v=e50
@@ -364,13 +364,13 @@ prev: output: value k=a ts=10.000000000,0 v=a10
 prev: output: meta k=a ts=10.000000000,0 txn=1
 prev: output: .
 
-# Local range keys. This exercises local keys having separated locks.
+# Local keys. This exercises local keys having separated locks.
 define
 locks
+meta k=La ts=10 txn=1
 meta k=Lb ts=20 txn=2
 meta k=Lc ts=30 txn=4
 mvcc
-meta k=La ts=10 txn=1
 value k=La ts=10 v=a10
 value k=Lb ts=20 v=b20
 value k=Lc ts=30 v=c30
@@ -560,12 +560,12 @@ prev: output: .
 
 define
 locks
+meta k=La ts=10 txn=1
 meta k=Lb ts=20 txn=2
 meta k=Lc ts=30 txn=4
 meta k=b ts=40 txn=5
 meta k=d ts=50 txn=6
 mvcc
-meta k=La ts=10 txn=1
 value k=La ts=10 v=a10
 value k=Lb ts=20 v=b20
 value k=Lc ts=30 v=c30
