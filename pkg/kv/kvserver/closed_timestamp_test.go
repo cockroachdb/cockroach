@@ -1104,6 +1104,10 @@ func countNotLeaseHolderErrors(ba roachpb.BatchRequest, repls []*kvserver.Replic
 const testingTargetDuration = 300 * time.Millisecond
 
 const testingSideTransportInterval = 100 * time.Millisecond
+
+// TODO(nvanbenschoten): this is a pretty bad variable name to leak into the
+// global scope of the kvserver_test package. At least one test was using it
+// unintentionally. Remove it.
 const numNodes = 3
 
 func replsForRange(
