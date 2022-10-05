@@ -263,8 +263,9 @@ func StartNewTestCluster(
 	cluster.Start(t)
 	for i := 0; i < cluster.NumServers(); i++ {
 		sysconfigProvider := cluster.Server(i).SystemConfigProvider()
-		sysconfig := sysconfigProvider.GetSystemConfig()
-		sysconfig.PurgeZoneConfigCache()
+		if sysconfig := sysconfigProvider.GetSystemConfig(); sysconfig != nil {
+			sysconfig.PurgeZoneConfigCache()
+		}
 	}
 	return cluster
 }
