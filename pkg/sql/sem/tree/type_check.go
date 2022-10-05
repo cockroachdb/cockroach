@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -2989,23 +2988,20 @@ func getMostSignificantOverload(
 
 	found := false
 	var ret QualifiedOverload
-	err := searchPath.IterateSearchPath(func(schema string) error {
+	for i, n := 0, searchPath.NumElements(); i < n; i++ {
+		schema := searchPath.GetSchema(i)
 		for i := range overloads {
 			if overloads[i].(QualifiedOverload).Schema == schema {
 				if found {
-					return ambiguousError()
+					return QualifiedOverload{}, ambiguousError()
 				}
 				found = true
 				ret = overloads[i].(QualifiedOverload)
 			}
 		}
 		if found {
-			return iterutil.StopIteration()
+			break
 		}
-		return nil
-	})
-	if err != nil {
-		return QualifiedOverload{}, err
 	}
 	if !found {
 		// This should never happen. Otherwise, it means we get function from a

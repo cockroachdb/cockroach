@@ -136,13 +136,26 @@ func (*UnresolvedObjectName) tableExpr() {}
 func NewUnresolvedObjectName(
 	numParts int, parts [3]string, annotationIdx AnnotationIdx,
 ) (*UnresolvedObjectName, error) {
-	u := &UnresolvedObjectName{
+	n, err := MakeUnresolvedObjectName(numParts, parts, annotationIdx)
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+// MakeUnresolvedObjectName creates an unresolved object name, verifying that it
+// is well-formed.
+func MakeUnresolvedObjectName(
+	numParts int, parts [3]string, annotationIdx AnnotationIdx,
+) (UnresolvedObjectName, error) {
+	u := UnresolvedObjectName{
 		NumParts:      numParts,
 		Parts:         parts,
 		AnnotatedNode: AnnotatedNode{AnnIdx: annotationIdx},
 	}
 	if u.NumParts < 1 {
-		return nil, newInvTableNameError(u)
+		forErr := u // prevents u from escaping
+		return UnresolvedObjectName{}, newInvTableNameError(&forErr)
 	}
 
 	// Check that all the parts specified are not empty.
@@ -154,7 +167,8 @@ func NewUnresolvedObjectName(
 	}
 	for i := 0; i < lastCheck; i++ {
 		if len(u.Parts[i]) == 0 {
-			return nil, newInvTableNameError(u)
+			forErr := u // prevents u from escaping
+			return UnresolvedObjectName{}, newInvTableNameError(&forErr)
 		}
 	}
 	return u, nil
