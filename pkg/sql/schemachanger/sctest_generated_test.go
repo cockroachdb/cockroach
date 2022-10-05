@@ -60,6 +60,26 @@ func TestRollback_add_column_default_seq(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_seq", sctest.SingleNodeCluster)
 }
+func TestEndToEndSideEffects_add_column_default_unique(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_unique", sctest.SingleNodeCluster)
+}
+func TestGenerateSchemaChangeCorpus_add_column_default_unique(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.GenerateSchemaChangeCorpus(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_unique", sctest.SingleNodeCluster)
+}
+func TestPause_add_column_default_unique(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Pause(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_unique", sctest.SingleNodeCluster)
+}
+func TestRollback_add_column_default_unique(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_unique", sctest.SingleNodeCluster)
+}
 func TestEndToEndSideEffects_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
