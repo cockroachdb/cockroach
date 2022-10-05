@@ -2349,3 +2349,75 @@ top-k
       │    ├── [/10/2 - /10/2]
       │    └── [/10/4 - /10/4]
       └── key: (1-4)
+
+# Regression test for #88993. Do not construct an unordered limit below the
+# UnionAll.
+exec-ddl
+CREATE TABLE t88993 (
+  a INT,
+  b INT,
+  c INT,
+  INDEX bca_idx (b, c, a)
+);
+----
+
+opt disable=GenerateTopK
+SELECT min(a) FROM t88993@bca_idx WHERE (b <= 11 AND c < 50) OR (b = 11 AND c = 50) OR (b >= 11 AND c > 50)
+----
+scalar-group-by
+ ├── columns: min:7
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── limit
+ │    ├── columns: a:1!null b:2!null c:3!null
+ │    ├── internal-ordering: +1
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-3)
+ │    ├── union-all
+ │    │    ├── columns: a:1!null b:2!null c:3!null
+ │    │    ├── left columns: a:8 b:9 c:10
+ │    │    ├── right columns: a:14 b:15 c:16
+ │    │    ├── ordering: +1
+ │    │    ├── limit hint: 1.00
+ │    │    ├── limit
+ │    │    │    ├── columns: a:8!null b:9!null c:10!null
+ │    │    │    ├── internal-ordering: +8 opt(9,10)
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(8-10)
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    ├── select
+ │    │    │    │    ├── columns: a:8!null b:9!null c:10!null
+ │    │    │    │    ├── fd: ()-->(9,10)
+ │    │    │    │    ├── ordering: +8 opt(9,10) [actual: +8]
+ │    │    │    │    ├── limit hint: 1.00
+ │    │    │    │    ├── scan t88993@bca_idx
+ │    │    │    │    │    ├── columns: a:8!null b:9!null c:10!null
+ │    │    │    │    │    ├── constraint: /9/10/8/11: (/11/50/NULL - /11/50]
+ │    │    │    │    │    ├── flags: force-index=bca_idx
+ │    │    │    │    │    ├── fd: ()-->(9,10)
+ │    │    │    │    │    └── ordering: +8 opt(9,10) [actual: +8]
+ │    │    │    │    └── filters
+ │    │    │    │         └── (((b:9 <= 11) AND (c:10 < 50)) OR ((b:9 = 11) AND (c:10 = 50))) OR ((b:9 >= 11) AND (c:10 > 50)) [outer=(9,10), constraints=(/9: (/NULL - ]; /10: (/NULL - /49] [/50 - /50] [/51 - ])]
+ │    │    │    └── 1
+ │    │    └── sort
+ │    │         ├── columns: a:14!null b:15!null c:16!null
+ │    │         ├── ordering: +14
+ │    │         ├── limit hint: 1.00
+ │    │         └── select
+ │    │              ├── columns: a:14!null b:15!null c:16!null
+ │    │              ├── scan t88993@bca_idx
+ │    │              │    ├── columns: a:14 b:15!null c:16
+ │    │              │    ├── constraint: /15/16/14/17
+ │    │              │    │    ├── (/NULL - /11/49]
+ │    │              │    │    └── (/11/51/NULL - ]
+ │    │              │    └── flags: force-index=bca_idx
+ │    │              └── filters
+ │    │                   ├── (((b:15 <= 11) AND (c:16 < 50)) OR ((b:15 = 11) AND (c:16 = 50))) OR ((b:15 >= 11) AND (c:16 > 50)) [outer=(15,16), constraints=(/15: (/NULL - ]; /16: (/NULL - /49] [/50 - /50] [/51 - ])]
+ │    │                   └── a:14 IS NOT NULL [outer=(14), constraints=(/14: (/NULL - ]; tight)]
+ │    └── 1
+ └── aggregations
+      └── const-agg [as=min:7, outer=(1)]
+           └── a:1
