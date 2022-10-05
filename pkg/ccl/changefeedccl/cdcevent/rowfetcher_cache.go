@@ -189,8 +189,9 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		// UserDefinedTypeColsHaveSameVersion if we have a hit because we are
 		// guaranteed that the tables have the same version. Additionally, these
 		// fetchers are always initialized with a single tabledesc.Immutable.
-		// TODO (zinger): Only check types used in the relevant family.
-		if catalog.UserDefinedTypeColsHaveSameVersion(tableDesc, f.tableDesc) {
+		if safe, err := catalog.UserDefinedTypeColsInFamilyHaveSameVersion(tableDesc, f.tableDesc, family); err != nil {
+			return nil, nil, err
+		} else if safe {
 			return &f.fetcher, &f.familyDesc, nil
 		}
 	}
