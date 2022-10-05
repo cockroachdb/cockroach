@@ -131,6 +131,7 @@ func TestRunNewVsOld(t *testing.T) {
 
 			tc.ds.dist(N, rng).setupTest(t, eng, *tc.ds.desc())
 			snap := eng.NewSnapshot()
+			defer snap.Close()
 
 			oldGCer := makeFakeGCer()
 			ttl := time.Duration(tc.ttlSec) * time.Second
@@ -174,6 +175,7 @@ func BenchmarkRun(b *testing.B) {
 			runGCFunc = runGCOld
 		}
 		snap := eng.NewSnapshot()
+		defer snap.Close()
 		ttl := time.Duration(spec.ttlSec) * time.Second
 		intentThreshold := intentAgeThreshold
 		if spec.intentAgeSec > 0 {
@@ -283,6 +285,7 @@ func TestNewVsInvariants(t *testing.T) {
 
 			sortedDistribution(tc.ds.dist(N, rng)).setupTest(t, eng, *desc)
 			beforeGC := eng.NewSnapshot()
+			defer beforeGC.Close()
 
 			// Run GCer over snapshot.
 			ttl := time.Duration(tc.ttlSec) * time.Second
