@@ -3188,29 +3188,31 @@ func (sb *statisticsBuilder) applyFiltersItem(
 				numUnappliedConjuncts++
 			}
 		}
-	} else if constraintUnion := sb.buildDisjunctionConstraints(filter); len(constraintUnion) > 0 {
-		// The filters are one or more disjunctions and tight constraint sets
-		// could be built for each.
-		var tmpStats, unionStats props.Statistics
-		unionStats.CopyFrom(s)
+	} else if constraintUnion, numUnappliedDisjuncts := sb.buildDisjunctionConstraints(filter); len(constraintUnion) > 0 {
+		// The filters are one or more disjuncts and tight constraint sets could be
+		// built for at least one disjunct. numUnappliedDisjuncts contains the count
+		// of disjuncts which are not tight constraints.
+		var tmpStats props.Statistics
 
+		selectivities := make([]props.Selectivity, 0, len(constraintUnion)+numUnappliedDisjuncts)
 		// Get the stats for each constraint set, apply the selectivity to a
-		// temporary stats struct, and union the selectivity and row counts.
-		sb.constrainExpr(e, constraintUnion[0], relProps, &unionStats)
-		for i := 1; i < len(constraintUnion); i++ {
+		// temporary stats struct, and combine the disjunct selectivities.
+		// union the selectivity and row counts.
+		for i := 0; i < len(constraintUnion); i++ {
 			tmpStats.CopyFrom(s)
 			sb.constrainExpr(e, constraintUnion[i], relProps, &tmpStats)
-			unionStats.UnionWith(&tmpStats)
+			selectivities = append(selectivities, tmpStats.Selectivity)
+		}
+		defaultSelectivity := props.MakeSelectivity(unknownFilterSelectivity)
+		for i := 0; i < numUnappliedDisjuncts; i++ {
+			selectivities = append(selectivities, defaultSelectivity)
 		}
 
-		// The stats are unioned naively; the selectivity may be greater than 1
-		// and the row count may be greater than the row count of the input
-		// stats. We use the minimum selectivity and row count of the unioned
-		// stats and the input stats.
 		// TODO(mgartner): Calculate and set the column statistics based on
 		// constraintUnion.
-		s.Selectivity = props.MinSelectivity(s.Selectivity, unionStats.Selectivity)
-		s.RowCount = min(s.RowCount, unionStats.RowCount)
+		disjunctionSelectivity := combineOredSelectivities(selectivities)
+		s.RowCount *= disjunctionSelectivity.AsFloat()
+		s.Selectivity.Multiply(disjunctionSelectivity)
 	} else {
 		numUnappliedConjuncts++
 	}
@@ -3221,20 +3223,22 @@ func (sb *statisticsBuilder) applyFiltersItem(
 // buildDisjunctionConstraints returns a slice of tight constraint sets that are
 // built from one or more adjacent Or expressions in filter. This allows more
 // accurate stats to be calculated for disjunctions. If any adjacent Or cannot
-// be tightly constrained, then nil is returned.
-func (sb *statisticsBuilder) buildDisjunctionConstraints(filter *FiltersItem) []*constraint.Set {
+// be tightly constrained, then numUnappliedDisjuncts is incremented, indicating
+// unknownFilterSelectivity should be used for that disjunct.
+func (sb *statisticsBuilder) buildDisjunctionConstraints(
+	filter *FiltersItem,
+) (constraintSet []*constraint.Set, numUnappliedDisjuncts int) {
 	expr := filter.Condition
 
 	// If the expression is not an Or, we cannot build disjunction constraint
 	// sets.
 	or, ok := expr.(*OrExpr)
 	if !ok {
-		return nil
+		return nil, 0
 	}
 
 	cb := constraintsBuilder{md: sb.md, evalCtx: sb.evalCtx}
 
-	unconstrained := false
 	var constraints []*constraint.Set
 	var collectConstraints func(opt.ScalarExpr)
 	collectConstraints = func(e opt.ScalarExpr) {
@@ -3249,8 +3253,8 @@ func (sb *statisticsBuilder) buildDisjunctionConstraints(filter *FiltersItem) []
 		innerOr, ok := e.(*OrExpr)
 		if !ok {
 			// If a tight constraint could not be built and the expression is
-			// not an Or, set unconstrained so we can return nil.
-			unconstrained = true
+			// not an Or, bump the number of unapplied disjuncts.
+			numUnappliedDisjuncts++
 			return
 		}
 
@@ -3270,11 +3274,7 @@ func (sb *statisticsBuilder) buildDisjunctionConstraints(filter *FiltersItem) []
 	collectConstraints(or.Left)
 	collectConstraints(or.Right)
 
-	if unconstrained {
-		return nil
-	}
-
-	return constraints
+	return constraints, numUnappliedDisjuncts
 }
 
 // constrainExpr calculates the stats for a relational expression based on the
@@ -4284,25 +4284,16 @@ func (sb *statisticsBuilder) selectivityFromOredEquivalencies(
 // https://www.thoughtco.com/probability-union-of-three-sets-more-3126263
 // https://stats.stackexchange.com/questions/87533/whats-the-general-disjunction-rule-for-n-events
 //
-// Q: Does the iterative approach do a good enough job of approximating
-//
-//	the non-iterative textbook solution?
-//
+// The iterative approach seems to be equivalent to textbook solutions which
+// expand into a large number of terms.
 // In the formula we assume A and B are independent, so:
 //
 //	P(A and B) = P(A) * P(B)
 //
 // The independence assumption may not be correct in all cases.
-// Would using the full formula lead to more errors since the independence
-// assumption is used in more terms in that formula?
-// In any case, the runtime of computing the full formula for filters with
-// many predicates may be excessive due to combinatorial explosion.
-// That shouldn't apply to the ON clause because typically it would not have
-// hundreds of disjuncts, but may apply if this method were used for
-// single-table filter selectivity estimation.
 //
-// Possible improvement: Use multicolumn stats to estimate P(A and B)
-// instead of assuming full independence.
+//	TODO(msirek): Use multicolumn stats and column correlations to get better
+//								estimates of P(A and B).
 func combineOredSelectivities(selectivities []props.Selectivity) props.Selectivity {
 	totalSelectivity := selectivities[0]
 	var combinedSel props.Selectivity

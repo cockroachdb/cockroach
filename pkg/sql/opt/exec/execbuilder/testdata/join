@@ -742,7 +742,7 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b, n, sq)
-│ estimated row count: 115 (missing stats)
+│ estimated row count: 116 (missing stats)
 │ filter: ((n IS NULL) OR (n > 1)) AND ((n IS NULL) OR (a < sq))
 │
 └── • hash join (left outer)
@@ -784,7 +784,7 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b, n, sq)
-│ estimated row count: 42 (missing stats)
+│ estimated row count: 44 (missing stats)
 │ filter: ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
 │
 └── • hash join (left outer)
@@ -827,7 +827,7 @@ vectorized: true
 │
 ├── • filter
 │   │ columns: (a, b)
-│   │ estimated row count: 111 (missing stats)
+│   │ estimated row count: 113 (missing stats)
 │   │ filter: ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
 │   │
 │   └── • scan

@@ -403,7 +403,7 @@ vectorized: true
                     │
                     └── • filter
                         │ columns: (crdb_internal_id_shard_16, id, crdb_region)
-                        │ estimated row count: 7 (missing stats)
+                        │ estimated row count: 6 (missing stats)
                         │ filter: (crdb_internal_id_shard_16 != 9) OR (crdb_region != 'ap-southeast-2')
                         │
                         └── • union all
@@ -1093,7 +1093,7 @@ vectorized: true
                     │
                     └── • distinct
                         │ columns: (id, email, crdb_region)
-                        │ estimated row count: 7 (missing stats)
+                        │ estimated row count: 6 (missing stats)
                         │ distinct on: id, crdb_region
                         │
                         └── • union all
