@@ -562,6 +562,8 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 107
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed

@@ -97,6 +97,11 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCtx.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 
+	// If there are no descriptors left, then we can short circuit here.
+	if len(payload.DescriptorIDs) == 0 {
+		return nil
+	}
+
 	err := scrun.RunSchemaChangesInJob(
 		ctx,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,

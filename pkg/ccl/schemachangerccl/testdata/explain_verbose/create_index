@@ -435,6 +435,8 @@ EXPLAIN (ddl, verbose) CREATE INDEX id1
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
