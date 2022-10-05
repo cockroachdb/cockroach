@@ -3389,6 +3389,37 @@ inner-join (lookup abcd@abcd_a_b_idx)
  │    └── columns: m:1 n:2
  └── filters (true)
 
+# Don't use the inequality in the lookup condition when lookup joins with
+# variable inequalities are disabled.
+opt expect=GenerateLookupJoins set=variable_inequality_lookup_join_enabled=false
+SELECT a,b,n,m FROM small LEFT JOIN abcd ON a=m AND b>n
+----
+left-join (lookup abcd@abcd_a_b_idx)
+ ├── columns: a:6 b:7 n:2 m:1
+ ├── key columns: [1] = [6]
+ ├── scan small
+ │    └── columns: m:1 n:2
+ └── filters
+      └── b:7 > n:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+
+# Don't generate a lookup join when inequality lookup joins are disabled.
+opt expect-not=GenerateLookupJoins set=variable_inequality_lookup_join_enabled=false
+SELECT a,b,n,m FROM (SELECT * FROM small LIMIT 1) JOIN abcd ON a>=m
+----
+inner-join (cross)
+ ├── columns: a:6!null b:7 n:2 m:1!null
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── fd: ()-->(1,2)
+ ├── scan abcd@abcd_a_b_idx
+ │    └── columns: a:6 b:7
+ ├── scan small
+ │    ├── columns: m:1 n:2
+ │    ├── limit: 1
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
+ └── filters
+      └── a:6 >= m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+
 # --------------------------------------------------
 # GenerateLookupJoinsWithFilter
 # --------------------------------------------------
