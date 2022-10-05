@@ -37,9 +37,8 @@ const (
 
 // intentInterleavingIter makes separated intents appear as interleaved. It
 // relies on the following assumptions:
-//   - There can also be intents that are physically interleaved.
-//     However, for a particular roachpb.Key there will be at most one intent,
-//     either interleaved or separated.
+//   - There can be no physically interleaved intents, i.e., all intents are
+//     separated (in the lock table keyspace).
 //   - An intent will have a corresponding provisional value.
 //   - The only single key locks in the lock table key space are intents.
 //
@@ -56,7 +55,7 @@ const (
 //   - At the same MVCCKey.Key: the intentIter is at the intent and iter at the
 //     provisional value.
 //   - At different MVCCKey.Keys: the intentIter is ahead of iter, at the first
-//     key after iter's MVCCKey.Key that has a separated intent.
+//     key after iter's MVCCKey.Key that has an intent.
 //
 // Note that in both cases the iterators are apart by the minimal possible
 // distance. This minimal distance rule applies for reverse iteration too, and
@@ -87,7 +86,7 @@ type intentInterleavingIter struct {
 	prefix     bool
 	constraint intentInterleavingIterConstraint
 
-	// iter is for iterating over MVCC keys and interleaved intents.
+	// iter is for iterating over MVCC keys.
 	iter *pebbleIterator // MVCCIterator
 	// The valid value from iter.Valid() after the last positioning call.
 	iterValid bool
@@ -127,7 +126,7 @@ type intentInterleavingIter struct {
 	// This will never happen in the forward direction due to
 	// maybeSkipIntentRangeKey(). In the reverse direction, if an intent is
 	// located on the start key of an overlapping range key, then we cannot step
-	// iter past the range key to satisfy the usual intentCmp < 0 condition,
+	// iter past the range key to satisfy the usual intentCmp > 0 condition,
 	// because we need the range keys to be exposed via e.g. RangeKeys(). We
 	// therefore also have to consider isCurAtIntentIter to be true when iter is
 	// positioned on a bare unversioned range key colocated with an intent,
@@ -156,11 +155,6 @@ type intentInterleavingIter struct {
 	intentKeyBuf      []byte
 	intentLimitKeyBuf []byte
 }
-
-// TODO(bananabrick): Update intent interleaving iter so that
-// it doesn't understand interleaved intents. As of now, cockroach
-// can't write new interleaved intents, but can read them using
-// this iterator.
 
 var _ MVCCIterator = &intentInterleavingIter{}
 
@@ -477,6 +471,7 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
 	i.dir = +1
 	i.valid = true
+	i.err = nil
 
 	if i.constraint != notConstrained {
 		i.checkConstraint(key, false)
@@ -556,8 +551,9 @@ func (i *intentInterleavingIter) computePos() {
 			//
 			// In the forward direction, this should never happen: the caller should
 			// have called maybeSkipIntentRangeKey() to step onto the provisional
-			// value (or a later key). The provisional value will be covered by the
-			// same range keys as the intent. We assert this and go on.
+			// value (or a later key, if the provisional value is absent, which we
+			// will check later). The provisional value will be covered by the same
+			// range keys as the intent.
 			//
 			// In the reverse direction, there are two cases:
 			//
@@ -656,11 +652,16 @@ func (i *intentInterleavingIter) Next() {
 	}
 	if i.dir < 0 {
 		// Switching from reverse to forward iteration.
+		if util.RaceEnabled && i.prefix {
+			panic(errors.AssertionFailedf("dir < 0 with prefix iteration"))
+		}
 		isCurAtIntent := i.isCurAtIntentIterReverse()
 		i.dir = +1
 		if !i.valid {
-			// Both iterators are exhausted, since intentKey is synchronized with
-			// intentIter for non-prefix iteration, so step both forward.
+			// Both iterators are exhausted. We know that this is non-prefix
+			// iteration, as reverse iteration is not supported with prefix
+			// iteration. Since intentKey is synchronized with intentIter for
+			// non-prefix iteration, step both forward.
 			i.valid = true
 			i.iter.Next()
 			if err := i.tryDecodeKey(); err != nil {
@@ -668,7 +669,7 @@ func (i *intentInterleavingIter) Next() {
 			}
 			i.rangeKeyChanged = i.iter.RangeKeyChanged()
 			var limitKey roachpb.Key
-			if i.iterValid && !i.prefix {
+			if i.iterValid {
 				limitKey = i.makeUpperLimitKey()
 			}
 			iterState, err := i.intentIter.NextEngineKeyWithLimit(limitKey)
@@ -683,9 +684,11 @@ func (i *intentInterleavingIter) Next() {
 		}
 		// At least one of the iterators is not exhausted.
 		if isCurAtIntent {
-			// iter precedes the intentIter, so must be at the lowest version of the
-			// preceding key, at a bare range key whose start key is colocated with
-			// the intent, or exhausted. So step it forward. It will now point to
+			// Reverse iteration was positioned at the intent, so either (a) iter
+			// precedes the intentIter, so must be at the lowest version of the
+			// preceding key or exhausted, or (b) iter is at a bare range key whose
+			// start key is colocated with the intent.
+			// Step iter forward. It will now point to
 			// a key that is the same as the intent key since an intent always has a
 			// corresponding provisional value, and provisional values must have a
 			// higher timestamp than any committed value on a key. Note that the
@@ -704,17 +707,19 @@ func (i *intentInterleavingIter) Next() {
 				i.valid = false
 				return
 			}
+			if hasPoint, hasRange := i.iter.HasPointAndRange(); hasRange && !hasPoint {
+				// If there was a bare range key before the provisional value, iter
+				// would have been positioned there prior to the i.iter.Next() call,
+				// so it must now be at the provisional value, but it is not.
+				i.err = errors.Errorf("intent has no provisional value")
+				i.valid = false
+				return
+			}
 		} else {
 			// The intentIter precedes the iter. It could be for the same key, iff
 			// this key has an intent, or an earlier key. Either way, stepping
-			// forward will take it to an intent for a later key. Note that iter
-			// could also be positioned at an intent. We are assuming that there
-			// isn't a bug (external to this code) that has caused two intents to be
-			// present for the same key.
-			var limitKey roachpb.Key
-			if !i.prefix {
-				limitKey = i.makeUpperLimitKey()
-			}
+			// forward will take it to an intent for a later key.
+			limitKey := i.makeUpperLimitKey()
 			iterState, err := i.intentIter.NextEngineKeyWithLimit(limitKey)
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
 				return
@@ -722,6 +727,7 @@ func (i *intentInterleavingIter) Next() {
 			// NB: doesn't need maybeSkipIntentRangeKey() as intentCmp > 0.
 			i.intentCmp = +1
 		}
+		// INVARIANT: i.valid
 	}
 	if !i.valid {
 		return
@@ -755,8 +761,7 @@ func (i *intentInterleavingIter) Next() {
 		i.intentCmp = +1
 	} else {
 		// Common case:
-		// The iterator is positioned at iter. It could be a value or an intent,
-		// though usually it will be a value.
+		// The iterator is positioned at iter, at an MVCC value.
 		i.iter.Next()
 		if err := i.tryDecodeKey(); err != nil {
 			return
@@ -770,9 +775,12 @@ func (i *intentInterleavingIter) Next() {
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
 				return
 			}
-			if err := i.maybeSkipIntentRangeKey(); err != nil {
-				return
-			}
+		}
+		// Whether we stepped the intentIter or not, we have stepped iter, and
+		// iter could now be at a bare range key that is equal to the intentIter
+		// key.
+		if err := i.maybeSkipIntentRangeKey(); err != nil {
+			return
 		}
 		i.computePos()
 	}
@@ -789,7 +797,7 @@ func (i *intentInterleavingIter) NextKey() {
 	if !i.valid {
 		return
 	}
-	if i.intentCmp <= 0 {
+	if i.isCurAtIntentIterForward() {
 		// The iterator is positioned at an intent in intentIter. iter must be
 		// positioned at the provisional value.
 		if i.intentCmp != 0 {
@@ -798,6 +806,8 @@ func (i *intentInterleavingIter) NextKey() {
 			return
 		}
 		// Step the iter to NextKey(), i.e., past all the versions of this key.
+		// Note that iter may already be exhausted, in which case calling NextKey
+		// is a no-op.
 		i.iter.NextKey()
 		if err := i.tryDecodeKey(); err != nil {
 			return
@@ -817,8 +827,8 @@ func (i *intentInterleavingIter) NextKey() {
 		i.computePos()
 		return
 	}
-	// The iterator is positioned at iter. It could be a value or an intent,
-	// though usually it will be a value.
+	// Common case:
+	// The iterator is positioned at iter, i.e., at a MVCC value.
 	// Step the iter to NextKey(), i.e., past all the versions of this key.
 	i.iter.NextKey()
 	if err := i.tryDecodeKey(); err != nil {
@@ -880,8 +890,6 @@ func (i *intentInterleavingIter) isCurAtIntentIterReverse() bool {
 }
 
 func (i *intentInterleavingIter) UnsafeKey() MVCCKey {
-	// If there is a separated intent there cannot also be an interleaved intent
-	// for the same key.
 	if i.isCurAtIntentIter() {
 		return MVCCKey{Key: i.intentKey}
 	}
@@ -1047,6 +1055,7 @@ func (i *intentInterleavingIter) Prev() {
 	if i.err != nil {
 		return
 	}
+	// INVARIANT: !i.prefix
 	if i.dir > 0 {
 		// Switching from forward to reverse iteration.
 		isCurAtIntent := i.isCurAtIntentIterForward()
@@ -1094,6 +1103,9 @@ func (i *intentInterleavingIter) Prev() {
 				return
 			}
 			i.computePos()
+			// TODO(sumeer): These calls to initialize and suppress rangeKeyChanged
+			// are unnecessary since i.valid is true and we will overwrite tnis work
+			// later in this function.
 			i.rangeKeyChanged = i.iter.RangeKeyChanged()
 			i.maybeSuppressRangeKeyChanged()
 		} else {
@@ -1106,8 +1118,12 @@ func (i *intentInterleavingIter) Prev() {
 				return
 			}
 			i.computePos()
+			// TODO(sumeer): This call to suppress rangeKeyChanged is unnecessary
+			// since i.valid is true and we will overwrite tnis work later in this
+			// function.
 			i.maybeSuppressRangeKeyChanged()
 		}
+		// INVARIANT: i.valid
 	}
 	if !i.valid {
 		return
@@ -1126,6 +1142,16 @@ func (i *intentInterleavingIter) Prev() {
 				return
 			}
 		}
+		// Two cases:
+		// - i.iterBareRangeAtIntent: we have stepped iter backwards, and since
+		//   we will no longer be at the intent, i.iter.RangeKeyChanged() should
+		//   be used as the value of i.rangeKeyChanged.
+		// - !i.iterBareRangeAtIntent: we have not stepped iter. If the range
+		//   bounds of iter covered the current intent, we have already shown them
+		//   to the client. So the only reason for i.rangeKeyChanged to be true is
+		//   if the range bounds do not cover the current intent. That is the
+		//   i.iter.RangeBounds().EndKey.Compare(i.intentKey) <= 0 condition
+		//   below.
 		i.rangeKeyChanged = i.iter.RangeKeyChanged() && (i.iterBareRangeAtIntent ||
 			i.iter.RangeBounds().EndKey.Compare(i.intentKey) <= 0)
 		var limitKey roachpb.Key
@@ -1149,17 +1175,18 @@ func (i *intentInterleavingIter) Prev() {
 		i.intentCmp = -1
 		if i.intentKey != nil {
 			i.computePos()
-			i.maybeSuppressRangeKeyChanged()
 			if i.intentCmp > 0 {
 				i.err = errors.Errorf("intentIter should not be after iter")
 				i.valid = false
 				return
 			}
+			// INVARIANT: i.intentCmp <= 0. So this call to
+			// maybeSuppressRangeKeyChanged() will be a no-op.
+			i.maybeSuppressRangeKeyChanged()
 		}
 	} else {
 		// Common case:
-		// The iterator is positioned at iter. It could be a value or an intent,
-		// though usually it will be a value.
+		// The iterator is positioned at iter, i.e., at a MVCC value.
 		i.iter.Prev()
 		if err := i.tryDecodeKey(); err != nil {
 			return
