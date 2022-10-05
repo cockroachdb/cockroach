@@ -48,6 +48,7 @@ go_test(
         "event_test.go",
         "main_test.go",
         "projection_test.go",
+        "rowfetcher_test.go",
     ],
     args = ["-test.timeout=295s"],
     embed = [":cdcevent"],
@@ -64,6 +65,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/distsql",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
@@ -76,6 +78,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
