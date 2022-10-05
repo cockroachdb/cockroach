@@ -55,10 +55,7 @@ message RaftSnapshotData {
   repeated RangeKeyValue range_kv = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeKV"];
 
-  // These are really raftpb.Entry, but we model them as raw bytes to avoid
-  // roundtripping through memory.
-  repeated bytes log_entries = 3;
-  reserved 1;
+  reserved 1, 3;
 }
 
 message RaftReplicaID {

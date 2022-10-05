@@ -13,14 +13,18 @@
 package split
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 const minSplitSuggestionInterval = time.Minute
+const minNoSplitKeyLoggingMetricsInterval = time.Minute
 const minQueriesPerSecondSampleDuration = time.Second
 
 // A Decider collects measurements about the activity (measured in qps) on a
@@ -48,10 +52,21 @@ const minQueriesPerSecondSampleDuration = time.Second
 // prevent load-based splits from being merged away until the resulting ranges
 // have consistently remained below a certain QPS threshold for a sufficiently
 // long period of time.
+
+// LoadSplitterMetrics consists of metrics for load-based splitter split key.
+type LoadSplitterMetrics struct {
+	PopularKeyCount *metric.Counter
+	NoSplitKeyCount *metric.Counter
+}
+
+// Decider tracks the latest QPS and if certain conditions are met, records
+// incoming requests to find potential split keys and checks if sampled
+// candidate split keys satisfy certain requirements.
 type Decider struct {
-	intn         func(n int) int      // supplied to Init
-	qpsThreshold func() float64       // supplied to Init
-	qpsRetention func() time.Duration // supplied to Init
+	intn                func(n int) int      // supplied to Init
+	qpsThreshold        func() float64       // supplied to Init
+	qpsRetention        func() time.Duration // supplied to Init
+	loadSplitterMetrics *LoadSplitterMetrics // supplied to Init
 
 	mu struct {
 		syncutil.Mutex
@@ -67,6 +82,9 @@ type Decider struct {
 		// Fields tracking split key suggestions.
 		splitFinder         *Finder   // populated when engaged or decided
 		lastSplitSuggestion time.Time // last stipulation to client to carry out split
+
+		// Fields tracking logging / metrics around load-based splitter split key.
+		lastNoSplitKeyLoggingMetrics time.Time
 	}
 }
 
@@ -79,10 +97,12 @@ func Init(
 	intn func(n int) int,
 	qpsThreshold func() float64,
 	qpsRetention func() time.Duration,
+	loadSplitterMetrics *LoadSplitterMetrics,
 ) {
 	lbs.intn = intn
 	lbs.qpsThreshold = qpsThreshold
 	lbs.qpsRetention = qpsRetention
+	lbs.loadSplitterMetrics = loadSplitterMetrics
 }
 
 // Record notifies the Decider that 'n' operations are being carried out which
@@ -93,14 +113,16 @@ func Init(
 // If the returned boolean is true, a split key is available (though it may
 // disappear as more keys are sampled) and should be initiated by the caller,
 // which can call MaybeSplitKey to retrieve the suggested key.
-func (d *Decider) Record(now time.Time, n int, span func() roachpb.Span) bool {
+func (d *Decider) Record(ctx context.Context, now time.Time, n int, span func() roachpb.Span) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	return d.recordLocked(now, n, span)
+	return d.recordLocked(ctx, now, n, span)
 }
 
-func (d *Decider) recordLocked(now time.Time, n int, span func() roachpb.Span) bool {
+func (d *Decider) recordLocked(
+	ctx context.Context, now time.Time, n int, span func() roachpb.Span,
+) bool {
 	d.mu.count += int64(n)
 
 	// First compute requests per second since the last check.
@@ -137,9 +159,28 @@ func (d *Decider) recordLocked(now time.Time, n int, span func() roachpb.Span) b
 		if s.Key != nil {
 			d.mu.splitFinder.Record(span(), d.intn)
 		}
-		if now.Sub(d.mu.lastSplitSuggestion) > minSplitSuggestionInterval && d.mu.splitFinder.Ready(now) && d.mu.splitFinder.Key() != nil {
-			d.mu.lastSplitSuggestion = now
-			return true
+		if d.mu.splitFinder.Ready(now) {
+			if d.mu.splitFinder.Key() != nil {
+				if now.Sub(d.mu.lastSplitSuggestion) > minSplitSuggestionInterval {
+					d.mu.lastSplitSuggestion = now
+					return true
+				}
+			} else {
+				if now.Sub(d.mu.lastNoSplitKeyLoggingMetrics) > minNoSplitKeyLoggingMetricsInterval {
+					d.mu.lastNoSplitKeyLoggingMetrics = now
+					insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained := d.mu.splitFinder.NoSplitKeyCause()
+					if insufficientCounters < splitKeySampleSize {
+						popularKeyFrequency := d.mu.splitFinder.PopularKeyFrequency()
+						if popularKeyFrequency >= splitKeyThreshold {
+							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
+						}
+						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
+						log.KvDistribution.Infof(ctx,
+							"No split key found: insufficient counters = %d, imbalance = %d, too many contained = %d, imbalance and too many contained = %d, most popular key occurs in %d%% of samples",
+							insufficientCounters, imbalance, tooManyContained, imbalanceAndTooManyContained, int(popularKeyFrequency*100))
+					}
+				}
+			}
 		}
 	}
 	return false
@@ -156,22 +197,22 @@ func (d *Decider) RecordMax(now time.Time, qps float64) {
 }
 
 // LastQPS returns the most recent QPS measurement.
-func (d *Decider) LastQPS(now time.Time) float64 {
+func (d *Decider) LastQPS(ctx context.Context, now time.Time) float64 {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.recordLocked(now, 0, nil) // force QPS computation
+	d.recordLocked(ctx, now, 0, nil) // force QPS computation
 	return d.mu.lastQPS
 }
 
 // MaxQPS returns the maximum QPS measurement recorded over the retention
 // period. If the Decider has not been recording for a full retention period,
 // the method returns false.
-func (d *Decider) MaxQPS(now time.Time) (float64, bool) {
+func (d *Decider) MaxQPS(ctx context.Context, now time.Time) (float64, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.recordLocked(now, 0, nil) // force QPS computation
+	d.recordLocked(ctx, now, 0, nil) // force QPS computation
 	return d.mu.maxQPS.maxQPS(now, d.qpsRetention())
 }
 
@@ -180,13 +221,13 @@ func (d *Decider) MaxQPS(now time.Time) (float64, bool) {
 // or if it wasn't able to determine a suitable split key.
 //
 // It is legal to call MaybeSplitKey at any time.
-func (d *Decider) MaybeSplitKey(now time.Time) roachpb.Key {
+func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key {
 	var key roachpb.Key
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.recordLocked(now, 0, nil)
+	d.recordLocked(ctx, now, 0, nil)
 	if d.mu.splitFinder != nil && d.mu.splitFinder.Ready(now) {
 		// We've found a key to split at. This key might be in the middle of a
 		// SQL row. If we fail to rectify that, we'll cause SQL crashes:
@@ -240,6 +281,7 @@ func (d *Decider) Reset(now time.Time) {
 	d.mu.maxQPS.reset(now, d.qpsRetention())
 	d.mu.splitFinder = nil
 	d.mu.lastSplitSuggestion = time.Time{}
+	d.mu.lastNoSplitKeyLoggingMetrics = time.Time{}
 }
 
 // maxQPSTracker collects a series of queries-per-second measurement samples and
