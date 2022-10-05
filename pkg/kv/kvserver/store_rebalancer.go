@@ -162,6 +162,7 @@ func SimulatorStoreRebalancer(
 	getRaftStatusFn func(replica CandidateReplica) *raft.Status,
 ) *StoreRebalancer {
 	sr := &StoreRebalancer{
+		AmbientContext:  log.MakeTestingAmbientCtxWithNewTracer(),
 		metrics:         makeStoreRebalancerMetrics(),
 		st:              &cluster.Settings{},
 		storeID:         storeID,
@@ -367,8 +368,9 @@ func (sr *StoreRebalancer) rebalanceStore(ctx context.Context, rctx *RebalanceCo
 		if outcome == NoRebalanceTarget {
 			break
 		}
+		oldVoters := candidateReplica.Desc().Replicas().VoterDescriptors()
 		if ok := sr.applyRangeRebalance(ctx, candidateReplica, voterTargets, nonVoterTargets); ok {
-			sr.PostRangeRebalance(rctx, candidateReplica, voterTargets)
+			sr.PostRangeRebalance(rctx, candidateReplica, voterTargets, oldVoters)
 		}
 	}
 	// Log the range rebalancing outcome, we ignore whether we were succesful
@@ -512,6 +514,7 @@ func (sr *StoreRebalancer) LogRangeRebalanceOutcome(ctx context.Context, rctx *R
 		log.KvDistribution.Infof(ctx,
 			"ran out of replicas worth transferring and qps (%.2f) is still above desired threshold (%.2f); will check again soon",
 			rctx.LocalDesc.Capacity.QueriesPerSecond, rctx.QPSMaxThreshold)
+		return
 	}
 
 	// We successfully rebalanced below or equal to the max threshold,
@@ -543,9 +546,6 @@ func (sr *StoreRebalancer) RebalanceRanges(
 	)
 
 	if candidateReplica == nil {
-		log.KvDistribution.Infof(ctx,
-			"ran out of replicas worth transferring and qps (%.2f) is still above desired threshold (%.2f); will check again soon",
-			rctx.LocalDesc.Capacity.QueriesPerSecond, rctx.QPSMaxThreshold)
 		return NoRebalanceTarget, candidateReplica, voterTargets, nonVoterTargets
 	}
 
@@ -594,7 +594,16 @@ func (sr *StoreRebalancer) PostRangeRebalance(
 	rctx *RebalanceContext,
 	candidateReplica CandidateReplica,
 	voterTargets []roachpb.ReplicationTarget,
+	oldVoters []roachpb.ReplicaDescriptor,
 ) {
+	// Update the storepool copies.
+	sr.allocator.StorePool.UpdateLocalStoreAfterRelocate(
+		voterTargets,
+		oldVoters,
+		rctx.LocalDesc.StoreID,
+		candidateReplica.QPS(),
+	)
+
 	sr.metrics.RangeRebalanceCount.Inc(1)
 	// Finally, update our local copies of the descriptors so that if
 	// additional transfers are needed we'll be making the decisions with more
