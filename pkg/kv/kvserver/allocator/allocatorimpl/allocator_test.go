@@ -7361,6 +7361,171 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 		})
 	}
 }
+func TestAllocatorDeterminismTransfers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:    1,
+			Attrs:      roachpb.Attributes{},
+			Node:       roachpb.NodeDescriptor{NodeID: 1},
+			Capacity:   roachpb.StoreCapacity{LeaseCount: 934, RangeCount: 934},
+			Properties: roachpb.StoreProperties{},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 0, RangeCount: 933},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 0, RangeCount: 934},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 118, RangeCount: 349},
+		},
+		{
+			StoreID:  5,
+			Node:     roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 115, RangeCount: 351},
+		},
+		{
+			StoreID:  6,
+			Node:     roachpb.NodeDescriptor{NodeID: 6},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 118, RangeCount: 349},
+		},
+		{
+			StoreID:  7,
+			Node:     roachpb.NodeDescriptor{NodeID: 7},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 105, RangeCount: 350},
+		},
+	}
+
+	runner := func() func() roachpb.ReplicaDescriptor {
+		ctx := context.Background()
+		stopper, g, _, a, _ := CreateTestAllocator(ctx, 7 /* numNodes */, true /* deterministic */)
+		defer stopper.Stop(ctx)
+		gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+		return func() roachpb.ReplicaDescriptor {
+			target := a.TransferLeaseTarget(
+				ctx,
+				roachpb.TestingDefaultSpanConfig(),
+				replicas(1, 2, 5),
+				&mockRepl{
+					replicationFactor: 3,
+					storeID:           1,
+				},
+				&replicastats.RatedSummary{
+					QPS:            100,
+					LocalityCounts: map[string]float64{},
+					Duration:       15 * time.Minute,
+				},
+				false,
+				allocator.TransferLeaseOptions{
+					Goal:                   allocator.LeaseCountConvergence,
+					ExcludeLeaseRepl:       false,
+					CheckCandidateFullness: false,
+					DryRun:                 false,
+				},
+			)
+			return target
+		}
+	}
+
+	ra, rb := runner(), runner()
+	for i := 0; i < 100000; i++ {
+		targetA := ra()
+		targetB := rb()
+
+		require.Equal(t, targetA, targetB, "%d iters", i)
+	}
+}
+
+// TestAllocatorRebalanceWithScatter tests that when `scatter` is set to true,
+// the allocator will produce rebalance opportunities even when it normally
+// wouldn't.
+func TestAllocatorDeterminism(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:    1,
+			Attrs:      roachpb.Attributes{},
+			Node:       roachpb.NodeDescriptor{NodeID: 1},
+			Capacity:   roachpb.StoreCapacity{LeaseCount: 934, RangeCount: 934},
+			Properties: roachpb.StoreProperties{},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 0, RangeCount: 933},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 0, RangeCount: 934},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 4},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 118, RangeCount: 349},
+		},
+		{
+			StoreID:  5,
+			Node:     roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 115, RangeCount: 351},
+		},
+		{
+			StoreID:  6,
+			Node:     roachpb.NodeDescriptor{NodeID: 6},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 118, RangeCount: 349},
+		},
+		{
+			StoreID:  7,
+			Node:     roachpb.NodeDescriptor{NodeID: 7},
+			Capacity: roachpb.StoreCapacity{LeaseCount: 105, RangeCount: 350},
+		},
+	}
+
+	runner := func() func() (roachpb.ReplicationTarget, roachpb.ReplicationTarget) {
+		ctx := context.Background()
+		stopper, g, _, a, _ := CreateTestAllocator(ctx, 7 /* numNodes */, true /* deterministic */)
+		defer stopper.Stop(ctx)
+		gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+		return func() (roachpb.ReplicationTarget, roachpb.ReplicationTarget) {
+			var rangeUsageInfo allocator.RangeUsageInfo
+			// Ensure that we wouldn't normally rebalance when all stores have the same
+			// replica count.
+			add, remove, _, _ := a.RebalanceVoter(
+				ctx,
+				roachpb.TestingDefaultSpanConfig(),
+				nil,
+				replicas(1, 2, 5),
+				nil,
+				rangeUsageInfo,
+				storepool.StoreFilterThrottled,
+				a.ScorerOptions(ctx),
+			)
+			return add, remove
+		}
+	}
+
+	ra, rb := runner(), runner()
+	for i := 0; i < 100000; i++ {
+		fmt.Println()
+		addA, removeA := ra()
+		addB, removeB := rb()
+		fmt.Println()
+
+		require.Equal(t, addA, addB, "%d iters", i)
+		require.Equal(t, removeA, removeB, "%d iters", i)
+	}
+}
 
 // TestAllocatorRebalanceWithScatter tests that when `scatter` is set to true,
 // the allocator will produce rebalance opportunities even when it normally

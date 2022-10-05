@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim
+package queue
 
 import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ func TestScannerReplicaPacer(t *testing.T) {
 	start := state.TestingStartTime()
 
 	createNextRepls := func(replicas int) func() []state.Replica {
-		s := state.NewTestStateReplCounts(map[state.StoreID]int{1: replicas}, 1 /* replsPerRange */)
+		s := state.NewTestStateReplCounts(map[state.StoreID]int{1: replicas}, 1 /* replsPerRange */, 1000 /* keyspace */)
 		return s.NextReplicasFn(state.StoreID(1))
 	}
 
@@ -89,7 +90,13 @@ func TestScannerReplicaPacer(t *testing.T) {
 		nextReplsFn := createNextRepls(tc.replCount)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			pacer := NewScannerReplicaPacer(nextReplsFn, tc.loopInterval, tc.minInterval, tc.maxInterval)
+			pacer := NewScannerReplicaPacer(
+				nextReplsFn,
+				tc.loopInterval,
+				tc.minInterval,
+				tc.maxInterval,
+				config.DefaultSimulationControlSettings().Seed,
+			)
 			results := make([]int, 0, 1)
 			for _, tick := range tc.ticks {
 				replsThisTick := 0

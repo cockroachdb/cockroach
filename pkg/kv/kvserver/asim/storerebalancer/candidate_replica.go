@@ -33,7 +33,9 @@ type simulatorReplica struct {
 	state state.State
 }
 
-func newSimulatorReplica(repl state.Replica, s state.State) *simulatorReplica {
+// NewSimulatorReplica returns a simulator replica, which implements the
+// CandidateReplica interface.
+func NewSimulatorReplica(repl state.Replica, s state.State) kvserver.CandidateReplica {
 	rng, ok := s.Range(repl.Range())
 	if !ok {
 		return nil

@@ -13,28 +13,46 @@ package config
 import "time"
 
 const (
-	defaultReplicaChangeBaseDelay  = 100 * time.Millisecond
-	defaultReplicaAddDelayFactor   = 16
-	defaultSplitQueueDelay         = 100 * time.Millisecond
-	defaultRangeSizeSplitThreshold = 512 * 1024 * 1024 // 512mb
-	defaultRangeRebalanceThreshold = 0.05
-	defaultPacerLoopInterval       = 10 * time.Minute
-	defaultPacerMinIterInterval    = 10 * time.Millisecond
-	defaultPacerMaxIterIterval     = 1 * time.Second
-	defaultStateExchangeInterval   = 10 * time.Second
-	defaultStateExchangeDelay      = 500 * time.Millisecond
-	defaultSplitQPSThreshold       = 2500
-	defaultSplitQPSRetention       = 10 * time.Minute
-	defaultSeed                    = 42
-	defaultLBRebalancingMode       = 2 // Leases and replicas.
-	defaultLBRebalancingInterval   = time.Minute
-	defaultLBRebalanceQPSThreshold = 0.1
-	defaultLBMinRequiredQPSDiff    = 200
+	defaultReplicaChangeBaseDelay    = 200 * time.Millisecond
+	defaultReplicaAddDelayFactor     = 16
+	defaultSplitQueueDelay           = 200 * time.Millisecond
+	defaultRangeSizeSplitThreshold   = 512 * 1024 * 1024 // 512mb
+	defaultRangeRebalanceThreshold   = 0.05
+	defaultPacerLoopInterval         = 10 * time.Minute
+	defaultPacerMinIterInterval      = 10 * time.Millisecond
+	defaultPacerMaxIterIterval       = 1 * time.Second
+	defaultStateExchangeInterval     = 10 * time.Second
+	defaultStateExchangeDelay        = 200 * time.Millisecond
+	defaultSplitQPSThreshold         = 2500
+	defaultSplitQPSRetention         = 10 * time.Minute
+	defaultSeed                      = 42
+	defaultLBRebalancingMode         = 2 // Leases and replicas.
+	defaultLBRebalancingInterval     = time.Minute
+	defaultLBRebalanceQPSThreshold   = 0.1
+	defaultLBMinRequiredQPSDiff      = 200
+	defaultReplQueueEnabled          = true
+	defaultSpiltQueueEnabled         = true
+	defaultReplQueueTransfersEnabled = true
+	defaultSystemRanges              = 44
+	defaultInterval                  = 500 * time.Millisecond
+	defaultBackgroundInterval        = 10 * time.Second
+	defaultDuration                  = 30 * time.Minute
 )
 
-// SimulationSettings controls
-// WIP: Thread these settings through to each of the sim parts.
+var (
+	defaultStartTime = time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
+)
+
+// SimulationSettings declares the settings for controlling simulation and
+// cluster settings used in cockroach.
 type SimulationSettings struct {
+	*SimulationControlSettings
+	*SimulationClusterSettings
+}
+
+// SimulationControlSettings declares the settings that control the simulation
+// loop and components. These settings do not exist in the real cluster.
+type SimulationControlSettings struct {
 	// Seed is the random source that will be used for any simulator components
 	// that accept a seed.
 	Seed int64
@@ -51,13 +69,6 @@ type SimulationSettings struct {
 	ReplicaAddRate float64
 	// SplitQueueDelay is the delay that range splits take to complete.
 	SplitQueueDelay time.Duration
-	// RangeSizeSplitThreshold is the threshold in MB, below which ranges will
-	// not attempted to be split due to size.
-	RangeSizeSplitThreshold int64
-	// RangeRebalanceThreshold is the minimum ratio of a store's range count to
-	// the mean range count at which that store is considered overfull or underfull
-	// of ranges.
-	RangeRebalanceThreshold float64
 	// PacerLoopInterval is the period over which the pacer will visit every
 	// replica e.g. If the period is 10 minutes, the pacer will attempt to
 	// visit every replica on the store 10 minute window, so if there are 1000
@@ -75,6 +86,35 @@ type SimulationSettings struct {
 	// StateExchangeDelay is the delay between sending a state update and all
 	// other stores receiving the update.
 	StateExchangeDelay time.Duration
+	// SystemRanges declares the number of ranges that exist outside of the
+	// workload keyspace.
+	SystemRanges int
+	// Interval is the step between ticks for active simulaton components, such
+	// as the queues, store rebalancer and state changers. It should be set
+	// lower than the bgInterval, as updated occur more frequently.
+	Interval time.Duration
+	// BackgroundInterval controls the step between ticks for background
+	// simulation components, such as the metrics, state exchange and workload
+	// generators. It should be set higher than the interval, as it is more
+	// costly and requires less frequent updates.
+	BackgroundInterval time.Duration
+	// Duration controls the amount of time the simulation runs for.
+	Duration time.Duration
+	// Start controls the start point, in virtual time that the simulation
+	// will begin ticking from.
+	Start time.Time
+}
+
+// SimulationClusterSettings declares the settings that map to cockroach
+// cluster settings.
+type SimulationClusterSettings struct {
+	// RangeSizeSplitThreshold is the threshold in MB, below which ranges will
+	// not attempted to be split due to size.
+	RangeSizeSplitThreshold int64
+	// RangeRebalanceThreshold is the minimum ratio of a store's range count to
+	// the mean range count at which that store is considered overfull or underfull
+	// of ranges.
+	RangeRebalanceThreshold float64
 	// SplitQPSThreshold is the threshold above which a range will be a
 	// candidate for load based splitting.
 	SplitQPSThreshold float64
@@ -94,34 +134,67 @@ type SimulationSettings struct {
 	// rebalancer would care to reconcile (via lease or replica rebalancing) between
 	// any two stores.
 	LBMinRequiredQPSDiff float64
+	// ReplicateQueueEnabled is a flag declaring whether the replicate queue is
+	// enabled.
+	ReplicateQueueEnabled bool
+	// SplitQueueEnabled is a flag declaring whether the split queue is
+	// enabled.
+	SplitQueueEnabled bool
+	// ReplQueueTransfersEnabled is a flag declaring whether the replicate
+	// queue will attempt to transfer leases in addition to moving replicas.
+	ReplQueueTransfersEnabled bool
 }
 
-// DefaultSimulationSettings returns a set of default settings for simulation.
+// DefaultSimulationSettings returns the default settings for the simulation.
 func DefaultSimulationSettings() *SimulationSettings {
 	return &SimulationSettings{
-		Seed:                    defaultSeed,
-		ReplicaChangeBaseDelay:  defaultReplicaChangeBaseDelay,
-		ReplicaAddRate:          defaultReplicaAddDelayFactor,
-		SplitQueueDelay:         defaultSplitQueueDelay,
-		RangeSizeSplitThreshold: defaultRangeSizeSplitThreshold,
-		RangeRebalanceThreshold: defaultRangeRebalanceThreshold,
-		PacerLoopInterval:       defaultPacerLoopInterval,
-		PacerMinIterInterval:    defaultPacerMinIterInterval,
-		PacerMaxIterIterval:     defaultPacerMaxIterIterval,
-		StateExchangeInterval:   defaultStateExchangeInterval,
-		StateExchangeDelay:      defaultStateExchangeDelay,
-		SplitQPSThreshold:       defaultSplitQPSThreshold,
-		SplitQPSRetention:       defaultSplitQPSRetention,
-		LBRebalancingMode:       defaultLBRebalancingMode,
-		LBRebalancingInterval:   defaultLBRebalancingInterval,
-		LBRebalanceQPSThreshold: defaultLBRebalanceQPSThreshold,
-		LBMinRequiredQPSDiff:    defaultLBMinRequiredQPSDiff,
+		SimulationControlSettings: DefaultSimulationControlSettings(),
+		SimulationClusterSettings: DefaultSimulationClusterSettings(),
+	}
+}
+
+// DefaultSimulationControlSettings returns a set of default control settings for
+// simulation.
+func DefaultSimulationControlSettings() *SimulationControlSettings {
+	return &SimulationControlSettings{
+		Seed:                   defaultSeed,
+		ReplicaChangeBaseDelay: defaultReplicaChangeBaseDelay,
+		ReplicaAddRate:         defaultReplicaAddDelayFactor,
+		SplitQueueDelay:        defaultSplitQueueDelay,
+		PacerLoopInterval:      defaultPacerLoopInterval,
+		PacerMinIterInterval:   defaultPacerMinIterInterval,
+		PacerMaxIterIterval:    defaultPacerMaxIterIterval,
+		StateExchangeInterval:  defaultStateExchangeInterval,
+		StateExchangeDelay:     defaultStateExchangeDelay,
+		SystemRanges:           defaultSystemRanges,
+		Interval:               defaultInterval,
+		BackgroundInterval:     defaultBackgroundInterval,
+		Duration:               defaultDuration,
+		Start:                  defaultStartTime,
+	}
+}
+
+// DefaultSimulationClusterSettings retunrs a set of default cluster settings
+// for simulation.
+func DefaultSimulationClusterSettings() *SimulationClusterSettings {
+	return &SimulationClusterSettings{
+		RangeSizeSplitThreshold:   defaultRangeSizeSplitThreshold,
+		RangeRebalanceThreshold:   defaultRangeRebalanceThreshold,
+		SplitQPSThreshold:         defaultSplitQPSThreshold,
+		SplitQPSRetention:         defaultSplitQPSRetention,
+		LBRebalancingMode:         defaultLBRebalancingMode,
+		LBRebalancingInterval:     defaultLBRebalancingInterval,
+		LBRebalanceQPSThreshold:   defaultLBRebalanceQPSThreshold,
+		LBMinRequiredQPSDiff:      defaultLBMinRequiredQPSDiff,
+		ReplicateQueueEnabled:     defaultReplQueueEnabled,
+		SplitQueueEnabled:         defaultSpiltQueueEnabled,
+		ReplQueueTransfersEnabled: defaultReplQueueTransfersEnabled,
 	}
 }
 
 // ReplicaChangeDelayFn returns a function which calculates the delay for
 // adding a replica based on the range size.
-func (s *SimulationSettings) ReplicaChangeDelayFn() func(rangeSize int64, add bool) time.Duration {
+func (s *SimulationControlSettings) ReplicaChangeDelayFn() func(rangeSize int64, add bool) time.Duration {
 	return func(rangeSize int64, add bool) time.Duration {
 		delay := s.ReplicaChangeBaseDelay
 		if add {
@@ -133,7 +206,7 @@ func (s *SimulationSettings) ReplicaChangeDelayFn() func(rangeSize int64, add bo
 
 // RangeSplitDelayFn returns a function which calculates the delay for
 // splitting a range.
-func (s *SimulationSettings) RangeSplitDelayFn() func() time.Duration {
+func (s *SimulationControlSettings) RangeSplitDelayFn() func() time.Duration {
 	return func() time.Duration {
 		return s.SplitQueueDelay
 	}
@@ -141,7 +214,7 @@ func (s *SimulationSettings) RangeSplitDelayFn() func() time.Duration {
 
 // SplitQPSThresholdFn returns a function that returns the current QPS split
 // threshold for load based splitting of a range.
-func (s *SimulationSettings) SplitQPSThresholdFn() func() float64 {
+func (s *SimulationClusterSettings) SplitQPSThresholdFn() func() float64 {
 	return func() float64 {
 		return s.SplitQPSThreshold
 	}
@@ -150,7 +223,7 @@ func (s *SimulationSettings) SplitQPSThresholdFn() func() float64 {
 // SplitQPSRetentionFn returns a function that returns the current QPS
 // retention duration for load recorded against a range, used in load based
 // split decisions.
-func (s *SimulationSettings) SplitQPSRetentionFn() func() time.Duration {
+func (s *SimulationClusterSettings) SplitQPSRetentionFn() func() time.Duration {
 	return func() time.Duration {
 		return s.SplitQPSRetention
 	}

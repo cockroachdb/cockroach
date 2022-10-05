@@ -863,6 +863,7 @@ func (cl candidateList) selectBest(randGen allocatorRand) *candidate {
 	if len(cl) == 1 {
 		return &cl[0]
 	}
+	//return &cl[0]
 	randGen.Lock()
 	order := randGen.Perm(len(cl))
 	randGen.Unlock()
@@ -1396,7 +1397,18 @@ func rankedCandidateListForRebalancing(
 
 	var equivalenceClasses []equivalenceClass
 	var needRebalanceTo bool
-	for _, existing := range existingStores {
+	existingStoreList := []roachpb.StoreID{}
+	for storeID := range existingStores {
+		existingStoreList = append(existingStoreList, storeID)
+	}
+	if options.deterministicForTesting() {
+		sort.Slice(
+			existingStoreList,
+			func(i, j int) bool { return existingStoreList[i] < existingStoreList[j] },
+		)
+	}
+	for _, storeID := range existingStoreList {
+		existing := existingStores[storeID]
 		var comparableCands candidateList
 		for _, store := range allStores.Stores {
 			// Only process replacement candidates, not existing stores.

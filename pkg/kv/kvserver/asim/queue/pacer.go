@@ -8,13 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package asim
+package queue
 
 import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 )
 
 // ReplicaPacer controls the speed of considering a replica.
@@ -38,12 +37,14 @@ type ReplicaScanner struct {
 	maxIterInvterval   time.Duration
 	iterInterval       time.Duration
 	visited            int
+	shuffler           func(n int, swap func(i, j int))
 }
 
 // NewScannerReplicaPacer returns a scanner replica pacer.
 func NewScannerReplicaPacer(
 	nextReplsFn func() []state.Replica,
 	targetLoopInterval, minIterInterval, maxIterInterval time.Duration,
+	seed int64,
 ) *ReplicaScanner {
 	return &ReplicaScanner{
 		nextReplsFn:        nextReplsFn,
@@ -51,6 +52,7 @@ func NewScannerReplicaPacer(
 		targetLoopInterval: targetLoopInterval,
 		minIterInvterval:   minIterInterval,
 		maxIterInvterval:   maxIterInterval,
+		shuffler:           state.NewShuffler(seed),
 	}
 }
 
@@ -75,7 +77,7 @@ func (rp *ReplicaScanner) resetPacerLoop(tick time.Time) {
 
 	// Avoid the same replicas being processed in the same order in each
 	// iteration.
-	shuffle.Shuffle(rp)
+	rp.shuffler(rp.Len(), rp.Swap)
 
 	// Reset the counter and tracker vars.
 	rp.visited = 0

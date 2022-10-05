@@ -57,10 +57,10 @@ func newState(settings *config.SimulationSettings) *state {
 		nodes:      make(map[NodeID]*node),
 		stores:     make(map[StoreID]*store),
 		loadsplits: make(map[StoreID]LoadSplitter),
-		clock:      &ManualSimClock{nanos: 0},
+		clock:      &ManualSimClock{nanos: settings.Start.UnixNano()},
 		ranges:     newRMap(),
 		usageInfo:  newClusterUsageInfo(),
-		settings:   config.DefaultSimulationSettings(),
+		settings:   settings,
 	}
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
 	return s
@@ -160,23 +160,24 @@ func (s *state) ClusterInfo() ClusterInfo {
 }
 
 // Stores returns all stores that exist in this state.
-func (s *state) Stores() map[StoreID]Store {
-	stores := make(map[StoreID]Store)
-	for storeID, store := range s.stores {
-		stores[storeID] = store
+func (s *state) Stores() []Store {
+	stores := []Store{}
+	for _, store := range s.stores {
+		stores = append(stores, store)
 	}
+	sort.Slice(stores, func(i, j int) bool { return stores[i].StoreID() < stores[j].StoreID() })
 	return stores
 }
 
 // StoreDescriptors returns the descriptors for all stores that exist in
 // this state.
-func (s *state) StoreDescriptors() []roachpb.StoreDescriptor {
-	s.updateStoreCapacities()
-	storeDescriptors := make([]roachpb.StoreDescriptor, len(s.stores))
-	iter := 0
-	for _, store := range s.stores {
-		storeDescriptors[iter] = store.desc
-		iter++
+func (s *state) StoreDescriptors(storeIDs ...StoreID) []roachpb.StoreDescriptor {
+	storeDescriptors := []roachpb.StoreDescriptor{}
+	for _, storeID := range storeIDs {
+		if store, ok := s.stores[storeID]; ok {
+			s.updateStoreCapacity(storeID)
+			storeDescriptors = append(storeDescriptors, store.desc)
+		}
 	}
 	return storeDescriptors
 }
@@ -189,11 +190,12 @@ func (s *state) Store(storeID StoreID) (Store, bool) {
 }
 
 // Nodes returns all nodes that exist in this state.
-func (s *state) Nodes() map[NodeID]Node {
-	nodes := make(map[NodeID]Node)
-	for nodeID, node := range s.nodes {
-		nodes[nodeID] = node
+func (s *state) Nodes() []Node {
+	nodes := []Node{}
+	for _, node := range s.nodes {
+		nodes = append(nodes, node)
 	}
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].NodeID() < nodes[j].NodeID() })
 	return nodes
 }
 
@@ -228,11 +230,12 @@ func (s *state) rng(rangeID RangeID) (*rng, bool) {
 }
 
 // Ranges returns all ranges that exist in this state.
-func (s *state) Ranges() map[RangeID]Range {
-	ranges := make(map[RangeID]Range)
-	for rangeID, r := range s.ranges.rangeMap {
-		ranges[rangeID] = r
+func (s *state) Ranges() []Range {
+	ranges := []Range{}
+	for _, r := range s.ranges.rangeMap {
+		ranges = append(ranges, r)
 	}
+	sort.Slice(ranges, func(i, j int) bool { return ranges[i].RangeID() < ranges[j].RangeID() })
 	return ranges
 }
 
@@ -257,13 +260,13 @@ func (r replicaList) Less(i, j int) bool {
 // Replicas returns all replicas that exist on a store.
 func (s *state) Replicas(storeID StoreID) []Replica {
 	replicas := []Replica{}
-	store, ok := s.Store(storeID)
+	store, ok := s.stores[storeID]
 	if !ok {
 		return replicas
 	}
 
 	repls := replicaList{}
-	for rangeID := range store.Replicas() {
+	for rangeID := range store.replicas {
 		rng := s.ranges.rangeMap[rangeID]
 		if replica := rng.replicas[storeID]; replica != nil {
 			repls = append(repls, replica)
@@ -291,10 +294,13 @@ func (s *state) AddNode() Node {
 // AddStore modifies the state to include one additional store on the Node
 // with ID NodeID. This fails if no Node exists with ID NodeID.
 func (s *state) AddStore(nodeID NodeID) (Store, bool) {
-	if _, ok := s.nodes[nodeID]; !ok {
+	if !s.CanAddStore(nodeID) {
 		return nil, false
 	}
+	return s.addStore(nodeID), true
+}
 
+func (s *state) addStore(nodeID NodeID) Store {
 	node := s.nodes[nodeID]
 	s.storeSeqGen++
 	storeID := s.storeSeqGen
@@ -311,30 +317,47 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	s.stores[storeID] = store
 
 	// Add a range load splitter for this store.
-	s.loadsplits[storeID] = NewSplitDecider(s.settings.Seed,
+	s.loadsplits[storeID] = NewSplitDecider(
+		s.settings.Seed,
 		s.settings.SplitQPSThresholdFn(),
 		s.settings.SplitQPSRetentionFn(),
 	)
 
-	return store, true
+	// Add a usage info struct.
+	_ = s.usageInfo.storeRef(storeID)
+
+	return store
+}
+
+// CanAddStore returns true if it is possible to add a store to the node with
+// ID NodeID, otherwise false.
+func (s *state) CanAddStore(nodeID NodeID) bool {
+	if _, ok := s.nodes[nodeID]; !ok {
+		return false
+	}
+	return true
 }
 
 // AddReplica modifies the state to include one additional range for the
 // Range with ID RangeID, placed on the Store with ID StoreID. This fails
 // if a Replica for the Range already exists the Store.
 func (s *state) AddReplica(rangeID RangeID, storeID StoreID) (Replica, bool) {
-	return s.addReplica(rangeID, storeID)
-
-}
-func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 	// Check whether it is possible to add the replica.
 	if !s.CanAddReplica(rangeID, storeID) {
 		return nil, false
 	}
+	return s.addReplica(rangeID, storeID), true
 
+}
+func (s *state) addReplica(rangeID RangeID, storeID StoreID) *replica {
 	store := s.stores[storeID]
 	nodeID := store.nodeID
-	rng, _ := s.rng(rangeID)
+	rng, ok := s.rng(rangeID)
+	if !ok {
+		panic(
+			fmt.Sprintf("programming error: attemtpted to add replica for a range=%d that doesn't exist",
+				rangeID))
+	}
 
 	desc := rng.desc.AddReplica(roachpb.NodeID(nodeID), roachpb.StoreID(storeID), roachpb.VOTER_FULL)
 	replica := &replica{
@@ -347,15 +370,20 @@ func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 	store.replicas[rangeID] = replica.replicaID
 	rng.replicas[storeID] = replica
 
+	// Update the usage info.
+	s.usageInfo.storeRef(storeID).Replicas++
+
 	// This is the first replica to be added for this range. Make it the
 	// leaseholder as a placeholder. The caller can update the lease, however
 	// we want to ensure that for any range that has replicas, a leaseholder
 	// exists at all times.
 	if len(rng.replicas) == 1 {
-		s.TransferLease(rangeID, storeID)
+		// NB: We don't call replaceLeaseHolder because that assumes a prior
+		// leaseholder exists. This call cannot fail.
+		s.setLeaseholder(rangeID, storeID)
 	}
 
-	return replica, true
+	return replica
 }
 
 // CanAddReplica returns whether adding a replica for the Range with ID RangeID
@@ -401,25 +429,31 @@ func (s *state) CanRemoveReplica(rangeID RangeID, storeID StoreID) bool {
 // RemoveReplica modifies the state to remove a Replica with the ID
 // ReplicaID. It fails if this Replica does not exist.
 func (s *state) RemoveReplica(rangeID RangeID, storeID StoreID) bool {
-	return s.removeReplica(rangeID, storeID)
-}
-
-func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 	// Check whether it is possible to remove the replica.
 	if !s.CanRemoveReplica(rangeID, storeID) {
 		return false
 	}
 
+	return s.removeReplica(rangeID, storeID)
+}
+
+func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 	store := s.stores[storeID]
 	nodeID := store.nodeID
-	rng, _ := s.rng(rangeID)
+	rng, ok := s.rng(rangeID)
+	if !ok {
+		panic(fmt.Sprintf("programming error: attemtpted to remove replica that doesn't exist for range=%d", rangeID))
+	}
 
 	if _, ok := rng.desc.RemoveReplica(roachpb.NodeID(nodeID), roachpb.StoreID(storeID)); !ok {
-		return false
+		panic(fmt.Sprintf("programming error: attempted to replica, but it doesn't exist in descriptor for range=%d, desc=%s",
+			rangeID, rng.desc),
+		)
 	}
 
 	delete(store.replicas, rangeID)
 	delete(rng.replicas, storeID)
+	s.usageInfo.storeRef(storeID).Replicas--
 	return true
 }
 
@@ -445,6 +479,7 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	ranges.rangeSeqGen++
 	rangeID := s.ranges.rangeSeqGen
 
+	// Create placeholder range that will be populated with any missing fields.
 	r := &rng{
 		rangeID:     rangeID,
 		startKey:    splitKey,
@@ -489,7 +524,10 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	// There was no predecessor (LHS), meaning there was no initial range in
 	// the rangeTree. In this case we cannot split the range into two.
 	if predecessorRange == nil {
-		return nil, nil, false
+		panic(fmt.Sprintf("programming error: no predecessor range found for "+
+			"split at %d, missing initial range",
+			splitKey),
+		)
 	}
 
 	// Set the predecessor (LHS) end key to the start key of the split (RHS).
@@ -514,18 +552,23 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 		s.load[r.rangeID] = predecessorLoad.Split()
 	}
 
+	// Set the span config to be the same as the predecessor range.
+	r.config = predecessorRange.config
+
 	// If there are existing replicas for the LHS of the split, then also
 	// create replicas on the same stores for the RHS.
-	for storeID, replica := range predecessorRange.replicas {
+	for _, replica := range predecessorRange.Replicas() {
+		storeID := replica.StoreID()
 		s.AddReplica(rangeID, storeID)
 		if replica.HoldsLease() {
 			// The successor range's leaseholder was on this store, copy the
 			// leaseholder store over for the new split range.
-			s.setLeaseHolder(r.rangeID, storeID)
-
+			leaseholderStore, _ := s.LeaseholderStore(r.rangeID)
+			// NB: This operation cannot fail.
+			s.replaceLeaseHolder(r.rangeID, storeID, leaseholderStore.StoreID())
 			// Reset the recorded load split statistics on the predecessor
 			// range.
-			s.loadsplits[storeID].ResetRange(predecessorRange.rangeID)
+			s.loadsplits[storeID].ResetRange(predecessorRange.RangeID())
 		}
 	}
 
@@ -549,41 +592,51 @@ func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 	if !s.ValidTransfer(rangeID, storeID) {
 		return false
 	}
-
-	rng := s.ranges.rangeMap[rangeID]
-
-	oldLeaseHolderID := rng.leaseholder
-	for oldStoreID, repl := range rng.replicas {
-		if repl.replicaID == oldLeaseHolderID {
-			// Reset the load stats on the old range, within the old
-			// leaseholder store.
-			s.loadsplits[oldStoreID].ResetRange(rangeID)
-			s.load[rangeID].ResetLoad()
-		}
+	oldStoreID, ok := s.LeaseholderStore(rangeID)
+	if !ok {
+		return false
 	}
 
-	// Apply the lease transfer to state.
-	s.setLeaseHolder(rangeID, storeID)
+	// Reset the load stats on the old range, within the old
+	// leaseholder store.
+	s.loadsplits[oldStoreID.StoreID()].ResetRange(rangeID)
+	s.loadsplits[storeID].ResetRange(rangeID)
+	s.load[rangeID].ResetLoad()
 
-	s.usageInfo.LeaseTransfers++
+	// Apply the lease transfer to state.
+	s.replaceLeaseHolder(rangeID, storeID, oldStoreID.StoreID())
 	return true
 }
 
-func (s *state) setLeaseHolder(rangeID RangeID, storeID StoreID) {
-	rng := s.ranges.rangeMap[rangeID]
-
+func (s *state) replaceLeaseHolder(rangeID RangeID, storeID, oldStoreID StoreID) {
 	// Remove the old leaseholder.
-	oldLeaseHolderID := rng.leaseholder
-	for _, repl := range rng.replicas {
-		if repl.replicaID == oldLeaseHolderID {
-			repl.holdsLease = false
-		}
-	}
-
+	s.removeLeaseholder(rangeID, oldStoreID)
 	// Update the range to reflect the new leaseholder.
+	s.setLeaseholder(rangeID, storeID)
+}
+
+func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
+	rng := s.ranges.rangeMap[rangeID]
 	rng.replicas[storeID].holdsLease = true
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
+	s.usageInfo.storeRef(storeID).Leases++
+}
+
+func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
+	rng := s.ranges.rangeMap[rangeID]
+	if repl, ok := rng.replicas[storeID]; ok {
+		if repl.holdsLease {
+			repl.holdsLease = false
+			s.usageInfo.storeRef(storeID).Leases--
+			return
+		}
+	}
+	panic(fmt.Sprintf(
+		"programming error: attempted remove a leaseholder that doesn't exist or doesn't "+
+			"hold lease for range=%d, store=%d",
+		rangeID, storeID),
+	)
 }
 
 // ValidTransfer returns whether transferring the lease for the Range with ID
@@ -599,7 +652,7 @@ func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 	}
 	rng, _ := s.Range(rangeID)
 	store, _ := s.Store(storeID)
-	repl, ok := store.Replicas()[rangeID]
+	repl, ok := store.Replica(rangeID)
 	// A replica for the range does not exist on the store, we cannot transfer
 	// a lease to it.
 	if !ok {
@@ -655,8 +708,8 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 	s.loadsplits[store.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
 }
 
-func (s *state) updateStoreCapacities() {
-	for storeID, store := range s.stores {
+func (s *state) updateStoreCapacity(storeID StoreID) {
+	if store, ok := s.stores[storeID]; ok {
 		store.desc.Capacity = Capacity(s, storeID)
 	}
 }
@@ -691,7 +744,12 @@ func (s *state) TickClock(tick time.Time) {
 func (s *state) UpdateStorePool(
 	storeID StoreID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetail,
 ) {
-	s.stores[storeID].storepool.DetailsMu.StoreDetails = storeDescriptors
+	for gossipStoreID, detail := range storeDescriptors {
+		copiedDetail := *detail
+		copiedDesc := *detail.Desc
+		copiedDetail.Desc = &copiedDesc
+		s.stores[storeID].storepool.DetailsMu.StoreDetails[gossipStoreID] = &copiedDetail
+	}
 }
 
 // NextReplicasFn returns a function, that when called will return the current
@@ -873,9 +931,11 @@ func (s *store) Descriptor() roachpb.StoreDescriptor {
 	return s.desc
 }
 
-// Replicas returns all replicas that are on this store.
-func (s *store) Replicas() map[RangeID]ReplicaID {
-	return s.replicas
+// Replica returns a the Replica belonging to the Range with ID RangeID, if
+// it exists, otherwise false.
+func (s *store) Replica(rangeID RangeID) (ReplicaID, bool) {
+	replicaID, ok := s.replicas[rangeID]
+	return replicaID, ok
 }
 
 // rng is an implementation of the Range interface.
@@ -927,12 +987,20 @@ func (r *rng) SpanConfig() roachpb.SpanConfig {
 }
 
 // Replicas returns all replicas which exist for this range.
-func (r *rng) Replicas() map[StoreID]Replica {
-	replicas := make(map[StoreID]Replica)
-	for storeID, replica := range r.replicas {
-		replicas[storeID] = replica
+func (r *rng) Replicas() []Replica {
+	replicas := []Replica{}
+	for _, replica := range r.replicas {
+		replicas = append(replicas, replica)
 	}
+	sort.Slice(replicas, func(i, j int) bool { return replicas[i].ReplicaID() < replicas[j].ReplicaID() })
 	return replicas
+}
+
+// Replica returns the replica that is on the store with ID StoreID if it
+// exists, else false.
+func (r *rng) Replica(storeID StoreID) (Replica, bool) {
+	replica, ok := r.replicas[storeID]
+	return replica, ok
 }
 
 // Leaseholder returns the ID of the leaseholder for this Range if there is
@@ -943,6 +1011,11 @@ func (r *rng) Leaseholder() ReplicaID {
 
 func (r *rng) Size() int64 {
 	return r.size
+}
+
+// SetSize sets the size of the range in bytes.
+func (r *rng) SetSize(size int64) {
+	r.size = size
 }
 
 // replica is an implementation of the Replica interface.

@@ -20,6 +20,7 @@ func RegisterTests(r registry.Registry) {
 	registerAdmission(r)
 	registerAllocator(r)
 	registerAlterPK(r)
+	registerAsim(r)
 	registerAsyncpg(r)
 	registerAutoUpgrade(r)
 	registerBackup(r)

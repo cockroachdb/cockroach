@@ -30,6 +30,7 @@ go_test(
     deps = [
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
         "@com_github_stretchr_testify//require",
@@ -39,6 +40,7 @@ go_test(
 go_library(
     name = "op",
     srcs = [
+        "change_replicas.go",
         "controller.go",
         "operation.go",
         "pq.go",
@@ -65,6 +67,7 @@ go_test(
     deps = [
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/roachpb",
         "@com_github_stretchr_testify//require",
