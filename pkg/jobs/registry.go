@@ -130,7 +130,8 @@ type Registry struct {
 	internalExecutorFactory sqlutil.InternalExecutorFactory
 
 	// if non-empty, indicates path to file that prevents any job adoptions.
-	preventAdoptionFile string
+	preventAdoptionFile     string
+	preventAdoptionLogEvery log.EveryN
 
 	mu struct {
 		syncutil.Mutex
@@ -195,19 +196,20 @@ func MakeRegistry(
 	knobs *TestingKnobs,
 ) *Registry {
 	r := &Registry{
-		serverCtx:           ctx,
-		ac:                  ac,
-		stopper:             stopper,
-		clock:               clock,
-		db:                  db,
-		ex:                  ex,
-		clusterID:           clusterID,
-		nodeID:              nodeID,
-		sqlInstance:         sqlInstance,
-		settings:            settings,
-		execCtx:             execCtxFn,
-		preventAdoptionFile: preventAdoptionFile,
-		td:                  td,
+		serverCtx:               ctx,
+		ac:                      ac,
+		stopper:                 stopper,
+		clock:                   clock,
+		db:                      db,
+		ex:                      ex,
+		clusterID:               clusterID,
+		nodeID:                  nodeID,
+		sqlInstance:             sqlInstance,
+		settings:                settings,
+		execCtx:                 execCtxFn,
+		preventAdoptionFile:     preventAdoptionFile,
+		preventAdoptionLogEvery: log.Every(time.Minute),
+		td:                      td,
 		// Use a non-zero buffer to allow queueing of notifications.
 		// The writing method will use a default case to avoid blocking
 		// if a notification is already queued.
@@ -753,9 +755,12 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	})
 	// claimJobs iterates the set of jobs which are not currently claimed and
 	// claims jobs up to maxAdoptionsPerLoop.
+	logDisabledAdoptionLimiter := log.Every(time.Minute)
 	claimJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
 		if r.adoptionDisabled(ctx) {
-			log.Warningf(ctx, "job adoption is disabled, registry will not claim any jobs")
+			if logDisabledAdoptionLimiter.ShouldLog() {
+				log.Warningf(ctx, "job adoption is disabled, registry will not claim any jobs")
+			}
 			return
 		}
 		r.metrics.AdoptIterations.Inc(1)
@@ -786,11 +791,15 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// processClaimedJobs iterates the jobs claimed by the current node that
 	// are in the running or reverting state, and then it starts those jobs if
 	// they are not already running.
+	logDisabledClaimLimiter := log.Every(time.Minute)
 	processClaimedJobs := wrapWithSession(func(ctx context.Context, s sqlliveness.Session) {
 		// If job adoption is disabled for the registry then we remove our claim on
 		// all adopted job, and cancel them.
 		if r.adoptionDisabled(ctx) {
-			log.Warningf(ctx, "job adoptions is disabled, canceling all adopted jobs due to liveness failure")
+			if logDisabledClaimLimiter.ShouldLog() {
+				log.Warningf(ctx, "job adoptions is disabled, canceling all adopted "+
+					"jobs due to liveness failure")
+			}
 			removeClaimsFromSession(ctx, s)
 			r.cancelAllAdoptedJobs()
 			return
@@ -1405,7 +1414,9 @@ func (r *Registry) adoptionDisabled(ctx context.Context) bool {
 			}
 			return false
 		}
-		log.Warningf(ctx, "job adoption is currently disabled by existence of %s", r.preventAdoptionFile)
+		if r.preventAdoptionLogEvery.ShouldLog() {
+			log.Warningf(ctx, "job adoption is currently disabled by existence of %s", r.preventAdoptionFile)
+		}
 		return true
 	}
 	return false
