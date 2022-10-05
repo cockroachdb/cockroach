@@ -2027,6 +2027,9 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 		s.serverController.sqlMux,
 		s.pgL,
 		&s.cfg.SocketFile,
+		s.status,
+		s.sqlServer.internalExecutor,
+		s.ClusterSettings(),
 	); err != nil {
 		return err
 	}

@@ -812,6 +812,9 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 			s.serveConn,
 			s.pgL,
 			&s.sqlServer.cfg.SocketFile,
+			s.sqlServer.tenantConnect,
+			s.sqlServer.internalExecutor,
+			s.ClusterSettings(),
 		); err != nil {
 			return err
 		}
