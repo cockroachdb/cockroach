@@ -60,14 +60,13 @@ const (
 )
 
 type decommissionBenchSpec struct {
-	nodes            int
-	cpus             int
-	warehouses       int
-	load             bool
-	admissionControl bool
-	multistore       bool
-	snapshotRate     int
-	duration         time.Duration
+	nodes        int
+	cpus         int
+	warehouses   int
+	load         bool
+	multistore   bool
+	snapshotRate int
+	duration     time.Duration
 
 	// When true, the test will attempt to stop the node prior to decommission.
 	whileDown bool
@@ -95,34 +94,30 @@ func registerDecommissionBench(r registry.Registry) {
 	for _, benchSpec := range []decommissionBenchSpec{
 		// Basic benchmark configurations, to be run nightly.
 		{
-			nodes:            4,
-			cpus:             16,
-			warehouses:       1000,
-			load:             true,
-			admissionControl: true,
+			nodes:      4,
+			cpus:       16,
+			warehouses: 1000,
+			load:       true,
 		},
 		{
-			nodes:            4,
-			cpus:             16,
-			warehouses:       1000,
-			load:             true,
-			admissionControl: true,
-			duration:         1 * time.Hour,
+			nodes:      4,
+			cpus:       16,
+			warehouses: 1000,
+			load:       true,
+			duration:   1 * time.Hour,
 		},
 		{
-			nodes:            4,
-			cpus:             16,
-			warehouses:       1000,
-			load:             true,
-			admissionControl: true,
-			whileDown:        true,
+			nodes:      4,
+			cpus:       16,
+			warehouses: 1000,
+			load:       true,
+			whileDown:  true,
 		},
 		{
-			nodes:            8,
-			cpus:             16,
-			warehouses:       3000,
-			load:             true,
-			admissionControl: true,
+			nodes:      8,
+			cpus:       16,
+			warehouses: 3000,
+			load:       true,
 			// This test can take nearly an hour to import and achieve balance, so
 			// we extend the timeout to let it complete.
 			timeout: 4 * time.Hour,
@@ -134,7 +129,6 @@ func registerDecommissionBench(r registry.Registry) {
 			cpus:               16,
 			warehouses:         3000,
 			load:               true,
-			admissionControl:   true,
 			whileUpreplicating: true,
 			// This test can take nearly an hour to import and achieve balance, so
 			// we extend the timeout to let it complete.
@@ -143,12 +137,11 @@ func registerDecommissionBench(r registry.Registry) {
 		},
 		{
 			// Drain before decommission, without adding a new node.
-			nodes:            8,
-			cpus:             16,
-			warehouses:       3000,
-			load:             true,
-			admissionControl: true,
-			drainFirst:       true,
+			nodes:      8,
+			cpus:       16,
+			warehouses: 3000,
+			load:       true,
+			drainFirst: true,
 			// This test can take nearly an hour to import and achieve balance, so
 			// we extend the timeout to let it complete.
 			timeout: 4 * time.Hour,
@@ -160,7 +153,6 @@ func registerDecommissionBench(r registry.Registry) {
 			cpus:               16,
 			warehouses:         3000,
 			load:               true,
-			admissionControl:   true,
 			whileUpreplicating: true,
 			drainFirst:         true,
 			// This test can take nearly an hour to import and achieve balance, so
@@ -169,13 +161,12 @@ func registerDecommissionBench(r registry.Registry) {
 			skip:    manualBenchmarkingOnly,
 		},
 		{
-			nodes:            4,
-			cpus:             16,
-			warehouses:       1000,
-			load:             true,
-			admissionControl: true,
-			drainFirst:       true,
-			skip:             manualBenchmarkingOnly,
+			nodes:      4,
+			cpus:       16,
+			warehouses: 1000,
+			load:       true,
+			drainFirst: true,
+			skip:       manualBenchmarkingOnly,
 		},
 		{
 			nodes:      4,
@@ -197,12 +188,11 @@ func registerDecommissionBench(r registry.Registry) {
 			skip:    manualBenchmarkingOnly,
 		},
 		{
-			nodes:            12,
-			cpus:             16,
-			warehouses:       3000,
-			load:             true,
-			admissionControl: true,
-			multistore:       true,
+			nodes:      12,
+			cpus:       16,
+			warehouses: 3000,
+			load:       true,
+			multistore: true,
 			// This test can take nearly an hour to import and achieve balance, so
 			// we extend the timeout to let it complete.
 			timeout: 3 * time.Hour,
@@ -210,11 +200,10 @@ func registerDecommissionBench(r registry.Registry) {
 		},
 		{
 			// Test to compare 12 4-store nodes vs 48 single-store nodes
-			nodes:            48,
-			cpus:             16,
-			warehouses:       3000,
-			load:             true,
-			admissionControl: true,
+			nodes:      48,
+			cpus:       16,
+			warehouses: 3000,
+			load:       true,
 			// This test can take nearly an hour to import and achieve balance, so
 			// we extend the timeout to let it complete.
 			timeout: 3 * time.Hour,
@@ -268,8 +257,6 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 
 	if benchSpec.slowWrites {
 		extraNameParts = append(extraNameParts, "hi-read-amp")
-	} else if !benchSpec.admissionControl {
-		extraNameParts = append(extraNameParts, "no-admission")
 	}
 
 	if benchSpec.duration > 0 {
@@ -382,7 +369,6 @@ func setupDecommissionBench(
 	t.Status(fmt.Sprintf("initializing cluster with %d warehouses", benchSpec.warehouses))
 	c.Run(ctx, c.Node(pinnedNode), importCmd)
 
-	SetAdmissionControl(ctx, t, c, benchSpec.admissionControl)
 	{
 		db := c.Conn(ctx, t.L(), pinnedNode)
 		defer db.Close()

@@ -174,6 +174,16 @@ func (i *MVCCIterator) UnsafeValue() []byte {
 	return i.i.UnsafeValue()
 }
 
+// MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
+func (i *MVCCIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	return i.i.MVCCValueLenAndIsTombstone()
+}
+
+// ValueLen implements the MVCCIterator interface.
+func (i *MVCCIterator) ValueLen() int {
+	return i.i.ValueLen()
+}
+
 // HasPointAndRange implements SimpleMVCCIterator.
 func (i *MVCCIterator) HasPointAndRange() (bool, bool) {
 	return i.i.HasPointAndRange()

@@ -550,6 +550,26 @@ func (p *pebbleIterator) UnsafeValue() []byte {
 	return p.iter.Value()
 }
 
+// MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
+func (p *pebbleIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	val := p.iter.Value()
+	// NB: don't move the following code into a helper since we desire inlining
+	// of tryDecodeSimpleMVCCValue.
+	v, ok, err := tryDecodeSimpleMVCCValue(val)
+	if err == nil && !ok {
+		v, err = decodeExtendedMVCCValue(val)
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return len(val), v.IsTombstone(), nil
+}
+
+// ValueLen implements the MVCCIterator interface.
+func (p *pebbleIterator) ValueLen() int {
+	return len(p.iter.Value())
+}
+
 // SeekLT implements the MVCCIterator interface.
 func (p *pebbleIterator) SeekLT(key MVCCKey) {
 	p.mvccDirIsReverse = true
@@ -856,7 +876,7 @@ func findSplitKeyUsingIterator(
 			bestSplitKey.Key = append(bestSplitKey.Key[:0], prevKey.Key...)
 		}
 
-		sizeSoFar += int64(len(iter.UnsafeValue()))
+		sizeSoFar += int64(iter.ValueLen())
 		if mvccKey.IsValue() && bytes.Equal(prevKey.Key, mvccKey.Key) {
 			// We only advanced timestamps, but not new mvcc keys.
 			sizeSoFar += timestampLen

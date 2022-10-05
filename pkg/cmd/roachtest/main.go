@@ -85,6 +85,7 @@ func main() {
 	var literalArtifacts string
 	var httpPort int
 	var debugEnabled bool
+	var skipInit bool
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
@@ -221,6 +222,7 @@ runner itself.
 				count:                  count,
 				cpuQuota:               cpuQuota,
 				debugEnabled:           debugEnabled,
+				skipInit:               skipInit,
 				httpPort:               httpPort,
 				parallelism:            parallelism,
 				artifactsDir:           artifacts,
@@ -260,6 +262,7 @@ runner itself.
 				count:                  count,
 				cpuQuota:               cpuQuota,
 				debugEnabled:           debugEnabled,
+				skipInit:               skipInit,
 				httpPort:               httpPort,
 				parallelism:            parallelism,
 				artifactsDir:           artifacts,
@@ -284,6 +287,8 @@ runner itself.
 			&count, "count", 1, "the number of times to run each test")
 		cmd.Flags().BoolVarP(
 			&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
+		cmd.Flags().BoolVar(
+			&skipInit, "skip-init", false, "skip initialization step (imports, table creation, etc.) for tests that support it, useful when re-using clusters with --wipe=false")
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
@@ -351,6 +356,7 @@ type cliCfg struct {
 	count                  int
 	cpuQuota               int
 	debugEnabled           bool
+	skipInit               bool
 	httpPort               int
 	parallelism            int
 	artifactsDir           string
@@ -426,7 +432,10 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	CtrlC(ctx, l, cancel, cr)
 	err = runner.Run(
 		ctx, tests, cfg.count, cfg.parallelism, opt,
-		testOpts{versionsBinaryOverride: cfg.versionsBinaryOverride},
+		testOpts{
+			versionsBinaryOverride: cfg.versionsBinaryOverride,
+			skipInit:               cfg.skipInit,
+		},
 		lopt, nil /* clusterAllocator */)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the

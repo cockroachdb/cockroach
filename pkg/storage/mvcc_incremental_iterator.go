@@ -653,6 +653,16 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 	return i.iter.UnsafeValue()
 }
 
+// MVCCValueLenAndIsTombstone implements the SimpleMVCCIterator interface.
+func (i *MVCCIncrementalIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	return i.iter.MVCCValueLenAndIsTombstone()
+}
+
+// ValueLen implements the SimpleMVCCIterator interface.
+func (i *MVCCIncrementalIterator) ValueLen() int {
+	return i.iter.ValueLen()
+}
+
 // updateIgnoreTime updates the iterator's metadata and handles intents depending on the iterator's
 // intent policy.
 func (i *MVCCIncrementalIterator) updateIgnoreTime() {

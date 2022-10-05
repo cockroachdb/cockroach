@@ -201,6 +201,26 @@ func (r *legacySSTIterator) UnsafeValue() []byte {
 	return r.value
 }
 
+// MVCCValueLenAndIsTombstone implements the SimpleMVCCIterator interface.
+func (r *legacySSTIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	// NB: don't move the following code into a helper since we desire inlining
+	// of tryDecodeSimpleMVCCValue.
+	v, ok, err := tryDecodeSimpleMVCCValue(r.value)
+	if err == nil && !ok {
+		v, err = decodeExtendedMVCCValue(r.value)
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return len(r.value), v.IsTombstone(), nil
+
+}
+
+// ValueLen implements the SimpleMVCCIterator interface.
+func (r *legacySSTIterator) ValueLen() int {
+	return len(r.value)
+}
+
 // verifyValue verifies the checksum of the current value.
 func (r *legacySSTIterator) verifyValue() {
 	mvccValue, ok, err := tryDecodeSimpleMVCCValue(r.value)

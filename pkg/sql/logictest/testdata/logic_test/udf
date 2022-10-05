@@ -1861,6 +1861,16 @@ CREATE FUNCTION sc_test_priv.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
 user root
 
+statement ok
+GRANT CREATE ON SCHEMA sc_test_priv TO testuser
+
+user testuser
+
+statement ok
+CREATE FUNCTION sc_test_priv.f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+user root
+
 subtest execution
 
 statement ok
