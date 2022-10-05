@@ -1663,6 +1663,319 @@ inner-join (cross)
  └── filters
       └── (((s:3 = 'foo') AND (u:7 = 3)) AND (v:8 = 4)) OR (((s:3 = 'bar') AND (u:7 = 5)) AND (v:8 = 6)) [type=bool, outer=(3,7,8), constraints=(/3: [/'bar' - /'bar'] [/'foo' - /'foo']; /7: [/3 - /3] [/5 - /5]; /8: [/4 - /4] [/6 - /6])]
 
+# Test selectivity of ORed join predicates
+# Estimate of # rows should be low, and nowhere near the no-stats
+# cartesian join estimate of 1,000,000 rows.
+
+exec-ddl
+CREATE TABLE classes (classID int, description varchar(50))
+----
+
+exec-ddl
+CREATE TABLE classRequest (studentID int, firstChoiceClassID int, secondChoiceClassID int, thirdChoiceClassID int, primary key(studentID))
+----
+
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.secondChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=330000, distinct(1)=100, null(1)=0, avgsize(1)=4]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.secondChoiceClassID = classes.classID OR
+                                          classRequest.thirdChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=330000, distinct(1)=100, null(1)=0, avgsize(1)=4]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── ((firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1)) OR (thirdchoiceclassid:9 = classid:1) [type=bool, outer=(1,7-9), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes LEFT OUTER JOIN classRequest ON
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID
+----
+left-join (cross)
+ ├── columns: classid:1(int) description:2(varchar) studentid:6(int) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=333333.3]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+# Presence of a single-table join term brings the estimate back up to cartesian join territory.
+# Currently only ORed equijoin terms are handled. Otherwise we give up on trying to get accurate estimates.
+norm
+SELECT * FROM classes LEFT OUTER JOIN classRequest ON
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = 1
+----
+left-join (cross)
+ ├── columns: classid:1(int) description:2(varchar) studentid:6(int) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=1000000]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(8)=100, null(8)=10, avgsize(8)=4]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = 1) [type=bool, outer=(1,7,8)]
+
+# Selectivity of each term is 1, so combined selectivity is 1 and 1000 rows
+# estimate is expected.
+norm
+SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID)
+----
+semi-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=333.3333, distinct(1)=100, null(1)=3.33333, avgsize(1)=4]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID  OR
+                      classRequest.secondChoiceClassID = classes.classID  OR
+                      classRequest.thirdChoiceClassID = classes.classID)
+----
+semi-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=333.3333, distinct(1)=100, null(1)=3.33333, avgsize(1)=4]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    └── stats: [rows=1000]
+ └── filters
+      └── ((firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1)) OR (thirdchoiceclassid:9 = classid:1) [type=bool, outer=(1,7-9), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE NOT EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID)
+----
+anti-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=666.6667]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000, distinct(1)=100, null(1)=10, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = 5)
+----
+semi-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=1000]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=1000]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000, distinct(8)=100, null(8)=10, avgsize(8)=4]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = 5) [type=bool, outer=(1,7,8)]
+
+# Tests with real stats
+exec-ddl
+ALTER TABLE classes INJECT STATISTICS '[
+  {
+    "columns": ["classid"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 5000,
+    "distinct_count": 5000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE classRequest INJECT STATISTICS '[
+  {
+    "columns": ["firstchoiceclassid"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 500
+  },
+  {
+    "columns": ["secondchoiceclassid"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 50
+  },
+  {
+    "columns": ["thirdchoiceclassid"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 10
+  }
+]'
+----
+
+# Like the no-stats tests, these should show cardinalities much smaller than
+# the cross cardinality.
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.secondChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=1666667, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.thirdChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=1666667, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (thirdchoiceclassid:9 = classid:1) [type=bool, outer=(1,7,9), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes, classRequest WHERE classRequest.firstChoiceClassID = classes.classID OR
+                                          classRequest.secondChoiceClassID = classes.classID OR
+                                          classRequest.thirdChoiceClassID = classes.classID
+----
+inner-join (cross)
+ ├── columns: classid:1(int!null) description:2(varchar) studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=1666667, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── ((firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1)) OR (thirdchoiceclassid:9 = classid:1) [type=bool, outer=(1,7-9), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes LEFT OUTER JOIN classRequest ON
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID
+----
+left-join (cross)
+ ├── columns: classid:1(int) description:2(varchar) studentid:6(int) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ ├── stats: [rows=1666667]
+ ├── fd: (6)-->(7-9)
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7-9)
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID  OR
+                      classRequest.secondChoiceClassID = classes.classID)
+----
+semi-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=1666.667, distinct(1)=1666.67, null(1)=0, avgsize(1)=4]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
+norm
+SELECT * FROM classes WHERE NOT EXISTS (SELECT * FROM classRequest WHERE
+                      classRequest.firstChoiceClassID = classes.classID OR
+                      classRequest.secondChoiceClassID = classes.classID)
+----
+anti-join (cross)
+ ├── columns: classid:1(int) description:2(varchar)
+ ├── stats: [rows=3333.333]
+ ├── scan classes
+ │    ├── columns: classid:1(int) description:2(varchar)
+ │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0, avgsize(1)=4]
+ ├── scan classrequest
+ │    ├── columns: firstchoiceclassid:7(int) secondchoiceclassid:8(int)
+ │    └── stats: [rows=1000]
+ └── filters
+      └── (firstchoiceclassid:7 = classid:1) OR (secondchoiceclassid:8 = classid:1) [type=bool, outer=(1,7,8), constraints=(/1: (/NULL - ])]
+
 # Regression test for #84236. Don't calculate selectivity as NaN.
 exec-ddl
 CREATE TABLE t84236_1 (
