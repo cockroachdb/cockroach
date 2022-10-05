@@ -298,3 +298,19 @@ vectorized: true
               missing stats
               table: b@b_a_idx
               spans: 2 spans
+
+# Regression test for #88925.
+statement ok
+CREATE TABLE t88925 (
+  a INT PRIMARY KEY,
+  b TEXT NOT NULL,
+  INVERTED INDEX t88925_b_idx (b gin_trgm_ops)
+)
+
+# The secondary index cannot be used because LIKE is not commutative.
+statement error pgcode 42809 index "t88925_b_idx" is inverted and cannot be used for this query
+SELECT * FROM t88925@t88925_b_idx WHERE 'aab' LIKE b
+
+# The secondary index cannot be used because ILIKE is not commutative.
+statement error pgcode 42809 index "t88925_b_idx" is inverted and cannot be used for this query
+SELECT * FROM t88925@t88925_b_idx WHERE 'aab' ILIKE b
