@@ -64,8 +64,6 @@ type DoesNotUseTxn interface {
 // ProcOutputHelper is a helper type that performs filtering and projection on
 // the output of a processor.
 type ProcOutputHelper struct {
-	numInternalCols int
-	RowAlloc        rowenc.EncDatumRowAlloc
 	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
 	// and outputCols can be set.
 	renderExprs []execinfrapb.ExprHelper
@@ -97,8 +95,18 @@ type ProcOutputHelper struct {
 
 // Reset resets this ProcOutputHelper, retaining allocated memory in its slices.
 func (h *ProcOutputHelper) Reset() {
+	// Deeply reset the render expressions and the output row. Note that we
+	// don't bother deeply resetting the types slice since the types are small
+	// objects.
+	for i := range h.renderExprs {
+		h.renderExprs[i] = execinfrapb.ExprHelper{}
+	}
+	for i := range h.outputRow {
+		h.outputRow[i] = rowenc.EncDatum{}
+	}
 	*h = ProcOutputHelper{
 		renderExprs: h.renderExprs[:0],
+		outputRow:   h.outputRow[:0],
 		OutputTypes: h.OutputTypes[:0],
 	}
 }
@@ -120,11 +128,10 @@ func (h *ProcOutputHelper) Init(
 	if post.Projection && len(post.RenderExprs) > 0 {
 		return errors.Errorf("post-processing has both projection and rendering: %s", post)
 	}
-	h.numInternalCols = len(coreOutputTypes)
 	if post.Projection {
 		for _, col := range post.OutputColumns {
-			if int(col) >= h.numInternalCols {
-				return errors.Errorf("invalid output column %d (only %d available)", col, h.numInternalCols)
+			if int(col) >= len(coreOutputTypes) {
+				return errors.Errorf("invalid output column %d (only %d available)", col, len(coreOutputTypes))
 			}
 		}
 		h.outputCols = post.OutputColumns
@@ -153,7 +160,6 @@ func (h *ProcOutputHelper) Init(
 			h.OutputTypes = make([]*types.T, nRenders)
 		}
 		for i, expr := range post.RenderExprs {
-			h.renderExprs[i] = execinfrapb.ExprHelper{}
 			if err := h.renderExprs[i].Init(expr, coreOutputTypes, semaCtx, evalCtx); err != nil {
 				return err
 			}
@@ -170,7 +176,14 @@ func (h *ProcOutputHelper) Init(
 	}
 	if h.outputCols != nil || len(h.renderExprs) > 0 {
 		// We're rendering or projecting, so allocate an output row.
-		h.outputRow = h.RowAlloc.AllocRow(len(h.OutputTypes))
+		if h.outputRow != nil && cap(h.outputRow) >= len(h.OutputTypes) {
+			// In some cases we might have no output columns, so nil outputRow
+			// would have sufficient width, yet nil row is a special value, so
+			// we can only reuse the old outputRow if it's non-nil.
+			h.outputRow = h.outputRow[:len(h.OutputTypes)]
+		} else {
+			h.outputRow = make(rowenc.EncDatumRow, len(h.OutputTypes))
+		}
 	}
 
 	h.offset = post.Offset
