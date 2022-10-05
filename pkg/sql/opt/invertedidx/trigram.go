@@ -45,6 +45,7 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	var constantVal opt.ScalarExpr
 	var left, right opt.ScalarExpr
 	var allMustMatch bool
+	var commutative bool
 	switch e := expr.(type) {
 	// Both ILIKE and LIKE are supported because the index entries are always
 	// downcased. We re-check the condition no matter what later.
@@ -54,12 +55,23 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		// out of all of the spans: we need to find results that match every single
 		// one of the trigrams in the constant datum.
 		allMustMatch = true
+		// ILIKE is not commutative.
+		commutative = false
 	case *memo.LikeExpr:
 		left, right = e.Left, e.Right
 		allMustMatch = true
+		// LIKE is not commutative.
+		// TODO(mgartner): We might be able to index accelerate expressions in
+		// the form 'foo' LIKE col. To correctly handle cases where col is '%',
+		// we'd have to write some value to the trigram index and always scan
+		// it. We currently do not write anything to the trigram index if the
+		// value is '%'.
+		commutative = false
 	case *memo.EqExpr:
 		left, right = e.Left, e.Right
 		allMustMatch = true
+		// Equality is commutative.
+		commutative = true
 	case *memo.ModExpr:
 		// If we're doing a % expression (similarity threshold), we need to
 		// construct an OR out of the spans: we need to find results that match any
@@ -67,13 +79,17 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		// further afterwards.
 		left, right = e.Left, e.Right
 		allMustMatch = false
+		// Similarity is commutative.
+		commutative = true
 	default:
 		// Only the above types are supported.
 		return inverted.NonInvertedColExpression{}, expr, nil
 	}
 	if isIndexColumn(t.tabID, t.index, left, t.computedColumns) && memo.CanExtractConstDatum(right) {
 		constantVal = right
-	} else if isIndexColumn(t.tabID, t.index, right, t.computedColumns) && memo.CanExtractConstDatum(left) {
+	} else if commutative && isIndexColumn(t.tabID, t.index, right, t.computedColumns) &&
+		memo.CanExtractConstDatum(left) {
+		// Commute the expression if the operator is commutative.
 		constantVal = left
 	} else {
 		// Can only accelerate with a single constant value.
