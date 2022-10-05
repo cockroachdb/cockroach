@@ -405,6 +405,26 @@ message SchemaDescriptor {
   // TODO(postamar): include system.zones data.
 }
 
+// Ranges
+message Ranges {
+
+  int64 range_id = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "RangeID"];
+
+  double qps = 2 [(gogoproto.jsontag) = ",includeempty"];
+
+  // DatabaseName is the name of the database in which the index was created.
+  string database_name = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // TableName is the name of the table on which the index was created.
+  string table_name = 6 [(gogoproto.jsontag) = ",omitempty"];
+
+  // IndexName is the name of the index within the scope of the given table.
+  string index_name = 7 [(gogoproto.jsontag) = ",omitempty"];
+
+  // SchemaName is the name of the schema in which the index was created.
+  string schema_name = 8 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // SchemaSnapshotMetadata is an event describing a schema snapshot, which
 // is a set of SchemaDescriptor messages sharing the same SnapshotID.
 message SchemaSnapshotMetadata {
@@ -425,4 +445,12 @@ message SchemaSnapshotMetadata {
   // Errors records any errors encountered when post-processing this snapshot,
   // which includes the redaction of any potential PII.
   repeated string errors = 5 [(gogoproto.jsontag) = ",omitempty"];
+}
+
+// HotRangesStats
+message HotRangesStats {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // Ranges
+  repeated Ranges ranges = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = ""];
 }

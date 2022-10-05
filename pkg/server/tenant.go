@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -732,6 +733,8 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 	}
 
 	s.sqlServer.isReady.Set(true)
+
+	structlogging.StartHotRangesLoggingScheduler(ctx, s.stopper, s.sqlServer.tenantConnect, *s.sqlServer.internalExecutor)
 
 	log.Event(ctx, "server ready")
 	return nil

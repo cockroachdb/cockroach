@@ -2727,6 +2727,39 @@ ChangefeedFailed events.
 | `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
 | `Format` | The data format being emitted (ex: JSON, Avro). | no |
 
+### `hot_ranges_stats`
+
+An event of type `hot_ranges_stats`
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Ranges` | Ranges | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
+### `ranges`
+
+An event of type `ranges`
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `RangeID` |  | no |
+| `Qps` |  | no |
+| `DatabaseName` | DatabaseName is the name of the database in which the index was created. | yes |
+| `TableName` | TableName is the name of the table on which the index was created. | yes |
+| `IndexName` | IndexName is the name of the index within the scope of the given table. | yes |
+| `SchemaName` | SchemaName is the name of the schema in which the index was created. | yes |
+
+
+
 ### `recovery_event`
 
 An event of type `recovery_event` is an event that is logged on every invocation of BACKUP,

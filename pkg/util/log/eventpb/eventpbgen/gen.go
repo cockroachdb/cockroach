@@ -671,6 +671,18 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
      }
      b = append(b, ']')
    }
+	 {{- else if eq .FieldType "array_of_Ranges"}}
+   if len(m.{{.FieldName}}) > 0 {
+     if printComma { b = append(b, ',')}; printComma = true
+     b = append(b, "\"{{.FieldName}}\":["...)
+     for i, l := range m.{{.FieldName}} {
+       if i > 0 { b = append(b, ',') }
+       b = append(b, '{')
+			 printComma, b = l.AppendJSONFields(false, b)
+       b = append(b, '}')
+     }
+     b = append(b, ']')
+   }
    {{- else if eq .FieldType "protobuf"}}
    if m.{{.FieldName}} != nil {
      if printComma { b = append(b, ',')}; printComma = true

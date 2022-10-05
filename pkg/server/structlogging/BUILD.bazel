@@ -1,0 +1,27 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "structlogging",
+    srcs = ["hot_ranges_log.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/structlogging",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/server/serverpb",
+        "//pkg/sql",
+        "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/logpb",
+        "//pkg/util/stop",
+    ],
+)
+
+go_test(
+    name = "structlogging_test",
+    srcs = ["hot_ranges_log_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":structlogging"],
+)
+
+get_x_data(name = "get_x_data")
