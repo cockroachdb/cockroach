@@ -70,6 +70,13 @@ type StatExporter interface {
 		queries []AggQuery,
 		benchmarkFns ...func(map[string]StatSummary) (string, float64),
 	) error
+	// CollectSummaries collects the summary for statistics, used in export.
+	CollectSummaries(
+		ctx context.Context,
+		l *logger.Logger,
+		interval Interval,
+		statQueries []AggQuery,
+	) (map[string]StatSummary, error)
 }
 
 // StatSummary holds the timeseries of some cluster aggregate statistic. The
@@ -102,7 +109,7 @@ func (cs *clusterStatCollector) Export(
 	benchmarkFns ...func(summaries map[string]StatSummary) (string, float64),
 ) error {
 	l := t.L()
-	summaries, err := cs.collectSummaries(ctx, l, Interval{From: from, To: to}, queries)
+	summaries, err := cs.CollectSummaries(ctx, l, Interval{From: from, To: to}, queries)
 	if err != nil {
 		l.ErrorfCtx(ctx, "unable to collect cluster stat summaries: %+v", err)
 		return err
@@ -170,9 +177,9 @@ func serializeReport(
 	return bytesBuf, nil
 }
 
-// collectSummaries iterates through the passed in aggregate queries and
+// CollectSummaries iterates through the passed in aggregate queries and
 // combines the results.
-func (cs *clusterStatCollector) collectSummaries(
+func (cs *clusterStatCollector) CollectSummaries(
 	ctx context.Context, l *logger.Logger, interval Interval, statQueries []AggQuery,
 ) (map[string]StatSummary, error) {
 	summaries := make(map[string]StatSummary)
@@ -250,13 +257,17 @@ func (cs *clusterStatCollector) getStatSummary(
 	for labelName, series := range labelNameSeries {
 		streamSize := n
 		ret.Tagged[labelName] = make([]float64, streamSize)
-		if streamSize != len(series) {
+		if streamSize > len(series) {
 			return ret, errors.Newf(
 				"Differing lengths on stream size on query %s, expected %d, actual %d",
 				summaryQuery.Stat.Query,
 				streamSize,
 				len(series),
 			)
+		} else if streamSize < len(series) {
+			// When the new series is longer than the expected, we are able to
+			// trim it to the expected length by discarding values at the end.
+			series = series[:streamSize]
 		}
 
 		for i, val := range series {
@@ -268,7 +279,7 @@ func (cs *clusterStatCollector) getStatSummary(
 	// When an aggregating function is given (AggQuery.AggFn), use this.
 	// Otherwise, parse the prometheus result in a similar manner to above.
 	if summaryQuery.AggFn != nil {
-		tag, val := summaryQuery.AggFn(summaryQuery.Stat.Query, convertEqualLengthMapToMat(ret.Tagged))
+		tag, val := summaryQuery.AggFn(summaryQuery.Stat.Query, ConvertEqualLengthMapToMat(ret.Tagged))
 		ret.Value = val
 		ret.AggTag = tag
 	} else {

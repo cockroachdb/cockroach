@@ -277,7 +277,7 @@ func TestClusterStatsCollectorSummaryCollector(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			summaries, err := c.collectSummaries(
+			summaries, err := c.CollectSummaries(
 				ctx,
 				logger,
 				Interval{statsTestingStartTime, statsTestingStartTime.Add(statsTestingDuration * time.Duration(tc.ticks))},
