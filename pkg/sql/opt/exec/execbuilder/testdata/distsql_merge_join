@@ -465,7 +465,7 @@ vectorized: true
     └── • filter
         │ columns: (pid1, pa1)
         │ ordering: +pid1
-        │ estimated row count: 342 (missing stats)
+        │ estimated row count: 339 (missing stats)
         │ filter: ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
         │
         └── • scan
@@ -536,7 +536,7 @@ vectorized: true
     └── • filter
         │ columns: (pid1, pa1)
         │ ordering: +pid1
-        │ estimated row count: 342 (missing stats)
+        │ estimated row count: 339 (missing stats)
         │ filter: ((((pid1 >= 11) AND (pid1 <= 13)) OR ((pid1 >= 19) AND (pid1 <= 21))) OR ((pid1 >= 31) AND (pid1 <= 33))) OR (pa1 > 0)
         │
         └── • scan

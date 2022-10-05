@@ -384,7 +384,7 @@ vectorized: true
                     │
                     └── • distinct
                         │ columns: (crdb_internal_id_shard_16, id, part)
-                        │ estimated row count: 7 (missing stats)
+                        │ estimated row count: 6 (missing stats)
                         │ distinct on: id, part
                         │
                         └── • union all
@@ -1027,7 +1027,7 @@ vectorized: true
                     │
                     └── • distinct
                         │ columns: (id, email, part)
-                        │ estimated row count: 7 (missing stats)
+                        │ estimated row count: 6 (missing stats)
                         │ distinct on: id, part
                         │
                         └── • union all
