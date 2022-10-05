@@ -1481,7 +1481,7 @@ func (p *Pebble) Stat(name string) (os.FileInfo, error) {
 
 // CreateCheckpoint implements the Engine interface.
 func (p *Pebble) CreateCheckpoint(dir string) error {
-	return p.db.Checkpoint(dir)
+	return p.db.Checkpoint(dir, pebble.WithFlushedWAL())
 }
 
 // SetMinVersion implements the Engine interface.
