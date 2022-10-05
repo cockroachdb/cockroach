@@ -6515,6 +6515,10 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 					}
 					return nil
 				})
+				sqlDB.Exec(t, `CANCEL JOB $1`, feedJob.JobID())
+				require.NoError(t, feedJob.WaitForStatus(func(s jobs.Status) bool {
+					return s == jobs.StatusCanceled
+				}))
 			})
 		}))
 	}
