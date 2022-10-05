@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/stretchr/testify/require"
 )
@@ -89,7 +90,13 @@ func TestScannerReplicaPacer(t *testing.T) {
 		nextReplsFn := createNextRepls(tc.replCount)
 
 		t.Run(tc.desc, func(t *testing.T) {
-			pacer := NewScannerReplicaPacer(nextReplsFn, tc.loopInterval, tc.minInterval, tc.maxInterval)
+			pacer := NewScannerReplicaPacer(
+				nextReplsFn,
+				tc.loopInterval,
+				tc.minInterval,
+				tc.maxInterval,
+				config.DefaultSimulationControlSettings().Seed,
+			)
 			results := make([]int, 0, 1)
 			for _, tick := range tc.ticks {
 				replsThisTick := 0

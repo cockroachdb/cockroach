@@ -11,6 +11,7 @@
 package state
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -115,6 +116,9 @@ func (s *SplitDecider) SplitKey(tick time.Time, rangeID RangeID) (Key, bool) {
 func (s *SplitDecider) ClearSplitKeys() []RangeID {
 	suggestions := make([]RangeID, len(s.suggestions))
 	copy(suggestions, s.suggestions)
+	if len(s.suggestions) > 0 {
+		fmt.Printf("got suggestions %+v\n", suggestions)
+	}
 
 	s.suggestions = []RangeID{}
 	return suggestions

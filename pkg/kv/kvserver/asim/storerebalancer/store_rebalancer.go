@@ -56,6 +56,7 @@ type storeRebalancerState struct {
 	rctx  *kvserver.RebalanceContext
 
 	pendingRelocate, pendingTransfer kvserver.CandidateReplica
+	pendingRelocateExistingVoters    []roachpb.ReplicaDescriptor
 	pendingRelocateTargets           []roachpb.ReplicationTarget
 	pendingTransferTarget            roachpb.ReplicaDescriptor
 
@@ -98,6 +99,7 @@ func newStoreRebalancerControl(
 		allocator,
 		getRaftStatusFn,
 	)
+	sr.AddLogTag("s", storeID)
 
 	return &storeRebalancerControl{
 		sr:       sr,
@@ -127,14 +129,17 @@ func (src *storeRebalancerControl) makeRebalanceContext(
 	allStoresList, _, _ := src.allocator.StorePool.GetStoreList(storepool.StoreFilterSuspect)
 	options := src.scorerOptions()
 
-	store, ok := state.Store(src.storeID)
-	if !ok {
-		return nil
+	// Find the store descriptor for the local store.
+	var localDesc *roachpb.StoreDescriptor
+	for i := range allStoresList.Stores {
+		if allStoresList.Stores[i].StoreID == roachpb.StoreID(src.storeID) {
+			localDesc = &allStoresList.Stores[i]
+			break
+		}
 	}
-	localDesc := store.Descriptor()
 
 	return kvserver.NewRebalanceContext(
-		&localDesc,
+		localDesc,
 		options,
 		kvserver.LBRebalancingMode(src.settings.LBRebalancingMode),
 		allocatorimpl.OverfullQPSThreshold(options, allStoresList.CandidateQueriesPerSecond.Mean),
@@ -159,6 +164,12 @@ func (src *storeRebalancerControl) checkPendingTicket() (done bool, next time.Ti
 }
 
 func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
+	src.sr.AddLogTag("tick", tick)
+	ctx = src.sr.ResetAndAnnotateCtx(ctx)
+	// LBRebalancing is disabled, return.
+	if src.settings.LBRebalancingMode == int64(kvserver.LBRebalancingOff) {
+		return
+	}
 	switch src.rebalancerState.phase {
 	case rebalancerSleeping:
 		src.phaseSleep(ctx, tick, state)
@@ -217,6 +228,12 @@ func (src *storeRebalancerControl) checkPendingLeaseRebalance() bool {
 			src.rebalancerState.rctx,
 			src.rebalancerState.pendingTransfer,
 			src.rebalancerState.pendingTransferTarget,
+		)
+		// Update the storepooll state to reflect it's success.
+		src.allocator.StorePool.UpdateLocalStoresAfterLeaseTransfer(
+			src.rebalancerState.rctx.LocalDesc.StoreID,
+			src.rebalancerState.pendingTransferTarget.StoreID,
+			src.rebalancerState.pendingTransfer.QPS(),
 		)
 	}
 
@@ -304,6 +321,7 @@ func (src *storeRebalancerControl) checkPendingRangeRebalance() bool {
 			src.rebalancerState.rctx,
 			src.rebalancerState.pendingRelocate,
 			src.rebalancerState.pendingRelocateTargets,
+			src.rebalancerState.pendingRelocateExistingVoters,
 		)
 	}
 
@@ -335,6 +353,7 @@ func (src *storeRebalancerControl) applyRangeRebalance(
 	ticket := src.controller.Dispatch(ctx, tick, s, relocateOp)
 	src.rebalancerState.pendingRelocate = candidateReplica
 	src.rebalancerState.pendingRelocateTargets = voterTargets
+	src.rebalancerState.pendingRelocateExistingVoters = candidateReplica.Desc().Replicas().VoterDescriptors()
 	src.rebalancerState.pendingTicket = ticket
 }
 

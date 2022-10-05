@@ -230,3 +230,30 @@ func (g *zipfianGenerator) readKey() int64 {
 func (g *zipfianGenerator) rand() *rand.Rand {
 	return g.random
 }
+
+// TestingWorkloadSeed returns a seed to use for constructing a workload
+// generator in unit tests.
+func testingWorkloadSeed() int64 {
+	return 42
+}
+
+// TestCreateWorkloadGenerator creates a simple uniform workload generator that
+// will generate load events at the rate given. The read ratio is fixed to
+// 0.95.
+func TestCreateWorkloadGenerator(start time.Time, rate int, keySpan int64) Generator {
+	readRatio := 0.95
+	minWriteSize := 128
+	maxWriteSize := 256
+	workloadRate := float64(rate)
+	r := rand.New(rand.NewSource(testingWorkloadSeed()))
+
+	return NewRandomGenerator(
+		start,
+		testingWorkloadSeed(),
+		NewUniformKeyGen(keySpan, r),
+		workloadRate,
+		readRatio,
+		maxWriteSize,
+		minWriteSize,
+	)
+}

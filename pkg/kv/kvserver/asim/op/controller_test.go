@@ -85,7 +85,7 @@ func TestLeaseTransferOp(t *testing.T) {
 			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: tc.ranges + 1, 2: tc.ranges + 1, 3: tc.ranges + 1}, 3)
 			settings := config.DefaultSimulationSettings()
 			changer := state.NewReplicaChanger()
-			controller := NewController(changer, allocatorimpl.Allocator{}, settings)
+			controller := NewController(changer, allocatorimpl.Allocator{}, settings, 1 /* storeID ignored*/)
 
 			for i := 2; i <= tc.ranges+1; i++ {
 				s.TransferLease(state.RangeID(i), 1)
@@ -270,7 +270,7 @@ func TestRelocateRangeOp(t *testing.T) {
 			s := state.NewTestStateReplCounts(map[state.StoreID]int{1: 3, 2: 3, 3: 3, 4: 0, 5: 0, 6: 0}, 3)
 			changer := state.NewReplicaChanger()
 			allocator := s.MakeAllocator(state.StoreID(1))
-			controller := NewController(changer, allocator, settings)
+			controller := NewController(changer, allocator, settings, 1)
 
 			// Transfer the lease to store 1 for all ranges.
 			for i := 2; i < 4; i++ {
@@ -291,8 +291,8 @@ func TestRelocateRangeOp(t *testing.T) {
 			// Update the storepool for informing allocator decisions.
 			storeDescriptors := s.StoreDescriptors()
 			exchange.Put(state.OffsetTick(start, 0), storeDescriptors...)
-			for storeID := range s.Stores() {
-				s.UpdateStorePool(storeID, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(storeID)))
+			for _, store := range s.Stores() {
+				s.UpdateStorePool(store.StoreID(), exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(store.StoreID())))
 			}
 
 			results := map[int64]map[state.RangeID]rangeState{}
@@ -342,8 +342,8 @@ func TestRelocateRangeOp(t *testing.T) {
 						leaseholder: int64(leaseholderStore.StoreID()),
 						voters:      []int64{},
 					}
-					for storeID := range rng.Replicas() {
-						rState.voters = append(rState.voters, int64(storeID))
+					for _, replica := range rng.Replicas() {
+						rState.voters = append(rState.voters, int64(replica.StoreID()))
 					}
 					sort.Slice(rState.voters, func(i, j int) bool {
 						return rState.voters[i] < rState.voters[j]

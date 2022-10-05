@@ -15,8 +15,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type splitQueue struct {
@@ -33,6 +35,7 @@ func NewSplitQueue(
 	delay func() time.Duration,
 	splitThreshold int64,
 	start time.Time,
+	settings *config.SimulationSettings,
 ) RangeQueue {
 	return &splitQueue{
 		baseQueue: baseQueue{
@@ -40,6 +43,7 @@ func NewSplitQueue(
 			storeID:       storeID,
 			stateChanger:  stateChanger,
 			next:          start,
+			settings:      settings,
 		},
 		delay:          delay,
 		splitThreshold: splitThreshold,
@@ -49,6 +53,10 @@ func NewSplitQueue(
 // MaybeAdd proposes a range for being split. If it meets the criteria it is
 // enqueued.
 func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state state.State) bool {
+	if !sq.settings.SplitQueueEnabled {
+		return false
+	}
+
 	priority := sq.shouldSplit(sq.lastTick, replica.Range(), state)
 	if priority < 1 {
 		return false
@@ -70,6 +78,10 @@ func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state
 // FIFO order on ties. The tick currently only considers size based range
 // splitting.
 func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+	if !sq.settings.SplitQueueEnabled {
+		return
+	}
+
 	if sq.lastTick.After(sq.next) {
 		sq.next = sq.lastTick
 	}
@@ -101,7 +113,9 @@ func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			Leaseholder: sq.storeID,
 			SplitKey:    splitKey,
 			Wait:        sq.delay(),
+			Author:      sq.storeID,
 		}
+		log.Infof(ctx, "enqueuing split +%v", change)
 
 		if completeAt, ok := sq.stateChanger.Push(sq.next, &change); ok {
 			sq.next = completeAt

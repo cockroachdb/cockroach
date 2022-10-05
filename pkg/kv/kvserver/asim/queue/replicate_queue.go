@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,6 +36,7 @@ func NewReplicateQueue(
 	delay func(rangeSize int64, add bool) time.Duration,
 	allocator allocatorimpl.Allocator,
 	start time.Time,
+	settings *config.SimulationSettings,
 ) RangeQueue {
 	return &replicateQueue{
 		baseQueue: baseQueue{
@@ -42,6 +44,7 @@ func NewReplicateQueue(
 			storeID:       storeID,
 			stateChanger:  stateChanger,
 			next:          start,
+			settings:      settings,
 		},
 		delay:     delay,
 		allocator: allocator,
@@ -54,9 +57,13 @@ func NewReplicateQueue(
 func (rq *replicateQueue) MaybeAdd(
 	ctx context.Context, replica state.Replica, state state.State,
 ) bool {
+	if !rq.settings.ReplicateQueueEnabled {
+		return false
+	}
+
 	rng, ok := state.Range(replica.Range())
 	if !ok {
-		return false
+		panic("can't find range")
 	}
 
 	action, priority := rq.allocator.ComputeAction(ctx, rng.SpanConfig(), rng.Descriptor())
@@ -83,11 +90,16 @@ func (rq *replicateQueue) MaybeAdd(
 // TODO(kvoli,lidorcarmel): Support taking additional actions, beyond consider
 // rebalance.
 func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+	if !rq.settings.ReplicateQueueEnabled {
+		return
+	}
+
 	if rq.lastTick.After(rq.next) {
 		rq.next = rq.lastTick
 	}
+	rq.lastTick = tick
 
-	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
+	if !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
 		item := heap.Pop(rq).(*replicaItem)
 		if item == nil {
 			return
@@ -95,7 +107,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 
 		rng, ok := s.Range(state.RangeID(item.rangeID))
 		if !ok {
-			return
+			panic("unexpected no range found")
 		}
 
 		action, _ := rq.allocator.ComputeAction(ctx, rng.SpanConfig(), rng.Descriptor())
@@ -112,7 +124,6 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		}
 	}
 
-	rq.lastTick = tick
 }
 
 // considerRebalance simulates the logic of the replicate queue when given a
@@ -148,7 +159,23 @@ func (rq *replicateQueue) considerRebalance(
 		Add:     state.StoreID(add.StoreID),
 		Remove:  state.StoreID(remove.StoreID),
 		Wait:    rq.delay(rng.Size(), true),
+		Author:  rq.storeID,
 	}
+
+	rq.allocator.StorePool.UpdateLocalStoreAfterRebalance(
+		add.StoreID,
+		s.ReplicaLoad(rng.RangeID(),
+			rq.storeID).Load(),
+		roachpb.ADD_VOTER,
+	)
+
+	rq.allocator.StorePool.UpdateLocalStoreAfterRebalance(
+		remove.StoreID,
+		s.ReplicaLoad(rng.RangeID(),
+			rq.storeID).Load(),
+		roachpb.REMOVE_VOTER,
+	)
+
 	if completeAt, ok := rq.stateChanger.Push(tick, &change); ok {
 		rq.next = completeAt
 	}

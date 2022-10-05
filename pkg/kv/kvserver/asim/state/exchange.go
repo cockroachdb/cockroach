@@ -88,14 +88,20 @@ func (u *FixedDelayExchange) Put(tick time.Time, descs ...roachpb.StoreDescripto
 
 	for _, d := range descs {
 		desc := d
-		nextStoreDetail := storepool.StoreDetail{}
-		nextStoreDetail.Desc = &desc
-		nextStoreDetail.LastAvailable = tick
-		nextStoreDetail.LastUpdatedTime = tick
-		nextStoreDetail.Desc.Node = desc.Node
-
-		(*curInterval)[desc.StoreID] = &nextStoreDetail
+		nextStoreDetail := MakeStoreDetail(desc, tick)
+		(*curInterval)[desc.StoreID] = nextStoreDetail
 	}
+}
+
+// MakeStoreDetail wraps a store descriptor into a storepool StoreDetail at the
+// given tick.
+func MakeStoreDetail(desc roachpb.StoreDescriptor, tick time.Time) *storepool.StoreDetail {
+	detail := storepool.StoreDetail{}
+	detail.Desc = &desc
+	detail.LastAvailable = tick
+	detail.LastUpdatedTime = tick
+	detail.Desc.Node = desc.Node
+	return &detail
 }
 
 // Get retrieves a store's view of the state exchange at tick t. In this
