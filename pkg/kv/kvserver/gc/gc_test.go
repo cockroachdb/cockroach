@@ -142,6 +142,7 @@ func TestIntentAgeThresholdSetting(t *testing.T) {
 	}
 	gcTTL := time.Second
 	snap := eng.NewSnapshot()
+	defer snap.Close()
 	nowTs := hlc.Timestamp{
 		WallTime: now.Nanoseconds(),
 	}
@@ -202,6 +203,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 	}
 	gcTTL := time.Second
 	snap := eng.NewSnapshot()
+	defer snap.Close()
 	nowTs := hlc.Timestamp{
 		WallTime: now.Nanoseconds(),
 	}
