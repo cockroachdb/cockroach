@@ -1,0 +1,46 @@
+--- ../builder.sh	2022-10-05 01:33:51.047070762 +0000
++++ builder.sh	2022-10-05 02:30:57.369597701 +0000
+@@ -2,8 +2,8 @@
+ 
+ set -euo pipefail
+ 
+-image=cockroachdb/builder
+-version=20220907-174613
++image=gcr.io/cockroach-testeng-infra/cockroachdb/builder
++version=antithesis-latest
+ 
+ function init() {
+   docker build --tag="${image}" "$(dirname "${0}")/builder"
+@@ -52,7 +52,7 @@
+ fi
+ 
+ # Absolute path to the toplevel cockroach directory.
+-cockroach_toplevel=$(dirname "$(cd "$(dirname "${0}")"; pwd)")
++cockroach_toplevel=$(dirname "$(cd "../"; pwd)")
+ 
+ # Ensure the artifact sub-directory always exists and redirect
+ # temporary file creation to it, so that CI always picks up temp files
+@@ -137,14 +137,19 @@
+ fi
+ vols="${vols} --volume=${cockroach_toplevel}:/go/src/github.com/cockroachdb/cockroach${cached_volume_mode}"
+ 
++#
++# NOTE: neither of these directories seem required for building the artifacts for Antithesis POC.
++#       Their instrumentor crashes due to the resulting hardlinks which span docker and host filesystems.
++#
++
+ # If ${cockroach_toplevel}/bin doesn't exist on the host, Docker creates it as
+ # root unless it already exists. Create it first as the invoking user.
+ # (This is a bug in the Docker daemon that only occurs when bind-mounted volumes
+ # are nested, as they are here.)
+-mkdir -p "${cockroach_toplevel}"/bin{.docker_amd64,}
+-vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin${delegated_volume_mode}"
+-mkdir -p "${cockroach_toplevel}"/lib{.docker_amd64,}
+-vols="${vols} --volume=${cockroach_toplevel}/lib.docker_amd64:/go/src/github.com/cockroachdb/cockroach/lib${delegated_volume_mode}"
++#mkdir -p "${cockroach_toplevel}"/bin{.docker_amd64,}
++#vols="${vols} --volume=${cockroach_toplevel}/bin.docker_amd64:/go/src/github.com/cockroachdb/cockroach/bin${delegated_volume_mode}"
++#mkdir -p "${cockroach_toplevel}"/lib{.docker_amd64,}
++#vols="${vols} --volume=${cockroach_toplevel}/lib.docker_amd64:/go/src/github.com/cockroachdb/cockroach/lib${delegated_volume_mode}"
+ 
+ mkdir -p "${gocache}"/docker/bin
+ vols="${vols} --volume=${gocache}/docker/bin:/go/bin${delegated_volume_mode}"

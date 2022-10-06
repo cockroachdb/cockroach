@@ -11,6 +11,7 @@ pkg/testutils
 pkg/ui
 pkg/util/buildutil
 pkg/util/envutil
+pkg/geo
 
 # Other dirs to exclude
 bin
