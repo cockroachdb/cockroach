@@ -16,9 +16,8 @@ EXTRA_TARGETS=
 if [ "$CONFIG" == "crosslinux" ]
 then
     DOC_TARGETS=$(grep '^//' docs/generated/bazel_targets.txt)
-    GO_TARGETS=$(grep -v '^#' build/bazelutil/checked_in_genfiles.txt | cut -d'|' -f1)
     BINARY_TARGETS="@com_github_cockroachdb_go_test_teamcity//:go-test-teamcity //pkg/cmd/dev //pkg/cmd/workload"
-    EXTRA_TARGETS="$DOC_TARGETS $GO_TARGETS $BINARY_TARGETS"
+    EXTRA_TARGETS="$DOC_TARGETS $BINARY_TARGETS"
 fi
 
 # Extra targets to build on Unix only.
