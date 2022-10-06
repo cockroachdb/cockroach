@@ -660,42 +660,7 @@ func Start(
 	if err != nil {
 		return err
 	}
-	if err := c.Start(ctx, l, startOpts); err != nil {
-		return err
-	}
-
-	if startOpts.ScheduleBackups {
-		if err := createBackupSchedule(context.Background(), l, c.Name, c.IsLocal(), c.Secure); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// createBackupSchedule creates a cluster backup schedule which runs an incremental every 15
-// minutes and a full every hour
-func createBackupSchedule(
-	ctx context.Context, l *logger.Logger, clusterName string, isLocal bool, secure bool,
-) error {
-	externalStoragePath := `gs://cockroachdb-backup-testing`
-
-	if isLocal {
-		externalStoragePath = `nodelocal://1`
-	}
-	scheduleBackupCoordinator := clusterName + ":1"
-	l.Printf("%s: creating backup schedule", scheduleBackupCoordinator)
-
-	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%v`,
-		externalStoragePath, clusterName, time.Now().UnixNano())
-
-	createScheduleCmd := fmt.Sprintf(`-e 
-CREATE SCHEDULE FOR BACKUP INTO '%s' 
-RECURRING '*/15 * * * *' 
-FULL BACKUP '@hourly' 
-WITH SCHEDULE OPTIONS first_run = 'now'`,
-		collectionPath)
-	return SQL(ctx, l, scheduleBackupCoordinator, secure, []string{createScheduleCmd})
+	return c.Start(ctx, l, startOpts)
 }
 
 // Monitor monitors the status of cockroach nodes in a cluster.

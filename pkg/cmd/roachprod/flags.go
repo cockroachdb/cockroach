@@ -190,7 +190,8 @@ func initFlags() {
 	startCmd.Flags().IntVar(&startOpts.StoreCount,
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
 	startCmd.Flags().BoolVar(&startOpts.ScheduleBackups,
-		"schedule-backups", startOpts.ScheduleBackups, "create a cluster backup schedule once the cluster has started")
+		"schedule-backups", startOpts.ScheduleBackups,
+		"create a cluster backup schedule once the cluster has started (full backup hourly, incremental every 15 mins)")
 
 	startTenantCmd.Flags().StringVarP(&hostCluster,
 		"host-cluster", "H", "", "host cluster")
