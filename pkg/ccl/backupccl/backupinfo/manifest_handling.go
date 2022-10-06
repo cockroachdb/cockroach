@@ -10,7 +10,6 @@ package backupinfo
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -55,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	gzip "github.com/klauspost/compress/gzip"
 )
 
 // Files that may appear in a backup directory.
@@ -189,7 +189,10 @@ func DecompressData(ctx context.Context, mem *mon.BoundAccount, descBytes []byte
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
+	defer func() {
+		// Swallow any errors, this is only a read operation.
+		_ = r.Close()
+	}()
 	return mon.ReadAll(ctx, ioctx.ReaderAdapter(r), mem)
 }
 
