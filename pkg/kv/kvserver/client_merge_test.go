@@ -4670,6 +4670,7 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 85372)
 
 	skip.UnderShort(t, "this test sleeps for a few seconds")
 
