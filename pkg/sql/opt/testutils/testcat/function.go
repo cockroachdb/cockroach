@@ -92,6 +92,8 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		tc.udfs = make(map[string]*tree.ResolvedFunctionDefinition)
 	}
 
+	// TODO(mgartner): Consider setting Class and CompositeInsensitive for
+	// overloads.
 	overload := &tree.Overload{
 		Types:             argTypes,
 		ReturnType:        tree.FixedReturnType(retType),
@@ -100,12 +102,8 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		CalledOnNullInput: calledOnNullInput,
 	}
 	prefixedOverload := tree.MakeQualifiedOverload("public", overload)
-	def := &tree.ResolvedFunctionDefinition{
-		Name: name,
-		// TODO(mgartner): Consider setting Class and CompositeInsensitive fo
-		// overloads.
-		Overloads: []tree.QualifiedOverload{prefixedOverload},
-	}
+	def := tree.NewResolvedFunctionDefinition(name, 1)
+	def.Overloads = append(def.Overloads, prefixedOverload)
 	tc.udfs[name] = def
 }
 
@@ -171,7 +169,7 @@ func formatFunction(fn *tree.ResolvedFunctionDefinition) string {
 	if len(fn.Overloads) != 1 {
 		panic(fmt.Errorf("functions with multiple overloads not supported"))
 	}
-	o := fn.Overloads[0]
+	o := fn.Overloads[0].(*tree.QualifiedOverload)
 	tp := treeprinter.New()
 	nullStr := ""
 	if !o.CalledOnNullInput {

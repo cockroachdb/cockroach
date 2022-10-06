@@ -490,10 +490,7 @@ func (desc *immutable) GetResolvedFuncDefinition(
 	if !found {
 		return nil, false
 	}
-	funcDef := &tree.ResolvedFunctionDefinition{
-		Name:      name,
-		Overloads: make([]*tree.QualifiedOverload, 0, len(funcDescPb.Overloads)),
-	}
+	funcDef := tree.NewResolvedFunctionDefinition(name, len(funcDescPb.Overloads))
 	for i := range funcDescPb.Overloads {
 		retType := funcDescPb.Overloads[i].ReturnType
 		overload := &tree.Overload{

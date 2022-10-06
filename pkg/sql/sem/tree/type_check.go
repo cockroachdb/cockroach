@@ -1072,11 +1072,11 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
-	overloadImpls := make([]overloadImpl, 0, len(def.Overloads))
-	for i := range def.Overloads {
-		overloadImpls = append(overloadImpls, def.Overloads[i])
-	}
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, overloadImpls, false, expr.Exprs...)
+	//overloadImpls := make([]overloadImpl, 0, len(def.Overloads))
+	//for i := range def.Overloads {
+	//	overloadImpls = append(overloadImpls, def.Overloads[i])
+	//}
+	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, def.Overloads, false, expr.Exprs...)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
