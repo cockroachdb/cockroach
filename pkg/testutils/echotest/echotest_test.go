@@ -30,8 +30,8 @@ func TestWalk(t *testing.T) {
 		{name: "foo"},
 		{name: "bar"},
 	} {
-		t.Run(test.name, w.Do(t, test.name, func(t *testing.T, path string) {
-			Require(t, fmt.Sprintf("hello, %s", test.name), path)
+		t.Run(test.name, w.Do(t, test.name, func(t *testing.T) string {
+			return fmt.Sprintf("hello, %s", test.name)
 		}))
 	}
 

@@ -12,8 +12,10 @@ package echotest
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -57,6 +59,9 @@ type Walker struct {
 	dir   string
 	files map[string]struct{} // base file names
 
+	// populate toggles creation of missing files and removal of now unreferenced
+	// ones. This is determined based on datadriven's --rewrite flag.
+	populate     bool
 	missingFiles []string
 }
 
@@ -83,9 +88,16 @@ func Walk(t T, dir string) Walker {
 		base := filepath.Base(f)
 		files[base] = struct{}{}
 	}
+	var createMissing bool
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "-rewrite") || strings.HasPrefix(arg, "--rewrite") {
+			createMissing = true
+		}
+	}
 	return Walker{
-		dir:   dir,
-		files: files,
+		dir:      dir,
+		files:    files,
+		populate: createMissing,
 	}
 }
 
@@ -109,10 +121,10 @@ func maybeHelper(t T) func() {
 // Do should be passed to `t.Run` to run an individual test case by the given
 // name, like so:
 //
-//	t.Run(test.name, w.Do(t, test.name, func(t *testing.T, path string) {
-//	  Require(t, fmt.Sprintf("hello, %s", test.name), path)
+//	t.Run(test.name, w.Do(t, test.name, func(t *testing.T) string {
+//	  return fmt.Sprintf("hello, %s", test.name)
 //	}))
-func (w *Walker) Do(t T, name string, invoke func(t *testing.T, path string)) func(t *testing.T) {
+func (w *Walker) Do(t T, name string, invoke func(t *testing.T) string) func(t *testing.T) {
 	maybeHelper(t)()
 	nname := regexp.MustCompile(`[^0-9a-zA-Z-]+`).ReplaceAllLiteralString(name, "_")
 	path := filepath.Join(w.dir, nname)
@@ -128,7 +140,8 @@ func (w *Walker) Do(t T, name string, invoke func(t *testing.T, path string)) fu
 	// invoked regardless of -test.run flag.
 	delete(w.files, nname)
 	return func(t *testing.T) {
-		invoke(t, path)
+		t.Helper()
+		Require(t, invoke(t), path)
 	}
 }
 
@@ -138,17 +151,39 @@ func (w *Walker) Do(t T, name string, invoke func(t *testing.T, path string)) fu
 // error via the provided T.
 func (w *Walker) Check(t T) {
 	if len(w.files) > 0 {
+		var removedFiles []string
 		var rm = "rm "
 		for f := range w.files {
+			if w.populate {
+				if err := os.Remove(filepath.Join(w.dir, f)); err != nil {
+					t.Errorf("error removing unused testdata file %s: %s", f, err)
+					t.FailNow()
+				}
+				removedFiles = append(removedFiles, f)
+			}
 			rm += filepath.Join(w.dir, f) + " "
 		}
-		t.Errorf("some test files are not referenced by a test case, to remove them use:\n%s", rm)
+		if w.populate {
+			t.Errorf("deleted the following unused test files: %s", removedFiles)
+		} else {
+			t.Errorf("some test files are not referenced by a test case, to remove them re-run with --rewrite or use:\n%s", rm)
+		}
 	}
 	if len(w.missingFiles) > 0 {
 		mk := fmt.Sprintf(`mkdir -p %[1]q && cd %[1]q && echo 'echo'`, w.dir)
 		for _, f := range w.missingFiles {
+			if w.populate {
+				if err := os.WriteFile(filepath.Join(w.dir, f), []byte("echo\n"), 0644); err != nil {
+					t.Errorf("unable to create missing file %s: %s", f, err)
+					t.FailNow()
+				}
+			}
 			mk += fmt.Sprintf(" \\\n  | tee %q", f)
 		}
-		t.Errorf("some test cases have no test file, to initialize them use the below snippet, then re-run with -rewrite:\n%s", mk)
+		if w.populate {
+			t.Errorf("created the following missing files, please re-run with --rewrite to populate them: %s", w.missingFiles)
+		} else {
+			t.Errorf("some test cases have no test file, to initialize them either re-run with `--rewrite` twice, OR use the below snippet, then re-run with -rewrite:\n%s", mk)
+		}
 	}
 }
