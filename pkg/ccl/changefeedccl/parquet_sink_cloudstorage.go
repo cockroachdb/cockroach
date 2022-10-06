@@ -71,7 +71,7 @@ func (s *parquetCloudStorageSink) EmitResolvedTimestamp(
 }
 
 func (pqcs *parquetCloudStorageSink) Flush(ctx context.Context) error {
-	return nil
+	return pqcs.baseCloudStorageSink.Flush(ctx)
 }
 
 func (pqcs *parquetCloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
@@ -118,7 +118,6 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	// 	if err != nil {
 	// 		return err
 	// 	}
-
 	// 	file.pqww = pqww
 	// } else {
 	// 	pqww = file.pqww

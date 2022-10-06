@@ -1095,6 +1095,8 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 					return m, nil
 				case changefeedbase.OptFormatCSV:
 					return m, nil
+				case changefeedbase.OptFormatParquet:
+					return m, nil
 				default:
 					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
 				}
