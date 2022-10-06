@@ -27,7 +27,7 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
       │    │    ├── BACKFILL_ONLY → ABSENT      SecondaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
-      │    │    └── DELETE_ONLY   → ABSENT      TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 4, SourceIndexID: 2}
+      │    │    └── DELETE_ONLY   → ABSENT      TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
       │    └── 14 Mutation operations
       │         ├── SetIndexName {"IndexID":1,"Name":"tbl_pkey","TableID":106}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":106}
