@@ -203,6 +203,7 @@ func checkRaftLog(
 		"failed to put test value")
 	reader := <-snapshots
 	assertRaftLog(t, ctx, reader)
+	defer reader.Close()
 }
 
 func requireContainsDescriptor(

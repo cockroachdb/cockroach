@@ -32,6 +32,9 @@ user testuser
 statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
 SET CLUSTER SETTING sql.defaults.default_int_size = 4
 
+statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'version'
+SET CLUSTER SETTING version = '22.2'
+
 statement error only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster setting 'sql.defaults.default_int_size'
 SHOW CLUSTER SETTING sql.defaults.default_int_size
 
@@ -55,6 +58,13 @@ query I
 SHOW CLUSTER SETTING sql.defaults.default_int_size
 ----
 4
+
+# Users with MODIFYCLUSTERSETTING should be able to see non sql.defaults settings.
+
+query B
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+----
+true
 
 query TT
 SELECT variable, value FROM [SHOW CLUSTER SETTINGS]
@@ -87,6 +97,16 @@ statement ok
 ALTER USER testuser VIEWCLUSTERSETTING
 
 user testuser
+
+# Users with VIEWCLUSTERSETTING should be able to see non sql.defaults settings but not modify.
+
+statement error pq: only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'diagnostics.reporting.enabled'
+SET CLUSTER SETTING diagnostics.reporting.enabled = false
+
+query B
+SHOW CLUSTER SETTING diagnostics.reporting.enabled
+----
+true
 
 statement error only users with the MODIFYCLUSTERSETTING privilege are allowed to set cluster setting 'sql.defaults.default_int_size'
 SET CLUSTER SETTING sql.defaults.default_int_size = 4

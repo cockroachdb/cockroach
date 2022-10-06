@@ -1603,9 +1603,6 @@ CREATE TABLE crdb_internal.cluster_settings (
 			}
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
-			if !hasAdmin && settings.AdminOnly(k) {
-				continue
-			}
 			setting, _ := settings.Lookup(
 				k, settings.LookupForLocalAccess, p.ExecCfg().Codec.ForSystemTenant(),
 			)
