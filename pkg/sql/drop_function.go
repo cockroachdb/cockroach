@@ -131,7 +131,7 @@ func (p *planner) matchUDF(
 			fnDef.Name, ol.Signature(true /*Simplify*/),
 		)
 	}
-	return &ol, nil
+	return ol, nil
 }
 
 func (p *planner) checkPrivilegesForDropFunction(
