@@ -438,6 +438,20 @@ func idleInSessionTimeoutVarSet(ctx context.Context, m sessionDataMutator, s str
 	return nil
 }
 
+func transactionTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
+	timeout, err := validateTimeoutVar(
+		m.data.GetIntervalStyle(),
+		s,
+		"transaction_timeout",
+	)
+	if err != nil {
+		return err
+	}
+
+	m.SetTransactionTimeout(timeout)
+	return nil
+}
+
 func idleInTransactionSessionTimeoutVarSet(
 	ctx context.Context, m sessionDataMutator, s string,
 ) error {

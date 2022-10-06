@@ -1218,6 +1218,18 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+	// CockroachDB extension.
+	`transaction_timeout`: {
+		GetStringVal: makeTimeoutVarGetter(`transaction_timeout`),
+		Set:          transactionTimeoutVarSet,
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			ms := evalCtx.SessionData().TransactionTimeout.Nanoseconds() / int64(time.Millisecond)
+			return strconv.FormatInt(ms, 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(0, 10)
+		},
+	},
 
 	// This is read-only in Postgres also.
 	// See https://www.postgresql.org/docs/14/sql-show.html and
