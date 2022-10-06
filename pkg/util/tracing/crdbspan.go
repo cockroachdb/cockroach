@@ -592,8 +592,9 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 
 	var result Trace
 	var childrenMetadata map[string]tracingpb.OperationMetadata
-	{
+	func() {
 		s.mu.Lock()
+		defer s.mu.Unlock()
 
 		// Make a clone of the finished children, to avoid working on and returning
 		// a trace that aliases s.mu.recording.finishedChildren. We're going to
@@ -631,9 +632,7 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 				rollupChildrenMetadata(childrenMetadata, openChildRecording.Root.ChildrenMetadata)
 			}
 		}
-	}
-
-	s.mu.Unlock()
+	}()
 
 	// Copy over the OperationMetadata collected from s' children into the root of
 	// the recording.
