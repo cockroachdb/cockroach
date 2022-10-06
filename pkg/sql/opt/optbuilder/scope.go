@@ -1548,9 +1548,6 @@ func (s *scope) replaceCount(
 				e := &cpy
 				e.Exprs = tree.Exprs{tree.DBoolTrue}
 
-				// TODO(mgartner): What happens if a user defines a UDF named
-				// "count"? We might need to resolve the function first, not
-				// just rely on string equality to "count" above.
 				newDef, err := e.Func.Resolve(s.builder.ctx, s.builder.semaCtx.SearchPath, nil /* resolver */)
 				if err != nil {
 					panic(err)
@@ -1577,9 +1574,6 @@ func (s *scope) replaceCount(
 			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.Any); err != nil {
 				panic(err)
 			}
-			// TODO(mgartner): What happens if a user defines a UDF named
-			// "count"? We might need to resolve the function first, not just
-			// rely on string equality to "count" above.
 			newDef, err := e.Func.Resolve(s.builder.ctx, s.builder.semaCtx.SearchPath, nil /* resolver */)
 			if err != nil {
 				panic(err)
