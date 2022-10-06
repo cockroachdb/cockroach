@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -533,6 +534,75 @@ func TestTrim(t *testing.T) {
 			trace.trim(trace.NumSpans - tc.trimSpans)
 			require.True(t, tc.exp.equalToTrace(trace), "resulting trace: %s", &trace)
 		})
+	}
+}
+
+// Randomized test for trace trimming. Random traces are constructed and then
+// trimmed. The random traces include both finished and open spans; when
+// collecting a recording, the open spans are added to it in a different way
+// from the previously-finished spans.
+func TestTrimRandom(t *testing.T) {
+	rnd, _ := randutil.NewTestRand()
+	tr := NewTracer()
+	for i := 0; i < 1000; i++ {
+		root, toFinish := genTrace(tr, rnd, nil, 1 /* childNum */, 1 /* level */)
+		trace := root.i.crdb.GetRecording(tracingpb.RecordingVerbose, false /* finishing */)
+		// Now that we have collected the recording, finish all the spans that were
+		// left open.
+		for _, s := range toFinish {
+			s.Finish()
+		}
+		// Check that finishing the spans did not mess up the recording we got
+		// previously.
+		trace.checkNumSpans(t)
+		for j := 1; j <= trace.NumSpans; j++ {
+			traceCopy := trace.PartialClone()
+			traceCopy.trim(j)
+			require.Equal(t, j, traceCopy.NumSpans)
+		}
+	}
+}
+
+// genTrace generates a trace recursively.
+func genTrace(
+	tr *Tracer, rnd *rand.Rand, parent *Span, childNum int, level int,
+) (_ *Span, unfinished []*Span) {
+	var name string
+	if level > 1 {
+		name = parent.OperationName() + "." + strconv.Itoa(childNum)
+	} else {
+		name = "root"
+	}
+	root := tr.StartSpan(name, WithParent(parent), WithRecording(tracingpb.RecordingVerbose))
+	if level < 5 {
+		children := rnd.Intn(5)
+		for i := 0; i < children; i++ {
+			_, toFinish := genTrace(tr, rnd, root, i+1, level+1)
+			unfinished = append(unfinished, toFinish...)
+		}
+	}
+
+	if level != 1 {
+		if rnd.Intn(2) == 1 {
+			root.Finish()
+		} else {
+			unfinished = append(unfinished, root)
+		}
+		return nil, unfinished
+	}
+	return root, unfinished
+}
+
+// checkNumSpans recursively checks that the number of spans under each trace
+// node is correct. It panics if it finds a discrepancy.
+func (t *Trace) checkNumSpans(test *testing.T) {
+	numSpans := 1
+	for i := range t.Children {
+		t.Children[i].checkNumSpans(test)
+		numSpans += t.Children[i].NumSpans
+	}
+	if numSpans != t.NumSpans {
+		test.Fatalf("%s: expected %d spans, got %d", t.Root.Operation, numSpans, t.NumSpans)
 	}
 }
 
