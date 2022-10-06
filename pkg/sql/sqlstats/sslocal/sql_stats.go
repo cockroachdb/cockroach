@@ -67,7 +67,7 @@ type SQLStats struct {
 
 	knobs *sqlstats.TestingKnobs
 
-	insights insights.Writer
+	insights insights.WriterProvider
 }
 
 func newSQLStats(
@@ -76,7 +76,7 @@ func newSQLStats(
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
 	maxMemBytesHist *metric.Histogram,
-	insightsWriter insights.Writer,
+	insightsWriter insights.WriterProvider,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
@@ -134,7 +134,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.insights,
+		s.insights(false /* internal */),
 	)
 	s.mu.apps[appName] = a
 	return a
