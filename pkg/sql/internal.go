@@ -270,7 +270,7 @@ func (ie *InternalExecutor) initConnEx(
 		// If this is already an "internal app", don't put more prefix.
 		appStatsBucketName = sd.ApplicationName
 	}
-	applicationStats := ie.s.sqlStats.GetApplicationStats(appStatsBucketName)
+	applicationStats := ie.s.sqlStats.GetApplicationStats(appStatsBucketName, true /* internal */)
 
 	sds := sessiondata.NewStack(sd)
 	sdMutIterator := ie.s.makeSessionDataMutatorIterator(sds, nil /* sessionDefaults */)
