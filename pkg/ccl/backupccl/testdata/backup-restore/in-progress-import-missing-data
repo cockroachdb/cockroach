@@ -156,6 +156,18 @@ SELECT count(*) FROM d.goodfoo;
 ----
 3
 
+# Create a view to ensure the restore checker passes even though no spans are introduced for the
+# view.
+exec-sql
+CREATE VIEW d.silly_view (foo_count)
+AS SELECT count(*)
+FROM d.foo;
+----
+
+query-sql
+SELECT * FROM d.silly_view;
+----
+0
 
 # Because BackupRestoreTestingKnobs.SkipDescriptorChangeIntroduction is turned on,
 # this backup will be unable to introduce foo, foofoo, and goodfoo.
