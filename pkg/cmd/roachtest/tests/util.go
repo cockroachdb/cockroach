@@ -121,12 +121,14 @@ func SetAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, en
 			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
 		}
 	}
+	/* TODO(sarkesian): REMOVE COMMENT - only commented because this setting doesn't exist on <= v22.1
 	if !enabled {
 		if _, err := db.ExecContext(
 			ctx, "SET CLUSTER SETTING admission.kv.pause_replication_io_threshold = 0.0"); err != nil {
 			t.Fatalf("failed to set admission control to %t: %v", enabled, err)
 		}
 	}
+	*/
 }
 
 // maybeUseBuildWithEnabledAssertions stages the cockroach-short binary with

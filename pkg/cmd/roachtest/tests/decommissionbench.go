@@ -39,10 +39,11 @@ import (
 )
 
 const (
-	defaultTimeout            = 2 * time.Hour
+	defaultTimeout            = 4 * time.Hour
 	envDecommissionNoSkipFlag = "ROACHTEST_DECOMMISSION_NOSKIP"
 	envDecommissionGrafana    = "ROACHTEST_DECOMMISSION_GRAFANA"
 	envDecommissionGrafanaURL = "ROACHTEST_DECOMMISSION_GRAFANA_URL"
+	envDecommissionPredVer    = "ROACHTEST_DECOMMISSION_PREDVER"
 
 	// Metrics for recording and sending to roachperf.
 	decommissionMetric = "decommission"
@@ -369,7 +370,20 @@ func setupDecommissionBench(
 	workloadNode, pinnedNode int,
 	importCmd string,
 ) {
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	predVer, err := PredecessorVersion(*t.BuildVersion())
+	if err != nil {
+		t.Fatal(err)
+	}
+	usePredVer := os.Getenv(envDecommissionPredVer) != ""
+	if usePredVer {
+		t.L().Printf("Staging version v%s", predVer)
+		if err := c.Stage(ctx, t.L(), "release", "v"+predVer, "", c.All()); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+	}
+
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	for i := 1; i <= benchSpec.nodes; i++ {
 		startOpts := option.DefaultStartOpts()
@@ -904,7 +918,7 @@ func runSingleDecommission(
 
 	if drainFirst {
 		h.t.Status(fmt.Sprintf("draining node%d", target))
-		if err := h.c.RunE(ctx, h.c.Node(target), "./cockroach node drain --self --insecure"); err != nil {
+		if err := h.c.RunE(ctx, h.c.Node(target), "./cockroach node drain --insecure"); err != nil {
 			return err
 		}
 	}
