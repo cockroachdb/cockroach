@@ -195,15 +195,16 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		if !descriptorIsVisible(schemaDesc, true /* allowAdding */) {
 			continue
 		}
-		// TODO(arul): Ideally this should be the fully qualified name of the schema,
-		// but at the time of writing there doesn't seem to be a clean way of doing
-		// this.
 		if _, ok := userNames[schemaDesc.GetPrivileges().Owner()]; ok {
+			sn, err := getSchemaNameFromSchemaDescriptor(lCtx, schemaDesc)
+			if err != nil {
+				return err
+			}
 			userNames[schemaDesc.GetPrivileges().Owner()] = append(
 				userNames[schemaDesc.GetPrivileges().Owner()],
 				objectAndType{
 					ObjectType: privilege.Schema,
-					ObjectName: schemaDesc.GetName(),
+					ObjectName: sn.String(),
 				})
 		}
 
@@ -301,7 +302,12 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			if dependentObjects[i].ObjectName != dependentObjects[j].ObjectName {
 				return dependentObjects[i].ObjectName < dependentObjects[j].ObjectName
 			}
-
+			if dependentObjects[j].ErrorMessage == nil {
+				return false
+			}
+			if dependentObjects[i].ErrorMessage == nil {
+				return true
+			}
 			return dependentObjects[i].ErrorMessage.Error() < dependentObjects[j].ErrorMessage.Error()
 		})
 		var hints []string
