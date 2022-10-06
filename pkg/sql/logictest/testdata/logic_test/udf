@@ -637,6 +637,70 @@ test           public         100137       test_priv_f1()      root     EXECUTE 
 test           public         100138       test_priv_f2(int8)  root     EXECUTE         true
 test           test_priv_sc1  100139       test_priv_f3()      root     EXECUTE         true
 
+query TTTTTT colnames
+SHOW FUNCTIONS
+----
+schema_name    function_name  result_data_type  argument_data_types  function_type  volatility
+public         a              int8              int8                 func           volatile
+public         b              int8              int8                 func           volatile
+public         c              int8              int8, int8           func           volatile
+public         d              int4              int2                 func           volatile
+public         f              int8              notmyworkday         func           immutable
+public         f_no_ref       int8              int8                 func           immutable
+public         proc_f         int8              int8                 func           volatile
+public         proc_f         text              text, int8           func           immutable
+public         test_priv_f1   int8              ·                    func           volatile
+public         test_priv_f2   int8              int8                 func           volatile
+public         test_tbl_f     int8              ·                    func           immutable
+public         test_vf_f      text              ·                    func           volatile
+public         test_vf_g      text              ·                    func           volatile
+sc             proc_f_2       text              text                 func           volatile
+test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
+
+query TTTTTT colnames
+SHOW FUNCTIONS FROM public
+----
+schema_name  function_name  result_data_type  argument_data_types  function_type  volatility
+public       a              int8              int8                 func           volatile
+public       b              int8              int8                 func           volatile
+public       c              int8              int8, int8           func           volatile
+public       d              int4              int2                 func           volatile
+public       f              int8              notmyworkday         func           immutable
+public       f_no_ref       int8              int8                 func           immutable
+public       proc_f         int8              int8                 func           volatile
+public       proc_f         text              text, int8           func           immutable
+public       test_priv_f1   int8              ·                    func           volatile
+public       test_priv_f2   int8              int8                 func           volatile
+public       test_tbl_f     int8              ·                    func           immutable
+public       test_vf_f      text              ·                    func           volatile
+public       test_vf_g      text              ·                    func           volatile
+
+query TTTTTT colnames
+SHOW FUNCTIONS FROM test_priv_sc1
+----
+schema_name    function_name  result_data_type  argument_data_types  function_type  volatility
+test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
+
+query TTTTTT colnames
+SHOW FUNCTIONS FROM test
+----
+schema_name    function_name  result_data_type  argument_data_types  function_type  volatility
+public         a              int8              int8                 func           volatile
+public         b              int8              int8                 func           volatile
+public         c              int8              int8, int8           func           volatile
+public         d              int4              int2                 func           volatile
+public         f              int8              notmyworkday         func           immutable
+public         f_no_ref       int8              int8                 func           immutable
+public         proc_f         int8              int8                 func           volatile
+public         proc_f         text              text, int8           func           immutable
+public         test_priv_f1   int8              ·                    func           volatile
+public         test_priv_f2   int8              int8                 func           volatile
+public         test_tbl_f     int8              ·                    func           immutable
+public         test_vf_f      text              ·                    func           volatile
+public         test_vf_g      text              ·                    func           volatile
+sc             proc_f_2       text              text                 func           volatile
+test_priv_sc1  test_priv_f3   int8              ·                    func           volatile
+
 statement ok
 GRANT EXECUTE ON FUNCTION test_priv_f1(), test_priv_f2(int), test_priv_sc1.test_priv_f3 TO udf_test_user WITH GRANT OPTION;
 

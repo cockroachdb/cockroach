@@ -439,6 +439,20 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowFunctions represents a SHOW FUNCTIONS statement.
+type ShowFunctions struct {
+	ObjectNamePrefix
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowFunctions) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW FUNCTIONS")
+	if node.ExplicitSchema {
+		ctx.WriteString(" FROM ")
+		ctx.FormatNode(&node.ObjectNamePrefix)
+	}
+}
+
 // ShowTransactions represents a SHOW TRANSACTIONS statement
 type ShowTransactions struct {
 	All     bool

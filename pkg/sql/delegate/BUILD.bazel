@@ -15,6 +15,7 @@ go_library(
         "show_enums.go",
         "show_full_table_scans.go",
         "show_function.go",
+        "show_functions.go",
         "show_grants.go",
         "show_jobs.go",
         "show_partitions.go",

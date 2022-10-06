@@ -216,6 +216,7 @@ FILES = [
     "show_default_privileges_stmt",
     "show_enums",
     "show_full_scans",
+    "show_functions_stmt",
     "show_grants_stmt",
     "show_indexes_stmt",
     "show_jobs",
