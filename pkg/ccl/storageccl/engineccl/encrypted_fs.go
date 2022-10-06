@@ -294,16 +294,16 @@ func (e *encryptionStatsHandler) GetKeyIDFromSettings(settings []byte) (string, 
 
 // init initializes function hooks used in non-CCL code.
 func init() {
-	storage.NewEncryptedEnvFunc = newEncryptedEnv
+	storage.NewEncryptedEnvFunc = NewEncryptedEnv
 	storage.CanRegistryElideFunc = canRegistryElide
 }
 
-// newEncryptedEnv creates an encrypted environment and returns the vfs.FS to use for reading and
+// NewEncryptedEnv creates an encrypted environment and returns the vfs.FS to use for reading and
 // writing data. The optionBytes is a binary serialized baseccl.EncryptionOptions, so that non-CCL
 // code does not depend on CCL code.
 //
 // See the comment at the top of this file for the structure of this environment.
-func newEncryptedEnv(
+func NewEncryptedEnv(
 	fs vfs.FS, fr *storage.PebbleFileRegistry, dbDir string, readOnly bool, optionBytes []byte,
 ) (*storage.EncryptionEnv, error) {
 	options := &baseccl.EncryptionOptions{}

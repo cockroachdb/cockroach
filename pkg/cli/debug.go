@@ -1394,6 +1394,8 @@ func init() {
 
 	DebugCmd.AddCommand(debugJobTraceFromClusterCmd)
 
+	DebugCmd.AddCommand(earCmd)
+
 	f := debugSyncBenchCmd.Flags()
 	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
 		"number of concurrent writers")
