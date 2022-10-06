@@ -26,6 +26,10 @@ func (s *statusServer) ProblemRanges(
 ) (*serverpb.ProblemRangesResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
 
+	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
 	response := &serverpb.ProblemRangesResponse{
 		NodeID:           s.gossip.NodeID.Get(),
 		ProblemsByNodeID: make(map[roachpb.NodeID]serverpb.ProblemRangesResponse_NodeProblems),

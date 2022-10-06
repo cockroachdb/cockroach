@@ -1425,10 +1425,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "387907b742706c699ae4e1eecbb8afe576004cb5460da2fe30b7f4d7d77503ed",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20221003221406-518ead0d41bb",
+        sha256 = "11f8da00b0b17fc086174d57fc1cd5e098ab0d62b752fd0c6db755873c3fe133",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20221005185728-eec7375f9c44",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20221003221406-518ead0d41bb.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20221005185728-eec7375f9c44.zip",
         ],
     )
     go_repository(
@@ -4059,10 +4059,10 @@ def go_deps():
         name = "com_github_hashicorp_go_version",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/hashicorp/go-version",
-        sha256 = "bf1d96bda50abf5e2d111bf99d220d978314907d815fd58f4bd4770dc7959b9e",
-        strip_prefix = "github.com/hashicorp/go-version@v1.6.0",
+        sha256 = "a3231adb6bf029750970de2955e82e41e4c062b94eb73683e9111aa0c0841008",
+        strip_prefix = "github.com/hashicorp/go-version@v1.2.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/go-version/com_github_hashicorp_go_version-v1.6.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/go-version/com_github_hashicorp_go_version-v1.2.0.zip",
         ],
     )
     go_repository(

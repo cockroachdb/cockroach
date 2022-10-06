@@ -1569,7 +1569,7 @@ func (s *adminServer) rangeLogHelper(
 	}
 	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-range-log", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: userName},
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		q.String(), q.QueryArguments()...,
 	)
 	if err != nil {
@@ -2679,7 +2679,7 @@ func (s *adminServer) Decommission(
 func (s *adminServer) DataDistribution(
 	ctx context.Context, req *serverpb.DataDistributionRequest,
 ) (_ *serverpb.DataDistributionResponse, retErr error) {
-	if _, err := s.requireAdminUser(ctx); err != nil {
+	if err := s.requireViewClusterMetadataPermission(ctx); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
