@@ -4754,6 +4754,9 @@ CREATE TABLE crdb_internal.predefined_comments (
 	populate: func(
 		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 	) error {
+		// NB if ever anyone were to extend this table to carry column
+		// comments, make sure to update pg_catalog.col_description to
+		// retrieve those comments.
 		tableCommentKey := tree.NewDInt(tree.DInt(keys.TableCommentType))
 		vt := p.getVirtualTabler()
 		vEntries := vt.getSchemas()
