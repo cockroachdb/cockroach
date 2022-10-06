@@ -297,10 +297,15 @@ func (ex *connExecutor) execStmtInOpenState(
 		st.mu.stmtCount++
 	}(&ex.state)
 
-	var timeoutTicker *time.Timer
+	var queryTimeoutTicker *time.Timer
+	var txnTimeoutTicker *time.Timer
 	queryTimedOut := false
-	// doneAfterFunc will be allocated only when timeoutTicker is non-nil.
-	var doneAfterFunc chan struct{}
+	txnTimedOut := false
+
+	// queryDoneAfterFunc and txnDoneAfterFunc will be allocated only when
+	// queryTimeoutTicker or txnTimeoutTicker is non-nil.
+	var queryDoneAfterFunc chan struct{}
+	var txnDoneAfterFunc chan struct{}
 
 	// Early-associate placeholder info with the eval context,
 	// so that we can fill in placeholder values in our call to addActiveQuery, below.
@@ -316,11 +321,18 @@ func (ex *connExecutor) execStmtInOpenState(
 	// overwriting res.Error to a more user-friendly message in case of query
 	// cancellation.
 	defer func(ctx context.Context, res RestrictedCommandResult) {
-		if timeoutTicker != nil {
-			if !timeoutTicker.Stop() {
+		if queryTimeoutTicker != nil {
+			if !queryTimeoutTicker.Stop() {
 				// Wait for the timer callback to complete to avoid a data race on
 				// queryTimedOut.
-				<-doneAfterFunc
+				<-queryDoneAfterFunc
+			}
+		}
+		if txnTimeoutTicker != nil {
+			if !txnTimeoutTicker.Stop() {
+				// Wait for the timer callback to complete to avoid a data race on
+				// txnTimedOut.
+				<-txnDoneAfterFunc
 			}
 		}
 
@@ -365,6 +377,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 			res.SetError(sqlerrors.QueryTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
+		} else if txnTimedOut {
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(ast)),
+			}
+			res.SetError(sqlerrors.TxnTimeoutError)
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 		}
 	}(ctx, res)
 
@@ -475,6 +493,34 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
+	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
+		timerDuration :=
+			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
+
+		// If the timer already expired, but the transaction is not yet aborted,
+		// we should error immediately without executing. If the timer
+		// expired but the transaction already is aborted, then we should still
+		// proceed with executing the statement in order to get a
+		// TransactionAbortedError.
+		_, txnAborted := ex.machine.CurState().(stateAborted)
+
+		if timerDuration < 0 && !txnAborted {
+			txnTimedOut = true
+			return makeErrEvent(sqlerrors.TxnTimeoutError)
+		}
+
+		if timerDuration > 0 {
+			txnDoneAfterFunc = make(chan struct{}, 1)
+			txnTimeoutTicker = time.AfterFunc(
+				timerDuration,
+				func() {
+					cancelQuery()
+					txnTimedOut = true
+					txnDoneAfterFunc <- struct{}{}
+				})
+		}
+	}
+
 	// We exempt `SET` statements from the statement timeout, particularly so as
 	// not to block the `SET statement_timeout` command itself.
 	if ex.sessionData().StmtTimeout > 0 && ast.StatementTag() != "SET" {
@@ -485,13 +531,13 @@ func (ex *connExecutor) execStmtInOpenState(
 			queryTimedOut = true
 			return makeErrEvent(sqlerrors.QueryTimeoutError)
 		}
-		doneAfterFunc = make(chan struct{}, 1)
-		timeoutTicker = time.AfterFunc(
+		queryDoneAfterFunc = make(chan struct{}, 1)
+		queryTimeoutTicker = time.AfterFunc(
 			timerDuration,
 			func() {
 				cancelQuery()
 				queryTimedOut = true
-				doneAfterFunc <- struct{}{}
+				queryDoneAfterFunc <- struct{}{}
 			})
 	}
 
