@@ -228,7 +228,7 @@ var traceTxnThreshold = settings.RegisterDurationSetting(
 		"note that enabling this may have a negative performance impact; "+
 		"this setting is coarser-grained than sql.trace.stmt.enable_threshold "+
 		"because it applies to all statements within a transaction as well as "+
-		"client communication (e.g. retries)", 0,
+		"client communication (e.g. retries)", 1*time.Minute,
 ).WithPublic()
 
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
