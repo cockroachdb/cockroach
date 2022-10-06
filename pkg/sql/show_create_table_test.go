@@ -1,0 +1,123 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package sql_test
+
+import (
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
+)
+
+func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s0 := tc.Server(0)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `USE db`)
+	tdb.Exec(t, `CREATE SCHEMA schema`)
+	tdb.Exec(t, `CREATE TABLE db.schema.table(x INT, y INT, INDEX(y) USING HASH)`)
+
+	ief := s0.InternalExecutorFactory().(descs.TxnManager)
+	require.NoError(
+		t,
+		ief.DescsTxnWithExecutor(ctx, s0.DB(), nil /* sessionData */, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		) error {
+			tn := tree.MakeTableNameWithSchema("db", "schema", "table")
+			flags := tree.ObjectLookupFlagsWithRequired()
+
+			_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+			require.NoError(t, err)
+			require.NotNil(t, mut)
+
+			// Check the show create table res before we invalidate the constraint.
+			// The check constraint from the hash shared index should not appear.
+			rows, err := ie.QueryRowEx(
+				ctx,
+				"show-create-table-before-invalidate-constraint",
+				txn,
+				sessiondata.NoSessionDataOverride,
+				`SHOW CREATE TABLE db.schema.table`,
+			)
+
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				`e'CREATE TABLE schema."table" (`+
+					`\n\tx INT8 NULL,`+
+					`\n\ty INT8 NULL,`+
+					`\n\tcrdb_internal_y_shard_16 INT8 NOT VISIBLE NOT NULL AS (`+
+					`mod(fnv32(crdb_internal.datums_to_bytes(y)), 16:::INT8)) VIRTUAL,`+
+					`\n\trowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),`+
+					`\n\tCONSTRAINT table_pkey PRIMARY KEY (rowid ASC),`+
+					`\n\tINDEX table_y_idx (y ASC) USING HASH WITH (bucket_count=16)`+
+					`\n)'`,
+				fmt.Sprintf("%v", rows[1].String()),
+			)
+
+			// Change the check constraint from the hash shared index to unvalidated.
+			for _, c := range mut.AllActiveAndInactiveChecks() {
+				if c.Name == "check_crdb_internal_y_shard_16" {
+					c.Validity = descpb.ConstraintValidity_Unvalidated
+				}
+			}
+
+			require.NoError(t, descriptors.WriteDesc(ctx, true /* kvTrace */, mut, txn))
+
+			// Check the show create table res after we invalidate the constraint.
+			// The constraint should appear now.
+			rows, err = ie.QueryRowEx(
+				ctx,
+				"show-create-table-after-invalidate-constraint",
+				txn,
+				sessiondata.NoSessionDataOverride,
+				`SHOW CREATE TABLE db.schema.table`,
+			)
+
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				`e'CREATE TABLE schema."table" (`+
+					`\n\tx INT8 NULL,`+
+					`\n\ty INT8 NULL,`+
+					`\n\tcrdb_internal_y_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 16:::INT8)) VIRTUAL,`+
+					`\n\trowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),`+
+					`\n\tCONSTRAINT table_pkey PRIMARY KEY (rowid ASC),`+
+					`\n\tINDEX table_y_idx (y ASC) USING HASH WITH (bucket_count=16),`+
+					`\n\tCONSTRAINT check_crdb_internal_y_shard_16 CHECK (`+
+					`crdb_internal_y_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, `+
+					`4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, `+
+					`11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8)) NOT VALID`+
+					`\n)'`, fmt.Sprintf("%v", rows[1].String()))
+			return nil
+		}))
+
+}
