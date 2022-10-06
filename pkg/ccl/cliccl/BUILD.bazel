@@ -7,6 +7,7 @@ go_library(
         "cliccl.go",
         "debug.go",
         "demo.go",
+        "ear.go",
         "start.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cliccl",
@@ -36,13 +37,25 @@ go_library(
 go_test(
     name = "cliccl_test",
     size = "medium",
-    srcs = ["main_test.go"],
+    srcs = [
+        "ear_test.go",
+        "main_test.go",
+    ],
     args = ["-test.timeout=295s"],
+    embed = [":cliccl"],
     deps = [
         "//pkg/build",
+        "//pkg/ccl/baseccl",
+        "//pkg/ccl/storageccl/engineccl",
         "//pkg/ccl/utilccl",
+        "//pkg/cli",
         "//pkg/server",
+        "//pkg/storage",
         "//pkg/testutils/serverutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
