@@ -1072,22 +1072,15 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
-	//overloadImpls := make([]overloadImpl, 0, len(def.Overloads))
-	//for i := range def.Overloads {
-	//	overloadImpls = append(overloadImpls, def.Overloads[i])
-	//}
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, def.Overloads, false, expr.Exprs...)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 
-	var calledOnNullInputFns []overloadImpl
-	var notCalledOnNullInputFns []overloadImpl
+	hasCalledOnNullInputFn := false
 	for _, f := range fns {
 		if f.(*QualifiedOverload).CalledOnNullInput {
-			calledOnNullInputFns = append(calledOnNullInputFns, f)
-		} else {
-			notCalledOnNullInputFns = append(notCalledOnNullInputFns, f)
+			hasCalledOnNullInputFn = true
 		}
 	}
 
@@ -1104,34 +1097,32 @@ func (expr *FuncExpr) TypeCheck(
 	if funcCls == AggregateClass {
 		for i := range typedSubExprs {
 			if typedSubExprs[i].ResolvedType().Family() == types.UnknownFamily {
-				var filtered []overloadImpl
-				for j := range notCalledOnNullInputFns {
-					if fns[j].params().GetAt(i).Equivalent(types.String) {
-						if filtered == nil {
-							filtered = make([]overloadImpl, 0, len(fns)-j)
-						}
-						filtered = append(filtered, fns[j])
+				shouldCast := false
+				for j := 0; j < len(fns); {
+					if fns[j].(*QualifiedOverload).CalledOnNullInput {
+						j++
+					} else if fns[j].params().GetAt(i).Equivalent(types.String) {
+						j++
+						shouldCast = true
+					} else {
+						fns[j], fns[len(fns)-1] = fns[len(fns)-1], fns[j]
+						fns = fns[:len(fns)-1]
 					}
 				}
 
-				// Only use the filtered list if it's not empty.
-				if filtered != nil {
-					notCalledOnNullInputFns = filtered
-
+				if shouldCast {
 					// Cast the expression to a string so the execution engine will find
 					// the correct overload.
 					typedSubExprs[i] = NewTypedCastExpr(typedSubExprs[i], types.String)
 				}
 			}
 		}
-		fns = append(calledOnNullInputFns, notCalledOnNullInputFns...)
 	}
 
 	// Return NULL if at least one overload is possible, no overload accepts
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
 	// NULL is given as an argument.
-	if len(fns) > 0 && len(calledOnNullInputFns) == 0 && funcCls != GeneratorClass &&
-		funcCls != AggregateClass {
+	if len(fns) > 0 && !hasCalledOnNullInputFn && funcCls != GeneratorClass && funcCls != AggregateClass {
 		for _, expr := range typedSubExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil
