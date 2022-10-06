@@ -225,35 +225,34 @@ func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool,
 
 // Returns true if the changefeed targets a column to be added will be added to a watched column family.
 func addedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool, error) {
+	if len(e.Before.VisibleColumns()) >= len(e.After.VisibleColumns()) {
+		return false, nil
+	}
+
 	// If no column families are specified, then all columns are targeted.
 	specifiedColumnFamiliesForTable := targets.GetSpecifiedColumnFamilies(e.Before.GetID())
 	if len(specifiedColumnFamiliesForTable) == 0 {
 		return true, nil
 	}
 
-	if len(e.Before.VisibleColumns()) >= len(e.After.VisibleColumns()) {
-		return false, nil
-	}
-
 	var beforeCols util.FastIntSet
-	for _, col := range e.Before.VisibleColumns() {
-		beforeCols.Add(int(col.GetID()))
-	}
-	var addedCols util.FastIntSet
-	for _, col := range e.After.VisibleColumns() {
-		colID := int(col.GetID())
-		if !beforeCols.Contains(colID) {
-			addedCols.Add(colID)
-		}
-	}
-
-	res := false
 	if err := e.Before.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		if _, ok := specifiedColumnFamiliesForTable[family.Name]; ok {
 			for _, colID := range family.ColumnIDs {
-				if addedCols.Contains(int(colID)) {
+				beforeCols.Add(int(colID))
+			}
+		}
+		return nil
+	}); err != nil {
+		return false, err
+	}
+
+	res := false
+	if err := e.After.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		if _, ok := specifiedColumnFamiliesForTable[family.Name]; ok {
+			for _, colID := range family.ColumnIDs {
+				if !beforeCols.Contains(int(colID)) {
 					res = true
-					return nil
 				}
 			}
 		}
