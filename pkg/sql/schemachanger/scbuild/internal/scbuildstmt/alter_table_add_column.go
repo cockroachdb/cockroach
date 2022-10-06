@@ -658,6 +658,7 @@ func addSecondaryIndexTargetsForAddColumn(
 			"assumed temporary index ID %d != %d", tempIndexID, temp.IndexID,
 		))
 	}
+	temp.ConstraintID = index.ConstraintID + 1
 	var tempIndexColumns []*scpb.IndexColumn
 	scpb.ForEachIndexColumn(b.QueryByID(tbl.TableID), func(
 		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
