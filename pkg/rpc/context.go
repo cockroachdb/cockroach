@@ -1827,10 +1827,15 @@ func (rpcCtx *Context) GRPCDialPod(
 func (rpcCtx *Context) grpcDialNodeInternal(
 	ctx context.Context, target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {
-	thisConnKeys := []connKey{{target, remoteNodeID, class}}
-	value, ok := rpcCtx.conns.Load(thisConnKeys[0])
+	thisKey := connKey{target, remoteNodeID, class}
+	value, ok := rpcCtx.conns.Load(thisKey)
 	if !ok {
-		value, _ = rpcCtx.conns.LoadOrStore(thisConnKeys[0], newConnectionToNodeID(rpcCtx.Stopper, remoteNodeID))
+		value, _ = rpcCtx.conns.LoadOrStore(thisKey, newConnectionToNodeID(rpcCtx.Stopper, remoteNodeID))
+	}
+
+	conn := value.(*Connection)
+	conn.initOnce.Do(func() {
+		connKeys := []connKey{thisKey}
 		if remoteNodeID != 0 {
 			// If the first connection established at a target address is
 			// for a specific node ID, then we want to reuse that connection
@@ -1838,25 +1843,31 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 			// specific node ID. (We do this as an optimization to reduce
 			// the number of TCP connections alive between nodes. This is
 			// not strictly required for correctness.) This LoadOrStore will
-			// ensure we're registering the connection we just created for
-			// future use by these other dials.
+			// ensure we're registering this connection for future use by
+			// these other dials.
 			//
 			// We need to be careful to unregister both connKeys when the
 			// connection breaks. Otherwise, we leak the entry below which
 			// "simulates" a hard network partition for anyone dialing without
 			// the nodeID (gossip).
 			//
-			// See:
-			// https://github.com/cockroachdb/cockroach/issues/37200
+			// See: https://github.com/cockroachdb/cockroach/issues/37200
+			//
+			// We also need to be careful that the goroutine which stores the
+			// connection under the second connKey (and accounts for this in
+			// connKeys) is the same one that will remove the connection from the
+			// conns map on disconnect. If a separate goroutine were to remove the
+			// conn, it may only do so for one of the two connKeys, leaking the
+			// other. We ensure this by running the logic to share connections
+			// inside the sync.Once function. In doing so, we ensure that the
+			// goroutine removing the conn from the map is aware of all keys that
+			// it is stored under.
 			otherKey := connKey{target, 0, class}
 			if _, loaded := rpcCtx.conns.LoadOrStore(otherKey, value); !loaded {
-				thisConnKeys = append(thisConnKeys, otherKey)
+				connKeys = append(connKeys, otherKey)
 			}
 		}
-	}
 
-	conn := value.(*Connection)
-	conn.initOnce.Do(func() {
 		// Either we kick off the heartbeat loop (and clean up when it's done),
 		// or we clean up the connKey entries immediately.
 		var redialChan <-chan struct{}
@@ -1870,7 +1881,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 						!grpcutil.IsConnectionRejected(err) {
 						log.Health.Errorf(ctx, "removing connection to %s due to error: %v", target, err)
 					}
-					rpcCtx.removeConn(conn, thisConnKeys...)
+					rpcCtx.removeConn(conn, connKeys...)
 				}); err != nil {
 				// If node is draining (`err` will always equal stop.ErrUnavailable
 				// here), return special error (see its comments).
@@ -1879,7 +1890,7 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 			}
 		}
 		if conn.dialErr != nil {
-			rpcCtx.removeConn(conn, thisConnKeys...)
+			rpcCtx.removeConn(conn, connKeys...)
 		}
 	})
 
