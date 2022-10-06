@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -88,7 +89,8 @@ type StartOpts struct {
 	ExtraArgs  []string
 
 	// ScheduleBackups starts a backup schedule once the cluster starts
-	ScheduleBackups bool
+	ScheduleBackups    bool
+	ScheduleBackupArgs string
 
 	// systemd limits on resources.
 	NumFilesLimit int64
@@ -155,7 +157,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}
 
 	l.Printf("%s: starting nodes", c.Name)
-	return c.Parallel(l, "", len(nodes), parallelism, func(nodeIdx int) ([]byte, error) {
+	if err := c.Parallel(l, "", len(nodes), parallelism, func(nodeIdx int) ([]byte, error) {
 		node := nodes[nodeIdx]
 
 		// NB: if cockroach started successfully, we ignore the output as it is
@@ -196,7 +198,13 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			return nil, errors.Wrap(err, "failed to set cluster settings")
 		}
 		return nil, nil
-	})
+	}); err != nil {
+		return err
+	}
+	if startOpts.ScheduleBackups {
+		return c.createBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs)
+	}
+	return nil
 }
 
 // NodeDir returns the data directory for the given node and store.
@@ -745,6 +753,38 @@ func (c *SyncedCluster) shouldAdvertisePublicIP() bool {
 		}
 	}
 	return false
+}
+
+// createBackupSchedule creates a cluster backup schedule which runs an incremental every 15
+// minutes and a full every hour
+func (c *SyncedCluster) createBackupSchedule(
+	ctx context.Context, l *logger.Logger, scheduledBackupArgs string,
+) error {
+	externalStoragePath := `gs://cockroachdb-backup-testing`
+
+	if c.IsLocal() {
+		externalStoragePath = `nodelocal://1`
+	}
+	//scheduleBackupCoordinator := clusterName + ":1"
+	l.Printf("%s: creating backup schedule", c.Name)
+
+	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%v`,
+		externalStoragePath, c.Name, timeutil.Now().UnixNano())
+
+	// Default scheduled backup runs a full backup every hour and an incremental
+	// every 15 minutes.
+	scheduleArgs := `RECURRING '*/15 * * * *' 
+FULL BACKUP '@hourly' 
+WITH SCHEDULE OPTIONS first_run = 'now'`
+
+	if scheduledBackupArgs != "" {
+		scheduleArgs = scheduledBackupArgs
+	}
+
+	createScheduleCmd := fmt.Sprintf(`-e 
+CREATE SCHEDULE IF NOT EXISTS test_only_backup FOR BACKUP INTO '%s' %s`,
+		collectionPath, scheduleArgs)
+	return c.SQL(ctx, l, []string{createScheduleCmd})
 }
 
 // getEnvVars returns all COCKROACH_* environment variables, in the form
