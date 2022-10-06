@@ -64,6 +64,12 @@ func (c *CustomFuncs) IsTimestampTZ(scalar opt.ScalarExpr) bool {
 	return scalar.DataType().Family() == types.TimestampTZFamily
 }
 
+// IsInt returns true if the given scalar expression is of one of the
+// integer types.
+func (c *CustomFuncs) IsInt(scalar opt.ScalarExpr) bool {
+	return scalar.DataType().Family() == types.IntFamily
+}
+
 // BoolType returns the boolean SQL type.
 func (c *CustomFuncs) BoolType() *types.T {
 	return types.Bool
@@ -329,7 +335,7 @@ func (c *CustomFuncs) OuterCols(e opt.Expr) opt.ColSet {
 // column, or in other words, a reference to a variable that is not bound within
 // its own scope. For example:
 //
-//   SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x)
+//	SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x)
 //
 // The a.x variable in the EXISTS subquery references a column outside the scope
 // of the subquery. It is an "outer column" for the subquery (see the comment on
@@ -340,11 +346,12 @@ func (c *CustomFuncs) HasOuterCols(input opt.Expr) bool {
 
 // IsCorrelated returns true if any variable in the source expression references
 // a column from the given set of output columns. For example:
-//   (InnerJoin
-//     (Scan a)
-//     (Scan b)
-//     [ ... (FiltersItem $item:(Eq (Variable a.x) (Const 1))) ... ]
-//   )
+//
+//	(InnerJoin
+//	  (Scan a)
+//	  (Scan b)
+//	  [ ... (FiltersItem $item:(Eq (Variable a.x) (Const 1))) ... ]
+//	)
 //
 // The $item expression is correlated with the (Scan a) expression because it
 // references one of its columns. But the $item expression is not correlated
@@ -356,11 +363,11 @@ func (c *CustomFuncs) IsCorrelated(src memo.RelExpr, cols opt.ColSet) bool {
 // IsBoundBy returns true if all outer references in the source expression are
 // bound by the given columns. For example:
 //
-//   (InnerJoin
-//     (Scan a)
-//     (Scan b)
-//     [ ... $item:(FiltersItem (Eq (Variable a.x) (Const 1))) ... ]
-//   )
+//	(InnerJoin
+//	  (Scan a)
+//	  (Scan b)
+//	  [ ... $item:(FiltersItem (Eq (Variable a.x) (Const 1))) ... ]
+//	)
 //
 // The $item expression is fully bound by the output columns of the (Scan a)
 // expression because all of its outer references are satisfied by the columns
@@ -413,11 +420,11 @@ func (c *CustomFuncs) FilterOuterCols(filters memo.FiltersExpr) opt.ColSet {
 // FiltersBoundBy returns true if all outer references in any of the filter
 // conditions are bound by the given columns. For example:
 //
-//   (InnerJoin
-//     (Scan a)
-//     (Scan b)
-//     $filters:[ (FiltersItem (Eq (Variable a.x) (Const 1))) ]
-//   )
+//	(InnerJoin
+//	  (Scan a)
+//	  (Scan b)
+//	  $filters:[ (FiltersItem (Eq (Variable a.x) (Const 1))) ]
+//	)
 //
 // The $filters expression is fully bound by the output columns of the (Scan a)
 // expression because all of its outer references are satisfied by the columns
@@ -714,14 +721,14 @@ func (c *CustomFuncs) ReplaceFiltersItem(
 // from the given list that are fully bound by the given columns (i.e. all
 // outer references are to one of these columns). For example:
 //
-//   (InnerJoin
-//     (Scan a)
-//     (Scan b)
-//     (Filters [
-//       (Eq (Variable a.x) (Variable b.x))
-//       (Gt (Variable a.x) (Const 1))
-//     ])
-//   )
+//	(InnerJoin
+//	  (Scan a)
+//	  (Scan b)
+//	  (Filters [
+//	    (Eq (Variable a.x) (Variable b.x))
+//	    (Gt (Variable a.x) (Const 1))
+//	  ])
+//	)
 //
 // Calling ExtractBoundConditions with the filter conditions list and the output
 // columns of (Scan a) would extract the (Gt) expression, since its outer
@@ -908,11 +915,10 @@ func (c *CustomFuncs) AppendAggCols(
 // function of the given operator type for each of column in the given set. For
 // example, for ConstAggOp and columns (1,2), this expression is returned:
 //
-//   (Aggregations
-//     [(ConstAgg (Variable 1)) (ConstAgg (Variable 2))]
-//     [1,2]
-//   )
-//
+//	(Aggregations
+//	  [(ConstAgg (Variable 1)) (ConstAgg (Variable 2))]
+//	  [1,2]
+//	)
 func (c *CustomFuncs) MakeAggCols(aggOp opt.Operator, cols opt.ColSet) memo.AggregationsExpr {
 	colsLen := cols.Len()
 	aggs := make(memo.AggregationsExpr, colsLen)
@@ -982,8 +988,7 @@ func (c *CustomFuncs) IsPositiveInt(datum tree.Datum) bool {
 // For example, NormalizeCmpTimeZoneFunction uses this function implicitly to
 // match a specific function, like so:
 //
-//   (Function $args:* (FunctionPrivate "timezone"))
-//
+//	(Function $args:* (FunctionPrivate "timezone"))
 func (c *CustomFuncs) EqualsString(left string, right string) bool {
 	return left == right
 }
