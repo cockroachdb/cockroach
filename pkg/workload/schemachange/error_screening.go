@@ -1127,7 +1127,7 @@ func (og *operationGenerator) checkAndAdjustForUnknownSchemaErrors(err error) er
 	if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
 		pgcode.MakeCode(pgErr.Code) == pgcode.InvalidSchemaName {
 		if regexpUnknownSchemaErr.MatchString(pgErr.Message) {
-			og.opGenLog.WriteString(fmt.Sprintf("Rolling back due to unknown schema error %v",
+			og.LogMessage(fmt.Sprintf("Rolling back due to unknown schema error %v",
 				err))
 			// Force a rollback and log inside the oepration generator.
 			return errors.Mark(err, errRunInTxnRbkSentinel)
