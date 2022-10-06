@@ -31,7 +31,7 @@ import (
 )
 
 func registerMultiTenantDistSQL(r registry.Registry) {
-	const numInstances = 2
+	const numInstances = 20
 	for _, bundle := range []string{"on", "off"} {
 		for _, timeout := range []int{0, 1} {
 			b := bundle
@@ -149,7 +149,7 @@ func runMultiTenantDistSQL(
 	attempts := 180
 	for {
 		time.Sleep(time.Second)
-		res, err := inst1Conn.Query("EXPLAIN (VEC,VERBOSE) SELECT DISTINCT i FROM t")
+		res, err := inst1Conn.Query("EXPLAIN (VEC) SELECT DISTINCT i FROM t")
 		if err != nil {
 			attempts--
 			require.Greater(t, attempts, 0, "All nodes didn't show up in time")
