@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -47,36 +48,37 @@ const (
 
 func awsdmsVerString(v *version.Version) string {
 	if ciBranch := os.Getenv("TC_BUILD_BRANCH"); ciBranch != "" {
-		return fmt.Sprintf("-ci-%s", ciBranch)
+		ciBranch = strings.ReplaceAll(ciBranch, ".", "-")
+		return fmt.Sprintf("ci-%s", ciBranch)
 	}
-	ret := fmt.Sprintf("-local-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
+	ret := fmt.Sprintf("local-%d-%d-%d", v.Major(), v.Minor(), v.Patch())
 	if v.PreRelease() != "" {
 		ret += "-" + v.PreRelease()
 	}
-	return ret
+	return strings.ReplaceAll(ret, ".", "-")
 }
 
 func awsdmsRoachtestRDSClusterName(v *version.Version) string {
-	return "roachtest-awsdms-rds-cluster" + awsdmsVerString(v)
+	return "roachtest-awsdms-rds-cluster-" + awsdmsVerString(v)
 }
 
 func awsdmsRoachtestDMSParameterGroup(v *version.Version) string {
-	return "roachtest-awsdms-param-group" + awsdmsVerString(v)
+	return "roachtest-awsdms-param-group-" + awsdmsVerString(v)
 }
 
 func awsdmsRoachtestDMSTaskName(v *version.Version) string {
-	return "roachtest-awsdms-dms-task" + awsdmsVerString(v)
+	return "roachtest-awsdms-dms-task-" + awsdmsVerString(v)
 }
 
 func awsdmsRoachtestDMSReplicationInstanceName(v *version.Version) string {
-	return "roachtest-awsdms-replication-instance" + awsdmsVerString(v)
+	return "roachtest-awsdms-replication-instance-" + awsdmsVerString(v)
 }
 
 func awsdmsRoachtestDMSRDSEndpointName(v *version.Version) string {
-	return "roachtest-awsdms-rds-endpoint" + awsdmsVerString(v)
+	return "roachtest-awsdms-rds-endpoint-" + awsdmsVerString(v)
 }
 func awsdmsRoachtestDMSCRDBEndpointName(v *version.Version) string {
-	return "roachtest-awsdms-crdb-endpoint" + awsdmsVerString(v)
+	return "roachtest-awsdms-crdb-endpoint-" + awsdmsVerString(v)
 }
 
 func rdsClusterFilters(v *version.Version) []rdstypes.Filter {
