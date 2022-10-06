@@ -31,7 +31,7 @@ import (
 )
 
 func registerMultiTenantDistSQL(r registry.Registry) {
-	const numInstances = 2
+	const numInstances = 20
 	for _, bundle := range []string{"on", "off"} {
 		for _, timeout := range []int{0, 1} {
 			b := bundle
