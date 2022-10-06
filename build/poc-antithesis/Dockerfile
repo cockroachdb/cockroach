@@ -114,8 +114,8 @@ RUN curl -fsSL https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-check.sh.
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.17.11.src.tar.gz -o golang.tar.gz \
- && echo 'ac2649a65944c6a5abe55054000eee3d77196880da36a3555f62e06540e8eb54  golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.19.1.src.tar.gz -o golang.tar.gz \
+ && echo '27871baa490f3401414ad793fba49086f6c855b1c584385ed7771e1204c7e179  golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
@@ -208,6 +208,13 @@ RUN curl -fsSL https://github.com/benesch/autouseradd/releases/download/1.2.0/au
   && tar xzf autouseradd.tar.gz -C / --strip-components 1 \
   && chmod +x /usr/local/bin/autouseradd \
   && rm autouseradd.tar.gz
+
+# see README.md for instructions on how to install Antithesis instrumentation library.
+
+RUN mkdir -p /opt/antithesis/bin/ && mkdir -p /opt/antithesis/lib/ && mkdir -p /opt/antithesis/instrumentation/go/wrappers/
+COPY libvoidstar.so /opt/antithesis/lib/
+COPY goinstrumentor /opt/antithesis/bin/
+COPY go.mod wrappers.go /opt/antithesis/instrumentation/go/wrappers/
 
 COPY entrypoint.sh /usr/local/bin
 
