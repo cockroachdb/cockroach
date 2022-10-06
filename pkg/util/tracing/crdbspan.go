@@ -168,9 +168,7 @@ type recordingState struct {
 	// to structured above.
 	//
 	// It's convenient to store finishedChildren as a Trace, even though the
-	// finishedChildren.Root will only be initialized when the span finishes. The
-	// children in the trace are maintained in no particular order, so
-	// finishedChildren.sortChildren should be used before handing the trace out.
+	// finishedChildren.Root will only be initialized when the span finishes.
 	finishedChildren Trace
 
 	// childrenMetadata is a mapping from operation to the aggregated metadata of
@@ -204,7 +202,9 @@ type sizeLimitedBuffer struct {
 
 // Trace represents the recording of a span and all its descendents.
 type Trace struct {
-	Root     tracingpb.RecordedSpan
+	Root tracingpb.RecordedSpan
+	// Children are the traces of the child spans. The slice is kept sorted by
+	// child start time.
 	Children []Trace
 	// NumSpans tracks the number of spans in the recording: 1 for the root plus
 	// the size of the child traces recursively.
@@ -280,6 +280,9 @@ func (t *Trace) trimRecursive(toDrop int) {
 	// the next fattest child, recurse into the next child.
 	toDropFromNextChild := toDrop - total
 	if toDropFromNextChild > 0 {
+		// Note: we know that childrenIdx[spansToDrop] is not out of bounds; if
+		// toDropFromNextChild > 0, there must be at least one more child after
+		// spansToDrop.
 		recurseIdx = childrenIdx[spansToDrop]
 		if t.Children[recurseIdx].NumSpans < toDropFromNextChild {
 			panic("expected next child to have enough spans")
@@ -293,31 +296,70 @@ func (t *Trace) trimRecursive(toDrop int) {
 	if spansToDrop > 0 {
 		t.DroppedDirectChildren = true
 		t.Root.EnsureTagGroup(tracingpb.AnonymousTagGroupName).AddTag("_dropped_children", "")
+		// We're going to drop the fattest spansToDrop spans.
 		childrenToDropIdx := childrenIdx[:spansToDrop]
 
-		// Remove all the spans that we decided to completely remove. Sort the indexes
-		// in reverse order so that we can remove them one by one without affecting
-		// the other indexes.
-		sort.Sort(sort.Reverse(sort.IntSlice(childrenToDropIdx)))
-		for _, idx := range childrenToDropIdx {
-			// Copy the structured events from the child we're about to drop to the
-			// parent.
-			buf := t.Children[idx].appendStructuredEventsRecursively(nil /* buffer */)
-			t.Root.StructuredRecords = append(t.Root.StructuredRecords, buf...)
-
-			t.Children[idx] = t.Children[len(t.Children)-1]
-			t.Children = t.Children[:len(t.Children)-1]
+		// Sort the indexes of the children to drop ascendingly, so that we can
+		// remove them easily while maintaining the existing order for the children
+		// that stay.
+		sort.Ints(childrenToDropIdx)
+		newChildren := make([]Trace, 0, len(t.Children)-spansToDrop)
+		j := 0 // This will iterate over childrenToDropIdx
+		for i := range t.Children {
+			if j < len(childrenToDropIdx) && i == childrenToDropIdx[j] {
+				// We need to drop this child.
+				j++
+				// Copy the structured events from the dropped child to the parent.
+				buf := t.Children[i].appendStructuredEventsRecursively(nil /* buffer */)
+				t.Root.StructuredRecords = append(t.Root.StructuredRecords, buf...)
+			} else {
+				// This child is not dropped; copy it over to newChildren.
+				newChildren = append(newChildren, t.Children[i])
+			}
 		}
+		t.Children = newChildren
 		t.NumSpans -= total
 	}
 }
 
-// addChild attempts to add a child's trace to t. After adding the child, the
-// trace is trimmed to maxRecordedSpansPerTrace.
-func (t *Trace) addChild(child Trace) {
-	t.NumSpans += child.NumSpans
-	t.Children = append(t.Children, child)
+// addChildren adds some child traces to t. After adding the children, the trace
+// is trimmed to maxRecordedSpansPerTrace.
+//
+// The list of children is kept sorted.
+func (t *Trace) addChildren(children []Trace) {
+	// Figure out if we'll need to re-sort the children. We won't need to do it if
+	// we're adding a single child that belongs in the last position.
+	needSort := false
+	if len(t.Children) > 0 {
+		needSort = !(len(children) == 1 &&
+			children[0].Root.StartTime.After(
+				t.Children[len(t.Children)-1].Root.StartTime))
+	}
+	for i := range children {
+		t.NumSpans += children[i].NumSpans
+		t.Children = append(t.Children, children[i])
+	}
 	t.trim(maxRecordedSpansPerTrace)
+	if needSort {
+		t.sortChildren()
+	}
+}
+
+// sortChildren sorts the children in the trace by start time.
+func (t *Trace) sortChildren() {
+	toSort := sortPoolTraces.Get().(*[]Trace) // avoids allocations in sort.Sort
+	*toSort = t.Children
+	sort.Slice(*toSort, func(i, j int) bool {
+		return (*toSort)[i].Root.StartTime.Before((*toSort)[j].Root.StartTime)
+	})
+	*toSort = nil
+	sortPoolTraces.Put(toSort)
+}
+
+var sortPoolTraces = sync.Pool{
+	New: func() interface{} {
+		return &[]Trace{}
+	},
 }
 
 // Empty returns true if the receiver is not initialized.
@@ -347,23 +389,6 @@ func (t *Trace) appendSpansRecursively(buffer []tracingpb.RecordedSpan) []tracin
 // and parents come before children. Otherwise, the spans are not sorted.
 func (t *Trace) Flatten() []tracingpb.RecordedSpan {
 	return t.appendSpansRecursively(nil /* buffer */)
-}
-
-// sortChildren sorts the children in the trace by start time.
-func (t *Trace) sortChildren() {
-	toSort := sortPoolTraces.Get().(*[]Trace) // avoids allocations in sort.Sort
-	*toSort = t.Children
-	sort.Slice(*toSort, func(i, j int) bool {
-		return (*toSort)[i].Root.StartTime.Before((*toSort)[j].Root.StartTime)
-	})
-	*toSort = nil
-	sortPoolTraces.Put(toSort)
-}
-
-var sortPoolTraces = sync.Pool{
-	New: func() interface{} {
-		return &[]Trace{}
-	},
 }
 
 // PartialClone performs a deep copy of the trace. The immutable slices are not
@@ -613,11 +638,12 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 		// We recurse on s' open children to get their verbose recordings, and to
 		// aggregate OperationMetadata from their children, both finished and open.
 		now := s.tracer.now()
+		openRecordings := make([]Trace, 0, len(s.mu.openChildren))
 		for _, openChild := range s.mu.openChildren {
 			if openChild.collectRecording || includeDetachedChildren {
 				openChildSp := openChild.Span.i.crdb
 				openChildRecording := openChildSp.getVerboseRecording(includeDetachedChildren, false /* finishing */)
-				result.addChild(openChildRecording)
+				openRecordings = append(openRecordings, openChildRecording)
 
 				// Record an entry for openChilds' OperationMetadata.
 				op := openChildSp.operation
@@ -632,6 +658,7 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 				rollupChildrenMetadata(childrenMetadata, openChildRecording.Root.ChildrenMetadata)
 			}
 		}
+		result.addChildren(openRecordings)
 	}()
 
 	// Copy over the OperationMetadata collected from s' children into the root of
@@ -640,7 +667,6 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 		result.Root.ChildrenMetadata = childrenMetadata
 	}
 
-	result.sortChildren()
 	return result
 }
 
@@ -713,7 +739,7 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRec Trace) {
 		// processors run in spans that FollowFrom an RPC Span that we don't
 		// collect.
 		childRec.Root.ParentSpanID = s.spanID
-		s.mu.recording.finishedChildren.addChild(childRec)
+		s.mu.recording.finishedChildren.addChildren([]Trace{childRec})
 	case tracingpb.RecordingStructured:
 		buf := childRec.appendStructuredEventsRecursively(nil /* buffer */)
 		for i := range buf {
