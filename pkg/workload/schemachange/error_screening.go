@@ -82,8 +82,9 @@ func (og *operationGenerator) scanInt(
 	err = tx.QueryRow(ctx, query, args...).Scan(&i)
 	if err == nil {
 		og.LogQueryResults(
-			fmt.Sprintf("%q %q", query, args),
-			fmt.Sprintf("%d", i),
+			query,
+			i,
+			args...,
 		)
 	}
 	return i, errors.Wrapf(err, "scanBool: %q %q", query, args)
@@ -95,8 +96,9 @@ func (og *operationGenerator) scanBool(
 	err = tx.QueryRow(ctx, query, args...).Scan(&b)
 	if err == nil {
 		og.LogQueryResults(
-			fmt.Sprintf("%q %q", query, args),
-			fmt.Sprintf("%t", b),
+			query,
+			b,
+			args...,
 		)
 	}
 	return b, errors.Wrapf(err, "scanBool: %q %q", query, args)
@@ -861,8 +863,9 @@ func (og *operationGenerator) scanStringArrayNullableRows(
 			humanReadableResults = append(humanReadableResults, humanReadableRes)
 		}
 		og.LogQueryResults(
-			fmt.Sprintf("%q %q", query, args),
-			fmt.Sprintf("%q", humanReadableResults))
+			query,
+			humanReadableResults,
+			args...)
 	}
 	return results, nil
 }
@@ -891,8 +894,9 @@ func (og *operationGenerator) scanStringArrayRows(
 	}
 
 	og.LogQueryResults(
-		fmt.Sprintf("%q %q", query, args),
-		fmt.Sprintf("%q", results))
+		query,
+		results,
+		args...)
 	return results, nil
 }
 
@@ -913,9 +917,10 @@ func (og *operationGenerator) scanStringArray(
 ) (b []string, err error) {
 	err = tx.QueryRow(ctx, query, args...).Scan(&b)
 	if err == nil {
-		og.LogQueryResultArray(
-			fmt.Sprintf("%q %q", query, args),
+		og.LogQueryResults(
+			query,
 			b,
+			args...,
 		)
 	}
 	return b, errors.Wrapf(err, "scanStringArray %q %q", query, args)
@@ -1135,7 +1140,7 @@ func (og *operationGenerator) checkAndAdjustForUnknownSchemaErrors(err error) er
 	if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
 		pgcode.MakeCode(pgErr.Code) == pgcode.InvalidSchemaName {
 		if regexpUnknownSchemaErr.MatchString(pgErr.Message) {
-			og.opGenLog.WriteString(fmt.Sprintf("Rolling back due to unknown schema error %v",
+			og.LogMessage(fmt.Sprintf("Rolling back due to unknown schema error %v",
 				err))
 			// Force a rollback and log inside the operation generator.
 			return errors.Mark(err, errRunInTxnRbkSentinel)
