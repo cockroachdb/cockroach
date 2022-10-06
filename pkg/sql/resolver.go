@@ -1341,6 +1341,22 @@ func getTypeNameFromTypeDescriptor(
 	return typeName, nil
 }
 
+func getSchemaNameFromSchemaDescriptor(
+	l simpleSchemaResolver, sc catalog.SchemaDescriptor,
+) (tree.ObjectNamePrefix, error) {
+	var scName tree.ObjectNamePrefix
+	db, err := l.getDatabaseByID(sc.GetParentID())
+	if err != nil {
+		return scName, err
+	}
+	return tree.ObjectNamePrefix{
+		CatalogName:     tree.Name(db.GetName()),
+		SchemaName:      tree.Name(sc.GetName()),
+		ExplicitCatalog: true,
+		ExplicitSchema:  true,
+	}, nil
+}
+
 // ResolveMutableTypeDescriptor resolves a type descriptor for mutable access.
 func (p *planner) ResolveMutableTypeDescriptor(
 	ctx context.Context, name *tree.UnresolvedObjectName, required bool,
