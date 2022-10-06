@@ -4,8 +4,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tokenizer",
     srcs = [
+        "buffer.go",
         "decoder.go",
-        "reader.go",
         "scanner.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/json/tokenizer",
@@ -17,12 +17,12 @@ go_test(
     srcs = [
         "bench_test.go",
         "decoder_test.go",
-        "reader_test.go",
         "scanner_test.go",
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":tokenizer"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
 
 get_x_data(name = "get_x_data")

@@ -65,9 +65,12 @@ var inputs = []struct {
 }
 
 func BenchmarkScanner(b *testing.B) {
-	var buf [8 << 10]byte
 	for _, tc := range inputs {
 		r := fixture(b, tc.path)
+		data, err := io.ReadAll(r)
+		if err != nil {
+			b.Fatal(err)
+		}
 		b.Run(tc.path, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(r.Size())
@@ -76,12 +79,7 @@ func BenchmarkScanner(b *testing.B) {
 				if _, err := r.Seek(0, 0); err != nil {
 					b.Fatal(err)
 				}
-				sc := &Scanner{
-					br: byteReader{
-						data: buf[:0],
-						r:    r,
-					},
-				}
+				sc := &Scanner{data: data}
 				n := 0
 				for len(sc.Next()) > 0 {
 					n++
@@ -96,9 +94,12 @@ func BenchmarkScanner(b *testing.B) {
 }
 
 func BenchmarkDecoderNextToken(b *testing.B) {
-	var buf [8 << 10]byte
 	for _, tc := range inputs {
 		r := fixture(b, tc.path)
+		data, err := io.ReadAll(r)
+		if err != nil {
+			b.Fatal(err)
+		}
 		b.Run("pkgjson/"+tc.path, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(r.Size())
@@ -107,7 +108,7 @@ func BenchmarkDecoderNextToken(b *testing.B) {
 				if _, err := r.Seek(0, 0); err != nil {
 					b.Fatal(err)
 				}
-				dec := NewDecoderBuffer(r, buf[:])
+				dec := MakeDecoder(data)
 				n := 0
 				for {
 					_, err := dec.NextToken()
