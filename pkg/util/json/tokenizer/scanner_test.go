@@ -37,26 +37,10 @@ package tokenizer
 
 import (
 	"io"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
-
-type SmallReader struct {
-	r io.Reader
-	n int
-}
-
-func (sm *SmallReader) next() int {
-	sm.n = (sm.n + 3) % 5
-	if sm.n < 1 {
-		sm.n++
-	}
-	return sm.n
-}
-
-func (sm *SmallReader) Read(buf []byte) (int, error) {
-	return sm.r.Read(buf[:min(sm.next(), len(buf))])
-}
 
 func TestScannerNext(t *testing.T) {
 	tests := []struct {
@@ -66,7 +50,7 @@ func TestScannerNext(t *testing.T) {
 		{in: `""`, tokens: []string{`""`}},
 		{in: `"a"`, tokens: []string{`"a"`}},
 		{in: ` "a" `, tokens: []string{`"a"`}},
-		{in: `"\""`, tokens: []string{`"\""`}},
+		{in: `"\""`, tokens: []string{`"""`}},
 		{in: `1`, tokens: []string{`1`}},
 		{in: `-1234567.8e+90`, tokens: []string{`-1234567.8e+90`}},
 		{in: `{}`, tokens: []string{`{`, `}`}},
@@ -89,13 +73,13 @@ func TestScannerNext(t *testing.T) {
 			},
 		},
 		{in: `{"x": "va\\\\ue", "y": "value y"}`, tokens: []string{
-			`{`, `"x"`, `:`, `"va\\\\ue"`, `,`, `"y"`, `:`, `"value y"`, `}`,
+			`{`, `"x"`, `:`, `"va\\ue"`, `,`, `"y"`, `:`, `"value y"`, `}`,
 		}},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
-			scanner := NewScanner(&SmallReader{r: strings.NewReader(tc.in)})
+			scanner := Scanner{data: []byte(tc.in)}
 			for n, want := range tc.tokens {
 				got := scanner.Next()
 				if string(got) != want {
@@ -106,9 +90,7 @@ func TestScannerNext(t *testing.T) {
 			if len(last) > 0 {
 				t.Fatalf("expected: %q, got: %q", "", string(last))
 			}
-			if err := scanner.Error(); err != io.EOF {
-				t.Fatalf("expected: %v, got: %v", io.EOF, err)
-			}
+			require.False(t, scanner.More())
 		})
 	}
 }
@@ -116,15 +98,14 @@ func TestScannerNext(t *testing.T) {
 func TestParseString(t *testing.T) {
 	testParseString(t, `""`, `""`)
 	testParseString(t, `"" `, `""`)
-	testParseString(t, `"\""`, `"\""`)
-	testParseString(t, `"\\\\\\\\\6"`, `"\\\\\\\\\6"`)
-	testParseString(t, `"\6"`, `"\6"`)
+	testParseString(t, `"\""`, `"""`)
+	testParseString(t, `"\\\\\\\\\t"`, `"\\\\	"`)
+	testParseString(t, `"\\b"`, `"\b"`)
 }
 
 func testParseString(t *testing.T, json, want string) {
 	t.Helper()
-	r := strings.NewReader(json)
-	scanner := NewScanner(r)
+	scanner := Scanner{data: []byte(json)}
 	got := scanner.Next()
 	if string(got) != want {
 		t.Fatalf("expected: %q, got: %q", want, got)
@@ -133,7 +114,6 @@ func testParseString(t *testing.T, json, want string) {
 
 func TestParseNumber(t *testing.T) {
 	testParseNumber(t, `1`)
-	// testParseNumber(t, `0000001`)
 	testParseNumber(t, `12.0004`)
 	testParseNumber(t, `1.7734`)
 	testParseNumber(t, `15`)
@@ -150,8 +130,7 @@ func TestParseNumber(t *testing.T) {
 
 func testParseNumber(t *testing.T, tc string) {
 	t.Helper()
-	r := strings.NewReader(tc)
-	scanner := NewScanner(r)
+	scanner := Scanner{data: []byte(tc)}
 	got := scanner.Next()
 	if string(got) != tc {
 		t.Fatalf("expected: %q, got: %q", tc, got)
@@ -159,27 +138,14 @@ func testParseNumber(t *testing.T, tc string) {
 }
 
 func TestScanner(t *testing.T) {
-	testScanner(t, 1)
-	testScanner(t, 8)
-	testScanner(t, 64)
-	testScanner(t, 256)
-	testScanner(t, 1<<10)
-	testScanner(t, 8<<10)
-	testScanner(t, 1<<20)
-}
-
-func testScanner(t *testing.T, sz int) {
-	t.Helper()
-	buf := make([]byte, sz)
 	for _, tc := range inputs {
 		r := fixture(t, tc.path)
+		data, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
 		t.Run(tc.path, func(t *testing.T) {
-			sc := &Scanner{
-				br: byteReader{
-					data: buf[:0],
-					r:    r,
-				},
-			}
+			sc := Scanner{data: data}
 			n := 0
 			for len(sc.Next()) > 0 {
 				n++
@@ -189,11 +155,4 @@ func testScanner(t *testing.T, sz int) {
 			}
 		})
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

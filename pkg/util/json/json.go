@@ -351,7 +351,9 @@ func (b *ObjectBuilderWithCounter) Size() uintptr {
 
 // ObjectBuilder builds JSON Object by a key value pair sequence.
 type ObjectBuilder struct {
-	pairs []jsonKeyValuePair
+	pairs     []jsonKeyValuePair
+	unordered bool
+	built     bool
 }
 
 // NewObjectBuilder returns an ObjectBuilder. The builder will reserve spaces
@@ -364,7 +366,7 @@ func NewObjectBuilder(numAddsHint int) *ObjectBuilder {
 
 // Add appends key value pair to the sequence.
 func (b *ObjectBuilder) Add(k string, v JSON) {
-	if b.pairs == nil {
+	if b.built {
 		panic(errors.AssertionFailedf(msgModifyAfterBuild))
 	}
 	b.pairs = append(b.pairs, jsonKeyValuePair{k: jsonString(k), v: v})
@@ -373,9 +375,14 @@ func (b *ObjectBuilder) Add(k string, v JSON) {
 // Build returns a JSON object built from a key value pair sequence. After that,
 // it should not be modified any longer.
 func (b *ObjectBuilder) Build() JSON {
-	if b.pairs == nil {
+	if b.built {
 		panic(errors.AssertionFailedf(msgModifyAfterBuild))
 	}
+	b.built = true
+	if b.unordered {
+		return jsonObject(b.pairs)
+	}
+
 	orders := make([]int, len(b.pairs))
 	for i := range orders {
 		orders[i] = i
@@ -841,8 +848,9 @@ func (j jsonObject) Size() uintptr {
 	return valSize
 }
 
-// ParseJSON takes a string of JSON and returns a JSON value.
-func ParseJSON(s string) (JSON, error) {
+// parseJSONGoStd parses json using encoding/json library.
+// TODO(yevgeniy): Remove this code once we get more confidence in lexer implementation.
+func parseJSONGoStd(s string, _ parseConfig) (JSON, error) {
 	// This goes in two phases - first it parses the string into raw interface{}s
 	// using the Go encoding/json package, then it transforms that into a JSON.
 	// This could be faster if we wrote a parser to go directly into the JSON.
@@ -858,10 +866,7 @@ func ParseJSON(s string) (JSON, error) {
 	decoder.UseNumber()
 	err := decoder.Decode(&result)
 	if err != nil {
-		err = errors.Handled(err)
-		err = errors.Wrap(err, "unable to decode JSON")
-		err = pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
-		return nil, err
+		return nil, jsonDecodeError(err)
 	}
 
 	// Check to see if input has more data.
@@ -876,6 +881,22 @@ func ParseJSON(s string) (JSON, error) {
 		return nil, errTrailingCharacters
 	}
 	return MakeJSON(result)
+}
+
+func jsonDecodeError(err error) error {
+	return pgerror.Wrapf(
+		errors.Handled(err),
+		pgcode.InvalidTextRepresentation,
+		"unable to decode JSON")
+}
+
+// ParseJSON takes a string of JSON and returns a JSON value.
+func ParseJSON(s string, opts ...ParseOption) (JSON, error) {
+	cfg := parseJSONDefaultConfig
+	for _, o := range opts {
+		o.apply(&cfg)
+	}
+	return cfg.parseJSON(s)
 }
 
 // EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,

@@ -256,7 +256,7 @@ const sampleJSON = `{
 }`
 
 func BenchmarkEncodeJSON(b *testing.B) {
-	j := jsonTestShorthand(sampleJSON)
+	j := parseJSON(b, sampleJSON)
 
 	b.ResetTimer()
 
@@ -266,7 +266,7 @@ func BenchmarkEncodeJSON(b *testing.B) {
 }
 
 func BenchmarkDecodeJSON(b *testing.B) {
-	j := jsonTestShorthand(sampleJSON)
+	j := parseJSON(b, sampleJSON)
 
 	b.ResetTimer()
 	bytes, err := EncodeJSON(nil, j)

@@ -20,7 +20,7 @@ SELECT '1.00'::JSON
 ----
 1.00
 
-statement error unexpected EOF
+statement error could not parse JSON
 SELECT '{'::JSON
 
 query T
