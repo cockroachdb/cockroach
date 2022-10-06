@@ -54,7 +54,7 @@ func BenchmarkInsights(b *testing.B) {
 			numTransactionsPerSession := b.N / numSessions
 			var sessions sync.WaitGroup
 			sessions.Add(numSessions)
-			writer := provider.Writer()
+			writer := provider.Writer(false /* internal */)
 
 			for i := 0; i < numSessions; i++ {
 				sessionID := clusterunique.ID{Uint128: uint128.FromInts(0, uint64(i))}
