@@ -57,13 +57,15 @@ go_test(
     size = "small",
     srcs = [
         "decode_test.go",
+        "mvcc3_test.go",
         "mvcc_test.go",
     ],
     args = ["-test.timeout=55s"],
+    embed = [":enginepb"],
     deps = [
-        ":enginepb",
         "//pkg/roachpb",
         "//pkg/storage",
+        "//pkg/testutils/zerofields",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_redact//:redact",
