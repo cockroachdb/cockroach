@@ -121,7 +121,9 @@ message RecordedSpan {
   // A StructuredRecord wraps the Payload with a RecordedAt timestamp to expose
   // information about when this event occurred.
   repeated StructuredRecord structured_records = 14 [(gogoproto.nullable) = false];
-
+  // structured_records_size_bytes represents the total size of the logs in
+  // structured_records.
+  int64 structured_records_size_bytes = 20;
 
   // ChildrenMetadata is a mapping from operation to the aggregated metadata of
   // that operation.

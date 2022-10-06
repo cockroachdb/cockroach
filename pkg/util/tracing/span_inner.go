@@ -130,7 +130,7 @@ func treeifyRecording(rec tracingpb.Recording) Trace {
 	for i, sp := range orphans {
 		traces[i] = treeifyRecordingInner(sp, byParent)
 	}
-	r.addChildren(traces)
+	r.addChildren(traces, 0 /* maxSpans */, 0 /* maxStructuredBytes */)
 	return r
 }
 
@@ -142,7 +142,7 @@ func treeifyRecordingInner(
 	for i, s := range byParent[sp.SpanID] {
 		children[i] = treeifyRecordingInner(*s, byParent)
 	}
-	r.addChildren(children)
+	r.addChildren(children, 0 /* maxSpans */, 0 /* maxStructuredBytes */)
 	return r
 }
 

@@ -49,13 +49,29 @@ import (
 )
 
 const (
+
 	// maxRecordedSpansPerTrace limits the number of spans per recording, keeping
 	// recordings from getting too large.
 	maxRecordedSpansPerTrace = 1000
-	// maxRecordedBytesPerSpan limits the size of logs and structured in a span;
-	// use a comfortable limit.
-	maxLogBytesPerSpan        = 256 * (1 << 10) // 256 KiB
-	maxStructuredBytesPerSpan = 10 * (1 << 10)  // 10 KiB
+	// maxRecordedBytesPerSpan limits the size of unstructured logs in a span.
+	maxLogBytesPerSpan = 256 * (1 << 10) // 256 KiB
+	// maxStructuredBytesPerSpan limits the size of structured logs in a span.
+	// This limit applies to records directly logged into the span; it does not
+	// apply to records in child span (including structured records copied from
+	// the child into the parent when the child is dropped because of the number
+	// of spans limit).
+	// See also maxStructuredBytesPerTrace.
+	maxStructuredBytesPerSpan = 10 * (1 << 10) // 10 KiB
+	// maxStructuredBytesPerTrace limits the total size of structured logs in a
+	// trace recording, across all spans. This limit is enforced at the time when
+	// a span is finished and its recording is copied to the parent, and at the
+	// time when an open span's recording is collected - which calls into all its
+	// open children. Thus, if there are multiple open spans that are part of the
+	// same trace, each one of them can temporarily have up to
+	// maxStructuredBytesPerTrace worth of messages under it. Each open span is
+	// also subject to the maxStructuredBytesPerSpan limit.
+	maxStructuredBytesPerTrace = 1 << 20 // 1 MiB
+
 	// maxSpanRegistrySize limits the number of local root spans tracked in
 	// a Tracer's registry.
 	maxSpanRegistrySize = 5000
@@ -1176,8 +1192,7 @@ child operation: %s, tracer created at:
 		startTime, opts.LogTags, opts.EventListeners, opts.SpanKind,
 		otelSpan, netTr, opts.Sterile)
 
-	s.i.crdb.enableRecording(opts.recordingType())
-
+	s.i.crdb.SetRecordingType(opts.recordingType())
 	s.i.crdb.parentSpanID = opts.parentSpanID()
 
 	var localRoot bool
