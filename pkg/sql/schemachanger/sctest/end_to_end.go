@@ -44,7 +44,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -61,7 +64,7 @@ func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, fun
 		DisableDefaultTestTenant: true,
 		Knobs: base.TestingKnobs{
 			SQLDeclarativeSchemaChanger: knobs,
-			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),
+			JobsTestingKnobs:            newJobsKnobs(),
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				UseTransactionalDescIDGenerator: true,
 			},
@@ -70,6 +73,39 @@ func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, fun
 	return db, func() {
 		s.Stopper().Stop(context.Background())
 	}
+}
+
+// newJobsKnobs constructs jobs.TestingKnobs for the end-to-end tests.
+func newJobsKnobs() *jobs.TestingKnobs {
+	jobKnobs := jobs.NewTestingKnobsWithShortIntervals()
+
+	// We want to force the process of marking the job as successful
+	// to fail sometimes. This will ensure that the schema change job
+	// is idempotent.
+	var injectedFailures = struct {
+		syncutil.Mutex
+		m map[jobspb.JobID]struct{}
+	}{
+		m: make(map[jobspb.JobID]struct{}),
+	}
+	jobKnobs.BeforeUpdate = func(orig, updated jobs.JobMetadata) error {
+		sc := orig.Payload.GetNewSchemaChange()
+		if sc == nil {
+			return nil
+		}
+		if orig.Status != jobs.StatusRunning || updated.Status != jobs.StatusSucceeded {
+			return nil
+		}
+		injectedFailures.Lock()
+		defer injectedFailures.Unlock()
+		if _, ok := injectedFailures.m[orig.ID]; !ok {
+			injectedFailures.m[orig.ID] = struct{}{}
+			log.Infof(context.Background(), "injecting failure while marking job succeeded")
+			return errors.New("injected failure when marking succeeded")
+		}
+		return nil
+	}
+	return jobKnobs
 }
 
 // EndToEndSideEffects is a data-driven test runner that executes DDL statements in the
