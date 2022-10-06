@@ -43,6 +43,10 @@ func (s *Smither) pickAnyType(typ *types.T) *types.T {
 		if typ.ArrayContents().Family() == types.AnyFamily {
 			typ = randgen.RandArrayContentsType(s.rnd)
 		}
+	case types.DecimalFamily:
+		if s.disableDecimals {
+			typ = s.randType()
+		}
 	}
 	return typ
 }
