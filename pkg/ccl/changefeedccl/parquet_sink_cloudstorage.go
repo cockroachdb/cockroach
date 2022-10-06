@@ -12,11 +12,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	pqexporter "github.com/cockroachdb/cockroach/pkg/sql/importer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -74,24 +74,24 @@ func (pqcs *parquetCloudStorageSink) Flush(ctx context.Context) error {
 	return pqcs.baseCloudStorageSink.Flush(ctx)
 }
 
-func (pqcs *parquetCloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
-	s := pqcs.baseCloudStorageSink
-	// filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
-	// 	s.jobSessionID, s.srcID, s.sinkID, 1, "ganesh", 1234, ".parquet")
+// func (pqcs *parquetCloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
+// 	s := pqcs.baseCloudStorageSink
+// 	// filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
+// 	// 	s.jobSessionID, s.srcID, s.sinkID, 1, "ganesh", 1234, ".parquet")
 
-	filename_output := "/Users/ganeshb/go/src/test/output.parquet"
-	payload, err := os.ReadFile(filename_output)
-	if err != nil {
-		fmt.Printf("error whene opening file: %s\n", err)
-	}
-	n2, err := file.Write(payload)
-	if err != nil {
-		fmt.Printf("error whene writing: %s\n", err)
-	}
-	fmt.Printf("xkcd: wrote %d bytes\n", n2)
+// 	filename_output := "/Users/ganeshb/go/src/test/output.parquet"
+// 	payload, err := os.ReadFile(filename_output)
+// 	if err != nil {
+// 		fmt.Printf("error whene opening file: %s\n", err)
+// 	}
+// 	n2, err := file.Write(payload)
+// 	if err != nil {
+// 		fmt.Printf("error whene writing: %s\n", err)
+// 	}
+// 	fmt.Printf("xkcd: wrote %d bytes\n", n2)
 
-	return s.flushFile(ctx, file)
-}
+// 	return s.flushFile(ctx, file)
+// }
 
 func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	ctx context.Context,
@@ -105,64 +105,66 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	// }
 
 	s := pqcs.baseCloudStorageSink
-	// var pqww *parquetWriterWrapper
+	var pqww *parquetWriterWrapper
 	file, err := s.getOrCreateFile(topic, mvcc)
 	if err != nil {
 		return err
 	}
-	pqcs.flushFile(ctx, file)
+	// pqcs.flushFile(ctx, file)
 
-	// if file.pqww == nil {
-	// 	var err error
-	// 	pqww, err = makeparquetWriterWrapper(ctx, updatedRow, &file.buf)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	file.pqww = pqww
-	// } else {
-	// 	pqww = file.pqww
-	// }
+	if file.pqww == nil {
+		var err error
+		pqww, err = makeparquetWriterWrapper(ctx, updatedRow, &file.buf)
+		if err != nil {
+			return err
+		}
+		file.pqww = pqww
+	} else {
+		pqww = file.pqww
+	}
 
-	// i := 0
-	// parquetRow := make(map[string]interface{}, pqww.numCols)
-	// // Revisit: I am assuming that this iterates through the columns in
-	// // the same order as when iterating through the columns when
-	// // creating the schema. this is important because each encode
-	// // function is dependent on the column position.
-	// updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-	// 	// Revisit: should probably wrap these errors with something
-	// 	// more meaningful for upstream
-	// 	encodeFn, err := pqww.parquetColumns[i].GetEncoder()
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	i++
-	// 	edNative, err := encodeFn(eval.UnwrapDatum(nil, d))
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	colName, err := pqww.parquetColumns[i].GetColName()
-	// 	if err != nil {
-	// 		return err
-	// 	}
+	i := 0
+	parquetRow := make(map[string]interface{}, pqww.numCols)
+	// Revisit: I am assuming that this iterates through the columns in
+	// the same order as when iterating through the columns when
+	// creating the schema. this is important because each encode
+	// function is dependent on the column position.
+	updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		// Revisit: should probably wrap these errors with something
+		// more meaningful for upstream
+		fmt.Printf("xkcd: col name: %s\n", col.Name)
+		encodeFn, err := pqww.parquetColumns[i].GetEncoder()
+		if err != nil {
+			return err
+		}
+		// Revisit: no clue what unwrap datum does, using it cuz export also did
+		edNative, err := encodeFn(eval.UnwrapDatum(nil, d))
+		if err != nil {
+			return err
+		}
+		colName, err := pqww.parquetColumns[i].GetColName()
+		if err != nil {
+			return err
+		}
 
-	// 	parquetRow[colName] = edNative
+		parquetRow[colName] = edNative
+		i++
 
-	// 	return nil
+		return nil
 
-	// })
+	})
 
-	// pqww.parquetWriter.AddData(parquetRow)
+	pqww.parquetWriter.AddData(parquetRow)
 
-	// file.alloc.Merge(&alloc)
-	// if pqww.parquetWriter.CurrentRowGroupSize() > s.targetMaxFileSize {
-	// 	s.metrics.recordSizeBasedFlush()
+	file.alloc.Merge(&alloc)
+	if pqww.parquetWriter.CurrentRowGroupSize() > s.targetMaxFileSize {
+		s.metrics.recordSizeBasedFlush()
 
-	// 	pqww.parquetWriter.Close()
-	// 	if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
-	// 		return err
-	// 	}
-	// }
+		pqww.parquetWriter.Close()
+		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
+			return err
+		}
+	}
 
 	return nil
 
@@ -203,6 +205,7 @@ func getParquetColumnTypes(
 		names = append(names, col.Name)
 		return nil
 	})
+	fmt.Printf("xkcd: parquet column size: %d\n", len(typs))
 
 	parquetColumns := make([]pqexporter.ParquetColumn, len(typs))
 

@@ -639,6 +639,10 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	}
 	s.asyncFlushActive = asyncFlushEnabled
 
+	if file.pqww != nil {
+		file.pqww.parquetWriter.Close()
+		file.rawSize = len(file.buf.Bytes())
+	}
 	// We use this monotonically increasing fileID to ensure correct ordering
 	// among files emitted at the same timestamp during the same job session.
 	fileID := s.fileID
