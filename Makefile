@@ -1119,7 +1119,7 @@ endif
 
 .instrumentor_exclusions.tmp:
 	@echo "regenerating $@"
-	VENDOR_EXCLUDE_ALL=$(INSTRUMENTOR_EXCLUDE_VENDOR) ./build/instrumentation/gen_exclusions.sh > $@
+	VENDOR_EXCLUDE_ALL=$(INSTRUMENTOR_EXCLUDE_VENDOR) ./build/poc-antithesis/instrumentation/gen_exclusions.sh > $@
 
 .PHONY: instrumentcode
 instrumentcode: instrumentation-prereqs $(instrumentation-deps) .instrumentor_exclusions.tmp
@@ -1129,7 +1129,7 @@ instrumentcode: instrumentation-prereqs $(instrumentation-deps) .instrumentor_ex
 		-antithesis $(ANTITHESIS)/instrumentation/go/wrappers . $(INSTRUMENTATION_TMP)
 
 instrument instrumentshort: instrumentation-prereqs instrumentcode
-	./build/instrumentation/vendor_antithesis.sh $(INSTRUMENTATION_TMP)
+	./build/poc-antithesis/instrumentation/vendor_antithesis.sh $(INSTRUMENTATION_TMP)
 	cd $(INSTRUMENTATION_TMP)/customer && \
 		$(xgo) $(build-mode) -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
 	cp $(INSTRUMENTATION_TMP)/customer/$@ ./$@
@@ -1138,6 +1138,7 @@ instrument instrumentshort: instrumentation-prereqs instrumentcode
 	cp $(INSTRUMENTATION_TMP)/symbols/go-*.sym.tsv ./artifacts/instrument
 	cp /opt/antithesis/lib/libvoidstar.so ./artifacts/instrument/libvoidstar.so
 	cd  ./artifacts/instrument && ln -sf ../../$@ cockroach-instrumented
+	cp .instrumentor_exclusions.tmp ./artifacts/instrument/
 
 .PHONY: cleaninstrument
 cleaninstrument: ## Clean up instrumentation artifacts and instrumented code.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
+dir="$(dirname $(dirname $(dirname "${0}")))"
 source "$dir/teamcity-support.sh"  # For $root
 source "$dir/release/teamcity-support.sh" # For configure_docker_creds, docker_login_with_google
 
@@ -15,7 +15,14 @@ mkdir -p "$ANTITHESIS_ARTIFACTS"
 
 tc_start_block "Variable Setup"
 build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
-build_tag="kv_txn_unexpectedly_committed"
+
+if [ -z "${BUILD_TAG}" ]; then
+  build_tag=$(git rev-parse --abbrev-ref HEAD)
+else
+  # user-specified BUILD_TAG overrides current branch name
+  build_tag=${BUILD_TAG}
+fi
+
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
 release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
 
@@ -50,26 +57,19 @@ docker pull $gcr_repository/cockroachdb/builder:antithesis-latest
 
 tc_end_block "Docker configure"
 
+# Subsequent steps are run relative to poc-antithesis
+cd $dir/poc-antithesis
+
 tc_start_block "Compile instrumented crdb (short) binary"
 
 # N.B. antithesis' goinstrumenter uses 'cp -R' which requires that the instrumentation directory is not a child
 # N.B. instrumented binary, symbols and shared lib are copied into $ANTITHESIS_ARTIFACTS (see Makefile)
-run build/builder.sh mkrelease amd64-linux-gnu instrumentshort INSTRUMENTATION_TMP=/go/src/github.com/instrument
+run ./builder.sh mkrelease amd64-linux-gnu instrumentshort INSTRUMENTATION_TMP=/go/src/github.com/instrument
 tc_end_block "Compile instrumented crdb (short) binary"
 
 tc_start_block "Copy instrumented binary and dependency files to build/deploy"
-# copy instrumented binary, symbol map and uninstrumented binary (used for workload generation)
-cp $ANTITHESIS_ARTIFACTS/go-*.sym.tsv build/deploy/
-# N.B. the instrumented binary will be renamed as cockroach (see build/deploy/Dockerfile_antithesis)
-cp $ANTITHESIS_ARTIFACTS/cockroach-instrumented build/deploy/instrument
-cp $ANTITHESIS_ARTIFACTS/libvoidstar.so build/deploy/
-# N.B. the un-instrumented binary will be renamed as cockroach and used for workload generation (see build/deploy/Dockerfile)
-cp cockroachshort-linux-2.6.32-gnu-amd64 build/deploy/cockroach
-cp lib/libgeos.so lib/libgeos_c.so build/deploy/
-cp -r licenses build/deploy/
+run ./prepare-deploy.sh
 
-chmod 755 build/deploy/instrument
-chmod 755 build/deploy/cockroach
 tc_end_block "Copy instrumented binary and dependency files to build/deploy"
 
 tc_start_block "Build cockroach-instrumented docker image"
@@ -79,8 +79,8 @@ docker build \
   --tag="cockroachdb/cockroach-instrumented:$build_tag" \
   --memory 30g \
   --memory-swap -1 \
-  -f build/deploy/Dockerfile_antithesis_instrumented \
-  build/deploy
+  -f deploy/Dockerfile_antithesis_instrumented \
+  deploy
 tc_end_block "Build cockroach-instrumented docker image"
 
 tc_start_block "Build workload docker image"
@@ -90,8 +90,8 @@ docker build \
   --tag="cockroachdb/workload:$build_tag" \
   --memory 30g \
   --memory-swap -1 \
-  -f build/deploy/Dockerfile_antithesis_workload \
-  build/deploy
+  -f deploy/Dockerfile_antithesis_workload \
+  deploy
 tc_end_block "Build workload docker image"
 
 tc_start_block "Build docker-compose config. image"
@@ -101,8 +101,8 @@ docker build \
   --tag="cockroachdb/config:$build_tag" \
   --memory 30g \
   --memory-swap -1 \
-  -f build/deploy/Dockerfile_antithesis_config \
-  build/deploy
+  -f deploy/Dockerfile_antithesis_config \
+  deploy
 tc_end_block "Build docker-compose config. image"
 
 tc_start_block "Pushing docker images to GCR"
@@ -115,6 +115,15 @@ docker push $gcr_repository/cockroachdb/cockroach-instrumented:$build_tag
 docker push $gcr_repository/cockroachdb/workload:$build_tag
 docker push $gcr_repository/cockroachdb/config:$build_tag
 tc_end_block "Pushing docker images to GCR"
+
+tc_start_block "Verifying docker-compose"
+
+export docker_registry=$gcr_repository
+export build_tag=$build_tag
+export data_dir=$artifacts/data
+# verify docker-compose; workload takes 5 minutes, plus init. time; so, give it a slack of another 5 mins.
+run timeout 600 deploy/verify_docker_compose.sh
+tc_end_block "Verifying docker-compose"
 
 tc_start_block "Pushing docker images to Antithesis"
 

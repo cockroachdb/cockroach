@@ -1,0 +1,11 @@
+deploy/cockroach
+deploy/go-*.sym.tsv
+deploy/instrument
+deploy/libgeos.so
+deploy/libgeos_c.so
+deploy/libvoidstar.so
+deploy/licenses/
+go.mod
+goinstrumentor
+libvoidstar.so
+wrappers.go
