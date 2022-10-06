@@ -11,6 +11,8 @@
 package tree_test
 
 import (
+	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -19,7 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	jsonb "github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func BenchmarkAsJSON(b *testing.B) {
@@ -64,6 +69,71 @@ func BenchmarkAsJSON(b *testing.B) {
 				bench(b, typ)
 			})
 		}
+	}
+}
+
+func BenchmarkParseJSON(b *testing.B) {
+	// Use fixed seed so that each invocation of this benchmark
+	// produces exactly the same types, and datums streams.
+	// This number can be changed to an arbitrary value; doing so
+	// would result in new types/datums being produced.
+	rng := randutil.NewTestRandWithSeed(-4365865412074131521)
+
+	const numJSON = 4096
+	makeTestData := func(opts ...jsonb.RandOption) (res []string) {
+		res = make([]string, numJSON)
+		for i := 0; i < numJSON; i++ {
+			j, err := jsonb.RandGen(rng, opts...)
+			if err != nil {
+				b.Fatal(err)
+			}
+			res[i] = j.String()
+		}
+		return res
+	}
+
+	type testInput struct {
+		strLen     int
+		escapeProb float32
+		data       []string
+	}
+
+	stringEscapeChance := []float32{0, 0.03, 0.4}
+	strMaxLengths := []int{1 << 7, 1 << 9, 1 << 12, 1 << 14, 1 << 18, 1 << 19}
+
+	start := timeutil.Now()
+	benchCases := func() (res []testInput) {
+		for _, escapeProb := range stringEscapeChance {
+			for _, maxStrLen := range strMaxLengths {
+				res = append(res, testInput{
+					strLen:     maxStrLen,
+					escapeProb: escapeProb,
+					data:       makeTestData(jsonb.WithMaxStrLen(maxStrLen), jsonb.WithEscapeProb(escapeProb)),
+				})
+			}
+		}
+		return res
+	}()
+	log.Infof(context.Background(), "test data generation took %s", timeutil.Since(start))
+	b.ResetTimer()
+
+	parseOpts := []jsonb.ParseOption{jsonb.WithFastJSONParser(), jsonb.WithUnorderedObjectKeys()}
+
+	for _, bc := range benchCases {
+		b.Run(fmt.Sprintf("escape=%.02f%%/%d", 100*bc.escapeProb, bc.strLen), func(b *testing.B) {
+			b.ReportAllocs()
+			var totalBytes int64
+			for i := 0; i < b.N; i++ {
+				str := bc.data[i%numJSON]
+
+				_, err := jsonb.ParseJSON(str, parseOpts...)
+				if err != nil {
+					b.Fatal(err)
+				}
+				totalBytes += int64(len(str))
+			}
+			b.SetBytes(int64(float64(totalBytes) / (float64(b.N))))
+		})
 	}
 }
 
