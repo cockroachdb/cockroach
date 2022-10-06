@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
@@ -637,6 +638,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedTSReader = spanconfigptsreader.NewAdapter(protectedtsProvider.(*ptprovider.Provider).Cache, spanConfig.subscriber)
 	}
 
+	rangeLogWriter := rangelog.NewWriter(
+		func() int64 {
+			return int64(builtins.GenerateUniqueInt(
+				builtins.ProcessUniqueID(nodeIDContainer.Get()),
+			))
+		},
+		internalExecutor,
+	)
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:        cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                 st,
@@ -667,7 +676,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
 		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
-		RangeLogWriter:           rangelog.NewWriter(internalExecutor),
+		RangeLogWriter:           rangeLogWriter,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {

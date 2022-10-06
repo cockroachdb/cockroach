@@ -14,6 +14,7 @@ package rangelog
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -25,13 +26,32 @@ import (
 
 // Writer implements kvserver.RangeLogWriter using the InternalExecutor.
 type Writer struct {
-	ie sqlutil.InternalExecutor
+	generateUniqueID func() int64
+	ie               sqlutil.InternalExecutor
+	insertQuery      string
 }
 
 // NewWriter returns a new Writer which implements kvserver.RangeLogWriter
 // using the InternalExecutor.
-func NewWriter(ie sqlutil.InternalExecutor) *Writer {
-	return &Writer{ie: ie}
+func NewWriter(generateUniqueID func() int64, ie sqlutil.InternalExecutor) *Writer {
+	return newWriter(generateUniqueID, ie, "system.rangelog")
+}
+
+func newWriter(
+	generateUniqueID func() int64, ie sqlutil.InternalExecutor, tableName string,
+) *Writer {
+	return &Writer{
+		generateUniqueID: generateUniqueID,
+		ie:               ie,
+		insertQuery: fmt.Sprintf(`
+	INSERT INTO %s (
+		timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info, "uniqueID"
+	)
+	VALUES(
+		$1, $2, $3, $4, $5, $6, $7
+	)
+	`, tableName),
+	}
 }
 
 // WriteRangeLogEvent implements kvserver.RangeLogWriter. It writes the event
@@ -39,14 +59,6 @@ func NewWriter(ie sqlutil.InternalExecutor) *Writer {
 func (s *Writer) WriteRangeLogEvent(
 	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
 ) error {
-	const insertEventTableStmt = `
-	INSERT INTO system.rangelog (
-		timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
-	)
-	VALUES(
-		$1, $2, $3, $4, $5, $6
-	)
-	`
 	args := []interface{}{
 		event.Timestamp,
 		event.RangeID,
@@ -54,6 +66,7 @@ func (s *Writer) WriteRangeLogEvent(
 		event.EventType.String(),
 		nil, // otherRangeID
 		nil, // info
+		s.generateUniqueID(),
 	}
 	if event.OtherRangeID != 0 {
 		args[4] = event.OtherRangeID
@@ -68,7 +81,7 @@ func (s *Writer) WriteRangeLogEvent(
 
 	rows, err := s.ie.ExecEx(ctx, "log-range-event", txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		insertEventTableStmt, args...)
+		s.insertQuery, args...)
 	if err != nil {
 		return err
 	}

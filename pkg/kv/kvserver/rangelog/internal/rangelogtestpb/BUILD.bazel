@@ -1,0 +1,40 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "rangelogtestpb_proto",
+    srcs = ["rangelogtest.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//pkg/kv/kvserver/rangelog:__subpackages__"],
+    deps = ["//pkg/kv/kvserver/kvserverpb:kvserverpb_proto"],
+)
+
+go_proto_library(
+    name = "rangelogtestpb_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/internal/rangelogtestpb",
+    proto = ":rangelogtestpb_proto",
+    visibility = [
+        "//pkg/gen:__subpackages__",  # keep
+        "//pkg/kv/kvserver/rangelog:__subpackages__",
+    ],
+    deps = ["//pkg/kv/kvserver/kvserverpb"],
+)
+
+go_library(
+    name = "rangelogtestpb",
+    srcs = ["parse.go"],
+    embed = [":rangelogtestpb_go_proto"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/internal/rangelogtestpb",
+    visibility = ["//pkg/kv/kvserver/rangelog:__subpackages__"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/encoding/csv",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+get_x_data(name = "get_x_data")
