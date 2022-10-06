@@ -554,11 +554,12 @@ func TestTrimRandom(t *testing.T) {
 		}
 		// Check that finishing the spans did not mess up the recording we got
 		// previously.
-		trace.checkNumSpans(t)
+		trace.check(t)
 		for j := 1; j <= trace.NumSpans; j++ {
 			traceCopy := trace.PartialClone()
 			traceCopy.trim(j)
 			require.Equal(t, j, traceCopy.NumSpans)
+			traceCopy.check(t)
 		}
 	}
 }
@@ -593,12 +594,16 @@ func genTrace(
 	return root, unfinished
 }
 
-// checkNumSpans recursively checks that the number of spans under each trace
-// node is correct. It panics if it finds a discrepancy.
-func (t *Trace) checkNumSpans(test *testing.T) {
+// check performs sanity checks on the trace:
+// - verify that the number of spans under each trace node is correct
+// - verify that all children are sorted
+func (t *Trace) check(test *testing.T) {
 	numSpans := 1
 	for i := range t.Children {
-		t.Children[i].checkNumSpans(test)
+		if i > 0 && t.Children[i].Root.StartTime.Before(t.Children[i-1].Root.StartTime) {
+			test.Fatalf("mis-ordered children")
+		}
+		t.Children[i].check(test)
 		numSpans += t.Children[i].NumSpans
 	}
 	if numSpans != t.NumSpans {
