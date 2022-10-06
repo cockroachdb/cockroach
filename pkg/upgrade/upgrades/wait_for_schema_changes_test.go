@@ -254,7 +254,6 @@ func TestWaitForSchemaChangeMigrationSynthetic(t *testing.T) {
 			var waitCount int32
 			var secondWaitChan chan struct{}
 			params.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{
-				DisableAdoptions: true,
 				BeforeWaitForJobsQuery: func() {
 					if secondWaitChan != nil {
 						if atomic.AddInt32(&waitCount, 1) == 2 {

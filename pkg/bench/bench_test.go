@@ -23,6 +23,13 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -33,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 func runBenchmarkSelect1(b *testing.B, db *sqlutils.SQLRunner) {
@@ -1419,4 +1427,102 @@ func BenchmarkNameResolution(b *testing.B) {
 		}
 		b.StopTimer()
 	})
+}
+
+func BenchmarkFuncExprTypeCheck(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	s, db, kvDB := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "defaultdb"})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.ExecMultiple(b,
+		`CREATE SCHEMA sc1`,
+		`CREATE SCHEMA sc2`,
+		`CREATE FUNCTION abs(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val $$`,
+		`CREATE FUNCTION sc1.udf(val INT) RETURNS INT CALLED ON NULL INPUT LANGUAGE SQL AS $$ SELECT val $$`,
+		`CREATE FUNCTION sc1.udf(val STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT val $$`,
+		`CREATE FUNCTION sc1.udf(val FLOAT) RETURNS FLOAT LANGUAGE SQL AS $$ SELECT val $$`,
+		`CREATE FUNCTION sc2.udf(val INT) RETURNS INT LANGUAGE SQL AS $$ SELECT val $$`,
+	)
+
+	ctx := context.Background()
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	p, cleanup := sql.NewInternalPlanner("type-check-benchmark",
+		kvDB.NewTxn(ctx, "type-check-benchmark-planner"),
+		username.RootUserName(),
+		&sql.MemoryMetrics{},
+		&execCfg,
+		sessiondatapb.SessionData{
+			Database: "defaultdb",
+		},
+	)
+
+	defer cleanup()
+	semaCtx := p.(sql.PlanHookState).SemaCtx()
+	sp := sessiondata.MakeSearchPath(append(sessiondata.DefaultSearchPath.GetPathArray(), "sc1", "sc2"))
+	semaCtx.SearchPath = &sp
+
+	testCases := []struct {
+		name    string
+		exprStr string
+	}{
+		{
+			name:    "builtin called on null input",
+			exprStr: "md5('some_string')",
+		},
+		{
+			name:    "builtin not called on null input",
+			exprStr: "parse_timetz('some_string')",
+		},
+		{
+			name:    "builtin aggregate",
+			exprStr: "corr(123, 321)",
+		},
+		{
+			name:    "builtin aggregate not called on null",
+			exprStr: "concat_agg(NULL)",
+		},
+		{
+			name:    "udf same name as builtin",
+			exprStr: "abs(123)",
+		},
+		{
+			name:    "udf across different schemas",
+			exprStr: "udf(123)",
+		},
+		{
+			name:    "unary operator",
+			exprStr: "-123",
+		},
+		{
+			name:    "binary operator",
+			exprStr: "123 + 321",
+		},
+		{
+			name:    "comparison operator",
+			exprStr: "123 > 321",
+		},
+		{
+			name:    "tuple comparison operator",
+			exprStr: "(1, 2, 3) > (1, 2, 4)",
+		},
+		{
+			name:    "tuple in operator",
+			exprStr: "1 in (1, 2, 3)",
+		},
+	}
+
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			expr, err := parser.ParseExpr(tc.exprStr)
+			require.NoError(b, err)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
+				require.NoError(b, err)
+			}
+		})
+	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
 )
 
@@ -84,6 +85,9 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// Skip this roachtest until master is on 23.1
+			skip.WithIssue(t, 89345)
+
 			if runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
