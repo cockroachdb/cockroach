@@ -28,10 +28,15 @@ if grep TODO DEPS.bzl; then
 fi
 check_workspace_clean 'dev_generate_bazel' "Run \`./dev generate bazel\` to automatically regenerate these."
 
+# Run `bazel run //pkg/gen` and ensure nothing changes. This ensures
+# generated documentation and checked-in go code are up to date.
+bazel run //pkg/gen
+check_workspace_clean 'dev_generate' "Run \`./dev generate\` to automatically regenerate these."
 # Run go mod tidy and ensure nothing changes.
 # NB: If files are missing from any packages then `go mod tidy` will
 # fail. So we need to make sure that `.pb.go` sources are populated.
-bazel run //pkg/gen:go_proto
+# This is part of what //pkg/gen does, in addition to generating Go code and
+# docs.
 bazel run @go_sdk//:bin/go --ui_event_filters=-DEBUG,-info,-stdout,-stderr --noshow_progress mod tidy
 check_workspace_clean 'go_mod_tidy' "Run \`go mod tidy\` to automatically regenerate these."
 

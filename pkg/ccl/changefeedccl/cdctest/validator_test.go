@@ -292,14 +292,14 @@ func TestFingerprintValidator(t *testing.T) {
 
 	t.Run(`empty`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`empty`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `empty`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `empty`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		assertValidatorFailures(t, v)
 	})
 	t.Run(`wrong data`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`wrong_data`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `wrong_data`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `wrong_data`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":10}}`, ts[1])
 		noteResolved(t, v, `p`, ts[1])
@@ -310,7 +310,7 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 	t.Run(`all resolved`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`all_resolved`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `all_resolved`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `all_resolved`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		if err := v.NoteResolved(`p`, ts[0]); err != nil {
 			t.Fatal(err)
@@ -329,7 +329,7 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 	t.Run(`rows unsorted`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`rows_unsorted`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `rows_unsorted`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `rows_unsorted`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
 		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])
@@ -341,7 +341,7 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 	t.Run(`missed initial`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`missed_initial`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_initial`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_initial`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		// Intentionally missing {"k":1,"v":1} at ts[1].
@@ -357,7 +357,7 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 	t.Run(`missed middle`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`missed_middle`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_middle`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_middle`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
@@ -375,7 +375,7 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 	t.Run(`missed end`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`missed_end`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_end`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `missed_end`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteResolved(t, v, `p`, ts[0])
 		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
@@ -390,7 +390,7 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 	t.Run(`initial scan`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`initial_scan`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `initial_scan`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `initial_scan`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":3}}`, ts[3])
 		noteRow(t, v, ignored, `[2]`, `{"after": {"k":2,"v":2}}`, ts[3])
@@ -399,7 +399,7 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 	t.Run(`unknown partition`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`unknown_partition`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `unknown_partition`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `unknown_partition`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		if err := v.NoteResolved(`nope`, ts[1]); !testutils.IsError(err, `unknown partition`) {
 			t.Fatalf(`expected "unknown partition" error got: %+v`, err)
@@ -407,7 +407,7 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 	t.Run(`resolved unsorted`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`resolved_unsorted`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `resolved_unsorted`, []string{`p`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `resolved_unsorted`, []string{`p`}, testColumns)
 		require.NoError(t, err)
 		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
 		noteResolved(t, v, `p`, ts[1])
@@ -417,7 +417,7 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 	t.Run(`two partitions`, func(t *testing.T) {
 		sqlDB.Exec(t, createTableStmt(`two_partitions`))
-		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `two_partitions`, []string{`p0`, `p1`}, testColumns, false)
+		v, err := NewFingerprintValidator(sqlDBRaw, `foo`, `two_partitions`, []string{`p0`, `p1`}, testColumns)
 		require.NoError(t, err)
 		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":1}}`, ts[1])
 		noteRow(t, v, ignored, `[1]`, `{"after": {"k":1,"v":2}}`, ts[2])

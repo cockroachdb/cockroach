@@ -12,6 +12,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"runtime"
 	"strconv"
@@ -46,6 +47,15 @@ var (
 	targetTable = "bank"
 
 	timeout = 30 * time.Minute
+	// set a fixed number of operations to be performed by the
+	// workload. Since we are validating events emitted by the
+	// changefeed in this test (ValidateDuplicatedEvents() call),
+	// enforcing a maximum number of operations sets a boundary on the
+	// validator's memory usage. The current value represents enough
+	// operations to allow for the validator to receive the desired
+	// amount of resolved events at different points of the upgrade
+	// process while staying within the current timeout.
+	maxOps = 12000
 )
 
 func registerCDCMixedVersions(r registry.Registry) {
@@ -78,9 +88,11 @@ type cdcMixedVersionTester struct {
 		syncutil.Mutex
 		C chan struct{}
 	}
-	kafka     kafkaManager
-	validator *cdctest.CountValidator
-	cleanup   func()
+	crdbUpgrading syncutil.Mutex
+	kafka         kafkaManager
+	validator     *cdctest.CountValidator
+	workloadDone  bool
+	cleanup       func()
 }
 
 func newCDCMixedVersionTester(
@@ -125,10 +137,12 @@ func (cmvt *cdcMixedVersionTester) installAndStartWorkload() versionStep {
 		t.Status("installing and running workload")
 		u.c.Run(ctx, cmvt.workloadNodes, "./workload init bank {pgurl:1}")
 		cmvt.monitor.Go(func(ctx context.Context) error {
+			defer func() { cmvt.workloadDone = true }()
 			return u.c.RunE(
 				ctx,
 				cmvt.workloadNodes,
-				fmt.Sprintf("./workload run bank {pgurl%s} --max-rate=10 --tolerate-errors", cmvt.crdbNodes),
+				fmt.Sprintf("./workload run bank {pgurl%s} --max-rate=10 --max-ops %d --tolerate-errors",
+					cmvt.crdbNodes, maxOps),
 			)
 		})
 	}
@@ -169,6 +183,15 @@ func (cmvt *cdcMixedVersionTester) waitForResolvedTimestamps() versionStep {
 	}
 }
 
+// waitForWorkload waits for the workload to finish
+func (cmvt *cdcMixedVersionTester) waitForWorkload() versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		t.L().Printf("waiting for workload to finish...")
+		cmvt.monitor.Wait()
+		t.L().Printf("workload finished")
+	}
+}
+
 // setupVerifier creates a CDC validator to validate that a changefeed
 // created on the `target` table is able to re-create the table
 // somewhere else. It also verifies CDC's ordering guarantees. This
@@ -196,20 +219,22 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 				t.Fatal(err)
 			}
 
-			fprintV, err := cdctest.NewFingerprintValidator(db, tableName, `fprint`, consumer.partitions, 0, true)
+			getConn := func(node int) *gosql.DB { return u.conn(ctx, t, node) }
+			fprintV, err := cdctest.NewFingerprintValidator(db, tableName, `fprint`, consumer.partitions, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
+			fprintV.DBFunc(cmvt.cdcDBConn(getConn)).ValidateDuplicatedEvents()
 			validators := cdctest.Validators{
 				cdctest.NewOrderValidator(tableName),
 				fprintV,
 			}
 			cmvt.validator = cdctest.MakeCountValidator(validators)
 
-			for {
+			for !cmvt.workloadDone {
 				m := consumer.Next(ctx)
 				if m == nil {
-					t.L().Printf("end of changefeed")
+					t.Fatal("unexpected end of changefeed")
 					return nil
 				}
 
@@ -233,6 +258,7 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 					cmvt.timestampResolved()
 				}
 			}
+			return nil
 		})
 	}
 }
@@ -245,6 +271,35 @@ func (cmvt *cdcMixedVersionTester) timestampResolved() {
 
 	if cmvt.timestampsResolved.C != nil {
 		cmvt.timestampsResolved.C <- struct{}{}
+	}
+}
+
+// cdcDBConn is the wrapper passed to the FingerprintValidator. The
+// goal is to ensure that database checks by the validator do not
+// happen while we are running an upgrade. We used to retry database
+// calls in the validator, but that logic adds complexity and does not
+// help in testing the changefeed's correctness
+func (cmvt *cdcMixedVersionTester) cdcDBConn(
+	getConn func(int) *gosql.DB,
+) func(func(*gosql.DB) error) error {
+	return func(f func(*gosql.DB) error) error {
+		cmvt.crdbUpgrading.Lock()
+		defer cmvt.crdbUpgrading.Unlock()
+
+		node := cmvt.crdbNodes.RandNode()[0]
+		return f(getConn(node))
+	}
+}
+
+// crdbUpgradeStep is a wrapper to steps that upgrade the cockroach
+// binary running in the cluster. It makes sure we hold exclusive
+// access to the `crdbUpgrading` lock while the upgrade is in process
+func (cmvt *cdcMixedVersionTester) crdbUpgradeStep(step versionStep) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		cmvt.crdbUpgrading.Lock()
+		defer cmvt.crdbUpgrading.Unlock()
+
+		step(ctx, t, u)
 	}
 }
 
@@ -316,7 +371,7 @@ func runCDCMixedVersions(
 
 		tester.waitForResolvedTimestamps(),
 		// Roll the nodes into the new version one by one in random order
-		binaryUpgradeStep(tester.crdbNodes, mainVersion),
+		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, mainVersion)),
 		// let the workload run in the new version for a while
 		tester.waitForResolvedTimestamps(),
 
@@ -324,19 +379,20 @@ func runCDCMixedVersions(
 
 		// Roll back again, which ought to be fine because the cluster upgrade was
 		// not finalized.
-		binaryUpgradeStep(tester.crdbNodes, predecessorVersion),
+		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, predecessorVersion)),
 		tester.waitForResolvedTimestamps(),
 
 		tester.assertValid(),
 
 		// Roll nodes forward and finalize upgrade.
-		binaryUpgradeStep(tester.crdbNodes, mainVersion),
+		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, mainVersion)),
 
 		// allow cluster version to update
 		allowAutoUpgradeStep(sqlNode()),
 		waitForUpgradeStep(tester.crdbNodes),
 
 		tester.waitForResolvedTimestamps(),
+		tester.waitForWorkload(),
 		tester.assertValid(),
 	).run(ctx, t)
 }

@@ -253,5 +253,5 @@ REVOKE ALL ON TABLE d.s.t FROM testuser;
 
 user testuser
 
-statement error pq: role testuser cannot be dropped because some objects depend on it\nowner of database d\nowner of schema s
+statement error pq: role testuser cannot be dropped because some objects depend on it\nowner of database d\nowner of schema d.s
 DROP ROLE testuser

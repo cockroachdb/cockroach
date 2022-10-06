@@ -177,3 +177,33 @@ INSERT INTO system.scheduled_jobs (schedule_name, owner, executor_type,execution
 
 statement error pq: cannot drop role/user user1; it owns 1 scheduled jobs.
 DROP USER user1
+
+# Verify that schemas are fully qualified in the error message.
+subtest same_schema_name
+
+statement ok
+CREATE ROLE schema_owner
+
+statement ok
+GRANT admin TO schema_owner
+
+statement ok
+SET ROLE schema_owner
+
+statement ok
+CREATE SCHEMA the_schema
+
+statement ok
+USE defaultdb
+
+statement ok
+CREATE SCHEMA the_schema
+
+statement ok
+RESET ROLE;
+RESET DATABASE
+
+statement error role schema_owner cannot be dropped because some objects depend on it\nowner of schema defaultdb.the_schema\nowner of schema test.the_schema
+DROP ROLE schema_owner
+
+subtest end
