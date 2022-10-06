@@ -294,8 +294,10 @@ func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	var cumCount uint64
 	var sum float64
 	for _, bar := range bars {
-		// NB: can't skip over zero buckets since result is
-		// a cumulative histogram.
+		if bar.Count == 0 {
+			// No need to expose trivial buckets.
+			continue
+		}
 		upperBound := float64(bar.To)
 		sum += upperBound * float64(bar.Count)
 
