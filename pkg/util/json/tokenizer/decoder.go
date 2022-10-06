@@ -48,23 +48,22 @@ type Decoder struct {
 	stack
 }
 
-// NewDecoder returns a new Decoder for the supplied Reader r.
-func NewDecoder(r io.Reader) *Decoder {
-	return NewDecoderBuffer(r, make([]byte, 8192))
+// MakeDecoder returns decoder for the input data
+func MakeDecoder(data []byte) Decoder {
+	return Decoder{
+		scanner: Scanner{data: data},
+		state:   (*Decoder).stateValue,
+	}
 }
 
-// NewDecoderBuffer returns a new Decoder for the supplier Reader r, using
-// the []byte buf provided for working storage.
-func NewDecoderBuffer(r io.Reader, buf []byte) *Decoder {
-	return &Decoder{
-		scanner: Scanner{
-			br: byteReader{
-				data: buf[:0],
-				r:    r,
-			},
-		},
-		state: (*Decoder).stateValue,
-	}
+// Pos returns current input position.
+func (d *Decoder) Pos() int {
+	return d.scanner.offset
+}
+
+// More returns true if there is more non-whitespace tokens available.
+func (d *Decoder) More() bool {
+	return d.scanner.More()
 }
 
 type stack []bool

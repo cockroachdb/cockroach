@@ -36,7 +36,12 @@
 
 package tokenizer
 
-import "io"
+import (
+	"sync"
+	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
+)
 
 const (
 	// ObjectStart indicates the start of JSON object.
@@ -61,21 +66,10 @@ const (
 	Null = 'n' // n
 )
 
-// NewScanner returns a new Scanner for the io.Reader r.
-// A Scanner reads from the supplied io.Reader and produces via Next a stream
-// of tokens, expressed as []byte slices.
-func NewScanner(r io.Reader) *Scanner {
-	return &Scanner{
-		br: byteReader{
-			r: r,
-		},
-	}
-}
-
 // Scanner implements a JSON scanner as defined in RFC 7159.
 type Scanner struct {
-	br  byteReader
-	pos int
+	data   []byte
+	offset int
 }
 
 var whitespace = [256]bool{
@@ -104,9 +98,7 @@ var whitespace = [256]bool{
 //	" A string, possibly containing backslash escaped entites.
 //	-, 0-9 A number
 func (s *Scanner) Next() []byte {
-	s.br.release(s.pos)
-	w := s.br.window(0)
-loop:
+	w := s.buf()
 	for pos, c := range w {
 		// strip any leading whitespace.
 		if whitespace[c] {
@@ -116,87 +108,196 @@ loop:
 		// simple case
 		switch c {
 		case ObjectStart, ObjectEnd, Colon, Comma, ArrayStart, ArrayEnd:
-			s.pos = pos + 1
-			return w[pos:s.pos]
+			s.offset += pos + 1
+			return w[pos : pos+1]
 		}
 
-		s.br.release(pos)
+		s.offset += pos
 		switch c {
 		case True:
-			s.pos = validateToken(&s.br, "true")
+			return s.next(validateToken(s.buf(), "true"))
 		case False:
-			s.pos = validateToken(&s.br, "false")
+			return s.next(validateToken(s.buf(), "false"))
 		case Null:
-			s.pos = validateToken(&s.br, "null")
+			return s.next(validateToken(s.buf(), "null"))
 		case String:
-			if s.parseString() < 2 {
-				return nil
-			}
+			return s.parseString()
 		default:
 			// ensure the number is correct.
-			s.pos = s.parseNumber(c)
+			return s.next(s.parseNumber(c))
 		}
-		return s.br.window(0)[:s.pos]
 	}
 
 	// it's all whitespace, ignore it
-	s.br.release(len(w))
+	s.offset += len(w)
+	return nil // eof
+}
 
-	// refill buffer
-	if s.br.extend() == 0 {
-		// eof
+// buf returns unread portion of the input.
+func (s *Scanner) buf() []byte {
+	if s.offset == len(s.data) {
 		return nil
 	}
-	w = s.br.window(0)
-	goto loop
+	return s.data[s.offset:]
 }
 
-func validateToken(br *byteReader, expected string) int {
-	for {
-		w := br.window(0)
-		n := len(expected)
-		if len(w) >= n {
-			if string(w[:n]) != expected {
-				// doesn't match
-				return 0
-			}
-			return n
-		}
-		// not enough data is left, we need to extend
-		if br.extend() == 0 {
-			// eof
-			return 0
+// next returns n bytes from the input, and advances offset by n bytes.
+func (s *Scanner) next(n int) (res []byte) {
+	res = s.data[s.offset : s.offset+n]
+	s.offset += n
+	return res
+}
+
+// More returns true if scanner has more non-white space tokens.
+func (s *Scanner) More() bool {
+	for i := s.offset; i < len(s.data); i++ {
+		if !whitespace[s.data[i]] {
+			return true
 		}
 	}
+	return false
 }
 
-// parseString returns the length of the string token
-// located at the start of the window or 0 if there is no closing
-// " before the end of the byteReader.
-func (s *Scanner) parseString() int {
-	escaped := false
-	w := s.br.window(1)
-	pos := 0
-	for {
-		for _, c := range w {
-			pos++
-			switch {
-			case escaped:
-				escaped = false
-			case c == '"':
-				// finished
-				s.pos = pos + 1
-				return s.pos
-			case c == '\\':
-				escaped = true
-			}
-		}
-		// need more data from the pipe
-		if s.br.extend() == 0 {
-			// EOF.
+func validateToken(w []byte, expected string) int {
+	n := len(expected)
+	if len(w) >= n {
+		if string(w[:n]) != expected {
+			// doesn't match
 			return 0
 		}
-		w = s.br.window(pos + 1)
+		return n
+	}
+	return 0 // eof
+}
+
+// parseString parses the string located at the start of the window. Returns
+// parsed string token, including enclosing `"`.
+func (s *Scanner) parseString() []byte {
+	pos := 1 // skip opening quote.
+	w := s.buf()[1:]
+
+	// Fast path: string does not have escape sequences.
+	for _, c := range w {
+		if c == '\\' {
+			// Alas, things are not that simple, we must handle escaped characters.
+			buf, n := s.parseStringSlow(pos)
+			s.offset += n
+			return buf
+		}
+
+		pos++
+		if c == '"' {
+			return s.next(pos)
+		}
+
+		if c < ' ' {
+			// Unescaped controlled characters not allowed.
+			return nil
+		}
+	}
+	return nil // eof
+}
+
+var bufferPool = sync.Pool{New: func() interface{} { return &buffer{} }}
+
+// parseStringSlow parses string containing escape sequences.
+// Everything up to pos does not have escape sequence, and buf[pos] is the first '\'
+// encountered when parsing the string.
+func (s *Scanner) parseStringSlow(pos int) ([]byte, int) {
+	w := s.buf()
+	// Sanity check
+	if pos < 1 || len(w) < pos || w[0] != '"' || w[pos] != '\\' {
+		return nil, pos
+	}
+
+	// Escaped characters necessitate that the returned token will be
+	// different from the input token.  Reset scratch buffer, and copy
+	// everything processed so far.
+	b := bufferPool.Get().(*buffer)
+	b.Reset()
+	defer bufferPool.Put(b)
+
+	b.Append(w[:pos])
+	w = w[pos:]
+
+	for wp := 0; wp < len(w); {
+		switch c := w[wp]; {
+		default:
+			b.AppendByte(c)
+			pos++
+			wp++
+		case c < ' ':
+			// Control characters must be escaped.
+			return nil, pos
+		case c == '"':
+			b.AppendByte(c)
+			pos++
+			return b.Bytes(), pos
+		case c == '\\':
+			switch n := readEscaped(w[wp:], b); n {
+			case -1:
+				return nil, pos // Error
+			case 0:
+				break
+			default:
+				wp += n
+				pos += n
+			}
+		}
+	}
+	return nil, pos // eof
+}
+
+// readEscaped reads escape sequence from the window w, and writes unescaped
+// values into provided buffer.
+// Returns number of bytes consumed from w.
+// Returns 0 if more data is needed, and -1 if an error occurred.
+func readEscaped(w []byte, buf *buffer) int {
+	if len(w) < 2 {
+		return 0 // need more data
+	}
+
+	switch c := w[1]; {
+	case c == 'u':
+		if 2+utf8.UTFMax >= len(w) {
+			return 0 // need more data
+		}
+
+		rr := getu4(w[2:6])
+		if rr < 0 {
+			return -1
+		}
+
+		r := 2 + utf8.UTFMax // number of bytes read so far.
+		if utf16.IsSurrogate(rr) {
+			if 2*r >= len(w) {
+				return 0 // need more data
+			}
+
+			if w[r] != '\\' || w[r+1] != 'u' {
+				return -1
+			}
+
+			rr1 := getu4(w[r+2:])
+			dec := utf16.DecodeRune(rr, rr1)
+			if dec == unicode.ReplacementChar {
+				return -1
+			}
+			// A valid pair; consume.
+			r *= 2
+			buf.AppendRune(dec)
+		} else {
+			buf.AppendRune(rr)
+		}
+
+		return r
+	default:
+		c = unescapeTable[c]
+		if c == 0 {
+			return -1
+		}
+		buf.AppendByte(c)
+		return 2
 	}
 }
 
@@ -213,97 +314,131 @@ func (s *Scanner) parseNumber(c byte) int {
 	)
 
 	pos := 0
-	w := s.br.window(0)
+	w := s.buf()
 	// int vs uint8 costs 10% on canada.json
 	var state uint8 = begin
 
 	// handle the case that the first character is a hyphen
 	if c == '-' {
 		pos++
-		w = s.br.window(1)
+		w = w[1:]
 	}
 
-	for {
-		for _, elem := range w {
-			switch state {
-			case begin:
-				if elem >= '1' && elem <= '9' {
-					state = anydigit1
-				} else if elem == '0' {
-					state = leadingzero
-				} else {
-					// error
-					return 0
-				}
-			case anydigit1:
-				if elem >= '0' && elem <= '9' {
-					// stay in this state
-					break
-				}
-				fallthrough
-			case leadingzero:
-				if elem == '.' {
-					state = decimal
-					break
-				}
-				if elem == 'e' || elem == 'E' {
-					state = exponent
-					break
-				}
-				return pos // finished.
-			case decimal:
-				if elem >= '0' && elem <= '9' {
-					state = anydigit2
-				} else {
-					// error
-					return 0
-				}
-			case anydigit2:
-				if elem >= '0' && elem <= '9' {
-					break
-				}
-				if elem == 'e' || elem == 'E' {
-					state = exponent
-					break
-				}
-				return pos // finished.
-			case exponent:
-				if elem == '+' || elem == '-' {
-					state = expsign
-					break
-				}
-				fallthrough
-			case expsign:
-				if elem >= '0' && elem <= '9' {
-					state = anydigit3
-					break
-				}
+	for _, elem := range w {
+		switch state {
+		case begin:
+			if elem >= '1' && elem <= '9' {
+				state = anydigit1
+			} else if elem == '0' {
+				state = leadingzero
+			} else {
 				// error
 				return 0
-			case anydigit3:
-				if elem < '0' || elem > '9' {
-					return pos
-				}
 			}
-			pos++
-		}
-
-		// need more data from the pipe
-		if s.br.extend() == 0 {
-			// end of the item. However, not necessarily an error. Make
-			// sure we are in a state that allows ending the number.
-			switch state {
-			case leadingzero, anydigit1, anydigit2, anydigit3:
-				return pos
-			default:
-				// error otherwise, the number isn't complete.
+		case anydigit1:
+			if elem >= '0' && elem <= '9' {
+				// stay in this state
+				break
+			}
+			fallthrough
+		case leadingzero:
+			if elem == '.' {
+				state = decimal
+				break
+			}
+			if elem == 'e' || elem == 'E' {
+				state = exponent
+				break
+			}
+			return pos // finished.
+		case decimal:
+			if elem >= '0' && elem <= '9' {
+				state = anydigit2
+			} else {
+				// error
 				return 0
 			}
+		case anydigit2:
+			if elem >= '0' && elem <= '9' {
+				break
+			}
+			if elem == 'e' || elem == 'E' {
+				state = exponent
+				break
+			}
+			return pos // finished.
+		case exponent:
+			if elem == '+' || elem == '-' {
+				state = expsign
+				break
+			}
+			fallthrough
+		case expsign:
+			if elem >= '0' && elem <= '9' {
+				state = anydigit3
+				break
+			}
+			// error
+			return 0
+		case anydigit3:
+			if elem < '0' || elem > '9' {
+				return pos
+			}
 		}
-		w = s.br.window(pos)
+		pos++
+	}
+
+	// end of the item. However, not necessarily an error. Make
+	// sure we are in a state that allows ending the number.
+	switch state {
+	case leadingzero, anydigit1, anydigit2, anydigit3:
+		return pos
+	default:
+		// error otherwise, the number isn't complete.
+		return 0
 	}
 }
 
-// Error returns the first error encountered.
-// When underlying reader is exhausted, Error returns io.EOF.
-func (s *Scanner) Error() error { return s.br.err }
+// hexTable lists quick conversion from byte to a valid
+// hex byte; or 0 if invalid.
+var hexTable = func() [256]rune {
+	var t [256]rune
+	for c := 0; c < 256; c++ {
+		switch {
+		case '0' <= c && c <= '9':
+			t[c] = rune(c - '0')
+		case 'a' <= c && c <= 'f':
+			t[c] = rune(c - 'a' + 10)
+		case 'A' <= c && c <= 'F':
+			t[c] = rune(c - 'A' + 10)
+		default:
+			t[c] = utf8.RuneError
+		}
+	}
+	return t
+}()
+
+// getu4 decodes \uXXXX from the beginning of s, returning the hex value,
+// or it returns -1.
+// s must be at least 4 bytes.
+func getu4(s []byte) rune {
+	r1, r2, r3, r4 := hexTable[s[0]], hexTable[s[1]], hexTable[s[2]], hexTable[s[3]]
+	if r1 == utf8.RuneError || r2 == utf8.RuneError || r3 == utf8.RuneError || r4 == utf8.RuneError {
+		return -1
+	}
+	return r1*(1<<12) + r2*(1<<8) + r3*(1<<4) + r4
+}
+
+// unescapeTable lists un-escaped characters for a set of valid
+// escape sequences.
+var unescapeTable = [256]byte{
+	'"':  '"',  // \"
+	'\\': '\\', // \\
+	'/':  '/',  // \/
+	'\'': '\'', // \'
+	'b':  '\b', // \b
+	'f':  '\f', // \f
+	'n':  '\n', // \n
+	'r':  '\r', // \r
+	't':  '\t', // \t
+}

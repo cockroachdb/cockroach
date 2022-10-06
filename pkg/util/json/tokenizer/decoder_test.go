@@ -38,7 +38,6 @@ package tokenizer
 
 import (
 	"io"
-	"strings"
 	"testing"
 )
 
@@ -77,7 +76,7 @@ func TestDecoderNextToken(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.json, func(t *testing.T) {
-			dec := NewDecoder(&SmallReader{r: strings.NewReader(tc.json)})
+			dec := MakeDecoder([]byte(tc.json))
 			for n, want := range tc.tokens {
 				got, err := dec.NextToken()
 				if string(got) != want {
@@ -131,7 +130,7 @@ func TestDecoderInvalidJSON(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.json, func(t *testing.T) {
-			dec := NewDecoder(&SmallReader{r: strings.NewReader(tc.json)})
+			dec := MakeDecoder([]byte(tc.json))
 			var err error
 			for {
 				_, err = dec.NextToken()
