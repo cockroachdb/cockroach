@@ -123,6 +123,7 @@ go_test(
         "@org_golang_google_grpc//peer",
         "@org_golang_google_grpc//stats",
         "@org_golang_google_grpc//status",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
