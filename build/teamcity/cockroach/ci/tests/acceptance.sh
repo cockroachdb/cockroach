@@ -13,7 +13,7 @@ else
 fi
 
 tc_start_block "Build cockroach"
-build_script='bazel build --config $1 --config ci //pkg/cmd/cockroach-short && cp $(bazel info bazel-bin --config $1 --config ci)/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short artifacts/cockroach && chmod a+w artifacts/cockroach'
+build_script='bazel build --config $1 --config ci //pkg/cmd/cockroach-short && cp $(bazel info bazel-bin --config $1 --config ci)/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short /artifacts/cockroach && chmod a+w /artifacts/cockroach'
 run_bazel /usr/bin/bash -c "$build_script" -- "$CROSSLINUX_CONFIG"
 tc_end_block "Build cockroach"
 
