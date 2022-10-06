@@ -14,6 +14,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -127,6 +128,10 @@ func TestIsEmpty(t *testing.T) {
 	assert.False(t, a.IsEmpty())
 	a = makeSynTS(0, 0)
 	assert.False(t, a.IsEmpty())
+
+	nonZero := makeTS(1, 1)
+	nonZero.Synthetic = true
+	require.NoError(t, zerofields.NoZeroField(nonZero), "please update IsEmpty as well")
 }
 
 func TestTimestampNext(t *testing.T) {
