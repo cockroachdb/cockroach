@@ -366,12 +366,20 @@ var sortPoolTraces = sync.Pool{
 	},
 }
 
-// Clone performs a deep copy of the trace.
-func (t *Trace) Clone() Trace {
+// PartialClone performs a deep copy of the trace. The immutable slices are not
+// copied: logs, tags and stats.
+func (t *Trace) PartialClone() Trace {
 	r := *t
+	// The structured logs need copying since the slice is mutable: new logs can
+	// be added to the source when spans are added to the trace but the trace is
+	// over the span limit. Technically, simply adding to the slice is safe if we
+	// made a shallow copy of the slice, but we're being defensive here as we
+	// might go beyond simply adding logs in the future.
+	r.Root.StructuredRecords = make([]tracingpb.StructuredRecord, len(t.Root.StructuredRecords))
+	copy(r.Root.StructuredRecords, t.Root.StructuredRecords)
 	r.Children = make([]Trace, len(t.Children))
 	for i := range t.Children {
-		r.Children[i] = t.Children[i].Clone()
+		r.Children[i] = t.Children[i].PartialClone()
 	}
 	return r
 }
@@ -587,7 +595,12 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 	{
 		s.mu.Lock()
 
-		result = s.mu.recording.finishedChildren.Clone()
+		// Make a clone of the finished children, to avoid working on and returning
+		// a trace that aliases s.mu.recording.finishedChildren. We're going to
+		// modify the trace below, when adding open children to it, and
+		// s.mu.recording.finishedChildren will also evolve after we return the
+		// copy, so we can't allow for aliases.
+		result = s.mu.recording.finishedChildren.PartialClone()
 		oldEvents := result.Root.StructuredRecords
 		result.Root = s.getRecordingNoChildrenLocked(tracingpb.RecordingVerbose, finishing)
 		result.Root.StructuredRecords = append(result.Root.StructuredRecords, oldEvents...)
