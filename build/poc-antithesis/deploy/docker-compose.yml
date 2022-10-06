@@ -1,0 +1,62 @@
+version: '3'
+
+services:
+  roach1:
+    image: ${docker_registry}/cockroachdb/cockroach-instrumented:${build_tag}
+    container_name: roach1
+    hostname: roach1
+    networks:
+      rdbms-net:
+        ipv4_address: 10.0.0.10
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    volumes:
+      # is /opt/config/ the right location to mount data?
+      - ${data_dir}/roach1:/cockroach/cockroach-data
+    command: start --cluster-name=test --insecure --join=roach1 --advertise-addr 10.0.0.10
+
+  roach2:
+    image: ${docker_registry}/cockroachdb/cockroach-instrumented:${build_tag}
+    container_name: roach2
+    hostname: roach2
+    networks:
+      rdbms-net:
+        ipv4_address: 10.0.0.20
+    volumes:
+      - ${data_dir}/roach2:/cockroach/cockroach-data
+    command: start --cluster-name=test --insecure --join=roach1 --advertise-addr 10.0.0.20
+    depends_on:
+      - roach1
+
+  roach3:
+    image: ${docker_registry}/cockroachdb/cockroach-instrumented:${build_tag}
+    container_name: roach3
+    hostname: roach3
+    networks:
+      rdbms-net:
+        ipv4_address: 10.0.0.30
+    volumes:
+        - ${data_dir}/roach3:/cockroach/cockroach-data
+    command: start --cluster-name=test --insecure --join=roach1 --advertise-addr 10.0.0.30
+    depends_on:
+      - roach1
+
+  workload:
+    image: ${docker_registry}/cockroachdb/workload:${build_tag}
+    container_name: workload
+    hostname: workload
+    command: bash run_bank_workload.sh
+    depends_on:
+      - roach1
+    networks:
+      rdbms-net:
+        ipv4_address: 10.0.0.128
+
+networks:
+  rdbms-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
+        
