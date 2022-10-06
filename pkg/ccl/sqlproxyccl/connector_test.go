@@ -11,6 +11,7 @@ package sqlproxyccl
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"net"
 	"reflect"
 	"testing"
@@ -772,6 +773,68 @@ func TestRetriableConnectorError(t *testing.T) {
 	err = markAsRetriableConnectorError(err)
 	require.True(t, isRetriableConnectorError(err))
 	require.True(t, errors.Is(err, errRetryConnectorSentinel))
+}
+
+func TestTenantTLSConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	makeChains := func(commonName string, org string) [][]*x509.Certificate {
+		cert := &x509.Certificate{}
+		cert.Subject.CommonName = commonName
+		if org != "" {
+			cert.Subject.OrganizationalUnit = []string{org}
+		}
+		return [][]*x509.Certificate{{
+			cert,
+		}}
+	}
+
+	tests := []struct {
+		name       string
+		skipVerify bool
+		chains     [][]*x509.Certificate
+		err        string
+	}{{
+		name:   "okSecure",
+		chains: makeChains("10", "Tenants"),
+	}, {
+		name:       "okSkipVerify",
+		skipVerify: true,
+	}, {
+		name: "missingChains",
+		err:  "VerifyConnection called with no verified chains",
+	}, {
+		name:   "wrongTenant",
+		err:    "expected a cert for tenant {10} found '1337'",
+		chains: makeChains("1337", "Tenants"),
+	}, {
+		name:   "nodeCert",
+		err:    "certificate is not a tenant cert",
+		chains: makeChains("10", ""),
+	}}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &tls.Config{
+				InsecureSkipVerify: tc.skipVerify,
+			}
+
+			config, err := tlsConfigForTenant(roachpb.MakeTenantID(10), "some.dns.address:123", config)
+			require.NoError(t, err)
+			require.Equal(t, config.ServerName, "some.dns.address")
+
+			err = config.VerifyConnection(tls.ConnectionState{
+				VerifiedChains: tc.chains,
+			})
+
+			if tc.err == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.err)
+			}
+		})
+	}
 }
 
 var _ tenant.DirectoryCache = &testTenantDirectoryCache{}
