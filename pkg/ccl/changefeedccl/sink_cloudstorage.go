@@ -69,6 +69,7 @@ type cloudStorageSinkFile struct {
 	buf         bytes.Buffer
 	alloc       kvevent.Alloc
 	oldestMVCC  hlc.Timestamp
+	pqww        *parquetWriterWrapper
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -586,6 +587,7 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 	if s.files == nil {
 		return errors.New(`cannot Flush on a closed sink`)
 	}
+	fmt.Printf("xkcd: cloud storage flush called\n")
 
 	s.metrics.recordFlushRequestCallback()()
 
