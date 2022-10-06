@@ -1110,6 +1110,9 @@ func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 			} else if scalarProps.HasSubquery {
 				emitProp("subquery")
 			}
+			if scalarProps.HasUDF {
+				emitProp("udf")
+			}
 		}
 
 		if !f.HasFlags(ExprFmtHideConstraints) {
