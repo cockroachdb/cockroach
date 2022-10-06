@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -127,6 +128,12 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 
 	ctx := params.ctx
 	p := params.p
+
+	// Exit early with an error if the schema is undergoing a declarative schema
+	// change.
+	if catalog.HasConcurrentDeclarativeSchemaChange(n.dbDesc) {
+		return scerrors.ConcurrentSchemaChangeError(n.dbDesc)
+	}
 
 	// Drop all of the collected objects.
 	if err := n.d.dropAllCollectedObjects(ctx, p); err != nil {

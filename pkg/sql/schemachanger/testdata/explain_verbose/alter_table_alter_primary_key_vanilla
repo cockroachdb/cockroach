@@ -708,6 +708,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed

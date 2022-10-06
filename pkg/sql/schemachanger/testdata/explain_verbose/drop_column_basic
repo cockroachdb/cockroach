@@ -534,6 +534,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
             │     JobID: 1
             │
             └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
                   IsNonCancelable: true
                   JobID: 1
                   RunningStatus: all stages completed
