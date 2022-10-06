@@ -494,12 +494,6 @@ func (f *kvFeed) runUntilTableEvent(
 		return nil
 	} else if tErr := (*errEndTimeReached)(nil); errors.As(err, &tErr) {
 		return err
-	} else if kvcoord.IsSendError(err) {
-		// During node shutdown it is possible for all outgoing transports used by
-		// the kvfeed to expire, producing a SendError that the node is still able
-		// to propagate to the frontier. This has been known to happen during
-		// cluster upgrades. This scenario should not fail the changefeed.
-		return changefeedbase.MarkRetryableError(err)
 	} else {
 		return err
 	}
