@@ -1022,11 +1022,19 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"table_oid", types.Oid}, {"column_number", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if *args[1].(*tree.DInt) == 0 {
+				if args[0] == tree.DNull || args[1] == tree.DNull {
+					return tree.DNull, nil
+				}
+				if colID := *args[1].(*tree.DInt); colID == 0 {
 					// column ID 0 never exists, and we don't want the query
 					// below to pick up the table comment by accident.
 					return tree.DNull, nil
 				}
+				if tabOID := *args[0].(*tree.DOid); tabOID.Oid >= catconstants.MinVirtualID {
+					// Virtual table columns do not have descriptions.
+					return tree.DNull, nil
+				}
+
 				// Note: the following is equivalent to:
 				//
 				// SELECT description FROM pg_catalog.pg_description
@@ -1038,9 +1046,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					ctx.Ctx(), "pg_get_coldesc",
 					sessiondata.NoSessionDataOverride,
 					`
-SELECT COALESCE(c.comment, pc.comment) FROM system.comments c
-FULL OUTER JOIN crdb_internal.predefined_comments pc
-ON pc.object_id=c.object_id AND pc.sub_id=c.sub_id AND pc.type = c.type
+SELECT comment FROM system.comments c
 WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 `, keys.ColumnCommentType, args[0], args[1])
 				if err != nil {
