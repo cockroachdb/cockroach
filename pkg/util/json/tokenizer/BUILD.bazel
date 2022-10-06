@@ -1,0 +1,15 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "tokenizer",
+    srcs = [
+        "buffer.go",
+        "decoder.go",
+        "scanner.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/json/tokenizer",
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")
