@@ -226,6 +226,8 @@ func processProducerMessage(
 			return processMessageResult{err: nil, consumerClosed: false}
 		}
 
+		// TODO(yuzefovich): consider removing this logging since the verbosity
+		// check is not exactly free.
 		if log.V(3) && row != nil {
 			log.Infof(ctx, "inbound stream pushing row %s", row.String(sd.types))
 		}
