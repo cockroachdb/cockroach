@@ -98,6 +98,7 @@ type Smither struct {
 	lowProbWhereWithJoinTables bool
 	disableInsertSelect        bool
 	disableDivision            bool
+	disableDecimals            bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
@@ -442,6 +443,11 @@ var DisableInsertSelect = simpleOption("disable insert select", func(s *Smither)
 // TODO(mgartner): Remove this once #86790 is addressed.
 var DisableDivision = simpleOption("disable division", func(s *Smither) {
 	s.disableDivision = true
+})
+
+// DisableDecimals disables use of decimal type columns in the query.
+var DisableDecimals = simpleOption("disable decimals", func(s *Smither) {
+	s.disableDecimals = true
 })
 
 // CompareMode causes the Smither to generate statements that have
