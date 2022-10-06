@@ -357,6 +357,12 @@ func (ri *ReplicaMVCCDataIterator) UnsafeValue() []byte {
 	return ri.it.UnsafeValue()
 }
 
+// MVCCValueLenAndIsTombstone has the same behavior as
+// SimpleMVCCIterator.MVCCValueLenAndIsTombstone.
+func (ri *ReplicaMVCCDataIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
+	return ri.it.MVCCValueLenAndIsTombstone()
+}
+
 // RangeKeys exposes RangeKeys from underlying iterator. See
 // storage.SimpleMVCCIterator for details.
 func (ri *ReplicaMVCCDataIterator) RangeKeys() storage.MVCCRangeKeyStack {
