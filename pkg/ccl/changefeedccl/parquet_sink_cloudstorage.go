@@ -79,7 +79,7 @@ func (pqcs *parquetCloudStorageSink) flushFile(ctx context.Context, file *cloudS
 	// filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
 	// 	s.jobSessionID, s.srcID, s.sinkID, 1, "ganesh", 1234, ".parquet")
 
-	filename_output := "/Users/ganeshb/go/src/github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/parquet_encoding_test_files/output.parquet"
+	filename_output := "/Users/ganeshb/go/src/test/output.parquet"
 	payload, err := os.ReadFile(filename_output)
 	if err != nil {
 		fmt.Printf("error whene opening file: %s\n", err)
