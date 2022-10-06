@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/errors"
@@ -107,14 +108,22 @@ func IsRetryableError(err error) bool {
 		return true
 	}
 
+	// During node shutdown it is possible for all outgoing transports used by
+	// the kvfeed to expire, producing a SendError that the node is still able
+	// to propagate to the frontier. This has been known to happen during
+	// cluster upgrades. This scenario should not fail the changefeed.
+	if kvcoord.IsSendError(err) {
+		return true
+	}
+
 	// TODO(knz): this is a bad implementation. Make it go away
 	// by avoiding string comparisons.
 
+	// If a RetryableError occurs on a remote node, DistSQL serializes it such
+	// that we can't recover the structure and we have to rely on this
+	// unfortunate string comparison.
 	errStr := err.Error()
-	if strings.Contains(errStr, retryableErrorString) {
-		// If a RetryableError occurs on a remote node, DistSQL serializes it such
-		// that we can't recover the structure and we have to rely on this
-		// unfortunate string comparison.
+	if strings.Contains(errStr, retryableErrorString) || strings.Contains(errStr, kvcoord.SendErrorString) {
 		return true
 	}
 
