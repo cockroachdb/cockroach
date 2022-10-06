@@ -140,6 +140,13 @@ func (cfg *Config) WithGrafanaDashboard(url string) *Config {
 	return cfg
 }
 
+// WithScrapeConfigs adds scraping configs to the prometheus instance. Chains
+// for convenience.
+func (cfg *Config) WithScrapeConfigs(config ...ScrapeConfig) *Config {
+	cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, config...)
+	return cfg
+}
+
 // WithNodeExporter causes node_exporter to be set up on the specified machines,
 // a separate process that sends hardware metrics to prometheus.
 // For more on the node exporter process, see https://prometheus.io/docs/guides/node-exporter/
