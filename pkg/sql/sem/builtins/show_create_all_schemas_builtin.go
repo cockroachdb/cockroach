@@ -33,7 +33,7 @@ func getSchemaIDs(
 		FROM %s.crdb_internal.create_schema_statements
 		WHERE database_name = $1
 		`, dbName)
-	it, err := evalPlanner.QueryIteratorEx(
+	it, err := evalPlanner.QueryIterator(
 		ctx,
 		"crdb_internal.show_create_all_schemas",
 		sessiondata.NoSessionDataOverride,
@@ -74,7 +74,7 @@ func getSchemaCreateStatement(
 		FROM %s.crdb_internal.create_schema_statements
 		WHERE descriptor_id = $1
 	`, dbName)
-	row, err := evalPlanner.QueryRowEx(
+	row, err := evalPlanner.QueryRow(
 		ctx,
 		"crdb_internal.show_create_all_schemas",
 		sessiondata.NoSessionDataOverride,

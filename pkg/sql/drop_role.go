@@ -590,7 +590,7 @@ func addDependentPrivilegesFromSystemPrivileges(
 	for i, username := range usernames {
 		names[i] = username.Normalized()
 	}
-	rows, err := p.QueryIteratorEx(ctx, `drop-role-get-system-privileges`, sessiondata.NodeUserSessionDataOverride,
+	rows, err := p.QueryIterator(ctx, `drop-role-get-system-privileges`, sessiondata.NodeUserSessionDataOverride,
 		`SELECT DISTINCT username, path, privileges FROM system.privileges WHERE username = ANY($1) ORDER BY 1, 2`, names)
 	if err != nil {
 		return err

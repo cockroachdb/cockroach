@@ -330,7 +330,7 @@ type Planner interface {
 	//
 	// The fields set in session that are set override the respective fields if
 	// they have previously been set through SetSessionData().
-	QueryRowEx(
+	QueryRow(
 		ctx context.Context,
 		opName string,
 		override sessiondata.InternalExecutorOverride,
@@ -343,7 +343,7 @@ type Planner interface {
 	//
 	// The fields set in session that are set override the respective fields if they
 	// have previously been set through SetSessionData().
-	QueryIteratorEx(ctx context.Context, opName string, override sessiondata.InternalExecutorOverride, stmt string, qargs ...interface{}) (InternalRows, error)
+	QueryIterator(ctx context.Context, opName string, override sessiondata.InternalExecutorOverride, stmt string, qargs ...interface{}) (InternalRows, error)
 
 	// IsActive returns if the version specified by key is active.
 	IsActive(ctx context.Context, key clusterversion.Key) bool
@@ -369,7 +369,7 @@ type Planner interface {
 // executor. It provides access to the rows from a query.
 // InternalRows is a copy of the one in sql/internal.go excluding the
 // Types function - we don't need the Types function for use cases where
-// QueryIteratorEx is used from the InternalExecutor on the Planner.
+// QueryIterator is used from the InternalExecutor on the Planner.
 // Furthermore, we cannot include the Types function due to a cyclic
 // dependency on colinfo.ResultColumns - we cannot import colinfo in tree.
 type InternalRows interface {

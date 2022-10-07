@@ -3240,7 +3240,7 @@ func isCurrentMutationDiscarded(
 func (p *planner) CanPerformDropOwnedBy(
 	ctx context.Context, role username.SQLUsername,
 ) (bool, error) {
-	row, err := p.QueryRowEx(ctx, `role-has-synthetic-privileges`, sessiondata.NodeUserSessionDataOverride,
+	row, err := p.QueryRow(ctx, `role-has-synthetic-privileges`, sessiondata.NodeUserSessionDataOverride,
 		`SELECT count(1) FROM system.privileges WHERE username = $1`, role.Normalized())
 
 	return tree.MustBeDInt(row[0]) == 0, err
