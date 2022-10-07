@@ -470,8 +470,7 @@ func (tm *TableMeta) GetRegionsInDatabase(
 			)
 		}
 	}()
-
-	if dbID == 0 {
+	if dbID == 0 || !tm.Table.IsMultiregion() {
 		return nil /* regionNames */, false
 	}
 	regionConfig, ok := planner.GetMultiregionConfig(ctx, dbID)
@@ -502,11 +501,21 @@ func (tm *TableMeta) GetDatabaseSurvivalGoal(
 		return multiregionConfig.SurvivalGoal(), true
 	}
 	dbID := tm.Table.GetDatabaseID()
+	defer func() {
+		if !ok {
+			tm.SetTableAnnotation(
+				regionConfigAnnID,
+				// Use a nil pointer to a RegionConfig, which is distinct from the
+				// untyped nil and will be detected in the type assertion above.
+				(*multiregion.RegionConfig)(nil),
+			)
+		}
+	}()
+	if dbID == 0 || !tm.Table.IsMultiregion() {
+		return descpb.SurvivalGoal_ZONE_FAILURE /* regionNames */, false
+	}
 	regionConfig, ok := planner.GetMultiregionConfig(ctx, dbID)
 	if !ok {
-		// Use a nil pointer to a RegionConfig, which is distinct from the
-		// untyped nil and will be detected in the type assertion above.
-		tm.SetTableAnnotation(regionConfigAnnID, (*multiregion.RegionConfig)(nil))
 		return descpb.SurvivalGoal_ZONE_FAILURE /* survivalGoal */, false
 	}
 	multiregionConfig, _ = regionConfig.(*multiregion.RegionConfig)
