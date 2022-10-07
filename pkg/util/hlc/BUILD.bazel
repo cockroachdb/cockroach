@@ -37,6 +37,7 @@ go_test(
     embed = [":hlc"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/testutils/zerofields",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
