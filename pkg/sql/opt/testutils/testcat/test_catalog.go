@@ -693,6 +693,8 @@ type Table struct {
 	// partitionBy is the partitioning clause that corresponds to the primary
 	// index. Used to initialize the partitioning for the primary index.
 	partitionBy *tree.PartitionBy
+
+	multiRegion bool
 }
 
 var _ cat.Table = &Table{}
@@ -701,6 +703,13 @@ func (tt *Table) String() string {
 	tp := treeprinter.New()
 	cat.FormatTable(tt.Catalog, tt, tp)
 	return tp.String()
+}
+
+// SetMultiRegion can make a table in the test catalog appear to be a
+// multiregion table, in that it can cause cat.Table.IsMultiregion() to return
+// true after SetMultiRegion(true) has been called.
+func (tt *Table) SetMultiRegion(val bool) {
+	tt.multiRegion = val
 }
 
 // ID is part of the cat.DataSource interface.
@@ -861,6 +870,11 @@ func (tt *Table) IsGlobalTable() bool {
 // IsRegionalByRow is part of the cat.Table interface.
 func (tt *Table) IsRegionalByRow() bool {
 	return false
+}
+
+// IsMultiregion is part of the cat.Table interface.
+func (tt *Table) IsMultiregion() bool {
+	return tt.multiRegion
 }
 
 // HomeRegionColName is part of the cat.Table interface.
