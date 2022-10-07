@@ -287,7 +287,7 @@ func timeZoneVarGetStringVal(
 
 	var loc *time.Location
 	var offset int64
-	switch v := eval.UnwrapDatum(&evalCtx.Context, d).(type) {
+	switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
 	case *tree.DString:
 		location := string(*v)
 		loc, err = timeutil.TimeZoneStringToLocation(
@@ -360,7 +360,7 @@ func makeTimeoutVarGetter(
 		}
 
 		var timeout time.Duration
-		switch v := eval.UnwrapDatum(&evalCtx.Context, d).(type) {
+		switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
 		case *tree.DString:
 			return string(*v), nil
 		case *tree.DInterval:

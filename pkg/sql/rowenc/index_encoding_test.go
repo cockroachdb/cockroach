@@ -424,7 +424,7 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexTableKeys(left, nil, descpb.LatestIndexDescriptorVersion)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeContainingInvertedIndexSpans(&evalCtx, right)
+		invertedExpr, err := EncodeContainingInvertedIndexSpans(context.Background(), &evalCtx, right)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -559,7 +559,7 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.LatestIndexDescriptorVersion)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeContainedInvertedIndexSpans(&evalCtx, value)
+		invertedExpr, err := EncodeContainedInvertedIndexSpans(context.Background(), &evalCtx, value)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -809,7 +809,7 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 		keys, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.PrimaryIndexWithStoredColumnsVersion)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeOverlapsInvertedIndexSpans(&evalCtx, value)
+		invertedExpr, err := EncodeOverlapsInvertedIndexSpans(context.Background(), &evalCtx, value)
 		require.NoError(t, err)
 
 		spanExpr, conversionOk := invertedExpr.(*inverted.SpanExpression)

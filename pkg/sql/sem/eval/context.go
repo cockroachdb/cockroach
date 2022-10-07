@@ -285,7 +285,7 @@ func (ec *Context) SetDeprecatedContext(ctx context.Context) context.Context {
 
 // UnwrapDatum encapsulates UnwrapDatum for use in the tree.CompareContext.
 func (ec *Context) UnwrapDatum(d tree.Datum) tree.Datum {
-	return UnwrapDatum(ec, d)
+	return UnwrapDatum(ec.deprecatedContext, ec, d)
 }
 
 // MustGetPlaceholderValue is part of the tree.CompareContext interface.
@@ -652,10 +652,10 @@ func arrayOfType(typ *types.T) (*tree.DArray, error) {
 // UnwrapDatum returns the base Datum type for a provided datum, stripping
 // an *DOidWrapper if present. This is useful for cases like type switches,
 // where type aliases should be ignored.
-func UnwrapDatum(evalCtx *Context, d tree.Datum) tree.Datum {
+func UnwrapDatum(ctx context.Context, evalCtx *Context, d tree.Datum) tree.Datum {
 	d = tree.UnwrapDOidWrapper(d)
 	if p, ok := d.(*tree.Placeholder); ok && evalCtx != nil && evalCtx.HasPlaceholders() {
-		ret, err := Expr(evalCtx.deprecatedContext, evalCtx, p)
+		ret, err := Expr(ctx, evalCtx, p)
 		if err != nil {
 			// If we fail to evaluate the placeholder, it's because we don't have
 			// a placeholder available. Just return the placeholder and someone else

@@ -117,7 +117,7 @@ func (v *Visitor) isConst(expr tree.Expr) bool {
 // zero.
 func (v *Visitor) isNumericZero(expr tree.TypedExpr) bool {
 	if d, ok := expr.(tree.Datum); ok {
-		switch t := eval.UnwrapDatum(v.evalCtx, d).(type) {
+		switch t := eval.UnwrapDatum(v.ctx, v.evalCtx, d).(type) {
 		case *tree.DDecimal:
 			return t.Decimal.Sign() == 0
 		case *tree.DFloat:
@@ -133,7 +133,7 @@ func (v *Visitor) isNumericZero(expr tree.TypedExpr) bool {
 // one.
 func (v *Visitor) isNumericOne(expr tree.TypedExpr) bool {
 	if d, ok := expr.(tree.Datum); ok {
-		switch t := eval.UnwrapDatum(v.evalCtx, d).(type) {
+		switch t := eval.UnwrapDatum(v.ctx, v.evalCtx, d).(type) {
 		case *tree.DDecimal:
 			return t.Decimal.Cmp(&DecimalOne.Decimal) == 0
 		case *tree.DFloat:

@@ -348,5 +348,5 @@ func predictHistogram(
 	}
 
 	// Finally, convert the predicted quantile function back to a histogram.
-	return yₙ.toHistogram(colType, nonNullRowCount)
+	return yₙ.toHistogram(ctx, colType, nonNullRowCount)
 }
