@@ -15,6 +15,7 @@ readonly cockroach="$1"
 readonly version="$2"
 readonly sha="$3"
 readonly urlfile=cockroach-url
+readonly pidfile=/tmp/server_pid
 
 # Display build information.
 echo ""
@@ -31,7 +32,7 @@ echo "Generating encryption key:"
 echo ""
 
 # Start node with encryption enabled.
-"$cockroach" start-single-node --insecure --listening-url-file="$urlfile" --enterprise-encryption=path=cockroach-data,key=aes-128.key,old-key=plain &
+"$cockroach" start-single-node --insecure --listening-url-file="$urlfile" --enterprise-encryption=path=cockroach-data,key=aes-128.key,old-key=plain --pid-file="$pidfile" &
 
 trap "kill -9 $! &> /dev/null" EXIT
 for i in {0..3}
@@ -57,7 +58,7 @@ diff -u expected actual
 
 # Attempt a clean shutdown for good measure. We'll force-kill in the atexit
 # handler if this fails.
-"$cockroach" quit --insecure
+cat "$pidfile" | xargs kill -TERM
 trap - EXIT
 
 # Verify reported version matches expected version.
