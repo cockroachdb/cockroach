@@ -25,10 +25,11 @@ import { AxisUnits } from "@cockroachlabs/cluster-ui";
 export default function(props: GraphDashboardProps) {
   const {
     nodeIDs,
-    nodesSummary,
     nodeSources,
     storeSources,
     tooltipSelection,
+    nodeDisplayNameByID,
+    storeIDsByNodeID,
   } = props;
 
   return [
@@ -82,7 +83,7 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={node}
             name="cr.node.sql.service.latency-p99"
-            title={nodeDisplayName(nodesSummary, node)}
+            title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
           />
@@ -123,8 +124,8 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.replicas"
-            title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
           />
         ))}
       </Axis>

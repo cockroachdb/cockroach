@@ -29,7 +29,12 @@ import { cockroach } from "src/js/protos";
 import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function(props: GraphDashboardProps) {
-  const { nodeIDs, nodesSummary, storeSources } = props;
+  const {
+    nodeIDs,
+    storeSources,
+    nodeDisplayNameByID,
+    storeIDsByNodeID,
+  } = props;
 
   return [
     <LineGraph title="Ranges" sources={storeSources}>
@@ -59,8 +64,8 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.replicas"
-            title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
           />
         ))}
       </Axis>
@@ -76,8 +81,8 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.replicas.leaseholders"
-            title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
           />
         ))}
       </Axis>
@@ -92,8 +97,8 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.rebalancing.queriespersecond"
-            title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
           />
         ))}
       </Axis>
@@ -108,8 +113,8 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.totalbytes"
-            title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
           />
         ))}
       </Axis>
@@ -182,8 +187,8 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.range.snapshots.rcvd-bytes"
-            title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
             nonNegativeRate
           />
         ))}
@@ -199,8 +204,8 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.kv.replica_circuit_breaker.num_tripped_replicas"
-            title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
             downsampler={TimeSeriesQueryAggregator.SUM}
           />
         ))}
@@ -216,8 +221,8 @@ export default function(props: GraphDashboardProps) {
           <Metric
             key={nid}
             name="cr.store.kv.replica_circuit_breaker.num_tripped_events"
-            title={nodeDisplayName(nodesSummary, nid)}
-            sources={storeIDsForNode(nodesSummary, nid)}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={storeIDsForNode(storeIDsByNodeID, nid)}
             downsampler={TimeSeriesQueryAggregator.MAX}
           />
         ))}
