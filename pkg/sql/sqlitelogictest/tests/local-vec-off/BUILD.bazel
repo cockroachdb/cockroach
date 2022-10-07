@@ -5,7 +5,7 @@ go_test(
     name = "local-vec-off_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = ["-test.timeout=3595s"],
+    args = ["-test.timeout=7195s"],
     data = [
         "//c-deps:libgeos",  # keep
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep
