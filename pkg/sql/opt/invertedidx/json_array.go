@@ -205,17 +205,17 @@ type jsonOrArrayDatumsToInvertedExpr struct {
 }
 
 var _ invertedexpr.DatumsToInvertedExpr = &jsonOrArrayDatumsToInvertedExpr{}
-var _ tree.IndexedVarContainer = &jsonOrArrayDatumsToInvertedExpr{}
+var _ eval.IndexedVarContainer = &jsonOrArrayDatumsToInvertedExpr{}
 
-// IndexedVarEval is part of the IndexedVarContainer interface.
+// IndexedVarEval is part of the eval.IndexedVarContainer interface.
 func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarEval(
-	idx int, e tree.ExprEvaluator,
+	ctx context.Context, idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	err := g.row[idx].EnsureDecoded(g.colTypes[idx], &g.alloc)
 	if err != nil {
 		return nil, err
 	}
-	return g.row[idx].Datum.Eval(e)
+	return g.row[idx].Datum.Eval(ctx, e)
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
@@ -310,7 +310,7 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 				// We call Copy so the caller can modify the returned expression.
 				return t.spanExpr.Copy(), nil
 			}
-			d, err := eval.Expr(g.evalCtx, t.nonIndexParam)
+			d, err := eval.Expr(ctx, g.evalCtx, t.nonIndexParam)
 			if err != nil {
 				return nil, err
 			}
@@ -371,7 +371,7 @@ var _ invertedFilterPlanner = &jsonOrArrayFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	evalCtx *eval.Context, expr opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,

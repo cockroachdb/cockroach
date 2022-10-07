@@ -280,7 +280,7 @@ var varGen = map[string]sessionVar{
 		GetStringVal: func(
 			ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn,
 		) (string, error) {
-			dbName, err := getStringVal(&evalCtx.Context, `database`, values)
+			dbName, err := getStringVal(ctx, &evalCtx.Context, `database`, values)
 			if err != nil {
 				return "", err
 			}
@@ -1135,12 +1135,12 @@ var varGen = map[string]sessionVar{
 	// https://www.postgresql.org/docs/9.6/static/runtime-config-client.html
 	`search_path`: {
 		GetStringVal: func(
-			_ context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
+			ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
 		) (string, error) {
 			comma := ""
 			var buf bytes.Buffer
 			for _, v := range values {
-				s, err := paramparse.DatumAsString(&evalCtx.Context, "search_path", v)
+				s, err := paramparse.DatumAsString(ctx, &evalCtx.Context, "search_path", v)
 				if err != nil {
 					return "", err
 				}
@@ -1309,10 +1309,10 @@ var varGen = map[string]sessionVar{
 	// their own password hash algorithm.
 	`password_encryption`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return security.GetConfiguredPasswordHashMethod(evalCtx.Ctx(), &evalCtx.Settings.SV).String(), nil
+			return security.GetConfiguredPasswordHashMethod(&evalCtx.Settings.SV).String(), nil
 		},
 		SetWithPlanner: func(ctx context.Context, p *planner, local bool, val string) error {
-			method := security.GetConfiguredPasswordHashMethod(ctx, &p.ExecCfg().Settings.SV)
+			method := security.GetConfiguredPasswordHashMethod(&p.ExecCfg().Settings.SV)
 			if val != method.String() {
 				return newCannotChangeParameterError("password_encryption")
 			}
@@ -2412,7 +2412,7 @@ func makePostgresBoolGetStringValFn(varName string) getStringValFn {
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		val, err := eval.Expr(&evalCtx.Context, values[0])
+		val, err := eval.Expr(ctx, &evalCtx.Context, values[0])
 		if err != nil {
 			return "", err
 		}
@@ -2548,7 +2548,7 @@ func makeBackwardsCompatBoolVar(varName string, displayValue bool) sessionVar {
 // the user to provide plain integer values to a SET variable.
 func makeIntGetStringValFn(name string) getStringValFn {
 	return func(ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn) (string, error) {
-		s, err := getIntVal(&evalCtx.Context, name, values)
+		s, err := getIntVal(ctx, &evalCtx.Context, name, values)
 		if err != nil {
 			return "", err
 		}
@@ -2560,7 +2560,7 @@ func makeIntGetStringValFn(name string) getStringValFn {
 // the user to provide plain float values to a SET variable.
 func makeFloatGetStringValFn(name string) getStringValFn {
 	return func(ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
-		f, err := getFloatVal(&evalCtx.Context, name, values)
+		f, err := getFloatVal(ctx, &evalCtx.Context, name, values)
 		if err != nil {
 			return "", err
 		}

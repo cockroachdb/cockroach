@@ -56,25 +56,25 @@ type AggregateFunc interface {
 
 // FnOverload is a function generally defined as a builtin. It doesn't have
 // a concrete type with a marker method only because it's onerous to add.
-type FnOverload = func(*Context, tree.Datums) (tree.Datum, error)
+type FnOverload = func(context.Context, *Context, tree.Datums) (tree.Datum, error)
 
 // FnWithExprsOverload is the concrete type for the tree.Overload.FnWithExprs
 // field.
-type FnWithExprsOverload func(*Context, tree.Exprs) (tree.Datum, error)
+type FnWithExprsOverload func(context.Context, *Context, tree.Exprs) (tree.Datum, error)
 
 // FnWithExprs is a marker to indicate that this is a
 // tree.FnWithExprsOverload.
 func (fo FnWithExprsOverload) FnWithExprs() {}
 
 // SQLFnOverload is the concrete type for the tree.Overload.SQLFn field.
-type SQLFnOverload func(*Context, tree.Datums) (string, error)
+type SQLFnOverload func(context.Context, *Context, tree.Datums) (string, error)
 
 // SQLFn is a marker to indicate that this is a tree.SQLFnOverload.
 func (so SQLFnOverload) SQLFn() {}
 
 // GeneratorOverload is the type of constructor functions for
 // ValueGenerator objects.
-type GeneratorOverload func(ctx *Context, args tree.Datums) (ValueGenerator, error)
+type GeneratorOverload func(ctx context.Context, evalCtx *Context, args tree.Datums) (ValueGenerator, error)
 
 // Generator is a marker to indicate that this is a tree.GeneratorOverload.
 func (geo GeneratorOverload) Generator() {}
@@ -82,7 +82,7 @@ func (geo GeneratorOverload) Generator() {}
 // GeneratorWithExprsOverload is an alternative constructor function type for
 // ValueGenerators that gives implementations the ability to see the builtin's
 // arguments before evaluation, as Exprs.
-type GeneratorWithExprsOverload func(ctx *Context, args tree.Exprs) (ValueGenerator, error)
+type GeneratorWithExprsOverload func(ctx context.Context, evalCtx *Context, args tree.Exprs) (ValueGenerator, error)
 
 // GeneratorWithExprs is a marker to indicate that this is a
 // tree.GeneratorWithExprsOverload.

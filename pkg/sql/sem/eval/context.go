@@ -130,8 +130,11 @@ type Context struct {
 	// need to restore once we finish evaluating it.
 	iVarContainerStack []tree.IndexedVarContainer
 
-	// Context holds the context in which the expression is evaluated.
-	Context context.Context
+	// deprecatedContext holds the context in which the expression is evaluated.
+	//
+	// Deprecated: this field should not be used because an effort to remove it
+	// from Context is under way.
+	deprecatedContext context.Context
 
 	Planner Planner
 
@@ -269,6 +272,17 @@ type RangeProber interface {
 	) error
 }
 
+// SetDeprecatedContext updates the context.Context of this Context. Previously
+// stored context is returned.
+//
+// Deprecated: this method should not be used because an effort to remove the
+// context.Context from Context is under way.
+func (ec *Context) SetDeprecatedContext(ctx context.Context) context.Context {
+	oldCtx := ec.deprecatedContext
+	ec.deprecatedContext = ctx
+	return oldCtx
+}
+
 // UnwrapDatum encapsulates UnwrapDatum for use in the tree.CompareContext.
 func (ec *Context) UnwrapDatum(d tree.Datum) tree.Datum {
 	return UnwrapDatum(ec, d)
@@ -280,7 +294,7 @@ func (ec *Context) MustGetPlaceholderValue(p *tree.Placeholder) tree.Datum {
 	if !ok {
 		panic(errors.AssertionFailedf("fail"))
 	}
-	out, err := Expr(ec, e)
+	out, err := Expr(ec.deprecatedContext, ec, e)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "fail"))
 	}
@@ -315,7 +329,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	ctx.TestingMon = monitor
 	ctx.Planner = &fakePlannerWithMonitor{monitor: monitor}
-	ctx.Context = context.TODO()
+	ctx.deprecatedContext = context.TODO()
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
@@ -606,11 +620,6 @@ func (ec *Context) GetDateStyle() pgdate.DateStyle {
 	return ec.SessionData().GetDateStyle()
 }
 
-// Ctx returns the session's context.
-func (ec *Context) Ctx() context.Context {
-	return ec.Context
-}
-
 // BoundedStaleness returns true if this query uses bounded staleness.
 func (ec *Context) BoundedStaleness() bool {
 	return ec.AsOfSystemTime != nil &&
@@ -646,7 +655,7 @@ func arrayOfType(typ *types.T) (*tree.DArray, error) {
 func UnwrapDatum(evalCtx *Context, d tree.Datum) tree.Datum {
 	d = tree.UnwrapDOidWrapper(d)
 	if p, ok := d.(*tree.Placeholder); ok && evalCtx != nil && evalCtx.HasPlaceholders() {
-		ret, err := Expr(evalCtx, p)
+		ret, err := Expr(evalCtx.deprecatedContext, evalCtx, p)
 		if err != nil {
 			// If we fail to evaluate the placeholder, it's because we don't have
 			// a placeholder available. Just return the placeholder and someone else

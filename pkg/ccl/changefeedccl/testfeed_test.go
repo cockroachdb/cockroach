@@ -1379,7 +1379,7 @@ func exprAsString(expr tree.Expr) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	datum, err := eval.Expr(evalCtx, te)
+	datum, err := eval.Expr(context.Background(), evalCtx, te)
 	if err != nil {
 		return "", err
 	}

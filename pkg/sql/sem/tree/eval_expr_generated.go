@@ -19,358 +19,360 @@
 // Run './dev generate bazel' to fix this.
 package tree
 
+import "context"
+
 // ExprEvaluator is used to evaluate TypedExpr expressions.
 type ExprEvaluator interface {
-	EvalAllColumnsSelector(*AllColumnsSelector) (Datum, error)
-	EvalAndExpr(*AndExpr) (Datum, error)
-	EvalArray(*Array) (Datum, error)
-	EvalArrayFlatten(*ArrayFlatten) (Datum, error)
-	EvalBinaryExpr(*BinaryExpr) (Datum, error)
-	EvalCaseExpr(*CaseExpr) (Datum, error)
-	EvalCastExpr(*CastExpr) (Datum, error)
-	EvalCoalesceExpr(*CoalesceExpr) (Datum, error)
-	EvalCollateExpr(*CollateExpr) (Datum, error)
-	EvalColumnAccessExpr(*ColumnAccessExpr) (Datum, error)
-	EvalColumnItem(*ColumnItem) (Datum, error)
-	EvalComparisonExpr(*ComparisonExpr) (Datum, error)
-	EvalDefaultVal(*DefaultVal) (Datum, error)
-	EvalFuncExpr(*FuncExpr) (Datum, error)
-	EvalIfErrExpr(*IfErrExpr) (Datum, error)
-	EvalIfExpr(*IfExpr) (Datum, error)
-	EvalIndexedVar(*IndexedVar) (Datum, error)
-	EvalIndirectionExpr(*IndirectionExpr) (Datum, error)
-	EvalIsNotNullExpr(*IsNotNullExpr) (Datum, error)
-	EvalIsNullExpr(*IsNullExpr) (Datum, error)
-	EvalIsOfTypeExpr(*IsOfTypeExpr) (Datum, error)
-	EvalNotExpr(*NotExpr) (Datum, error)
-	EvalNullIfExpr(*NullIfExpr) (Datum, error)
-	EvalOrExpr(*OrExpr) (Datum, error)
-	EvalParenExpr(*ParenExpr) (Datum, error)
-	EvalPlaceholder(*Placeholder) (Datum, error)
-	EvalRangeCond(*RangeCond) (Datum, error)
-	EvalRoutineExpr(*RoutineExpr) (Datum, error)
-	EvalSubquery(*Subquery) (Datum, error)
-	EvalTuple(*Tuple) (Datum, error)
-	EvalTupleStar(*TupleStar) (Datum, error)
-	EvalTypedDummy(*TypedDummy) (Datum, error)
-	EvalUnaryExpr(*UnaryExpr) (Datum, error)
-	EvalUnqualifiedStar(UnqualifiedStar) (Datum, error)
-	EvalUnresolvedName(*UnresolvedName) (Datum, error)
+	EvalAllColumnsSelector(context.Context, *AllColumnsSelector) (Datum, error)
+	EvalAndExpr(context.Context, *AndExpr) (Datum, error)
+	EvalArray(context.Context, *Array) (Datum, error)
+	EvalArrayFlatten(context.Context, *ArrayFlatten) (Datum, error)
+	EvalBinaryExpr(context.Context, *BinaryExpr) (Datum, error)
+	EvalCaseExpr(context.Context, *CaseExpr) (Datum, error)
+	EvalCastExpr(context.Context, *CastExpr) (Datum, error)
+	EvalCoalesceExpr(context.Context, *CoalesceExpr) (Datum, error)
+	EvalCollateExpr(context.Context, *CollateExpr) (Datum, error)
+	EvalColumnAccessExpr(context.Context, *ColumnAccessExpr) (Datum, error)
+	EvalColumnItem(context.Context, *ColumnItem) (Datum, error)
+	EvalComparisonExpr(context.Context, *ComparisonExpr) (Datum, error)
+	EvalDefaultVal(context.Context, *DefaultVal) (Datum, error)
+	EvalFuncExpr(context.Context, *FuncExpr) (Datum, error)
+	EvalIfErrExpr(context.Context, *IfErrExpr) (Datum, error)
+	EvalIfExpr(context.Context, *IfExpr) (Datum, error)
+	EvalIndexedVar(context.Context, *IndexedVar) (Datum, error)
+	EvalIndirectionExpr(context.Context, *IndirectionExpr) (Datum, error)
+	EvalIsNotNullExpr(context.Context, *IsNotNullExpr) (Datum, error)
+	EvalIsNullExpr(context.Context, *IsNullExpr) (Datum, error)
+	EvalIsOfTypeExpr(context.Context, *IsOfTypeExpr) (Datum, error)
+	EvalNotExpr(context.Context, *NotExpr) (Datum, error)
+	EvalNullIfExpr(context.Context, *NullIfExpr) (Datum, error)
+	EvalOrExpr(context.Context, *OrExpr) (Datum, error)
+	EvalParenExpr(context.Context, *ParenExpr) (Datum, error)
+	EvalPlaceholder(context.Context, *Placeholder) (Datum, error)
+	EvalRangeCond(context.Context, *RangeCond) (Datum, error)
+	EvalRoutineExpr(context.Context, *RoutineExpr) (Datum, error)
+	EvalSubquery(context.Context, *Subquery) (Datum, error)
+	EvalTuple(context.Context, *Tuple) (Datum, error)
+	EvalTupleStar(context.Context, *TupleStar) (Datum, error)
+	EvalTypedDummy(context.Context, *TypedDummy) (Datum, error)
+	EvalUnaryExpr(context.Context, *UnaryExpr) (Datum, error)
+	EvalUnqualifiedStar(context.Context, UnqualifiedStar) (Datum, error)
+	EvalUnresolvedName(context.Context, *UnresolvedName) (Datum, error)
 }
 
 
 // Eval is part of the TypedExpr interface.
-func (node *AllColumnsSelector) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalAllColumnsSelector(node)
+func (node *AllColumnsSelector) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalAllColumnsSelector(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *AndExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalAndExpr(node)
+func (node *AndExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalAndExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *Array) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalArray(node)
+func (node *Array) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalArray(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *ArrayFlatten) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalArrayFlatten(node)
+func (node *ArrayFlatten) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalArrayFlatten(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *BinaryExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalBinaryExpr(node)
+func (node *BinaryExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalBinaryExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *CaseExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalCaseExpr(node)
+func (node *CaseExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalCaseExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *CastExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalCastExpr(node)
+func (node *CastExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalCastExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *CoalesceExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalCoalesceExpr(node)
+func (node *CoalesceExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalCoalesceExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *CollateExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalCollateExpr(node)
+func (node *CollateExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalCollateExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *ColumnAccessExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalColumnAccessExpr(node)
+func (node *ColumnAccessExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalColumnAccessExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *ColumnItem) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalColumnItem(node)
+func (node *ColumnItem) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalColumnItem(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *ComparisonExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalComparisonExpr(node)
+func (node *ComparisonExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalComparisonExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DArray) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DArray) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DBitArray) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DBitArray) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DBool) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DBool) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DBox2D) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DBox2D) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DBytes) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DBytes) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DCollatedString) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DCollatedString) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DDate) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DDate) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DDecimal) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DDecimal) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DEncodedKey) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DEncodedKey) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DEnum) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DEnum) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DFloat) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DFloat) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DGeography) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DGeography) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DGeometry) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DGeometry) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DIPAddr) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DIPAddr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DInt) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DInt) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DInterval) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DInterval) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DJSON) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DJSON) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DOid) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DOid) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DOidWrapper) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DOidWrapper) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DString) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DString) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DTime) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DTime) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DTimeTZ) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DTimeTZ) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DTimestamp) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DTimestamp) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DTimestampTZ) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DTimestampTZ) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DTuple) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DTuple) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DUuid) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DUuid) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DVoid) Eval(v ExprEvaluator) (Datum, error) {
+func (node *DVoid) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *DefaultVal) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalDefaultVal(node)
+func (node *DefaultVal) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalDefaultVal(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *FuncExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalFuncExpr(node)
+func (node *FuncExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalFuncExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *IfErrExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalIfErrExpr(node)
+func (node *IfErrExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalIfErrExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *IfExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalIfExpr(node)
+func (node *IfExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalIfExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *IndexedVar) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalIndexedVar(node)
+func (node *IndexedVar) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalIndexedVar(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *IndirectionExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalIndirectionExpr(node)
+func (node *IndirectionExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalIndirectionExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *IsNotNullExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalIsNotNullExpr(node)
+func (node *IsNotNullExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalIsNotNullExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *IsNullExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalIsNullExpr(node)
+func (node *IsNullExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalIsNullExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *IsOfTypeExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalIsOfTypeExpr(node)
+func (node *IsOfTypeExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalIsOfTypeExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *NotExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalNotExpr(node)
+func (node *NotExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalNotExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *NullIfExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalNullIfExpr(node)
+func (node *NullIfExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalNullIfExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *OrExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalOrExpr(node)
+func (node *OrExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalOrExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *ParenExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalParenExpr(node)
+func (node *ParenExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalParenExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *Placeholder) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalPlaceholder(node)
+func (node *Placeholder) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalPlaceholder(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *RangeCond) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalRangeCond(node)
+func (node *RangeCond) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalRangeCond(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *RoutineExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalRoutineExpr(node)
+func (node *RoutineExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalRoutineExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *Subquery) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalSubquery(node)
+func (node *Subquery) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalSubquery(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *Tuple) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalTuple(node)
+func (node *Tuple) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalTuple(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *TupleStar) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalTupleStar(node)
+func (node *TupleStar) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalTupleStar(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *TypedDummy) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalTypedDummy(node)
+func (node *TypedDummy) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalTypedDummy(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *UnaryExpr) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalUnaryExpr(node)
+func (node *UnaryExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalUnaryExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node UnqualifiedStar) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalUnqualifiedStar(node)
+func (node UnqualifiedStar) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalUnqualifiedStar(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node *UnresolvedName) Eval(v ExprEvaluator) (Datum, error) {
-	return v.EvalUnresolvedName(node)
+func (node *UnresolvedName) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalUnresolvedName(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.
-func (node dNull) Eval(v ExprEvaluator) (Datum, error) {
+func (node dNull) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return node, nil
 }
 

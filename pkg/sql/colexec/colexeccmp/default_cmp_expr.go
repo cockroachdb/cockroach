@@ -11,6 +11,8 @@
 package colexeccmp
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -19,7 +21,7 @@ import (
 // structs that behave as an adapter from tree.ComparisonExpr to a vectorized
 // friendly model.
 type ComparisonExprAdapter interface {
-	Eval(left, right tree.Datum) (tree.Datum, error)
+	Eval(ctx context.Context, left, right tree.Datum) (tree.Datum, error)
 }
 
 // NewComparisonExprAdapter returns a new ComparisonExprAdapter for the provided

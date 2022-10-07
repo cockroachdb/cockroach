@@ -42,9 +42,9 @@ func TestConstantEvalArrayComparison(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer ctx.TestingMon.Stop(context.Background())
-	c := normalize.MakeConstantEvalVisitor(ctx)
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(context.Background())
+	c := normalize.MakeConstantEvalVisitor(context.Background(), evalCtx)
 	expr, _ = tree.WalkExpr(&c, typedExpr)
 	if err := c.Err(); err != nil {
 		t.Fatal(err)

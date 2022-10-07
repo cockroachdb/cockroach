@@ -82,7 +82,7 @@ func TestRunExplainCombinations(t *testing.T) {
 			}
 		}
 
-		inputs, outputs, err := getExplainCombinations(conn, "EXPLAIN(OPT)", test.placeholderToColMap, bundle)
+		inputs, outputs, err := getExplainCombinations(ctx, conn, "EXPLAIN(OPT)", test.placeholderToColMap, bundle)
 		assert.NoError(t, err)
 		assert.Equal(t, test.expectedInputs, inputs)
 		assert.Equal(t, test.expectedOutputs, outputs)

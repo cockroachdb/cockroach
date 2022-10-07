@@ -1633,10 +1633,12 @@ func (*scope) VisitPost(expr tree.Expr) tree.Expr {
 // scope implements the IndexedVarContainer interface so it can be used as
 // semaCtx.IVarContainer. This allows tree.TypeCheck to determine the correct
 // type for any IndexedVars.
-var _ tree.IndexedVarContainer = &scope{}
+var _ eval.IndexedVarContainer = &scope{}
 
-// IndexedVarEval is part of the IndexedVarContainer interface.
-func (s *scope) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+// IndexedVarEval is part of the eval.IndexedVarContainer interface.
+func (s *scope) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
 	panic(errors.AssertionFailedf("unimplemented: scope.IndexedVarEval"))
 }
 

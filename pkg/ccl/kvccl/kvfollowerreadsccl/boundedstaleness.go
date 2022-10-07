@@ -9,6 +9,7 @@
 package kvfollowerreadsccl
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -22,18 +23,20 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func checkBoundedStalenessEnabled(ctx *eval.Context) error {
-	st := ctx.Settings
+func checkBoundedStalenessEnabled(evalCtx *eval.Context) error {
+	st := evalCtx.Settings
 	return utilccl.CheckEnterpriseEnabled(
 		st,
-		ctx.ClusterID,
+		evalCtx.ClusterID,
 		sql.ClusterOrganization.Get(&st.SV),
 		"bounded staleness",
 	)
 }
 
-func evalMaxStaleness(ctx *eval.Context, d duration.Duration) (time.Time, error) {
-	if err := checkBoundedStalenessEnabled(ctx); err != nil {
+func evalMaxStaleness(
+	ctx context.Context, evalCtx *eval.Context, d duration.Duration,
+) (time.Time, error) {
+	if err := checkBoundedStalenessEnabled(evalCtx); err != nil {
 		return time.Time{}, err
 	}
 	if d.Compare(duration.FromInt64(0)) < 0 {
@@ -43,15 +46,15 @@ func evalMaxStaleness(ctx *eval.Context, d duration.Duration) (time.Time, error)
 			asof.WithMaxStalenessFunctionName,
 		)
 	}
-	return duration.Add(ctx.GetStmtTimestamp(), d.Mul(-1)), nil
+	return duration.Add(evalCtx.GetStmtTimestamp(), d.Mul(-1)), nil
 }
 
-func evalMinTimestamp(ctx *eval.Context, t time.Time) (time.Time, error) {
-	if err := checkBoundedStalenessEnabled(ctx); err != nil {
+func evalMinTimestamp(ctx context.Context, evalCtx *eval.Context, t time.Time) (time.Time, error) {
+	if err := checkBoundedStalenessEnabled(evalCtx); err != nil {
 		return time.Time{}, err
 	}
 	t = t.Round(time.Microsecond)
-	if stmtTimestamp := ctx.GetStmtTimestamp().Round(time.Microsecond); t.After(stmtTimestamp) {
+	if stmtTimestamp := evalCtx.GetStmtTimestamp().Round(time.Microsecond); t.After(stmtTimestamp) {
 		return time.Time{}, errors.WithDetailf(
 			pgerror.Newf(
 				pgcode.InvalidParameterValue,

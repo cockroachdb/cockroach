@@ -58,7 +58,7 @@ func normalizeAndExpr(v *Visitor, expr *tree.AndExpr) tree.TypedExpr {
 
 	// Use short-circuit evaluation to simplify AND expressions.
 	if v.isConst(left) {
-		dleft, v.err = eval.Expr(v.ctx, left)
+		dleft, v.err = eval.Expr(v.ctx, v.evalCtx, left)
 		if v.err != nil {
 			return expr
 		}
@@ -77,7 +77,7 @@ func normalizeAndExpr(v *Visitor, expr *tree.AndExpr) tree.TypedExpr {
 		)
 	}
 	if v.isConst(right) {
-		dright, v.err = eval.Expr(v.ctx, right)
+		dright, v.err = eval.Expr(v.ctx, v.evalCtx, right)
 		if v.err != nil {
 			return expr
 		}
@@ -172,7 +172,7 @@ func normalizeCoalesceExpr(v *Visitor, expr *tree.CoalesceExpr) tree.TypedExpr {
 			return &exprCopy
 		}
 
-		val, err := eval.Expr(v.ctx, subExpr)
+		val, err := eval.Expr(v.ctx, v.evalCtx, subExpr)
 		if err != nil {
 			v.err = err
 			return expr
@@ -248,7 +248,7 @@ func normalizeComparisonExpr(v *Visitor, expr *tree.ComparisonExpr) tree.TypedEx
 		tuple, ok := expr.Right.(*tree.DTuple)
 		if ok {
 			tupleCopy := *tuple
-			tupleCopy.Normalize(v.ctx)
+			tupleCopy.Normalize(v.evalCtx)
 
 			// If the tuple only contains NULL values, Normalize will have reduced
 			// it to a single NULL value.
@@ -297,7 +297,7 @@ func normalizeComparisonExpr(v *Visitor, expr *tree.ComparisonExpr) tree.TypedEx
 
 func normalizeIfExpr(v *Visitor, expr *tree.IfExpr) tree.TypedExpr {
 	if v.isConst(expr.Cond) {
-		cond, err := eval.Expr(v.ctx, expr.TypedCondExpr())
+		cond, err := eval.Expr(v.ctx, v.evalCtx, expr.TypedCondExpr())
 		if err != nil {
 			v.err = err
 			return expr
@@ -333,7 +333,7 @@ func normalizeOrExpr(v *Visitor, expr *tree.OrExpr) tree.TypedExpr {
 
 	// Use short-circuit evaluation to simplify OR expressions.
 	if v.isConst(left) {
-		dleft, v.err = eval.Expr(v.ctx, left)
+		dleft, v.err = eval.Expr(v.ctx, v.evalCtx, left)
 		if v.err != nil {
 			return expr
 		}
@@ -352,7 +352,7 @@ func normalizeOrExpr(v *Visitor, expr *tree.OrExpr) tree.TypedExpr {
 		)
 	}
 	if v.isConst(right) {
-		dright, v.err = eval.Expr(v.ctx, right)
+		dright, v.err = eval.Expr(v.ctx, v.evalCtx, right)
 		if v.err != nil {
 			return expr
 		}
@@ -381,7 +381,7 @@ func normalizeRangeCond(v *Visitor, expr *tree.RangeCond) tree.TypedExpr {
 	leftFrom, from := expr.TypedLeftFrom(), expr.TypedFrom()
 	leftTo, to := expr.TypedLeftTo(), expr.TypedTo()
 	// The visitor hasn't walked down into leftTo; do it now.
-	if leftTo, v.err = Expr(v.ctx, leftTo); v.err != nil {
+	if leftTo, v.err = Expr(v.ctx, v.evalCtx, leftTo); v.err != nil {
 		return expr
 	}
 
@@ -453,7 +453,7 @@ func normalizeTuple(v *Visitor, expr *tree.Tuple) tree.TypedExpr {
 	if !isConst {
 		return expr
 	}
-	e, err := eval.Expr(v.ctx, expr)
+	e, err := eval.Expr(v.ctx, v.evalCtx, expr)
 	if err != nil {
 		v.err = err
 	}

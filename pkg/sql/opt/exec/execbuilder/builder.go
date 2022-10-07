@@ -11,6 +11,7 @@
 package execbuilder
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -51,6 +52,7 @@ func getParallelScanResultThreshold(forceProductionValue bool) uint64 {
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
 // expression tree (opt.Expr).
 type Builder struct {
+	ctx              context.Context
 	factory          exec.Factory
 	optimizer        *xform.Optimizer
 	mem              *memo.Memo
@@ -178,6 +180,7 @@ type Builder struct {
 // `transaction_rows_read_err` guardrail is disabled.). It should be false if
 // the statement is executed as part of an explicit transaction.
 func New(
+	ctx context.Context,
 	factory exec.Factory,
 	optimizer *xform.Optimizer,
 	mem *memo.Memo,
@@ -192,6 +195,7 @@ func New(
 		mem:                    mem,
 		catalog:                catalog,
 		e:                      e,
+		ctx:                    ctx,
 		evalCtx:                evalCtx,
 		allowAutoCommit:        allowAutoCommit,
 		initialAllowAutoCommit: allowAutoCommit,
@@ -340,16 +344,18 @@ func (b *Builder) boundedStaleness() bool {
 	return b.evalCtx != nil && b.evalCtx.BoundedStaleness()
 }
 
-// mdVarContainer is an IndexedVarContainer implementation used by BuildScalar -
-// it maps indexed vars to columns in the metadata.
+// mdVarContainer is an eval.IndexedVarContainer implementation used by
+// BuildScalar - it maps indexed vars to columns in the metadata.
 type mdVarContainer struct {
 	md *opt.Metadata
 }
 
-var _ tree.IndexedVarContainer = &mdVarContainer{}
+var _ eval.IndexedVarContainer = &mdVarContainer{}
 
-// IndexedVarEval is part of the IndexedVarContainer interface.
-func (c *mdVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+// IndexedVarEval is part of the eval.IndexedVarContainer interface.
+func (c *mdVarContainer) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
 	return nil, errors.AssertionFailedf("no eval allowed in mdVarContainer")
 }
 

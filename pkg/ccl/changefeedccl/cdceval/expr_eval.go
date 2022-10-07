@@ -293,7 +293,7 @@ func (e *exprEval) evalProjection(
 		if err != nil {
 			return cdcevent.Row{}, err
 		}
-		if err := e.projection.SetValueDatumAt(e.evalCtx, i, d); err != nil {
+		if err := e.projection.SetValueDatumAt(ctx, e.evalCtx, i, d); err != nil {
 			return cdcevent.Row{}, err
 		}
 	}
@@ -425,7 +425,7 @@ func (e *exprEval) typeCheck(
 		ctx, expr, targetType, "cdc", e.semaCtx,
 		volatility.Immutable, true)
 	if err == nil {
-		d, err := eval.Expr(e.evalCtx, typedExpr)
+		d, err := eval.Expr(ctx, e.evalCtx, typedExpr)
 		if err != nil {
 			return nil, err
 		}
@@ -448,7 +448,7 @@ func (e *exprEval) typeCheck(
 	if err != nil {
 		return nil, err
 	}
-	return normalize.Expr(e.evalCtx, typedExpr)
+	return normalize.Expr(ctx, e.evalCtx, typedExpr)
 }
 
 // evalExpr evaluates typed expression and returns resulting datum.
@@ -476,7 +476,7 @@ func (e *exprEval) evalExpr(
 		if err != nil {
 			return nil, err
 		}
-		d, err := eval.Expr(e.evalCtx, typedExpr)
+		d, err := eval.Expr(ctx, e.evalCtx, typedExpr)
 		if err != nil {
 			return nil, err
 		}

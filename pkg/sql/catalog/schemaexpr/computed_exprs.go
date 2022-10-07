@@ -11,9 +11,12 @@
 package schemaexpr
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -29,10 +32,12 @@ type RowIndexedVarContainer struct {
 	Mapping catalog.TableColMap
 }
 
-var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
+var _ eval.IndexedVarContainer = &RowIndexedVarContainer{}
 
-// IndexedVarEval implements tree.IndexedVarContainer.
-func (r *RowIndexedVarContainer) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+// IndexedVarEval implements eval.IndexedVarContainer.
+func (r *RowIndexedVarContainer) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
 	rowIdx, ok := r.Mapping.Get(r.Cols[idx].GetID())
 	if !ok {
 		return tree.DNull, nil

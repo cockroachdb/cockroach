@@ -69,7 +69,7 @@ func (b *Builder) buildSQLFn(
 	}
 
 	// Get the SQL statement and parse it.
-	sql, err := info.def.Overload.SQLFn.(eval.SQLFnOverload)(b.evalCtx, exprs)
+	sql, err := info.def.Overload.SQLFn.(eval.SQLFnOverload)(b.ctx, b.evalCtx, exprs)
 	if err != nil {
 		panic(err)
 	}

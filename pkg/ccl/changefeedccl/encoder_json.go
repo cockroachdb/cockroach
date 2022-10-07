@@ -414,8 +414,8 @@ func init() {
 	overload := tree.Overload{
 		Types:      tree.VariadicType{FixedTypes: []*types.T{types.AnyTuple}, VarType: types.String},
 		ReturnType: tree.FixedReturnType(types.Bytes),
-		Fn: func(evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			row := cdcevent.MakeRowFromTuple(evalCtx, tree.MustBeDTuple(args[0]))
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			row := cdcevent.MakeRowFromTuple(ctx, evalCtx, tree.MustBeDTuple(args[0]))
 			flags := make([]string, len(args)-1)
 			for i, d := range args[1:] {
 				flags[i] = string(tree.MustBeDString(d))

@@ -368,7 +368,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		// Evaluate the new values. This must be done separately for
 		// each row so as to handle impure functions correctly.
 		for j, e := range cb.updateExprs {
-			val, err := eval.Expr(cb.evalCtx, e)
+			val, err := eval.Expr(ctx, cb.evalCtx, e)
 			if err != nil {
 				return roachpb.Key{}, sqlerrors.NewInvalidSchemaDefinitionError(err)
 			}
@@ -874,7 +874,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			if !ok {
 				continue
 			}
-			val, err := eval.Expr(ib.evalCtx, texpr)
+			val, err := eval.Expr(ctx, ib.evalCtx, texpr)
 			if err != nil {
 				return err
 			}
@@ -931,7 +931,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				// predicate expression evaluates to true.
 				texpr := ib.predicates[idx.GetID()]
 
-				val, err := eval.Expr(ib.evalCtx, texpr)
+				val, err := eval.Expr(ctx, ib.evalCtx, texpr)
 				if err != nil {
 					return nil, nil, 0, err
 				}

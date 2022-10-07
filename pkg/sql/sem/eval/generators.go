@@ -20,7 +20,9 @@ import (
 )
 
 // GetGenerator is used to construct a ValueGenerator from a FuncExpr.
-func GetGenerator(ctx *Context, expr *tree.FuncExpr) (ValueGenerator, error) {
+func GetGenerator(
+	ctx context.Context, evalCtx *Context, expr *tree.FuncExpr,
+) (ValueGenerator, error) {
 	if !expr.IsGeneratorClass() {
 		return nil, errors.AssertionFailedf(
 			"cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q",
@@ -29,13 +31,13 @@ func GetGenerator(ctx *Context, expr *tree.FuncExpr) (ValueGenerator, error) {
 	}
 	ol := expr.ResolvedOverload()
 	if ol.GeneratorWithExprs != nil {
-		return ol.GeneratorWithExprs.(GeneratorWithExprsOverload)(ctx, expr.Exprs)
+		return ol.GeneratorWithExprs.(GeneratorWithExprsOverload)(ctx, evalCtx, expr.Exprs)
 	}
-	nullArg, args, err := (*evaluator)(ctx).evalFuncArgs(expr)
+	nullArg, args, err := (*evaluator)(evalCtx).evalFuncArgs(ctx, expr)
 	if err != nil || nullArg {
 		return nil, err
 	}
-	return ol.Generator.(GeneratorOverload)(ctx, args)
+	return ol.Generator.(GeneratorOverload)(ctx, evalCtx, args)
 }
 
 // Table generators, also called "set-generating functions", are

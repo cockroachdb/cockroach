@@ -135,9 +135,7 @@ func GetConfiguredPasswordCost(
 
 // GetConfiguredPasswordHashMethod returns the configured hash method
 // to use before storing passwords provided in cleartext from clients.
-func GetConfiguredPasswordHashMethod(
-	ctx context.Context, sv *settings.Values,
-) (method password.HashMethod) {
+func GetConfiguredPasswordHashMethod(sv *settings.Values) (method password.HashMethod) {
 	return password.HashMethod(PasswordHashMethod.Get(sv))
 }
 

@@ -95,7 +95,7 @@ func (f *filtererProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 		}
 
 		// Perform the actual filtering.
-		passes, err := f.filter.EvalFilter(row)
+		passes, err := f.filter.EvalFilter(f.Ctx, row)
 		if err != nil {
 			f.MoveToDraining(err)
 			break

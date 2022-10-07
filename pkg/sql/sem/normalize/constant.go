@@ -11,6 +11,8 @@
 package normalize
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -18,8 +20,9 @@ import (
 
 // ConstantEvalVisitor replaces constant TypedExprs with the result of Eval.
 type ConstantEvalVisitor struct {
-	ctx *eval.Context
-	err error
+	ctx     context.Context
+	evalCtx *eval.Context
+	err     error
 
 	fastIsConstVisitor fastIsConstVisitor
 }
@@ -27,8 +30,8 @@ type ConstantEvalVisitor struct {
 var _ tree.Visitor = &ConstantEvalVisitor{}
 
 // MakeConstantEvalVisitor creates a ConstantEvalVisitor instance.
-func MakeConstantEvalVisitor(ctx *eval.Context) ConstantEvalVisitor {
-	return ConstantEvalVisitor{ctx: ctx, fastIsConstVisitor: fastIsConstVisitor{ctx: ctx}}
+func MakeConstantEvalVisitor(ctx context.Context, evalCtx *eval.Context) ConstantEvalVisitor {
+	return ConstantEvalVisitor{ctx: ctx, evalCtx: evalCtx, fastIsConstVisitor: fastIsConstVisitor{evalCtx: evalCtx}}
 }
 
 // Err retrieves the error field in the ConstantEvalVisitor.
@@ -53,7 +56,7 @@ func (v *ConstantEvalVisitor) VisitPost(expr tree.Expr) tree.Expr {
 		return expr
 	}
 
-	value, err := eval.Expr(v.ctx, typedExpr)
+	value, err := eval.Expr(v.ctx, v.evalCtx, typedExpr)
 	if err != nil {
 		// Ignore any errors here (e.g. division by zero), so they can happen
 		// during execution where they are correctly handled. Note that in some

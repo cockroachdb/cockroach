@@ -11,6 +11,8 @@
 package eval
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -21,7 +23,7 @@ import (
 // ComparisonExprWithSubOperator evaluates a comparison expression that has
 // sub-operator.
 func ComparisonExprWithSubOperator(
-	ctx *Context, expr *tree.ComparisonExpr, left, right tree.Datum,
+	ctx context.Context, evalCtx *Context, expr *tree.ComparisonExpr, left, right tree.Datum,
 ) (tree.Datum, error) {
 	var datums tree.Datums
 	// Right is either a tuple or an array of Datums.
@@ -34,11 +36,11 @@ func ComparisonExprWithSubOperator(
 	} else {
 		return nil, errors.AssertionFailedf("unhandled right expression %s", right)
 	}
-	return evalDatumsCmp(ctx, expr.Operator, expr.SubOperator, expr.Op, left, datums)
+	return evalDatumsCmp(ctx, evalCtx, expr.Operator, expr.SubOperator, expr.Op, left, datums)
 }
 
 func evalComparison(
-	ctx *Context, op treecmp.ComparisonOperator, left, right tree.Datum,
+	ctx context.Context, evalCtx *Context, op treecmp.ComparisonOperator, left, right tree.Datum,
 ) (tree.Datum, error) {
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil
@@ -46,7 +48,7 @@ func evalComparison(
 	ltype := left.ResolvedType()
 	rtype := right.ResolvedType()
 	if fn, ok := tree.CmpOps[op.Symbol].LookupImpl(ltype, rtype); ok {
-		return BinaryOp(ctx, fn.EvalOp, left, right)
+		return BinaryOp(ctx, evalCtx, fn.EvalOp, left, right)
 	}
 	return nil, pgerror.Newf(
 		pgcode.UndefinedFunction, "unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
@@ -71,7 +73,8 @@ func evalComparison(
 //
 //	evalDatumsCmp(ctx, LT, Any, CmpOp(LT, leftType, rightParamType), leftDatum, rightArray.Array).
 func evalDatumsCmp(
-	ctx *Context,
+	ctx context.Context,
+	evalCtx *Context,
 	op, subOp treecmp.ComparisonOperator,
 	fn *tree.CmpOp,
 	left tree.Datum,
@@ -87,7 +90,7 @@ func evalDatumsCmp(
 		}
 
 		_, newLeft, newRight, _, not := tree.FoldComparisonExprWithDatums(subOp, left, elem)
-		d, err := BinaryOp(ctx, fn.EvalOp, newLeft, newRight)
+		d, err := BinaryOp(ctx, evalCtx, fn.EvalOp, newLeft, newRight)
 		if err != nil {
 			return nil, err
 		}

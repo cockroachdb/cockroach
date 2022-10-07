@@ -420,6 +420,7 @@ func (ex *connExecutor) execBind(
 						}
 					}
 					d, err := pgwirebase.DecodeDatum(
+						ctx,
 						ex.planner.EvalContext(),
 						typ,
 						qArgFormatCodes[i],

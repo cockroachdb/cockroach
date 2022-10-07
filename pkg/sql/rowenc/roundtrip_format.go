@@ -11,6 +11,8 @@
 package rowenc
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -19,12 +21,14 @@ import (
 
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
 // round-trip when printing a Datum with FmtExport.
-func ParseDatumStringAs(t *types.T, s string, evalCtx *eval.Context) (tree.Datum, error) {
+func ParseDatumStringAs(
+	ctx context.Context, t *types.T, s string, evalCtx *eval.Context,
+) (tree.Datum, error) {
 	switch t.Family() {
 	// We use a different parser for array types because ParseAndRequireString only parses
 	// the internal postgres string representation of arrays.
 	case types.ArrayFamily, types.CollatedStringFamily:
-		return parseAsTyp(evalCtx, t, s)
+		return parseAsTyp(ctx, evalCtx, t, s)
 	default:
 		res, _, err := tree.ParseAndRequireString(t, s, evalCtx)
 		return res, err
@@ -37,26 +41,28 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *eval.Context) (tree.Datum
 // than the bytes case, this function does the same as ParseDatumStringAs but is not
 // guaranteed to round-trip.
 func ParseDatumStringAsWithRawBytes(
-	t *types.T, s string, evalCtx *eval.Context,
+	ctx context.Context, t *types.T, s string, evalCtx *eval.Context,
 ) (tree.Datum, error) {
 	switch t.Family() {
 	case types.BytesFamily:
 		return tree.NewDBytes(tree.DBytes(s)), nil
 	default:
-		return ParseDatumStringAs(t, s, evalCtx)
+		return ParseDatumStringAs(ctx, t, s, evalCtx)
 	}
 }
 
-func parseAsTyp(evalCtx *eval.Context, typ *types.T, s string) (tree.Datum, error) {
+func parseAsTyp(
+	ctx context.Context, evalCtx *eval.Context, typ *types.T, s string,
+) (tree.Datum, error) {
 	expr, err := parser.ParseExpr(s)
 	if err != nil {
 		return nil, err
 	}
 	semaCtx := tree.MakeSemaContext()
-	typedExpr, err := tree.TypeCheck(evalCtx.Context, expr, &semaCtx, typ)
+	typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, typ)
 	if err != nil {
 		return nil, err
 	}
-	datum, err := eval.Expr(evalCtx, typedExpr)
+	datum, err := eval.Expr(ctx, evalCtx, typedExpr)
 	return datum, err
 }

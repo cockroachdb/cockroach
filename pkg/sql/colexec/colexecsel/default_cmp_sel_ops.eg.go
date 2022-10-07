@@ -52,7 +52,7 @@ func (d *defaultCmpSelOp) Next() coldata.Batch {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether hasSel is true.
 			//gcassert:bce
-			res, err := d.adapter.Eval(leftColumn[i], rightColumn[i])
+			res, err := d.adapter.Eval(d.Ctx, leftColumn[i], rightColumn[i])
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}
@@ -107,7 +107,7 @@ func (d *defaultCmpConstSelOp) Next() coldata.Batch {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether hasSel is true.
 			//gcassert:bce
-			res, err := d.adapter.Eval(leftColumn[i], d.constArg)
+			res, err := d.adapter.Eval(d.Ctx, leftColumn[i], d.constArg)
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}

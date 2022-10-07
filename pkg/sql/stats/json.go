@@ -147,7 +147,7 @@ func (js *JSONStatistic) GetHistogram(
 	h.Buckets = make([]HistogramData_Bucket, len(js.HistogramBuckets))
 	for i := range h.Buckets {
 		hb := &js.HistogramBuckets[i]
-		upperVal, err := rowenc.ParseDatumStringAs(colType, hb.UpperBound, evalCtx)
+		upperVal, err := rowenc.ParseDatumStringAs(ctx, colType, hb.UpperBound, evalCtx)
 		if err != nil {
 			return nil, err
 		}

@@ -119,7 +119,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		// tenant ID is non zero and refers to a tenant that exists in
 		// system.tenants.
 		var err error
-		tenantIDi, tenantID, err = resolveTenantID(params.p, n.tenantID)
+		tenantIDi, tenantID, err = resolveTenantID(params.ctx, params.p, n.tenantID)
 		if err != nil {
 			return err
 		}
@@ -142,7 +142,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		}
 	} else {
 		reportedValue = tree.AsStringWithFlags(n.value, tree.FmtBareStrings)
-		value, err := eval.Expr(params.p.EvalContext(), n.value)
+		value, err := eval.Expr(params.ctx, params.p.EvalContext(), n.value)
 		if err != nil {
 			return err
 		}
@@ -176,8 +176,10 @@ func (n *alterTenantSetClusterSettingNode) Next(_ runParams) (bool, error) { ret
 func (n *alterTenantSetClusterSettingNode) Values() tree.Datums            { return nil }
 func (n *alterTenantSetClusterSettingNode) Close(_ context.Context)        {}
 
-func resolveTenantID(p *planner, expr tree.TypedExpr) (uint64, tree.Datum, error) {
-	tenantIDd, err := eval.Expr(p.EvalContext(), expr)
+func resolveTenantID(
+	ctx context.Context, p *planner, expr tree.TypedExpr,
+) (uint64, tree.Datum, error) {
+	tenantIDd, err := eval.Expr(ctx, p.EvalContext(), expr)
 	if err != nil {
 		return 0, nil, err
 	}

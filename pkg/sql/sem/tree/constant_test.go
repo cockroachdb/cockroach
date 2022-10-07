@@ -608,7 +608,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 			typedExpr, err := test.c.ResolveAsType(context.Background(), &semaCtx, availType)
 			var res tree.Datum
 			if err == nil {
-				res, err = eval.Expr(evalCtx, typedExpr)
+				res, err = eval.Expr(context.Background(), evalCtx, typedExpr)
 			}
 			if err != nil {
 				if !strings.Contains(err.Error(), "could not parse") &&

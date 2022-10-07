@@ -61,15 +61,15 @@ func isBinaryEvalMethod(fd *ast.FuncDecl) bool {
 		len(fd.Type.Results.List) == 2 &&
 		isIdentWithName(fd.Type.Results.List[0].Type, "Datum") &&
 		isIdentWithName(fd.Type.Results.List[1].Type, "error") &&
-		((len(fd.Type.Params.List) == 2 &&
-			isIdentWithName(fd.Type.Params.List[1].Type, "Datum") &&
-			len(fd.Type.Params.List[1].Names) == 2) ||
-			(len(fd.Type.Params.List) == 3 &&
-				isIdentWithName(fd.Type.Params.List[1].Type, "Datum") &&
-				len(fd.Type.Params.List[1].Names) == 1 &&
+		((len(fd.Type.Params.List) == 3 &&
+			isIdentWithName(fd.Type.Params.List[2].Type, "Datum") &&
+			len(fd.Type.Params.List[2].Names) == 2) ||
+			(len(fd.Type.Params.List) == 4 &&
 				isIdentWithName(fd.Type.Params.List[2].Type, "Datum") &&
-				len(fd.Type.Params.List[2].Names) == 1)) &&
-		isIdentWithName(fd.Type.Params.List[0].Type, "OpEvaluator")
+				len(fd.Type.Params.List[2].Names) == 1 &&
+				isIdentWithName(fd.Type.Params.List[3].Type, "Datum") &&
+				len(fd.Type.Params.List[3].Names) == 1)) &&
+		isIdentWithName(fd.Type.Params.List[1].Type, "OpEvaluator")
 }
 
 func isUnaryEvalMethod(fd *ast.FuncDecl) bool {
@@ -78,10 +78,10 @@ func isUnaryEvalMethod(fd *ast.FuncDecl) bool {
 		len(fd.Type.Results.List) == 2 &&
 		isIdentWithName(fd.Type.Results.List[0].Type, "Datum") &&
 		isIdentWithName(fd.Type.Results.List[1].Type, "error") &&
-		len(fd.Type.Params.List) == 2 &&
-		isIdentWithName(fd.Type.Params.List[0].Type, "OpEvaluator") &&
-		isIdentWithName(fd.Type.Params.List[1].Type, "Datum") &&
-		len(fd.Type.Params.List[1].Names) == 1
+		len(fd.Type.Params.List) == 3 &&
+		isIdentWithName(fd.Type.Params.List[1].Type, "OpEvaluator") &&
+		isIdentWithName(fd.Type.Params.List[2].Type, "Datum") &&
+		len(fd.Type.Params.List[2].Names) == 1
 }
 
 var opsTemplate = template.Must(template.
@@ -92,12 +92,12 @@ const opsTemplateStr = header + `
 
 // UnaryEvalOp is a unary operation which can be evaluated.
 type UnaryEvalOp interface {
-	Eval(OpEvaluator, Datum) (Datum, error)
+	Eval(context.Context, OpEvaluator, Datum) (Datum, error)
 }
 
 // BinaryEvalOp is a binary operation which can be evaluated.
 type BinaryEvalOp interface {
-	Eval(OpEvaluator, Datum, Datum) (Datum, error)
+	Eval(context.Context, OpEvaluator, Datum, Datum) (Datum, error)
 }
 
 // OpEvaluator is an evaluator for UnaryEvalOp and BinaryEvalOp operations.
@@ -109,26 +109,26 @@ type OpEvaluator interface {
 // UnaryOpEvaluator knows how to evaluate UnaryEvalOps.
 type UnaryOpEvaluator interface {
 {{- range .UnaryOps }}
-	Eval{{.}}(*{{ . }}, Datum) (Datum, error)
+	Eval{{.}}(context.Context, *{{ . }}, Datum) (Datum, error)
 {{- end}}
 }
 
 // UnaryOpEvaluator knows how to evaluate BinaryEvalOps.
 type BinaryOpEvaluator interface {
 {{- range .BinaryOps }}
-	Eval{{.}}(*{{ . }}, Datum, Datum) (Datum, error)
+	Eval{{.}}(context.Context, *{{ . }}, Datum, Datum) (Datum, error)
 {{- end}}
 }
 
 {{ range .UnaryOps }}
 // Eval is part of the UnaryEvalOp interface.
-func (op *{{.}}) Eval(e OpEvaluator, v Datum) (Datum, error) {
-	return e.Eval{{.}}(op, v)
+func (op *{{.}}) Eval(ctx context.Context, e OpEvaluator, v Datum) (Datum, error) {
+	return e.Eval{{.}}(ctx, op, v)
 }
 {{ end }}{{ range .BinaryOps }}
 // Eval is part of the BinaryEvalOp interface.
-func (op *{{.}}) Eval(e OpEvaluator, a, b Datum) (Datum, error) {
-	return e.Eval{{.}}(op, a, b)
+func (op *{{.}}) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.Eval{{.}}(ctx, op, a, b)
 }
 {{ end }}
 `

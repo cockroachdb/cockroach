@@ -12,6 +12,7 @@
 package paramparse
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -35,8 +36,10 @@ func UnresolvedNameToStrVal(expr tree.Expr) tree.Expr {
 }
 
 // DatumAsFloat transforms a tree.TypedExpr containing a Datum into a float.
-func DatumAsFloat(evalCtx *eval.Context, name string, value tree.TypedExpr) (float64, error) {
-	val, err := eval.Expr(evalCtx, value)
+func DatumAsFloat(
+	ctx context.Context, evalCtx *eval.Context, name string, value tree.TypedExpr,
+) (float64, error) {
+	val, err := eval.Expr(ctx, evalCtx, value)
 	if err != nil {
 		return 0, err
 	}
@@ -60,9 +63,9 @@ func DatumAsFloat(evalCtx *eval.Context, name string, value tree.TypedExpr) (flo
 // DatumAsDuration transforms a tree.TypedExpr containing a Datum into a
 // time.Duration.
 func DatumAsDuration(
-	evalCtx *eval.Context, name string, value tree.TypedExpr,
+	ctx context.Context, evalCtx *eval.Context, name string, value tree.TypedExpr,
 ) (time.Duration, error) {
-	val, err := eval.Expr(evalCtx, value)
+	val, err := eval.Expr(ctx, evalCtx, value)
 	if err != nil {
 		return 0, err
 	}
@@ -95,8 +98,10 @@ func DatumAsDuration(
 }
 
 // DatumAsInt transforms a tree.TypedExpr containing a Datum into an int.
-func DatumAsInt(evalCtx *eval.Context, name string, value tree.TypedExpr) (int64, error) {
-	val, err := eval.Expr(evalCtx, value)
+func DatumAsInt(
+	ctx context.Context, evalCtx *eval.Context, name string, value tree.TypedExpr,
+) (int64, error) {
+	val, err := eval.Expr(ctx, evalCtx, value)
 	if err != nil {
 		return 0, err
 	}
@@ -112,8 +117,10 @@ func DatumAsInt(evalCtx *eval.Context, name string, value tree.TypedExpr) (int64
 }
 
 // DatumAsString transforms a tree.TypedExpr containing a Datum into a string.
-func DatumAsString(evalCtx *eval.Context, name string, value tree.TypedExpr) (string, error) {
-	val, err := eval.Expr(evalCtx, value)
+func DatumAsString(
+	ctx context.Context, evalCtx *eval.Context, name string, value tree.TypedExpr,
+) (string, error) {
+	val, err := eval.Expr(ctx, evalCtx, value)
 	if err != nil {
 		return "", err
 	}

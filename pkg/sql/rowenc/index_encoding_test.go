@@ -883,11 +883,11 @@ func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
 
 // Determines if the input array contains only one or more entries of the
 // same non-null element. NULL entries are not considered.
-func containsNonNullUniqueElement(ctx *eval.Context, valArr *tree.DArray) bool {
+func containsNonNullUniqueElement(evalCtx *eval.Context, valArr *tree.DArray) bool {
 	var lastVal tree.Datum = tree.DNull
 	for _, val := range valArr.Array {
 		if val != tree.DNull {
-			if lastVal != tree.DNull && lastVal.Compare(ctx, val) != 0 {
+			if lastVal != tree.DNull && lastVal.Compare(evalCtx, val) != 0 {
 				return false
 			}
 			lastVal = val
@@ -987,7 +987,7 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 
 		// Since the spans are never tight, apply an additional filter to determine
 		// if the result is contained.
-		datum, err := eval.Expr(&evalCtx, typedExpr)
+		datum, err := eval.Expr(context.Background(), &evalCtx, typedExpr)
 		require.NoError(t, err)
 		actual := bool(*datum.(*tree.DBool))
 		require.Equal(t, expected, actual, "%s, %s: expected evaluation result to match", indexedValue, value)
@@ -1036,7 +1036,7 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 				expectedContainsKeys = all
 			}
 
-			d, err := eval.Expr(&evalCtx, expr)
+			d, err := eval.Expr(context.Background(), &evalCtx, expr)
 			require.NoError(t, err)
 			expected := bool(*d.(*tree.DBool))
 			trigrams := trigram.MakeTrigrams(right, false /* pad */)

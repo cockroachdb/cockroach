@@ -274,7 +274,7 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 
 	// Start by using private expression formatting.
 	m := mf.o.mem
-	nf := memo.MakeExprFmtCtxBuffer(mf.buf, memo.ExprFmtHideAll, m, nil /* catalog */)
+	nf := memo.MakeExprFmtCtxBuffer(mf.o.ctx, mf.buf, memo.ExprFmtHideAll, m, nil /* catalog */)
 	memo.FormatPrivate(&nf, private, physProps)
 
 	// Now append additional information that's useful in the memo case.

@@ -141,7 +141,9 @@ var _ colexecop.ResettableOperator = &orderedAggregator{}
 var _ colexecop.ClosableOperator = &orderedAggregator{}
 
 // NewOrderedAggregator creates an ordered aggregator.
-func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
+func NewOrderedAggregator(
+	ctx context.Context, args *colexecagg.NewAggregatorArgs,
+) colexecop.ResettableOperator {
 	for _, aggFn := range args.Spec.Aggregations {
 		if aggFn.FilterColIdx != nil {
 			colexecerror.InternalError(errors.AssertionFailedf("filtering ordered aggregation is not supported"))
@@ -154,7 +156,7 @@ func NewOrderedAggregator(args *colexecagg.NewAggregatorArgs) colexecop.Resettab
 	// We will be reusing the same aggregate functions, so we use 1 as the
 	// allocation size.
 	funcsAlloc, inputArgsConverter, toClose, err := colexecagg.NewAggregateFuncsAlloc(
-		args, args.Spec.Aggregations, 1 /* allocSize */, colexecagg.OrderedAggKind,
+		ctx, args, args.Spec.Aggregations, 1 /* allocSize */, colexecagg.OrderedAggKind,
 	)
 	if err != nil {
 		colexecerror.InternalError(err)

@@ -13,6 +13,7 @@ package sql
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/url"
@@ -47,6 +48,7 @@ import (
 )
 
 type execFactory struct {
+	ctx     context.Context
 	planner *planner
 	// alloc is allocated lazily the first time it is needed and shared among
 	// all mutation planNodes created by the factory. It should not be accessed
@@ -59,8 +61,9 @@ type execFactory struct {
 
 var _ exec.Factory = &execFactory{}
 
-func newExecFactory(p *planner) *execFactory {
+func newExecFactory(ctx context.Context, p *planner) *execFactory {
 	return &execFactory{
+		ctx:     ctx,
 		planner: p,
 	}
 }
@@ -121,8 +124,7 @@ func (ef *execFactory) ConstructScan(
 	scan := ef.planner.Scan()
 	colCfg := makeScanColumnsConfig(table, params.NeededCols)
 
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := scan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
+	if err := scan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -636,8 +638,7 @@ func (ef *execFactory) ConstructIndexJoin(
 
 	tableScan := ef.planner.Scan()
 
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
+	if err := tableScan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -698,8 +699,7 @@ func (ef *execFactory) ConstructLookupJoin(
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
+	if err := tableScan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 
@@ -784,8 +784,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	// Set up a scanNode that we won't actually use, just to get the needed
 	// column analysis.
 	colCfg := makeScanColumnsConfig(table, lookupCols)
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tableDesc, colCfg); err != nil {
+	if err := tableScan.initTable(ef.ctx, ef.planner, tableDesc, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -832,8 +831,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 	colCfg := makeScanColumnsConfig(table, lookupCols)
 	tableScan := ef.planner.Scan()
 
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := tableScan.initTable(ctx, ef.planner, tabDesc, colCfg); err != nil {
+	if err := tableScan.initTable(ef.ctx, ef.planner, tabDesc, colCfg); err != nil {
 		return nil, err
 	}
 	tableScan.index = idx
@@ -904,8 +902,7 @@ func (ef *execFactory) constructScanForZigzag(
 	tableDesc := table.(*optTable).desc
 	idxDesc := index.(*optIndex).idx
 	scan := ef.planner.Scan()
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-	if err := scan.initTable(ctx, ef.planner, tableDesc, colCfg); err != nil {
+	if err := scan.initTable(ef.ctx, ef.planner, tableDesc, colCfg); err != nil {
 		return nil, nil, err
 	}
 
@@ -1195,7 +1192,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalExecutorFactory.NewInternalExecutor(
 		ef.planner.SessionData(),
 	)
-	c := makeStmtEnvCollector(ef.planner.EvalContext().Context, ie.(*InternalExecutor))
+	c := makeStmtEnvCollector(ef.ctx, ie.(*InternalExecutor))
 
 	// Show the version of Cockroach running.
 	if err := c.PrintVersion(&out.buf); err != nil {
@@ -1312,8 +1309,6 @@ func (ef *execFactory) ConstructInsert(
 	checkOrdSet exec.CheckOrdinalSet,
 	autoCommit bool,
 ) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1322,7 +1317,7 @@ func (ef *execFactory) ConstructInsert(
 	// Create the table inserter, which does the bulk of the work.
 	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
-		ctx,
+		ef.ctx,
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
@@ -1383,8 +1378,6 @@ func (ef *execFactory) ConstructInsertFastPath(
 	fkChecks []exec.InsertFastPathFKCheck,
 	autoCommit bool,
 ) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-
 	// Derive insert table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1393,7 +1386,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	// Create the table inserter, which does the bulk of the work.
 	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
-		ctx,
+		ef.ctx,
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
@@ -1468,8 +1461,6 @@ func (ef *execFactory) ConstructUpdate(
 	passthrough colinfo.ResultColumns,
 	autoCommit bool,
 ) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-
 	// TODO(radu): the execution code has an annoying limitation that the fetch
 	// columns must be a superset of the update columns, even when the "old" value
 	// of a column is not necessary. The optimizer code for pruning columns is
@@ -1495,7 +1486,7 @@ func (ef *execFactory) ConstructUpdate(
 	// Create the table updater, which does the bulk of the work.
 	internal := ef.planner.SessionData().Internal
 	ru, err := row.MakeUpdater(
-		ctx,
+		ef.ctx,
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
@@ -1585,8 +1576,6 @@ func (ef *execFactory) ConstructUpsert(
 	checks exec.CheckOrdinalSet,
 	autoCommit bool,
 ) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Ctx()
-
 	// Derive table and column descriptors.
 	rowsNeeded := !returnColOrdSet.Empty()
 	tabDesc := table.(*optTable).desc
@@ -1597,7 +1586,7 @@ func (ef *execFactory) ConstructUpsert(
 	// Create the table inserter, which does the bulk of the insert-related work.
 	internal := ef.planner.SessionData().Internal
 	ri, err := row.MakeInserter(
-		ctx,
+		ef.ctx,
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
@@ -1613,7 +1602,7 @@ func (ef *execFactory) ConstructUpsert(
 
 	// Create the table updater, which does the bulk of the update-related work.
 	ru, err := row.MakeUpdater(
-		ctx,
+		ef.ctx,
 		ef.planner.txn,
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
@@ -1750,7 +1739,7 @@ func (ef *execFactory) ConstructDeleteRange(
 
 	splitter := span.NoopSplitter()
 	canUsePointDelete := ef.planner.ExecCfg().Settings.Version.IsActive(
-		ef.planner.EvalContext().Context, clusterversion.DeleteRequestReturnKey,
+		ef.ctx, clusterversion.DeleteRequestReturnKey,
 	)
 	if canUsePointDelete {
 		splitter = span.MakeSplitterForDelete(
@@ -1776,7 +1765,7 @@ func (ef *execFactory) ConstructCreateTable(
 	schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"CREATE TABLE",
 	); err != nil {
@@ -1793,7 +1782,7 @@ func (ef *execFactory) ConstructCreateTableAs(
 	input exec.Node, schema cat.Schema, ct *tree.CreateTable,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"CREATE TABLE",
 	); err != nil {
@@ -1823,7 +1812,7 @@ func (ef *execFactory) ConstructCreateView(
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"CREATE VIEW",
 	); err != nil {
@@ -1856,7 +1845,7 @@ func (ef *execFactory) ConstructCreateFunction(
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"CREATE FUNCTION",
 	); err != nil {
@@ -1943,7 +1932,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 	index cat.Index, input exec.Node, expiration tree.TypedExpr,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"ALTER TABLE/INDEX SPLIT AT",
 	); err != nil {
@@ -1955,7 +1944,7 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 
-	expirationTime, err := parseExpirationTime(ef.planner.EvalContext(), expiration)
+	expirationTime, err := parseExpirationTime(ef.ctx, ef.planner.EvalContext(), expiration)
 	if err != nil {
 		return nil, err
 	}
@@ -1973,7 +1962,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 	index cat.Index, input exec.Node,
 ) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"ALTER TABLE/INDEX UNSPLIT AT",
 	); err != nil {
@@ -1994,7 +1983,7 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 // ConstructAlterTableUnsplitAll is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node, error) {
 	if err := checkSchemaChangeEnabled(
-		ef.planner.EvalContext().Context,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		"ALTER TABLE/INDEX UNSPLIT ALL",
 	); err != nil {
@@ -2050,7 +2039,7 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 func (ef *execFactory) ConstructControlJobs(
 	command tree.JobCommand, input exec.Node, reason tree.TypedExpr,
 ) (exec.Node, error) {
-	reasonDatum, err := eval.Expr(ef.planner.EvalContext(), reason)
+	reasonDatum, err := eval.Expr(ef.ctx, ef.planner.EvalContext(), reason)
 	if err != nil {
 		return nil, err
 	}
@@ -2099,9 +2088,8 @@ func (ef *execFactory) ConstructCancelSessions(input exec.Node, ifExists bool) (
 
 // ConstructCreateStatistics is part of the exec.Factory interface.
 func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Node, error) {
-	ctx := ef.planner.extendedEvalCtx.Ctx()
 	if err := featureflag.CheckEnabled(
-		ctx,
+		ef.ctx,
 		ef.planner.ExecCfg(),
 		featureStatsEnabled,
 		"ANALYZE/CREATE STATISTICS",
@@ -2130,6 +2118,7 @@ func (ef *execFactory) ConstructExplain(
 	}
 
 	plan, err := buildFn(&execFactory{
+		ctx:       ef.ctx,
 		planner:   ef.planner,
 		isExplain: true,
 	})

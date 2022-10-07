@@ -183,7 +183,7 @@ type Memo struct {
 // information about the context in which it is compiled from the evalContext
 // argument. If any of that changes, then the memo must be invalidated (see the
 // IsStale method for more details).
-func (m *Memo) Init(evalCtx *eval.Context) {
+func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*m = Memo{
@@ -213,7 +213,7 @@ func (m *Memo) Init(evalCtx *eval.Context) {
 		variableInequalityLookupJoinEnabled:    evalCtx.SessionData().VariableInequalityLookupJoinEnabled,
 	}
 	m.metadata.Init()
-	m.logPropsBuilder.init(evalCtx, m)
+	m.logPropsBuilder.init(ctx, evalCtx, m)
 }
 
 // AllowUnconstrainedNonCoveringIndexScan indicates whether unconstrained
@@ -226,8 +226,8 @@ func (m *Memo) AllowUnconstrainedNonCoveringIndexScan() bool {
 // with the perturb-cost OptTester flag in order to update the query plan tree
 // after optimization is complete with the real computed cost, not the perturbed
 // cost.
-func (m *Memo) ResetLogProps(evalCtx *eval.Context) {
-	m.logPropsBuilder.init(evalCtx, m)
+func (m *Memo) ResetLogProps(ctx context.Context, evalCtx *eval.Context) {
+	m.logPropsBuilder.init(ctx, evalCtx, m)
 }
 
 // NotifyOnNewGroup sets a callback function which is invoked each time we

@@ -11,6 +11,7 @@
 package memo
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -462,21 +463,21 @@ func TestGetJoinMultiplicity(t *testing.T) {
 }
 
 type testOpBuilder struct {
-	t   *testing.T
-	ctx *eval.Context
-	mem *Memo
-	cat *testcat.Catalog
+	t       *testing.T
+	evalCtx *eval.Context
+	mem     *Memo
+	cat     *testcat.Catalog
 }
 
 func makeOpBuilder(t *testing.T) testOpBuilder {
-	ctx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	var mem Memo
-	mem.Init(&ctx)
+	mem.Init(context.Background(), &evalCtx)
 	ob := testOpBuilder{
-		t:   t,
-		ctx: &ctx,
-		mem: &mem,
-		cat: testcat.New(),
+		t:       t,
+		evalCtx: &evalCtx,
+		mem:     &mem,
+		cat:     testcat.New(),
 	}
 	return ob
 }

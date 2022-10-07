@@ -430,7 +430,7 @@ func TestHashAggregator(t *testing.T) {
 		}
 		colexectestutils.RunTestsWithOrderedCols(t, testAllocator, []colexectestutils.Tuples{tc.input}, typs, tc.expected, verifier, tc.orderedCols,
 			func(sources []colexecop.Operator) (colexecop.Operator, error) {
-				return NewHashAggregator(&colexecagg.NewAggregatorArgs{
+				return NewHashAggregator(context.Background(), &colexecagg.NewAggregatorArgs{
 					Allocator:      testAllocator,
 					MemAccount:     testMemAcc,
 					Input:          sources[0],
@@ -476,17 +476,17 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 		for _, groupSize := range groupSizes {
 			for _, agg := range []aggType{
 				{
-					new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
-						return NewHashAggregator(args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
+					new: func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
+						return NewHashAggregator(ctx, args, nil /* newSpillingQueueArgs */, testAllocator, testAllocator, math.MaxInt64)
 					},
 					name:  "tracking=false",
 					order: unordered,
 				},
 				{
-					new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
+					new: func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 						spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
 						memAccounts = append(memAccounts, &spillingQueueMemAcc)
-						return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
+						return NewHashAggregator(ctx, args, &colexecutils.NewSpillingQueueArgs{
 							UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
 							Types:              args.InputTypes,
 							MemoryLimit:        execinfra.DefaultMemoryLimit,
@@ -537,10 +537,10 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 		groupSizes = []int{1, coldata.BatchSize()}
 	}
 	var memAccounts []*mon.BoundAccount
-	f := func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
+	f := func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 		spillingQueueMemAcc := testMemMonitor.MakeBoundAccount()
 		memAccounts = append(memAccounts, &spillingQueueMemAcc)
-		return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
+		return NewHashAggregator(ctx, args, &colexecutils.NewSpillingQueueArgs{
 			UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
 			Types:              args.InputTypes,
 			MemoryLimit:        execinfra.DefaultMemoryLimit,

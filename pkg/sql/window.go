@@ -108,7 +108,7 @@ func (w *windowFuncHolder) TypeCheck(
 	return w, nil
 }
 
-func (w *windowFuncHolder) Eval(v tree.ExprEvaluator) (tree.Datum, error) {
+func (w *windowFuncHolder) Eval(ctx context.Context, v tree.ExprEvaluator) (tree.Datum, error) {
 	panic("windowFuncHolder should not be evaluated directly")
 }
 

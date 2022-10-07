@@ -11,6 +11,7 @@
 package ordering
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -30,7 +31,7 @@ func TestDistinctOnProvided(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
 	var f norm.Factory
-	f.Init(evalCtx, testcat.New())
+	f.Init(context.Background(), evalCtx, testcat.New())
 	md := f.Metadata()
 	for i := 1; i <= 5; i++ {
 		md.AddColumn(fmt.Sprintf("c%d", i), types.Int)

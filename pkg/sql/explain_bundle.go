@@ -134,7 +134,7 @@ func buildStatementBundle(
 	b := makeStmtBundleBuilder(db, ie, plan, trace, placeholders)
 
 	b.addStatement()
-	b.addOptPlans()
+	b.addOptPlans(ctx)
 	b.addExecPlan(planString)
 	b.addDistSQLDiagrams()
 	b.addExplainVec()
@@ -238,7 +238,7 @@ func (b *stmtBundleBuilder) addStatement() {
 
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
 // opt-vv.txt.
-func (b *stmtBundleBuilder) addOptPlans() {
+func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 	if b.plan.mem == nil || b.plan.mem.RootExpr() == nil {
 		// No optimizer plans; an error must have occurred during planning.
 		b.z.AddFile("opt.txt", "no plan")
@@ -248,7 +248,7 @@ func (b *stmtBundleBuilder) addOptPlans() {
 	}
 
 	formatOptPlan := func(flags memo.ExprFmtFlags) string {
-		f := memo.MakeExprFmtCtx(flags, b.plan.mem, b.plan.catalog)
+		f := memo.MakeExprFmtCtx(ctx, flags, b.plan.mem, b.plan.catalog)
 		f.FormatExpr(b.plan.mem.RootExpr())
 		return f.Buffer.String()
 	}

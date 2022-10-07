@@ -131,7 +131,7 @@ func (n *setVarNode) startExec(params runParams) error {
 	}
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
-			d, err := eval.Expr(params.EvalContext(), v)
+			d, err := eval.Expr(params.ctx, params.EvalContext(), v)
 			if err != nil {
 				return err
 			}
@@ -142,7 +142,7 @@ func (n *setVarNode) startExec(params runParams) error {
 			strVal, err = n.v.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues, params.p.Txn())
 		} else {
 			// No string converter defined, use the default one.
-			strVal, err = getStringVal(params.EvalContext(), n.name, n.typedValues)
+			strVal, err = getStringVal(params.ctx, params.EvalContext(), n.name, n.typedValues)
 		}
 		if err != nil {
 			return err
@@ -247,34 +247,40 @@ func (n *resetAllNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *resetAllNode) Values() tree.Datums            { return nil }
 func (n *resetAllNode) Close(_ context.Context)        {}
 
-func getStringVal(evalCtx *eval.Context, name string, values []tree.TypedExpr) (string, error) {
+func getStringVal(
+	ctx context.Context, evalCtx *eval.Context, name string, values []tree.TypedExpr,
+) (string, error) {
 	if len(values) != 1 {
 		return "", newSingleArgVarError(name)
 	}
-	return paramparse.DatumAsString(evalCtx, name, values[0])
+	return paramparse.DatumAsString(ctx, evalCtx, name, values[0])
 }
 
-func getIntVal(evalCtx *eval.Context, name string, values []tree.TypedExpr) (int64, error) {
+func getIntVal(
+	ctx context.Context, evalCtx *eval.Context, name string, values []tree.TypedExpr,
+) (int64, error) {
 	if len(values) != 1 {
 		return 0, newSingleArgVarError(name)
 	}
-	return paramparse.DatumAsInt(evalCtx, name, values[0])
+	return paramparse.DatumAsInt(ctx, evalCtx, name, values[0])
 }
 
-func getFloatVal(evalCtx *eval.Context, name string, values []tree.TypedExpr) (float64, error) {
+func getFloatVal(
+	ctx context.Context, evalCtx *eval.Context, name string, values []tree.TypedExpr,
+) (float64, error) {
 	if len(values) != 1 {
 		return 0, newSingleArgVarError(name)
 	}
-	return paramparse.DatumAsFloat(evalCtx, name, values[0])
+	return paramparse.DatumAsFloat(ctx, evalCtx, name, values[0])
 }
 
 func timeZoneVarGetStringVal(
-	_ context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
+	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
 ) (string, error) {
 	if len(values) != 1 {
 		return "", newSingleArgVarError("timezone")
 	}
-	d, err := eval.Expr(&evalCtx.Context, values[0])
+	d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
 	if err != nil {
 		return "", err
 	}
@@ -348,7 +354,7 @@ func makeTimeoutVarGetter(
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		d, err := eval.Expr(&evalCtx.Context, values[0])
+		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
 		if err != nil {
 			return "", err
 		}

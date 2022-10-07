@@ -109,11 +109,13 @@ func getRowKey(
 
 // parseExpriationTime parses an expression into a hlc.Timestamp representing
 // the expiration time of the split.
-func parseExpirationTime(evalCtx *eval.Context, expireExpr tree.TypedExpr) (hlc.Timestamp, error) {
+func parseExpirationTime(
+	ctx context.Context, evalCtx *eval.Context, expireExpr tree.TypedExpr,
+) (hlc.Timestamp, error) {
 	if !eval.IsConst(evalCtx, expireExpr) {
 		return hlc.Timestamp{}, errors.Errorf("SPLIT AT: only constant expressions are allowed for expiration")
 	}
-	d, err := eval.Expr(evalCtx, expireExpr)
+	d, err := eval.Expr(ctx, evalCtx, expireExpr)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}

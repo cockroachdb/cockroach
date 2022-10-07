@@ -229,11 +229,6 @@ type typeContainer struct {
 
 var _ IndexedVarContainer = &typeContainer{}
 
-// IndexedVarEval is part of the IndexedVarContainer interface.
-func (tc *typeContainer) IndexedVarEval(idx int, e ExprEvaluator) (Datum, error) {
-	return nil, errors.AssertionFailedf("no eval allowed in typeContainer")
-}
-
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (tc *typeContainer) IndexedVarResolvedType(idx int) *types.T {
 	return tc.types[idx]

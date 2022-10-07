@@ -121,9 +121,11 @@ type probeRangeGenerator struct {
 	ranges []kv.KeyValue
 }
 
-func makeProbeRangeGenerator(evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
+func makeProbeRangeGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
 	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +141,7 @@ func makeProbeRangeGenerator(evalCtx *eval.Context, args tree.Datums) (eval.Valu
 	var ranges []kv.KeyValue
 	{
 		ctx, sp := tracing.EnsureChildSpan(
-			evalCtx.Context, evalCtx.Tracer, "meta2scan",
+			ctx, evalCtx.Tracer, "meta2scan",
 			tracing.WithRecording(tracingpb.RecordingVerbose),
 		)
 		defer sp.Finish()

@@ -315,7 +315,7 @@ func (p *planner) checkPasswordAndGetHash(
 		var isPreHashed, schemeSupported bool
 		var schemeName string
 		var issueNum int
-		isPreHashed, schemeSupported, issueNum, schemeName, hashedPassword, err = password.CheckPasswordHashValidity(ctx, []byte(passwordStr))
+		isPreHashed, schemeSupported, issueNum, schemeName, hashedPassword, err = password.CheckPasswordHashValidity([]byte(passwordStr))
 		if err != nil {
 			return hashedPassword, pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
@@ -332,7 +332,7 @@ func (p *planner) checkPasswordAndGetHash(
 			"Passwords must be %d characters or longer.", minLength)
 	}
 
-	method := security.GetConfiguredPasswordHashMethod(ctx, &st.SV)
+	method := security.GetConfiguredPasswordHashMethod(&st.SV)
 	cost, err := security.GetConfiguredPasswordCost(ctx, &st.SV, method)
 	if err != nil {
 		return hashedPassword, errors.HandleAsAssertionFailure(err)

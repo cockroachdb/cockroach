@@ -11,6 +11,7 @@
 package execinfrapb
 
 import (
+	context "context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -146,7 +147,10 @@ func (spec *WindowerSpec_Frame_Exclusion) initFromAST(e treewindow.WindowFrameEx
 // If offset exprs are present, we evaluate them and save the encoded results
 // in the spec.
 func (spec *WindowerSpec_Frame_Bounds) initFromAST(
-	b tree.WindowFrameBounds, m treewindow.WindowFrameMode, evalCtx *eval.Context,
+	ctx context.Context,
+	b tree.WindowFrameBounds,
+	m treewindow.WindowFrameMode,
+	evalCtx *eval.Context,
 ) error {
 	if b.StartBound == nil {
 		return errors.Errorf("unexpected: Start Bound is nil")
@@ -157,7 +161,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 	}
 	if b.StartBound.HasOffset() {
 		typedStartOffset := b.StartBound.OffsetExpr.(tree.TypedExpr)
-		dStartOffset, err := eval.Expr(evalCtx, typedStartOffset)
+		dStartOffset, err := eval.Expr(ctx, evalCtx, typedStartOffset)
 		if err != nil {
 			return err
 		}
@@ -201,7 +205,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 		}
 		if b.EndBound.HasOffset() {
 			typedEndOffset := b.EndBound.OffsetExpr.(tree.TypedExpr)
-			dEndOffset, err := eval.Expr(evalCtx, typedEndOffset)
+			dEndOffset, err := eval.Expr(ctx, evalCtx, typedEndOffset)
 			if err != nil {
 				return err
 			}
@@ -260,14 +264,16 @@ func isNegative(evalCtx *eval.Context, offset tree.Datum) bool {
 
 // InitFromAST initializes the spec based on tree.WindowFrame. It will evaluate
 // offset expressions if present in the frame.
-func (spec *WindowerSpec_Frame) InitFromAST(f *tree.WindowFrame, evalCtx *eval.Context) error {
+func (spec *WindowerSpec_Frame) InitFromAST(
+	ctx context.Context, f *tree.WindowFrame, evalCtx *eval.Context,
+) error {
 	if err := spec.Mode.initFromAST(f.Mode); err != nil {
 		return err
 	}
 	if err := spec.Exclusion.initFromAST(f.Exclusion); err != nil {
 		return err
 	}
-	return spec.Bounds.initFromAST(f.Bounds, f.Mode, evalCtx)
+	return spec.Bounds.initFromAST(ctx, f.Bounds, f.Mode, evalCtx)
 }
 
 func (spec WindowerSpec_Frame_Mode) convertToAST() (treewindow.WindowFrameMode, error) {

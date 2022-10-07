@@ -74,7 +74,7 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 					res = tree.DNull
 				} else {
 					res, err = b.funcExpr.ResolvedOverload().
-						Fn.(eval.FnOverload)(b.evalCtx, b.row)
+						Fn.(eval.FnOverload)(b.Ctx, b.evalCtx, b.row)
 					if err != nil {
 						colexecerror.ExpectedError(b.funcExpr.MaybeWrapError(err))
 					}

@@ -46,7 +46,7 @@ func (n *limitNode) Close(ctx context.Context) {
 // evalLimit evaluates the Count and Offset fields. If Count is missing, the
 // value is MaxInt64. If Offset is missing, the value is 0
 func evalLimit(
-	evalCtx *eval.Context, countExpr, offsetExpr tree.TypedExpr,
+	ctx context.Context, evalCtx *eval.Context, countExpr, offsetExpr tree.TypedExpr,
 ) (count, offset int64, err error) {
 	count = math.MaxInt64
 	offset = 0
@@ -62,7 +62,7 @@ func evalLimit(
 
 	for _, datum := range data {
 		if datum.src != nil {
-			dstDatum, err := eval.Expr(evalCtx, datum.src)
+			dstDatum, err := eval.Expr(ctx, evalCtx, datum.src)
 			if err != nil {
 				return count, offset, err
 			}

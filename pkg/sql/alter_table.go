@@ -760,6 +760,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableResetStorageParams:
 			setter := tablestorageparam.NewSetter(n.tableDesc)
 			if err := storageparam.Reset(
+				params.ctx,
 				params.EvalContext(),
 				t.Params,
 				setter,
@@ -1248,7 +1249,7 @@ func updateSequenceDependencies(
 func injectTableStats(
 	params runParams, desc catalog.TableDescriptor, statsExpr tree.TypedExpr,
 ) error {
-	val, err := eval.Expr(params.EvalContext(), statsExpr)
+	val, err := eval.Expr(params.ctx, params.EvalContext(), statsExpr)
 	if err != nil {
 		return err
 	}

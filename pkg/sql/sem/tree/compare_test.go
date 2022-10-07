@@ -56,13 +56,13 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 			Right:    tree.NewDString(d.right),
 		}
 		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer ctx.TestingMon.Stop(context.Background())
+		defer ctx.Stop(context.Background())
 		ctx.ReCache = tree.NewRegexpCache(8)
 		typedExpr, err := tree.TypeCheck(context.Background(), expr, nil, types.Any)
 		if err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
-		if _, err := eval.Expr(ctx, typedExpr); err != nil {
+		if _, err := eval.Expr(context.Background(), ctx, typedExpr); err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
 		if typedExpr.(*tree.ComparisonExpr).Op.EvalOp == nil {

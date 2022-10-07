@@ -808,7 +808,7 @@ func (ot *OptTester) FormatExpr(e opt.Expr) string {
 	if rel, ok := e.(memo.RelExpr); ok {
 		mem = rel.Memo()
 	}
-	return memo.FormatExpr(e, ot.Flags.ExprFormat, mem, ot.catalog)
+	return memo.FormatExpr(ot.ctx, e, ot.Flags.ExprFormat, mem, ot.catalog)
 }
 
 func formatRuleSet(r RuleSet) string {
@@ -842,7 +842,7 @@ func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Ex
 
 	if rel, ok := e.(memo.RelExpr); ok {
 		for _, cols := range ot.Flags.ColStats {
-			memo.RequestColStat(&ot.evalCtx, rel, cols)
+			memo.RequestColStat(ot.ctx, &ot.evalCtx, rel, cols)
 		}
 	}
 	ot.checkExpectedRules(tb, d)
@@ -1257,7 +1257,7 @@ func (ot *OptTester) Memo() (string, error) {
 // Expr parses the input directly into an expression; see exprgen.Build.
 func (ot *OptTester) Expr() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(&ot.evalCtx, ot.catalog)
+	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
 	f.DisableOptimizations()
 
 	return exprgen.Build(ot.ctx, ot.catalog, &f, ot.sql)
@@ -1267,7 +1267,7 @@ func (ot *OptTester) Expr() (opt.Expr, error) {
 // normalization; see exprgen.Build.
 func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	var f norm.Factory
-	f.Init(&ot.evalCtx, ot.catalog)
+	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
 	f.SetDisabledRules(ot.Flags.DisableRules)
 
 	if !ot.Flags.NoStableFolds {
@@ -1581,7 +1581,7 @@ func (ot *OptTester) optStepsExploreDiff() (string, error) {
 
 		for i := range newNodes {
 			name := et.LastRuleName().String()
-			after := memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog)
+			after := memo.FormatExpr(ot.ctx, newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog)
 
 			diff := difflib.UnifiedDiff{
 				A:        difflib.SplitLines(before),
@@ -1777,7 +1777,7 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 		}
 		for i := range newNodes {
 			ot.output("\nNew expression %d of %d:\n", i+1, len(newNodes))
-			ot.indent(memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog))
+			ot.indent(memo.FormatExpr(ot.ctx, newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog))
 		}
 	}
 	return ot.builder.String(), nil
@@ -2015,7 +2015,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 
 		// Make sure we have estimated stats for this column.
 		colSet := opt.MakeColSet(col)
-		memo.RequestColStat(&ot.evalCtx, rel, colSet)
+		memo.RequestColStat(ot.ctx, &ot.evalCtx, rel, colSet)
 		stat, ok := relProps.Statistics().ColStats.Lookup(colSet)
 		if !ok {
 			return nil, fmt.Errorf("could not find statistic for column %s", colName)
@@ -2239,7 +2239,7 @@ func (ot *OptTester) optimizeExpr(
 		return nil, err
 	}
 	if ot.Flags.PerturbCost != 0 {
-		o.Memo().ResetLogProps(&ot.evalCtx)
+		o.Memo().ResetLogProps(ot.ctx, &ot.evalCtx)
 		o.RecomputeCost()
 	}
 	return root, nil
@@ -2287,6 +2287,6 @@ func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (e
 		db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
 		ot.evalCtx.Txn = kv.NewTxn(context.Background(), db, 1)
 	}
-	bld := execbuilder.New(f, ot.makeOptimizer(), mem, ot.catalog, expr, &ot.evalCtx, true)
+	bld := execbuilder.New(context.Background(), f, ot.makeOptimizer(), mem, ot.catalog, expr, &ot.evalCtx, true)
 	return bld.Build()
 }

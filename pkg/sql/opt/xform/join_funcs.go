@@ -864,7 +864,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 
 		// Check whether the filter can constrain the inverted column.
 		invertedExpr := invertedidx.TryJoinInvertedIndex(
-			c.e.evalCtx.Context, c.e.f, onFilters, scanPrivate.Table, index, inputCols,
+			c.e.ctx, c.e.f, onFilters, scanPrivate.Table, index, inputCols,
 		)
 		if invertedExpr == nil {
 			return

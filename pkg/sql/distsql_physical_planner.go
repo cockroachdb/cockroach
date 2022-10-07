@@ -1776,7 +1776,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 // corresponding to the render node. An evaluator stage is added if the render
 // node has any expressions which are not just simple column references.
 func (dsp *DistSQLPlanner) createPlanForRender(
-	p *PhysicalPlan, n *renderNode, planCtx *PlanningCtx,
+	ctx context.Context, p *PhysicalPlan, n *renderNode, planCtx *PlanningCtx,
 ) error {
 	typs, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
 	if err != nil {
@@ -1799,7 +1799,7 @@ func (dsp *DistSQLPlanner) createPlanForRender(
 	newColMap := identityMap(p.PlanToStreamColMap, len(n.render))
 	newMergeOrdering := dsp.convertOrdering(n.reqOrdering, newColMap)
 	err = p.AddRendering(
-		n.render, planCtx, p.PlanToStreamColMap, typs, newMergeOrdering,
+		ctx, n.render, planCtx, p.PlanToStreamColMap, typs, newMergeOrdering,
 	)
 	if err != nil {
 		return err
@@ -1862,7 +1862,7 @@ type aggregatorPlanningInfo struct {
 // addAggregators adds aggregators corresponding to a groupNode and updates the plan to
 // reflect the groupNode.
 func (dsp *DistSQLPlanner) addAggregators(
-	planCtx *PlanningCtx, p *PhysicalPlan, n *groupNode,
+	ctx context.Context, planCtx *PlanningCtx, p *PhysicalPlan, n *groupNode,
 ) error {
 	aggregations := make([]execinfrapb.AggregatorSpec_Aggregation, len(n.funcs))
 	argumentsColumnTypes := make([][]*types.T, len(n.funcs))
@@ -1884,7 +1884,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		argumentsColumnTypes[i] = make([]*types.T, len(fholder.arguments))
 		for j, argument := range fholder.arguments {
 			var err error
-			aggregations[i].Arguments[j], err = physicalplan.MakeExpression(argument, planCtx, nil)
+			aggregations[i].Arguments[j], err = physicalplan.MakeExpression(ctx, argument, planCtx, nil)
 			if err != nil {
 				return err
 			}
@@ -1892,7 +1892,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		}
 	}
 
-	return dsp.planAggregators(planCtx, p, &aggregatorPlanningInfo{
+	return dsp.planAggregators(ctx, planCtx, p, &aggregatorPlanningInfo{
 		aggregations:         aggregations,
 		argumentsColumnTypes: argumentsColumnTypes,
 		isScalar:             n.isScalar,
@@ -1921,7 +1921,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 //     All other expressions simply pass through unchanged, for e.g. '1' in
 //     'SELECT 1 GROUP BY k'.
 func (dsp *DistSQLPlanner) planAggregators(
-	planCtx *PlanningCtx, p *PhysicalPlan, info *aggregatorPlanningInfo,
+	ctx context.Context, planCtx *PlanningCtx, p *PhysicalPlan, info *aggregatorPlanningInfo,
 ) error {
 	aggType := execinfrapb.AggregatorSpec_NON_SCALAR
 	if info.isScalar {
@@ -2294,7 +2294,8 @@ func (dsp *DistSQLPlanner) planAggregators(
 					mappedIdx := int(finalIdxMap[finalIdx])
 					var err error
 					renderExprs[i], err = physicalplan.MakeExpression(
-						h.IndexedVar(mappedIdx), planCtx, nil /* indexVarMap */)
+						ctx, h.IndexedVar(mappedIdx), planCtx, nil, /* indexVarMap */
+					)
 					if err != nil {
 						return err
 					}
@@ -2314,8 +2315,8 @@ func (dsp *DistSQLPlanner) planAggregators(
 						return err
 					}
 					renderExprs[i], err = physicalplan.MakeExpression(
-						expr, planCtx,
-						nil /* indexVarMap */)
+						ctx, expr, planCtx, nil, /* indexVarMap */
+					)
 					if err != nil {
 						return err
 					}
@@ -2607,7 +2608,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	if n.lookupExpr != nil {
 		var err error
 		joinReaderSpec.LookupExpr, err = physicalplan.MakeExpression(
-			n.lookupExpr, planCtx, nil, /* indexVarMap */
+			ctx, n.lookupExpr, planCtx, nil, /* indexVarMap */
 		)
 		if err != nil {
 			return nil, err
@@ -2619,7 +2620,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		}
 		var err error
 		joinReaderSpec.RemoteLookupExpr, err = physicalplan.MakeExpression(
-			n.remoteLookupExpr, planCtx, nil, /* indexVarMap */
+			ctx, n.remoteLookupExpr, planCtx, nil, /* indexVarMap */
 		)
 		if err != nil {
 			return nil, err
@@ -2630,7 +2631,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	if n.onCond != nil {
 		var err error
 		joinReaderSpec.OnExpr, err = physicalplan.MakeExpression(
-			n.onCond, planCtx, nil, /* indexVarMap */
+			ctx, n.onCond, planCtx, nil, /* indexVarMap */
 		)
 		if err != nil {
 			return nil, err
@@ -2696,14 +2697,14 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	}
 
 	if invertedJoinerSpec.InvertedExpr, err = physicalplan.MakeExpression(
-		n.invertedExpr, planCtx, nil, /* indexVarMap */
+		ctx, n.invertedExpr, planCtx, nil, /* indexVarMap */
 	); err != nil {
 		return nil, err
 	}
 	// Set the ON condition.
 	if n.onExpr != nil {
 		if invertedJoinerSpec.OnExpr, err = physicalplan.MakeExpression(
-			n.onExpr, planCtx, nil, /* indexVarMap */
+			ctx, n.onExpr, planCtx, nil, /* indexVarMap */
 		); err != nil {
 			return nil, err
 		}
@@ -2740,7 +2741,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 
 // createPlanForZigzagJoin creates a distributed plan for a zigzagJoinNode.
 func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
-	planCtx *PlanningCtx, n *zigzagJoinNode,
+	ctx context.Context, planCtx *PlanningCtx, n *zigzagJoinNode,
 ) (plan *PhysicalPlan, err error) {
 
 	sides := make([]zigzagPlanningSide, len(n.sides))
@@ -2748,7 +2749,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 	for i, side := range n.sides {
 		// The fixed values are represented as a Values node with one tuple.
 		typs := getTypesFromResultColumns(side.fixedVals.columns)
-		valuesSpec, err := dsp.createValuesSpecFromTuples(planCtx, side.fixedVals.tuples, typs)
+		valuesSpec, err := dsp.createValuesSpecFromTuples(ctx, planCtx, side.fixedVals.tuples, typs)
 		if err != nil {
 			return nil, err
 		}
@@ -2764,7 +2765,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 		}
 	}
 
-	return dsp.planZigzagJoin(planCtx, zigzagPlanningInfo{
+	return dsp.planZigzagJoin(ctx, planCtx, zigzagPlanningInfo{
 		sides:       sides,
 		columns:     n.columns,
 		onCond:      n.onCond,
@@ -2790,7 +2791,7 @@ type zigzagPlanningInfo struct {
 }
 
 func (dsp *DistSQLPlanner) planZigzagJoin(
-	planCtx *PlanningCtx, pi zigzagPlanningInfo,
+	ctx context.Context, planCtx *PlanningCtx, pi zigzagPlanningInfo,
 ) (plan *PhysicalPlan, err error) {
 
 	plan = planCtx.NewPhysicalPlan()
@@ -2829,7 +2830,7 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 	// Set the ON condition.
 	if pi.onCond != nil {
 		zigzagJoinerSpec.OnExpr, err = physicalplan.MakeExpression(
-			pi.onCond, planCtx, nil, /* indexVarMap */
+			ctx, pi.onCond, planCtx, nil, /* indexVarMap */
 		)
 		if err != nil {
 			return nil, err
@@ -2875,7 +2876,8 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 			Type: n.preFiltererType,
 		}
 		if invertedFiltererSpec.PreFiltererSpec.Expression, err = physicalplan.MakeExpression(
-			n.preFiltererExpr, planCtx, nil); err != nil {
+			ctx, n.preFiltererExpr, planCtx, nil,
+		); err != nil {
 			return nil, err
 		}
 	}
@@ -2990,7 +2992,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		rightPlanToStreamColMap: rightMap,
 	}
 	post, joinToStreamColMap := helper.joinOutColumns(n.pred.joinType, n.columns)
-	onExpr, err := helper.remapOnExpr(planCtx, n.pred.onCond)
+	onExpr, err := helper.remapOnExpr(ctx, planCtx, n.pred.onCond)
 	if err != nil {
 		return nil, err
 	}
@@ -3141,7 +3143,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			return nil, err
 		}
 
-		if err := plan.AddFilter(n.filter, planCtx, plan.PlanToStreamColMap); err != nil {
+		if err := plan.AddFilter(ctx, n.filter, planCtx, plan.PlanToStreamColMap); err != nil {
 			return nil, err
 		}
 
@@ -3151,7 +3153,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			return nil, err
 		}
 
-		if err := dsp.addAggregators(planCtx, plan, n); err != nil {
+		if err := dsp.addAggregators(ctx, planCtx, plan, n); err != nil {
 			return nil, err
 		}
 
@@ -3173,10 +3175,10 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			return nil, err
 		}
 		var count, offset int64
-		if count, offset, err = evalLimit(planCtx.EvalContext(), n.countExpr, n.offsetExpr); err != nil {
+		if count, offset, err = evalLimit(ctx, planCtx.EvalContext(), n.countExpr, n.offsetExpr); err != nil {
 			return nil, err
 		}
-		if err := plan.AddLimit(count, offset, planCtx); err != nil {
+		if err := plan.AddLimit(ctx, count, offset, planCtx); err != nil {
 			return nil, err
 		}
 
@@ -3194,7 +3196,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if err != nil {
 			return nil, err
 		}
-		err = dsp.createPlanForRender(plan, n, planCtx)
+		err = dsp.createPlanForRender(ctx, plan, n, planCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -3233,7 +3235,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		} else {
 			colTypes := getTypesFromResultColumns(n.columns)
 			var spec *execinfrapb.ValuesCoreSpec
-			spec, err = dsp.createValuesSpecFromTuples(planCtx, n.tuples, colTypes)
+			spec, err = dsp.createValuesSpecFromTuples(ctx, planCtx, n.tuples, colTypes)
 			if err != nil {
 				return nil, err
 			}
@@ -3247,7 +3249,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createPlanForZero(planCtx, n)
 
 	case *zigzagJoinNode:
-		plan, err = dsp.createPlanForZigzagJoin(planCtx, n)
+		plan, err = dsp.createPlanForZigzagJoin(ctx, planCtx, n)
 
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
@@ -3440,7 +3442,7 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 // createValuesSpecFromTuples creates a ValuesCoreSpec from the results of
 // evaluating the given tuples.
 func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
-	planCtx *PlanningCtx, tuples [][]tree.TypedExpr, resultTypes []*types.T,
+	ctx context.Context, planCtx *PlanningCtx, tuples [][]tree.TypedExpr, resultTypes []*types.T,
 ) (*execinfrapb.ValuesCoreSpec, error) {
 	var a tree.DatumAlloc
 	evalCtx := &planCtx.ExtendedEvalCtx.Context
@@ -3454,7 +3456,7 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 	for rowIdx, tuple := range tuples {
 		var buf []byte
 		for colIdx, typedExpr := range tuple {
-			datum, err := eval.Expr(evalCtx, typedExpr)
+			datum, err := eval.Expr(ctx, evalCtx, typedExpr)
 			if err != nil {
 				return nil, err
 			}
@@ -3573,7 +3575,7 @@ func (dsp *DistSQLPlanner) createPlanForOrdinality(
 }
 
 func createProjectSetSpec(
-	planCtx *PlanningCtx, n *projectSetPlanningInfo, indexVarMap []int,
+	ctx context.Context, planCtx *PlanningCtx, n *projectSetPlanningInfo, indexVarMap []int,
 ) (*execinfrapb.ProjectSetSpec, error) {
 	spec := execinfrapb.ProjectSetSpec{
 		Exprs:                 make([]execinfrapb.Expression, len(n.exprs)),
@@ -3583,7 +3585,7 @@ func createProjectSetSpec(
 	}
 	for i, expr := range n.exprs {
 		var err error
-		spec.Exprs[i], err = physicalplan.MakeExpression(expr, planCtx, indexVarMap)
+		spec.Exprs[i], err = physicalplan.MakeExpression(ctx, expr, planCtx, indexVarMap)
 		if err != nil {
 			return nil, err
 		}
@@ -3605,19 +3607,19 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	if err != nil {
 		return nil, err
 	}
-	err = dsp.addProjectSet(plan, planCtx, &n.projectSetPlanningInfo)
+	err = dsp.addProjectSet(ctx, plan, planCtx, &n.projectSetPlanningInfo)
 	return plan, err
 }
 
 // addProjectSet adds a grouping stage consisting of a single
 // projectSetProcessor that is planned on the gateway.
 func (dsp *DistSQLPlanner) addProjectSet(
-	plan *PhysicalPlan, planCtx *PlanningCtx, info *projectSetPlanningInfo,
+	ctx context.Context, plan *PhysicalPlan, planCtx *PlanningCtx, info *projectSetPlanningInfo,
 ) error {
 	numResults := len(plan.GetResultTypes())
 
 	// Create the project set processor spec.
-	projectSetSpec, err := createProjectSetSpec(planCtx, info, plan.PlanToStreamColMap)
+	projectSetSpec, err := createProjectSetSpec(ctx, planCtx, info, plan.PlanToStreamColMap)
 	if err != nil {
 		return err
 	}
@@ -3981,7 +3983,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 	newResultTypes := make([]*types.T, len(plan.GetResultTypes())+len(n.funcs))
 	copy(newResultTypes, plan.GetResultTypes())
 	for windowFnSpecIdx, windowFn := range n.funcs {
-		windowFnSpec, outputType, err := createWindowFnSpec(planCtx, plan, windowFn)
+		windowFnSpec, outputType, err := createWindowFnSpec(ctx, planCtx, plan, windowFn)
 		if err != nil {
 			return nil, err
 		}

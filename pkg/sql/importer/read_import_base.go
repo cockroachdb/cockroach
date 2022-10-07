@@ -527,7 +527,7 @@ type importRowProducer interface {
 // Implementations of this interface do not need to be thread safe.
 type importRowConsumer interface {
 	// FillDatums sends row data to the provide datum converter.
-	FillDatums(row interface{}, rowNum int64, conv *row.DatumRowConverter) error
+	FillDatums(ctx context.Context, row interface{}, rowNum int64, conv *row.DatumRowConverter) error
 }
 
 // batch represents batch of data to convert.
@@ -715,7 +715,7 @@ func (p *parallelImporter) importWorker(
 		conv.KvBatch.Progress = batch.progress
 		for batchIdx, record := range batch.data {
 			rowNum = batch.startPos + int64(batchIdx)
-			if err := consumer.FillDatums(record, rowNum, conv); err != nil {
+			if err := consumer.FillDatums(ctx, record, rowNum, conv); err != nil {
 				if err = handleCorruptRow(ctx, fileCtx, err); err != nil {
 					return err
 				}

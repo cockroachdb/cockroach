@@ -93,7 +93,7 @@ func processExpression(
 	//
 	// TODO(solon): It would be preferable to enhance our expression serialization
 	// format so this wouldn't be necessary.
-	c := normalize.MakeConstantEvalVisitor(evalCtx)
+	c := normalize.MakeConstantEvalVisitor(ctx, evalCtx)
 	expr, _ = tree.WalkExpr(&c, typedExpr)
 	if err := c.Err(); err != nil {
 		return nil, err
@@ -127,20 +127,22 @@ func (eh *ExprHelper) String() string {
 }
 
 // ExprHelper implements tree.IndexedVarContainer.
-var _ tree.IndexedVarContainer = &ExprHelper{}
+var _ eval.IndexedVarContainer = &ExprHelper{}
 
 // IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
 func (eh *ExprHelper) IndexedVarResolvedType(idx int) *types.T {
 	return eh.Types[idx]
 }
 
-// IndexedVarEval is part of the tree.IndexedVarContainer interface.
-func (eh *ExprHelper) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+// IndexedVarEval is part of the eval.IndexedVarContainer interface.
+func (eh *ExprHelper) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
 	err := eh.Row[idx].EnsureDecoded(eh.Types[idx], &eh.datumAlloc)
 	if err != nil {
 		return nil, err
 	}
-	return eh.Row[idx].Datum.Eval(e)
+	return eh.Row[idx].Datum.Eval(ctx, e)
 }
 
 // IndexedVarNodeFormatter is part of the parser.IndexedVarContainer interface.
@@ -210,21 +212,21 @@ func (eh *ExprHelper) Init(
 
 // EvalFilter is used for filter expressions; it evaluates the expression and
 // returns whether the filter passes.
-func (eh *ExprHelper) EvalFilter(row rowenc.EncDatumRow) (bool, error) {
+func (eh *ExprHelper) EvalFilter(ctx context.Context, row rowenc.EncDatumRow) (bool, error) {
 	eh.Row = row
 	eh.evalCtx.PushIVarContainer(eh)
-	pass, err := RunFilter(eh.Expr, eh.evalCtx)
+	pass, err := RunFilter(ctx, eh.Expr, eh.evalCtx)
 	eh.evalCtx.PopIVarContainer()
 	return pass, err
 }
 
 // RunFilter runs a filter expression and returns whether the filter passes.
-func RunFilter(filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
+func RunFilter(ctx context.Context, filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
 	if filter == nil {
 		return true, nil
 	}
 
-	d, err := eval.Expr(evalCtx, filter)
+	d, err := eval.Expr(ctx, evalCtx, filter)
 	if err != nil {
 		return false, err
 	}
@@ -239,11 +241,11 @@ func RunFilter(filter tree.TypedExpr, evalCtx *eval.Context) (bool, error) {
 //	'@2 + @5' would return '7'
 //	'@1' would return '1'
 //	'@2 + 10' would return '12'
-func (eh *ExprHelper) Eval(row rowenc.EncDatumRow) (tree.Datum, error) {
+func (eh *ExprHelper) Eval(ctx context.Context, row rowenc.EncDatumRow) (tree.Datum, error) {
 	eh.Row = row
 
 	eh.evalCtx.PushIVarContainer(eh)
-	d, err := eval.Expr(eh.evalCtx, eh.Expr)
+	d, err := eval.Expr(ctx, eh.evalCtx, eh.Expr)
 	eh.evalCtx.PopIVarContainer()
 	return d, err
 }

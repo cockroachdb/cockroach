@@ -347,7 +347,7 @@ func newZigzagJoiner(
 			z.infos[i].fixedValues = fixedValues[i]
 		} else {
 			fv := &spec.Sides[i].FixedValues
-			if err = execinfra.HydrateTypesInDatumInfo(flowCtx.EvalCtx.Ctx(), &resolver, fv.Columns); err != nil {
+			if err = execinfra.HydrateTypesInDatumInfo(ctx, &resolver, fv.Columns); err != nil {
 				return nil, err
 			}
 			z.infos[i].fixedValues, err = valuesSpecToEncDatum(fv)

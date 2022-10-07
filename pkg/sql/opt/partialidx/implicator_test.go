@@ -60,7 +60,7 @@ func TestImplicator(t *testing.T) {
 			var err error
 
 			var f norm.Factory
-			f.Init(&evalCtx, nil /* catalog */)
+			f.Init(context.Background(), &evalCtx, nil /* catalog */)
 			md := f.Metadata()
 
 			if d.Cmd != "predtest" {
@@ -113,7 +113,7 @@ func TestImplicator(t *testing.T) {
 				buf.WriteString("none")
 			} else {
 				execBld := execbuilder.New(
-					nil /* factory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
+					context.Background(), nil /* factory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
 					&remainingFilters, &evalCtx, false, /* allowAutoCommit */
 				)
 				expr, err := execBld.BuildScalar()
@@ -267,7 +267,7 @@ func BenchmarkImplicator(b *testing.B) {
 
 	for _, tc := range testCases {
 		var f norm.Factory
-		f.Init(&evalCtx, nil /* catalog */)
+		f.Init(context.Background(), &evalCtx, nil /* catalog */)
 		md := f.Metadata()
 
 		// Parse the variable types.

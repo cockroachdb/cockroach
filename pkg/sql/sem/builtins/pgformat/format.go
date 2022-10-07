@@ -11,6 +11,8 @@
 package pgformat
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -21,8 +23,8 @@ import (
 
 // pp is used to store a printer's state.
 type pp struct {
-	ctx *eval.Context
-	buf *tree.FmtCtx
+	evalCtx *eval.Context
+	buf     *tree.FmtCtx
 
 	// padRight records whether the '-' flag is currently in effect.
 	padRight bool
@@ -51,12 +53,14 @@ func (p *pp) popInt() (v int, ok bool) {
 
 // Format formats according to a format specifier in the style of postgres format()
 // and returns the resulting string.
-func Format(ctx *eval.Context, format string, a ...tree.Datum) (string, error) {
+func Format(
+	ctx context.Context, evalCtx *eval.Context, format string, a ...tree.Datum,
+) (string, error) {
 	p := pp{
-		ctx: ctx,
-		buf: ctx.FmtCtx(tree.FmtArrayToString),
+		evalCtx: evalCtx,
+		buf:     evalCtx.FmtCtx(tree.FmtArrayToString),
 	}
-	err := p.doPrintf(format, a)
+	err := p.doPrintf(ctx, format, a)
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +90,7 @@ func parsenum(s string, start, end int) (num int, isnum bool, newi int) {
 	return
 }
 
-func (p *pp) printArg(arg tree.Datum, verb rune) (err error) {
+func (p *pp) printArg(ctx context.Context, arg tree.Datum, verb rune) (err error) {
 	var writeFunc func(*tree.FmtCtx) (numBytesWritten int)
 	if arg == tree.DNull {
 		switch verb {
@@ -108,7 +112,7 @@ func (p *pp) printArg(arg tree.Datum, verb rune) (err error) {
 		case 'I':
 			writeFunc = func(buf *tree.FmtCtx) int {
 				lenBefore := buf.Len()
-				bare := p.ctx.FmtCtx(tree.FmtArrayToString)
+				bare := p.evalCtx.FmtCtx(tree.FmtArrayToString)
 				bare.FormatNode(arg)
 				str := bare.CloseAndGetString()
 				lexbase.EncodeRestrictedSQLIdent(&buf.Buffer, str, lexbase.EncNoFlags)
@@ -118,7 +122,7 @@ func (p *pp) printArg(arg tree.Datum, verb rune) (err error) {
 			writeFunc = func(buf *tree.FmtCtx) int {
 				lenBefore := buf.Len()
 				var dStr tree.Datum
-				dStr, err = eval.PerformCast(p.ctx, arg, types.String)
+				dStr, err = eval.PerformCast(ctx, p.evalCtx, arg, types.String)
 				// This shouldn't be possible--anything can be cast to
 				// a string. err will be returned by printArg().
 				if err != nil {
@@ -148,7 +152,7 @@ func (p *pp) printArg(arg tree.Datum, verb rune) (err error) {
 		return
 	}
 
-	scratch := p.ctx.FmtCtx(tree.FmtArrayToString)
+	scratch := p.evalCtx.FmtCtx(tree.FmtArrayToString)
 	for n := writeFunc(scratch); n < p.width; n++ {
 		p.buf.WriteRune(' ')
 	}
@@ -159,7 +163,7 @@ func (p *pp) printArg(arg tree.Datum, verb rune) (err error) {
 
 // intFromArg gets the argNumth element of a. On return, isInt reports whether the argument has integer type.
 func intFromArg(
-	ctx *eval.Context, a []tree.Datum, argNum int,
+	ctx context.Context, evalCtx *eval.Context, a []tree.Datum, argNum int,
 ) (num int, isInt bool, newArgNum int) {
 	newArgNum = argNum
 	if argNum < len(a) && argNum >= 0 {
@@ -169,7 +173,7 @@ func intFromArg(
 			return 0, true, argNum + 1
 		}
 		if cast.ValidCast(datum.ResolvedType(), types.Int, cast.ContextImplicit) {
-			dInt, err := eval.PerformCast(ctx, datum, types.Int)
+			dInt, err := eval.PerformCast(ctx, evalCtx, datum, types.Int)
 			if err == nil {
 				num = int(tree.MustBeDInt(dInt))
 				isInt = true
@@ -187,7 +191,7 @@ func intFromArg(
 // doPrintf is copied from golang's internal implementation of fmt,
 // but modified to use the sql function format()'s syntax for width
 // and positional arguments.
-func (p *pp) doPrintf(format string, a []tree.Datum) error {
+func (p *pp) doPrintf(ctx context.Context, format string, a []tree.Datum) error {
 	end := len(format)
 	argNum := 0 // we process one argument per non-trivial format
 formatLoop:
@@ -223,7 +227,7 @@ formatLoop:
 				if argNum < 0 {
 					return errors.New("positions must be positive and 1-indexed")
 				}
-				err := p.printArg(a[argNum], rune(c))
+				err := p.printArg(ctx, a[argNum], rune(c))
 				if err != nil {
 					return err
 				}
@@ -260,12 +264,12 @@ formatLoop:
 					if rawArgNum < 1 {
 						return errors.New("positions must be positive and 1-indexed")
 					}
-					p.width, isNum, argNum = intFromArg(p.ctx, a, rawArgNum-1)
+					p.width, isNum, argNum = intFromArg(ctx, p.evalCtx, a, rawArgNum-1)
 					if !isNum {
 						return errors.New("non-numeric width")
 					}
 				} else {
-					p.width, isNum, argNum = intFromArg(p.ctx, a, argNum)
+					p.width, isNum, argNum = intFromArg(ctx, p.evalCtx, a, argNum)
 					if !isNum {
 						return errors.New("non-numeric width")
 					}
