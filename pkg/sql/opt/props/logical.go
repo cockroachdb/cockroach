@@ -52,9 +52,11 @@ type Shared struct {
 
 	// HasSubquery is true if the subtree rooted at this node contains a subquery.
 	// The subquery can be a Subquery, Exists, Any, or ArrayFlatten expression.
-	// Subqueries are the only place where a relational node can be nested within a
-	// scalar expression.
 	HasSubquery bool
+
+	// HasUDF is true if the subtree rooted at this node contains a UDF
+	// invocation.
+	HasUDF bool
 
 	// HasCorrelatedSubquery is true if the scalar expression tree contains a
 	// subquery having one or more outer columns. The subquery can be a Subquery,
