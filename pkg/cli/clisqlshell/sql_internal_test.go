@@ -106,6 +106,7 @@ func TestHandleCliCmdSqlAlias(t *testing.T) {
 		{`\du myuser`, `SELECT * FROM [SHOW USERS] WHERE username = 'myuser'`},
 		{`\d mytable`, `SHOW COLUMNS FROM mytable`},
 		{`\d`, `SHOW TABLES`},
+		{`\df`, `SHOW FUNCTIONS`},
 	}
 
 	for _, tt := range clientSideCommandTestsTable {
