@@ -83,6 +83,23 @@ case "${cmd}" in
     fi
     gcloud compute instances stop "${NAME}"
     ;;
+    suspend)
+    read -r -p "This will pause the VM. Are you sure? [yes] " response
+    response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+    if [[ $response != "yes" ]]; then
+      echo Aborting
+      exit 1
+    fi
+    gcloud compute instances suspend "${NAME}"
+    ;;
+    resume)
+    gcloud compute instances resume "${NAME}"
+    echo "waiting for node to finish starting..."
+    # Wait for vm and sshd to start up.
+    retry gcloud compute ssh "${NAME}" --command=true || true
+    # SSH into the node, since that's probably why we resumed it.
+    $0 ssh
+    ;;
     reset)
     read -r -p "This will hard reset (\"powercycle\") the VM. Are you sure? [yes] " response
     # Convert to lowercase.
@@ -181,7 +198,7 @@ case "${cmd}" in
     gcloud compute instances describe ${NAME} --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
     ;;
     *)
-    echo "$0: unknown command: ${cmd}, use one of create, start, stop, delete, status, ssh, or sync"
+    echo "$0: unknown command: ${cmd}, use one of create, start, stop, resume, suspend, delete, status, ssh, or sync"
     exit 1
     ;;
 esac
