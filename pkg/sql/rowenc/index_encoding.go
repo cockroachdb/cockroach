@@ -585,7 +585,8 @@ func EncodeInvertedIndexTableKeys(
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := eval.UnwrapDatum(nil, val)
+	// TODO(yuzefovich): can val ever be a placeholder?
+	datum := tree.UnwrapDOidWrapper(val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
 		// We do not need to pass the version for JSON types, since all prior
@@ -619,12 +620,12 @@ func EncodeInvertedIndexTableKeys(
 // set operations that must be applied on the spans read during execution. See
 // comments in the SpanExpression definition for details.
 func EncodeContainingInvertedIndexSpans(
-	evalCtx *eval.Context, val tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := eval.UnwrapDatum(evalCtx, val)
+	datum := eval.UnwrapDatum(ctx, evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
 		return json.EncodeContainingInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
@@ -650,12 +651,12 @@ func EncodeContainingInvertedIndexSpans(
 // span expression returned will never be tight. See comments in the
 // SpanExpression definition for details.
 func EncodeContainedInvertedIndexSpans(
-	evalCtx *eval.Context, val tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := eval.UnwrapDatum(evalCtx, val)
+	datum := eval.UnwrapDatum(ctx, evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.ArrayFamily:
 		return encodeContainedArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
@@ -679,12 +680,12 @@ func EncodeContainedInvertedIndexSpans(
 // The spans are returned in an inverted.SpanExpression, which represents the
 // set operations that must be applied on the spans read during execution.
 func EncodeExistsInvertedIndexSpans(
-	evalCtx *eval.Context, val tree.Datum, all bool,
+	ctx context.Context, evalCtx *eval.Context, val tree.Datum, all bool,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := eval.UnwrapDatum(evalCtx, val)
+	datum := eval.UnwrapDatum(ctx, evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.StringFamily:
 		// val could be a DOidWrapper, so we need to use the unwrapped datum
@@ -732,12 +733,12 @@ func EncodeExistsInvertedIndexSpans(
 // span expression returned will be tight. See comments in the
 // SpanExpression definition for details.
 func EncodeOverlapsInvertedIndexSpans(
-	evalCtx *eval.Context, val tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
-	datum := eval.UnwrapDatum(evalCtx, val)
+	datum := eval.UnwrapDatum(ctx, evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.ArrayFamily:
 		return encodeOverlapsArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)

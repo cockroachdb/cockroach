@@ -43,7 +43,7 @@ func DatumAsFloat(
 	if err != nil {
 		return 0, err
 	}
-	switch v := eval.UnwrapDatum(evalCtx, val).(type) {
+	switch v := eval.UnwrapDatum(ctx, evalCtx, val).(type) {
 	case *tree.DString:
 		return strconv.ParseFloat(string(*v), 64)
 	case *tree.DInt:
@@ -70,7 +70,7 @@ func DatumAsDuration(
 		return 0, err
 	}
 	var d duration.Duration
-	switch v := eval.UnwrapDatum(evalCtx, val).(type) {
+	switch v := eval.UnwrapDatum(ctx, evalCtx, val).(type) {
 	case *tree.DString:
 		datum, err := tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), string(*v))
 		if err != nil {

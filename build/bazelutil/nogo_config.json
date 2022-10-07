@@ -736,7 +736,8 @@
             "pkg/sql/execinfra/processorsbase.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
             "pkg/sql/importer/import_table_creation.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
             "pkg/sql/row/expr_walker_test.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
-            "pkg/sql/schemachanger/scbuild/tree_context_builder.go$": "temporary exclusion until deprecatedContext is removed from eval.Context"
+            "pkg/sql/schemachanger/scbuild/tree_context_builder.go$": "temporary exclusion until deprecatedContext is removed from eval.Context",
+            "pkg/sql/stats/quantile.go$": "temporary exclusion until deprecatedContext is removed from eval.Context"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"

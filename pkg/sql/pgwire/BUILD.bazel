@@ -44,7 +44,6 @@ go_library(
         "//pkg/sql/pgwire/pgwirebase",
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/sem/catconstants",
-        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqltelemetry",

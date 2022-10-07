@@ -11,6 +11,7 @@
 package stats
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/bits"
@@ -51,7 +52,7 @@ func TestRandomQuantileRoundTrip(t *testing.T) {
 						t.Errorf("seed: %v unexpected makeQuantile error: %v", seed, err)
 						return
 					}
-					hist2, err := qfun.toHistogram(colType, rowCount)
+					hist2, err := qfun.toHistogram(context.Background(), colType, rowCount)
 					if err != nil {
 						t.Errorf("seed: %v unexpected quantile.toHistogram error: %v", seed, err)
 						return
@@ -563,7 +564,7 @@ func TestQuantileToHistogram(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			hist, err := tc.qfun.toHistogram(types.Float, tc.rows)
+			hist, err := tc.qfun.toHistogram(context.Background(), types.Float, tc.rows)
 			if err != nil {
 				if !tc.err {
 					t.Errorf("test case %d unexpected quantile.toHistogram err: %v", i, err)
