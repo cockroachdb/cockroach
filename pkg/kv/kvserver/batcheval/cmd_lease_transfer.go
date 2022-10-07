@@ -79,7 +79,7 @@ func TransferLease(
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
 	if err := roachpb.CheckCanReceiveLease(
-		newLease.Replica, cArgs.EvalCtx.Desc().Replicas(), true, /* lhRemovalAllowed */
+		newLease.Replica, cArgs.EvalCtx.Desc().Replicas(), false, /* wasLastLeaseholder */
 	); err != nil {
 		return newFailedLeaseTrigger(true /* isTransfer */), err
 	}

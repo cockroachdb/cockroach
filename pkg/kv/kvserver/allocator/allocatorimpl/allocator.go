@@ -1546,7 +1546,7 @@ func (a *Allocator) ValidLeaseTargets(
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
 	replDescs := roachpb.MakeReplicaSet(existing)
 	for i := range existing {
-		if err := roachpb.CheckCanReceiveLease(existing[i], replDescs, true /* lhRemovalAllowed */); err != nil {
+		if err := roachpb.CheckCanReceiveLease(existing[i], replDescs, false /* wasLastLeaseholder */); err != nil {
 			continue
 		}
 		// If we're not allowed to include the current replica, remove it from

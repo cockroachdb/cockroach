@@ -1207,7 +1207,16 @@ func (rp *replicaProposer) leaderStatusRLocked(
 			// lease again, and by then hopefully we will have caught up.
 			leaderEligibleForLease = true
 		} else {
-			err := roachpb.CheckCanReceiveLease(leaderRep, rangeDesc.Replicas(), true /* lhRemovalAllowed */)
+			// If the current leader is a VOTER_DEMOTING and it was the last one to
+			// hold the lease (according to our possibly stale applied lease state),
+			// CheckCanReceiveLease considers it eligible to continue holding the
+			// lease, so we don't allow our proposal through. Otherwise, if it was not
+			// the last one to hold the lease, it will never be allowed to acquire it
+			// again, so we don't consider it eligible.
+			lastLease, _ := r.getLeaseRLocked()
+			wasLastLeaseholder := leaderRep.ReplicaID == lastLease.Replica.ReplicaID
+			err := roachpb.CheckCanReceiveLease(
+				leaderRep, rangeDesc.Replicas(), wasLastLeaseholder)
 			leaderEligibleForLease = err == nil
 		}
 	}
