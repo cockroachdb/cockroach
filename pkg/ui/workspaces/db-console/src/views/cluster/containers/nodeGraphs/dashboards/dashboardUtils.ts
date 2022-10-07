@@ -8,17 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { NodesSummary } from "src/redux/nodes";
-
 /**
  * GraphDashboardProps are the properties accepted by the renderable component
  * of each graph dashboard.
  */
 export interface GraphDashboardProps {
-  /**
-   * Summary of nodes data.
-   */
-  nodesSummary: NodesSummary;
   /**
    * List of node IDs which should be used in graphs which display a series per
    * node.
@@ -40,21 +34,26 @@ export interface GraphDashboardProps {
    * all nodes" or "on node X".
    */
   tooltipSelection: string;
+
+  nodeDisplayNameByID: {
+    [key: string]: string;
+  };
+
+  storeIDsByNodeID: {
+    [key: string]: string[];
+  };
 }
 
-export function nodeDisplayName(nodesSummary: NodesSummary, nid: string) {
-  const ns = nodesSummary.nodeStatusByID[nid];
-  if (!ns) {
-    // This should only happen immediately after loading a page, and
-    // associated graphs should display no data.
-    return "unknown node";
-  }
-  return nodesSummary.nodeDisplayNameByID[ns.desc.node_id];
+export function nodeDisplayName(
+  nodeDisplayNameByID: { [nodeId: string]: string },
+  nid: string,
+): string {
+  return nodeDisplayNameByID[nid] || "unknown node";
 }
 
 export function storeIDsForNode(
-  nodesSummary: NodesSummary,
+  storeIDsByNodeID: { [key: string]: string[] },
   nid: string,
 ): string[] {
-  return nodesSummary.storeIDsByNodeID[nid] || [];
+  return storeIDsByNodeID[nid] || [];
 }

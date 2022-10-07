@@ -25,7 +25,7 @@ import {
 import "./debug.styl";
 import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
-import { nodeIDsSelector } from "src/redux/nodes";
+import { nodeIDsStringifiedSelector } from "src/redux/nodes";
 import { refreshNodes, refreshUserSQLRoles } from "src/redux/apiReducers";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
 
@@ -144,7 +144,7 @@ function NodeIDSelector(props: {
 const NodeIDSelectorConnected = connect(
   (state: AdminUIState) => {
     return {
-      nodeIDs: nodeIDsSelector(state),
+      nodeIDs: nodeIDsStringifiedSelector(state),
     };
   },
   {
