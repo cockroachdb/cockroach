@@ -274,34 +274,34 @@ func TestCheckCanReceiveLease(t *testing.T) {
 	const none = roachpb.ReplicaType(-1)
 
 	for _, tc := range []struct {
-		leaseholderType           roachpb.ReplicaType
-		anotherReplicaType        roachpb.ReplicaType
-		eligibleLhRemovalEnabled  bool
-		eligibleLhRemovalDisabled bool
+		leaseholderType         roachpb.ReplicaType
+		anotherReplicaType      roachpb.ReplicaType
+		wasLastLeaseholderTrue  bool
+		wasLastLeaseholderFalse bool
 	}{
-		{leaseholderType: roachpb.VOTER_FULL, anotherReplicaType: none, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: true},
-		{leaseholderType: roachpb.VOTER_INCOMING, anotherReplicaType: none, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: true},
+		{leaseholderType: roachpb.VOTER_FULL, anotherReplicaType: none, wasLastLeaseholderTrue: true, wasLastLeaseholderFalse: true},
+		{leaseholderType: roachpb.VOTER_INCOMING, anotherReplicaType: none, wasLastLeaseholderTrue: true, wasLastLeaseholderFalse: true},
 
-		// A VOTER_OUTGOING should only be able to get the lease if there's a VOTER_INCOMING.
-		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_INCOMING, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_OUTGOING, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_FULL, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		// A VOTER_OUTGOING should only be able to get the lease if there's a VOTER_INCOMING and wasLastLeaseholderTrue.
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: none, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_INCOMING, wasLastLeaseholderTrue: true, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_OUTGOING, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.VOTER_OUTGOING, anotherReplicaType: roachpb.VOTER_FULL, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
 
-		// A VOTER_DEMOTING_LEARNER should only be able to get the lease if there's a VOTER_INCOMING.
-		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_INCOMING, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_FULL, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_OUTGOING, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		// A VOTER_DEMOTING_LEARNER should only be able to get the lease if there's a VOTER_INCOMING and wasLastLeaseholderTrue.
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: none, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_INCOMING, wasLastLeaseholderTrue: true, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_FULL, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_LEARNER, anotherReplicaType: roachpb.VOTER_OUTGOING, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
 
 		// A VOTER_DEMOTING_NON_VOTER should only be able to get the lease if there's a VOTER_INCOMING.
-		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_INCOMING, eligibleLhRemovalEnabled: true, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_FULL, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_OUTGOING, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: none, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_INCOMING, wasLastLeaseholderTrue: true, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_FULL, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.VOTER_DEMOTING_NON_VOTER, anotherReplicaType: roachpb.VOTER_OUTGOING, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
 
-		{leaseholderType: roachpb.LEARNER, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
-		{leaseholderType: roachpb.NON_VOTER, anotherReplicaType: none, eligibleLhRemovalEnabled: false, eligibleLhRemovalDisabled: false},
+		{leaseholderType: roachpb.LEARNER, anotherReplicaType: none, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
+		{leaseholderType: roachpb.NON_VOTER, anotherReplicaType: none, wasLastLeaseholderTrue: false, wasLastLeaseholderFalse: false},
 	} {
 		t.Run(tc.leaseholderType.String(), func(t *testing.T) {
 			repDesc := roachpb.ReplicaDescriptor{
@@ -319,10 +319,10 @@ func TestCheckCanReceiveLease(t *testing.T) {
 				rngDesc.InternalReplicas = append(rngDesc.InternalReplicas, anotherDesc)
 			}
 			err := roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas(), true)
-			require.Equal(t, tc.eligibleLhRemovalEnabled, err == nil, "err: %v", err)
+			require.Equal(t, tc.wasLastLeaseholderTrue, err == nil, "err: %v", err)
 
 			err = roachpb.CheckCanReceiveLease(rngDesc.InternalReplicas[0], rngDesc.Replicas(), false)
-			require.Equal(t, tc.eligibleLhRemovalDisabled, err == nil, "err: %v", err)
+			require.Equal(t, tc.wasLastLeaseholderFalse, err == nil, "err: %v", err)
 		})
 	}
 
