@@ -126,9 +126,9 @@ func (j *jsonOrArrayJoinPlanner) extractJSONOrArrayJoinCondition(
 // through the JSON or Array. This function is used when checking if an indexed
 // column contains (@>) a constant.
 func getInvertedExprForJSONOrArrayIndexForContaining(
-	evalCtx *eval.Context, d tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, d tree.Datum,
 ) inverted.Expression {
-	invertedExpr, err := rowenc.EncodeContainingInvertedIndexSpans(evalCtx, d)
+	invertedExpr, err := rowenc.EncodeContainingInvertedIndexSpans(ctx, evalCtx, d)
 	if err != nil {
 		panic(err)
 	}
@@ -141,9 +141,9 @@ func getInvertedExprForJSONOrArrayIndexForContaining(
 // through the JSON or Array. This function is only used when checking if an
 // indexed column is contained by (<@) a constant.
 func getInvertedExprForJSONOrArrayIndexForContainedBy(
-	evalCtx *eval.Context, d tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, d tree.Datum,
 ) inverted.Expression {
-	invertedExpr, err := rowenc.EncodeContainedInvertedIndexSpans(evalCtx, d)
+	invertedExpr, err := rowenc.EncodeContainedInvertedIndexSpans(ctx, evalCtx, d)
 	if err != nil {
 		panic(err)
 	}
@@ -157,9 +157,9 @@ func getInvertedExprForJSONOrArrayIndexForContainedBy(
 // If d is an array, then the inverted expression is a conjunction if all is
 // true, and a disjunction otherwise.
 func getInvertedExprForJSONIndexForExists(
-	evalCtx *eval.Context, d tree.Datum, all bool,
+	ctx context.Context, evalCtx *eval.Context, d tree.Datum, all bool,
 ) inverted.Expression {
-	invertedExpr, err := rowenc.EncodeExistsInvertedIndexSpans(evalCtx, d, all)
+	invertedExpr, err := rowenc.EncodeExistsInvertedIndexSpans(ctx, evalCtx, d, all)
 	if err != nil {
 		panic(err)
 	}
@@ -172,9 +172,9 @@ func getInvertedExprForJSONIndexForExists(
 // through the Array. This function is only used when checking if an
 // indexed Array column overlaps (&&) with a constant.
 func getInvertedExprForArrayIndexForOverlaps(
-	evalCtx *eval.Context, d tree.Datum,
+	ctx context.Context, evalCtx *eval.Context, d tree.Datum,
 ) inverted.Expression {
-	invertedExpr, err := rowenc.EncodeOverlapsInvertedIndexSpans(evalCtx, d)
+	invertedExpr, err := rowenc.EncodeOverlapsInvertedIndexSpans(ctx, evalCtx, d)
 	if err != nil {
 		panic(err)
 	}
@@ -232,7 +232,7 @@ func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.
 // NewJSONOrArrayDatumsToInvertedExpr returns a new
 // jsonOrArrayDatumsToInvertedExpr.
 func NewJSONOrArrayDatumsToInvertedExpr(
-	evalCtx *eval.Context, colTypes []*types.T, expr tree.TypedExpr,
+	ctx context.Context, evalCtx *eval.Context, colTypes []*types.T, expr tree.TypedExpr,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	g := &jsonOrArrayDatumsToInvertedExpr{
 		evalCtx:  evalCtx,
@@ -259,17 +259,17 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 				var invertedExpr inverted.Expression
 				switch t.Operator.Symbol {
 				case treecmp.ContainedBy:
-					invertedExpr = getInvertedExprForJSONOrArrayIndexForContainedBy(evalCtx, d)
+					invertedExpr = getInvertedExprForJSONOrArrayIndexForContainedBy(ctx, evalCtx, d)
 				case treecmp.Contains:
-					invertedExpr = getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, d)
+					invertedExpr = getInvertedExprForJSONOrArrayIndexForContaining(ctx, evalCtx, d)
 				case treecmp.Overlaps:
-					invertedExpr = getInvertedExprForArrayIndexForOverlaps(evalCtx, d)
+					invertedExpr = getInvertedExprForArrayIndexForOverlaps(ctx, evalCtx, d)
 				case treecmp.JSONExists:
-					invertedExpr = getInvertedExprForJSONIndexForExists(evalCtx, d, true /* all */)
+					invertedExpr = getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, true /* all */)
 				case treecmp.JSONSomeExists:
-					invertedExpr = getInvertedExprForJSONIndexForExists(evalCtx, d, false /* all */)
+					invertedExpr = getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, false /* all */)
 				case treecmp.JSONAllExists:
-					invertedExpr = getInvertedExprForJSONIndexForExists(evalCtx, d, true /* all */)
+					invertedExpr = getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, true /* all */)
 				default:
 					return nil, fmt.Errorf("%s cannot be index-accelerated", t)
 				}
@@ -319,10 +319,10 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 			}
 			switch t.Operator.Symbol {
 			case treecmp.Contains:
-				return getInvertedExprForJSONOrArrayIndexForContaining(g.evalCtx, d), nil
+				return getInvertedExprForJSONOrArrayIndexForContaining(ctx, g.evalCtx, d), nil
 
 			case treecmp.ContainedBy:
-				return getInvertedExprForJSONOrArrayIndexForContainedBy(g.evalCtx, d), nil
+				return getInvertedExprForJSONOrArrayIndexForContainedBy(ctx, g.evalCtx, d), nil
 
 			default:
 				return nil, fmt.Errorf("unsupported expression %v", t)
@@ -379,21 +379,21 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 ) {
 	switch t := expr.(type) {
 	case *memo.ContainsExpr:
-		invertedExpr = j.extractJSONOrArrayContainsCondition(evalCtx, t.Left, t.Right, false /* containedBy */)
+		invertedExpr = j.extractJSONOrArrayContainsCondition(ctx, evalCtx, t.Left, t.Right, false /* containedBy */)
 	case *memo.ContainedByExpr:
-		invertedExpr = j.extractJSONOrArrayContainsCondition(evalCtx, t.Left, t.Right, true /* containedBy */)
+		invertedExpr = j.extractJSONOrArrayContainsCondition(ctx, evalCtx, t.Left, t.Right, true /* containedBy */)
 	case *memo.JsonExistsExpr:
-		invertedExpr = j.extractJSONExistsCondition(evalCtx, t.Left, t.Right, false /* all */)
+		invertedExpr = j.extractJSONExistsCondition(ctx, evalCtx, t.Left, t.Right, false /* all */)
 	case *memo.JsonSomeExistsExpr:
-		invertedExpr = j.extractJSONExistsCondition(evalCtx, t.Left, t.Right, false /* all */)
+		invertedExpr = j.extractJSONExistsCondition(ctx, evalCtx, t.Left, t.Right, false /* all */)
 	case *memo.JsonAllExistsExpr:
-		invertedExpr = j.extractJSONExistsCondition(evalCtx, t.Left, t.Right, true /* all */)
+		invertedExpr = j.extractJSONExistsCondition(ctx, evalCtx, t.Left, t.Right, true /* all */)
 	case *memo.EqExpr:
 		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
-			invertedExpr = j.extractJSONFetchValEqCondition(evalCtx, fetch, t.Right)
+			invertedExpr = j.extractJSONFetchValEqCondition(ctx, evalCtx, fetch, t.Right)
 		}
 	case *memo.OverlapsExpr:
-		invertedExpr = j.extractArrayOverlapsCondition(evalCtx, t.Left, t.Right)
+		invertedExpr = j.extractArrayOverlapsCondition(ctx, evalCtx, t.Left, t.Right)
 	}
 
 	if invertedExpr == nil {
@@ -417,7 +417,7 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 // on the given left and right expression arguments. Returns an empty
 // InvertedExpression if no inverted filter could be extracted.
 func (j *jsonOrArrayFilterPlanner) extractArrayOverlapsCondition(
-	evalCtx *eval.Context, left, right opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, left, right opt.ScalarExpr,
 ) inverted.Expression {
 	var constantVal opt.ScalarExpr
 	if isIndexColumn(j.tabID, j.index, left, j.computedColumns) && memo.CanExtractConstDatum(right) {
@@ -434,7 +434,7 @@ func (j *jsonOrArrayFilterPlanner) extractArrayOverlapsCondition(
 		// If none of the conditions are met, we cannot create an InvertedExpression.
 		return inverted.NonInvertedColExpression{}
 	}
-	return getInvertedExprForArrayIndexForOverlaps(evalCtx, memo.ExtractConstDatum(constantVal))
+	return getInvertedExprForArrayIndexForOverlaps(ctx, evalCtx, memo.ExtractConstDatum(constantVal))
 }
 
 // extractJSONOrArrayContainsCondition extracts an InvertedExpression
@@ -442,7 +442,7 @@ func (j *jsonOrArrayFilterPlanner) extractArrayOverlapsCondition(
 // on the given left and right expression arguments. Returns an empty
 // InvertedExpression if no inverted filter could be extracted.
 func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
-	evalCtx *eval.Context, left, right opt.ScalarExpr, containedBy bool,
+	ctx context.Context, evalCtx *eval.Context, left, right opt.ScalarExpr, containedBy bool,
 ) inverted.Expression {
 	var indexColumn, constantVal opt.ScalarExpr
 	if isIndexColumn(j.tabID, j.index, left, j.computedColumns) && memo.CanExtractConstDatum(right) {
@@ -460,12 +460,12 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 		if fetch, ok := left.(*memo.FetchValExpr); ok {
 			// When the expression has a JSON fetch operator on the left, it is
 			// handled in extractJSONFetchValContainsCondition.
-			return j.extractJSONFetchValContainsCondition(evalCtx, fetch, right, containedBy)
+			return j.extractJSONFetchValContainsCondition(ctx, evalCtx, fetch, right, containedBy)
 		} else if fetch, ok := right.(*memo.FetchValExpr); ok {
 			// When the expression has a JSON fetch operator on the right, it is
 			// handled in extractJSONFetchValContainsCondition as an equivalent
 			// expression with right and left swapped.
-			return j.extractJSONFetchValContainsCondition(evalCtx, fetch, left, !containedBy)
+			return j.extractJSONFetchValContainsCondition(ctx, evalCtx, fetch, left, !containedBy)
 		}
 		// If none of the conditions are met, we cannot create an InvertedExpression.
 		return inverted.NonInvertedColExpression{}
@@ -480,9 +480,9 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 		}
 	}
 	if containedBy {
-		return getInvertedExprForJSONOrArrayIndexForContainedBy(evalCtx, d)
+		return getInvertedExprForJSONOrArrayIndexForContainedBy(ctx, evalCtx, d)
 	}
-	return getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, d)
+	return getInvertedExprForJSONOrArrayIndexForContaining(ctx, evalCtx, d)
 }
 
 // extractJSONExistsCondition extracts an InvertedExpression representing an
@@ -491,7 +491,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 // arguments. Returns an empty InvertedExpression if no inverted filter could be
 // extracted.
 func (j *jsonOrArrayFilterPlanner) extractJSONExistsCondition(
-	evalCtx *eval.Context, left, right opt.ScalarExpr, all bool,
+	ctx context.Context, evalCtx *eval.Context, left, right opt.ScalarExpr, all bool,
 ) inverted.Expression {
 	if isIndexColumn(j.tabID, j.index, left, j.computedColumns) && memo.CanExtractConstDatum(right) {
 		// When the first argument is a variable or expression corresponding to the
@@ -499,7 +499,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONExistsCondition(
 		// InvertedExpression for left ? right.
 		constantVal := right
 		d := memo.ExtractConstDatum(constantVal)
-		return getInvertedExprForJSONIndexForExists(evalCtx, d, all)
+		return getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, all)
 	}
 	// If none of the conditions are met, we cannot create an InvertedExpression.
 	return inverted.NonInvertedColExpression{}
@@ -517,7 +517,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONExistsCondition(
 // index and each index is a constant string. The right expression must be a
 // constant JSON value.
 func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
-	evalCtx *eval.Context, left *memo.FetchValExpr, right opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, left *memo.FetchValExpr, right opt.ScalarExpr,
 ) inverted.Expression {
 	// The right side of the expression should be a constant JSON value.
 	if !memo.CanExtractConstDatum(right) {
@@ -540,7 +540,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 
 	// For Equals expressions, we will generate the inverted expression for the
 	// single object built from the keys and val.
-	invertedExpr := getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, tree.NewDJSON(obj))
+	invertedExpr := getInvertedExprForJSONOrArrayIndexForContaining(ctx, evalCtx, tree.NewDJSON(obj))
 
 	// When the right side is an array or object, the InvertedExpression
 	// generated is not tight. We must indicate it is non-tight so an additional
@@ -568,7 +568,11 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 // The type of operator is indicated by the containedBy parameter, which is
 // true for <@ and false for @>.
 func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
-	evalCtx *eval.Context, left *memo.FetchValExpr, right opt.ScalarExpr, containedBy bool,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	left *memo.FetchValExpr,
+	right opt.ScalarExpr,
+	containedBy bool,
 ) inverted.Expression {
 	// The right side of the expression should be a constant JSON value.
 	if !memo.CanExtractConstDatum(right) {
@@ -603,9 +607,9 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 	for i := range objs {
 		var expr inverted.Expression
 		if containedBy {
-			expr = getInvertedExprForJSONOrArrayIndexForContainedBy(evalCtx, tree.NewDJSON(objs[i]))
+			expr = getInvertedExprForJSONOrArrayIndexForContainedBy(ctx, evalCtx, tree.NewDJSON(objs[i]))
 		} else {
-			expr = getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, tree.NewDJSON(objs[i]))
+			expr = getInvertedExprForJSONOrArrayIndexForContaining(ctx, evalCtx, tree.NewDJSON(objs[i]))
 		}
 		if invertedExpr == nil {
 			invertedExpr = expr

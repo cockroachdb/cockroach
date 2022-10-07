@@ -186,7 +186,7 @@ func (e *evaluator) EvalCastExpr(ctx context.Context, expr *tree.CastExpr) (tree
 	if d == tree.DNull {
 		return d, nil
 	}
-	d = UnwrapDatum(e.ctx(), d)
+	d = UnwrapDatum(ctx, e.ctx(), d)
 	return PerformCast(ctx, e.ctx(), d, expr.ResolvedType())
 }
 
@@ -212,7 +212,7 @@ func (e *evaluator) EvalCollateExpr(
 	if err != nil {
 		return nil, err
 	}
-	unwrapped := UnwrapDatum(e.ctx(), d)
+	unwrapped := UnwrapDatum(ctx, e.ctx(), d)
 	if unwrapped == tree.DNull {
 		return tree.DNull, nil
 	}

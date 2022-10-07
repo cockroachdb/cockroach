@@ -41,7 +41,7 @@ func NewDatumsToInvertedExpr(
 		return NewGeoDatumsToInvertedExpr(ctx, evalCtx, colTypes, expr, geoConfig)
 	}
 
-	return NewJSONOrArrayDatumsToInvertedExpr(evalCtx, colTypes, expr)
+	return NewJSONOrArrayDatumsToInvertedExpr(ctx, evalCtx, colTypes, expr)
 }
 
 // NewBoundPreFilterer returns a PreFilterer for the given expr where the type

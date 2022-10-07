@@ -379,7 +379,7 @@ func makePGPrivilegeInquiryDef(
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var user username.SQLUsername
 				if withUser {
-					arg := eval.UnwrapDatum(evalCtx, args[0])
+					arg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 					userS, err := getNameForArg(ctx, evalCtx, arg, "pg_roles", "rolname")
 					if err != nil {
 						return nil, err
@@ -850,7 +850,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				schemaArg := eval.UnwrapDatum(evalCtx, args[0])
+				schemaArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 				schema, err := getNameForArg(ctx, evalCtx, schemaArg, "pg_namespace", "nspname")
 				if err != nil {
 					return nil, err
@@ -1350,7 +1350,7 @@ SELECT description
 		"any column of table",
 		argTypeOpts{{"table", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			tableArg := eval.UnwrapDatum(evalCtx, args[0])
+			tableArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(tableArg, false /* isSequence */)
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1377,8 +1377,8 @@ SELECT description
 		"column",
 		argTypeOpts{{"table", strOrOidTypes}, {"column", []*types.T{types.String, types.Int}}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			tableArg := eval.UnwrapDatum(evalCtx, args[0])
-			colArg := eval.UnwrapDatum(evalCtx, args[1])
+			tableArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
+			colArg := eval.UnwrapDatum(ctx, evalCtx, args[1])
 			specifier, err := columnHasPrivilegeSpecifier(tableArg, colArg)
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1406,7 +1406,7 @@ SELECT description
 		argTypeOpts{{"database", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
 
-			databaseArg := eval.UnwrapDatum(evalCtx, args[0])
+			databaseArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			specifier, err := databaseHasPrivilegeSpecifier(databaseArg)
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1434,7 +1434,7 @@ SELECT description
 		"foreign-data wrapper",
 		argTypeOpts{{"fdw", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			fdwArg := eval.UnwrapDatum(evalCtx, args[0])
+			fdwArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			fdw, err := getNameForArg(ctx, evalCtx, fdwArg, "pg_foreign_data_wrapper", "fdwname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1472,7 +1472,7 @@ SELECT description
 		"function",
 		argTypeOpts{{"function", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			oidArg := eval.UnwrapDatum(evalCtx, args[0])
+			oidArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			// When specifying a function by a text string rather than by OID,
 			// the allowed input is the same as for the regprocedure data type.
 			var oid tree.Datum
@@ -1525,7 +1525,7 @@ SELECT description
 		"language",
 		argTypeOpts{{"language", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			langArg := eval.UnwrapDatum(evalCtx, args[0])
+			langArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			lang, err := getNameForArg(ctx, evalCtx, langArg, "pg_language", "lanname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1563,7 +1563,7 @@ SELECT description
 		"schema",
 		argTypeOpts{{"schema", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			schemaArg := eval.UnwrapDatum(evalCtx, args[0])
+			schemaArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			databaseName := evalCtx.SessionData().Database
 			specifier, err := schemaHasPrivilegeSpecifier(ctx, evalCtx, schemaArg, databaseName)
 			if err != nil {
@@ -1592,7 +1592,7 @@ SELECT description
 		"sequence",
 		argTypeOpts{{"sequence", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			seqArg := eval.UnwrapDatum(evalCtx, args[0])
+			seqArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(seqArg, true /* isSequence */)
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1618,7 +1618,7 @@ SELECT description
 		"foreign server",
 		argTypeOpts{{"server", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			serverArg := eval.UnwrapDatum(evalCtx, args[0])
+			serverArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			server, err := getNameForArg(ctx, evalCtx, serverArg, "pg_foreign_server", "srvname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1656,7 +1656,7 @@ SELECT description
 		"table",
 		argTypeOpts{{"table", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			tableArg := eval.UnwrapDatum(evalCtx, args[0])
+			tableArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(tableArg, false /* isSequence */)
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1691,7 +1691,7 @@ SELECT description
 		"tablespace",
 		argTypeOpts{{"tablespace", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			tablespaceArg := eval.UnwrapDatum(evalCtx, args[0])
+			tablespaceArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			tablespace, err := getNameForArg(ctx, evalCtx, tablespaceArg, "pg_tablespace", "spcname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1729,7 +1729,7 @@ SELECT description
 		"type",
 		argTypeOpts{{"type", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			oidArg := eval.UnwrapDatum(evalCtx, args[0])
+			oidArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			// When specifying a type by a text string rather than by OID, the
 			// allowed input is the same as for the regtype data type.
 			var oid tree.Datum
@@ -1775,7 +1775,7 @@ SELECT description
 		"role",
 		argTypeOpts{{"role", strOrOidTypes}},
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			roleArg := eval.UnwrapDatum(evalCtx, args[0])
+			roleArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			roleS, err := getNameForArg(ctx, evalCtx, roleArg, "pg_roles", "rolname")
 			if err != nil {
 				return eval.HasNoPrivilege, err
