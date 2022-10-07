@@ -132,13 +132,13 @@ const (
 // For example, here is a query plan with corresponding estimated statistics at
 // each level:
 //
-//        Query:    SELECT y FROM a WHERE x=1
+//	Query:    SELECT y FROM a WHERE x=1
 //
-//        Plan:            Project y        Row Count: 10, Distinct(x): 1
-//                             |
-//                         Select x=1       Row Count: 10, Distinct(x): 1
-//                             |
-//                          Scan a          Row Count: 100, Distinct(x): 10
+//	Plan:            Project y        Row Count: 10, Distinct(x): 1
+//	                     |
+//	                 Select x=1       Row Count: 10, Distinct(x): 1
+//	                     |
+//	                  Scan a          Row Count: 100, Distinct(x): 10
 //
 // The statistics for the Scan operator were presumably retrieved from the
 // underlying table statistics cached in the metadata. The statistics for
@@ -189,7 +189,7 @@ const (
 // To better understand how the statisticsBuilder works, let us consider this
 // simple query, which consists of a scan followed by an aggregation:
 //
-//   SELECT count(*), x, y FROM t GROUP BY x, y
+//	SELECT count(*), x, y FROM t GROUP BY x, y
 //
 // The statistics for the scan of t will be calculated first, since logical
 // properties are built bottom-up. The estimated row count is retrieved from
@@ -207,25 +207,25 @@ const (
 // that no statistics are cached, this is the order of function calls for the
 // above example (somewhat simplified):
 //
-//        +-------------+               +--------------+
-//  1.    | buildScan t |           2.  | buildGroupBy |
-//        +-------------+               +--------------+
-//               |                             |
-//     +-----------------------+   +-------------------------+
-//     | makeTableStatistics t |   | colStatFromChild (x, y) |
-//     +-----------------------+   +-------------------------+
-//                                             |
-//                                   +--------------------+
-//                                   | colStatScan (x, y) |
-//                                   +--------------------+
-//                                             |
-//                                   +---------------------+
-//                                   | colStatTable (x, y) |
-//                                   +---------------------+
-//                                             |
-//                                   +--------------------+
-//                                   | colStatLeaf (x, y) |
-//                                   +--------------------+
+//	      +-------------+               +--------------+
+//	1.    | buildScan t |           2.  | buildGroupBy |
+//	      +-------------+               +--------------+
+//	             |                             |
+//	   +-----------------------+   +-------------------------+
+//	   | makeTableStatistics t |   | colStatFromChild (x, y) |
+//	   +-----------------------+   +-------------------------+
+//	                                           |
+//	                                 +--------------------+
+//	                                 | colStatScan (x, y) |
+//	                                 +--------------------+
+//	                                           |
+//	                                 +---------------------+
+//	                                 | colStatTable (x, y) |
+//	                                 +---------------------+
+//	                                           |
+//	                                 +--------------------+
+//	                                 | colStatLeaf (x, y) |
+//	                                 +--------------------+
 //
 // See props/statistics.go for more details.
 type statisticsBuilder struct {
@@ -1737,8 +1737,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// still have corresponding filters in zigzag.On. So we don't need
 	// to iterate through FixedCols here if we are already processing the ON
 	// clause.
-	// TODO(rytaft): use histogram for zig zag join.
-	numUnappliedConjuncts, constrainedCols, _ := sb.applyFilters(zigzag.On, zigzag, relProps)
+	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilters(zigzag.On, zigzag, relProps)
 
 	// Application of constraints on inverted indexes needs to be handled a
 	// little differently since a constraint on an inverted index key column
@@ -1756,10 +1755,12 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// join ends up having a higher row count and therefore higher cost than
 	// a competing index join + constrained scan.
 	tab := sb.md.Table(zigzag.LeftTable)
-	if tab.Index(zigzag.LeftIndex).IsInverted() {
+	leftIndexInverted := tab.Index(zigzag.LeftIndex).IsInverted()
+	rightIndexInverted := tab.Index(zigzag.RightIndex).IsInverted()
+	if leftIndexInverted {
 		numUnappliedConjuncts += float64(len(zigzag.LeftFixedCols) * 2)
 	}
-	if tab.Index(zigzag.RightIndex).IsInverted() {
+	if rightIndexInverted {
 		numUnappliedConjuncts += float64(len(zigzag.RightFixedCols) * 2)
 	}
 
@@ -1776,8 +1777,22 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 
 	// Calculate selectivity and row count
 	// -----------------------------------
-	multiColSelectivity, _ := sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s)
-	s.ApplySelectivity(multiColSelectivity)
+	if !leftIndexInverted && !rightIndexInverted {
+		// A zigzag join is equivalent to a Select with Filters above a base table
+		// scan, in terms of which rows are included in the output. The selectivity
+		// estimate should never deviate between these two operations, so we apply
+		// the exact same calculations here as in buildSelect -> filterRelExpr to
+		// ensure the estimates always match. This is currently only done for
+		// non-inverted indexes where the filters can be pushed to the zigzag join
+		// ON clause.
+		// TODO(msirek): Validate stats for inverted index zigzag join match
+		//               non-zigzag join stats.
+		corr := sb.correlationFromMultiColDistinctCounts(constrainedCols, zigzag, s)
+		s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, zigzag, s, corr))
+	} else {
+		multiColSelectivity, _ := sb.selectivityFromMultiColDistinctCounts(constrainedCols, zigzag, s)
+		s.ApplySelectivity(multiColSelectivity)
+	}
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &relProps.FuncDeps, zigzag, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	s.ApplySelectivity(sb.selectivityFromNullsRemoved(zigzag, relProps.NotNullCols, constrainedCols))
@@ -3328,12 +3343,12 @@ func (sb *statisticsBuilder) applyConstraintSet(
 // columns is done in the logical props builder.
 //
 // For example, consider the following constraint sets:
-//   /a/b/c: [/1 - /1/2/3] [/1/2/5 - /1/2/8]
-//   /c: [/6 - /6]
+//
+//	/a/b/c: [/1 - /1/2/3] [/1/2/5 - /1/2/8]
+//	/c: [/6 - /6]
 //
 // The first constraint set filters nulls out of column a, and the
 // second constraint set filters nulls out of column c.
-//
 func (sb *statisticsBuilder) updateNullCountsFromNotNullCols(
 	notNullCols opt.ColSet, s *props.Statistics,
 ) {
@@ -3355,20 +3370,22 @@ func (sb *statisticsBuilder) updateNullCountsFromNotNullCols(
 //
 // For example, consider the following constraint set:
 //
-//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]
-//   /c: [/6 - /6]
+//	/a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]
+//	/c: [/6 - /6]
 //
 // After the first constraint is processed, s.ColStats contains the
 // following:
-//   [a] -> { ... DistinctCount: 1 ... }
-//   [b] -> { ... DistinctCount: 1 ... }
-//   [c] -> { ... DistinctCount: 5 ... }
+//
+//	[a] -> { ... DistinctCount: 1 ... }
+//	[b] -> { ... DistinctCount: 1 ... }
+//	[c] -> { ... DistinctCount: 5 ... }
 //
 // After the second constraint is processed, column c is further constrained,
 // so s.ColStats contains the following:
-//   [a] -> { ... DistinctCount: 1 ... }
-//   [b] -> { ... DistinctCount: 1 ... }
-//   [c] -> { ... DistinctCount: 1 ... }
+//
+//	[a] -> { ... DistinctCount: 1 ... }
+//	[b] -> { ... DistinctCount: 1 ... }
+//	[c] -> { ... DistinctCount: 1 ... }
 //
 // Note that updateDistinctCountsFromConstraint is pessimistic, and assumes
 // that there is at least one row for every possible value provided by the
@@ -3381,7 +3398,7 @@ func (sb *statisticsBuilder) updateNullCountsFromNotNullCols(
 // query specifically mentions some exact values we should use that as a hint.
 // For example, consider the following constraint:
 //
-//   /a: [ - 5][10 - 10][15 - 15]
+//	/a: [ - 5][10 - 10][15 - 15]
 //
 // In this case, updateDistinctCountsFromConstraint will infer that there
 // are at least two distinct values (10 and 15). This lower bound will be
@@ -3583,63 +3600,65 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 // or (2) by assuming they are correlated.
 //
 // (1) Assuming independence between columns, we can calculate the selectivity
-//     by taking the product of selectivities of each constrained column. In
-//     the general case, this can be represented by the formula:
 //
-//                      ┬-┬ ⎛ new_distinct(i) ⎞
-//       selectivity =  │ │ ⎜ --------------- ⎟
-//                      ┴ ┴ ⎝ old_distinct(i) ⎠
-//                     i in
-//                  {constrained
-//                    columns}
+//	by taking the product of selectivities of each constrained column. In
+//	the general case, this can be represented by the formula:
+//
+//	                 ┬-┬ ⎛ new_distinct(i) ⎞
+//	  selectivity =  │ │ ⎜ --------------- ⎟
+//	                 ┴ ┴ ⎝ old_distinct(i) ⎠
+//	                i in
+//	             {constrained
+//	               columns}
 //
 // (2) If we instead assume there is some correlation between columns, we
-//     calculate the selectivity using multi-column statistics.
 //
-//                     ⎛ new_distinct({constrained columns}) ⎞
-//       selectivity = ⎜ ----------------------------------- ⎟
-//                     ⎝ old_distinct({constrained columns}) ⎠
+//	calculate the selectivity using multi-column statistics.
 //
-//     This formula looks simple, but the challenge is that it is difficult
-//     to determine the correct value for new_distinct({constrained columns})
-//     if each column is not constrained to a single value. For example, if
-//     new_distinct(x)=2 and new_distinct(y)=2, new_distinct({x,y}) could be 2,
-//     3 or 4. We estimate the new distinct count as follows, using the concept
-//     of "soft functional dependency (FD) strength" as defined in [1]:
+//	                ⎛ new_distinct({constrained columns}) ⎞
+//	  selectivity = ⎜ ----------------------------------- ⎟
+//	                ⎝ old_distinct({constrained columns}) ⎠
 //
-//       new_distinct({x,y}) = min_value + range * (1 - FD_strength_scaled)
+//	This formula looks simple, but the challenge is that it is difficult
+//	to determine the correct value for new_distinct({constrained columns})
+//	if each column is not constrained to a single value. For example, if
+//	new_distinct(x)=2 and new_distinct(y)=2, new_distinct({x,y}) could be 2,
+//	3 or 4. We estimate the new distinct count as follows, using the concept
+//	of "soft functional dependency (FD) strength" as defined in [1]:
 //
-//     where
+//	  new_distinct({x,y}) = min_value + range * (1 - FD_strength_scaled)
 //
-//       min_value = max(new_distinct(x), new_distinct(y))
-//       max_value = new_distinct(x) * new_distinct(y)
-//       range     = max_value - min_value
+//	where
 //
-//                     ⎛ max(old_distinct(x),old_distinct(y)) ⎞
-//       FD_strength = ⎜ ------------------------------------ ⎟
-//                     ⎝         old_distinct({x,y})          ⎠
+//	  min_value = max(new_distinct(x), new_distinct(y))
+//	  max_value = new_distinct(x) * new_distinct(y)
+//	  range     = max_value - min_value
 //
-//                         ⎛ max(old_distinct(x), old_distinct(y)) ⎞
-//       min_FD_strength = ⎜ ------------------------------------- ⎟
-//                         ⎝   old_distinct(x) * old_distinct(y)   ⎠
+//	                ⎛ max(old_distinct(x),old_distinct(y)) ⎞
+//	  FD_strength = ⎜ ------------------------------------ ⎟
+//	                ⎝         old_distinct({x,y})          ⎠
 //
-//                            ⎛ FD_strength - min_FD_strength ⎞  // scales FD_strength
-//       FD_strength_scaled = ⎜ ----------------------------- ⎟  // to be between
-//                            ⎝      1 - min_FD_strength      ⎠  // 0 and 1
+//	                    ⎛ max(old_distinct(x), old_distinct(y)) ⎞
+//	  min_FD_strength = ⎜ ------------------------------------- ⎟
+//	                    ⎝   old_distinct(x) * old_distinct(y)   ⎠
 //
-//     Suppose that old_distinct(x)=100 and old_distinct(y)=10. If x and y are
-//     perfectly correlated, old_distinct({x,y})=100. Using the example from
-//     above, new_distinct(x)=2 and new_distinct(y)=2. Plugging in the values
-//     into the equation, we get:
+//	                       ⎛ FD_strength - min_FD_strength ⎞  // scales FD_strength
+//	  FD_strength_scaled = ⎜ ----------------------------- ⎟  // to be between
+//	                       ⎝      1 - min_FD_strength      ⎠  // 0 and 1
 //
-//       FD_strength_scaled  = 1
-//       new_distinct({x,y}) = 2 + (4 - 2) * (1 - 1) = 2
+//	Suppose that old_distinct(x)=100 and old_distinct(y)=10. If x and y are
+//	perfectly correlated, old_distinct({x,y})=100. Using the example from
+//	above, new_distinct(x)=2 and new_distinct(y)=2. Plugging in the values
+//	into the equation, we get:
 //
-//     If x and y are completely independent, however, old_distinct({x,y})=1000.
-//     In this case, we get:
+//	  FD_strength_scaled  = 1
+//	  new_distinct({x,y}) = 2 + (4 - 2) * (1 - 1) = 2
 //
-//       FD_strength_scaled  = 0
-//       new_distinct({x,y}) = 2 + (4 - 2) * (1 - 0) = 4
+//	If x and y are completely independent, however, old_distinct({x,y})=1000.
+//	In this case, we get:
+//
+//	  FD_strength_scaled  = 0
+//	  new_distinct({x,y}) = 2 + (4 - 2) * (1 - 0) = 4
 //
 // Note that even if we calculate the selectivity based on equation (2) above,
 // we still want to take equation (1) into account. This is because it is
@@ -3649,7 +3668,7 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 // individually, we must give some weight to equation (1). Therefore, instead
 // of equation (2) we actually return the following selectivity:
 //
-//   selectivity = (1 - w) * (equation 1) + w * (equation 2)
+//	selectivity = (1 - w) * (equation 1) + w * (equation 2)
 //
 // where w is the constant multiColWeight.
 //
@@ -3662,8 +3681,8 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 // correlation.
 //
 // [1] Ilyas, Ihab F., et al. "CORDS: automatic discovery of correlations and
-//     soft functional dependencies." SIGMOD 2004.
 //
+//	soft functional dependencies." SIGMOD 2004.
 func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 	cols opt.ColSet, e RelExpr, s *props.Statistics,
 ) (selectivity, selectivityUpperBound props.Selectivity) {
@@ -3812,25 +3831,28 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 // correlation coefficient between pairs of columns during table stats
 // collection. Instead, this is just a proxy obtained by estimating three values
 // for the selectivity of the filter constraining the given columns:
-// 1. lb (lower bound): the value returned by multiplying the individual
-//    conjunct selectivities together, estimated from single-column distinct
-//    counts. This would be the selectivity of the entire predicate if the
-//    columns were completely independent.
-// 2. ub (upper bound): the lowest single-conjunct selectivity estimated from
-//    single-column distinct counts. This would be the selectivity of the entire
-//    predicate if the columns were completely correlated. In other words, this
-//    would be the selectivity if the value of the column with the most
-//    selective predicate functionally determined the value of all other
-//    constrained columns.
-// 3. mc (multi-column selectivity): the value returned by estimating the
-//    predicate selectivity with a combination of single-column and multi-column
-//    distinct counts. It falls somewhere between upper and lower bound, and
-//    thus approximates the level of correlation of the columns.
+//  1. lb (lower bound): the value returned by multiplying the individual
+//     conjunct selectivities together, estimated from single-column distinct
+//     counts. This would be the selectivity of the entire predicate if the
+//     columns were completely independent.
+//  2. ub (upper bound): the lowest single-conjunct selectivity estimated from
+//     single-column distinct counts. This would be the selectivity of the entire
+//     predicate if the columns were completely correlated. In other words, this
+//     would be the selectivity if the value of the column with the most
+//     selective predicate functionally determined the value of all other
+//     constrained columns.
+//  3. mc (multi-column selectivity): the value returned by estimating the
+//     predicate selectivity with a combination of single-column and multi-column
+//     distinct counts. It falls somewhere between upper and lower bound, and
+//     thus approximates the level of correlation of the columns.
 //
 // The "correlation" returned by this function is thus:
-//   corr = (mc - lb) / (ub - lb)
+//
+//	corr = (mc - lb) / (ub - lb)
+//
 // where
-//   lb <= mc <= ub
+//
+//	lb <= mc <= ub
 //
 // This value will be used to refine the selectivity estimate from single-column
 // histograms, which do not contain information about column correlations.
@@ -4041,14 +4063,13 @@ func (sb *statisticsBuilder) selectivityFromNullsRemoved(
 // predicateSelectivity calculates the selectivity of a predicate, using the
 // following formula:
 //
-//   sel = (output row count) / (input row count)
+//	sel = (output row count) / (input row count)
 //
 // where
 //
-//   output row count =
-//     (fraction of non-null values preserved) * (number of non-null input rows) +
-//     (fraction of null values preserved) * (number of null input rows)
-//
+//	output row count =
+//	  (fraction of non-null values preserved) * (number of non-null input rows) +
+//	  (fraction of null values preserved) * (number of null input rows)
 func (sb *statisticsBuilder) predicateSelectivity(
 	nonNullSelectivity, nullSelectivity props.Selectivity, inputNullCount, inputRowCount float64,
 ) props.Selectivity {
@@ -4180,7 +4201,7 @@ func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 // and the determinant columns each have distinctCount = 1, we should consider
 // the implied correlations for selectivity calculation. Consider the query:
 //
-//   SELECT * FROM customer WHERE id = 123 and name = 'John Smith'
+//	SELECT * FROM customer WHERE id = 123 and name = 'John Smith'
 //
 // If id is the primary key of customer, then name is functionally determined
 // by id. We only need to consider the selectivity of id, not name, since id
@@ -4189,7 +4210,6 @@ func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
 // eliminating columns that can be functionally determined by other columns.
 // If the distinct count on all of these reduced columns is one, then we return
 // this reduced column set to be used for selectivity calculation.
-//
 func (sb *statisticsBuilder) tryReduceCols(
 	cols opt.ColSet, s *props.Statistics, fd *props.FuncDepSet,
 ) opt.ColSet {

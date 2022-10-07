@@ -3266,3 +3266,249 @@ union
       ├── columns: t85499.rowid:6(int!null)
       ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, avgsize(6)=4]
       └── key: (6)
+
+# Regression test for support issue #1821
+exec-ddl
+CREATE TABLE t1821 (
+    n INT8 NOT NULL,
+    a INT8 NULL,
+    b INT8 NULL,
+    c STRING NULL,
+    CONSTRAINT t1_pkey PRIMARY KEY (n ASC),
+    INDEX a_idx (a ASC),
+    INDEX b_idx (b ASC)
+)
+----
+
+exec-ddl
+ALTER TABLE t1821 INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "n"
+        ],
+        "created_at": "2022-09-28 15:29:12.909895",
+        "distinct_count": 199241,
+        "null_count": 0,
+        "row_count": 200000
+    },
+    {
+        "avg_size": 3,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2022-09-28 15:29:12.909895",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "-9223372036854775808"
+            },
+            {
+                "distinct_range": 7.275957614183426E-12,
+                "num_eq": 50000,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 417.004372929906,
+                "num_eq": 16,
+                "num_range": 150000,
+                "upper_bound": "200000"
+            },
+            {
+                "distinct_range": 7.275957614183426E-12,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "9223372036854775807"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 200000
+    },
+    {
+        "avg_size": 3,
+        "columns": [
+            "b"
+        ],
+        "created_at": "2022-09-28 15:29:12.909895",
+        "distinct_count": 100000,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "-9223372036854775808"
+            },
+            {
+                "distinct_range": 7.275957614183426E-12,
+                "num_eq": 50000,
+                "num_range": 0,
+                "upper_bound": "1"
+            },
+            {
+                "distinct_range": 417.004372929906,
+                "num_eq": 16,
+                "num_range": 150000,
+                "upper_bound": "200000"
+            },
+            {
+                "distinct_range": 7.275957614183426E-12,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "9223372036854775807"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 200000
+    },
+    {
+        "avg_size": 3,
+        "columns": [
+            "c"
+        ],
+        "created_at": "2022-09-28 15:29:12.909895",
+        "distinct_count": 1,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 200000,
+                "num_range": 0,
+                "upper_bound": "a"
+            }
+        ],
+        "histo_col_type": "STRING",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 200000
+    }
+]';
+----
+
+# Zig-zag join should not be picked due to high selectivity.
+opt
+SELECT count(*) FROM t1821 WHERE a = 1 AND b = 1
+----
+scalar-group-by
+ ├── columns: count:7(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── select
+ │    ├── columns: a:2(int!null) b:3(int!null)
+ │    ├── stats: [rows=29371.93, distinct(2)=1, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=6]
+ │    │   histogram(2)=  0 29372
+ │    │                <---- 1 -
+ │    │   histogram(3)=  0 29372
+ │    │                <---- 1 -
+ │    ├── fd: ()-->(2,3)
+ │    ├── scan t1821
+ │    │    ├── columns: a:2(int) b:3(int)
+ │    │    └── stats: [rows=200000, distinct(2)=100000, null(2)=0, avgsize(2)=3, distinct(3)=100000, null(3)=0, avgsize(3)=3, distinct(2,3)=200000, null(2,3)=0, avgsize(2,3)=6]
+ │    │        histogram(2)=  0           0            0 49996 1.4999e+05  15.999  0           0
+ │    │                     <--- -9223372036854775808 ---- 1 ------------- 200000 --- 9223372036854775807
+ │    │        histogram(3)=  0           0            0 49996 1.4999e+05  15.999  0           0
+ │    │                     <--- -9223372036854775808 ---- 1 ------------- 200000 --- 9223372036854775807
+ │    └── filters
+ │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ └── aggregations
+      └── count-rows [as=count_rows:7, type=int]
+
+# Zig-zag join plus index join should not be picked due to high selectivity.
+opt
+SELECT count(c) FROM t1821 WHERE a = 1 AND b = 1
+----
+scalar-group-by
+ ├── columns: count:7(int!null)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(7)
+ ├── select
+ │    ├── columns: a:2(int!null) b:3(int!null) c:4(string)
+ │    ├── stats: [rows=29371.93, distinct(2)=1, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=6]
+ │    │   histogram(2)=  0 29372
+ │    │                <---- 1 -
+ │    │   histogram(3)=  0 29372
+ │    │                <---- 1 -
+ │    ├── fd: ()-->(2,3)
+ │    ├── scan t1821
+ │    │    ├── columns: a:2(int) b:3(int) c:4(string)
+ │    │    └── stats: [rows=200000, distinct(2)=100000, null(2)=0, avgsize(2)=3, distinct(3)=100000, null(3)=0, avgsize(3)=3, distinct(2,3)=200000, null(2,3)=0, avgsize(2,3)=6]
+ │    │        histogram(2)=  0           0            0 49996 1.4999e+05  15.999  0           0
+ │    │                     <--- -9223372036854775808 ---- 1 ------------- 200000 --- 9223372036854775807
+ │    │        histogram(3)=  0           0            0 49996 1.4999e+05  15.999  0           0
+ │    │                     <--- -9223372036854775808 ---- 1 ------------- 200000 --- 9223372036854775807
+ │    └── filters
+ │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ └── aggregations
+      └── count [as=count:7, type=int, outer=(4)]
+           └── c:4 [type=string]
+
+# When the zig-zag join is covering, stats come from the Select group.
+opt
+SELECT 1 FROM t1821@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1
+----
+project
+ ├── columns: "?column?":7(int!null)
+ ├── stats: [rows=29371.93]
+ ├── fd: ()-->(7)
+ ├── inner-join (zigzag t1821@a_idx t1821@b_idx)
+ │    ├── columns: a:2(int!null) b:3(int!null)
+ │    ├── eq columns: [1] = [1]
+ │    ├── left fixed columns: [2] = [1]
+ │    ├── right fixed columns: [3] = [1]
+ │    ├── stats: [rows=29371.93, distinct(2)=1, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=6]
+ │    │   histogram(2)=  0 29372
+ │    │                <---- 1 -
+ │    │   histogram(3)=  0 29372
+ │    │                <---- 1 -
+ │    ├── fd: ()-->(2,3)
+ │    └── filters
+ │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+ └── projections
+      └── 1 [as="?column?":7, type=int]
+
+# When the zig-zag join is not covering and the stats come from memoizing the
+# zig-zag join, verify that the row count is the same as above.
+opt
+SELECT c FROM t1821@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1
+----
+project
+ ├── columns: c:4(string)
+ ├── stats: [rows=29371.93]
+ └── inner-join (lookup t1821)
+      ├── columns: a:2(int!null) b:3(int!null) c:4(string)
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── stats: [rows=29371.93, distinct(2)=1, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=6]
+      │   histogram(2)=  0 29372
+      │                <---- 1 -
+      │   histogram(3)=  0 29372
+      │                <---- 1 -
+      ├── fd: ()-->(2,3)
+      ├── inner-join (zigzag t1821@a_idx t1821@b_idx)
+      │    ├── columns: n:1(int!null) a:2(int!null) b:3(int!null)
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [2] = [1]
+      │    ├── right fixed columns: [3] = [1]
+      │    ├── stats: [rows=29371.93, distinct(2)=1, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=3, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=6]
+      │    │   histogram(2)=  0 29372
+      │    │                <---- 1 -
+      │    │   histogram(3)=  0 29372
+      │    │                <---- 1 -
+      │    ├── fd: ()-->(2,3)
+      │    └── filters
+      │         ├── a:2 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      │         └── b:3 = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+      └── filters (true)

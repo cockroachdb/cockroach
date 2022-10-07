@@ -2075,6 +2075,10 @@ select
  └── filters
       └── f:6 = 0.0 [type=bool, outer=(6), constraints=(/6: [/0.0 - /0.0]; tight), fd=()-->(6)]
 
+# Without stats with histograms, zig-zag join may not be chosen.
+# This is OK because it can be expensive when many rows are qualified.
+# This case shows less than 1 qualified row in the constrained scan of
+# multi_col@bef_idx, so it should beat zig-zag join.
 opt
 SELECT * FROM multi_col
 WHERE a = '37685f26-4b07-40ba-9bbf-42916ed9bc61'
@@ -2083,34 +2087,29 @@ AND d = 'foo'
 AND e = 5
 AND f = 0
 ----
-inner-join (lookup multi_col)
+select
  ├── columns: a:1(uuid!null) b:2(bool!null) c:3(int) d:4(string!null) e:5(int!null) f:6(float!null)
- ├── key columns: [7] = [7]
- ├── lookup columns are key
  ├── stats: [rows=0.9000001, distinct(1)=0.9, null(1)=0, avgsize(1)=1, distinct(2)=0.9, null(2)=0, avgsize(2)=2, distinct(4)=0.9, null(4)=0, avgsize(4)=4, distinct(5)=0.9, null(5)=0, avgsize(5)=5, distinct(6)=0.9, null(6)=0, avgsize(6)=6, distinct(1,2,4-6)=0.9, null(1,2,4-6)=0, avgsize(1,2,4-6)=18]
  │   histogram(2)=  0   0.9
  │                <--- false
  │   histogram(4)=  0   0.9
  │                <--- 'foo'
  ├── fd: ()-->(1,2,4-6)
- ├── inner-join (zigzag multi_col@bad_idx multi_col@bef_idx)
- │    ├── columns: a:1(uuid!null) b:2(bool!null) d:4(string!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
- │    ├── eq columns: [7] = [7]
- │    ├── left fixed columns: [2 1 4] = [false '37685f26-4b07-40ba-9bbf-42916ed9bc61' 'foo']
- │    ├── right fixed columns: [2 5 6] = [false 5 0.0]
- │    ├── stats: [rows=0.9000001, distinct(1)=0.9, null(1)=0, avgsize(1)=1, distinct(2)=0.9, null(2)=0, avgsize(2)=2, distinct(4)=0.9, null(4)=0, avgsize(4)=4, distinct(5)=0.9, null(5)=0, avgsize(5)=5, distinct(6)=0.9, null(6)=0, avgsize(6)=6, distinct(1,2,4-6)=0.9, null(1,2,4-6)=0, avgsize(1,2,4-6)=18]
- │    │   histogram(2)=  0   0.9
- │    │                <--- false
- │    │   histogram(4)=  0   0.9
- │    │                <--- 'foo'
- │    ├── fd: ()-->(1,2,4-6)
- │    └── filters
- │         ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
- │         ├── NOT b:2 [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
- │         ├── d:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- │         ├── e:5 = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
- │         └── f:6 = 0.0 [type=bool, outer=(6), constraints=(/6: [/0.0 - /0.0]; tight), fd=()-->(6)]
- └── filters (true)
+ ├── index-join multi_col
+ │    ├── columns: a:1(uuid) b:2(bool) c:3(int) d:4(string) e:5(int) f:6(float)
+ │    ├── stats: [rows=0.501576]
+ │    ├── fd: ()-->(2,5,6)
+ │    └── scan multi_col@bef_idx
+ │         ├── columns: b:2(bool!null) e:5(int!null) f:6(float!null) rowid:7(int!null)
+ │         ├── constraint: /2/5/6/7: [/false/5/0.0 - /false/5/0.0]
+ │         ├── stats: [rows=0.501576, distinct(2)=0.501576, null(2)=0, avgsize(2)=2, distinct(5)=0.501576, null(5)=0, avgsize(5)=5, distinct(6)=0.501576, null(6)=0, avgsize(6)=6, distinct(2,5,6)=0.501576, null(2,5,6)=0, avgsize(2,5,6)=12]
+ │         │   histogram(2)=  0 0.50158
+ │         │                <--- false
+ │         ├── key: (7)
+ │         └── fd: ()-->(2,5,6)
+ └── filters
+      ├── a:1 = '37685f26-4b07-40ba-9bbf-42916ed9bc61' [type=bool, outer=(1), constraints=(/1: [/'37685f26-4b07-40ba-9bbf-42916ed9bc61' - /'37685f26-4b07-40ba-9bbf-42916ed9bc61']; tight), fd=()-->(1)]
+      └── d:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # Regression test for #50409.
 exec-ddl

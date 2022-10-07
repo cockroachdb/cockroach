@@ -936,6 +936,70 @@ vectorized: true
               table: d@foo_inv
               spans: /"a"/{}-/"a"/{}/PrefixEnd /???-/??? /"b"/{}-/"b"/{}/PrefixEnd /???-/???
 
+# Stats reflect the following, with some histogram buckets removed:
+# insert into d select g, '[1,2]' from generate_series(1,1000) g(g);
+# insert into d select g, '[[1, 2]]' from generate_series(1001,50000) g(g);
+# insert into d select g, '[1,3]' from generate_series(100001,200000) g(g);
+# analyze d;
+
+statement ok
+ALTER TABLE d INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "a"
+        ],
+        "created_at": "2022-10-04 15:11:25.779551",
+        "distinct_count": 101000,
+        "null_count": 0,
+        "row_count": 101000
+    },
+    {
+        "avg_size": 26,
+        "columns": [
+            "b"
+        ],
+        "created_at": "2022-10-04 15:11:25.779551",
+        "distinct_count": 3,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 100680,
+                "num_range": 0,
+                "upper_bound": "\\x37000300012a0200"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 1020,
+                "num_range": 0,
+                "upper_bound": "\\x37000300012a0400"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 99900,
+                "num_range": 0,
+                "upper_bound": "\\x37000300012a0600"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 49980,
+                "num_range": 0,
+                "upper_bound": "\\x370003000300012a0200"
+            },
+            {
+                "distinct_range": 0,
+                "num_eq": 48420,
+                "num_range": 0,
+                "upper_bound": "\\x370003000300012a0400"
+            }
+        ],
+        "histo_col_type": "BYTES",
+        "histo_version": 2,
+        "null_count": 0,
+        "row_count": 101000
+    }
+]';
+
 # Filter with a fully-specified array. This should use a zigzag join.
 query T
 EXPLAIN SELECT a FROM d WHERE b @> '[1, 2]' ORDER BY a
@@ -944,15 +1008,18 @@ distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 1,247
 │ order: +a
 │
 └── • lookup join
+    │ estimated row count: 1,247
     │ table: d@d_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> '[1, 2]'
     │
     └── • zigzag join
+          estimated row count: 1,247
           left table: d@foo_inv
           left columns: (a)
           left fixed values: 1 column
@@ -969,15 +1036,18 @@ distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 1,247
 │ order: +a
 │
 └── • lookup join
+    │ estimated row count: 1,247
     │ table: d@d_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b @> '[1]') AND (b @> '[2]')
     │
     └── • zigzag join
+          estimated row count: 1,247
           left table: d@foo_inv
           left columns: (a)
           left fixed values: 1 column
@@ -994,15 +1064,18 @@ distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 1,247
 │ order: +a
 │
 └── • lookup join
+    │ estimated row count: 1,247
     │ table: d@d_pkey
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b @> '[[1, 2]]'
     │
     └── • zigzag join
+          estimated row count: 1,247
           left table: d@foo_inv
           left columns: (a)
           left fixed values: 1 column
@@ -1260,22 +1333,23 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
+│ estimated row count: 33,667
 │ filter: b <@ '[]'
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 111 (missing stats)
+    │ estimated row count: 0
     │ table: d@d_pkey
     │ key columns: a
     │
     └── • scan
           columns: (a)
-          estimated row count: 111 (missing stats)
+          estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
           table: d@foo_inv
           spans: /[]-/{}
 
-
+# Stats now include many entries with column b value '[[1, 2]]', so full scan
+# is cheaper.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[1, 2]'
 ----
@@ -1284,29 +1358,14 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
+│ estimated row count: 33,667
 │ filter: b <@ '[1, 2]'
 │
-└── • index join
-    │ columns: (a, b)
-    │ estimated row count: 111 (missing stats)
-    │ table: d@d_pkey
-    │ key columns: a
-    │
-    └── • project
-        │ columns: (a)
-        │ estimated row count: 111 (missing stats)
-        │
-        └── • inverted filter
-            │ columns: (a, b_inverted_key)
-            │ inverted column: b_inverted_key
-            │ num spans: 5
-            │
-            └── • scan
-                  columns: (a, b_inverted_key)
-                  estimated row count: 111 (missing stats)
-                  table: d@foo_inv
-                  spans: /1-/1/PrefixEnd /2-/2/PrefixEnd /[]-/{} /Arr/1-/Arr/1/PrefixEnd /Arr/2-/Arr/2/PrefixEnd
+└── • scan
+      columns: (a, b)
+      estimated row count: 101,000 (100% of the table; stats collected <hidden> ago)
+      table: d@d_pkey
+      spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '{}'
@@ -1316,18 +1375,18 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
+│ estimated row count: 33,667
 │ filter: b <@ '{}'
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 111 (missing stats)
+    │ estimated row count: 0
     │ table: d@d_pkey
     │ key columns: a
     │
     └── • scan
           columns: (a)
-          estimated row count: 111 (missing stats)
+          estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
           table: d@foo_inv
           spans: /{}-/{}/PrefixEnd
 
@@ -1339,18 +1398,18 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
+│ estimated row count: 33,667
 │ filter: b <@ '{"a": "b"}'
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 111 (missing stats)
+    │ estimated row count: 0
     │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
+        │ estimated row count: 0
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -1359,7 +1418,7 @@ vectorized: true
             │
             └── • scan
                   columns: (a, b_inverted_key)
-                  estimated row count: 111 (missing stats)
+                  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
                   table: d@foo_inv
                   spans: /{}-/{}/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd
 
@@ -1371,18 +1430,18 @@ vectorized: true
 ·
 • filter
 │ columns: (a, b)
-│ estimated row count: 333 (missing stats)
+│ estimated row count: 33,667
 │ filter: b <@ '[{"a": "b"}, {"c": {"d": ["e"]}}, "f"]'
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 111 (missing stats)
+    │ estimated row count: 0
     │ table: d@d_pkey
     │ key columns: a
     │
     └── • project
         │ columns: (a)
-        │ estimated row count: 111 (missing stats)
+        │ estimated row count: 0
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
@@ -1391,7 +1450,7 @@ vectorized: true
             │
             └── • scan
                   columns: (a, b_inverted_key)
-                  estimated row count: 111 (missing stats)
+                  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
                   table: d@foo_inv
                   spans: /"f"-/"f"/PrefixEnd /[]-/{} /Arr/"f"-/Arr/"f"/PrefixEnd /Arr/{}-/Arr/{}/PrefixEnd /Arr/"a"/"b"-/Arr/"a"/"b"/PrefixEnd /Arr/"c"/{}-/Arr/"c"/{}/PrefixEnd /Arr/"c"/"d"/[]-/Arr/"c"/"d"/{} /Arr/"c"/"d"/Arr/"e"-/Arr/"c"/"d"/Arr/"e"/PrefixEnd
 
