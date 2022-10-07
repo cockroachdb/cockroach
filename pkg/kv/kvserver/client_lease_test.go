@@ -267,10 +267,10 @@ func TestCannotTransferLeaseToVoterDemoting(t *testing.T) {
 	})
 }
 
-// TestTransferLeaseToVoterOutgoingWithIncoming ensures that the evaluation of lease
-// requests for nodes which are already in the VOTER_DEMOTING_LEARNER state succeeds
-// when there is a VOTER_INCOMING node.
-func TestTransferLeaseToVoterDemotingWithIncoming(t *testing.T) {
+// TestTransferLeaseToVoterDemotingFails ensures that the evaluation of lease
+// requests for nodes which are already in the VOTER_DEMOTING_LEARNER state fails
+// if they weren't previously holding the lease, even if there is a VOTER_INCOMING..
+func TestTransferLeaseToVoterDemotingFails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -320,8 +320,8 @@ func TestTransferLeaseToVoterDemotingWithIncoming(t *testing.T) {
 	//  - Send an AdminChangeReplicasRequest to remove n3 and add n4
 	//  - Block the step that moves n3 to VOTER_DEMOTING_LEARNER on changeReplicasChan
 	//  - Send an AdminLeaseTransfer to make n3 the leaseholder
-	//  - Try really hard to make sure that the lease transfer at least gets to
-	//    latch acquisition before unblocking the ChangeReplicas.
+	//  - Make sure that this request fails (since n3 is VOTER_DEMOTING_LEARNER and
+	//    wasn't previously leaseholder)
 	//  - Unblock the ChangeReplicas.
 	//  - Make sure the lease transfer succeeds.
 
@@ -348,15 +348,17 @@ func TestTransferLeaseToVoterDemotingWithIncoming(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.Target(0), leaseHolder,
 				errors.Errorf("Leaseholder supposed to be on n1."))
-			// Move the lease to n3, the VOTER_DEMOTING_LEARNER.
+			// Try to move the lease to n3, the VOTER_DEMOTING_LEARNER.
+			// This should fail since the last leaseholder wasn't n3
+			// (wasLastLeaseholder = false in CheckCanReceiveLease).
 			err = tc.Server(0).DB().AdminTransferLease(context.Background(),
 				scratchStartKey, tc.Target(2).StoreID)
-			require.NoError(t, err)
-			// Make sure the lease moved to n3.
+			require.EqualError(t, err, `replica cannot hold lease`)
+			// Make sure the lease is still on n1.
 			leaseHolder, err = tc.FindRangeLeaseHolder(desc, nil)
 			require.NoError(t, err)
-			require.Equal(t, tc.Target(2), leaseHolder,
-				errors.Errorf("Leaseholder supposed to be on n3."))
+			require.Equal(t, tc.Target(0), leaseHolder,
+				errors.Errorf("Leaseholder supposed to be on n1."))
 		}()
 		// Try really hard to make sure that our request makes it past the
 		// sanity check error to the evaluation error.
@@ -369,7 +371,7 @@ func TestTransferLeaseToVoterDemotingWithIncoming(t *testing.T) {
 	})
 }
 
-// TestTransferLeaseFailureDuringJointConfig reproduces
+// internalTransferLeaseFailureDuringJointConfig reproduces
 // https://github.com/cockroachdb/cockroach/issues/83687
 // and makes sure that if lease transfer fails during a joint configuration
 // the previous leaseholder will successfully re-aquire the lease.
@@ -385,10 +387,9 @@ func TestTransferLeaseToVoterDemotingWithIncoming(t *testing.T) {
 //   - We re-enable lease transfers on this range.
 //   - n1 is able to re-aquire the lease, due to the fix in #83686 which enables a
 //     VOTER_DEMOTING_LEARNER (n1) replica to get the lease if there's also a VOTER_INCOMING
-//     which is the case here (n4).
+//     which is the case here (n4) and since n1 was the last leaseholder.
 //   - n1 transfers the lease away and the range leaves the joint configuration.
-func TestTransferLeaseFailureDuringJointConfig(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
@@ -439,7 +440,22 @@ func TestTransferLeaseFailureDuringJointConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, desc.Replicas().InAtomicReplicationChange())
 
-	// Further lease transfers should succeed, allowing the atomic replication change to complete.
+	// Allow further lease transfers to succeed.
+	atomic.StoreInt64(&scratchRangeID, 0)
+
+	if isManual {
+		// Manually transfer the lease to n1 (VOTER_DEMOTING_LEARNER).
+		err = tc.Server(0).DB().AdminTransferLease(context.Background(),
+			scratchStartKey, tc.Target(0).StoreID)
+		require.NoError(t, err)
+		// Make sure n1 has the lease
+		leaseHolder, err := tc.FindRangeLeaseHolder(desc, nil)
+		require.NoError(t, err)
+		require.Equal(t, tc.Target(0), leaseHolder,
+			errors.Errorf("Leaseholder supposed to be on n1."))
+	}
+
+	// Complete the replication change.
 	atomic.StoreInt64(&scratchRangeID, 0)
 	store := tc.GetFirstStoreFromServer(t, 0)
 	repl := store.LookupReplica(roachpb.RKey(scratchStartKey))
@@ -450,6 +466,24 @@ func TestTransferLeaseFailureDuringJointConfig(t *testing.T) {
 	desc, err = tc.LookupRange(scratchStartKey)
 	require.NoError(t, err)
 	require.False(t, desc.Replicas().InAtomicReplicationChange())
+}
+
+// TestTransferLeaseFailureDuringJointConfig is using
+// internalTransferLeaseFailureDuringJointConfig and
+// completes the lease transfer to n1 “automatically”
+// by relying on replicate queue.
+func TestTransferLeaseFailureDuringJointConfigAuto(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	internalTransferLeaseFailureDuringJointConfig(t, false)
+}
+
+// TestTransferLeaseFailureDuringJointConfigManual is using
+// internalTransferLeaseFailureDuringJointConfig and
+// completes the lease transfer to n1 “manually” using
+// AdminTransferLease.
+func TestTransferLeaseFailureDuringJointConfigManual(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	internalTransferLeaseFailureDuringJointConfig(t, true)
 }
 
 // TestStoreLeaseTransferTimestampCacheRead verifies that the timestamp cache on
