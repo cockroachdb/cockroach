@@ -2532,3 +2532,10 @@ DROP FUNCTION f_test_exec_dropped;
 
 statement error pq: unknown function: f_test_exec_dropped\(\): function undefined
 SELECT f_test_exec_dropped(321);
+
+
+subtest variadic
+
+# Variadic UDFS are not currently supported.
+statement error pgcode 0A000 unimplemented: this syntax\nHINT.*\n.*88947
+CREATE FUNCTION rec(VARIADIC arr INT[]) RETURNS INT LANGUAGE SQL AS '1'
