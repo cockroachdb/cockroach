@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -27,12 +28,14 @@ type filterNode struct {
 	reqOrdering ReqOrdering
 }
 
-// filterNode implements tree.IndexedVarContainer
-var _ tree.IndexedVarContainer = &filterNode{}
+// filterNode implements eval.IndexedVarContainer
+var _ eval.IndexedVarContainer = &filterNode{}
 
-// IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
-	return f.source.plan.Values()[idx].Eval(e)
+// IndexedVarEval implements the eval.IndexedVarContainer interface.
+func (f *filterNode) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
+	return f.source.plan.Values()[idx].Eval(ctx, e)
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.

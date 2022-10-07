@@ -9,6 +9,8 @@
 package streamproducer
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -24,16 +26,20 @@ type replicationStreamManagerImpl struct{}
 
 // StartReplicationStream implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StartReplicationStream(
-	evalCtx *eval.Context, txn *kv.Txn, tenantID uint64,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, tenantID uint64,
 ) (streaming.StreamID, error) {
-	return startReplicationStreamJob(evalCtx, txn, tenantID)
+	return startReplicationStreamJob(ctx, evalCtx, txn, tenantID)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) HeartbeatReplicationStream(
-	evalCtx *eval.Context, streamID streaming.StreamID, frontier hlc.Timestamp, txn *kv.Txn,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	streamID streaming.StreamID,
+	frontier hlc.Timestamp,
+	txn *kv.Txn,
 ) (streampb.StreamReplicationStatus, error) {
-	return heartbeatReplicationStream(evalCtx, streamID, frontier, txn)
+	return heartbeatReplicationStream(ctx, evalCtx, streamID, frontier, txn)
 }
 
 // StreamPartition implements streaming.ReplicationStreamManager interface.
@@ -43,24 +49,28 @@ func (r *replicationStreamManagerImpl) StreamPartition(
 	return streamPartition(evalCtx, streamID, opaqueSpec)
 }
 
-// GetReplicationStreamSpec implements ReplicationStreamManager interface.
+// GetReplicationStreamSpec implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
-	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
-	return getReplicationStreamSpec(evalCtx, txn, streamID)
+	return getReplicationStreamSpec(ctx, evalCtx, txn, streamID)
 }
 
 // CompleteReplicationStream implements ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) CompleteReplicationStream(
-	evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID, successfulIngestion bool,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	streamID streaming.StreamID,
+	successfulIngestion bool,
 ) error {
-	return completeReplicationStream(evalCtx, txn, streamID, successfulIngestion)
+	return completeReplicationStream(ctx, evalCtx, txn, streamID, successfulIngestion)
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
-	evalCtx *eval.Context,
+	ctx context.Context, evalCtx *eval.Context,
 ) (streaming.ReplicationStreamManager, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(evalCtx.Context)
+	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
 	}

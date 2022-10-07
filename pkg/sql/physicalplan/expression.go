@@ -14,6 +14,8 @@
 package physicalplan
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,18 +58,18 @@ func (fakeExprContext) IsLocal() bool {
 //
 // ctx can be nil in which case a fakeExprCtx will be used.
 func MakeExpression(
-	expr tree.TypedExpr, ctx ExprContext, indexVarMap []int,
+	ctx context.Context, expr tree.TypedExpr, exprContext ExprContext, indexVarMap []int,
 ) (execinfrapb.Expression, error) {
 	if expr == nil {
 		return execinfrapb.Expression{}, nil
 	}
-	if ctx == nil {
-		ctx = &fakeExprContext{}
+	if exprContext == nil {
+		exprContext = &fakeExprContext{}
 	}
 
 	// Always replace the subqueries with their results (they must have been
 	// executed before the main query).
-	evalCtx := ctx.EvalContext()
+	evalCtx := exprContext.EvalContext()
 	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
 		evalCtx: evalCtx,
 	}
@@ -82,15 +84,15 @@ func MakeExpression(
 		expr = RemapIVarsInTypedExpr(expr, indexVarMap)
 	}
 	expression := execinfrapb.Expression{LocalExpr: expr}
-	if ctx.IsLocal() {
+	if exprContext.IsLocal() {
 		return expression, nil
 	}
 
 	// Since the plan is not fully local, serialize the expression.
-	fmtCtx := execinfrapb.ExprFmtCtxBase(evalCtx)
+	fmtCtx := execinfrapb.ExprFmtCtxBase(ctx, evalCtx)
 	fmtCtx.FormatNode(expr)
 	if log.V(1) {
-		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
+		log.Infof(ctx, "Expr %s:\n%s", fmtCtx.String(), tree.ExprDebugString(expr))
 	}
 	expression.Expr = fmtCtx.CloseAndGetString()
 	return expression, nil

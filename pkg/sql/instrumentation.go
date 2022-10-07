@@ -265,7 +265,7 @@ func (ih *instrumentationHelper) Setup(
 			ih.traceMetadata = make(execNodeTraceMetadata)
 		}
 		// Make sure that the builtins use the correct context.
-		ih.evalCtx.Context = newCtx
+		ih.evalCtx.SetDeprecatedContext(newCtx)
 	}()
 
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
@@ -712,7 +712,7 @@ func (ih *instrumentationHelper) SetIndexRecommendations(
 	) {
 		f := opc.optimizer.Factory()
 		evalCtx := opc.p.EvalContext()
-		f.Init(evalCtx, &opc.catalog)
+		f.Init(ctx, evalCtx, &opc.catalog)
 		f.FoldingControl().AllowStableFolds()
 		bld := optbuilder.New(ctx, &opc.p.semaCtx, evalCtx, &opc.catalog, f, opc.p.stmt.AST)
 		err := bld.Build()

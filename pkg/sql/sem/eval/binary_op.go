@@ -11,6 +11,7 @@
 package eval
 
 import (
+	"context"
 	"math"
 	"time"
 
@@ -32,23 +33,27 @@ import (
 )
 
 // BinaryOp evaluates a tree.BinaryEvalOp.
-func BinaryOp(ctx *Context, op tree.BinaryEvalOp, left, right tree.Datum) (tree.Datum, error) {
-	return op.Eval((*evaluator)(ctx), left, right)
+func BinaryOp(
+	ctx context.Context, evalCtx *Context, op tree.BinaryEvalOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	return op.Eval(ctx, (*evaluator)(evalCtx), left, right)
 }
 
 func (e *evaluator) EvalAppendToMaybeNullArrayOp(
-	op *tree.AppendToMaybeNullArrayOp, a, b tree.Datum,
+	ctx context.Context, op *tree.AppendToMaybeNullArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	return tree.AppendToMaybeNullArray(op.Typ, a, b)
 }
 
 func (e *evaluator) EvalArrayOverlapsOp(
-	_ *tree.OverlapsArrayOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.OverlapsArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	return tree.ArrayOverlaps(e.ctx(), tree.MustBeDArray(a), tree.MustBeDArray(b))
 }
 
-func (e *evaluator) EvalBitAndINetOp(_ *tree.BitAndINetOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalBitAndINetOp(
+	ctx context.Context, _ *tree.BitAndINetOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	ipAddr := tree.MustBeDIPAddr(a).IPAddr
 	other := tree.MustBeDIPAddr(b).IPAddr
 	newIPAddr, err := ipAddr.And(&other)
@@ -57,12 +62,14 @@ func (e *evaluator) EvalBitAndINetOp(_ *tree.BitAndINetOp, a, b tree.Datum) (tre
 	}), err
 }
 
-func (e *evaluator) EvalBitAndIntOp(_ *tree.BitAndIntOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalBitAndIntOp(
+	ctx context.Context, _ *tree.BitAndIntOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	return tree.NewDInt(tree.MustBeDInt(a) & tree.MustBeDInt(b)), nil
 }
 
 func (e *evaluator) EvalBitAndVarBitOp(
-	_ *tree.BitAndVarBitOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.BitAndVarBitOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	lhs := tree.MustBeDBitArray(a)
 	rhs := tree.MustBeDBitArray(b)
@@ -74,7 +81,9 @@ func (e *evaluator) EvalBitAndVarBitOp(
 	}, nil
 }
 
-func (e *evaluator) EvalBitOrINetOp(_ *tree.BitOrINetOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalBitOrINetOp(
+	ctx context.Context, _ *tree.BitOrINetOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	ipAddr := tree.MustBeDIPAddr(a).IPAddr
 	other := tree.MustBeDIPAddr(b).IPAddr
 	newIPAddr, err := ipAddr.Or(&other)
@@ -83,11 +92,15 @@ func (e *evaluator) EvalBitOrINetOp(_ *tree.BitOrINetOp, a, b tree.Datum) (tree.
 	}), err
 }
 
-func (e *evaluator) EvalBitOrIntOp(_ *tree.BitOrIntOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalBitOrIntOp(
+	ctx context.Context, _ *tree.BitOrIntOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	return tree.NewDInt(tree.MustBeDInt(a) | tree.MustBeDInt(b)), nil
 }
 
-func (e *evaluator) EvalBitOrVarBitOp(_ *tree.BitOrVarBitOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalBitOrVarBitOp(
+	ctx context.Context, _ *tree.BitOrVarBitOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	lhs := tree.MustBeDBitArray(a)
 	rhs := tree.MustBeDBitArray(b)
 	if lhs.BitLen() != rhs.BitLen() {
@@ -98,12 +111,14 @@ func (e *evaluator) EvalBitOrVarBitOp(_ *tree.BitOrVarBitOp, a, b tree.Datum) (t
 	}, nil
 }
 
-func (e *evaluator) EvalBitXorIntOp(_ *tree.BitXorIntOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalBitXorIntOp(
+	ctx context.Context, _ *tree.BitXorIntOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	return tree.NewDInt(tree.MustBeDInt(a) ^ tree.MustBeDInt(b)), nil
 }
 
 func (e *evaluator) EvalBitXorVarBitOp(
-	_ *tree.BitXorVarBitOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.BitXorVarBitOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	lhs := tree.MustBeDBitArray(a)
 	rhs := tree.MustBeDBitArray(b)
@@ -116,7 +131,7 @@ func (e *evaluator) EvalBitXorVarBitOp(
 }
 
 func (e *evaluator) EvalCompareBox2DOp(
-	op *tree.CompareBox2DOp, left, right tree.Datum,
+	ctx context.Context, op *tree.CompareBox2DOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	if err := checkExperimentalBox2DComparisonOperatorEnabled(e.Settings); err != nil {
 		return nil, err
@@ -125,7 +140,7 @@ func (e *evaluator) EvalCompareBox2DOp(
 }
 
 func (e *evaluator) EvalCompareScalarOp(
-	op *tree.CompareScalarOp, left, right tree.Datum,
+	ctx context.Context, op *tree.CompareScalarOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	// Before deferring to the Datum.Compare method, check for values that should
 	// be handled differently during SQL comparison evaluation than they should when
@@ -148,7 +163,7 @@ func (e *evaluator) EvalCompareScalarOp(
 }
 
 func (e *evaluator) EvalCompareTupleOp(
-	op *tree.CompareTupleOp, leftDatum, rightDatum tree.Datum,
+	ctx context.Context, op *tree.CompareTupleOp, leftDatum, rightDatum tree.Datum,
 ) (tree.Datum, error) {
 	left, right := leftDatum.(*tree.DTuple), rightDatum.(*tree.DTuple)
 	cmp := 0
@@ -199,14 +214,16 @@ func (e *evaluator) EvalCompareTupleOp(
 }
 
 func (e *evaluator) EvalConcatArraysOp(
-	op *tree.ConcatArraysOp, a, b tree.Datum,
+	ctx context.Context, op *tree.ConcatArraysOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	return tree.ConcatArrays(op.Typ, a, b)
 }
 
-func (e *evaluator) EvalConcatOp(op *tree.ConcatOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalConcatOp(
+	ctx context.Context, op *tree.ConcatOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	if op.Left == types.String {
-		casted, err := PerformCast(e.ctx(), right, types.String)
+		casted, err := PerformCast(ctx, e.ctx(), right, types.String)
 		if err != nil {
 			return nil, err
 		}
@@ -215,7 +232,7 @@ func (e *evaluator) EvalConcatOp(op *tree.ConcatOp, left, right tree.Datum) (tre
 		), nil
 	}
 	if op.Right == types.String {
-		casted, err := PerformCast(e.ctx(), left, types.String)
+		casted, err := PerformCast(ctx, e.ctx(), left, types.String)
 		if err != nil {
 			return nil, err
 		}
@@ -227,13 +244,13 @@ func (e *evaluator) EvalConcatOp(op *tree.ConcatOp, left, right tree.Datum) (tre
 }
 
 func (e *evaluator) EvalConcatBytesOp(
-	_ *tree.ConcatBytesOp, left tree.Datum, right tree.Datum,
+	ctx context.Context, _ *tree.ConcatBytesOp, left tree.Datum, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.NewDBytes(*left.(*tree.DBytes) + *right.(*tree.DBytes)), nil
 }
 
 func (e *evaluator) EvalConcatJsonbOp(
-	_ *tree.ConcatJsonbOp, left tree.Datum, right tree.Datum,
+	ctx context.Context, _ *tree.ConcatJsonbOp, left tree.Datum, right tree.Datum,
 ) (tree.Datum, error) {
 	j, err := tree.MustBeDJSON(left).JSON.Concat(
 		tree.MustBeDJSON(right).JSON,
@@ -245,7 +262,7 @@ func (e *evaluator) EvalConcatJsonbOp(
 }
 
 func (e *evaluator) EvalConcatStringOp(
-	_ *tree.ConcatStringOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.ConcatStringOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.NewDString(
 		string(tree.MustBeDString(left) + tree.MustBeDString(right)),
@@ -254,7 +271,7 @@ func (e *evaluator) EvalConcatStringOp(
 }
 
 func (e *evaluator) EvalConcatVarBitOp(
-	_ *tree.ConcatVarBitOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.ConcatVarBitOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	lhs := tree.MustBeDBitArray(left)
 	rhs := tree.MustBeDBitArray(right)
@@ -264,7 +281,7 @@ func (e *evaluator) EvalConcatVarBitOp(
 }
 
 func (e *evaluator) EvalContainedByArrayOp(
-	_ *tree.ContainedByArrayOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.ContainedByArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	needles := tree.MustBeDArray(a)
 	haystack := tree.MustBeDArray(b)
@@ -272,7 +289,7 @@ func (e *evaluator) EvalContainedByArrayOp(
 }
 
 func (e *evaluator) EvalContainedByJsonbOp(
-	_ *tree.ContainedByJsonbOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.ContainedByJsonbOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	c, err := json.Contains(b.(*tree.DJSON).JSON, a.(*tree.DJSON).JSON)
 	if err != nil {
@@ -282,7 +299,7 @@ func (e *evaluator) EvalContainedByJsonbOp(
 }
 
 func (e *evaluator) EvalContainsArrayOp(
-	_ *tree.ContainsArrayOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.ContainsArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	haystack := tree.MustBeDArray(a)
 	needles := tree.MustBeDArray(b)
@@ -290,7 +307,7 @@ func (e *evaluator) EvalContainsArrayOp(
 }
 
 func (e *evaluator) EvalContainsJsonbOp(
-	_ *tree.ContainsJsonbOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.ContainsJsonbOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	c, err := json.Contains(a.(*tree.DJSON).JSON, b.(*tree.DJSON).JSON)
 	if err != nil {
@@ -300,7 +317,7 @@ func (e *evaluator) EvalContainsJsonbOp(
 }
 
 func (e *evaluator) EvalDivDecimalIntOp(
-	_ *tree.DivDecimalIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.DivDecimalIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
@@ -314,7 +331,7 @@ func (e *evaluator) EvalDivDecimalIntOp(
 }
 
 func (e *evaluator) EvalDivDecimalOp(
-	_ *tree.DivDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.DivDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
@@ -326,7 +343,9 @@ func (e *evaluator) EvalDivDecimalOp(
 	return dd, err
 }
 
-func (e *evaluator) EvalDivFloatOp(_ *tree.DivFloatOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalDivFloatOp(
+	ctx context.Context, _ *tree.DivFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	r := *right.(*tree.DFloat)
 	if r == 0.0 {
 		return nil, tree.ErrDivByZero
@@ -335,7 +354,7 @@ func (e *evaluator) EvalDivFloatOp(_ *tree.DivFloatOp, left, right tree.Datum) (
 }
 
 func (e *evaluator) EvalDivIntDecimalOp(
-	_ *tree.DivIntDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.DivIntDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := tree.MustBeDInt(left)
 	r := &right.(*tree.DDecimal).Decimal
@@ -348,7 +367,9 @@ func (e *evaluator) EvalDivIntDecimalOp(
 	return dd, err
 }
 
-func (e *evaluator) EvalDivIntOp(_ *tree.DivIntOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalDivIntOp(
+	ctx context.Context, _ *tree.DivIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	rInt := tree.MustBeDInt(right)
 	if rInt == 0 {
 		return nil, tree.ErrDivByZero
@@ -362,7 +383,7 @@ func (e *evaluator) EvalDivIntOp(_ *tree.DivIntOp, left, right tree.Datum) (tree
 }
 
 func (e *evaluator) EvalDivIntervalFloatOp(
-	_ *tree.DivIntervalFloatOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.DivIntervalFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	r := float64(*right.(*tree.DFloat))
 	if r == 0.0 {
@@ -374,7 +395,7 @@ func (e *evaluator) EvalDivIntervalFloatOp(
 }
 
 func (e *evaluator) EvalDivIntervalIntOp(
-	_ *tree.DivIntervalIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.DivIntervalIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	rInt := tree.MustBeDInt(right)
 	if rInt == 0 {
@@ -386,7 +407,7 @@ func (e *evaluator) EvalDivIntervalIntOp(
 }
 
 func (e *evaluator) EvalFloorDivDecimalIntOp(
-	_ *tree.FloorDivDecimalIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.FloorDivDecimalIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
@@ -400,7 +421,7 @@ func (e *evaluator) EvalFloorDivDecimalIntOp(
 }
 
 func (e *evaluator) EvalFloorDivDecimalOp(
-	_ *tree.FloorDivDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.FloorDivDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
@@ -413,7 +434,7 @@ func (e *evaluator) EvalFloorDivDecimalOp(
 }
 
 func (e *evaluator) EvalFloorDivFloatOp(
-	_ *tree.FloorDivFloatOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.FloorDivFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := float64(*left.(*tree.DFloat))
 	r := float64(*right.(*tree.DFloat))
@@ -424,7 +445,7 @@ func (e *evaluator) EvalFloorDivFloatOp(
 }
 
 func (e *evaluator) EvalFloorDivIntDecimalOp(
-	_ *tree.FloorDivIntDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.FloorDivIntDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := tree.MustBeDInt(left)
 	r := &right.(*tree.DDecimal).Decimal
@@ -438,7 +459,7 @@ func (e *evaluator) EvalFloorDivIntDecimalOp(
 }
 
 func (e *evaluator) EvalFloorDivIntOp(
-	_ *tree.FloorDivIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.FloorDivIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	rInt := tree.MustBeDInt(right)
 	if rInt == 0 {
@@ -447,7 +468,9 @@ func (e *evaluator) EvalFloorDivIntOp(
 	return tree.NewDInt(tree.MustBeDInt(left) / rInt), nil
 }
 
-func (e *evaluator) EvalInTupleOp(_ *tree.InTupleOp, arg, values tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalInTupleOp(
+	ctx context.Context, _ *tree.InTupleOp, arg, values tree.Datum,
+) (tree.Datum, error) {
 	vtuple := values.(*tree.DTuple)
 	// If the tuple was sorted during normalization, we can perform an
 	// efficient binary search to find if the arg is in the tuple (as
@@ -509,7 +532,7 @@ func (e *evaluator) EvalInTupleOp(_ *tree.InTupleOp, arg, values tree.Datum) (tr
 }
 
 func (e *evaluator) EvalJSONAllExistsOp(
-	_ *tree.JSONAllExistsOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.JSONAllExistsOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	// TODO(justin): this can be optimized.
 	for _, k := range tree.MustBeDArray(b).Array {
@@ -527,7 +550,9 @@ func (e *evaluator) EvalJSONAllExistsOp(
 	return tree.DBoolTrue, nil
 }
 
-func (e *evaluator) EvalJSONExistsOp(_ *tree.JSONExistsOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalJSONExistsOp(
+	ctx context.Context, _ *tree.JSONExistsOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	exists, err := a.(*tree.DJSON).JSON.Exists(string(tree.MustBeDString(b)))
 	if err != nil {
 		return nil, err
@@ -539,7 +564,7 @@ func (e *evaluator) EvalJSONExistsOp(_ *tree.JSONExistsOp, a, b tree.Datum) (tre
 }
 
 func (e *evaluator) EvalJSONFetchTextIntOp(
-	_ *tree.JSONFetchTextIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.JSONFetchTextIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	res, err := left.(*tree.DJSON).JSON.FetchValIdx(int(tree.MustBeDInt(right)))
 	if err != nil {
@@ -559,7 +584,7 @@ func (e *evaluator) EvalJSONFetchTextIntOp(
 }
 
 func (e *evaluator) EvalJSONFetchTextPathOp(
-	_ *tree.JSONFetchTextPathOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.JSONFetchTextPathOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	res, err := tree.GetJSONPath(
 		left.(*tree.DJSON).JSON, *tree.MustBeDArray(right),
@@ -581,7 +606,7 @@ func (e *evaluator) EvalJSONFetchTextPathOp(
 }
 
 func (e *evaluator) EvalJSONFetchTextStringOp(
-	_ *tree.JSONFetchTextStringOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.JSONFetchTextStringOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	res, err := left.(*tree.DJSON).JSON.FetchValKey(
 		string(tree.MustBeDString(right)),
@@ -603,7 +628,7 @@ func (e *evaluator) EvalJSONFetchTextStringOp(
 }
 
 func (e *evaluator) EvalJSONFetchValIntOp(
-	_ *tree.JSONFetchValIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.JSONFetchValIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	j, err := left.(*tree.DJSON).JSON.FetchValIdx(int(tree.MustBeDInt(right)))
 	if err != nil {
@@ -616,7 +641,7 @@ func (e *evaluator) EvalJSONFetchValIntOp(
 }
 
 func (e *evaluator) EvalJSONFetchValPathOp(
-	_ *tree.JSONFetchValPathOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.JSONFetchValPathOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	path, err := tree.GetJSONPath(
 		left.(*tree.DJSON).JSON, *tree.MustBeDArray(right),
@@ -631,7 +656,7 @@ func (e *evaluator) EvalJSONFetchValPathOp(
 }
 
 func (e *evaluator) EvalJSONFetchValStringOp(
-	_ *tree.JSONFetchValStringOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.JSONFetchValStringOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	j, err := left.(*tree.DJSON).JSON.FetchValKey(
 		string(tree.MustBeDString(right)),
@@ -646,13 +671,13 @@ func (e *evaluator) EvalJSONFetchValStringOp(
 }
 
 func (e *evaluator) EvalJSONSomeExistsOp(
-	_ *tree.JSONSomeExistsOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.JSONSomeExistsOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	return tree.JSONExistsAny(tree.MustBeDJSON(a), tree.MustBeDArray(b))
 }
 
 func (e *evaluator) EvalLShiftINetOp(
-	_ *tree.LShiftINetOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.LShiftINetOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	ipAddr := tree.MustBeDIPAddr(left).IPAddr
 	other := tree.MustBeDIPAddr(right).IPAddr
@@ -660,7 +685,7 @@ func (e *evaluator) EvalLShiftINetOp(
 }
 
 func (e *evaluator) EvalLShiftIntOp(
-	_ *tree.LShiftIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.LShiftIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	rval := tree.MustBeDInt(right)
 	if rval < 0 || rval >= 64 {
@@ -671,7 +696,7 @@ func (e *evaluator) EvalLShiftIntOp(
 }
 
 func (e *evaluator) EvalLShiftVarBitIntOp(
-	_ *tree.LShiftVarBitIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.LShiftVarBitIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	lhs := tree.MustBeDBitArray(left)
 	rhs := tree.MustBeDInt(right)
@@ -680,17 +705,21 @@ func (e *evaluator) EvalLShiftVarBitIntOp(
 	}, nil
 }
 
-func (e *evaluator) EvalMatchLikeOp(op *tree.MatchLikeOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalMatchLikeOp(
+	ctx context.Context, op *tree.MatchLikeOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	return matchLike(e.ctx(), a, b, op.CaseInsensitive)
 }
 
-func (e *evaluator) EvalMatchRegexpOp(op *tree.MatchRegexpOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalMatchRegexpOp(
+	ctx context.Context, op *tree.MatchRegexpOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	key := regexpKey{s: string(tree.MustBeDString(b)), caseInsensitive: op.CaseInsensitive}
 	return matchRegexpWithKey(e.ctx(), a, key)
 }
 
 func (e *evaluator) EvalMinusDateIntOp(
-	_ *tree.MinusDateIntOp, a, b tree.Datum,
+	ctx context.Context, _ *tree.MinusDateIntOp, a, b tree.Datum,
 ) (tree.Datum, error) {
 	d, err := a.(*tree.DDate).SubDays(int64(tree.MustBeDInt(b)))
 	if err != nil {
@@ -700,7 +729,7 @@ func (e *evaluator) EvalMinusDateIntOp(
 }
 
 func (e *evaluator) EvalMinusDateIntervalOp(
-	_ *tree.MinusDateIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusDateIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	leftTime, err := left.(*tree.DDate).ToTime()
 	if err != nil {
@@ -710,7 +739,9 @@ func (e *evaluator) EvalMinusDateIntervalOp(
 	return tree.MakeDTimestamp(t, time.Microsecond)
 }
 
-func (e *evaluator) EvalMinusDateOp(_ *tree.MinusDateOp, a, b tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalMinusDateOp(
+	ctx context.Context, _ *tree.MinusDateOp, a, b tree.Datum,
+) (tree.Datum, error) {
 	l, r := a.(*tree.DDate).Date, b.(*tree.DDate).Date
 	if !l.IsFinite() || !r.IsFinite() {
 		return nil, pgerror.New(pgcode.DatetimeFieldOverflow, "cannot subtract infinite dates")
@@ -722,7 +753,7 @@ func (e *evaluator) EvalMinusDateOp(_ *tree.MinusDateOp, a, b tree.Datum) (tree.
 }
 
 func (e *evaluator) EvalMinusDateTimeOp(
-	_ *tree.MinusDateTimeOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusDateTimeOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	leftTime, err := left.(*tree.DDate).ToTime()
 	if err != nil {
@@ -733,7 +764,7 @@ func (e *evaluator) EvalMinusDateTimeOp(
 }
 
 func (e *evaluator) EvalMinusDecimalIntOp(
-	_ *tree.MinusDecimalIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusDecimalIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
@@ -744,7 +775,7 @@ func (e *evaluator) EvalMinusDecimalIntOp(
 }
 
 func (e *evaluator) EvalMinusDecimalOp(
-	_ *tree.MinusDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
@@ -754,13 +785,13 @@ func (e *evaluator) EvalMinusDecimalOp(
 }
 
 func (e *evaluator) EvalMinusFloatOp(
-	_ *tree.MinusFloatOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.NewDFloat(*left.(*tree.DFloat) - *right.(*tree.DFloat)), nil
 }
 
 func (e *evaluator) EvalMinusINetIntOp(
-	_ *tree.MinusINetIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusINetIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	ipAddr := tree.MustBeDIPAddr(left).IPAddr
 	i := tree.MustBeDInt(right)
@@ -769,7 +800,7 @@ func (e *evaluator) EvalMinusINetIntOp(
 }
 
 func (e *evaluator) EvalMinusINetOp(
-	_ *tree.MinusINetOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusINetOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	ipAddr := tree.MustBeDIPAddr(left).IPAddr
 	other := tree.MustBeDIPAddr(right).IPAddr
@@ -778,7 +809,7 @@ func (e *evaluator) EvalMinusINetOp(
 }
 
 func (e *evaluator) EvalMinusIntDecimalOp(
-	_ *tree.MinusIntDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusIntDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := tree.MustBeDInt(left)
 	r := &right.(*tree.DDecimal).Decimal
@@ -788,7 +819,9 @@ func (e *evaluator) EvalMinusIntDecimalOp(
 	return dd, err
 }
 
-func (e *evaluator) EvalMinusIntOp(_ *tree.MinusIntOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalMinusIntOp(
+	ctx context.Context, _ *tree.MinusIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	a, b := tree.MustBeDInt(left), tree.MustBeDInt(right)
 	r, ok := arith.SubWithOverflow(int64(a), int64(b))
 	if !ok {
@@ -798,7 +831,7 @@ func (e *evaluator) EvalMinusIntOp(_ *tree.MinusIntOp, left, right tree.Datum) (
 }
 
 func (e *evaluator) EvalMinusIntervalOp(
-	_ *tree.MinusIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l, r := left.(*tree.DInterval), right.(*tree.DInterval)
 	return &tree.DInterval{
@@ -807,7 +840,7 @@ func (e *evaluator) EvalMinusIntervalOp(
 }
 
 func (e *evaluator) EvalMinusJsonbIntOp(
-	_ *tree.MinusJsonbIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusJsonbIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	j, _, err := left.(*tree.DJSON).JSON.RemoveIndex(int(tree.MustBeDInt(right)))
 	if err != nil {
@@ -817,7 +850,7 @@ func (e *evaluator) EvalMinusJsonbIntOp(
 }
 
 func (e *evaluator) EvalMinusJsonbStringArrayOp(
-	_ *tree.MinusJsonbStringArrayOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusJsonbStringArrayOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	j := left.(*tree.DJSON).JSON
 	arr := *tree.MustBeDArray(right)
@@ -836,7 +869,7 @@ func (e *evaluator) EvalMinusJsonbStringArrayOp(
 }
 
 func (e *evaluator) EvalMinusJsonbStringOp(
-	_ *tree.MinusJsonbStringOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusJsonbStringOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	j, _, err := left.(*tree.DJSON).JSON.RemoveString(
 		string(tree.MustBeDString(right)),
@@ -848,14 +881,14 @@ func (e *evaluator) EvalMinusJsonbStringOp(
 }
 
 func (e *evaluator) EvalMinusTimeIntervalOp(
-	_ *tree.MinusTimeIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusTimeIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*left.(*tree.DTime))
 	return tree.MakeDTime(t.Add(right.(*tree.DInterval).Duration.Mul(-1))), nil
 }
 
 func (e *evaluator) EvalMinusTimeOp(
-	_ *tree.MinusTimeOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusTimeOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	t1 := timeofday.TimeOfDay(*left.(*tree.DTime))
 	t2 := timeofday.TimeOfDay(*right.(*tree.DTime))
@@ -864,7 +897,7 @@ func (e *evaluator) EvalMinusTimeOp(
 }
 
 func (e *evaluator) EvalMinusTimeTZIntervalOp(
-	_ *tree.MinusTimeTZIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusTimeTZIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	t := left.(*tree.DTimeTZ)
 	d := right.(*tree.DInterval).Duration
@@ -872,7 +905,7 @@ func (e *evaluator) EvalMinusTimeTZIntervalOp(
 }
 
 func (e *evaluator) EvalMinusTimestampIntervalOp(
-	_ *tree.MinusTimestampIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusTimestampIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.MakeDTimestamp(
 		duration.Add(
@@ -884,7 +917,7 @@ func (e *evaluator) EvalMinusTimestampIntervalOp(
 }
 
 func (e *evaluator) EvalMinusTimestampOp(
-	_ *tree.MinusTimestampOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusTimestampOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	nanos := left.(*tree.DTimestamp).Sub(
 		right.(*tree.DTimestamp).Time,
@@ -895,7 +928,7 @@ func (e *evaluator) EvalMinusTimestampOp(
 }
 
 func (e *evaluator) EvalMinusTimestampTZIntervalOp(
-	_ *tree.MinusTimestampTZIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusTimestampTZIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	t := duration.Add(
 		left.(*tree.DTimestampTZ).Time.In(e.ctx().GetLocation()),
@@ -905,7 +938,7 @@ func (e *evaluator) EvalMinusTimestampTZIntervalOp(
 }
 
 func (e *evaluator) EvalMinusTimestampTZOp(
-	_ *tree.MinusTimestampTZOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusTimestampTZOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	nanos := left.(*tree.DTimestampTZ).Sub(
 		right.(*tree.DTimestampTZ).Time,
@@ -916,7 +949,7 @@ func (e *evaluator) EvalMinusTimestampTZOp(
 }
 
 func (e *evaluator) EvalMinusTimestampTZTimestampOp(
-	_ *tree.MinusTimestampTZTimestampOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusTimestampTZTimestampOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	// These two quantities aren't directly comparable. Convert the
 	// TimestampTZ to a timestamp first.
@@ -932,7 +965,7 @@ func (e *evaluator) EvalMinusTimestampTZTimestampOp(
 }
 
 func (e *evaluator) EvalMinusTimestampTimestampTZOp(
-	_ *tree.MinusTimestampTimestampTZOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MinusTimestampTimestampTZOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	// These two quantities aren't directly comparable. Convert the
 	// TimestampTZ to a timestamp first.
@@ -948,7 +981,7 @@ func (e *evaluator) EvalMinusTimestampTimestampTZOp(
 }
 
 func (e *evaluator) EvalModDecimalIntOp(
-	_ *tree.ModDecimalIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.ModDecimalIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
@@ -962,7 +995,7 @@ func (e *evaluator) EvalModDecimalIntOp(
 }
 
 func (e *evaluator) EvalModDecimalOp(
-	_ *tree.ModDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.ModDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
@@ -974,7 +1007,9 @@ func (e *evaluator) EvalModDecimalOp(
 	return dd, err
 }
 
-func (e *evaluator) EvalModFloatOp(_ *tree.ModFloatOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalModFloatOp(
+	ctx context.Context, _ *tree.ModFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	l := float64(*left.(*tree.DFloat))
 	r := float64(*right.(*tree.DFloat))
 	if r == 0.0 {
@@ -984,7 +1019,7 @@ func (e *evaluator) EvalModFloatOp(_ *tree.ModFloatOp, left, right tree.Datum) (
 }
 
 func (e *evaluator) EvalModIntDecimalOp(
-	_ *tree.ModIntDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.ModIntDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := tree.MustBeDInt(left)
 	r := &right.(*tree.DDecimal).Decimal
@@ -997,7 +1032,9 @@ func (e *evaluator) EvalModIntDecimalOp(
 	return dd, err
 }
 
-func (e *evaluator) EvalModIntOp(_ *tree.ModIntOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalModIntOp(
+	ctx context.Context, _ *tree.ModIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	r := tree.MustBeDInt(right)
 	if r == 0 {
 		return nil, tree.ErrDivByZero
@@ -1006,7 +1043,7 @@ func (e *evaluator) EvalModIntOp(_ *tree.ModIntOp, left, right tree.Datum) (tree
 }
 
 func (e *evaluator) EvalModStringOp(
-	_ *tree.ModStringOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.ModStringOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	// The string % string operator returns whether the two strings have a
 	// greater or equal trigram similarity() than the threshold in
@@ -1020,7 +1057,7 @@ func (e *evaluator) EvalModStringOp(
 }
 
 func (e *evaluator) EvalMultDecimalIntOp(
-	_ *tree.MultDecimalIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultDecimalIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
@@ -1031,7 +1068,7 @@ func (e *evaluator) EvalMultDecimalIntOp(
 }
 
 func (e *evaluator) EvalMultDecimalIntervalOp(
-	_ *tree.MultDecimalIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultDecimalIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	t, err := l.Float64()
@@ -1044,7 +1081,7 @@ func (e *evaluator) EvalMultDecimalIntervalOp(
 }
 
 func (e *evaluator) EvalMultDecimalOp(
-	_ *tree.MultDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
@@ -1054,7 +1091,7 @@ func (e *evaluator) EvalMultDecimalOp(
 }
 
 func (e *evaluator) EvalMultFloatIntervalOp(
-	_ *tree.MultFloatIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultFloatIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := float64(*left.(*tree.DFloat))
 	return &tree.DInterval{
@@ -1063,13 +1100,13 @@ func (e *evaluator) EvalMultFloatIntervalOp(
 }
 
 func (e *evaluator) EvalMultFloatOp(
-	_ *tree.MultFloatOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.NewDFloat(*left.(*tree.DFloat) * *right.(*tree.DFloat)), nil
 }
 
 func (e *evaluator) EvalMultIntDecimalOp(
-	_ *tree.MultIntDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultIntDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := tree.MustBeDInt(left)
 	r := &right.(*tree.DDecimal).Decimal
@@ -1080,7 +1117,7 @@ func (e *evaluator) EvalMultIntDecimalOp(
 }
 
 func (e *evaluator) EvalMultIntIntervalOp(
-	_ *tree.MultIntIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultIntIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return &tree.DInterval{
 		Duration: right.(*tree.DInterval).Duration.
@@ -1088,7 +1125,9 @@ func (e *evaluator) EvalMultIntIntervalOp(
 	}, nil
 }
 
-func (e *evaluator) EvalMultIntOp(_ *tree.MultIntOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalMultIntOp(
+	ctx context.Context, _ *tree.MultIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	// See Rob Pike's implementation from
 	// https://groups.google.com/d/msg/golang-nuts/h5oSN5t3Au4/KaNQREhZh0QJ
 
@@ -1106,7 +1145,7 @@ func (e *evaluator) EvalMultIntOp(_ *tree.MultIntOp, left, right tree.Datum) (tr
 }
 
 func (e *evaluator) EvalMultIntervalDecimalOp(
-	_ *tree.MultIntervalDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultIntervalDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	r := &right.(*tree.DDecimal).Decimal
 	t, err := r.Float64()
@@ -1119,7 +1158,7 @@ func (e *evaluator) EvalMultIntervalDecimalOp(
 }
 
 func (e *evaluator) EvalMultIntervalFloatOp(
-	_ *tree.MultIntervalFloatOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultIntervalFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	r := float64(*right.(*tree.DFloat))
 	return &tree.DInterval{
@@ -1128,7 +1167,7 @@ func (e *evaluator) EvalMultIntervalFloatOp(
 }
 
 func (e *evaluator) EvalMultIntervalIntOp(
-	_ *tree.MultIntervalIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.MultIntervalIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return &tree.DInterval{
 		Duration: left.(*tree.DInterval).Duration.
@@ -1137,7 +1176,7 @@ func (e *evaluator) EvalMultIntervalIntOp(
 }
 
 func (e *evaluator) EvalOverlapsArrayOp(
-	_ *tree.OverlapsArrayOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.OverlapsArrayOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	array := tree.MustBeDArray(left)
 	other := tree.MustBeDArray(right)
@@ -1145,7 +1184,7 @@ func (e *evaluator) EvalOverlapsArrayOp(
 }
 
 func (e *evaluator) EvalOverlapsINetOp(
-	_ *tree.OverlapsINetOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.OverlapsINetOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	ipAddr := tree.MustBeDIPAddr(left).IPAddr
 	other := tree.MustBeDIPAddr(right).IPAddr
@@ -1153,7 +1192,7 @@ func (e *evaluator) EvalOverlapsINetOp(
 }
 
 func (e *evaluator) EvalPlusDateIntOp(
-	_ *tree.PlusDateIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusDateIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	d, err := left.(*tree.DDate).AddDays(int64(tree.MustBeDInt(right)))
 	if err != nil {
@@ -1163,7 +1202,7 @@ func (e *evaluator) EvalPlusDateIntOp(
 }
 
 func (e *evaluator) EvalPlusDateIntervalOp(
-	_ *tree.PlusDateIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusDateIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	leftTime, err := left.(*tree.DDate).ToTime()
 	if err != nil {
@@ -1174,7 +1213,7 @@ func (e *evaluator) EvalPlusDateIntervalOp(
 }
 
 func (e *evaluator) EvalPlusDateTimeOp(
-	_ *tree.PlusDateTimeOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusDateTimeOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	leftTime, err := left.(*tree.DDate).ToTime()
 	if err != nil {
@@ -1185,7 +1224,7 @@ func (e *evaluator) EvalPlusDateTimeOp(
 }
 
 func (e *evaluator) EvalPlusDateTimeTZOp(
-	_ *tree.PlusDateTimeTZOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusDateTimeTZOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	leftTime, err := left.(*tree.DDate).ToTime()
 	if err != nil {
@@ -1196,7 +1235,7 @@ func (e *evaluator) EvalPlusDateTimeTZOp(
 }
 
 func (e *evaluator) EvalPlusDecimalIntOp(
-	_ *tree.PlusDecimalIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusDecimalIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
@@ -1207,7 +1246,7 @@ func (e *evaluator) EvalPlusDecimalIntOp(
 }
 
 func (e *evaluator) EvalPlusDecimalOp(
-	_ *tree.PlusDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
@@ -1217,13 +1256,13 @@ func (e *evaluator) EvalPlusDecimalOp(
 }
 
 func (e *evaluator) EvalPlusFloatOp(
-	_ *tree.PlusFloatOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.NewDFloat(*left.(*tree.DFloat) + *right.(*tree.DFloat)), nil
 }
 
 func (e *evaluator) EvalPlusINetIntOp(
-	_ *tree.PlusINetIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusINetIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	ipAddr := tree.MustBeDIPAddr(left).IPAddr
 	i := tree.MustBeDInt(right)
@@ -1232,7 +1271,7 @@ func (e *evaluator) EvalPlusINetIntOp(
 }
 
 func (e *evaluator) EvalPlusIntDecimalOp(
-	_ *tree.PlusIntDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusIntDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := tree.MustBeDInt(left)
 	r := &right.(*tree.DDecimal).Decimal
@@ -1243,7 +1282,7 @@ func (e *evaluator) EvalPlusIntDecimalOp(
 }
 
 func (e *evaluator) EvalPlusIntDateOp(
-	_ *tree.PlusIntDateOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusIntDateOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	d, err := right.(*tree.DDate).AddDays(int64(tree.MustBeDInt(left)))
 	if err != nil {
@@ -1253,7 +1292,7 @@ func (e *evaluator) EvalPlusIntDateOp(
 }
 
 func (e *evaluator) EvalPlusIntINetOp(
-	_ *tree.PlusIntINetOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusIntINetOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	i := tree.MustBeDInt(left)
 	ipAddr := tree.MustBeDIPAddr(right).IPAddr
@@ -1261,7 +1300,9 @@ func (e *evaluator) EvalPlusIntINetOp(
 	return tree.NewDIPAddr(tree.DIPAddr{IPAddr: newIPAddr}), err
 }
 
-func (e *evaluator) EvalPlusIntOp(_ *tree.PlusIntOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalPlusIntOp(
+	ctx context.Context, _ *tree.PlusIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	a, b := tree.MustBeDInt(left), tree.MustBeDInt(right)
 	r, ok := arith.AddWithOverflow(int64(a), int64(b))
 	if !ok {
@@ -1271,7 +1312,7 @@ func (e *evaluator) EvalPlusIntOp(_ *tree.PlusIntOp, left, right tree.Datum) (tr
 }
 
 func (e *evaluator) EvalPlusIntervalDateOp(
-	_ *tree.PlusIntervalDateOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusIntervalDateOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	rightTime, err := right.(*tree.DDate).ToTime()
 	if err != nil {
@@ -1282,7 +1323,7 @@ func (e *evaluator) EvalPlusIntervalDateOp(
 }
 
 func (e *evaluator) EvalPlusIntervalOp(
-	_ *tree.PlusIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return &tree.DInterval{
 		Duration: left.(*tree.DInterval).Duration.Add(
@@ -1292,14 +1333,14 @@ func (e *evaluator) EvalPlusIntervalOp(
 }
 
 func (e *evaluator) EvalPlusIntervalTimeOp(
-	_ *tree.PlusIntervalTimeOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusIntervalTimeOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*right.(*tree.DTime))
 	return tree.MakeDTime(t.Add(left.(*tree.DInterval).Duration)), nil
 }
 
 func (e *evaluator) EvalPlusIntervalTimeTZOp(
-	_ *tree.PlusIntervalTimeTZOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusIntervalTimeTZOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	t := right.(*tree.DTimeTZ)
 	d := left.(*tree.DInterval).Duration
@@ -1307,7 +1348,7 @@ func (e *evaluator) EvalPlusIntervalTimeTZOp(
 }
 
 func (e *evaluator) EvalPlusIntervalTimestampOp(
-	_ *tree.PlusIntervalTimestampOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusIntervalTimestampOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.MakeDTimestamp(duration.Add(
 		right.(*tree.DTimestamp).Time, left.(*tree.DInterval).Duration,
@@ -1315,7 +1356,7 @@ func (e *evaluator) EvalPlusIntervalTimestampOp(
 }
 
 func (e *evaluator) EvalPlusIntervalTimestampTZOp(
-	_ *tree.PlusIntervalTimestampTZOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusIntervalTimestampTZOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	// Convert time to be in the given timezone, as math relies on matching timezones..
 	t := duration.Add(
@@ -1326,7 +1367,7 @@ func (e *evaluator) EvalPlusIntervalTimestampTZOp(
 }
 
 func (e *evaluator) EvalPlusTimeDateOp(
-	_ *tree.PlusTimeDateOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusTimeDateOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	rightTime, err := right.(*tree.DDate).ToTime()
 	if err != nil {
@@ -1337,14 +1378,14 @@ func (e *evaluator) EvalPlusTimeDateOp(
 }
 
 func (e *evaluator) EvalPlusTimeIntervalOp(
-	_ *tree.PlusTimeIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusTimeIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	t := timeofday.TimeOfDay(*left.(*tree.DTime))
 	return tree.MakeDTime(t.Add(right.(*tree.DInterval).Duration)), nil
 }
 
 func (e *evaluator) EvalPlusTimeTZDateOp(
-	_ *tree.PlusTimeTZDateOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusTimeTZDateOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	rightTime, err := right.(*tree.DDate).ToTime()
 	if err != nil {
@@ -1355,7 +1396,7 @@ func (e *evaluator) EvalPlusTimeTZDateOp(
 }
 
 func (e *evaluator) EvalPlusTimeTZIntervalOp(
-	_ *tree.PlusTimeTZIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusTimeTZIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	t := left.(*tree.DTimeTZ)
 	d := right.(*tree.DInterval).Duration
@@ -1363,7 +1404,7 @@ func (e *evaluator) EvalPlusTimeTZIntervalOp(
 }
 
 func (e *evaluator) EvalPlusTimestampIntervalOp(
-	_ *tree.PlusTimestampIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusTimestampIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.MakeDTimestamp(
 		duration.Add(
@@ -1374,7 +1415,7 @@ func (e *evaluator) EvalPlusTimestampIntervalOp(
 }
 
 func (e *evaluator) EvalPlusTimestampTZIntervalOp(
-	_ *tree.PlusTimestampTZIntervalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PlusTimestampTZIntervalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	// Convert time to be in the given timezone, as math relies on matching timezones..
 	t := duration.Add(
@@ -1385,7 +1426,7 @@ func (e *evaluator) EvalPlusTimestampTZIntervalOp(
 }
 
 func (e *evaluator) EvalPowDecimalIntOp(
-	_ *tree.PowDecimalIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PowDecimalIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := tree.MustBeDInt(right)
@@ -1396,7 +1437,7 @@ func (e *evaluator) EvalPowDecimalIntOp(
 }
 
 func (e *evaluator) EvalPowDecimalOp(
-	_ *tree.PowDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PowDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
@@ -1405,13 +1446,15 @@ func (e *evaluator) EvalPowDecimalOp(
 	return dd, err
 }
 
-func (e *evaluator) EvalPowFloatOp(_ *tree.PowFloatOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalPowFloatOp(
+	ctx context.Context, _ *tree.PowFloatOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	f := math.Pow(float64(*left.(*tree.DFloat)), float64(*right.(*tree.DFloat)))
 	return tree.NewDFloat(tree.DFloat(f)), nil
 }
 
 func (e *evaluator) EvalPowIntDecimalOp(
-	_ *tree.PowIntDecimalOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.PowIntDecimalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	l := tree.MustBeDInt(left)
 	r := &right.(*tree.DDecimal).Decimal
@@ -1421,18 +1464,20 @@ func (e *evaluator) EvalPowIntDecimalOp(
 	return dd, err
 }
 
-func (e *evaluator) EvalPowIntOp(_ *tree.PowIntOp, left, right tree.Datum) (tree.Datum, error) {
+func (e *evaluator) EvalPowIntOp(
+	ctx context.Context, _ *tree.PowIntOp, left, right tree.Datum,
+) (tree.Datum, error) {
 	return IntPow(tree.MustBeDInt(left), tree.MustBeDInt(right))
 }
 
 func (e *evaluator) EvalPrependToMaybeNullArrayOp(
-	op *tree.PrependToMaybeNullArrayOp, left, right tree.Datum,
+	ctx context.Context, op *tree.PrependToMaybeNullArrayOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	return tree.PrependToMaybeNullArray(op.Typ, left, right)
 }
 
 func (e *evaluator) EvalRShiftINetOp(
-	_ *tree.RShiftINetOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.RShiftINetOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	ipAddr := tree.MustBeDIPAddr(left).IPAddr
 	other := tree.MustBeDIPAddr(right).IPAddr
@@ -1440,7 +1485,7 @@ func (e *evaluator) EvalRShiftINetOp(
 }
 
 func (e *evaluator) EvalRShiftIntOp(
-	_ *tree.RShiftIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.RShiftIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	rval := tree.MustBeDInt(right)
 	if rval < 0 || rval >= 64 {
@@ -1451,7 +1496,7 @@ func (e *evaluator) EvalRShiftIntOp(
 }
 
 func (e *evaluator) EvalRShiftVarBitIntOp(
-	_ *tree.RShiftVarBitIntOp, left, right tree.Datum,
+	ctx context.Context, _ *tree.RShiftVarBitIntOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	lhs := tree.MustBeDBitArray(left)
 	rhs := tree.MustBeDInt(right)
@@ -1461,7 +1506,7 @@ func (e *evaluator) EvalRShiftVarBitIntOp(
 }
 
 func (e *evaluator) EvalSimilarToOp(
-	op *tree.SimilarToOp, left, right tree.Datum,
+	ctx context.Context, op *tree.SimilarToOp, left, right tree.Datum,
 ) (tree.Datum, error) {
 	key := similarToKey{s: string(tree.MustBeDString(right)), escape: '\\'}
 	return matchRegexpWithKey(e.ctx(), left, key)

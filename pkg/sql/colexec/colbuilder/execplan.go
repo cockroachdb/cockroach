@@ -869,7 +869,7 @@ func NewColOperator(
 					// The second argument is nil because we disable the
 					// tracking of the input tuples.
 					result.Root = colexec.NewHashAggregator(
-						newAggArgs, nil, /* newSpillingQueueArgs */
+						ctx, newAggArgs, nil, /* newSpillingQueueArgs */
 						hashTableAllocator, outputUnlimitedAllocator, maxOutputBatchMemSize,
 					)
 				} else {
@@ -911,6 +911,7 @@ func NewColOperator(
 					newAggArgs.MemAccount = hashAggregatorMemAccount
 					hashTableAllocator := colmem.NewLimitedAllocator(ctx, hashTableMemAccount, accounts[1], factory)
 					inMemoryHashAggregator := colexec.NewHashAggregator(
+						ctx,
 						newAggArgs,
 						&colexecutils.NewSpillingQueueArgs{
 							UnlimitedAllocator: colmem.NewAllocator(ctx, accounts[2], factory),
@@ -952,6 +953,7 @@ func NewColOperator(
 							newAggArgs.Input = input
 							ehaHashTableAllocator := colmem.NewAllocator(ctx, ehaAccounts[1], factory)
 							eha, toClose := colexecdisk.NewExternalHashAggregator(
+								ctx,
 								flowCtx,
 								args,
 								&newAggArgs,
@@ -971,7 +973,7 @@ func NewColOperator(
 				evalCtx.SingleDatumAggMemAccount = args.StreamingMemAccount
 				newAggArgs.Allocator = getStreamingAllocator(ctx, args)
 				newAggArgs.MemAccount = args.StreamingMemAccount
-				result.Root = colexec.NewOrderedAggregator(newAggArgs)
+				result.Root = colexec.NewOrderedAggregator(ctx, newAggArgs)
 			}
 			result.ToClose = append(result.ToClose, result.Root.(colexecop.Closer))
 
@@ -1428,7 +1430,7 @@ func NewColOperator(
 							// Min and max window functions have specialized implementations
 							// when the frame can shrink and has a default exclusion clause.
 							aggFnsAlloc, _, toClose, err = colexecagg.NewAggregateFuncsAlloc(
-								&aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
+								ctx, &aggArgs, aggregations, 1 /* allocSize */, colexecagg.WindowAggKind,
 							)
 							if err != nil {
 								colexecerror.InternalError(err)
@@ -2343,7 +2345,7 @@ func planProjectionOperators(
 	case *tree.OrExpr:
 		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, acc, factory, releasables)
 	case *tree.Tuple:
-		tuple, isConstTuple := evalTupleIfConst(evalCtx, t)
+		tuple, isConstTuple := evalTupleIfConst(ctx, evalCtx, t)
 		if isConstTuple {
 			// Tuple expression is a constant, so we can just project the
 			// resulting datum.
@@ -2474,7 +2476,7 @@ func planProjectionExpr(
 		if tuple, ok := right.(*tree.Tuple); ok {
 			// If we have a tuple on the right, try to pre-evaluate it in case
 			// it consists only of constant expressions.
-			tupleDatum, ok := evalTupleIfConst(evalCtx, tuple)
+			tupleDatum, ok := evalTupleIfConst(ctx, evalCtx, tuple)
 			if ok {
 				right = tupleDatum
 			}
@@ -2692,14 +2694,16 @@ func useDefaultCmpOpForIn(tuple *tree.DTuple) bool {
 
 // evalTupleIfConst checks whether t contains only constant (i.e. tree.Datum)
 // expressions and evaluates the tuple if so.
-func evalTupleIfConst(evalCtx *eval.Context, t *tree.Tuple) (_ tree.Datum, ok bool) {
+func evalTupleIfConst(
+	ctx context.Context, evalCtx *eval.Context, t *tree.Tuple,
+) (_ tree.Datum, ok bool) {
 	for _, expr := range t.Exprs {
 		if _, isDatum := expr.(tree.Datum); !isDatum {
 			// Not a constant expression.
 			return nil, false
 		}
 	}
-	tuple, err := eval.Expr(evalCtx, t)
+	tuple, err := eval.Expr(ctx, evalCtx, t)
 	if err != nil {
 		return nil, false
 	}

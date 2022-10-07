@@ -116,7 +116,7 @@ func TestBuilder(t *testing.T) {
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}
-				f := memo.MakeExprFmtCtx(tester.Flags.ExprFormat, o.Memo(), catalog)
+				f := memo.MakeExprFmtCtx(ctx, tester.Flags.ExprFormat, o.Memo(), catalog)
 				f.FormatExpr(o.Memo().RootExpr())
 				return f.Buffer.String()
 

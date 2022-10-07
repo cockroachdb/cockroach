@@ -83,7 +83,7 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 		if err != nil {
 			t.Fatal(err)
 		}
-		d, err := eval.Expr(&evalCtx, te)
+		d, err := eval.Expr(ctx, &evalCtx, te)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -272,6 +272,7 @@ func TestEncodings(t *testing.T) {
 				}
 
 				d, err := pgwirebase.DecodeDatum(
+					ctx,
 					&evalCtx,
 					types.OidToType[tc.Oid],
 					code,
@@ -335,6 +336,7 @@ func TestExoticNumericEncodings(t *testing.T) {
 	for i, c := range testCases {
 		t.Run(fmt.Sprintf("%d_%s", i, c.Value), func(t *testing.T) {
 			d, err := pgwirebase.DecodeDatum(
+				context.Background(),
 				&evalCtx,
 				types.Decimal,
 				pgwirebase.FormatBinary,

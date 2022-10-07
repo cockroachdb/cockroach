@@ -200,7 +200,7 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 			for _, groupSize := range groupSizes {
 				benchmarkAggregateFunction(
 					b, aggType{
-						new: func(args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
+						new: func(ctx context.Context, args *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator {
 							op, _, err := createExternalHashAggregator(
 								ctx, flowCtx, args, queueCfg, &colexecop.TestingSemaphore{},
 								0 /* numForcedRepartitions */, &monitorRegistry,

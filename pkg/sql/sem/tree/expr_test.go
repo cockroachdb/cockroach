@@ -68,7 +68,7 @@ func TestCastFromNull(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	for _, typ := range types.Scalar {
 		castExpr := tree.CastExpr{Expr: tree.DNull, Type: typ}
-		res, err := eval.Expr(nil, &castExpr)
+		res, err := eval.Expr(context.Background(), nil, &castExpr)
 		require.NoError(t, err)
 		require.Equal(t, tree.DNull, res)
 	}
@@ -89,15 +89,15 @@ func TestStringConcat(t *testing.T) {
 			continue
 		}
 		d := randgen.RandDatum(rng, typ, false /* nullOk */)
-		expected, err := eval.PerformCast(&evalCtx, d, types.String)
+		expected, err := eval.PerformCast(ctx, &evalCtx, d, types.String)
 		require.NoError(t, err)
 		concatOp := treebin.MakeBinaryOperator(treebin.Concat)
 		concatExprLeft := tree.NewTypedBinaryExpr(concatOp, tree.NewDString(""), d, types.String)
-		resLeft, err := eval.Expr(&evalCtx, concatExprLeft)
+		resLeft, err := eval.Expr(ctx, &evalCtx, concatExprLeft)
 		require.NoError(t, err)
 		require.Equal(t, expected, resLeft)
 		concatExprRight := tree.NewTypedBinaryExpr(concatOp, d, tree.NewDString(""), types.String)
-		resRight, err := eval.Expr(&evalCtx, concatExprRight)
+		resRight, err := eval.Expr(ctx, &evalCtx, concatExprRight)
 		require.NoError(t, err)
 		require.Equal(t, expected, resRight)
 	}
@@ -174,13 +174,13 @@ func TestExprString(t *testing.T) {
 			t.Errorf("Print/parse/print cycle changes the string: `%s` vs `%s`", str, str2)
 		}
 		// Compare the normalized expressions.
-		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer ctx.TestingMon.Stop(context.Background())
-		normalized, err := normalize.Expr(ctx, typedExpr)
+		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+		defer evalCtx.Stop(context.Background())
+		normalized, err := normalize.Expr(context.Background(), evalCtx, typedExpr)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		normalized2, err := normalize.Expr(ctx, typedExpr2)
+		normalized2, err := normalize.Expr(context.Background(), evalCtx, typedExpr2)
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}

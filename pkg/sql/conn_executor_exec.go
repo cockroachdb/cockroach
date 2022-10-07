@@ -315,7 +315,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
-	ex.addActiveQuery(ast, formatWithPlaceholders(ast, ex.planner.EvalContext()), queryID, cancelQuery)
+	ex.addActiveQuery(ast, formatWithPlaceholders(ctx, ast, ex.planner.EvalContext()), queryID, cancelQuery)
 
 	// Make sure that we always unregister the query. It also deals with
 	// overwriting res.Error to a more user-friendly message in case of query
@@ -844,21 +844,21 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 	return nil
 }
 
-func formatWithPlaceholders(ast tree.Statement, evalCtx *eval.Context) string {
+func formatWithPlaceholders(ctx context.Context, ast tree.Statement, evalCtx *eval.Context) string {
 	var fmtCtx *tree.FmtCtx
 	fmtFlags := tree.FmtSimple
 
 	if evalCtx.HasPlaceholders() {
 		fmtCtx = evalCtx.FmtCtx(
 			fmtFlags,
-			tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
-				d, err := eval.Expr(evalCtx, placeholder)
+			tree.FmtPlaceholderFormat(func(fmtCtx *tree.FmtCtx, placeholder *tree.Placeholder) {
+				d, err := eval.Expr(ctx, evalCtx, placeholder)
 				if err != nil || d == nil {
 					// Fall back to the default behavior if something goes wrong.
-					ctx.Printf("$%d", placeholder.Idx+1)
+					fmtCtx.Printf("$%d", placeholder.Idx+1)
 					return
 				}
-				d.Format(ctx)
+				d.Format(fmtCtx)
 			}),
 		)
 	} else {

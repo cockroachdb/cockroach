@@ -11,6 +11,8 @@
 package normalize
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -18,8 +20,10 @@ import (
 )
 
 // Expr normalizes the provided expr.
-func Expr(ctx *eval.Context, typedExpr tree.TypedExpr) (tree.TypedExpr, error) {
-	v := MakeNormalizeVisitor(ctx)
+func Expr(
+	ctx context.Context, evalCtx *eval.Context, typedExpr tree.TypedExpr,
+) (tree.TypedExpr, error) {
+	v := MakeNormalizeVisitor(ctx, evalCtx)
 	expr, _ := tree.WalkExpr(&v, typedExpr)
 	if v.err != nil {
 		return nil, v.err
@@ -29,8 +33,9 @@ func Expr(ctx *eval.Context, typedExpr tree.TypedExpr) (tree.TypedExpr, error) {
 
 // Visitor supports the execution of Expr.
 type Visitor struct {
-	ctx *eval.Context
-	err error
+	ctx     context.Context
+	evalCtx *eval.Context
+	err     error
 
 	fastIsConstVisitor fastIsConstVisitor
 }
@@ -38,8 +43,8 @@ type Visitor struct {
 var _ tree.Visitor = &Visitor{}
 
 // MakeNormalizeVisitor creates a Visitor instance.
-func MakeNormalizeVisitor(ctx *eval.Context) Visitor {
-	return Visitor{ctx: ctx, fastIsConstVisitor: fastIsConstVisitor{ctx: ctx}}
+func MakeNormalizeVisitor(ctx context.Context, evalCtx *eval.Context) Visitor {
+	return Visitor{ctx: ctx, evalCtx: evalCtx, fastIsConstVisitor: fastIsConstVisitor{evalCtx: evalCtx}}
 }
 
 // Err retrieves the error field in the Visitor.
@@ -80,7 +85,7 @@ func (v *Visitor) VisitPost(expr tree.Expr) tree.Expr {
 
 	// Evaluate all constant expressions.
 	if v.isConst(expr) {
-		value, err := eval.Expr(v.ctx, expr.(tree.TypedExpr))
+		value, err := eval.Expr(v.ctx, v.evalCtx, expr.(tree.TypedExpr))
 		if err != nil {
 			// Ignore any errors here (e.g. division by zero), so they can happen
 			// during execution where they are correctly handled. Note that in some
@@ -112,7 +117,7 @@ func (v *Visitor) isConst(expr tree.Expr) bool {
 // zero.
 func (v *Visitor) isNumericZero(expr tree.TypedExpr) bool {
 	if d, ok := expr.(tree.Datum); ok {
-		switch t := eval.UnwrapDatum(v.ctx, d).(type) {
+		switch t := eval.UnwrapDatum(v.evalCtx, d).(type) {
 		case *tree.DDecimal:
 			return t.Decimal.Sign() == 0
 		case *tree.DFloat:
@@ -128,7 +133,7 @@ func (v *Visitor) isNumericZero(expr tree.TypedExpr) bool {
 // one.
 func (v *Visitor) isNumericOne(expr tree.TypedExpr) bool {
 	if d, ok := expr.(tree.Datum); ok {
-		switch t := eval.UnwrapDatum(v.ctx, d).(type) {
+		switch t := eval.UnwrapDatum(v.evalCtx, d).(type) {
 		case *tree.DDecimal:
 			return t.Decimal.Cmp(&DecimalOne.Decimal) == 0
 		case *tree.DFloat:
@@ -166,7 +171,7 @@ func invertComparisonOp(op treecmp.ComparisonOperator) (treecmp.ComparisonOperat
 // bottom-up. If a child is *not* a const tree.Datum, that means it was already
 // determined to be non-constant, and therefore was not evaluated.
 type fastIsConstVisitor struct {
-	ctx     *eval.Context
+	evalCtx *eval.Context
 	isConst bool
 
 	// visited indicates whether we have already visited one level of the tree.
@@ -185,7 +190,7 @@ func (v *fastIsConstVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 			// Visitor may have wrapped a NULL.
 			return true, expr
 		}
-		if _, ok := expr.(tree.Datum); !ok || eval.IsVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
+		if _, ok := expr.(tree.Datum); !ok || eval.IsVar(v.evalCtx, expr, true /*allowConstPlaceholders*/) {
 			// If the child expression is not a const tree.Datum, the parent expression is
 			// not constant. Note that all constant literals have already been
 			// normalized to tree.Datum in TypeCheck.
@@ -199,7 +204,7 @@ func (v *fastIsConstVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tre
 	// that it is not constant.
 
 	if !tree.OperatorIsImmutable(expr) ||
-		eval.IsVar(v.ctx, expr, true /*allowConstPlaceholders*/) {
+		eval.IsVar(v.evalCtx, expr, true /*allowConstPlaceholders*/) {
 		v.isConst = false
 		return false, expr
 	}

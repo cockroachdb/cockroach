@@ -1171,7 +1171,7 @@ func (ti *Index) partitionByListExprToDatums(
 		if err != nil {
 			panic(err)
 		}
-		d[i], err = eval.Expr(evalCtx, cTyped)
+		d[i], err = eval.Expr(ctx, evalCtx, cTyped)
 		if err != nil {
 			panic(err)
 		}

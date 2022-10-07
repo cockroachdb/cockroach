@@ -11,6 +11,8 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -71,6 +73,8 @@ type joinPredicate struct {
 	rightEqKey bool
 }
 
+var _ eval.IndexedVarContainer = &joinPredicate{}
+
 // getJoinResultColumns returns the result columns of a join.
 func getJoinResultColumns(
 	joinType descpb.JoinType, left, right colinfo.ResultColumns,
@@ -105,9 +109,11 @@ func makePredicate(joinType descpb.JoinType, left, right colinfo.ResultColumns) 
 	return pred
 }
 
-// IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
-	return p.curRow[idx].Eval(e)
+// IndexedVarEval implements the eval.IndexedVarContainer interface.
+func (p *joinPredicate) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
+	return p.curRow[idx].Eval(ctx, e)
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
@@ -131,13 +137,15 @@ func (p *joinPredicate) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 // in the join algorithm already).
 // Returns true if there is no on condition or the on condition accepts the
 // row.
-func (p *joinPredicate) eval(ctx *eval.Context, leftRow, rightRow tree.Datums) (bool, error) {
+func (p *joinPredicate) eval(
+	ctx context.Context, evalCtx *eval.Context, leftRow, rightRow tree.Datums,
+) (bool, error) {
 	if p.onCond != nil {
 		copy(p.curRow[:len(leftRow)], leftRow)
 		copy(p.curRow[len(leftRow):], rightRow)
-		ctx.PushIVarContainer(p.iVarHelper.Container())
-		pred, err := execinfrapb.RunFilter(p.onCond, ctx)
-		ctx.PopIVarContainer()
+		evalCtx.PushIVarContainer(p.iVarHelper.Container())
+		pred, err := execinfrapb.RunFilter(ctx, p.onCond, evalCtx)
+		evalCtx.PopIVarContainer()
 		return pred, err
 	}
 	return true, nil

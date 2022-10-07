@@ -270,7 +270,7 @@ func (h *ProcOutputHelper) ProcessRow(
 	if len(h.renderExprs) > 0 {
 		// Rendering.
 		for i := range h.renderExprs {
-			datum, err := h.renderExprs[i].Eval(row)
+			datum, err := h.renderExprs[i].Eval(ctx, row)
 			if err != nil {
 				return nil, false, err
 			}
@@ -868,8 +868,7 @@ func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string)
 			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(pb.ProcessorID)))
 		}
 	}
-	pb.evalOrigCtx = pb.EvalCtx.Context
-	pb.EvalCtx.Context = pb.Ctx
+	pb.evalOrigCtx = pb.EvalCtx.SetDeprecatedContext(pb.Ctx)
 	return pb.Ctx
 }
 
@@ -900,7 +899,7 @@ func (pb *ProcessorBaseNoHelper) InternalClose() bool {
 	// Reset the context so that any incidental uses after this point do not
 	// access the finished span.
 	pb.Ctx = pb.origCtx
-	pb.EvalCtx.Context = pb.evalOrigCtx
+	pb.EvalCtx.SetDeprecatedContext(pb.evalOrigCtx)
 	return true
 }
 

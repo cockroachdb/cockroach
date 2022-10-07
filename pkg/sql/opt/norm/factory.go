@@ -11,6 +11,8 @@
 package norm
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -66,6 +68,7 @@ type AppliedRuleFunc func(ruleName opt.RuleName, source, target opt.Expr)
 // Optgen DSL, the factory always calls the `onConstruct` method as its last
 // step, in order to allow any custom manual code to execute.
 type Factory struct {
+	ctx     context.Context
 	evalCtx *eval.Context
 
 	// mem is the Memo data structure that the factory builds.
@@ -123,17 +126,18 @@ func init() {
 //
 // By default, a factory only constant-folds immutable operators; this can be
 // changed using FoldingControl().AllowStableFolds().
-func (f *Factory) Init(evalCtx *eval.Context, catalog cat.Catalog) {
+func (f *Factory) Init(ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog) {
 	// Initialize (or reinitialize) the memo.
 	mem := f.mem
 	if mem == nil {
 		mem = &memo.Memo{}
 	}
-	mem.Init(evalCtx)
+	mem.Init(ctx, evalCtx)
 
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*f = Factory{
+		ctx:     ctx,
 		mem:     mem,
 		evalCtx: evalCtx,
 		catalog: catalog,
@@ -162,7 +166,7 @@ func (f *Factory) DetachMemo() *memo.Memo {
 	m := f.mem
 	f.mem = nil
 	m.Detach()
-	f.Init(f.evalCtx, nil /* catalog */)
+	f.Init(f.ctx, f.evalCtx, nil /* catalog */)
 	return m
 }
 
@@ -317,7 +321,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	var replaceFn ReplaceFunc
 	replaceFn = func(e opt.Expr) opt.Expr {
 		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
-			d, err := eval.Expr(f.evalCtx, e.(*memo.PlaceholderExpr).Value)
+			d, err := eval.Expr(f.ctx, f.evalCtx, e.(*memo.PlaceholderExpr).Value)
 			if err != nil {
 				panic(err)
 			}
@@ -354,7 +358,7 @@ func (f *Factory) onMaxConstructorStackDepthExceeded() {
 	if buildutil.CrdbTestBuild {
 		panic(err)
 	}
-	errorutil.SendReport(f.evalCtx.Ctx(), &f.evalCtx.Settings.SV, err)
+	errorutil.SendReport(f.ctx, &f.evalCtx.Settings.SV, err)
 }
 
 // onConstructRelational is called as a final step by each factory method that

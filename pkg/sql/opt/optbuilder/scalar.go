@@ -405,7 +405,7 @@ func (b *Builder) buildScalar(
 		if !b.KeepPlaceholders && b.evalCtx.HasPlaceholders() {
 			b.HadPlaceholders = true
 			// Replace placeholders with their value.
-			d, err := eval.Expr(b.evalCtx, t)
+			d, err := eval.Expr(b.ctx, b.evalCtx, t)
 			if err != nil {
 				panic(err)
 			}

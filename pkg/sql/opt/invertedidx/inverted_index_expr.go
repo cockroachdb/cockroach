@@ -31,10 +31,14 @@ import (
 
 // NewDatumsToInvertedExpr returns a new DatumsToInvertedExpr.
 func NewDatumsToInvertedExpr(
-	evalCtx *eval.Context, colTypes []*types.T, expr tree.TypedExpr, geoConfig geoindex.Config,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	colTypes []*types.T,
+	expr tree.TypedExpr,
+	geoConfig geoindex.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	if !geoConfig.IsEmpty() {
-		return NewGeoDatumsToInvertedExpr(evalCtx, colTypes, expr, geoConfig)
+		return NewGeoDatumsToInvertedExpr(ctx, evalCtx, colTypes, expr, geoConfig)
 	}
 
 	return NewJSONOrArrayDatumsToInvertedExpr(evalCtx, colTypes, expr)
@@ -66,6 +70,7 @@ func NewBoundPreFilterer(typ *types.T, expr tree.TypedExpr) (*PreFilterer, inter
 //   - pre-filterer state that can be used by the invertedFilterer operator to
 //     reduce the number of false positives returned by the span expression.
 func TryFilterInvertedIndex(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
 	filters memo.FiltersExpr,
@@ -130,7 +135,7 @@ func TryFilterInvertedIndex(
 	var pfState *invertedexpr.PreFiltererStateForInvertedFilterer
 	for i := range filters {
 		invertedExprLocal, remFiltersLocal, pfStateLocal := extractInvertedFilterCondition(
-			evalCtx, factory, filters[i].Condition, filterPlanner,
+			ctx, evalCtx, factory, filters[i].Condition, filterPlanner,
 		)
 		if invertedExpr == nil {
 			invertedExpr = invertedExprLocal
@@ -447,7 +452,7 @@ type invertedFilterPlanner interface {
 	// - remaining filters that must be applied if the inverted expression is not
 	//   tight, and
 	// - pre-filterer state that can be used to reduce false positives.
-	extractInvertedFilterConditionFromLeaf(evalCtx *eval.Context, expr opt.ScalarExpr) (
+	extractInvertedFilterConditionFromLeaf(ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr) (
 		invertedExpr inverted.Expression,
 		remainingFilters opt.ScalarExpr,
 		_ *invertedexpr.PreFiltererStateForInvertedFilterer,
@@ -469,6 +474,7 @@ type invertedFilterPlanner interface {
 //   - pre-filterer state that can be used to reduce false positives. This is
 //     only non-nil if filterCond is a leaf condition (i.e., has no ANDs or ORs).
 func extractInvertedFilterCondition(
+	ctx context.Context,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
 	filterCond opt.ScalarExpr,
@@ -480,8 +486,8 @@ func extractInvertedFilterCondition(
 ) {
 	switch t := filterCond.(type) {
 	case *memo.AndExpr:
-		l, remLeft, _ := extractInvertedFilterCondition(evalCtx, factory, t.Left, filterPlanner)
-		r, remRight, _ := extractInvertedFilterCondition(evalCtx, factory, t.Right, filterPlanner)
+		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner)
+		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner)
 		if remLeft == nil {
 			remainingFilters = remRight
 		} else if remRight == nil {
@@ -492,8 +498,8 @@ func extractInvertedFilterCondition(
 		return inverted.And(l, r), remainingFilters, nil
 
 	case *memo.OrExpr:
-		l, remLeft, _ := extractInvertedFilterCondition(evalCtx, factory, t.Left, filterPlanner)
-		r, remRight, _ := extractInvertedFilterCondition(evalCtx, factory, t.Right, filterPlanner)
+		l, remLeft, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Left, filterPlanner)
+		r, remRight, _ := extractInvertedFilterCondition(ctx, evalCtx, factory, t.Right, filterPlanner)
 		if remLeft != nil || remRight != nil {
 			// If either child has remaining filters, we must return the original
 			// condition as the remaining filter. It would be incorrect to return
@@ -503,7 +509,7 @@ func extractInvertedFilterCondition(
 		return inverted.Or(l, r), remainingFilters, nil
 
 	default:
-		return filterPlanner.extractInvertedFilterConditionFromLeaf(evalCtx, filterCond)
+		return filterPlanner.extractInvertedFilterConditionFromLeaf(ctx, evalCtx, filterCond)
 	}
 }
 

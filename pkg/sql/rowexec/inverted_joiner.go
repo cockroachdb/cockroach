@@ -277,7 +277,7 @@ func newInvertedJoiner(
 			return nil, err
 		}
 		ij.datumsToInvertedExpr, err = invertedidx.NewDatumsToInvertedExpr(
-			ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr, ij.fetchSpec.GeoConfig,
+			ctx, ij.EvalCtx, onExprColTypes, invertedExprHelper.Expr, ij.fetchSpec.GeoConfig,
 		)
 		if err != nil {
 			return nil, err
@@ -689,7 +689,7 @@ func (ij *invertedJoiner) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatum
 	ij.combinedRow = append(ij.combinedRow[:0], lrow...)
 	ij.combinedRow = append(ij.combinedRow, rrow...)
 	if ij.onExprHelper.Expr != nil {
-		res, err := ij.onExprHelper.EvalFilter(ij.combinedRow)
+		res, err := ij.onExprHelper.EvalFilter(ij.Ctx, ij.combinedRow)
 		if !res || err != nil {
 			return nil, err
 		}

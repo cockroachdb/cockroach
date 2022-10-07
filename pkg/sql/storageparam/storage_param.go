@@ -31,9 +31,9 @@ import (
 type Setter interface {
 	// Set is called during CREATE [TABLE | INDEX] ... WITH (...) or
 	// ALTER [TABLE | INDEX] ... WITH (...).
-	Set(semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
+	Set(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
 	// Reset is called during ALTER [TABLE | INDEX] ... RESET (...)
-	Reset(evalCtx *eval.Context, key string) error
+	Reset(ctx context.Context, evalCtx *eval.Context, key string) error
 	// RunPostChecks is called after all storage parameters have been set.
 	// This allows checking whether multiple storage parameters together
 	// form a valid configuration.
@@ -65,15 +65,15 @@ func Set(
 		if err != nil {
 			return err
 		}
-		if typedExpr, err = normalize.Expr(evalCtx, typedExpr); err != nil {
+		if typedExpr, err = normalize.Expr(ctx, evalCtx, typedExpr); err != nil {
 			return err
 		}
-		datum, err := eval.Expr(evalCtx, typedExpr)
+		datum, err := eval.Expr(ctx, evalCtx, typedExpr)
 		if err != nil {
 			return err
 		}
 
-		if err := setter.Set(semaCtx, evalCtx, key, datum); err != nil {
+		if err := setter.Set(ctx, semaCtx, evalCtx, key, datum); err != nil {
 			return err
 		}
 	}
@@ -82,10 +82,12 @@ func Set(
 
 // Reset sets the given storage parameters using the
 // given observer.
-func Reset(evalCtx *eval.Context, params tree.NameList, paramObserver Setter) error {
+func Reset(
+	ctx context.Context, evalCtx *eval.Context, params tree.NameList, paramObserver Setter,
+) error {
 	for _, p := range params {
 		telemetry.Inc(sqltelemetry.ResetTableStorageParameter(string(p)))
-		if err := paramObserver.Reset(evalCtx, string(p)); err != nil {
+		if err := paramObserver.Reset(ctx, evalCtx, string(p)); err != nil {
 			return err
 		}
 	}
@@ -94,8 +96,8 @@ func Reset(evalCtx *eval.Context, params tree.NameList, paramObserver Setter) er
 
 // SetFillFactor validates the fill_factor storage param and then issues a
 // notice.
-func SetFillFactor(evalCtx *eval.Context, key string, datum tree.Datum) error {
-	val, err := paramparse.DatumAsFloat(evalCtx, key, datum)
+func SetFillFactor(ctx context.Context, evalCtx *eval.Context, key string, datum tree.Datum) error {
+	val, err := paramparse.DatumAsFloat(ctx, evalCtx, key, datum)
 	if err != nil {
 		return err
 	}
@@ -104,7 +106,7 @@ func SetFillFactor(evalCtx *eval.Context, key string, datum tree.Datum) error {
 	}
 	if evalCtx != nil {
 		evalCtx.ClientNoticeSender.BufferClientNotice(
-			evalCtx.Context,
+			ctx,
 			pgnotice.Newf("storage parameter %q is ignored", key),
 		)
 	}

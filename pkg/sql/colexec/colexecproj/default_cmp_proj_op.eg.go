@@ -54,7 +54,7 @@ func (d *defaultCmpProjOp) Next() coldata.Batch {
 			// Note that we performed a conversion with deselection, so there
 			// is no need to check whether sel is non-nil.
 			//gcassert:bce
-			res, err := d.adapter.Eval(leftColumn[i], rightColumn[i])
+			res, err := d.adapter.Eval(d.Ctx, leftColumn[i], rightColumn[i])
 			if err != nil {
 				colexecerror.ExpectedError(err)
 			}

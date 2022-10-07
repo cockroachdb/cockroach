@@ -70,9 +70,10 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				return nil, err
 			}
 			if err := opc.runExecBuilder(
+				ctx,
 				&pt,
 				&stmt,
-				newExecFactory(p),
+				newExecFactory(ctx, p),
 				memo,
 				p.EvalContext(),
 				p.autoCommit,
@@ -85,7 +86,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 					"DECLARE CURSOR must not contain data-modifying statements in WITH")
 			}
 
-			statement := formatWithPlaceholders(s.Select, p.EvalContext())
+			statement := formatWithPlaceholders(ctx, s.Select, p.EvalContext())
 			itCtx := context.Background()
 			rows, err := ie.QueryIterator(itCtx, "sql-cursor", p.txn, statement)
 			if err != nil {

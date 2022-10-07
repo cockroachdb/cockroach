@@ -11,6 +11,8 @@
 package invertedidx
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -34,7 +36,7 @@ var _ invertedFilterPlanner = &trigramFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf implements the invertedFilterPlanner
 // interface.
 func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	_ *eval.Context, expr opt.ScalarExpr,
+	_ context.Context, _ *eval.Context, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,

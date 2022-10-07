@@ -63,7 +63,7 @@ func injectTableStats(tt *Table, statsExpr tree.Expr) {
 	if err != nil {
 		panic(err)
 	}
-	val, err := eval.Expr(&evalCtx, typedExpr)
+	val, err := eval.Expr(ctx, &evalCtx, typedExpr)
 	if err != nil {
 		panic(err)
 	}

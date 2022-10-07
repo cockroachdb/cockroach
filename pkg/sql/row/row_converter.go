@@ -88,6 +88,7 @@ func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 //     maps the indexes of the comptuedCols/computeExpr slices
 //     back into indexes in the result row tuple.
 func GenerateInsertRow(
+	ctx context.Context,
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,
 	insertCols []catalog.Column,
@@ -113,7 +114,7 @@ func GenerateInsertRow(
 				rowVals[i] = tree.DNull
 				continue
 			}
-			d, err := eval.Expr(evalCtx, defaultExprs[i])
+			d, err := eval.Expr(ctx, evalCtx, defaultExprs[i])
 			if err != nil {
 				return nil, err
 			}
@@ -135,7 +136,7 @@ func GenerateInsertRow(
 			if !col.IsComputed() {
 				continue
 			}
-			d, err := eval.Expr(evalCtx, computeExprs[computeIdx])
+			d, err := eval.Expr(ctx, evalCtx, computeExprs[computeIdx])
 			if err != nil {
 				name := col.GetName()
 				return nil, errors.Wrapf(err,
@@ -409,7 +410,7 @@ func NewDatumRowConverter(
 				if volatile == overrideImmutable {
 					// This default expression isn't volatile, so we can evaluate once
 					// here and memoize it.
-					c.defaultCache[i], err = eval.Expr(c.EvalCtx, c.defaultCache[i])
+					c.defaultCache[i], err = eval.Expr(ctx, c.EvalCtx, c.defaultCache[i])
 					if err != nil {
 						return nil, errors.Wrapf(err, "error evaluating default expression")
 					}
@@ -488,7 +489,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 			// number of instances the function random() appears in a row.
 			// TODO (anzoteh96): Optimize this part of code when there's no expression
 			// involving random(), gen_random_uuid(), or anything like that.
-			datum, err := eval.Expr(c.EvalCtx, c.defaultCache[i])
+			datum, err := eval.Expr(ctx, c.EvalCtx, c.defaultCache[i])
 			if !c.TargetColOrds.Contains(i) {
 				if err != nil {
 					return errors.Wrapf(
@@ -505,7 +506,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	}
 
 	insertRow, err := GenerateInsertRow(
-		c.defaultCache, c.computedExprs, c.cols, computedColsLookup, c.EvalCtx,
+		ctx, c.defaultCache, c.computedExprs, c.cols, computedColsLookup, c.EvalCtx,
 		c.tableDesc, c.Datums, &c.computedIVarContainer)
 	if err != nil {
 		return errors.Wrap(err, "generate insert row")
@@ -521,7 +522,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		if len(partialIndexPutVals) > 0 {
 			for i, idx := range c.tableDesc.PartialIndexes() {
 				texpr := c.partialIndexExprs[idx.GetID()]
-				val, err := eval.Expr(c.EvalCtx, texpr)
+				val, err := eval.Expr(ctx, c.EvalCtx, texpr)
 				if err != nil {
 					return errors.Wrap(err, "evaluate partial index expression")
 				}

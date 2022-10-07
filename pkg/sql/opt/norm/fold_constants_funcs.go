@@ -291,7 +291,7 @@ func (c *CustomFuncs) FoldBinary(
 	}
 
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
-	result, err := eval.BinaryOp(c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	result, err := eval.BinaryOp(c.f.ctx, c.f.evalCtx, o.EvalOp, lDatum, rDatum)
 	if err != nil {
 		return nil, false
 	}
@@ -310,7 +310,7 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) (_ opt.Sc
 		return nil, false
 	}
 
-	result, err := eval.UnaryOp(c.f.evalCtx, o.EvalOp, datum)
+	result, err := eval.UnaryOp(c.f.ctx, c.f.evalCtx, o.EvalOp, datum)
 	if err != nil {
 		return nil, false
 	}
@@ -333,7 +333,7 @@ func (c *CustomFuncs) foldStringToRegclassCast(
 	if err != nil {
 		return nil, err
 	}
-	ds, resName, err := c.f.catalog.ResolveDataSource(c.f.evalCtx.Context, flags, tn)
+	ds, resName, err := c.f.catalog.ResolveDataSource(c.f.ctx, flags, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +368,7 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.Scalar
 	datum := memo.ExtractConstDatum(input)
 	texpr := tree.NewTypedCastExpr(datum, typ)
 
-	result, err := eval.Expr(c.f.evalCtx, texpr)
+	result, err := eval.Expr(c.f.ctx, c.f.evalCtx, texpr)
 	if err != nil {
 		// Casts can require KV operations. KV errors are not safe to swallow.
 		// Check if the error is a KV error, and, if so, propagate it rather
@@ -403,7 +403,7 @@ func (c *CustomFuncs) FoldAssignmentCast(
 	}
 
 	datum := memo.ExtractConstDatum(input)
-	result, err := eval.PerformAssignmentCast(c.f.evalCtx, datum, typ)
+	result, err := eval.PerformAssignmentCast(c.f.ctx, c.f.evalCtx, datum, typ)
 	if err != nil {
 		// Casts can require KV operations. KV errors are not safe to swallow.
 		// Check if the error is a KV error, and, if so, propagate it rather
@@ -484,7 +484,7 @@ func (c *CustomFuncs) FoldComparison(
 		lDatum, rDatum = rDatum, lDatum
 	}
 
-	result, err := eval.BinaryOp(c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	result, err := eval.BinaryOp(c.f.ctx, c.f.evalCtx, o.EvalOp, lDatum, rDatum)
 	if err != nil {
 		return nil, false
 	}
@@ -529,7 +529,7 @@ func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) (_ opt.Scalar
 		}
 		inputD := memo.ExtractConstDatum(input)
 		texpr := tree.NewTypedIndirectionExpr(inputD, indexD, resolvedType)
-		result, err := eval.Expr(c.f.evalCtx, texpr)
+		result, err := eval.Expr(c.f.ctx, c.f.evalCtx, texpr)
 		if err == nil {
 			return c.f.ConstructConstVal(result, texpr.ResolvedType()), true
 		}
@@ -562,7 +562,7 @@ func (c *CustomFuncs) FoldColumnAccess(
 		datum := memo.ExtractConstDatum(input)
 
 		texpr := tree.NewTypedColumnAccessExpr(datum, "" /* by-index access */, int(idx))
-		result, err := eval.Expr(c.f.evalCtx, texpr)
+		result, err := eval.Expr(c.f.ctx, c.f.evalCtx, texpr)
 		if err == nil {
 			return c.f.ConstructConstVal(result, texpr.ResolvedType()), true
 		}
@@ -633,7 +633,7 @@ func (c *CustomFuncs) FoldFunction(
 		private.Overload,
 	)
 
-	result, err := eval.Expr(c.f.evalCtx, fn)
+	result, err := eval.Expr(c.f.ctx, c.f.evalCtx, fn)
 	if err != nil {
 		return nil, false
 	}

@@ -75,10 +75,10 @@ func (d *defaultCmp_KINDSelOp) Next() coldata.Batch {
 			// is no need to check whether hasSel is true.
 			// {{if .HasConst}}
 			//gcassert:bce
-			res, err := d.adapter.Eval(leftColumn[i], d.constArg)
+			res, err := d.adapter.Eval(d.Ctx, leftColumn[i], d.constArg)
 			// {{else}}
 			//gcassert:bce
-			res, err := d.adapter.Eval(leftColumn[i], rightColumn[i])
+			res, err := d.adapter.Eval(d.Ctx, leftColumn[i], rightColumn[i])
 			// {{end}}
 			if err != nil {
 				colexecerror.ExpectedError(err)

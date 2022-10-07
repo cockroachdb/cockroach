@@ -54,11 +54,11 @@ func prepareExpr(t *testing.T, datumExpr string) tree.Datum {
 	// Normalization ensures that casts are processed.
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	typedExpr, err = normalize.Expr(evalCtx, typedExpr)
+	typedExpr, err = normalize.Expr(context.Background(), evalCtx, typedExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
-	d, err := eval.Expr(evalCtx, typedExpr)
+	d, err := eval.Expr(ctx, evalCtx, typedExpr)
 	if err != nil {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}

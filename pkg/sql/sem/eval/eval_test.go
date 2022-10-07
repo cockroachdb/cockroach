@@ -66,7 +66,7 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return fmt.Sprint(err)
 			}
-			r, err := eval.Expr(evalCtx, e)
+			r, err := eval.Expr(ctx, evalCtx, e)
 			if err != nil {
 				return fmt.Sprint(err)
 			}
@@ -88,7 +88,7 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return normalize.Expr(evalCtx, typedExpr)
+			return normalize.Expr(ctx, evalCtx, typedExpr)
 		})
 	})
 }
@@ -104,7 +104,7 @@ func optBuildScalar(evalCtx *eval.Context, e tree.Expr) (tree.TypedExpr, error) 
 	}
 
 	bld := execbuilder.New(
-		nil /* factory */, &o, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
+		ctx, nil /* factory */, &o, o.Memo(), nil /* catalog */, o.Memo().RootExpr(),
 		evalCtx, false, /* allowAutoCommit */
 	)
 	expr, err := bld.BuildScalar()
@@ -193,7 +193,7 @@ func TestTimeConversion(t *testing.T) {
 
 	for _, test := range tests {
 		ctx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-		defer ctx.TestingMon.Stop(context.Background())
+		defer ctx.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := parser.ParseExpr(exprStr)
 		if err != nil {
@@ -206,7 +206,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		r, err := eval.Expr(ctx, typedExpr)
+		r, err := eval.Expr(context.Background(), ctx, typedExpr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -245,7 +245,7 @@ func TestTimeConversion(t *testing.T) {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
 		}
-		r, err = eval.Expr(ctx, typedExpr)
+		r, err = eval.Expr(context.Background(), ctx, typedExpr)
 		if err != nil {
 			t.Errorf("%s: %v", exprStr, err)
 			continue
@@ -365,8 +365,8 @@ func TestEvalError(t *testing.T) {
 		typedExpr, err := tree.TypeCheck(ctx, expr, &semaCtx, types.Any)
 		if err == nil {
 			evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-			defer evalCtx.Stop(context.Background())
-			_, err = eval.Expr(evalCtx, typedExpr)
+			defer evalCtx.Stop(ctx)
+			_, err = eval.Expr(ctx, evalCtx, typedExpr)
 		}
 		if !testutils.IsError(err, strings.Replace(regexp.QuoteMeta(d.expected), `\.\*`, `.*`, -1)) {
 			t.Errorf("%s: expected %s, but found %v", d.expr, d.expected, err)

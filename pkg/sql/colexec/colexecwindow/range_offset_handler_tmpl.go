@@ -200,6 +200,7 @@ func (h *_OP_STRING) getIdx(ctx context.Context, currRow, lastIdx int) (idx int)
 	//     yet handled natively.
 	// */}}
 	_overloadHelper := h.overloadHelper
+	_ctx := ctx
 	// {{end}}
 
 	if lastIdx >= h.storedCols.Length() {

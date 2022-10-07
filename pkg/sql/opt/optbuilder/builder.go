@@ -445,7 +445,7 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 			// we cannot resolve the variables in this context. This matches Postgres
 			// behavior.
 			if !tree.ContainsVars(texpr) {
-				regclass, err := eval.Expr(b.evalCtx, texpr)
+				regclass, err := eval.Expr(b.ctx, b.evalCtx, texpr)
 				if err != nil {
 					panic(err)
 				}

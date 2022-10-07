@@ -345,7 +345,7 @@ func evaluateYAMLConfig(expr tree.TypedExpr, params runParams) (string, bool, er
 	var yamlConfig string
 	deleteZone := false
 	if expr != nil {
-		datum, err := eval.Expr(params.EvalContext(), expr)
+		datum, err := eval.Expr(params.ctx, params.EvalContext(), expr)
 		if err != nil {
 			return "", false, err
 		}
@@ -395,7 +395,7 @@ func evaluateZoneOptions(
 				optionsStr = append(optionsStr, fmt.Sprintf("%s = COPY FROM PARENT", name))
 				continue
 			}
-			datum, err := eval.Expr(params.EvalContext(), expr)
+			datum, err := eval.Expr(params.ctx, params.EvalContext(), expr)
 			if err != nil {
 				return nil, nil, nil, err
 			}

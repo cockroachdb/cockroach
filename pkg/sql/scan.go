@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -131,10 +132,12 @@ func (p *planner) Scan() *scanNode {
 	return n
 }
 
-// scanNode implements tree.IndexedVarContainer.
-var _ tree.IndexedVarContainer = &scanNode{}
+// scanNode implements eval.IndexedVarContainer.
+var _ eval.IndexedVarContainer = &scanNode{}
 
-func (n *scanNode) IndexedVarEval(idx int, e tree.ExprEvaluator) (tree.Datum, error) {
+func (n *scanNode) IndexedVarEval(
+	ctx context.Context, idx int, e tree.ExprEvaluator,
+) (tree.Datum, error) {
 	panic("scanNode can't be run in local mode")
 }
 

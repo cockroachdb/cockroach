@@ -745,7 +745,7 @@ func stringToDatum(val string, typ *types.T, evalCtx *eval.Context) tree.Datum {
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
-	d, err := eval.Expr(evalCtx, typedExpr)
+	d, err := eval.Expr(context.Background(), evalCtx, typedExpr)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}

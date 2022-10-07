@@ -337,7 +337,7 @@ var _ invertedFilterPlanner = &geoFilterPlanner{}
 // extractInvertedFilterConditionFromLeaf is part of the invertedFilterPlanner
 // interface.
 func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
-	evalCtx *eval.Context, expr opt.ScalarExpr,
+	ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
 ) (
 	invertedExpr inverted.Expression,
 	remainingFilters opt.ScalarExpr,
@@ -375,11 +375,11 @@ func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	//
 	// See geoindex.CommuteRelationshipMap for the full list of mappings.
 	invertedExpr, pfState := extractGeoFilterCondition(
-		evalCtx.Context, g.factory, expr, args, false /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
+		ctx, g.factory, expr, args, false /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
 	)
 	if _, ok := invertedExpr.(inverted.NonInvertedColExpression); ok {
 		invertedExpr, pfState = extractGeoFilterCondition(
-			evalCtx.Context, g.factory, expr, args, true /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
+			ctx, g.factory, expr, args, true /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
 		)
 	}
 	if !invertedExpr.IsTight() {
@@ -723,17 +723,17 @@ type geoDatumsToInvertedExpr struct {
 }
 
 var _ invertedexpr.DatumsToInvertedExpr = &geoDatumsToInvertedExpr{}
-var _ tree.IndexedVarContainer = &geoDatumsToInvertedExpr{}
+var _ eval.IndexedVarContainer = &geoDatumsToInvertedExpr{}
 
-// IndexedVarEval is part of the IndexedVarContainer interface.
+// IndexedVarEval is part of the eval.IndexedVarContainer interface.
 func (g *geoDatumsToInvertedExpr) IndexedVarEval(
-	idx int, e tree.ExprEvaluator,
+	ctx context.Context, idx int, e tree.ExprEvaluator,
 ) (tree.Datum, error) {
 	err := g.row[idx].EnsureDecoded(g.colTypes[idx], &g.alloc)
 	if err != nil {
 		return nil, err
 	}
-	return g.row[idx].Datum.Eval(e)
+	return g.row[idx].Datum.Eval(ctx, e)
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
@@ -749,7 +749,11 @@ func (g *geoDatumsToInvertedExpr) IndexedVarNodeFormatter(idx int) tree.NodeForm
 
 // NewGeoDatumsToInvertedExpr returns a new geoDatumsToInvertedExpr.
 func NewGeoDatumsToInvertedExpr(
-	evalCtx *eval.Context, colTypes []*types.T, expr tree.TypedExpr, config geoindex.Config,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	colTypes []*types.T,
+	expr tree.TypedExpr,
+	config geoindex.Config,
 ) (invertedexpr.DatumsToInvertedExpr, error) {
 	if config.IsEmpty() {
 		return nil, fmt.Errorf("inverted joins are currently only supported for geospatial indexes")
@@ -813,7 +817,7 @@ func NewGeoDatumsToInvertedExpr(
 			// it for every row.
 			var invertedExpr inverted.Expression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
-				invertedExpr = g.getSpanExpr(evalCtx.Ctx(), d, additionalParams, relationship, g.indexConfig)
+				invertedExpr = g.getSpanExpr(ctx, d, additionalParams, relationship, g.indexConfig)
 			} else if funcExprCount == 1 {
 				// Currently pre-filtering is limited to a single FuncExpr.
 				preFilterRelationship = relationship
@@ -860,7 +864,7 @@ func (g *geoDatumsToInvertedExpr) Convert(
 				// We call Copy so the caller can modify the returned expression.
 				return t.invertedExpr.Copy(), nil
 			}
-			d, err := eval.Expr(g.evalCtx, t.nonIndexParam)
+			d, err := eval.Expr(ctx, g.evalCtx, t.nonIndexParam)
 			if err != nil {
 				return nil, err
 			}
