@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -519,6 +520,7 @@ type replicateQueue struct {
 	// descriptors.
 	updateCh          chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
+	logTracesEvery    util.EveryN
 	// logTracesThresholdFunc returns the threshold for logging traces from
 	// processing a replica.
 	logTracesThresholdFunc queueProcessTimeoutFunc
@@ -529,10 +531,11 @@ var _ queueImpl = &replicateQueue{}
 // newReplicateQueue returns a new instance of replicateQueue.
 func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replicateQueue {
 	rq := &replicateQueue{
-		metrics:   makeReplicateQueueMetrics(),
-		allocator: allocator,
-		purgCh:    time.NewTicker(replicateQueuePurgatoryCheckInterval).C,
-		updateCh:  make(chan time.Time, 1),
+		metrics:        makeReplicateQueueMetrics(),
+		allocator:      allocator,
+		purgCh:         time.NewTicker(replicateQueuePurgatoryCheckInterval).C,
+		updateCh:       make(chan time.Time, 1),
+		logTracesEvery: util.Every(10 * time.Second),
 		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(
 			permittedRangeScanSlowdown/2, rebalanceSnapshotRate, recoverySnapshotRate,
 		),
@@ -801,7 +804,6 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 		loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
 		exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
 
-		var traceOutput string
 		traceLoggingNeeded := err != nil || exceededDuration
 		if traceLoggingNeeded {
 			// If we have tracing spans from execChangeReplicasTxn, filter it from
@@ -810,14 +812,23 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 			rec = filterTracingSpans(sp.GetConfiguredRecording(),
 				replicaChangeTxnGetDescOpName, replicaChangeTxnUpdateDescOpName,
 			)
-			traceOutput = fmt.Sprintf("\ntrace:\n%s", rec)
-		}
+			traceOutput := fmt.Sprintf("\ntrace:\n%s", rec)
 
-		if err != nil {
-			log.KvDistribution.Infof(ctx, "error processing replica: %v%s", err, traceOutput)
-		} else if exceededDuration {
-			log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
-				processDuration, loggingThreshold, traceOutput)
+			var logTraceFn func(context.Context, string, ...interface{})
+			if rq.logTracesEvery.ShouldProcess(timeutil.Now()) {
+				logTraceFn = log.KvDistribution.Infof
+			} else {
+				logTraceFn = func(ctx context.Context, format string, args ...interface{}) {
+					log.KvDistribution.VEventf(ctx, 2, format, args...)
+				}
+			}
+
+			if err != nil {
+				logTraceFn(ctx, "error processing replica: %v%s", err, traceOutput)
+			} else if exceededDuration {
+				logTraceFn(ctx, "processing replica took %s, exceeding threshold of %s%s",
+					processDuration, loggingThreshold, traceOutput)
+			}
 		}
 	}
 
