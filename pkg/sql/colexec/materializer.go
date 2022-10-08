@@ -207,12 +207,7 @@ func newMaterializerInternal(
 		typs:                  typs,
 		converter:             colconv.NewAllVecToDatumConverter(len(typs)),
 		row:                   make(rowenc.EncDatumRow, len(typs)),
-		// We have to perform a deep copy of closers because the input object
-		// might be released before the materializer is closed.
-		// TODO(yuzefovich): improve this. It will require untangling of
-		// planTop.close and the row sources pointed to by the plan via
-		// rowSourceToPlanNode wrappers.
-		closers: append(m.closers[:0], input.ToClose...),
+		closers:               input.ToClose,
 	}
 	m.drainHelper.allocator = allocator
 	m.drainHelper.statsCollectors = input.StatsCollectors
@@ -364,14 +359,10 @@ func (m *Materializer) ConsumerClosed() {
 func (m *Materializer) Release() {
 	m.ProcessorBaseNoHelper.Reset()
 	m.converter.Release()
-	for i := range m.closers {
-		m.closers[i] = nil
-	}
 	*m = Materializer{
 		// We're keeping the reference to the same ProcessorBaseNoHelper since
 		// it allows us to reuse some of the slices.
 		ProcessorBaseNoHelper: m.ProcessorBaseNoHelper,
-		closers:               m.closers[:0],
 	}
 	materializerPool.Put(m)
 }
