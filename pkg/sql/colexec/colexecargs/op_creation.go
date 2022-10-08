@@ -100,8 +100,13 @@ type NewColOperatorResult struct {
 	// behind the stats collector interface. We need to track it separately from
 	// all other stats collectors since it requires special handling.
 	Columnarizer colexecop.VectorizedStatsCollector
-	ColumnTypes  []*types.T
-	Releasables  []execreleasable.Releasable
+	// TODO(yuzefovich): consider keeping the reference to the types in Release.
+	// This will also require changes to the planning code to actually reuse the
+	// slice if possible. This is not exactly trivial since there is no clear
+	// contract right now of whether or not a particular operator has to make a
+	// copy of the type schema if it needs to use it later.
+	ColumnTypes []*types.T
+	Releasables []execreleasable.Releasable
 }
 
 var _ execreleasable.Releasable = &NewColOperatorResult{}
@@ -152,9 +157,6 @@ func (r *NewColOperatorResult) Release() {
 			MetadataSources: r.MetadataSources[:0],
 			ToClose:         r.ToClose[:0],
 		},
-		// There is no need to deeply reset the column types because these
-		// objects are very tiny in the grand scheme of things.
-		ColumnTypes: r.ColumnTypes[:0],
 		Releasables: r.Releasables[:0],
 	}
 	newColOperatorResultPool.Put(r)
