@@ -2037,7 +2037,6 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestGCAssert", func(t *testing.T) {
-		skip.WithIssue(t, 86714)
 		skip.UnderShort(t)
 		skip.UnderBazelWithIssue(t, 65485, "Doesn't work in Bazel -- not really sure why yet")
 

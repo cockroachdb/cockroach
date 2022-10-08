@@ -163,12 +163,8 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(partitions []int) {
 // TODO(yuzefovich): think through how we can inline more implementations of
 // Less method - this has non-trivial performance improvements.
 // */}}
-// {{$isInt := or (eq .VecMethod "Int16") (eq .VecMethod "Int32")}}
-// {{$isInt = or ($isInt) (eq .VecMethod "Int64")}}
-// {{if and ($isInt) (not $nulls)}}
-// {{end}}
-//
-//gcassert:inline
+// {{$isInt := or (or (eq .VecMethod "Int16") (eq .VecMethod "Int32")) (eq .VecMethod "Int64")}}
+// {{if and ($isInt) (not $nulls)}}gcassert:inline{{end}}
 func (s *sort_TYPE_DIR_HANDLES_NULLSOp) Less(i, j int) bool {
 	// {{if $nulls}}
 	n1 := s.nulls.MaybeHasNulls() && s.nulls.NullAt(s.order[i])
