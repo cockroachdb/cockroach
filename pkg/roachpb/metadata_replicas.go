@@ -186,16 +186,16 @@ func (d ReplicaSet) containsVoterIncoming() bool {
 // For simplicity, CockroachDB treats learner replicas the same as voter
 // replicas as much as possible, but there are a few exceptions:
 //
-// - Learner replicas are not considered when calculating quorum size, and thus
-//   do not affect the computation of which ranges are under-replicated for
-//   upreplication/alerting/debug/etc purposes. Ditto for over-replicated.
-// - Learner replicas cannot become raft leaders, so we also don't allow them to
-//   become leaseholders. As a result, DistSender and the various oracles don't
-//   try to send them traffic.
-// - The raft snapshot queue tries to avoid sending snapshots to ephemeral
-//   learners (but not to non-voting replicas, which are also etcd learners) for
-//   reasons described below.
-// - Merges won't run while a learner replica is present.
+//   - Learner replicas are not considered when calculating quorum size, and thus
+//     do not affect the computation of which ranges are under-replicated for
+//     upreplication/alerting/debug/etc purposes. Ditto for over-replicated.
+//   - Learner replicas cannot become raft leaders, so we also don't allow them to
+//     become leaseholders. As a result, DistSender and the various oracles don't
+//     try to send them traffic.
+//   - The raft snapshot queue tries to avoid sending snapshots to ephemeral
+//     learners (but not to non-voting replicas, which are also etcd learners) for
+//     reasons described below.
+//   - Merges won't run while a learner replica is present.
 //
 // Replicas are now added in two ConfChange transactions. The first creates the
 // learner and the second promotes it to a voter. If the node that is
@@ -546,6 +546,17 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // but not to exit it in this state, i.e., the leaseholder must be some
 // kind of voter in the next new config (potentially VOTER_DEMOTING).
 //
+// It is possible (and sometimes needed) that while in the joint configuration,
+// the replica being removed will receive lease. This is allowed only if
+// a) there is a VOTER_INCOMING replica to which the lease will be trasferred
+// when transitioning out of the joint config, and b) the replica being removed
+// was the last leaseholder (as indictated by wasLastLeaseholder). The
+// information we use for (b) is potentially stale, but if it incorrect
+// the removed node either does not need to get the lease or will not be able
+// to get it. In particular, when we think we are the last leaseholder but we
+// aren't, the CAS call for extending the lease will fail (see
+// wasLastLeaseholder := isExtension in cmd_lease_request.go).
+//
 // An error is also returned is the replica is not part of `replDescs`.
 // leaseHolderRemovalAllowed is intended to check if the cluster version is
 // EnableLeaseHolderRemoval or higher.
@@ -554,14 +565,17 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // will check voter constraint violations. When changing this method, you need
 // to update replica filter in report to keep it correct.
 func CheckCanReceiveLease(
-	wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet, leaseHolderRemovalAllowed bool,
+	wouldbeLeaseholder ReplicaDescriptor,
+	replDescs ReplicaSet,
+	leaseHolderRemovalAllowed bool,
+	wasLastLeaseholder bool,
 ) error {
 	repDesc, ok := replDescs.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
 		return errReplicaNotFound
 	}
 	if !(repDesc.IsVoterNewConfig() ||
-		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && leaseHolderRemovalAllowed)) {
+		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && leaseHolderRemovalAllowed && wasLastLeaseholder)) {
 		// We allow a demoting / incoming voter to receive the lease if there's an incoming voter.
 		// In this case, when exiting the joint config, we will transfer the lease to the incoming
 		// voter.

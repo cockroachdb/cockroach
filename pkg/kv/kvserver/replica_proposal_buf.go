@@ -909,13 +909,13 @@ func (b *propBuf) TrackEvaluatingRequest(
 // ensuring that no future writes ever write below it.
 //
 // Returns false in the following cases:
-// 1) target is below the propBuf's closed timestamp. This ensures that the
-//    side-transport (the caller) is prevented from publishing closed timestamp
-//    regressions. In other words, for a given LAI, the side-transport only
-//    publishes closed timestamps higher than what Raft published.
-// 2) There are requests evaluating at timestamps equal to or below target (as
-//    tracked by the evalTracker). We can't close timestamps at or above these
-//    requests' write timestamps.
+//  1. target is below the propBuf's closed timestamp. This ensures that the
+//     side-transport (the caller) is prevented from publishing closed timestamp
+//     regressions. In other words, for a given LAI, the side-transport only
+//     publishes closed timestamps higher than what Raft published.
+//  2. There are requests evaluating at timestamps equal to or below target (as
+//     tracked by the evalTracker). We can't close timestamps at or above these
+//     requests' write timestamps.
 func (b *propBuf) MaybeForwardClosedLocked(ctx context.Context, target hlc.Timestamp) bool {
 	if lb := b.evalTracker.LowerBound(ctx); !lb.IsEmpty() && lb.LessEq(target) {
 		return false
@@ -1065,9 +1065,19 @@ func (rp *replicaProposer) leaderStatusRLocked(
 			// lease again, and by then hopefully we will have caught up.
 			leaderEligibleForLease = true
 		} else {
+
 			lhRemovalAllowed := r.store.cfg.Settings.Version.IsActive(
 				ctx, clusterversion.EnableLeaseHolderRemoval)
-			err := roachpb.CheckCanReceiveLease(leaderRep, rangeDesc.Replicas(), lhRemovalAllowed)
+			// If the current leader is a VOTER_DEMOTING and it was the last one to
+			// hold the lease (according to our possibly stale applied lease state),
+			// CheckCanReceiveLease considers it eligible to continue holding the
+			// lease, so we don't allow our proposal through. Otherwise, if it was not
+			// the last one to hold the lease, it will never be allowed to acquire it
+			// again, so we don't consider it eligible.
+			lastLease, _ := r.getLeaseRLocked()
+			wasLastLeaseholder := leaderRep.ReplicaID == lastLease.Replica.ReplicaID
+			err := roachpb.CheckCanReceiveLease(
+				leaderRep, rangeDesc.Replicas(), lhRemovalAllowed, wasLastLeaseholder)
 			leaderEligibleForLease = err == nil
 		}
 	}
