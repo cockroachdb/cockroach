@@ -340,10 +340,6 @@ type StoreTestingKnobs struct {
 	// heartbeats and then expect other replicas to take the lease without
 	// worrying about Raft).
 	AllowLeaseRequestProposalsWhenNotLeader bool
-	// AllowLeaseTransfersWhenTargetMayNeedSnapshot, if set, makes the Replica
-	// and proposal buffer allow lease request proposals even when the proposer
-	// cannot prove that the lease transfer target does not need a Raft snapshot.
-	AllowLeaseTransfersWhenTargetMayNeedSnapshot bool
 	// LeaseTransferRejectedRetryLoopCount, if set, configures the maximum number
 	// of retries for the retry loop used during lease transfers. This retry loop
 	// retries after transfer attempts are rejected because the transfer is deemed
