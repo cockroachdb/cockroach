@@ -397,7 +397,7 @@ func (r *Replica) propose(
 		// transferred away. The previous leaseholder is a LEARNER in the target config,
 		// and therefore shouldn't continue holding the lease.
 		if err := roachpb.CheckCanReceiveLease(
-			lhDesc, proposedDesc.Replicas(), true, /* lhRemovalAllowed */
+			lhDesc, proposedDesc.Replicas(), true, /* wasLastLeaseholder */
 		); err != nil {
 			e := errors.Mark(errors.Wrapf(err, "%v received invalid ChangeReplicasTrigger %s to "+
 				"remove self (leaseholder); lhRemovalAllowed: %v; current desc: %v; proposed desc: %v",

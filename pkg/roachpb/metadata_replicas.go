@@ -503,22 +503,30 @@ var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
 // but not to exit it in this state, i.e., the leaseholder must be some
 // kind of voter in the next new config (potentially VOTER_DEMOTING).
 //
+// It is possible (and sometimes needed) that while in the joint configuration,
+// the replica being removed will receive lease. This is allowed only if
+// a) there is a VOTER_INCOMING replica to which the lease will be trasferred
+// when transitioning out of the joint config, and b) the replica being removed
+// was the last leaseholder (as indictated by wasLastLeaseholder). The
+// information we use for (b) is potentially stale, but if it incorrect
+// the removed node either does not need to get the lease or will not be able
+// to get it. In particular, when we think we are the last leaseholder but we
+// aren't, the CAS call for extending the lease will fail (see
+// wasLastLeaseholder := isExtension in cmd_lease_request.go).
+//
 // An error is also returned is the replica is not part of `replDescs`.
-// leaseHolderRemovalAllowed is intended to check if the cluster version is
-// EnableLeaseHolderRemoval or higher.
-// TODO(shralex): remove this flag in 23.1
 // NB: This logic should be in sync with constraint_stats_report as report
 // will check voter constraint violations. When changing this method, you need
 // to update replica filter in report to keep it correct.
 func CheckCanReceiveLease(
-	wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet, leaseHolderRemovalAllowed bool,
+	wouldbeLeaseholder ReplicaDescriptor, replDescs ReplicaSet, wasLastLeaseholder bool,
 ) error {
 	repDesc, ok := replDescs.GetReplicaDescriptorByID(wouldbeLeaseholder.ReplicaID)
 	if !ok {
 		return errReplicaNotFound
 	}
 	if !(repDesc.IsVoterNewConfig() ||
-		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && leaseHolderRemovalAllowed)) {
+		(repDesc.IsVoterOldConfig() && replDescs.containsVoterIncoming() && wasLastLeaseholder)) {
 		// We allow a demoting / incoming voter to receive the lease if there's an incoming voter.
 		// In this case, when exiting the joint config, we will transfer the lease to the incoming
 		// voter.
