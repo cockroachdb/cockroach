@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -106,7 +107,13 @@ func (r *Replica) evalAndPropose(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	tok TrackedRequestToken,
-) (chan proposalResult, func(), kvserverbase.CmdIDKey, *StoreWriteBytes, *roachpb.Error) {
+) (
+	chan proposalResult,
+	func(),
+	kvserverbase.CmdIDKey,
+	*kvadmission.StoreWriteBytes,
+	*roachpb.Error,
+) {
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := makeIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, g, st, ui)
@@ -167,7 +174,7 @@ func (r *Replica) evalAndPropose(
 	// typical lag in consensus is expected to be small compared to the time
 	// granularity of admission control doing token and size estimation (which
 	// is 15s). Also, admission control corrects for gaps in reporting.
-	writeBytes := newStoreWriteBytes()
+	writeBytes := kvadmission.NewStoreWriteBytes()
 	if proposal.command.WriteBatch != nil {
 		writeBytes.WriteBytes = int64(len(proposal.command.WriteBatch.Data))
 	}
@@ -1051,7 +1058,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, getNonDeterministicFailureExplanation(err), err
 		}
 		if r.store.cfg.KVAdmissionController != nil &&
-			stats.apply.followerStoreWriteBytes.numEntries > 0 {
+			stats.apply.followerStoreWriteBytes.NumEntries > 0 {
 			r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes(
 				r.store.StoreID(), stats.apply.followerStoreWriteBytes)
 		}
