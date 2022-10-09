@@ -743,7 +743,8 @@ func (g *newRuleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleE
 		opTyp := g.md.typeOf(opDef)
 
 		g.genBoundStatements(t)
-		g.w.nestIndent("_expr := &%s{\n", opTyp.name)
+		g.w.writeIndent("var _expr, _interned memo.RelExpr\n")
+		g.w.nestIndent("_expr = &%s{\n", opTyp.name)
 		for i, arg := range t.Args {
 			field := opDef.Fields[i]
 
@@ -753,7 +754,31 @@ func (g *newRuleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleE
 			g.w.write(",\n")
 		}
 		g.w.unnest("}\n")
-		g.w.writeIndent("_interned := _e.mem.Add%sToGroup(_expr, _root)\n", opDef.Name)
+
+		// Post-transformation normalization
+		//g.w.nestIndent("if _e.f.HasZeroCardinalityInput(_expr) {\n")
+		//g.w.writeIndent("_typedExpr, _ := _expr.(*%s)\n", opTyp.name)
+		//g.w.nestIndent("_expr = %s.Construct%s(\n", g.factoryVar, name)
+		//numArgs := len(t.Args)
+		//for i := range t.Args {
+		//	field := opDef.Fields[i]
+		//	if i == numArgs - 1 && strings.Contains(g.md.typeOf(field).name, "Private") {
+		//		g.w.writeIndent("&")
+		//	} else {
+		//		g.w.writeIndent("")
+		//	}
+		//	g.w.write("_typedExpr.%s", g.md.fieldName(field))
+		//	g.w.write(",\n")
+		//}
+		//g.w.unnest(")\n")
+		//
+		//g.w.writeIndent("_expr = _e.f.OnTransformRelational(_expr, _root)\n")
+		//g.w.writeIndent("_interned = _expr\n")
+		//g.w.unnest("}\n")
+		//g.w.nestIndent("if _interned == (memo.RelExpr)(nil) {\n")
+		//g.w.writeIndent("_typedExpr, _ := _expr.(*%s)\n", opTyp.name)
+		//g.w.writeIndent("_interned = _e.mem.Add%sToGroup(_typedExpr, _root)\n", opDef.Name)
+		//g.w.unnest("}\n")  // msirek-temp
 
 		// Notify listeners that rule was applied. If the expression was already
 		// part of the memo, then _interned != _expr, and this rule is a no-op.

@@ -539,6 +539,11 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 
 		if fullyOptimized {
 			state.fullyOptimized = true
+			if state.best.Op() == opt.LimitOp {
+				i := 0
+				i++ // msirek-temp
+			}
+			state.best = o.f.OnTransformRelational(state.best, grp)
 			break
 		}
 	}

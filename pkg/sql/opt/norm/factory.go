@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"math"
 )
 
 // ReplaceFunc is the callback function passed to the Factory.Replace method.
@@ -389,6 +390,95 @@ func (f *Factory) onConstructRelational(rel memo.RelExpr) memo.RelExpr {
 // replacement code can be run.
 func (f *Factory) onConstructScalar(scalar opt.ScalarExpr) opt.ScalarExpr {
 	return scalar
+}
+
+// OnTransformRelational is called as a final step by each transformation rule
+// that generates a new relational expression, so that a limited number of
+// normalizations can be applied. This currently only replaces a zero
+// cardinality relation with an empty values expression and eliminates a No-Op
+// LIMIT expression.
+func (f *Factory) OnTransformRelational(rel memo.RelExpr, grp memo.RelExpr) (expr memo.RelExpr) {
+	//if rel.Op() != opt.ValuesOp {
+	//	rel = f.OnTransformSimplifyZeroCardinalityGroup(rel, grp)
+	//} // msirek-temp
+	if rel.Op() == opt.LimitOp {
+		rel = f.OnTransformEliminateLimit(rel, grp)
+	}
+
+	return rel
+}
+
+func (f *Factory) OnTransformSimplifyZeroCardinalityGroup(rel memo.RelExpr, grp memo.RelExpr) (expr memo.RelExpr) {
+	if rel.Op() != opt.ValuesOp {
+		relational := rel.Relational()
+		// We can do this if we only contain leakproof operators. As an example of
+		// an immutable operator that should not be folded: a Limit on top of an
+		// empty input has to error out if the limit turns out to be negative.
+		if relational.Cardinality.IsZero() && relational.VolatilitySet.IsLeakproof() {
+			if f.matchedRule == nil || f.matchedRule(opt.SimplifyZeroCardinalityGroup) {
+				values := f.funcs.GenerateEmptyValues(relational.OutputCols) // msirek-temp
+				// values := f.funcs.ConstructEmptyValues(relational.OutputCols) // msirek-temp
+				//interned := f.mem.AddValuesToGroup(values.(*memo.ValuesExpr), grp) // msirek-temp
+				interned := f.mem.AddValuesToGroup(values, grp)
+				if f.appliedRule != nil {
+					if interned != values {
+						f.appliedRule(opt.SimplifyZeroCardinalityGroup, grp, nil)
+					} else {
+						f.appliedRule(opt.SimplifyZeroCardinalityGroup, grp, interned)
+					}
+				}
+
+				//interned = f.mem.AddValuesToGroup(values.(*memo.ValuesExpr), grp) // msirek-temp
+				// interned = values // msirek-temp
+				rel = values
+			}
+		}
+	}
+	return rel
+}
+
+func (f *Factory) OnTransformEliminateLimit(rel memo.RelExpr, grp memo.RelExpr) (expr memo.RelExpr) {
+	limitExpr, ok := rel.(*memo.LimitExpr)
+	if !ok {
+		return rel
+	}
+	constExpr, _ := limitExpr.Limit.(*memo.ConstExpr)
+	if constExpr != nil {
+		limit := constExpr.Value
+		limitVal := int64(*limit.(*tree.DInt))
+		inputRel := limitExpr.Input.FirstExpr()
+		for i, member := 0, inputRel; member != nil; i, member = i+1, member.NextExpr() {
+			var limitGreaterThanNumValues bool
+			if valuesExpr, ok := member.(*memo.ValuesExpr); ok {
+				maxRows := valuesExpr.Len()
+				limitGreaterThanNumValues = limitVal >= 0 && maxRows < math.MaxUint32 && limitVal >= int64(maxRows)
+			}
+			if limitGreaterThanNumValues || f.funcs.LimitGeMaxRows(limit, member) {
+				if f.matchedRule == nil || f.matchedRule(opt.EliminateLimit) {
+					if f.appliedRule != nil {
+						f.appliedRule(opt.EliminateLimit, grp, nil)
+					}
+					return member
+					// return f.mem.AddExprToGroup(member, grp) // msirek-temp
+				}
+			}
+		}
+	}
+	return rel
+}
+
+// HasZeroCardinalityInput returns true if at least one of the inputs to `rel`
+// is a zero-cardinality leak-proof relation.
+func (f *Factory) HasZeroCardinalityInput(rel memo.RelExpr) bool {
+	for i := 0; i < rel.ChildCount(); i++ {
+		if relExpr, ok := rel.Child(i).(memo.RelExpr); ok {
+			relational := relExpr.Relational()
+			if relational.Cardinality.IsZero() && relational.VolatilitySet.IsLeakproof() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ----------------------------------------------------------------------

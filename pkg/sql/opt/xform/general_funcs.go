@@ -845,3 +845,8 @@ func (c *CustomFuncs) getKnownScanConstraint(
 	}
 	return cons, !cons.IsUnconstrained()
 }
+
+// AddExprToGroup adds any generic RelExpr `expr` to group `grp`.
+func (c *CustomFuncs) AddExprToGroup(grp, expr memo.RelExpr) memo.RelExpr {
+	return c.e.mem.AddExprToGroup(expr, grp.FirstExpr())
+}

@@ -54,6 +54,7 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	g.genMemoizeFuncs()
 	g.genAddToGroupFuncs()
+	g.genAddExprToGroup()
 	g.genInternFuncs()
 	g.genBuildPropsFunc()
 }
@@ -710,6 +711,23 @@ func (g *exprsGen) genAddToGroupFuncs() {
 		fmt.Fprintf(g.w, "  return interned\n")
 		fmt.Fprintf(g.w, "}\n\n")
 	}
+}
+
+// genAddExprToGroupFuncs generates a method on the memo which adds a generic
+// RelExpr expression to a group.
+func (g *exprsGen) genAddExprToGroup() {
+	defines := g.compiled.Defines.WithTag("Relational").WithoutTag("List").WithoutTag("ListItem")
+	fmt.Fprintf(g.w, "func (m *Memo) AddExprToGroup(e RelExpr, grp RelExpr) RelExpr {\n")
+	fmt.Fprintf(g.w, "  switch t := e.(type) {\n")
+	for _, define := range defines {
+		opTyp := g.md.typeOf(define)
+		fmt.Fprintf(g.w, "  case *%s:\n", opTyp.name)
+		fmt.Fprintf(g.w, "    return m.Add%sToGroup(t, grp)\n", define.Name)
+	}
+	fmt.Fprintf(g.w, "  default:\n")
+	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled op: %%s\", e.Op()))\n")
+	fmt.Fprintf(g.w, "  }\n")
+	fmt.Fprintf(g.w, "}\n")
 }
 
 // genInternFuncs generates methods on the interner.

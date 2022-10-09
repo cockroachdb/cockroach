@@ -444,6 +444,12 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			); !ok {
 			return
 		}
+		relational := grp.Relational()
+		if combinedConstraint.IsContradiction() && grp.Relational().VolatilitySet.IsLeakproof() {
+			values := c.GenerateEmptyValues(relational.OutputCols)
+			c.e.mem.AddValuesToGroup(values, grp)
+			return
+		}
 
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate

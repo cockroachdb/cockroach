@@ -793,6 +793,23 @@ func (c *CustomFuncs) ConstructEmptyValues(cols opt.ColSet) memo.RelExpr {
 	})
 }
 
+// ConstructEmptyValues builds a Values expression with no rows, but does not
+// add it to the memo.
+func (c *CustomFuncs) GenerateEmptyValues(cols opt.ColSet) *memo.ValuesExpr {
+	colList := make(opt.ColList, 0, cols.Len())
+	for i, ok := cols.Next(0); ok; i, ok = cols.Next(i + 1) {
+		colList = append(colList, i)
+	}
+	valuesExpr := &memo.ValuesExpr{
+		Rows:          memo.EmptyScalarListExpr,
+		ValuesPrivate: memo.ValuesPrivate{
+			Cols: colList,
+			ID:   c.mem.Metadata().NextUniqueID(),
+		},
+	}
+	return valuesExpr
+}
+
 // ----------------------------------------------------------------------
 //
 // Grouping functions
