@@ -45,6 +45,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 // TestStoreRangeLease verifies that regular ranges (not some special ones at
@@ -371,6 +373,100 @@ func TestTransferLeaseToVoterDemotingFails(t *testing.T) {
 	})
 }
 
+// TestTransferLeaseDuringJointConfigWithDeadIncomingVoter ensures that the
+// lease transfer performed during a joint config replication change that is
+// replacing the existing leaseholder does not get stuck even if the existing
+// leaseholder cannot prove that the incoming leaseholder is caught up on its
+// log. It does so by killing the incoming leaseholder before it receives the
+// lease and ensuring that the range is able to exit the joint configuration.
+//
+// Currently, the range exits by bypassing safety checks during the lease
+// transfer, sending the lease to the dead incoming voter, letting the lease
+// expire, acquiring the lease on one of the non-demoting voters, and exiting.
+// The details here may change in the future, but the goal of this test will
+// not.
+func TestTransferLeaseDuringJointConfigWithDeadIncomingVoter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// The lease request timeout depends on the Raft election timeout, so we set
+	// it low to get faster lease expiration (800 ms) and speed up the test.
+	var raftCfg base.RaftConfig
+	raftCfg.SetDefaults()
+	raftCfg.RaftHeartbeatIntervalTicks = 1
+	raftCfg.RaftElectionTimeoutTicks = 2
+
+	knobs, ltk := makeReplicationTestKnobs()
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			RaftConfig: raftCfg,
+			Knobs:      knobs,
+		},
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	// Make sure n1 has the lease to start with.
+	err := tc.Server(0).DB().AdminTransferLease(ctx, key, tc.Target(0).StoreID)
+	require.NoError(t, err)
+	store0, repl0 := getFirstStoreReplica(t, tc.Server(0), key)
+
+	// The test proceeds as follows:
+	//
+	//  - Send an AdminChangeReplicasRequest to remove n1 (leaseholder) and add n4
+	//  - Stop the replication change after entering the joint configuration
+	//  - Kill n4 and wait until n1 notices
+	//  - Complete the replication change
+
+	// Enter joint config.
+	ltk.withStopAfterJointConfig(func() {
+		tc.RebalanceVoterOrFatal(ctx, t, key, tc.Target(0), tc.Target(3))
+	})
+	desc = tc.LookupRangeOrFatal(t, key)
+	require.Len(t, desc.Replicas().Descriptors(), 4)
+	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
+
+	// Kill n4.
+	tc.StopServer(3)
+
+	// Wait for n1 to notice.
+	testutils.SucceedsSoon(t, func() error {
+		// Manually report n4 as unreachable to speed up the test.
+		require.NoError(t, repl0.RaftReportUnreachable(4))
+		// Check the Raft progress.
+		s := repl0.RaftStatus()
+		require.Equal(t, raft.StateLeader, s.RaftState)
+		p := s.Progress
+		require.Len(t, p, 4)
+		require.Contains(t, p, uint64(4))
+		if p[4].State != tracker.StateProbe {
+			return errors.Errorf("dead replica not state probe")
+		}
+		return nil
+	})
+
+	// Run the range through the replicate queue on n1.
+	trace, processErr, err := store0.Enqueue(
+		ctx, "replicate", repl0, true /* skipShouldQueue */, false /* async */)
+	require.NoError(t, err)
+	require.NoError(t, processErr)
+	formattedTrace := trace.String()
+	expectedMessages := []string{
+		`transitioning out of joint configuration`,
+		`leaseholder .* is being removed through an atomic replication change, transferring lease to`,
+		`lease transfer to .* complete`,
+	}
+	require.NoError(t, testutils.MatchInOrder(formattedTrace, expectedMessages...))
+
+	// Verify that the joint configuration has completed.
+	desc = tc.LookupRangeOrFatal(t, key)
+	require.Len(t, desc.Replicas().VoterDescriptors(), 3)
+	require.False(t, desc.Replicas().InAtomicReplicationChange(), desc)
+}
+
 // internalTransferLeaseFailureDuringJointConfig reproduces
 // https://github.com/cockroachdb/cockroach/issues/83687
 // and makes sure that if lease transfer fails during a joint configuration
@@ -398,13 +494,16 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 	// range when they are being proposed.
 	var scratchRangeID int64
 	shouldFailProposal := func(args kvserverbase.ProposalFilterArgs) bool {
-		// Block if a ChangeReplicas command is removing a node from our range.
 		return args.Req.RangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) &&
 			args.Req.IsSingleTransferLeaseRequest()
 	}
+	const failureMsg = "injected lease transfer"
 	knobs.Store.(*kvserver.StoreTestingKnobs).TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
 		if shouldFailProposal(args) {
-			return roachpb.NewErrorf("Injecting lease transfer failure")
+			// The lease transfer should be configured to bypass safety checks.
+			// See maybeTransferLeaseDuringLeaveJoint for an explanation.
+			require.True(t, args.Req.Requests[0].GetTransferLease().BypassSafetyChecks)
+			return roachpb.NewErrorf(failureMsg)
 		}
 		return nil
 	}
@@ -430,7 +529,7 @@ func internalTransferLeaseFailureDuringJointConfig(t *testing.T, isManual bool) 
 			{ChangeType: roachpb.ADD_VOTER, Target: tc.Target(3)},
 		})
 	require.Error(t, err)
-	require.Regexp(t, "Injecting lease transfer failure", err)
+	require.Regexp(t, failureMsg, err)
 
 	// We're now in a joint configuration, n1 already revoked its lease but all
 	// other replicas think n1 is the leaseholder. As long as n1 is alive, it is

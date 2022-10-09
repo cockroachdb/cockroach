@@ -1827,7 +1827,7 @@ func (rq *replicateQueue) shedLease(
 // ReplicaLeaseMover handles lease transfers for a single range.
 type ReplicaLeaseMover interface {
 	// AdminTransferLease moves the lease to the requested store.
-	AdminTransferLease(ctx context.Context, target roachpb.StoreID) error
+	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
 
 	// String returns info about the replica.
 	String() string
@@ -1860,7 +1860,7 @@ func (rq *replicateQueue) TransferLease(
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
 	log.KvDistribution.Infof(ctx, "transferring lease to s%d", target)
-	if err := rlm.AdminTransferLease(ctx, target); err != nil {
+	if err := rlm.AdminTransferLease(ctx, target, false /* bypassSafetyChecks */); err != nil {
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
 	rq.lastLeaseTransfer.Store(timeutil.Now())

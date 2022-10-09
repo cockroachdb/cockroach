@@ -57,8 +57,8 @@ type CandidateReplica interface {
 	// Stats returns a snapshot of the QPS replica load stats
 	Stats() *replicastats.RatedSummary
 	// AdminTransferLease transfers the LeaderLease to another replica.
-	AdminTransferLease(ctx context.Context, target roachpb.StoreID) error
-	// Replica returns the underlying replica for this CandidateReplica. It is
+	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
+	// Repl returns the underlying replica for this CandidateReplica. It is
 	// only used for determining timeouts in production code and not the
 	// simulator.
 	Repl() *Replica
