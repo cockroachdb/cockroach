@@ -32,8 +32,9 @@ import (
 )
 
 type queryComparisonTest struct {
-	name string
-	run  func(*sqlsmith.Smither, *rand.Rand, queryComparisonHelper) error
+	name      string
+	setupName string
+	run       func(*sqlsmith.Smither, *rand.Rand, queryComparisonHelper) error
 }
 
 func runQueryComparison(
@@ -138,7 +139,7 @@ func runOneRoundQueryComparison(
 	rnd, seed := randutil.NewTestRand()
 	t.L().Printf("seed: %d", seed)
 
-	setup := sqlsmith.Setups[sqlsmith.RandTableSetupName](rnd)
+	setup := sqlsmith.Setups[qct.setupName](rnd)
 
 	t.Status("executing setup")
 	t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
@@ -169,7 +170,8 @@ func runOneRoundQueryComparison(
 
 	// Initialize a smither that generates only INSERT and UPDATE statements with
 	// the InsUpdOnly option.
-	mutatingSmither := newMutatingSmither(conn, rnd, t, true /* disableDelete */)
+	isMultiRegion := qct.setupName == sqlsmith.SeedMultiRegionSetupName
+	mutatingSmither := newMutatingSmither(conn, rnd, t, true /* disableDelete */, isMultiRegion)
 	defer mutatingSmither.Close()
 
 	// Initialize a smither that generates only deterministic SELECT statements.
@@ -205,7 +207,8 @@ func runOneRoundQueryComparison(
 			t.Status("running ", qct.name, ": ", i, " initial mutations completed")
 			// Initialize a new mutating smither that generates INSERT, UPDATE and
 			// DELETE statements with the MutationsOnly option.
-			mutatingSmither = newMutatingSmither(conn, rnd, t, false /* disableDelete */)
+			isMultiRegion := qct.setupName == sqlsmith.SeedMultiRegionSetupName
+			mutatingSmither = newMutatingSmither(conn, rnd, t, false /* disableDelete */, isMultiRegion)
 			defer mutatingSmither.Close()
 		}
 
@@ -237,21 +240,25 @@ func runOneRoundQueryComparison(
 }
 
 func newMutatingSmither(
-	conn *gosql.DB, rnd *rand.Rand, t test.Test, disableDelete bool,
+	conn *gosql.DB, rnd *rand.Rand, t test.Test, disableDelete bool, isMultiRegion bool,
 ) (mutatingSmither *sqlsmith.Smither) {
-	var allowedMutations func() sqlsmith.SmitherOption
-	if disableDelete {
-		allowedMutations = sqlsmith.InsUpdOnly
-	} else {
-		allowedMutations = sqlsmith.MutationsOnly
-	}
-	var err error
-	mutatingSmither, err = sqlsmith.NewSmither(conn, rnd, allowedMutations(),
+	var smitherOpts []sqlsmith.SmitherOption
+	smitherOpts = append(smitherOpts,
 		sqlsmith.FavorCommonData(), sqlsmith.UnlikelyRandomNulls(),
 		sqlsmith.DisableInsertSelect(), sqlsmith.DisableCrossJoins(),
 		sqlsmith.SetComplexity(.05),
-		sqlsmith.SetScalarComplexity(.01),
-	)
+		sqlsmith.SetScalarComplexity(.01))
+	if disableDelete {
+		smitherOpts = append(smitherOpts, sqlsmith.InsUpdOnly())
+	} else {
+		smitherOpts = append(smitherOpts, sqlsmith.MutationsOnly())
+	}
+	if isMultiRegion {
+		smitherOpts = append(smitherOpts, sqlsmith.EnableAlters())
+		smitherOpts = append(smitherOpts, sqlsmith.MultiRegionDDLs())
+	}
+	var err error
+	mutatingSmither, err = sqlsmith.NewSmither(conn, rnd, smitherOpts...)
 	if err != nil {
 		t.Fatal(err)
 	}

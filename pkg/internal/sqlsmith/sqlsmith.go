@@ -316,6 +316,11 @@ var MultiRegionDDLs = simpleOption("include multiregion DDLs", func(s *Smither) 
 	s.alterWeights = append(s.alterWeights, alterMultiregion...)
 })
 
+// EnableAlters enables ALTER statements.
+var EnableAlters = simpleOption("include ALTER statements", func(s *Smither) {
+	s.stmtWeights = append(s.stmtWeights, statementWeight{1, makeAlter})
+})
+
 // DisableWith causes the Smither to not emit WITH clauses.
 var DisableWith = simpleOption("disable WITH", func(s *Smither) {
 	s.disableWith = true

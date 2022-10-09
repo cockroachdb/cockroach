@@ -19,26 +19,36 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/errors"
 )
 
 func registerCostFuzz(r registry.Registry) {
-	r.Add(registry.TestSpec{
-		Name:            "costfuzz",
-		Owner:           registry.OwnerSQLQueries,
-		Timeout:         time.Hour * 1,
-		RequiresLicense: true,
-		Tags:            nil,
-		Cluster:         r.MakeClusterSpec(1),
-		NativeLibs:      registry.LibGEOS,
-		Run:             runCostFuzz,
-	})
-}
-
-func runCostFuzz(ctx context.Context, t test.Test, c cluster.Cluster) {
-	runQueryComparison(ctx, t, c, &queryComparisonTest{name: "costfuzz", run: runCostFuzzQuery})
+	for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+		var clusterSpec spec.ClusterSpec
+		switch setupName {
+		case sqlsmith.SeedMultiRegionSetupName:
+			clusterSpec = r.MakeClusterSpec(4, spec.Geo())
+		default:
+			clusterSpec = r.MakeClusterSpec(1)
+		}
+		r.Add(registry.TestSpec{
+			Name:            fmt.Sprintf("costfuzz/%s", setupName),
+			Owner:           registry.OwnerSQLQueries,
+			Timeout:         time.Hour * 1,
+			RequiresLicense: true,
+			Tags:            nil,
+			Cluster:         clusterSpec,
+			NativeLibs:      registry.LibGEOS,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runQueryComparison(ctx, t, c, &queryComparisonTest{
+					name: "costfuzz", setupName: setupName, run: runCostFuzzQuery,
+				})
+			},
+		})
+	}
 }
 
 // runCostFuzzQuery executes the same query two times, once with normal costs
