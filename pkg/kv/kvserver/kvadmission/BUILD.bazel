@@ -1,0 +1,24 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvadmission",
+    srcs = ["kvadmission.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_pebble//:pebble",
+    ],
+)
+
+get_x_data(name = "get_x_data")
