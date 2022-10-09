@@ -19,13 +19,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/errors"
 )
 
 func registerUnoptimizedQueryOracle(r registry.Registry) {
-	specs := []struct {
+	disableRuleSpecs := []struct {
 		disableRules           string
 		disableRuleProbability float64
 	}{
@@ -38,24 +39,36 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 			disableRuleProbability: 0.5,
 		},
 	}
-	for i := range specs {
-		spec := &specs[i]
-		r.Add(registry.TestSpec{
-			Name:            fmt.Sprintf("unoptimized-query-oracle/disable-rules=%s", spec.disableRules),
-			Owner:           registry.OwnerSQLQueries,
-			Timeout:         time.Hour * 1,
-			RequiresLicense: true,
-			Tags:            nil,
-			Cluster:         r.MakeClusterSpec(1),
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runQueryComparison(ctx, t, c, &queryComparisonTest{
-					name: "unoptimized-query-oracle",
-					run: func(s *sqlsmith.Smither, r *rand.Rand, h queryComparisonHelper) error {
-						return runUnoptimizedQueryOracleImpl(s, r, h, spec.disableRuleProbability)
-					},
-				})
-			},
-		})
+	for i := range disableRuleSpecs {
+		disableRuleSpec := &disableRuleSpecs[i]
+		for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+			var clusterSpec spec.ClusterSpec
+			switch setupName {
+			case sqlsmith.SeedMultiRegionSetupName:
+				clusterSpec = r.MakeClusterSpec(4, spec.Geo())
+			default:
+				clusterSpec = r.MakeClusterSpec(1)
+			}
+			r.Add(registry.TestSpec{
+				Name: fmt.Sprintf(
+					"unoptimized-query-oracle/disable-rules=%s/%s", disableRuleSpec.disableRules, setupName,
+				),
+				Owner:           registry.OwnerSQLQueries,
+				Timeout:         time.Hour * 1,
+				RequiresLicense: true,
+				Tags:            nil,
+				Cluster:         clusterSpec,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runQueryComparison(ctx, t, c, &queryComparisonTest{
+						name:      "unoptimized-query-oracle",
+						setupName: setupName,
+						run: func(s *sqlsmith.Smither, r *rand.Rand, h queryComparisonHelper) error {
+							return runUnoptimizedQueryOracleImpl(s, r, h, disableRuleSpec.disableRuleProbability)
+						},
+					})
+				},
+			})
+		}
 	}
 }
 
