@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -38,7 +39,12 @@ import (
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
-) (br *roachpb.BatchResponse, _ *concurrency.Guard, _ *StoreWriteBytes, pErr *roachpb.Error) {
+) (
+	br *roachpb.BatchResponse,
+	_ *concurrency.Guard,
+	_ *kvadmission.StoreWriteBytes,
+	pErr *roachpb.Error,
+) {
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
 

@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	math "math"
-	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -22,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -187,34 +186,11 @@ func (ls *Stores) Send(
 	return br, pErr
 }
 
-// StoreWriteBytes aliases admission.StoreWorkDoneInfo, since the notion of
-// "work is done" is specific to admission control and doesn't need to leak
-// everywhere.
-type StoreWriteBytes admission.StoreWorkDoneInfo
-
-var storeWriteBytesPool = sync.Pool{
-	New: func() interface{} { return &StoreWriteBytes{} },
-}
-
-func newStoreWriteBytes() *StoreWriteBytes {
-	wb := storeWriteBytesPool.Get().(*StoreWriteBytes)
-	*wb = StoreWriteBytes{}
-	return wb
-}
-
-// Release returns the *StoreWriteBytes to the pool.
-func (wb *StoreWriteBytes) Release() {
-	if wb == nil {
-		return
-	}
-	storeWriteBytesPool.Put(wb)
-}
-
 // SendWithWriteBytes is the implementation of Send with an additional
 // *StoreWriteBytes return value.
 func (ls *Stores) SendWithWriteBytes(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *StoreWriteBytes, *roachpb.Error) {
+) (*roachpb.BatchResponse, *kvadmission.StoreWriteBytes, *roachpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
 		log.Fatalf(ctx, "invalid batch (%s): %s", ba, err)
 	}
