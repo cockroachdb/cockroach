@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -77,7 +78,12 @@ var migrateApplicationTimeout = settings.RegisterDurationSetting(
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
-) (br *roachpb.BatchResponse, _ *concurrency.Guard, _ *StoreWriteBytes, pErr *roachpb.Error) {
+) (
+	br *roachpb.BatchResponse,
+	_ *concurrency.Guard,
+	_ *kvadmission.StoreWriteBytes,
+	pErr *roachpb.Error,
+) {
 	startTime := timeutil.Now()
 
 	// Even though we're not a read-only operation by definition, we have to
