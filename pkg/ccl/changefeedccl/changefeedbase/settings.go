@@ -10,6 +10,7 @@ package changefeedbase
 
 import (
 	"encoding/json"
+	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -239,7 +240,13 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.event_consumer_workers",
 	"the number of workers to use when processing events; 0 or 1 disables",
-	int64(util.ConstantWithMetamorphicTestRange("changefeed.consumer_max_workers", 8, 0, 32)),
+	func() int64 {
+		idealNumber := runtime.NumCPU() >> 2
+		if idealNumber < 1 {
+			return 1
+		}
+		return int64(idealNumber)
+	}(),
 	settings.NonNegativeInt,
 ).WithPublic()
 
