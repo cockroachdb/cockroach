@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMaybeRefreshStats(t *testing.T) {
@@ -119,6 +120,50 @@ func TestMaybeRefreshStats(t *testing.T) {
 		t.Fatal("refresher should not re-enqueue attempt to create stats over view")
 	default:
 	}
+}
+
+func TestMaybeRefreshStatsTargetRowsZeroDoesNotPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+	AutomaticStatisticsMinStaleRows.Override(ctx, &st.SV, 0)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRun.Exec(t,
+		`CREATE DATABASE t;
+		CREATE TABLE t.a (k INT PRIMARY KEY);
+		INSERT INTO t.a VALUES (1);
+		CREATE VIEW t.vw AS SELECT k, k+1 FROM t.a;`)
+
+	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
+	descA := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
+	cache := NewTableStatisticsCache(
+		ctx,
+		10, /* cacheSize */
+		kvDB,
+		executor,
+		keys.SystemSQLCodec,
+		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
+		s.CollectionFactory().(*descs.CollectionFactory),
+	)
+	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
+
+	// This should not panic.
+	require.NotPanics(t, func() {
+		refresher.maybeRefreshStats(
+			ctx, s.Stopper(), descA.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
+		)
+	})
 }
 
 func TestAverageRefreshTime(t *testing.T) {

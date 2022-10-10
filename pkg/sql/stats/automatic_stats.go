@@ -444,9 +444,15 @@ func (r *Refresher) maybeRefreshStats(
 		mustRefresh = true
 	}
 
-	targetRows := int64(rowCount*AutomaticStatisticsFractionStaleRows.Get(&r.st.SV)) +
-		AutomaticStatisticsMinStaleRows.Get(&r.st.SV)
-	if !mustRefresh && rowsAffected < math.MaxInt32 && r.randGen.randInt(targetRows) >= rowsAffected {
+	statsFractionStaleRows := AutomaticStatisticsFractionStaleRows.Get(&r.st.SV)
+	statsMinStaleRows := AutomaticStatisticsMinStaleRows.Get(&r.st.SV)
+	targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
+	// randInt will panic if we pass it a value of 0.
+	randomTargetRows := int64(0)
+	if targetRows > 0 {
+		randomTargetRows = r.randGen.randInt(targetRows)
+	}
+	if !mustRefresh && rowsAffected < math.MaxInt32 && randomTargetRows >= rowsAffected {
 		// No refresh is happening this time.
 		return
 	}
