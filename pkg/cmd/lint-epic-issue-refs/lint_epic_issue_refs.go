@@ -20,13 +20,25 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// Regex components for finding and validating issue and epic references in a string
 var (
-	fixIssueRefRE        = regexp.MustCompile(`(?im)(?i:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:(?:(#\d+)|([\w.-]+[/][\w.-]+#\d+)|([A-Z]+-\d+))[,.;]?(?:[ \t\n\r]+|$))+`)
-	informIssueRefRE     = regexp.MustCompile(`(?im)(?:see also|informs):?\s+(?:(?:(#\d+)|([\w.-]+[/][\w.-]+#\d+)|([A-Z]+-\d+))[,.;]?(?:[ \t\n\r]+|$))+`)
-	epicRefRE            = regexp.MustCompile(`(?im)epic:?\s+(?:([A-Z]+-[0-9]+)[,.;]?(?:[ \t\n\r]+|$))+`)
-	epicNoneRE           = regexp.MustCompile(`(?im)epic:?\s+(?:(none)[,.;]?(?:[ \t\n\r]+|$))+`)
-	githubJiraIssueRefRE = regexp.MustCompile(`(#\d+)|([\w.-]+[/][\w.-]+#\d+)|([A-Za-z]+-\d+)`)
-	jiraIssueRefRE       = regexp.MustCompile(`[A-Za-z]+-[0-9]+`)
+	ghIssuePart     = `(#\d+)`                                                      // e.g., #12345
+	ghIssueRepoPart = `([\w.-]+[/][\w.-]+#\d+)`                                     // e.g., cockroachdb/cockroach#12345
+	ghURLPart       = `(https://github.com/[-a-z0-9]+/[-._a-z0-9/]+/issues/\d+)`    // e.g., https://github.com/cockroachdb/cockroach/issues/12345
+	jiraIssuePart   = `([[:alpha:]]+-\d+)`                                          // e.g., DOC-3456
+	jiraURLPart     = "https://cockroachlabs.atlassian.net/browse/" + jiraIssuePart // e.g., https://cockroachlabs.atlassian.net/browse/DOC-3456
+	issueRefPart    = ghIssuePart + "|" + ghIssueRepoPart + "|" + ghURLPart + "|" + jiraIssuePart + "|" + jiraURLPart
+	afterRefPart    = `[,.;]?(?:[ \t\n\r]+|$)`
+)
+
+// Fully composed regexs used to match strings.
+var (
+	fixIssueRefRE        = regexp.MustCompile(`(?im)(?i:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+(?:(?:` + issueRefPart + `)` + afterRefPart + ")+")
+	informIssueRefRE     = regexp.MustCompile(`(?im)(?:part of|see also|informs):?\s+(?:(?:` + issueRefPart + `)` + afterRefPart + ")+")
+	epicRefRE            = regexp.MustCompile(`(?im)epic:?\s+(?:(?:` + jiraIssuePart + "|" + jiraURLPart + `)` + afterRefPart + ")+")
+	epicNoneRE           = regexp.MustCompile(`(?im)epic:?\s+(?:(none)` + afterRefPart + ")+")
+	githubJiraIssueRefRE = regexp.MustCompile(issueRefPart)
+	jiraIssueRefRE       = regexp.MustCompile(jiraIssuePart + "|" + jiraURLPart)
 )
 
 type commitInfo struct {
