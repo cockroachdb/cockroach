@@ -29,6 +29,7 @@ go_library(
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/sqlproxyccl/throttler",
         "//pkg/roachpb",
+        "//pkg/security",
         "//pkg/security/certmgr",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgwirebase",

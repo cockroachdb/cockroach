@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/throttler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
@@ -338,19 +339,12 @@ func (c *connector) dialSQLServer(
 		return c.testingKnobs.dialSQLServer(serverAssignment)
 	}
 
-	// Use a TLS config if one was provided. If TLSConfig is nil, Clone will
-	// return nil.
-	tlsConf := c.TLSConfig.Clone()
-	if tlsConf != nil {
-		// serverAssignment.Addr() will always have a port. We use an empty
-		// string as the default port as we only care about extracting the host.
-		outgoingHost, _, err := addr.SplitHostPort(serverAssignment.Addr(), "" /* defaultPort */)
-		if err != nil {
+	var tlsConf *tls.Config
+	if c.TLSConfig != nil {
+		var err error
+		if tlsConf, err = tlsConfigForTenant(c.TenantID, serverAssignment.Addr(), c.TLSConfig); err != nil {
 			return nil, err
 		}
-		// Always set ServerName. If InsecureSkipVerify is true, this will
-		// be ignored.
-		tlsConf.ServerName = outgoingHost
 	}
 
 	conn, err := BackendDial(c.StartupMsg, serverAssignment.Addr(), tlsConf)
@@ -423,4 +417,53 @@ var reportFailureToDirectoryCache = func(
 	directoryCache tenant.DirectoryCache,
 ) error {
 	return directoryCache.ReportFailure(ctx, tenantID, addr)
+}
+
+// tlsConfigForTenant customizes the tls configuration for connecting to a
+// specific tenant's sql server. Tenant certificates have two key features:
+//
+//  1. OU=Tenant
+//  2. CommonName=<tenant_id>
+//
+// The certificate is also expected to have a dns san that matches the
+// sqlServerAddr.
+func tlsConfigForTenant(
+	tenantID roachpb.TenantID, sqlServerAddr string, baseConfig *tls.Config,
+) (*tls.Config, error) {
+	config := baseConfig.Clone()
+
+	// serverAssignment.Addr() will always have a port. We use an empty
+	// string as the default port as we only care about extracting the host.
+	outgoingHost, _, err := addr.SplitHostPort(sqlServerAddr, "" /* defaultPort */)
+	if err != nil {
+		return nil, err
+	}
+
+	// Always set ServerName. If InsecureSkipVerify is true, this will be
+	// ignored.
+	config.ServerName = outgoingHost
+
+	config.VerifyConnection = func(state tls.ConnectionState) error {
+		if config.InsecureSkipVerify {
+			return nil
+		}
+		if len(state.VerifiedChains) == 0 || len(state.VerifiedChains[0]) == 0 {
+			// This should never happen. VerifyConnection is only called if the
+			// server provided a cert and the cert's CA was valid.
+			return errors.AssertionFailedf("VerifyConnection called with no verified chains")
+		}
+		serverCert := state.VerifiedChains[0][0]
+
+		// TODO(jeffswenson): once URI SANs are added to the tenant sql
+		// servers, this should validate the URI SAN.
+		if !security.IsTenantCertificate(serverCert) {
+			return errors.Newf("%s's certificate is not a tenant cert", outgoingHost)
+		}
+		if serverCert.Subject.CommonName != tenantID.String() {
+			return errors.Newf("expected a cert for tenant %d found '%s'", tenantID, serverCert.Subject.CommonName)
+		}
+		return nil
+	}
+
+	return config, nil
 }
