@@ -16,7 +16,7 @@ require (
 	github.com/google/btree v1.0.1
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/uuid v1.3.0
-	go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8
+	go.etcd.io/etcd/raft/v3 v3.6.0-alpha.0.0.20221009201006-d19116e6ee66
 	golang.org/x/crypto v0.0.0-20220817201139-bc19a97f63c8
 	golang.org/x/exp v0.0.0-20220104160115-025e73f80486
 	golang.org/x/exp/typeparams v0.0.0-20220713135740-79cabaa25d75 // indirect
@@ -352,6 +352,7 @@ require (
 	github.com/twpayne/go-kml v1.5.2 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
+	go.etcd.io/etcd/api/v3 v3.6.0-alpha.0 // indirect
 	go.mongodb.org/mongo-driver v1.5.1 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.9.0 // indirect
