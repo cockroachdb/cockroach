@@ -12,7 +12,9 @@ package rangefeed
 
 import (
 	"bytes"
+	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -62,6 +64,7 @@ type CatchUpIterator struct {
 	close     func()
 	span      roachpb.Span
 	startTime hlc.Timestamp // exclusive
+	pacer     *kvadmission.Pacer
 }
 
 // NewCatchUpIterator returns a CatchUpIterator for the given Reader over the
@@ -70,7 +73,11 @@ type CatchUpIterator struct {
 // NB: startTime is exclusive, i.e. the first possible event will be emitted at
 // Timestamp.Next().
 func NewCatchUpIterator(
-	reader storage.Reader, span roachpb.Span, startTime hlc.Timestamp, closer func(),
+	reader storage.Reader,
+	span roachpb.Span,
+	startTime hlc.Timestamp,
+	closer func(),
+	pacer *kvadmission.Pacer,
 ) *CatchUpIterator {
 	return &CatchUpIterator{
 		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader,
@@ -89,6 +96,7 @@ func NewCatchUpIterator(
 		close:     closer,
 		span:      span,
 		startTime: startTime,
+		pacer:     pacer,
 	}
 }
 
@@ -96,6 +104,7 @@ func NewCatchUpIterator(
 // callback.
 func (i *CatchUpIterator) Close() {
 	i.simpleCatchupIter.Close()
+	i.pacer.Close()
 	if i.close != nil {
 		i.close()
 	}
@@ -117,7 +126,9 @@ type outputEventFn func(e *roachpb.RangeFeedEvent) error
 // For example, with MVCC range tombstones [a-f)@5 and [a-f)@3 overlapping point
 // keys a@6, a@4, and b@2, the emitted order is [a-f)@3,[a-f)@5,a@4,a@6,b@2 because
 // the start key "a" is ordered before all of the timestamped point keys.
-func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) error {
+func (i *CatchUpIterator) CatchUpScan(
+	ctx context.Context, outputFn outputEventFn, withDiff bool,
+) error {
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
 	// reverse-chronological order. To output in chronological order, store
@@ -318,6 +329,10 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 			} else {
 				i.Next()
 			}
+		}
+
+		if err := i.pacer.Pace(ctx); err != nil {
+			return errors.Wrap(err, "automatic pacing: %v")
 		}
 	}
 
