@@ -375,11 +375,4 @@ replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d
 
 replace github.com/knz/go-libedit => github.com/otan-cockroach/go-libedit v1.10.2-0.20201030151939-7cced08450e7
 
-// At the time of writing (i.e. as of this version below) the `etcd` repo is in the process of properly introducing
-// modules, and as part of that uses an unsatisfiable version for this dependency (v3.0.0-00010101000000-000000000000).
-// We just force it to the same SHA as the `go.etcd.io/etcd/raft/v3` module (they live in the same VCS root).
-//
-// While this is necessary, make sure that the require block above does not diverge.
-replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560
-
 replace github.com/docker/docker => github.com/moby/moby v20.10.6+incompatible
