@@ -36,22 +36,14 @@ message CollectChecksumRequest {
   bytes checksum_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ChecksumID",
       (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
-  reserved 4;
-  // If true then the response must include the snapshot of the data from which
-  // the checksum is computed.
-  bool with_snapshot = 5;
+  reserved 4, 5;
 }
 
 message CollectChecksumResponse {
   // The checksum is the sha512 hash of the requested computation. It is empty
   // if the computation failed.
   bytes checksum = 1;
-  // snapshot is set if the with_snapshot in CollectChecksumRequest is true. For
-  // example, it can be set by the caller when it has detected an inconsistency.
-  //
-  // TODO(tschottdorf): with larger ranges, this is no longer tenable.
-  // See https://github.com/cockroachdb/cockroach/issues/21128.
-  roachpb.RaftSnapshotData snapshot = 2;
+  reserved 2;
   // delta carries the stats of the range minus the recomputed stats.
   storage.enginepb.MVCCStatsDelta delta = 3 [(gogoproto.nullable) = false];
   // persisted carries the persisted stats of the replica.

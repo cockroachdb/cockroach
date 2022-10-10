@@ -76,8 +76,8 @@ type replicaChecksum struct {
 // other replicas. These are inspected and a CheckConsistencyResponse is assembled.
 //
 // When req.Mode is CHECK_VIA_QUEUE and an inconsistency is detected, the
-// consistency check will be re-run to collect a diff, which is then printed
-// before calling `log.Fatal`. This behavior should be lifted to the consistency
+// consistency check will be re-run to save storage engine checkpoints and
+// terminate suspicious nodes. This behavior should be lifted to the consistency
 // checker queue in the future.
 func (r *Replica) CheckConsistency(
 	ctx context.Context, req roachpb.CheckConsistencyRequest,
@@ -145,12 +145,6 @@ func (r *Replica) checkConsistencyImpl(
 					&results[idx].Response.Persisted,
 					&results[idx].Response.Delta,
 				)
-			}
-			minoritySnap := results[shaToIdxs[minoritySHA][0]].Response.Snapshot
-			curSnap := results[shaToIdxs[sha][0]].Response.Snapshot
-			if sha != minoritySHA && minoritySnap != nil && curSnap != nil {
-				diff := DiffRange(curSnap, minoritySnap)
-				buf.Printf("====== diff(%x, [minority]) ======\n%v", redact.Safe(sha), diff)
 			}
 		}
 
@@ -246,18 +240,17 @@ func (r *Replica) checkConsistencyImpl(
 		return resp, roachpb.NewError(err)
 	}
 
-	if args.Snapshot {
-		// A diff was already printed. Return because all the code below will do
-		// is request another consistency check, with a diff and with
-		// instructions to terminate the minority nodes.
+	if args.Checkpoint {
+		// A checkpoint/termination request has already been sent. Return because
+		// all the code below will do is request another consistency check, with
+		// instructions to make a checkpoint and to terminate the minority nodes.
 		log.Errorf(ctx, "consistency check failed")
 		return resp, nil
 	}
 
-	// No diff was printed, so we want to re-run the check with snapshots
-	// requested, to build the diff. Note that this recursive call will be
-	// terminated in the `args.Snapshot` branch above.
-	args.Snapshot = true
+	// No checkpoint was requested, so we want to re-run the check with
+	// checkpoints and termination of suspicious nodes. Note that this recursive
+	// call will be terminated in the `args.Checkpoint` branch above.
 	args.Checkpoint = true
 	for _, idxs := range shaToIdxs[minoritySHA] {
 		args.Terminate = append(args.Terminate, results[idxs].Replica)
@@ -279,10 +272,11 @@ func (r *Replica) checkConsistencyImpl(
 	//
 	// See:
 	// https://github.com/cockroachdb/cockroach/issues/36861
+	// TODO(pavelkalinnikov): remove this now that diffs are not printed?
 	defer log.TemporarilyDisableFileGCForMainLogger()()
 
 	if _, pErr := r.checkConsistencyImpl(ctx, args); pErr != nil {
-		log.Errorf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
+		log.Errorf(ctx, "replica inconsistency detected; second round failed: %s", pErr)
 	}
 
 	return resp, nil
@@ -296,7 +290,7 @@ type ConsistencyCheckResult struct {
 }
 
 func (r *Replica) collectChecksumFromReplica(
-	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, withSnap bool,
+	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID,
 ) (CollectChecksumResponse, error) {
 	conn, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID, rpc.DefaultClass)
 	if err != nil {
@@ -308,7 +302,6 @@ func (r *Replica) collectChecksumFromReplica(
 		StoreRequestHeader: StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
 		RangeID:            r.RangeID,
 		ChecksumID:         id,
-		WithSnapshot:       withSnap,
 	}
 	resp, err := client.CollectChecksum(ctx, req)
 	if err != nil {
@@ -350,7 +343,7 @@ func (r *Replica) runConsistencyCheck(
 		if err := r.store.Stopper().RunAsyncTask(ctx, "storage.Replica: checking consistency",
 			func(ctx context.Context) {
 				defer wg.Done()
-				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, req.Snapshot)
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
@@ -467,10 +460,8 @@ func (*Replica) checksumInitialWait(ctx context.Context) time.Duration {
 }
 
 // computeChecksumDone sends the checksum computation result to the receiver.
-func (*Replica) computeChecksumDone(
-	rc *replicaChecksum, result *replicaHash, snapshot *roachpb.RaftSnapshotData,
-) {
-	c := CollectChecksumResponse{Snapshot: snapshot}
+func (*Replica) computeChecksumDone(rc *replicaChecksum, result *replicaHash) {
+	var c CollectChecksumResponse
 	if result != nil {
 		c.Checksum = result.SHA512[:]
 		delta := result.PersistedMS
@@ -649,7 +640,7 @@ func (*Replica) sha512(
 			return nil, err
 		}
 		if snapshot != nil {
-			// Add LeaseAppliedState to the diff.
+			// Add LeaseAppliedState to the snapshot.
 			kv := roachpb.RaftSnapshotData_KeyValue{
 				Timestamp: hlc.Timestamp{},
 			}
@@ -752,16 +743,12 @@ func (r *Replica) computeChecksumPostApply(
 		); err != nil {
 			log.Errorf(ctx, "checksum collection did not join: %v", err)
 		} else {
-			var snapshot *roachpb.RaftSnapshotData
-			if cc.SaveSnapshot {
-				snapshot = &roachpb.RaftSnapshotData{}
-			}
-			result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode, r.store.consistencyLimiter)
+			result, err := r.sha512(ctx, desc, snap, nil /* snapshot */, cc.Mode, r.store.consistencyLimiter)
 			if err != nil {
 				log.Errorf(ctx, "checksum computation failed: %v", err)
 				result = nil
 			}
-			r.computeChecksumDone(c, result, snapshot)
+			r.computeChecksumDone(c, result)
 		}
 
 		var shouldFatal bool
@@ -776,10 +763,10 @@ func (r *Replica) computeChecksumPostApply(
 		}
 
 		// This node should fatal as a result of a previous consistency check (i.e.
-		// this round is carried out only to obtain a diff). If we fatal too early,
-		// the diff won't make it back to the leaseholder and thus won't be printed
-		// to the logs. Since we're already in a goroutine that's about to end,
-		// simply sleep for a few seconds and then terminate.
+		// this round only saves checkpoints and kills some nodes). If we fatal too
+		// early, the reply won't make it back to the leaseholder, so it will not be
+		// certain of completing the check. Since we're already in a goroutine
+		// that's about to end, just sleep for a few seconds and then terminate.
 		auxDir := r.store.engine.GetAuxiliaryDir()
 		_ = r.store.engine.MkdirAll(auxDir)
 		path := base.PreventedStartupFile(auxDir)
