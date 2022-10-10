@@ -84,6 +84,20 @@ Fixes #12345
 Release notes (sql change): Excellent sql change...`,
 			expected: map[string]int{"doc-4321": 1, "CC-1234": 1, "CRDB-12345": 1, "crdb-23456": 1, "DEVINFHD-12345": 1, "#12345": 1},
 		},
+		{
+			message: `testing URL refs
+
+Resolves: https://github.com/cockroachlabs/support/issues/1833
+This fixes everything. Closes https://github.com/cockroachdb/cockroach/issues/83912.
+Fix: https://cockroachlabs.atlassian.net/browse/DOC-9492
+
+Release notes (sql change): Excellent sql change...`,
+			expected: map[string]int{
+				"https://github.com/cockroachlabs/support/issues/1833":  1,
+				"https://github.com/cockroachdb/cockroach/issues/83912": 1,
+				"https://cockroachlabs.atlassian.net/browse/DOC-9492":   1,
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -103,11 +117,12 @@ func TestExtractInformIssueIDs(t *testing.T) {
 			message: `logictestccl: skip flaky TestCCLLogic/fakedist-metadata/partitioning_enum
 
 Informs #75227
+Part of #45791
 Epic CRDB-491
 Fix:  #73834
 
 Release note (bug fix): Fixin the bug`,
-			expected: map[string]int{"#75227": 1},
+			expected: map[string]int{"#75227": 1, "#45791": 1},
 		},
 		{
 			message: `lots of variations
@@ -126,10 +141,24 @@ Release note (sql change): Import now checks readability...`,
 
 Fixed:  CRDB-12345 example/repo#941
 informs: doc-1234, crdb-24680
-Informs DEVINF-123, #69765
+Informs DEVINF-123, #69765 and part of DEVINF-3891
 
 Release note (sql change): Something something something...`,
-			expected: map[string]int{"doc-1234": 1, "DEVINF-123": 1, "#69765": 1, "crdb-24680": 1},
+			expected: map[string]int{"doc-1234": 1, "DEVINF-123": 1, "#69765": 1, "crdb-24680": 1, "DEVINF-3891": 1},
+		},
+		{
+			message: `testing URL refs
+
+Fixed:  CRDB-12345 example/repo#941
+informs: https://github.com/cockroachdb/cockroach/issues/8892, https://github.com/cockroachdb/pebble/issues/309 
+PART OF https://cockroachlabs.atlassian.net/browse/DOC-3891
+
+Release note (sql change): Something something something...`,
+			expected: map[string]int{
+				"https://github.com/cockroachdb/cockroach/issues/8892": 1,
+				"https://github.com/cockroachdb/pebble/issues/309":     1,
+				"https://cockroachlabs.atlassian.net/browse/DOC-3891":  1,
+			},
 		},
 	}
 
@@ -160,10 +189,18 @@ Release note (bug fix): Fixin the bug`,
 			message: `lots of variations
 
 epic: CRDB-9234.
-epic CRDB-235, CRDB-40192;   DEVINF-392
+epic CRDB-235, CRDB-40192;   DEVINF-392	https://cockroachlabs.atlassian.net/browse/CRDB-97531
+Epic doc-9238
 
 Release note (sql change): Import now checks readability...`,
-			expected: map[string]int{"CRDB-9234": 1, "CRDB-235": 1, "CRDB-40192": 1, "DEVINF-392": 1},
+			expected: map[string]int{
+				"CRDB-9234":  1,
+				"CRDB-235":   1,
+				"CRDB-40192": 1,
+				"DEVINF-392": 1,
+				"doc-9238":   1,
+				"https://cockroachlabs.atlassian.net/browse/CRDB-97531": 1,
+			},
 		},
 	}
 
