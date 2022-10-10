@@ -18,6 +18,7 @@ go_library(
         "schedule_metrics.go",
         "scheduled_job.go",
         "scheduled_job_executor.go",
+        "static_job_ids.go",
         "test_helpers.go",
         "testing_knobs.go",
         "update.go",

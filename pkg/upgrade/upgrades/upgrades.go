@@ -216,6 +216,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemJobInfoTableMigration,
 	),
+	upgrade.NewPermanentTenantUpgrade(
+		"create jobs metrics polling job",
+		toCV(clusterversion.V23_1_CreateJobsMetricsPollingJob),
+		createJobsMetricsPollingJob,
+	),
 }
 
 func init() {
