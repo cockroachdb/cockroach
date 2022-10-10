@@ -4304,7 +4304,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 					}
 					_, overloads := builtinsregistry.GetBuiltinProperties(name)
 					for _, overload := range overloads {
-						params, _ := tree.GetParamsAndReturnType(overload)
+						params, _ := tree.GetParamsAndReturnType(&overload)
 						sortOperatorOid := oidZero
 						aggregateKind := tree.NewDString("n")
 						aggNumDirectArgs := zeroVal

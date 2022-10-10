@@ -82,7 +82,7 @@ func TestBuiltinFunctionResolver(t *testing.T) {
 				return
 			}
 			for _, o := range funcDef.Overloads {
-				require.Equal(t, tc.expectedSchema, o.Schema)
+				require.Equal(t, tc.expectedSchema, o.GetSchema())
 			}
 		})
 	}
@@ -94,20 +94,20 @@ func TestMatchOverload(t *testing.T) {
 
 	fd := &tree.ResolvedFunctionDefinition{
 		Name: "f",
-		Overloads: []tree.QualifiedOverload{
-			{
+		Overloads: []tree.OverloadImpl{
+			&tree.QualifiedOverload{
 				Schema:   "pg_catalog",
 				Overload: &tree.Overload{Oid: 1, IsUDF: false, Types: tree.ArgTypes{tree.ArgType{Typ: types.Int}}},
 			},
-			{
+			&tree.QualifiedOverload{
 				Schema:   "sc1",
 				Overload: &tree.Overload{Oid: 2, IsUDF: true, Types: tree.ArgTypes{tree.ArgType{Typ: types.Int}}},
 			},
-			{
+			&tree.QualifiedOverload{
 				Schema:   "sc1",
 				Overload: &tree.Overload{Oid: 3, IsUDF: true, Types: tree.ArgTypes{}},
 			},
-			{
+			&tree.QualifiedOverload{
 				Schema:   "sc2",
 				Overload: &tree.Overload{Oid: 4, IsUDF: true, Types: tree.ArgTypes{tree.ArgType{Typ: types.Int}}},
 			},

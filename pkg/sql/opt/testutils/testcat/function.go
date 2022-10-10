@@ -104,7 +104,7 @@ func (tc *Catalog) CreateFunction(c *tree.CreateFunction) {
 		Name: name,
 		// TODO(mgartner): Consider setting Class and CompositeInsensitive fo
 		// overloads.
-		Overloads: []tree.QualifiedOverload{prefixedOverload},
+		Overloads: []tree.OverloadImpl{prefixedOverload},
 	}
 	tc.udfs[name] = def
 }
@@ -174,13 +174,16 @@ func formatFunction(fn *tree.ResolvedFunctionDefinition) string {
 	o := fn.Overloads[0]
 	tp := treeprinter.New()
 	nullStr := ""
-	if !o.CalledOnNullInput {
+	if !o.(*tree.QualifiedOverload).CalledOnNullInput {
 		nullStr = ", called-on-null-input=false"
 	}
 	child := tp.Childf(
 		"FUNCTION %s%s [%s%s]",
-		fn.Name, o.Signature(false /* simplify */), o.Volatility, nullStr,
+		fn.Name,
+		o.(*tree.QualifiedOverload).Signature(false /* simplify */),
+		o.(*tree.QualifiedOverload).Volatility,
+		nullStr,
 	)
-	child.Child(o.Body)
+	child.Child(o.(*tree.QualifiedOverload).Body)
 	return tp.String()
 }

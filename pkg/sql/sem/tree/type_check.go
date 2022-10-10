@@ -1072,22 +1072,15 @@ func (expr *FuncExpr) TypeCheck(
 		}
 	}
 
-	overloadImpls := make([]overloadImpl, 0, len(def.Overloads))
-	for i := range def.Overloads {
-		overloadImpls = append(overloadImpls, def.Overloads[i])
-	}
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, overloadImpls, false, expr.Exprs...)
+	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, semaCtx, desired, def.Overloads, false, expr.Exprs...)
 	if err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 
-	var calledOnNullInputFns []overloadImpl
-	var notCalledOnNullInputFns []overloadImpl
+	hasCalledOnNullInputFn := false
 	for _, f := range fns {
-		if f.(*QualifiedOverload).CalledOnNullInput {
-			calledOnNullInputFns = append(calledOnNullInputFns, f)
-		} else {
-			notCalledOnNullInputFns = append(notCalledOnNullInputFns, f)
+		if f.GetCalledOnNullInput() {
+			hasCalledOnNullInputFn = true
 		}
 	}
 
@@ -1104,34 +1097,32 @@ func (expr *FuncExpr) TypeCheck(
 	if funcCls == AggregateClass {
 		for i := range typedSubExprs {
 			if typedSubExprs[i].ResolvedType().Family() == types.UnknownFamily {
-				var filtered []overloadImpl
-				for j := range notCalledOnNullInputFns {
-					if fns[j].params().GetAt(i).Equivalent(types.String) {
-						if filtered == nil {
-							filtered = make([]overloadImpl, 0, len(fns)-j)
-						}
-						filtered = append(filtered, fns[j])
+				shouldCast := false
+				for j := 0; j < len(fns); {
+					if fns[j].GetCalledOnNullInput() {
+						j++
+					} else if fns[j].params().GetAt(i).Equivalent(types.String) {
+						j++
+						shouldCast = true
+					} else {
+						fns[j], fns[len(fns)-1] = fns[len(fns)-1], fns[j]
+						fns = fns[:len(fns)-1]
 					}
 				}
 
-				// Only use the filtered list if it's not empty.
-				if filtered != nil {
-					notCalledOnNullInputFns = filtered
-
+				if shouldCast {
 					// Cast the expression to a string so the execution engine will find
 					// the correct overload.
 					typedSubExprs[i] = NewTypedCastExpr(typedSubExprs[i], types.String)
 				}
 			}
 		}
-		fns = append(calledOnNullInputFns, notCalledOnNullInputFns...)
 	}
 
 	// Return NULL if at least one overload is possible, no overload accepts
 	// NULL arguments, the function isn't a generator or aggregate builtin, and
 	// NULL is given as an argument.
-	if len(fns) > 0 && len(calledOnNullInputFns) == 0 && funcCls != GeneratorClass &&
-		funcCls != AggregateClass {
+	if len(fns) > 0 && !hasCalledOnNullInputFn && funcCls != GeneratorClass && funcCls != AggregateClass {
 		for _, expr := range typedSubExprs {
 			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil
@@ -2932,10 +2923,10 @@ func (stripFuncsVisitor) VisitPost(expr Expr) Expr { return expr }
 // given or no UDF found, there should be only one candidate overload and be
 // returned. Otherwise, ambiguity error is also thrown.
 //
-// Note: even the input is a slice of overloadImpl, they're essentially a slice
+// Note: even the input is a slice of OverloadImpl, they're essentially a slice
 // of QualifiedOverload. Also, the input should not be empty.
 func getMostSignificantOverload(
-	overloads []overloadImpl, searchPath SearchPath, expr *FuncExpr, getFuncSig func() string,
+	overloads []OverloadImpl, searchPath SearchPath, expr *FuncExpr, getFuncSig func() string,
 ) (*QualifiedOverload, error) {
 	ambiguousError := func() error {
 		return pgerror.Newf(
@@ -2947,7 +2938,7 @@ func getMostSignificantOverload(
 			formatCandidates(expr.Func.String(), overloads),
 		)
 	}
-	checkAmbiguity := func(oImpls []overloadImpl) (*QualifiedOverload, error) {
+	checkAmbiguity := func(oImpls []OverloadImpl) (*QualifiedOverload, error) {
 		if len(oImpls) > 1 {
 			// Throw ambiguity error if there are more than one candidate overloads from
 			// same schema.
@@ -2963,10 +2954,10 @@ func getMostSignificantOverload(
 	udfFound := false
 	uniqueSchema := true
 	for i, o := range overloads {
-		if o.(*QualifiedOverload).IsUDF {
+		if o.GetIsUDF() {
 			udfFound = true
 		}
-		if i > 0 && o.(*QualifiedOverload).Schema != overloads[i-1].(*QualifiedOverload).Schema {
+		if i > 0 && o.GetSchema() != overloads[i-1].GetSchema() {
 			uniqueSchema = false
 		}
 	}
@@ -2991,7 +2982,7 @@ func getMostSignificantOverload(
 	for i, n := 0, searchPath.NumElements(); i < n; i++ {
 		schema := searchPath.GetSchema(i)
 		for i := range overloads {
-			if overloads[i].(*QualifiedOverload).Schema == schema {
+			if overloads[i].GetSchema() == schema {
 				if found {
 					return nil, ambiguousError()
 				}

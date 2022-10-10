@@ -69,7 +69,7 @@ func TestResolveFunction(t *testing.T) {
 			}
 			require.NoError(t, err)
 			for _, o := range funcDef.Overloads {
-				require.Equal(t, tc.expectedSchema, o.Schema)
+				require.Equal(t, tc.expectedSchema, o.GetSchema())
 			}
 		})
 	}

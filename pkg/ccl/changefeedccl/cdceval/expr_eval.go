@@ -627,9 +627,9 @@ func checkFunctionSupported(
 	} else {
 		// Pick highest volatility overload.
 		for i := range funcDef.Overloads {
-			overload := funcDef.Overloads[i].Overload
-			if overload.Volatility > fnVolatility {
-				fnVolatility = overload.Volatility
+			v := funcDef.Overloads[i].GetVolatility()
+			if v > fnVolatility {
+				fnVolatility = v
 			}
 		}
 	}

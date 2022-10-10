@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -126,6 +127,42 @@ func (to *testOverload) String() string {
 	return fmt.Sprintf("func(%s) %s", strings.Join(typeNames, ","), to.retType)
 }
 
+func (to *testOverload) GetClass() FunctionClass {
+	panic("unimplemented")
+}
+
+func (to *testOverload) GetReturnLabels() []string {
+	panic("unimplemented")
+}
+
+func (to *testOverload) GetHasSequenceArguments() bool {
+	panic("unimplemented")
+}
+
+func (to *testOverload) GetSchema() string {
+	panic("unimplemented")
+}
+
+func (to *testOverload) GetInfo() string {
+	panic("unimplemented")
+}
+
+func (to *testOverload) GetOID() oid.Oid {
+	panic("unimplemented")
+}
+
+func (to *testOverload) GetVolatility() volatility.V {
+	panic("unimplemented")
+}
+
+func (to *testOverload) GetIsUDF() bool {
+	panic("unimplemented")
+}
+
+func (to *testOverload) GetCalledOnNullInput() bool {
+	panic("unimplemented")
+}
+
 func makeTestOverload(retType *types.T, params ...*types.T) *testOverload {
 	t := make(ArgTypes, len(params))
 	for i := range params {
@@ -182,88 +219,88 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	testData := []struct {
 		desired          *types.T
 		exprs            []Expr
-		overloads        []overloadImpl
-		expectedOverload overloadImpl
+		overloads        []OverloadImpl
+		expectedOverload OverloadImpl
 		inBinOp          bool
 	}{
 		// Unary constants.
-		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, unaryIntFn}, ambiguous, false},
-		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, unaryFloatFn}, unaryIntFn, false},
-		{nil, []Expr{decConst("1.0")}, []overloadImpl{unaryIntFn, unaryDecimalFn}, unaryDecimalFn, false},
-		{nil, []Expr{decConst("1.0")}, []overloadImpl{unaryIntFn, unaryFloatFn}, ambiguous, false},
-		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, binaryIntFn}, unaryIntFn, false},
-		{nil, []Expr{intConst("1")}, []overloadImpl{unaryFloatFn, unaryStringFn}, unaryFloatFn, false},
-		{nil, []Expr{intConst("1")}, []overloadImpl{unaryStringFn, binaryIntFn}, unsupported, false},
-		{nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn}, unaryIntervalFn, false},
-		{nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryStringFn}, unaryStringFn, false},
-		{nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryTimestampFn}, unaryIntervalFn, false},
-		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFn, unaryIntFnPref}, unaryIntFnPref, false},
-		{nil, []Expr{intConst("1")}, []overloadImpl{unaryIntFnPref, unaryIntFnPref}, ambiguous, false},
-		{nil, []Expr{strConst("PT12H2M")}, []overloadImpl{unaryIntervalFn, unaryIntFn}, unaryIntervalFn, false},
+		{nil, []Expr{intConst("1")}, []OverloadImpl{unaryIntFn, unaryIntFn}, ambiguous, false},
+		{nil, []Expr{intConst("1")}, []OverloadImpl{unaryIntFn, unaryFloatFn}, unaryIntFn, false},
+		{nil, []Expr{decConst("1.0")}, []OverloadImpl{unaryIntFn, unaryDecimalFn}, unaryDecimalFn, false},
+		{nil, []Expr{decConst("1.0")}, []OverloadImpl{unaryIntFn, unaryFloatFn}, ambiguous, false},
+		{nil, []Expr{intConst("1")}, []OverloadImpl{unaryIntFn, binaryIntFn}, unaryIntFn, false},
+		{nil, []Expr{intConst("1")}, []OverloadImpl{unaryFloatFn, unaryStringFn}, unaryFloatFn, false},
+		{nil, []Expr{intConst("1")}, []OverloadImpl{unaryStringFn, binaryIntFn}, unsupported, false},
+		{nil, []Expr{strConst("PT12H2M")}, []OverloadImpl{unaryIntervalFn}, unaryIntervalFn, false},
+		{nil, []Expr{strConst("PT12H2M")}, []OverloadImpl{unaryIntervalFn, unaryStringFn}, unaryStringFn, false},
+		{nil, []Expr{strConst("PT12H2M")}, []OverloadImpl{unaryIntervalFn, unaryTimestampFn}, unaryIntervalFn, false},
+		{nil, []Expr{intConst("1")}, []OverloadImpl{unaryIntFn, unaryIntFnPref}, unaryIntFnPref, false},
+		{nil, []Expr{intConst("1")}, []OverloadImpl{unaryIntFnPref, unaryIntFnPref}, ambiguous, false},
+		{nil, []Expr{strConst("PT12H2M")}, []OverloadImpl{unaryIntervalFn, unaryIntFn}, unaryIntervalFn, false},
 		// Unary unresolved Placeholders.
-		{nil, []Expr{placeholder(0)}, []overloadImpl{unaryStringFn, unaryIntFn}, shouldError, false},
-		{nil, []Expr{placeholder(0)}, []overloadImpl{unaryStringFn, binaryIntFn}, unaryStringFn, false},
-		{nil, []Expr{placeholder(0)}, []overloadImpl{unaryStringFn, unaryIntFnPref}, unaryIntFnPref, false},
+		{nil, []Expr{placeholder(0)}, []OverloadImpl{unaryStringFn, unaryIntFn}, shouldError, false},
+		{nil, []Expr{placeholder(0)}, []OverloadImpl{unaryStringFn, binaryIntFn}, unaryStringFn, false},
+		{nil, []Expr{placeholder(0)}, []OverloadImpl{unaryStringFn, unaryIntFnPref}, unaryIntFnPref, false},
 		// Unary values (not constants).
-		{nil, []Expr{NewDInt(1)}, []overloadImpl{unaryIntFn, unaryFloatFn}, unaryIntFn, false},
-		{nil, []Expr{NewDFloat(1)}, []overloadImpl{unaryIntFn, unaryFloatFn}, unaryFloatFn, false},
-		{nil, []Expr{NewDInt(1)}, []overloadImpl{unaryIntFn, binaryIntFn}, unaryIntFn, false},
-		{nil, []Expr{NewDInt(1)}, []overloadImpl{unaryFloatFn, unaryStringFn}, unsupported, false},
-		{nil, []Expr{NewDString("a")}, []overloadImpl{unaryIntFn, unaryFloatFn}, unsupported, false},
-		{nil, []Expr{NewDString("a")}, []overloadImpl{unaryIntFn, unaryStringFn}, unaryStringFn, false},
+		{nil, []Expr{NewDInt(1)}, []OverloadImpl{unaryIntFn, unaryFloatFn}, unaryIntFn, false},
+		{nil, []Expr{NewDFloat(1)}, []OverloadImpl{unaryIntFn, unaryFloatFn}, unaryFloatFn, false},
+		{nil, []Expr{NewDInt(1)}, []OverloadImpl{unaryIntFn, binaryIntFn}, unaryIntFn, false},
+		{nil, []Expr{NewDInt(1)}, []OverloadImpl{unaryFloatFn, unaryStringFn}, unsupported, false},
+		{nil, []Expr{NewDString("a")}, []OverloadImpl{unaryIntFn, unaryFloatFn}, unsupported, false},
+		{nil, []Expr{NewDString("a")}, []OverloadImpl{unaryIntFn, unaryStringFn}, unaryStringFn, false},
 		// Binary constants.
-		{nil, []Expr{intConst("1"), intConst("1")}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryIntFn}, binaryIntFn, false},
-		{nil, []Expr{intConst("1"), decConst("1.0")}, []overloadImpl{binaryIntFn, binaryDecimalFn, unaryDecimalFn}, binaryDecimalFn, false},
-		{nil, []Expr{strConst("2010-09-28"), strConst("2010-09-29")}, []overloadImpl{binaryTimestampFn}, binaryTimestampFn, false},
-		{nil, []Expr{strConst("2010-09-28"), strConst("2010-09-29")}, []overloadImpl{binaryTimestampFn, binaryStringFn}, binaryStringFn, false},
-		{nil, []Expr{strConst("2010-09-28"), strConst("2010-09-29")}, []overloadImpl{binaryTimestampFn, binaryIntFn}, binaryTimestampFn, false},
-		{nil, []Expr{intConst("1"), intConst("1")}, []overloadImpl{binaryIntFn, binaryFloatFn, binaryIntFnPref}, binaryIntFnPref, false},
-		{nil, []Expr{intConst("1"), intConst("1")}, []overloadImpl{binaryIntFn, binaryIntFnPref, binaryIntFnPref}, ambiguous, false},
+		{nil, []Expr{intConst("1"), intConst("1")}, []OverloadImpl{binaryIntFn, binaryFloatFn, unaryIntFn}, binaryIntFn, false},
+		{nil, []Expr{intConst("1"), decConst("1.0")}, []OverloadImpl{binaryIntFn, binaryDecimalFn, unaryDecimalFn}, binaryDecimalFn, false},
+		{nil, []Expr{strConst("2010-09-28"), strConst("2010-09-29")}, []OverloadImpl{binaryTimestampFn}, binaryTimestampFn, false},
+		{nil, []Expr{strConst("2010-09-28"), strConst("2010-09-29")}, []OverloadImpl{binaryTimestampFn, binaryStringFn}, binaryStringFn, false},
+		{nil, []Expr{strConst("2010-09-28"), strConst("2010-09-29")}, []OverloadImpl{binaryTimestampFn, binaryIntFn}, binaryTimestampFn, false},
+		{nil, []Expr{intConst("1"), intConst("1")}, []OverloadImpl{binaryIntFn, binaryFloatFn, binaryIntFnPref}, binaryIntFnPref, false},
+		{nil, []Expr{intConst("1"), intConst("1")}, []OverloadImpl{binaryIntFn, binaryIntFnPref, binaryIntFnPref}, ambiguous, false},
 		// Binary unresolved Placeholders.
-		{nil, []Expr{placeholder(0), placeholder(1)}, []overloadImpl{binaryIntFn, binaryFloatFn}, shouldError, false},
-		{nil, []Expr{placeholder(0), placeholder(1)}, []overloadImpl{binaryIntFn, unaryStringFn}, binaryIntFn, false},
-		{nil, []Expr{placeholder(0), placeholder(1)}, []overloadImpl{binaryIntFnPref, binaryFloatFn}, binaryIntFnPref, false},
-		{nil, []Expr{placeholder(0), NewDString("a")}, []overloadImpl{binaryIntFn, binaryStringFn}, binaryStringFn, false},
-		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryIntFn, false},
-		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryStringFn, binaryFloatFn}, binaryFloatFn, false},
+		{nil, []Expr{placeholder(0), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryFloatFn}, shouldError, false},
+		{nil, []Expr{placeholder(0), placeholder(1)}, []OverloadImpl{binaryIntFn, unaryStringFn}, binaryIntFn, false},
+		{nil, []Expr{placeholder(0), placeholder(1)}, []OverloadImpl{binaryIntFnPref, binaryFloatFn}, binaryIntFnPref, false},
+		{nil, []Expr{placeholder(0), NewDString("a")}, []OverloadImpl{binaryIntFn, binaryStringFn}, binaryStringFn, false},
+		{nil, []Expr{placeholder(0), intConst("1")}, []OverloadImpl{binaryIntFn, binaryFloatFn}, binaryIntFn, false},
+		{nil, []Expr{placeholder(0), intConst("1")}, []OverloadImpl{binaryStringFn, binaryFloatFn}, binaryFloatFn, false},
 		// Binary values.
-		{nil, []Expr{NewDString("a"), NewDString("b")}, []overloadImpl{binaryStringFn, binaryFloatFn, unaryFloatFn}, binaryStringFn, false},
-		{nil, []Expr{NewDString("a"), intConst("1")}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, binaryStringFloatFn1, false},
-		{nil, []Expr{NewDString("a"), NewDInt(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, unsupported, false},
-		{nil, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, binaryStringFloatFn1, false},
-		{nil, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn2}, binaryStringFloatFn2, false},
-		{nil, []Expr{NewDFloat(1), NewDString("a")}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, unsupported, false},
-		{nil, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, ambiguous, false},
+		{nil, []Expr{NewDString("a"), NewDString("b")}, []OverloadImpl{binaryStringFn, binaryFloatFn, unaryFloatFn}, binaryStringFn, false},
+		{nil, []Expr{NewDString("a"), intConst("1")}, []OverloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, binaryStringFloatFn1, false},
+		{nil, []Expr{NewDString("a"), NewDInt(1)}, []OverloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, unsupported, false},
+		{nil, []Expr{NewDString("a"), NewDFloat(1)}, []OverloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, binaryStringFloatFn1, false},
+		{nil, []Expr{NewDString("a"), NewDFloat(1)}, []OverloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn2}, binaryStringFloatFn2, false},
+		{nil, []Expr{NewDFloat(1), NewDString("a")}, []OverloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1}, unsupported, false},
+		{nil, []Expr{NewDString("a"), NewDFloat(1)}, []OverloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, ambiguous, false},
 		// Desired type with ambiguity.
-		{types.Int, []Expr{intConst("1"), decConst("1.0")}, []overloadImpl{binaryIntFn, binaryDecimalFn, unaryDecimalFn}, binaryIntFn, false},
-		{types.Int, []Expr{intConst("1"), NewDFloat(1)}, []overloadImpl{binaryIntFn, binaryFloatFn, unaryFloatFn}, binaryFloatFn, false},
-		{types.Int, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn1, false},
-		{types.Float, []Expr{NewDString("a"), NewDFloat(1)}, []overloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn2, false},
-		{types.Float, []Expr{placeholder(0), placeholder(1)}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn, false},
+		{types.Int, []Expr{intConst("1"), decConst("1.0")}, []OverloadImpl{binaryIntFn, binaryDecimalFn, unaryDecimalFn}, binaryIntFn, false},
+		{types.Int, []Expr{intConst("1"), NewDFloat(1)}, []OverloadImpl{binaryIntFn, binaryFloatFn, unaryFloatFn}, binaryFloatFn, false},
+		{types.Int, []Expr{NewDString("a"), NewDFloat(1)}, []OverloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn1, false},
+		{types.Float, []Expr{NewDString("a"), NewDFloat(1)}, []OverloadImpl{binaryStringFn, binaryFloatFn, binaryStringFloatFn1, binaryStringFloatFn2}, binaryStringFloatFn2, false},
+		{types.Float, []Expr{placeholder(0), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn, false},
 		// Sub-expressions.
-		{nil, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn, false},
-		{nil, []Expr{decConst("1.1"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, shouldError, false},
-		{nil, []Expr{NewDFloat(1.1), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn, binaryFloatFn}, binaryFloatFn, false},
-		{types.Decimal, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn, false},              // Limitation.
-		{nil, []Expr{plus(intConst("1"), intConst("2")), plus(decConst("1.1"), decConst("2.2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, shouldError, false}, // Limitation.
-		{nil, []Expr{plus(decConst("1.1"), decConst("2.2")), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryDecimalFn}, shouldError, false},
-		{nil, []Expr{plus(NewDFloat(1.1), NewDFloat(2.2)), plus(intConst("1"), intConst("2"))}, []overloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn, false},
+		{nil, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []OverloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn, false},
+		{nil, []Expr{decConst("1.1"), plus(intConst("1"), intConst("2"))}, []OverloadImpl{binaryIntFn, binaryDecimalFn}, shouldError, false},
+		{nil, []Expr{NewDFloat(1.1), plus(intConst("1"), intConst("2"))}, []OverloadImpl{binaryIntFn, binaryDecimalFn, binaryFloatFn}, binaryFloatFn, false},
+		{types.Decimal, []Expr{decConst("1.0"), plus(intConst("1"), intConst("2"))}, []OverloadImpl{binaryIntFn, binaryDecimalFn}, binaryIntFn, false},              // Limitation.
+		{nil, []Expr{plus(intConst("1"), intConst("2")), plus(decConst("1.1"), decConst("2.2"))}, []OverloadImpl{binaryIntFn, binaryDecimalFn}, shouldError, false}, // Limitation.
+		{nil, []Expr{plus(decConst("1.1"), decConst("2.2")), plus(intConst("1"), intConst("2"))}, []OverloadImpl{binaryIntFn, binaryDecimalFn}, shouldError, false},
+		{nil, []Expr{plus(NewDFloat(1.1), NewDFloat(2.2)), plus(intConst("1"), intConst("2"))}, []OverloadImpl{binaryIntFn, binaryFloatFn}, binaryFloatFn, false},
 		// Homogenous preference.
-		{nil, []Expr{NewDInt(1), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, false},
-		{nil, []Expr{NewDFloat(1), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false},
-		{nil, []Expr{intConst("1"), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, false},
-		{nil, []Expr{decConst("1.0"), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, ambiguous, false}, // Limitation.
-		{types.Date, []Expr{NewDInt(1), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
-		{types.Date, []Expr{NewDFloat(1), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false},
-		{types.Date, []Expr{intConst("1"), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
-		{types.Date, []Expr{decConst("1.0"), placeholder(1)}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
+		{nil, []Expr{NewDInt(1), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, false},
+		{nil, []Expr{NewDFloat(1), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false},
+		{nil, []Expr{intConst("1"), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, false},
+		{nil, []Expr{decConst("1.0"), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, ambiguous, false}, // Limitation.
+		{types.Date, []Expr{NewDInt(1), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
+		{types.Date, []Expr{NewDFloat(1), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, unsupported, false},
+		{types.Date, []Expr{intConst("1"), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
+		{types.Date, []Expr{decConst("1.0"), placeholder(1)}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntDateFn, false},
 		// BinOps
-		{nil, []Expr{NewDInt(1), DNull}, []overloadImpl{binaryIntFn, binaryIntDateFn}, ambiguous, false},
-		{nil, []Expr{NewDInt(1), DNull}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, true},
+		{nil, []Expr{NewDInt(1), DNull}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, ambiguous, false},
+		{nil, []Expr{NewDInt(1), DNull}, []OverloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, true},
 		// Verify that we don't return uninitialized typedExprs for a function like
 		// array_length where the array argument is a placeholder (#36153).
-		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryArrayIntFn}, unsupported, false},
-		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryArrayIntFn}, unsupported, true},
+		{nil, []Expr{placeholder(0), intConst("1")}, []OverloadImpl{binaryArrayIntFn}, unsupported, false},
+		{nil, []Expr{placeholder(0), intConst("1")}, []OverloadImpl{binaryArrayIntFn}, unsupported, true},
 	}
 	ctx := context.Background()
 	for i, d := range testData {
@@ -328,20 +365,20 @@ func TestGetMostSignificantOverload(t *testing.T) {
 		return &path
 	}
 	returnTyper := FixedReturnType(types.Int)
-	newOverload := func(schema string, oid oid.Oid) QualifiedOverload {
-		return QualifiedOverload{Schema: schema, Overload: &Overload{Oid: oid, Types: ArgTypes{}, ReturnType: returnTyper}}
+	newOverload := func(schema string, oid oid.Oid) *QualifiedOverload {
+		return &QualifiedOverload{Schema: schema, Overload: &Overload{Oid: oid, Types: ArgTypes{}, ReturnType: returnTyper}}
 	}
 
 	testCases := []struct {
 		testName    string
-		overloads   []overloadImpl
+		overloads   []OverloadImpl
 		searchPath  SearchPath
 		expectedOID int
 		expectedErr string
 	}{
 		{
 			testName: "empty search path",
-			overloads: []overloadImpl{
+			overloads: []OverloadImpl{
 				newOverload("sc1", 1),
 			},
 			searchPath:  EmptySearchPath,
@@ -349,113 +386,113 @@ func TestGetMostSignificantOverload(t *testing.T) {
 		},
 		{
 			testName: "empty search path but ambiguous",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 2, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 2, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  EmptySearchPath,
 			expectedErr: "ambiguous call",
 		},
 		{
 			testName: "no udf overload",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 1, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 1, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1", "pg_catalog"}),
 			expectedOID: 1,
 		},
 		{
 			testName: "no udf overload but ambiguous",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 1, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 2, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 1, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 2, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1", "pg_catalog"}),
 			expectedErr: "ambiguous call",
 		},
 		{
 			testName: "overloads from all schemas in path",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1"}),
 			expectedOID: 3,
 		},
 		{
 			testName: "overloads from all schemas in path but ambiguous",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 4, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 4, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1"}),
 			expectedErr: "ambiguous call",
 		},
 		{
 			testName: "overloads from some schemas in path",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc1", "sc2"}),
 			expectedOID: 1,
 		},
 		{
 			testName: "overloads from some schemas in path but ambiguous",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 3, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1"}),
 			expectedErr: "ambiguous call",
 		},
 		{
 			testName: "implicit pg_catalog in path",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 3}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 3}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1"}),
 			expectedOID: 3,
 		},
 		{
 			testName: "explicit pg_catalog in path",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 3}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc3", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "pg_catalog", Overload: &Overload{Oid: 3}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc2", "sc1", "pg_catalog"}),
 			expectedOID: 2,
 		},
 		{
 			testName: "unique schema not in path",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc2"}),
 			expectedOID: 1,
 		},
 		{
 			testName: "unique schema not in path but ambiguous",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3", "sc2"}),
 			expectedErr: "ambiguous call",
 		},
 		{
 			testName: "not unique schema and schema not in path",
-			overloads: []overloadImpl{
-				QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
-				QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+			overloads: []OverloadImpl{
+				&QualifiedOverload{Schema: "sc1", Overload: &Overload{Oid: 1, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
+				&QualifiedOverload{Schema: "sc2", Overload: &Overload{Oid: 2, IsUDF: true, Types: ArgTypes{}, ReturnType: returnTyper}},
 			},
 			searchPath:  makeSearchPath([]string{"sc3"}),
 			expectedErr: "unknown signature",

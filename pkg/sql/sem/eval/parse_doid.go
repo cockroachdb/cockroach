@@ -79,7 +79,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 				"more than one function named '%s'", funcDef.Name)
 		}
 		overload := funcDef.Overloads[0]
-		return tree.NewDOidWithTypeAndName(overload.Oid, t, funcDef.Name), nil
+		return tree.NewDOidWithTypeAndName(overload.GetOID(), t, funcDef.Name), nil
 	case oid.T_regprocedure:
 		// Fake a ALTER FUNCTION statement to extract the function signature.
 		// We're kinda being lazy here to rely on the parser to determine if the
@@ -110,7 +110,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 			// short-circuit it to return the oid. For example, `array_in` is defined
 			// to take in a `Any` type, but some ORM sends
 			// `'array_in(cstring,oid,integer)'::REGPROCEDURE` for introspection.
-			ol := fd.Overloads[0]
+			ol := fd.Overloads[0].(*tree.QualifiedOverload)
 			if !catid.IsOIDUserDefined(ol.Oid) &&
 				ol.Types.Length() == 1 &&
 				ol.Types.GetAt(0).Identical(types.Any) {
