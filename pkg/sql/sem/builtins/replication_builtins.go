@@ -65,12 +65,12 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			Info: "This function can be used to signal a running stream ingestion job to complete. " +
 				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
-				"cluster in a consistent state. The specified timestamp can only be specified up to the" +
-				" microsecond. " +
+				"cluster in a consistent state. The specified timestamp can only be specified up to the " +
+				"microsecond. " +
 				"This function does not wait for the job to reach a terminal state, " +
 				"but instead returns the job id as soon as it has signaled the job to complete. " +
-				"This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the" +
-				" job has left the cluster in a consistent state.",
+				"This builtin can be used in conjunction with `SHOW JOBS WHEN COMPLETE` to ensure that the " +
+				"job has left the cluster in a consistent state.",
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -221,7 +221,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			Info: "This function can be used on the consumer side to heartbeat its replication progress to " +
 				"a replication stream in the source cluster. The returns a StreamReplicationStatus message " +
-				"that indicates stream status (ACTIVE, PAUSED, INACTIVE, or STATUS_UNKNOWN_RETRY).",
+				"that indicates stream status (`ACTIVE`, `PAUSED`, `INACTIVE`, or `STATUS_UNKNOWN_RETRY`).",
 			Volatility: volatility.Volatile,
 		},
 	),

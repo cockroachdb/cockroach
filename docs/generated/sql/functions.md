@@ -1414,12 +1414,14 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="_st_dfullywithinexclusive"></a><code>_st_dfullywithinexclusive(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if every pair of points comprising geometry_a and geometry_b are within distance units, exclusive. In other words, the ST_MaxDistance between geometry_a and geometry_b is less than distance units.</p>
 <p>This function variant does not utilize any spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive. Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function variant does not utilize any spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -1428,12 +1430,14 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="_st_dwithin"></a><code>_st_dwithin(geometry_a: geometry, geometry_b: geometry, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geometry_a is within distance units of geometry_b, inclusive.</p>
 <p>This function variant does not utilize any spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="_st_dwithinexclusive"></a><code>_st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="_st_dwithinexclusive"></a><code>_st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive. Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function variant does not utilize any spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="_st_dwithinexclusive"></a><code>_st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="_st_dwithinexclusive"></a><code>_st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -1881,10 +1885,12 @@ from the given Geometry.</p>
 <tr><td><a name="st_disjoint"></a><code>st_disjoint(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if geometry_a does not overlap, touch or is within geometry_b.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_distance"></a><code>st_distance(geography_a: geography, geography_b: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geography_a and geography_b.  Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_distance"></a><code>st_distance(geography_a: geography, geography_b: geography) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geography_a and geography_b.  Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_distance"></a><code>st_distance(geography_a: geography, geography_b: geography, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geography_a and geography_b.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_distance"></a><code>st_distance(geography_a: geography, geography_b: geography, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geography_a and geography_b.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td><td>Immutable</td></tr>
@@ -1896,16 +1902,19 @@ from the given Geometry.</p>
 <tr><td><a name="st_distancesphere"></a><code>st_distancesphere(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geometry_a and geometry_b assuming the coordinates represent lng/lat points on a sphere.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_distancespheroid"></a><code>st_distancespheroid(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geometry_a and geometry_b assuming the coordinates represent lng/lat points on a spheroid.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_distancespheroid"></a><code>st_distancespheroid(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the distance in meters between geometry_a and geometry_b assuming the coordinates represent lng/lat points on a spheroid.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive. Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_dwithin"></a><code>st_dwithin(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, inclusive.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -1918,12 +1927,14 @@ from the given Geometry.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_dwithinexclusive"></a><code>st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive. Uses a spheroid to perform the operation.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_dwithinexclusive"></a><code>st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive. Uses a spheroid to perform the operation.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_dwithinexclusive"></a><code>st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive.&quot;\n\nWhen operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
+<tr><td><a name="st_dwithinexclusive"></a><code>st_dwithinexclusive(geography_a: geography, geography_b: geography, distance: <a href="float.html">float</a>, use_spheroid: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if any of geography_a is within distance meters of geography_b, exclusive.</p>
+<p>When operating on a spheroid, this function will use the sphere to calculate the closest two points. The spheroid distance between these two points is calculated using GeographicLib. This follows observed PostGIS behavior.</p>
 <p>The calculations performed are have a precision of 1cm.</p>
 <p>This function utilizes the S2 library for spherical calculations.</p>
 <p>This function utilizes the GeographicLib library for spheroid calculations.</p>
@@ -2455,19 +2466,13 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the default index configuration.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography, settings: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the index configuration specified
-by the settings parameter.</p>
-<p>The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX … WITH (…),
-e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
-SELECT ST_S2Covering(geography, ‘s2_max_level=15,s2_level_mod=3’).</p>
+<tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography, settings: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the index configuration specified by the settings parameter.</p>
+<p>The settings parameter uses the same format as the parameters inside the <code>WITH</code> in <code>CREATE INDEX ... WITH (...)</code>, e.g. <code>CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3)</code> can be tried using <code>SELECT ST_S2Covering(geography, 's2_max_level=15,s2_level_mod=3')</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_s2covering"></a><code>st_s2covering(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry which represents the S2 covering used by the index using the default index configuration.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="st_s2covering"></a><code>st_s2covering(geometry: geometry, settings: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry which represents the S2 covering used by the index using the index configuration specified
-by the settings parameter.</p>
-<p>The settings parameter uses the same format as the parameters inside the WITH in CREATE INDEX … WITH (…),
-e.g. CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3) can be tried using
-SELECT ST_S2Covering(geometry, ‘s2_max_level=15,s2_level_mod=3’).</p>
+<tr><td><a name="st_s2covering"></a><code>st_s2covering(geometry: geometry, settings: <a href="string.html">string</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a geometry which represents the S2 covering used by the index using the index configuration specified by the settings parameter.</p>
+<p>The settings parameter uses the same format as the parameters inside the <code>WITH</code> in <code>CREATE INDEX ... WITH (...)</code>, e.g. <code>CREATE INDEX t_idx ON t USING GIST(geom) WITH (s2_max_level=15, s2_level_mod=3)</code> can be tried using <code>SELECT ST_S2Covering(geometry, 's2_max_level=15,s2_level_mod=3')</code></p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_scale"></a><code>st_scale(g: geometry, factor: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry scaled by taking in a Geometry as the factor.</p>
 </span></td><td>Immutable</td></tr>
@@ -2633,9 +2638,9 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tbody>
 <tr><td><a name="crdb_internal.complete_replication_stream"></a><code>crdb_internal.complete_replication_stream(stream_id: <a href="int.html">int</a>, successful_ingestion: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used on the producer side to complete and clean up a replication stream.‘successful_ingestion’ indicates whether the stream ingestion finished successfully.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.complete_stream_ingestion_job"></a><code>crdb_internal.complete_stream_ingestion_job(job_id: <a href="int.html">int</a>, cutover_ts: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used to signal a running stream ingestion job to complete. The job will eventually stop ingesting, revert to the specified timestamp and leave the cluster in a consistent state. The specified timestamp can only be specified up to the microsecond. This function does not wait for the job to reach a terminal state, but instead returns the job id as soon as it has signaled the job to complete. This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the job has left the cluster in a consistent state.</p>
+<tr><td><a name="crdb_internal.complete_stream_ingestion_job"></a><code>crdb_internal.complete_stream_ingestion_job(job_id: <a href="int.html">int</a>, cutover_ts: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function can be used to signal a running stream ingestion job to complete. The job will eventually stop ingesting, revert to the specified timestamp and leave the cluster in a consistent state. The specified timestamp can only be specified up to the microsecond. This function does not wait for the job to reach a terminal state, but instead returns the job id as soon as it has signaled the job to complete. This builtin can be used in conjunction with <code>SHOW JOBS WHEN COMPLETE</code> to ensure that the job has left the cluster in a consistent state.</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.replication_stream_progress"></a><code>crdb_internal.replication_stream_progress(stream_id: <a href="int.html">int</a>, frontier_ts: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function can be used on the consumer side to heartbeat its replication progress to a replication stream in the source cluster. The returns a StreamReplicationStatus message that indicates stream status (ACTIVE, PAUSED, INACTIVE, or STATUS_UNKNOWN_RETRY).</p>
+<tr><td><a name="crdb_internal.replication_stream_progress"></a><code>crdb_internal.replication_stream_progress(stream_id: <a href="int.html">int</a>, frontier_ts: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function can be used on the consumer side to heartbeat its replication progress to a replication stream in the source cluster. The returns a StreamReplicationStatus message that indicates stream status (<code>ACTIVE</code>, <code>PAUSED</code>, <code>INACTIVE</code>, or <code>STATUS_UNKNOWN_RETRY</code>).</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.replication_stream_spec"></a><code>crdb_internal.replication_stream_spec(stream_id: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>This function can be used on the consumer side to get a replication stream specification for the specified stream. The consumer will later call ‘stream_partition’ to a partition with the spec to start streaming.</p>
 </span></td><td>Volatile</td></tr>
@@ -3022,8 +3027,8 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><a name="crdb_internal.assignment_cast"></a><code>crdb_internal.assignment_cast(val: anyelement, type: anyelement) &rarr; anyelement</code></td><td><span class="funcdesc"><p>This function is used internally to perform assignment casts during mutations.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.check_consistency"></a><code>crdb_internal.check_consistency(stats_only: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail, interval AS duration}</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range. an empty start or end key is treated as the minimum and maximum possible, respectively. stats_only should only be set to false when targeting a small number of ranges to avoid overloading the cluster. Each returned row contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), and verbose detail.</p>
-<p>Example usage:
-SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
+<p>Example usage:</p>
+<p><code>SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')</code></p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.check_password_hash_format"></a><code>crdb_internal.check_password_hash_format(password: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>This function checks whether a string is a precomputed password hash. Returns the hash algorithm.</p>
 </span></td><td>Immutable</td></tr>
