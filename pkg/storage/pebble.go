@@ -682,7 +682,7 @@ type Pebble struct {
 	diskSlowCount        int64
 	diskStallCount       int64
 
-	onMetricCallback pebble.MetricCallbacks
+	onMetricEvent pebble.MetricEventListener
 
 	// Relevant options copied over from pebble.Options.
 	fs            vfs.FS
@@ -933,10 +933,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		return nil, err
 	}
 
-	cfg.Opts.OnMetrics = pebble.MetricCallbacks{
-		LogWriterFsyncLatency: func(duration int64) {
-			if p.onMetricCallback.LogWriterFsyncLatency != nil {
-				p.onMetricCallback.LogWriterFsyncLatency(duration)
+	cfg.Opts.MetricEventListener = pebble.MetricEventListener{
+		WALFsyncLatency: func(duration time.Duration) {
+			if p.onMetricEvent.WALFsyncLatency != nil {
+				p.onMetricEvent.WALFsyncLatency(duration)
 			}
 		},
 	}
@@ -1703,9 +1703,9 @@ func (p *Pebble) RegisterFlushCompletedCallback(cb func()) {
 	p.mu.Unlock()
 }
 
-// RegisterMetricCallbacks implements the Engine interface
-func (p *Pebble) RegisterMetricCallbacks(callbacks pebble.MetricCallbacks) {
-	p.onMetricCallback = callbacks
+// RegisterMetricEventListener implements the Engine interface
+func (p *Pebble) RegisterMetricEventListener(listener pebble.MetricEventListener) {
+	p.onMetricEvent = listener
 }
 
 // Remove implements the FS interface.

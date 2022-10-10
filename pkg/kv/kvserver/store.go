@@ -1888,6 +1888,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 
+	s.engine.RegisterMetricEventListener(pebble.MetricEventListener{WALFsyncLatency: func(duration time.Duration) {
+		s.metrics.FsyncLatency.RecordValue(duration.Microseconds())
+	}})
+
 	// Create the raft log truncator and register the callback.
 	s.raftTruncator = makeRaftLogTruncator(s.cfg.AmbientCtx, (*storeForTruncatorImpl)(s), stopper)
 	{

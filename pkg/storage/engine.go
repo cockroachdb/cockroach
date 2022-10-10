@@ -929,6 +929,11 @@ type Engine interface {
 	// of the callback since it could cause a deadlock (since the callback may
 	// be invoked while holding mutexes).
 	RegisterFlushCompletedCallback(cb func())
+	// RegisterMetricEventListener registers the provided listener. The listener
+	// has a collection of callback functions. Call this will cause the listener
+	// to replaces the existing listener struct. Each callback in the
+	// pebble.MetricEventListener is invoked separately.
+	RegisterMetricEventListener(listener pebble.MetricEventListener)
 	// Filesystem functionality.
 	fs.FS
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
