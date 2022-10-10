@@ -87,6 +87,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"go.etcd.io/etcd/raft/v3"
 	"golang.org/x/time/rate"
 )
@@ -3343,7 +3344,7 @@ func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err erro
 // ComputeMetricsPeriodically computes metrics that need to be computed
 // periodically along with the regular metrics
 func (s *Store) ComputeMetricsPeriodically(
-	ctx context.Context, prevMetrics *storage.Metrics, tick int,
+	ctx context.Context, prevMetrics *storage.MetricsForInterval, tick int,
 ) (m storage.Metrics, err error) {
 	m, err = s.computeMetrics(ctx)
 	if err != nil {
@@ -3352,8 +3353,19 @@ func (s *Store) ComputeMetricsPeriodically(
 	wt := m.Flush.WriteThroughput
 
 	if prevMetrics != nil {
-		wt.Subtract(prevMetrics.Flush.WriteThroughput)
+		wt.Subtract(prevMetrics.FlushWriteThroughput)
+
+		prevFsync := prevMetrics.WALFsyncLatency
+		curFsync := &prometheusgo.Metric{}
+		err := m.LogWriter.FsyncLatency.Write(curFsync)
+		if err != nil {
+			return m, err
+		}
+		curFsync = subtractPrometheusMetrics(curFsync, prevFsync)
+
+		s.metrics.FsyncLatency.Update(m.LogWriter.FsyncLatency, curFsync.Histogram)
 	}
+
 	flushUtil := 0.0
 	if wt.WorkDuration > 0 {
 		flushUtil = float64(wt.WorkDuration) / float64(wt.WorkDuration+wt.IdleDuration)
@@ -3382,6 +3394,24 @@ func (s *Store) ComputeMetricsPeriodically(
 		log.StructuredEvent(ctx, &e)
 	}
 	return m, nil
+}
+
+func subtractPrometheusMetrics(
+	curFsync *prometheusgo.Metric, prevFsync prometheusgo.Metric,
+) *prometheusgo.Metric {
+	prevBuckets := prevFsync.Histogram.GetBucket()
+	curBuckets := curFsync.Histogram.GetBucket()
+
+	*curFsync.Histogram.SampleCount -= prevFsync.Histogram.GetSampleCount()
+	*curFsync.Histogram.SampleSum -= prevFsync.Histogram.GetSampleSum()
+
+	for idx, v := range prevBuckets {
+		if *curBuckets[idx].UpperBound != *v.UpperBound {
+			panic("Bucket Upperbounds don't match")
+		}
+		*curBuckets[idx].CumulativeCount -= *v.CumulativeCount
+	}
+	return curFsync
 }
 
 // ComputeMetrics immediately computes the current value of store metrics which
