@@ -191,18 +191,54 @@ type Overload struct {
 	ReturnSet bool
 }
 
-// params implements the overloadImpl interface.
-func (b Overload) params() TypeList { return b.Types }
+// params implements the OverloadImpl interface.
+func (b *Overload) params() TypeList { return b.Types }
 
-// returnType implements the overloadImpl interface.
-func (b Overload) returnType() ReturnTyper { return b.ReturnType }
+// returnType implements the OverloadImpl interface.
+func (b *Overload) returnType() ReturnTyper { return b.ReturnType }
 
-// preferred implements the overloadImpl interface.
-func (b Overload) preferred() bool { return b.PreferredOverload }
+// preferred implements the OverloadImpl interface.
+func (b *Overload) preferred() bool { return b.PreferredOverload }
+
+func (b *Overload) GetClass() FunctionClass {
+	return b.Class
+}
+
+func (b *Overload) GetReturnLabels() []string {
+	return b.ReturnLabels
+}
+
+func (b *Overload) GetHasSequenceArguments() bool {
+	return b.HasSequenceArguments
+}
+
+func (b *Overload) GetSchema() string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (b *Overload) GetInfo() string {
+	return b.Info
+}
+
+func (b *Overload) GetOID() oid.Oid {
+	return b.Oid
+}
+
+func (b *Overload) GetVolatility() volatility.V {
+	return b.Volatility
+}
+
+func (b *Overload) GetIsUDF() bool {
+	return b.IsUDF
+}
+
+func (b *Overload) GetCalledOnNullInput() bool {
+	return b.CalledOnNullInput
+}
 
 // FixedReturnType returns a fixed type that the function returns, returning Any
 // if the return type is based on the function's arguments.
-func (b Overload) FixedReturnType() *types.T {
+func (b *Overload) FixedReturnType() *types.T {
 	if b.ReturnType == nil {
 		return nil
 	}
@@ -211,7 +247,7 @@ func (b Overload) FixedReturnType() *types.T {
 
 // InferReturnTypeFromInputArgTypes returns the type that the function returns,
 // inferring the type based on the function's inputTypes if necessary.
-func (b Overload) InferReturnTypeFromInputArgTypes(inputTypes []*types.T) *types.T {
+func (b *Overload) InferReturnTypeFromInputArgTypes(inputTypes []*types.T) *types.T {
 	retTyp := b.FixedReturnType()
 	// If the output type of the function depends on its inputs, then
 	// the output of FixedReturnType will be ambiguous. In the ambiguous
@@ -235,14 +271,14 @@ func (b Overload) InferReturnTypeFromInputArgTypes(inputTypes []*types.T) *types
 }
 
 // IsGenerator returns true if the function is a set returning function (SRF).
-func (b Overload) IsGenerator() bool {
+func (b *Overload) IsGenerator() bool {
 	return b.Generator != nil || b.GeneratorWithExprs != nil
 }
 
 // Signature returns a human-readable signature.
 // If simplify is bool, tuple-returning functions with just
 // 1 tuple element unwrap the return type in the signature.
-func (b Overload) Signature(simplify bool) string {
+func (b *Overload) Signature(simplify bool) string {
 	retType := b.FixedReturnType()
 	if simplify {
 		if retType.Family() == types.TupleFamily && len(retType.TupleContents()) == 1 {
@@ -252,26 +288,35 @@ func (b Overload) Signature(simplify bool) string {
 	return fmt.Sprintf("(%s) -> %s", b.Types.String(), retType)
 }
 
-// overloadImpl is an implementation of an overloaded function. It provides
+// OverloadImpl is an implementation of an overloaded function. It provides
 // access to the parameter type list and the return type of the implementation.
 //
 // This is a more general type than Overload defined above, because it also
 // works with the built-in binary and unary operators.
-type overloadImpl interface {
+type OverloadImpl interface {
 	params() TypeList
 	returnType() ReturnTyper
 	// allows manually resolving preference between multiple compatible overloads.
 	preferred() bool
+	GetClass() FunctionClass
+	GetReturnLabels() []string
+	GetHasSequenceArguments() bool
+	GetSchema() string
+	GetInfo() string
+	GetOID() oid.Oid
+	GetVolatility() volatility.V
+	GetIsUDF() bool
+	GetCalledOnNullInput() bool
 }
 
-var _ overloadImpl = &Overload{}
-var _ overloadImpl = &UnaryOp{}
-var _ overloadImpl = &BinOp{}
-var _ overloadImpl = &CmpOp{}
+var _ OverloadImpl = &Overload{}
+var _ OverloadImpl = &UnaryOp{}
+var _ OverloadImpl = &BinOp{}
+var _ OverloadImpl = &CmpOp{}
 
 // GetParamsAndReturnType gets the parameters and return type of an
-// overloadImpl.
-func GetParamsAndReturnType(impl overloadImpl) (TypeList, ReturnTyper) {
+// OverloadImpl.
+func GetParamsAndReturnType(impl OverloadImpl) (TypeList, ReturnTyper) {
 	return impl.params(), impl.returnType()
 }
 
@@ -563,7 +608,7 @@ func returnTypeToFixedType(s ReturnTyper, inputTyps []TypedExpr) *types.T {
 }
 
 type typeCheckOverloadState struct {
-	overloads       []overloadImpl
+	overloads       []OverloadImpl
 	overloadIdxs    []uint8 // index into overloads
 	exprs           []Expr
 	typedExprs      []TypedExpr
@@ -588,10 +633,10 @@ func typeCheckOverloadedExprs(
 	ctx context.Context,
 	semaCtx *SemaContext,
 	desired *types.T,
-	overloads []overloadImpl,
+	overloads []OverloadImpl,
 	inBinOp bool,
 	exprs ...Expr,
-) ([]TypedExpr, []overloadImpl, error) {
+) ([]TypedExpr, []OverloadImpl, error) {
 	if len(overloads) > math.MaxUint8 {
 		return nil, nil, errors.AssertionFailedf("too many overloads (%d > 255)", len(overloads))
 	}
@@ -644,7 +689,7 @@ func typeCheckOverloadedExprs(
 
 	// Filter out incorrect parameter length overloads.
 	s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-		func(o overloadImpl) bool {
+		func(o OverloadImpl) bool {
 			return o.params().MatchLen(len(exprs))
 		})
 
@@ -652,7 +697,7 @@ func typeCheckOverloadedExprs(
 	for _, i := range s.constIdxs {
 		constExpr := exprs[i].(Constant)
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-			func(o overloadImpl) bool {
+			func(o OverloadImpl) bool {
 				return canConstantBecome(constExpr, o.params().GetAt(i))
 			})
 	}
@@ -687,7 +732,7 @@ func typeCheckOverloadedExprs(
 		}
 		s.typedExprs[i] = typ
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-			func(o overloadImpl) bool {
+			func(o OverloadImpl) bool {
 				return o.params().MatchAt(typ.ResolvedType(), i)
 			})
 	}
@@ -704,7 +749,7 @@ func typeCheckOverloadedExprs(
 	// if a desired type was provided.
 	if desired.Family() != types.AnyFamily {
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-			func(o overloadImpl) bool {
+			func(o OverloadImpl) bool {
 				// For now, we only filter on the return type for overloads with
 				// fixed return types. This could be improved, but is not currently
 				// critical because we have no cases of functions with multiple
@@ -748,7 +793,7 @@ func typeCheckOverloadedExprs(
 				if allConstantsAreHomogenous {
 					for _, i := range s.constIdxs {
 						s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-							func(o overloadImpl) bool {
+							func(o OverloadImpl) bool {
 								return o.params().GetAt(i).Equivalent(homogeneousTyp)
 							})
 					}
@@ -765,7 +810,7 @@ func typeCheckOverloadedExprs(
 				natural := naturalConstantType(exprs[i].(Constant))
 				if natural != nil {
 					s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-						func(o overloadImpl) bool {
+						func(o OverloadImpl) bool {
 							return o.params().GetAt(i).Equivalent(natural)
 						})
 				}
@@ -828,7 +873,7 @@ func typeCheckOverloadedExprs(
 		for _, i := range s.constIdxs {
 			constExpr := exprs[i].(Constant)
 			s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-				func(o overloadImpl) bool {
+				func(o OverloadImpl) bool {
 					semaCtx := MakeSemaContext()
 					_, err := constExpr.ResolveAsType(ctx, &semaCtx, o.params().GetAt(i))
 					return err == nil
@@ -847,13 +892,13 @@ func typeCheckOverloadedExprs(
 			prevOverloadIdxs := s.overloadIdxs
 			for _, i := range s.constIdxs {
 				s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-					func(o overloadImpl) bool {
+					func(o OverloadImpl) bool {
 						return o.params().GetAt(i).Equivalent(bestConstType)
 					})
 			}
 			if ok, typedExprs, fns, err := checkReturn(ctx, semaCtx, &s); ok {
 				if len(fns) == 0 {
-					var overloadImpls []overloadImpl
+					var overloadImpls []OverloadImpl
 					for i := range prevOverloadIdxs {
 						overloadImpls = append(overloadImpls, s.overloads[i])
 					}
@@ -874,7 +919,7 @@ func typeCheckOverloadedExprs(
 	// The fifth heuristic is to defer to preferred candidates, if one has been
 	// specified in the overload list.
 	if ok, typedExprs, fns, err := filterAttempt(ctx, semaCtx, &s, func() {
-		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs, func(o overloadImpl) bool {
+		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs, func(o OverloadImpl) bool {
 			return o.preferred()
 		})
 	}); ok {
@@ -895,7 +940,7 @@ func typeCheckOverloadedExprs(
 				return nil, nil, err
 			}
 			s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-				func(o overloadImpl) bool {
+				func(o OverloadImpl) bool {
 					return o.params().GetAt(i).Equivalent(homogeneousTyp)
 				})
 		}
@@ -999,7 +1044,7 @@ func typeCheckOverloadedExprs(
 					rightType = leftType
 				}
 				s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-					func(o overloadImpl) bool {
+					func(o OverloadImpl) bool {
 						return o.params().GetAt(0).Equivalent(leftType) &&
 							o.params().GetAt(1).Equivalent(rightType)
 					})
@@ -1042,7 +1087,7 @@ func typeCheckOverloadedExprs(
 					rightType = types.String
 				}
 				s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
-					func(o overloadImpl) bool {
+					func(o OverloadImpl) bool {
 						return o.params().GetAt(0).Equivalent(leftType) &&
 							o.params().GetAt(1).Equivalent(rightType)
 					})
@@ -1056,7 +1101,7 @@ func typeCheckOverloadedExprs(
 		return nil, nil, err
 	}
 
-	possibleOverloads := make([]overloadImpl, len(s.overloadIdxs))
+	possibleOverloads := make([]OverloadImpl, len(s.overloadIdxs))
 	for i, o := range s.overloadIdxs {
 		possibleOverloads[i] = s.overloads[o]
 	}
@@ -1069,7 +1114,7 @@ func typeCheckOverloadedExprs(
 // undo any filtering performed during the attempt.
 func filterAttempt(
 	ctx context.Context, semaCtx *SemaContext, s *typeCheckOverloadState, attempt func(),
-) (ok bool, _ []TypedExpr, _ []overloadImpl, _ error) {
+) (ok bool, _ []TypedExpr, _ []OverloadImpl, _ error) {
 	before := s.overloadIdxs
 	attempt()
 	if len(s.overloadIdxs) == 1 {
@@ -1087,7 +1132,7 @@ func filterAttempt(
 
 // filterOverloads filters overloads which do not satisfy the predicate.
 func filterOverloads(
-	overloads []overloadImpl, overloadIdxs []uint8, fn func(overloadImpl) bool,
+	overloads []OverloadImpl, overloadIdxs []uint8, fn func(OverloadImpl) bool,
 ) []uint8 {
 	for i := 0; i < len(overloadIdxs); {
 		if fn(overloads[overloadIdxs[i]]) {
@@ -1135,7 +1180,7 @@ func defaultTypeCheck(
 // immediately return, so any mutations to s are irrelevant.
 func checkReturn(
 	ctx context.Context, semaCtx *SemaContext, s *typeCheckOverloadState,
-) (ok bool, _ []TypedExpr, _ []overloadImpl, _ error) {
+) (ok bool, _ []TypedExpr, _ []OverloadImpl, _ error) {
 	switch len(s.overloadIdxs) {
 	case 0:
 		if err := defaultTypeCheck(ctx, semaCtx, s, false); err != nil {
@@ -1177,7 +1222,7 @@ func checkReturn(
 // as checkReturn.
 func checkReturnPlaceholdersAtIdx(
 	ctx context.Context, semaCtx *SemaContext, s *typeCheckOverloadState, idx int,
-) (bool, []TypedExpr, []overloadImpl, error) {
+) (bool, []TypedExpr, []OverloadImpl, error) {
 	o := s.overloads[idx]
 	p := o.params()
 	for _, i := range s.placeholderIdxs {
@@ -1194,7 +1239,7 @@ func checkReturnPlaceholdersAtIdx(
 	return true, s.typedExprs, s.overloads[idx : idx+1], nil
 }
 
-func formatCandidates(prefix string, candidates []overloadImpl) string {
+func formatCandidates(prefix string, candidates []OverloadImpl) string {
 	var buf bytes.Buffer
 	for _, candidate := range candidates {
 		buf.WriteString(prefix)

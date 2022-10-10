@@ -1179,7 +1179,7 @@ func isOrderedSetAggregate(
 	unsetPrivate := func(def *tree.ResolvedFunctionDefinition) {
 		for i := range def.Overloads {
 			newOverload := def.Overloads[i]
-			newOverload.Private = false
+			newOverload.(*tree.QualifiedOverload).Private = false
 			def.Overloads[i] = newOverload
 		}
 	}

@@ -84,6 +84,42 @@ func (*UnaryOp) preferred() bool {
 	return false
 }
 
+func (op *UnaryOp) GetClass() FunctionClass {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *UnaryOp) GetReturnLabels() []string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *UnaryOp) GetHasSequenceArguments() bool {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *UnaryOp) GetSchema() string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *UnaryOp) GetInfo() string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *UnaryOp) GetOID() oid.Oid {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *UnaryOp) GetVolatility() volatility.V {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *UnaryOp) GetIsUDF() bool {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *UnaryOp) GetCalledOnNullInput() bool {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
 func unaryOpFixups(
 	ops map[UnaryOperatorSymbol]unaryOpOverload,
 ) map[UnaryOperatorSymbol]unaryOpOverload {
@@ -99,7 +135,7 @@ func unaryOpFixups(
 }
 
 // unaryOpOverload is an overloaded set of unary operator implementations.
-type unaryOpOverload []overloadImpl
+type unaryOpOverload []OverloadImpl
 
 // UnaryOps contains the unary operations indexed by operation type.
 var UnaryOps = unaryOpFixups(map[UnaryOperatorSymbol]unaryOpOverload{
@@ -239,6 +275,42 @@ func (op *BinOp) returnType() ReturnTyper {
 
 func (op *BinOp) preferred() bool {
 	return op.PreferredOverload
+}
+
+func (op *BinOp) GetClass() FunctionClass {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *BinOp) GetReturnLabels() []string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *BinOp) GetHasSequenceArguments() bool {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *BinOp) GetSchema() string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *BinOp) GetInfo() string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *BinOp) GetOID() oid.Oid {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *BinOp) GetVolatility() volatility.V {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *BinOp) GetIsUDF() bool {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *BinOp) GetCalledOnNullInput() bool {
+	panic(errors.AssertionFailedf("unimplemented"))
 }
 
 // AppendToMaybeNullArray appends an element to an array. If the first
@@ -453,7 +525,7 @@ func init() {
 }
 
 // binOpOverload is an overloaded set of binary operator implementations.
-type binOpOverload []overloadImpl
+type binOpOverload []OverloadImpl
 
 func (o binOpOverload) LookupImpl(left, right *types.T) (*BinOp, bool) {
 	for _, fn := range o {
@@ -1323,6 +1395,42 @@ func (op *CmpOp) preferred() bool {
 	return op.PreferredOverload
 }
 
+func (op *CmpOp) GetClass() FunctionClass {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *CmpOp) GetReturnLabels() []string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *CmpOp) GetHasSequenceArguments() bool {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *CmpOp) GetSchema() string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *CmpOp) GetInfo() string {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *CmpOp) GetOID() oid.Oid {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *CmpOp) GetVolatility() volatility.V {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *CmpOp) GetIsUDF() bool {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
+func (op *CmpOp) GetCalledOnNullInput() bool {
+	panic(errors.AssertionFailedf("unimplemented"))
+}
+
 func cmpOpFixups(
 	cmpOps map[treecmp.ComparisonOperatorSymbol]cmpOpOverload,
 ) map[treecmp.ComparisonOperatorSymbol]cmpOpOverload {
@@ -1378,7 +1486,7 @@ func cmpOpFixups(
 }
 
 // cmpOpOverload is an overloaded set of comparison operator implementations.
-type cmpOpOverload []overloadImpl
+type cmpOpOverload []OverloadImpl
 
 func (o cmpOpOverload) LookupImpl(left, right *types.T) (*CmpOp, bool) {
 	for _, fn := range o {

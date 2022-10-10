@@ -121,17 +121,17 @@ func helpWithFunction(sqllex sqlLexer, f tree.ResolvableFunctionReference) int {
 	// together.
 	lastInfo := ""
 	for i, b := range d.Overloads {
-		if b.Info != "" && b.Info != lastInfo {
+		if b.GetInfo() != "" && b.GetInfo() != lastInfo {
 			if i > 0 {
 				fmt.Fprintln(w, "---")
 			}
-			fmt.Fprintf(w, "\n%s\n\n", b.Info)
+			fmt.Fprintf(w, "\n%s\n\n", b.GetInfo())
 			fmt.Fprintln(w, "Signature")
 		}
-		lastInfo = b.Info
+		lastInfo = b.GetInfo()
 
-		simplifyRet := b.Class == tree.GeneratorClass
-		fmt.Fprintf(w, "%s%s\n", d.Name, b.Signature(simplifyRet))
+		simplifyRet := b.GetClass() == tree.GeneratorClass
+		fmt.Fprintf(w, "%s%s\n", d.Name, b.(*tree.QualifiedOverload).Signature(simplifyRet))
 	}
 	_ = w.Flush()
 	msg.Text = buf.String()

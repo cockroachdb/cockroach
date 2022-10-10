@@ -45,7 +45,7 @@ type ResolvedFunctionDefinition struct {
 	// not qualified.
 	Name string
 
-	Overloads []*QualifiedOverload
+	Overloads []OverloadImpl
 }
 
 // QualifiedOverload is a wrapper of Overload prefixed with a schema name.
@@ -53,6 +53,10 @@ type ResolvedFunctionDefinition struct {
 type QualifiedOverload struct {
 	Schema string
 	*Overload
+}
+
+func (b QualifiedOverload) GetSchema() string {
+	return b.Schema
 }
 
 // MakeQualifiedOverload creates a new QualifiedOverload.
@@ -265,8 +269,8 @@ func (fd *ResolvedFunctionDefinition) MergeWith(
 func (fd *ResolvedFunctionDefinition) MatchOverload(
 	argTypes []*types.T, explicitSchema string, searchPath SearchPath,
 ) (*QualifiedOverload, error) {
-	matched := func(ol *QualifiedOverload, schema string) bool {
-		return schema == ol.Schema && (argTypes == nil || ol.params().Match(argTypes))
+	matched := func(ol OverloadImpl, schema string) bool {
+		return schema == ol.GetSchema() && (argTypes == nil || ol.params().Match(argTypes))
 	}
 	typeNames := func() string {
 		ns := make([]string, len(argTypes))
@@ -277,7 +281,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	}
 
 	found := false
-	ret := make([]*QualifiedOverload, 0, len(fd.Overloads))
+	ret := make([]OverloadImpl, 0, len(fd.Overloads))
 
 	findMatches := func(schema string) {
 		for i := range fd.Overloads {
@@ -306,11 +310,11 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	if len(ret) > 1 {
 		return nil, errors.Errorf("function name %q is not unique", fd.Name)
 	}
-	return ret[0], nil
+	return ret[0].(*QualifiedOverload), nil
 }
 
-func combineOverloads(a, b []*QualifiedOverload) []*QualifiedOverload {
-	return append(append(make([]*QualifiedOverload, 0, len(a)+len(b)), a...), b...)
+func combineOverloads(a, b []OverloadImpl) []OverloadImpl {
+	return append(append(make([]OverloadImpl, 0, len(a)+len(b)), a...), b...)
 }
 
 // GetClass returns function class by checking each overload's Class and returns
@@ -321,9 +325,9 @@ func combineOverloads(a, b []*QualifiedOverload) []*QualifiedOverload {
 // method, function is resolved to one overload, so that we can get rid of this
 // function and similar methods below.
 func (fd *ResolvedFunctionDefinition) GetClass() (FunctionClass, error) {
-	ret := fd.Overloads[0].Class
+	ret := fd.Overloads[0].GetClass()
 	for i := range fd.Overloads {
-		if fd.Overloads[i].Class != ret {
+		if fd.Overloads[i].GetClass() != ret {
 			return 0, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function class on %s", fd.Name)
 		}
 	}
@@ -336,9 +340,9 @@ func (fd *ResolvedFunctionDefinition) GetClass() (FunctionClass, error) {
 // different length. This is good enough since we don't create UDF with
 // ReturnLabel.
 func (fd *ResolvedFunctionDefinition) GetReturnLabel() ([]string, error) {
-	ret := fd.Overloads[0].ReturnLabels
+	ret := fd.Overloads[0].GetReturnLabels()
 	for i := range fd.Overloads {
-		if len(ret) != len(fd.Overloads[i].ReturnLabels) {
+		if len(ret) != len(fd.Overloads[i].GetReturnLabels()) {
 			return nil, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function return label on %s", fd.Name)
 		}
 	}
@@ -349,9 +353,9 @@ func (fd *ResolvedFunctionDefinition) GetReturnLabel() ([]string, error) {
 // checking each overload's HasSequenceArguments flag. Ambiguous error is
 // returned if there is any overload has a different flag.
 func (fd *ResolvedFunctionDefinition) GetHasSequenceArguments() (bool, error) {
-	ret := fd.Overloads[0].HasSequenceArguments
+	ret := fd.Overloads[0].GetHasSequenceArguments()
 	for i := range fd.Overloads {
-		if ret != fd.Overloads[i].HasSequenceArguments {
+		if ret != fd.Overloads[i].GetHasSequenceArguments() {
 			return false, pgerror.Newf(pgcode.AmbiguousFunction, "ambiguous function sequence argument on %s", fd.Name)
 		}
 	}
@@ -366,7 +370,7 @@ func QualifyBuiltinFunctionDefinition(
 ) *ResolvedFunctionDefinition {
 	ret := &ResolvedFunctionDefinition{
 		Name:      def.Name,
-		Overloads: make([]*QualifiedOverload, 0, len(def.Definition)),
+		Overloads: make([]OverloadImpl, 0, len(def.Definition)),
 	}
 	for _, o := range def.Definition {
 		ret.Overloads = append(

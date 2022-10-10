@@ -39,8 +39,9 @@ AND function_name = %[2]s
 
 	var udfSchema string
 	for _, o := range fn.Overloads {
-		if o.IsUDF {
-			udfSchema = o.Schema
+		ol := o.(*tree.QualifiedOverload)
+		if ol.IsUDF {
+			udfSchema = ol.Schema
 		}
 	}
 	if udfSchema == "" {
