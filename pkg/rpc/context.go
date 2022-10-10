@@ -573,7 +573,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		rpcCompression:      enableRPCCompression,
 		MasterCtx:           masterCtx,
 		metrics:             makeMetrics(),
-		heartbeatTimeout:    2 * opts.Config.RPCHeartbeatInterval,
+		heartbeatTimeout:    2 * opts.Config.RPCHeartbeatIntervalAndHalfTimeout,
 		logClosingConnEvery: log.Every(time.Second),
 	}
 
@@ -581,7 +581,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	// CLI commands are exempted.
 	if !opts.ClientOnly {
 		rpcCtx.RemoteClocks = newRemoteClockMonitor(
-			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatInterval, opts.Config.HistogramWindowInterval())
+			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatIntervalAndHalfTimeout, opts.Config.HistogramWindowInterval())
 	}
 
 	if id := opts.Knobs.StorageClusterID; id != nil {
@@ -2157,7 +2157,7 @@ func (rpcCtx *Context) runHeartbeat(
 			return err
 		}
 
-		heartbeatTimer.Reset(rpcCtx.Config.RPCHeartbeatInterval)
+		heartbeatTimer.Reset(rpcCtx.Config.RPCHeartbeatIntervalAndHalfTimeout)
 	}
 }
 
