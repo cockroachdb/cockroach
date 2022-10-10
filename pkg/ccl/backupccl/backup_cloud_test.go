@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,6 +48,40 @@ func InitManualReplication(tc *testcluster.TestCluster) {
 func TestCloudBackupRestoreS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	creds, bucket := requiredS3CredsAndBucket(t)
+
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer lease.TestingDisableTableLeases()()
+	const numAccounts = 1000
+
+	ctx, tc, db, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
+	uri := setupS3URI(t, db, bucket, prefix, creds)
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+}
+
+// TestCloudBackupRestoreS3WithLegacyPut tests that backup/restore works when
+// cloudstorage.s3.buffer_and_put_uploads.enabled=true is set.
+func TestCloudBackupRestoreS3WithLegacyPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	creds, bucket := requiredS3CredsAndBucket(t)
+
+	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
+	defer lease.TestingDisableTableLeases()()
+	const numAccounts = 1000
+
+	ctx, tc, db, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
+	db.Exec(t, "SET CLUSTER SETTING cloudstorage.s3.buffer_and_put_uploads.enabled=true")
+	uri := setupS3URI(t, db, bucket, prefix, creds)
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+}
+
+func requiredS3CredsAndBucket(t *testing.T) (credentials.Value, string) {
+	t.Helper()
 	creds, err := credentials.NewEnvCredentials().Get()
 	if err != nil {
 		skip.IgnoreLintf(t, "No AWS env keys (%v)", err)
@@ -55,21 +90,28 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	if bucket == "" {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
+	return creds, bucket
+}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer lease.TestingDisableTableLeases()()
-	const numAccounts = 1000
+func setupS3URI(
+	t *testing.T, db *sqlutils.SQLRunner, bucket string, prefix string, creds credentials.Value,
+) url.URL {
+	t.Helper()
+	endpoint := os.Getenv("AWS_ENDPOINT")
+	customCACert := os.Getenv("AWS_CUSTOM_CA_CERT")
+	if customCACert != "" {
+		db.Exec(t, fmt.Sprintf("SET CLUSTER SETTING cloudstorage.http.custom_ca='%s'", customCACert))
+	}
 
-	ctx, tc, _, _, cleanupFn := BackupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
-	defer cleanupFn()
-	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
 	uri := url.URL{Scheme: "s3", Host: bucket, Path: prefix}
 	values := uri.Query()
 	values.Add(amazon.AWSAccessKeyParam, creds.AccessKeyID)
 	values.Add(amazon.AWSSecretParam, creds.SecretAccessKey)
+	if endpoint != "" {
+		values.Add(amazon.AWSEndpointParam, endpoint)
+	}
 	uri.RawQuery = values.Encode()
-
-	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+	return uri
 }
 
 // TestBackupRestoreGoogleCloudStorage hits the real GCS and so could
