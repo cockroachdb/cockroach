@@ -26,14 +26,18 @@ type Setup func(*rand.Rand) []string
 // RandTableSetupName is the name of the table setup that creates random tables.
 const RandTableSetupName = "rand-tables"
 
+// SeedMultiRegionSetupName is the name of the table setup that creates
+// multi-region tables.
+const SeedMultiRegionSetupName = "seed-multi-region"
+
 // Setups is a collection of useful initial table states.
 var Setups = map[string]Setup{
 	"empty": wrapCommonSetup(stringSetup("")),
 	// seed is a SQL statement that creates a table with most data types
 	// and some sample rows.
-	"seed":              wrapCommonSetup(stringSetup(seedTable)),
-	"seed-multi-region": wrapCommonSetup(stringSetup(multiregionSeed)),
-	RandTableSetupName:  wrapCommonSetup(randTables),
+	"seed":                   wrapCommonSetup(stringSetup(seedTable)),
+	SeedMultiRegionSetupName: wrapCommonSetup(stringSetup(multiregionSeed)),
+	RandTableSetupName:       wrapCommonSetup(randTables),
 }
 
 // wrapCommonSetup wraps setup steps common to all SQLSmith setups around the
