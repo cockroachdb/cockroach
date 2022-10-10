@@ -1028,6 +1028,7 @@ func (a *Allocator) AllocateTargetFromList(
 		candidateStores,
 		constraintsChecker,
 		existingReplicaSet,
+		existingNonVoters,
 		a.StorePool.GetLocalitiesByStore(existingReplicaSet),
 		a.StorePool.IsStoreReadyForRoutineReplicaTransfer,
 		allowMultipleReplsPerNode,

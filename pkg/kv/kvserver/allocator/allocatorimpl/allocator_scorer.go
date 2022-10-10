@@ -584,6 +584,7 @@ type candidate struct {
 	l0SubLevels    int
 	convergesScore int
 	balanceScore   balanceStatus
+	hasNonVoter    bool
 	rangeCount     int
 	details        string
 }
@@ -689,6 +690,12 @@ func (c candidate) compare(o candidate) float64 {
 		}
 		return -(1 + (float64(o.balanceScore-c.balanceScore))/10.0)
 	}
+	if c.hasNonVoter != o.hasNonVoter {
+		if c.hasNonVoter {
+			return 10
+		}
+		return -10
+	}
 	// Sometimes we compare partially-filled in candidates, e.g. those with
 	// diversity scores filled in but not balance scores or range counts. This
 	// avoids returning NaN in such cases.
@@ -736,6 +743,7 @@ func (c byScoreAndID) Less(i, j int) bool {
 	if scoresAlmostEqual(c[i].diversityScore, c[j].diversityScore) &&
 		c[i].convergesScore == c[j].convergesScore &&
 		c[i].balanceScore == c[j].balanceScore &&
+		c[i].hasNonVoter == c[j].hasNonVoter &&
 		c[i].rangeCount == c[j].rangeCount &&
 		c[i].necessary == c[j].necessary &&
 		c[i].fullDisk == c[j].fullDisk &&
@@ -770,7 +778,8 @@ func (cl candidateList) best() candidateList {
 		if cl[i].necessary == cl[0].necessary &&
 			scoresAlmostEqual(cl[i].diversityScore, cl[0].diversityScore) &&
 			cl[i].convergesScore == cl[0].convergesScore &&
-			cl[i].balanceScore == cl[0].balanceScore {
+			cl[i].balanceScore == cl[0].balanceScore &&
+			cl[i].hasNonVoter == cl[0].hasNonVoter {
 			continue
 		}
 		return cl[:i]
@@ -938,6 +947,7 @@ func rankedCandidateListForAllocation(
 	candidateStores storepool.StoreList,
 	constraintsCheck constraintsCheckFn,
 	existingReplicas []roachpb.ReplicaDescriptor,
+	nonVoterReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	allowMultipleReplsPerNode bool,
@@ -945,6 +955,7 @@ func rankedCandidateListForAllocation(
 ) candidateList {
 	var candidates candidateList
 	existingReplTargets := roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()
+	nonVoterReplTargets := roachpb.MakeReplicaSet(nonVoterReplicas).ReplicationTargets()
 	for _, s := range candidateStores.Stores {
 		// Disregard all the stores that already have replicas.
 		if StoreHasReplica(s.StoreID, existingReplTargets) {
@@ -1009,6 +1020,7 @@ func rankedCandidateListForAllocation(
 				}).balanceScore(candidateStores, s.Capacity)
 			}
 		}
+		hasNonVoter := StoreHasReplica(s.StoreID, nonVoterReplTargets)
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          constraintsOK,
@@ -1016,6 +1028,7 @@ func rankedCandidateListForAllocation(
 			diversityScore: diversityScore,
 			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
+			hasNonVoter:    hasNonVoter,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})
 	}

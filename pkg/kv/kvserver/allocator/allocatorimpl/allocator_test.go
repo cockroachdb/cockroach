@@ -3409,6 +3409,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				sl,
 				allocationConstraintsChecker,
 				existingRepls,
+				nil,
 				a.StorePool.GetLocalitiesByStore(existingRepls),
 				a.StorePool.IsStoreReadyForRoutineReplicaTransfer,
 				false, /* allowMultipleReplsPerNode */
@@ -3751,6 +3752,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			sl,
 			checkFn,
 			existingRepls,
+			nil,
 			a.StorePool.GetLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.StoreID) bool { return true },
 			false, /* allowMultipleReplsPerNode */
