@@ -1404,13 +1404,11 @@ func StartGrafana(
 	if err != nil {
 		return err
 	}
-	urls, err := GrafanaURL(ctx, l, clusterName, false)
+	url, err := GrafanaURL(ctx, l, clusterName, false)
 	if err != nil {
 		return err
 	}
-	for i, url := range urls {
-		fmt.Printf("Grafana dashboard %d: %s\n", i, url)
-	}
+	fmt.Printf("Grafana dashboard: %s\n", url)
 	return nil
 }
 
@@ -1437,17 +1435,17 @@ func StopGrafana(ctx context.Context, l *logger.Logger, clusterName string, dump
 // GrafanaURL returns a url to the grafana dashboard
 func GrafanaURL(
 	ctx context.Context, l *logger.Logger, clusterName string, openInBrowser bool,
-) ([]string, error) {
+) (string, error) {
 	if err := LoadClusters(); err != nil {
-		return nil, err
+		return "", err
 	}
 	c, err := newCluster(l, clusterName)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	nodes, err := install.ListNodes("all", len(c.VMs))
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	// grafana is assumed to be running on the last node in the target
 	grafanaNode := install.Nodes{nodes[len(nodes)-1]}
@@ -1458,7 +1456,11 @@ func GrafanaURL(
 		secure:        false,
 		port:          3000,
 	}
-	return urlGenerator(c, l, grafanaNode, uConfig)
+	urls, err := urlGenerator(c, l, grafanaNode, uConfig)
+	if err != nil {
+		return "", err
+	}
+	return urls[0], nil
 }
 
 // PrometheusSnapshot takes a snapshot of prometheus and stores the snapshot and
