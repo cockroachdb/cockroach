@@ -169,6 +169,22 @@ SELECT * FROM d.silly_view;
 ----
 0
 
+# Start and pause another import to ensure the restore checker doesn't spuriously fail on
+# descriptors with an in-progress import.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+exec-sql
+CREATE TABLE foo_offline (i INT PRIMARY KEY, s STRING);
+----
+
+import expect-pausepoint tag=b
+IMPORT INTO foo_offline (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
 # Because BackupRestoreTestingKnobs.SkipDescriptorChangeIntroduction is turned on,
 # this backup will be unable to introduce foo, foofoo, and goodfoo.
 exec-sql

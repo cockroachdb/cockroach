@@ -332,7 +332,7 @@ func fullClusterTargetsBackup(
 // they are also restore targets. This specifically entails checking the
 // following invariant on each table we seek to restore: if the nth backup
 // contains an online table in its backupManifest.Descriptors field or
-// backupManifest. DescriptorsChanges field but the n-1th does not contain it in
+// backupManifest.DescriptorsChanges field but the n-1th does not contain it online in
 // its Descriptors field, then that table must be covered by the nth backup's
 // manifest.IntroducedSpans field. Note: this check assumes that
 // mainBackupManifests are sorted by Endtime and this check only applies to
@@ -362,11 +362,11 @@ func checkMissingIntroducedSpans(
 			continue
 		}
 
-		// Gather the tables included in the previous backup.
-		prevTables := make(map[descpb.ID]struct{})
+		// Gather the _online_ tables included in the previous backup.
+		prevOnlineTables := make(map[descpb.ID]struct{})
 		for _, desc := range mainBackupManifests[i-1].Descriptors {
-			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil {
-				prevTables[table.GetID()] = struct{}{}
+			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Public() {
+				prevOnlineTables[table.GetID()] = struct{}{}
 			}
 		}
 
@@ -381,6 +381,8 @@ func checkMissingIntroducedSpans(
 			tablesIntroduced[descpb.ID(tableID)] = struct{}{}
 		}
 
+		// requiredIntroduction affirms that the given table in backup i was either
+		// introduced in backup i, or included online in backup i-1.
 		requiredIntroduction := func(table *descpb.TableDescriptor) error {
 			if _, required := requiredTables[table.GetID()]; !required {
 				// The table is not required for the restore, so there's no need to check coverage.
@@ -397,7 +399,7 @@ func checkMissingIntroducedSpans(
 				return nil
 			}
 
-			if _, inPrevBackup := prevTables[table.GetID()]; inPrevBackup {
+			if _, inPrevBackup := prevOnlineTables[table.GetID()]; inPrevBackup {
 				// The table was included in the previous backup, which implies the
 				// table was online at prevBackup.Endtime, and therefore does not need
 				// to be introduced.
@@ -418,10 +420,10 @@ that was running an IMPORT at the time of the previous incremental in this chain
 			})
 		}
 
-		// If the table in the current backup was not in prevBackup.Descriptors,
-		// then it needs to be introduced.
 		for _, desc := range mainBackupManifests[i].Descriptors {
-			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil {
+			// Check that all online tables at backup time were either introduced or
+			// in the previous backup.
+			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
 					return err
 				}
@@ -429,9 +431,9 @@ that was running an IMPORT at the time of the previous incremental in this chain
 		}
 
 		// As described in the docstring for getReintroducedSpans(), there are cases
-		// where a descriptor may appear in manifest. DescriptorChanges but not
-		// manifest.Descriptors. If a descriptor is online at any moment during the
-		// backup interval, it needs to be reintroduced.
+		// where a descriptor may appear in manifest.DescriptorChanges but not
+		// manifest.Descriptors. If a descriptor switched from offline to online at
+		// any moment during the backup interval, it needs to be reintroduced.
 		for _, desc := range mainBackupManifests[i].DescriptorChanges {
 			if table, _, _, _ := descpb.FromDescriptor(desc.Desc); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
