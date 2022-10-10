@@ -652,10 +652,10 @@ func (ds *ServerImpl) SetupFlow(
 
 // CancelDeadFlows is part of the execinfrapb.DistSQLServer interface.
 func (ds *ServerImpl) CancelDeadFlows(
-	_ context.Context, req *execinfrapb.CancelDeadFlowsRequest,
+	ctx context.Context, req *execinfrapb.CancelDeadFlowsRequest,
 ) (*execinfrapb.SimpleResponse, error) {
-	// This function is a noop on this node because it doesn't queue any of the
-	// remote flows, so there are no dead flows to cancel.
+	ctx = ds.AnnotateCtx(ctx)
+	ds.remoteFlowRunner.CancelDeadFlows(ctx, req)
 	return &execinfrapb.SimpleResponse{}, nil
 }
 

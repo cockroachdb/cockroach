@@ -13,6 +13,7 @@ package flowinfra
 import (
 	"context"
 	"sync"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -130,6 +131,14 @@ type Flow interface {
 
 	// GetID returns the flow ID.
 	GetID() execinfrapb.FlowID
+
+	// MemUsage returns the estimated memory footprint of this Flow object. Note
+	// that this ignores all the memory usage of the components that are created
+	// on behalf of this Flow.
+	MemUsage() int64
+
+	// Cancel cancels the flow by canceling its context.
+	Cancel()
 
 	// Cleanup must be called whenever the flow is done (meaning it either
 	// completes gracefully after all processors and mailboxes exited or an
@@ -497,6 +506,18 @@ func (f *FlowBase) Wait() {
 	if panicVal != nil {
 		panic(panicVal)
 	}
+}
+
+const flowBaseOverhead = int64(unsafe.Sizeof(FlowBase{}))
+
+// MemUsage is part of the Flow interface.
+func (f *FlowBase) MemUsage() int64 {
+	return flowBaseOverhead + int64(len(f.statementSQL))
+}
+
+// Cancel is part of the Flow interface.
+func (f *FlowBase) Cancel() {
+	f.ctxCancel()
 }
 
 // Cleanup is part of the Flow interface.
