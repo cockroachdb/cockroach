@@ -3076,6 +3076,10 @@ var charts = []sectionDescription{
 				Title:   "Flush Utilization",
 				Metrics: []string{"storage.flush.utilization"},
 			},
+			{
+				Title:   "Fsync Latency",
+				Metrics: []string{"storage.fsync.latency"},
+			},
 		},
 	},
 	{
