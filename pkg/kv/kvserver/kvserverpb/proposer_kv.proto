@@ -75,9 +75,7 @@ message ComputeChecksum {
   // that hardcoded in the binary will a computation be carried out.
   uint32 version = 5;
 
-  // SaveSnapshot indicates that the snapshot used to compute the checksum
-  // should be saved so that a diff of divergent replicas can later be computed.
-  bool save_snapshot = 2;
+  reserved 2;
   roachpb.ChecksumMode mode = 3;
   // If set, a checkpoint (i.e. cheap backup) of the engine will be taken. This
   // is expected to be set only if we already know that there is an

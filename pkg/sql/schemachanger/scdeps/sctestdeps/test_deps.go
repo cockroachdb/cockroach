@@ -935,7 +935,7 @@ func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err 
 	return err
 }
 
-// ValidateForwardIndexes implements the index validator interface.
+// ValidateForwardIndexes implements the validator interface.
 func (s *TestState) ValidateForwardIndexes(
 	_ context.Context,
 	tbl catalog.TableDescriptor,
@@ -950,7 +950,7 @@ func (s *TestState) ValidateForwardIndexes(
 	return nil
 }
 
-// ValidateInvertedIndexes implements the index validator interface.
+// ValidateInvertedIndexes implements the validator interface.
 func (s *TestState) ValidateInvertedIndexes(
 	_ context.Context,
 	tbl catalog.TableDescriptor,
@@ -965,8 +965,8 @@ func (s *TestState) ValidateInvertedIndexes(
 	return nil
 }
 
-// IndexValidator implements the scexec.Dependencies interface.
-func (s *TestState) IndexValidator() scexec.IndexValidator {
+// Validator implements the scexec.Dependencies interface.
+func (s *TestState) Validator() scexec.Validator {
 	return s
 }
 

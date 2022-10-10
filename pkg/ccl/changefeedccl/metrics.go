@@ -576,8 +576,8 @@ type Metrics struct {
 	FrontierUpdates                *metric.Counter
 	ThrottleMetrics                cdcutils.Metrics
 	ReplanCount                    *metric.Counter
-	ParallelConsumerFlushNanos     *metric.Counter
-	ParallelConsumerConsumeNanos   *metric.Counter
+	ParallelConsumerFlushNanos     *metric.Histogram
+	ParallelConsumerConsumeNanos   *metric.Histogram
 	ParallelConsumerInFlightEvents *metric.Gauge
 
 	mu struct {
@@ -609,8 +609,8 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		FrontierUpdates:                metric.NewCounter(metaChangefeedFrontierUpdates),
 		ThrottleMetrics:                cdcutils.MakeMetrics(histogramWindow),
 		ReplanCount:                    metric.NewCounter(metaChangefeedReplanCount),
-		ParallelConsumerFlushNanos:     metric.NewCounter(metaChangefeedEventConsumerFlushNanos),
-		ParallelConsumerConsumeNanos:   metric.NewCounter(metaChangefeedEventConsumerConsumeNanos),
+		ParallelConsumerFlushNanos:     metric.NewHistogram(metaChangefeedEventConsumerFlushNanos, histogramWindow, metric.IOLatencyBuckets),
+		ParallelConsumerConsumeNanos:   metric.NewHistogram(metaChangefeedEventConsumerConsumeNanos, histogramWindow, metric.IOLatencyBuckets),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
 	}
 

@@ -968,7 +968,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	jobRegistry.SetInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)
-	execCfg.IndexValidator = scdeps.NewIndexValidator(
+	execCfg.Validator = scdeps.NewValidator(
 		execCfg.DB,
 		execCfg.Codec,
 		execCfg.Settings,

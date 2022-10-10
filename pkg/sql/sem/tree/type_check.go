@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -2310,9 +2311,9 @@ type typeCheckExprsState struct {
 
 	exprs           []Expr
 	typedExprs      []TypedExpr
-	constIdxs       []int // index into exprs/typedExprs
-	placeholderIdxs []int // index into exprs/typedExprs
-	resolvableIdxs  []int // index into exprs/typedExprs
+	constIdxs       util.FastIntSet // index into exprs/typedExprs
+	placeholderIdxs util.FastIntSet // index into exprs/typedExprs
+	resolvableIdxs  util.FastIntSet // index into exprs/typedExprs
 }
 
 // TypeCheckSameTypedExprs type checks a list of expressions, asserting that all
@@ -2347,7 +2348,7 @@ func TypeCheckSameTypedExprs(
 	// TODO(nvanbenschoten): Look into reducing allocations here.
 	typedExprs := make([]TypedExpr, len(exprs))
 
-	constIdxs, placeholderIdxs, resolvableIdxs := typeCheckSplitExprs(ctx, semaCtx, exprs)
+	constIdxs, placeholderIdxs, resolvableIdxs := typeCheckSplitExprs(semaCtx, exprs)
 
 	s := typeCheckExprsState{
 		ctx:             ctx,
@@ -2360,22 +2361,22 @@ func TypeCheckSameTypedExprs(
 	}
 
 	switch {
-	case len(resolvableIdxs) == 0 && len(constIdxs) == 0:
+	case resolvableIdxs.Empty() && constIdxs.Empty():
 		if err := typeCheckSameTypedPlaceholders(s, desired); err != nil {
 			return nil, nil, err
 		}
 		return typedExprs, desired, nil
-	case len(resolvableIdxs) == 0:
+	case resolvableIdxs.Empty():
 		return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 	default:
 		firstValidIdx := -1
 		firstValidType := types.Unknown
-		for i, j := range resolvableIdxs {
-			typedExpr, err := exprs[j].TypeCheck(ctx, semaCtx, desired)
+		for i, ok := s.resolvableIdxs.Next(0); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
+			typedExpr, err := exprs[i].TypeCheck(ctx, semaCtx, desired)
 			if err != nil {
 				return nil, nil, err
 			}
-			typedExprs[j] = typedExpr
+			typedExprs[i] = typedExpr
 			if returnType := typedExpr.ResolvedType(); returnType.Family() != types.UnknownFamily {
 				firstValidType = returnType
 				firstValidIdx = i
@@ -2386,10 +2387,11 @@ func TypeCheckSameTypedExprs(
 		if firstValidType.Family() == types.UnknownFamily {
 			// We got to the end without finding a non-null expression.
 			switch {
-			case len(constIdxs) > 0:
+			case !constIdxs.Empty():
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
-			case len(placeholderIdxs) > 0:
-				p := s.exprs[placeholderIdxs[0]].(*Placeholder)
+			case !placeholderIdxs.Empty():
+				next, _ := placeholderIdxs.Next(0)
+				p := s.exprs[next].(*Placeholder)
 				return nil, nil, placeholderTypeAmbiguityError(p.Idx)
 			default:
 				if desired != types.Any {
@@ -2399,7 +2401,7 @@ func TypeCheckSameTypedExprs(
 			}
 		}
 
-		for _, i := range resolvableIdxs[firstValidIdx+1:] {
+		for i, ok := s.resolvableIdxs.Next(firstValidIdx + 1); ok; i, ok = s.resolvableIdxs.Next(i + 1) {
 			typedExpr, err := exprs[i].TypeCheck(ctx, semaCtx, firstValidType)
 			if err != nil {
 				return nil, nil, err
@@ -2411,12 +2413,12 @@ func TypeCheckSameTypedExprs(
 			}
 			typedExprs[i] = typedExpr
 		}
-		if len(constIdxs) > 0 {
+		if !constIdxs.Empty() {
 			if _, err := typeCheckSameTypedConsts(s, firstValidType, true); err != nil {
 				return nil, nil, err
 			}
 		}
-		if len(placeholderIdxs) > 0 {
+		if !placeholderIdxs.Empty() {
 			if err := typeCheckSameTypedPlaceholders(s, firstValidType); err != nil {
 				return nil, nil, err
 			}
@@ -2427,7 +2429,7 @@ func TypeCheckSameTypedExprs(
 
 // Used to set placeholders to the desired typ.
 func typeCheckSameTypedPlaceholders(s typeCheckExprsState, typ *types.T) error {
-	for _, i := range s.placeholderIdxs {
+	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {
 		typedExpr, err := typeCheckAndRequire(s.ctx, s.semaCtx, s.exprs[i], typ, "placeholder")
 		if err != nil {
 			return err
@@ -2444,7 +2446,7 @@ func typeCheckSameTypedConsts(
 	s typeCheckExprsState, typ *types.T, required bool,
 ) (*types.T, error) {
 	setTypeForConsts := func(typ *types.T) (*types.T, error) {
-		for _, i := range s.constIdxs {
+		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 			typedExpr, err := typeCheckAndRequire(s.ctx, s.semaCtx, s.exprs[i], typ, "constant")
 			if err != nil {
 				// In this case, even though the constExpr has been shown to be
@@ -2460,7 +2462,7 @@ func typeCheckSameTypedConsts(
 	// If typ is not a wildcard, all consts try to become typ.
 	if typ.Family() != types.AnyFamily {
 		all := true
-		for _, i := range s.constIdxs {
+		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 			if !canConstantBecome(s.exprs[i].(Constant), typ) {
 				if required {
 					typedExpr, err := s.exprs[i].TypeCheck(s.ctx, s.semaCtx, types.Any)
@@ -2489,7 +2491,7 @@ func typeCheckSameTypedConsts(
 	// If not, we want to force an error because the constants cannot all
 	// become the same type.
 	reqTyp := typ
-	for _, i := range s.constIdxs {
+	for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 		typedExpr, err := s.exprs[i].TypeCheck(s.ctx, s.semaCtx, reqTyp)
 		if err != nil {
 			return nil, err
@@ -2513,7 +2515,7 @@ func typeCheckConstsAndPlaceholdersWithDesired(
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(s.placeholderIdxs) > 0 {
+	if !s.placeholderIdxs.Empty() {
 		if err := typeCheckSameTypedPlaceholders(s, typ); err != nil {
 			return nil, nil, err
 		}
@@ -2526,16 +2528,16 @@ func typeCheckConstsAndPlaceholdersWithDesired(
 // - Placeholders
 // - All other Exprs
 func typeCheckSplitExprs(
-	ctx context.Context, semaCtx *SemaContext, exprs []Expr,
-) (constIdxs []int, placeholderIdxs []int, resolvableIdxs []int) {
+	semaCtx *SemaContext, exprs []Expr,
+) (constIdxs util.FastIntSet, placeholderIdxs util.FastIntSet, resolvableIdxs util.FastIntSet) {
 	for i, expr := range exprs {
 		switch {
 		case isConstant(expr):
-			constIdxs = append(constIdxs, i)
+			constIdxs.Add(i)
 		case semaCtx.isUnresolvedPlaceholder(expr):
-			placeholderIdxs = append(placeholderIdxs, i)
+			placeholderIdxs.Add(i)
 		default:
-			resolvableIdxs = append(resolvableIdxs, i)
+			resolvableIdxs.Add(i)
 		}
 	}
 	return constIdxs, placeholderIdxs, resolvableIdxs
