@@ -12,13 +12,14 @@ import (
 	"context"
 	gosql "database/sql"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -58,10 +59,6 @@ func TestTenantWithDecommissionedID(t *testing.T) {
 	for instanceID := 1; instanceID <= int(decommissionID); instanceID++ {
 		sqlServer, tenant := serverutils.StartTenant(t, server, base.TestTenantArgs{
 			TenantID: tenantID,
-			// Set a low heartbeat interval. The first heartbeat succeeds
-			// because the tenant needs to communicate with the kv node to
-			// determine its instance id.
-			RPCHeartbeatInterval: time.Millisecond * 5,
 		})
 		if sqlServer.RPCContext().NodeID.Get() == decommissionID {
 			tenantSQLServer = sqlServer
@@ -73,6 +70,8 @@ func TestTenantWithDecommissionedID(t *testing.T) {
 	require.NotNil(t, tenantSQLServer)
 	defer tenantDB.Close()
 
-	_, err := tenantDB.Exec("CREATE ROLE test_user WITH PASSWORD 'password'")
-	require.NoError(t, err)
+	require.NoError(t, contextutil.RunWithTimeout(ctx, "use SQL", testutils.DefaultSucceedsSoonDuration, func(ctx context.Context) error {
+		_, err := tenantDB.Exec("CREATE ROLE test_user WITH PASSWORD 'password'")
+		return err
+	}))
 }
