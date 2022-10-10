@@ -133,7 +133,7 @@ func TestTenantUnauthenticatedAccess(t *testing.T) {
 			},
 		})
 	require.Error(t, err)
-	require.Regexp(t, `Unauthenticated desc = requested key .* not fully contained in tenant keyspace /Tenant/1{0-1}`, err)
+	require.Regexp(t, `requested key .* not fully contained in tenant keyspace /Tenant/1{0-1}.*Unauthenticated`, err)
 }
 
 // TestTenantHTTP verifies that SQL tenant servers expose metrics and debugging endpoints.

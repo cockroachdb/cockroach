@@ -66,7 +66,7 @@ const (
 	// each heartbeat.
 	defaultRaftHeartbeatIntervalTicks = 5
 
-	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatInterval
+	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatIntervalAndHalfTimeout
 	// used by the rpc context.
 	defaultRPCHeartbeatInterval = 3 * time.Second
 
@@ -221,10 +221,13 @@ type Config struct {
 	// This is computed from HTTPAddr if specified otherwise Addr.
 	HTTPAdvertiseAddr string
 
-	// RPCHeartbeatInterval controls how often a Ping request is sent on peer
-	// connections to determine connection health and update the local view
-	// of remote clocks.
-	RPCHeartbeatInterval time.Duration
+	// RPCHeartbeatIntervalAndHalfTimeout controls how often a Ping request is
+	// sent on peer connections to determine connection health and update the
+	// local view of remote clocks.
+	//
+	// Twice this value is used as a timeout for heartbeats, so don't set this too
+	// low.
+	RPCHeartbeatIntervalAndHalfTimeout time.Duration
 
 	// Enables the use of an PTP hardware clock user space API for HLC current time.
 	// This contains the path to the device to be used (i.e. /dev/ptp0)
@@ -273,7 +276,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.SQLAdvertiseAddr = cfg.SQLAddr
 	cfg.SocketFile = ""
 	cfg.SSLCertsDir = DefaultCertsDirectory
-	cfg.RPCHeartbeatInterval = defaultRPCHeartbeatInterval
+	cfg.RPCHeartbeatIntervalAndHalfTimeout = defaultRPCHeartbeatInterval
 	cfg.ClusterName = ""
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
