@@ -83,6 +83,11 @@ func (mb *mutationBuilder) buildDelete(returning tree.ReturningExprs) {
 	mb.projectPartialIndexDelCols()
 
 	private := mb.makeMutationPrivate(returning != nil)
+	for _, col := range mb.extraAccessibleCols {
+		if col.id != 0 {
+			private.PassthroughCols = append(private.PassthroughCols, col.id)
+		}
+	}
 	mb.outScope.expr = mb.b.factory.ConstructDelete(
 		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
 	)
