@@ -811,6 +811,10 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 	})
 
+	if err := r.createJobsStatsPollerIfNotExists(ctx); err != nil {
+		return err
+	}
+
 	if err := stopper.RunAsyncTask(ctx, "jobs/cancel", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
@@ -893,6 +897,121 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 		}
 	})
+}
+
+func (r *Registry) createJobsStatsPollerIfNotExists(ctx context.Context) error {
+	if r.knobs.IntervalOverrides.PollMetrics != nil && *r.knobs.IntervalOverrides.PollMetrics == time.Duration(0) {
+		return nil
+	}
+
+	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		exists, err := JobExists(ctx, jobspb.InvalidJobID, r.ex, txn, false, func(payload *jobspb.Payload) bool {
+			return payload.Type() == jobspb.TypePollJobsStats
+		})
+		if err != nil {
+			return err
+		}
+
+		if exists {
+			return nil
+		}
+
+		metricsJobID := r.MakeJobID()
+		jr := createJobsStatsPollerRecord()
+		if _, err := r.CreateAdoptableJobWithTxn(ctx, jr, metricsJobID, txn); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func createJobsStatsPollerRecord() Record {
+	return Record{
+		Description: jobspb.TypePollJobsStats.String(),
+		Details:     jobspb.PollJobsStatsDetails{},
+		Progress:    jobspb.PollJobsStatsProgress{},
+		CreatedBy:   &CreatedByInfo{Name: username.RootUser, ID: username.RootUserID},
+		Username:    username.RootUserName(),
+	}
+}
+
+// PollMetricsTask polls the jobs table for certain metrics at an interval.
+func (r *Registry) PollMetricsTask(ctx context.Context) error {
+	var err error
+	updateMetrics := func(ctx context.Context, s sqlliveness.Session) {
+		lc, cleanup := makeLoopController(r.settings, pollJobsMetricsInterval, r.knobs.IntervalOverrides.PollMetrics)
+		defer cleanup()
+		for {
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+				return
+			case <-lc.updated:
+				lc.onUpdate()
+			case <-lc.timer.C:
+				lc.timer.Read = true
+				if err = r.updatePausedMetrics(ctx, s); err != nil {
+					log.Errorf(ctx, "failed to update paused metrics: %v", err)
+					return
+				}
+				lc.onExecute()
+			}
+		}
+	}
+	r.withSession(ctx, updateMetrics)
+	return err
+}
+
+const pausedJobsCountQuery = string(`
+	SELECT job_type, count(*)
+	FROM crdb_internal.jobs
+	WHERE status = '` + StatusPaused + `' 
+  GROUP BY job_type`)
+
+func (r *Registry) updatePausedMetrics(ctx context.Context, s sqlliveness.Session) error {
+	metricUpdates := make(map[jobspb.Type]int)
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// In case of transaction retries, reset this map here.
+		metricUpdates = make(map[jobspb.Type]int)
+
+		// Run the claim transaction at low priority to ensure that it does not
+		// contend with foreground reads.
+		if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
+			return err
+		}
+		rows, err := r.ex.QueryBufferedEx(
+			ctx, "poll-jobs-metrics-job", txn, sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			pausedJobsCountQuery, s.ID().UnsafeBytes(), r.ID(),
+		)
+		if err != nil {
+			return errors.Wrap(err, "could not query jobs table")
+		}
+
+		for _, row := range rows {
+			typeString := *row[0].(*tree.DString)
+			count := *row[1].(*tree.DInt)
+			typ, err := jobspb.TypeFromString(string(typeString))
+			if err != nil {
+				return err
+			}
+			metricUpdates[typ] = int(count)
+		}
+
+		return nil
+	})
+	if err == nil {
+		for _, v := range jobspb.Type_value {
+			if r.metrics.JobMetrics[v] != nil {
+				if _, ok := metricUpdates[jobspb.Type(v)]; ok {
+					r.metrics.JobMetrics[v].CurrentlyPaused.Update(int64(metricUpdates[jobspb.Type(v)]))
+				} else {
+					r.metrics.JobMetrics[v].CurrentlyPaused.Update(0)
+				}
+			}
+		}
+	}
+
+	return err
 }
 
 func (r *Registry) maybeCancelJobs(ctx context.Context, s sqlliveness.Session) {

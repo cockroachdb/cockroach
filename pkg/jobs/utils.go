@@ -20,30 +20,38 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// RunningJobExists checks that whether there are any other jobs (matched by
-// payloadPredicate callback) in the pending, running, or paused status that
-// started earlier than the job with provided jobID.
+const jobExistsOp = "get-jobs"
+
+// JobExists checks that whether there are any other jobs (matched by
+// payloadPredicate callback) that started earlier than the job with provided jobID.
+// If the running parameter is true, this function will only search jobs that have
+// pending, running, or paused status.
 // If the provided jobID is a jobspb.InvalidJobID, this function checks if
 // exists any jobs that matches the payloadPredicate.
-func RunningJobExists(
+func JobExists(
 	ctx context.Context,
 	jobID jobspb.JobID,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
+	running bool,
 	payloadPredicate func(payload *jobspb.Payload) bool,
 ) (exists bool, retErr error) {
-	const stmt = `
-SELECT
-  id, payload
-FROM
-  system.jobs
-WHERE
-  status IN ` + NonTerminalStatusTupleString + `
-ORDER BY created`
+
+	var statusPredicate string
+	if running {
+		statusPredicate = `WHERE status IN ` + NonTerminalStatusTupleString
+	}
+	stmt := `
+	SELECT
+		id, payload
+	FROM
+		system.jobs ` +
+		statusPredicate +
+		`ORDER BY created`
 
 	it, err := ie.QueryIterator(
 		ctx,
-		"get-jobs",
+		jobExistsOp,
 		txn,
 		stmt,
 	)

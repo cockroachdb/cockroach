@@ -95,6 +95,7 @@ var AutomaticJobTypes = [...]Type{
 	TypeAutoSpanConfigReconciliation,
 	TypeAutoSQLStatsCompaction,
 	TypeAutoSchemaTelemetry,
+	TypePollJobsStats,
 }
 
 // DetailsType returns the type for a payload detail.
@@ -136,6 +137,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeRowLevelTTL
 	case *Payload_SchemaTelemetry:
 		return TypeAutoSchemaTelemetry
+	case *Payload_PollJobsStats:
+		return TypePollJobsStats
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -182,6 +185,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_RowLevelTTL{RowLevelTTL: &d}
 	case SchemaTelemetryProgress:
 		return &Progress_SchemaTelemetry{SchemaTelemetry: &d}
+	case PollJobsStatsProgress:
+		return &Progress_PollJobsStats{PollJobsStats: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -223,6 +228,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.RowLevelTTL
 	case *Payload_SchemaTelemetry:
 		return *d.SchemaTelemetry
+	case *Payload_PollJobsStats:
+		return *d.PollJobsStats
 	default:
 		return nil
 	}
@@ -264,6 +271,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.RowLevelTTL
 	case *Progress_SchemaTelemetry:
 		return *d.SchemaTelemetry
+	case *Progress_PollJobsStats:
+		return *d.PollJobsStats
 	default:
 		return nil
 	}
@@ -275,6 +284,17 @@ func (t Type) String() string {
 	// simply swap underscores for spaces in the identifier for very SQL-esque
 	// names, like "BACKUP" and "SCHEMA CHANGE".
 	return strings.Replace(Type_name[int32(t)], "_", " ", -1)
+}
+
+// TypeFromString is used to get the type corresponding to the string s
+// where s := Type.String().
+func TypeFromString(s string) (Type, error) {
+	s = strings.Replace(s, " ", "_", -1)
+	t, ok := Type_value[s]
+	if !ok {
+		return TypeUnspecified, errors.New("invalid type string")
+	}
+	return Type(t), nil
 }
 
 // WrapPayloadDetails wraps a Details object in the protobuf wrapper struct
@@ -318,6 +338,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_RowLevelTTL{RowLevelTTL: &d}
 	case SchemaTelemetryDetails:
 		return &Payload_SchemaTelemetry{SchemaTelemetry: &d}
+	case PollJobsStatsDetails:
+		return &Payload_PollJobsStats{PollJobsStats: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -353,7 +375,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 18
+const NumJobTypes = 19
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this
