@@ -639,12 +639,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	rangeLogWriter := rangelog.NewWriter(
+		keys.SystemSQLCodec,
 		func() int64 {
 			return int64(builtins.GenerateUniqueInt(
 				builtins.ProcessUniqueID(nodeIDContainer.Get()),
 			))
 		},
-		internalExecutor,
 	)
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:        cfg.DefaultZoneConfig.AsSpanConfig(),
