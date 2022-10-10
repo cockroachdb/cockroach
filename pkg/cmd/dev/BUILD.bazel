@@ -44,11 +44,12 @@ go_binary(
 
 go_test(
     name = "dev_test",
+    size = "small",
     srcs = [
         "datadriven_test.go",
         "recorderdriven_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
     deps = [

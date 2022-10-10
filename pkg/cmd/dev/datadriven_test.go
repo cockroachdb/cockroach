@@ -16,6 +16,7 @@ import (
 	"io"
 	"log"
 	"testing"
+	"time"
 
 	"github.com/alessio/shellescape"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec"
@@ -48,6 +49,7 @@ const (
 // suited for flows that do (reading a list of go files in the bazel generated
 // sandbox and copying them over one-by-one).
 func TestDataDriven(t *testing.T) {
+	time.Sleep(100 * time.Second)
 	verbose := testing.Verbose()
 	testdata := testutils.TestDataPath(t, "datadriven")
 	datadriven.Walk(t, testdata, func(t *testing.T, path string) {
