@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfiglimiter"
@@ -366,6 +367,13 @@ type monitorAndMetricsOptions struct {
 	histogramWindowInterval time.Duration
 	settings                *cluster.Settings
 }
+
+var vmoduleSetting = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"server.debug.default_vmodule",
+	"vmodule string (ignored by any server with an explicit one provided at start)",
+	"",
+)
 
 // newRootSQLMemoryMonitor returns a started BytesMonitor and corresponding
 // metrics.
@@ -1105,6 +1113,23 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if cfg.TestingKnobs.Server != nil {
 		reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
+
+	startedWithExplicitVModule := log.GetVModule() != ""
+	fn := func(ctx context.Context) {
+		if startedWithExplicitVModule {
+			log.Infof(ctx, "ignoring vmodule cluster setting due to starting with explicit vmodule flag")
+		} else {
+			s := vmoduleSetting.Get(&cfg.Settings.SV)
+			if log.GetVModule() != s {
+				log.Infof(ctx, "updating vmodule from cluster setting to %s", s)
+				if err := log.SetVModule(s); err != nil {
+					log.Warningf(ctx, "failed to apply vmodule cluster setting: %v", err)
+				}
+			}
+		}
+	}
+	vmoduleSetting.SetOnChange(&cfg.Settings.SV, fn)
+	fn(ctx)
 
 	var settingsWatcher *settingswatcher.SettingsWatcher
 	if codec.ForSystemTenant() {
