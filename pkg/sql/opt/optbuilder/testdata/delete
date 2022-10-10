@@ -32,6 +32,36 @@ CREATE TABLE mutation (
 )
 ----
 
+exec-ddl
+CREATE TABLE u_a (
+    a INT NOT NULL PRIMARY KEY,
+    b STRING,
+    c INT
+)
+----
+
+exec-ddl
+CREATE TABLE u_b (
+  a INT NOT NULL PRIMARY KEY,
+  b STRING
+)
+----
+
+exec-ddl
+CREATE TABLE u_c (
+  a INT NOT NULL PRIMARY KEY,
+  b STRING,
+  c INT
+)
+----
+
+exec-ddl
+CREATE TABLE u_e (
+  a INT NOT NULL,
+  b INT
+)
+----
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -455,3 +485,297 @@ build
 DELETE FROM mutation ORDER BY p LIMIT 2
 ----
 error (42P10): column "p" is being backfilled
+
+# ------------------------------------------------------------------------------
+# Test USING.
+# ------------------------------------------------------------------------------
+
+# Test a simple join with a filter
+build format=show-qual
+DELETE FROM u_a USING u_b WHERE c = u_b.a AND u_b.b = 'd'
+----
+delete t.public.u_a
+ ├── columns: <none>
+ ├── fetch columns: t.public.u_a.a:6 t.public.u_a.b:7 t.public.u_a.c:8
+ ├── passthrough columns t.public.u_b.a:11 t.public.u_b.b:12 t.public.u_b.crdb_internal_mvcc_timestamp:13 t.public.u_b.tableoid:14
+ └── select
+      ├── columns: t.public.u_a.a:6!null t.public.u_a.b:7 t.public.u_a.c:8!null t.public.u_a.crdb_internal_mvcc_timestamp:9 t.public.u_a.tableoid:10 t.public.u_b.a:11!null t.public.u_b.b:12!null t.public.u_b.crdb_internal_mvcc_timestamp:13 t.public.u_b.tableoid:14
+      ├── inner-join (cross)
+      │    ├── columns: t.public.u_a.a:6!null t.public.u_a.b:7 t.public.u_a.c:8 t.public.u_a.crdb_internal_mvcc_timestamp:9 t.public.u_a.tableoid:10 t.public.u_b.a:11!null t.public.u_b.b:12 t.public.u_b.crdb_internal_mvcc_timestamp:13 t.public.u_b.tableoid:14
+      │    ├── scan t.public.u_a
+      │    │    └── columns: t.public.u_a.a:6!null t.public.u_a.b:7 t.public.u_a.c:8 t.public.u_a.crdb_internal_mvcc_timestamp:9 t.public.u_a.tableoid:10
+      │    ├── scan t.public.u_b
+      │    │    └── columns: t.public.u_b.a:11!null t.public.u_b.b:12 t.public.u_b.crdb_internal_mvcc_timestamp:13 t.public.u_b.tableoid:14
+      │    └── filters (true)
+      └── filters
+           └── (t.public.u_a.c:8 = t.public.u_b.a:11) AND (t.public.u_b.b:12 = 'd')
+
+# Test a self join
+build
+DELETE FROM u_a USING u_a u_a2 WHERE u_a.a = u_a2.c
+----
+delete u_a
+ ├── columns: <none>
+ ├── fetch columns: u_a.a:6 u_a.b:7 u_a.c:8
+ ├── passthrough columns u_a2.a:11 u_a2.b:12 u_a2.c:13 u_a2.crdb_internal_mvcc_timestamp:14 u_a2.tableoid:15
+ └── select
+      ├── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_a2.a:11!null u_a2.b:12 u_a2.c:13!null u_a2.crdb_internal_mvcc_timestamp:14 u_a2.tableoid:15
+      ├── inner-join (cross)
+      │    ├── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_a2.a:11!null u_a2.b:12 u_a2.c:13 u_a2.crdb_internal_mvcc_timestamp:14 u_a2.tableoid:15
+      │    ├── scan u_a
+      │    │    └── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10
+      │    ├── scan u_a [as=u_a2]
+      │    │    └── columns: u_a2.a:11!null u_a2.b:12 u_a2.c:13 u_a2.crdb_internal_mvcc_timestamp:14 u_a2.tableoid:15
+      │    └── filters (true)
+      └── filters
+           └── u_a.a:6 = u_a2.c:13
+
+# Test when USING uses multiple tables
+build
+DELETE FROM u_a USING u_b, u_c WHERE u_a.c = u_b.a AND u_a.c = u_c.a
+----
+delete u_a
+ ├── columns: <none>
+ ├── fetch columns: u_a.a:6 u_a.b:7 u_a.c:8
+ ├── passthrough columns u_b.a:11 u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14 u_c.a:15 u_c.b:16 u_c.c:17 u_c.crdb_internal_mvcc_timestamp:18 u_c.tableoid:19
+ └── select
+      ├── columns: u_a.a:6!null u_a.b:7 u_a.c:8!null u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14 u_c.a:15!null u_c.b:16 u_c.c:17 u_c.crdb_internal_mvcc_timestamp:18 u_c.tableoid:19
+      ├── inner-join (cross)
+      │    ├── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14 u_c.a:15!null u_c.b:16 u_c.c:17 u_c.crdb_internal_mvcc_timestamp:18 u_c.tableoid:19
+      │    ├── scan u_a
+      │    │    └── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10
+      │    ├── inner-join (cross)
+      │    │    ├── columns: u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14 u_c.a:15!null u_c.b:16 u_c.c:17 u_c.crdb_internal_mvcc_timestamp:18 u_c.tableoid:19
+      │    │    ├── scan u_b
+      │    │    │    └── columns: u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+      │    │    ├── scan u_c
+      │    │    │    └── columns: u_c.a:15!null u_c.b:16 u_c.c:17 u_c.crdb_internal_mvcc_timestamp:18 u_c.tableoid:19
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── filters
+           └── (u_a.c:8 = u_b.a:11) AND (u_a.c:8 = u_c.a:15)
+
+# Test if USING works well with RETURNING expressions that reference
+# the USING table
+build
+DELETE FROM
+  u_a
+USING
+  u_c
+WHERE
+  u_c.a > u_a.c AND u_c.c <= 4
+RETURNING
+  u_c.a, u_c.b, u_c.c
+----
+project
+ ├── columns: a:11 b:12 c:13
+ └── delete u_a
+      ├── columns: u_a.a:1!null u_a.b:2 u_a.c:3!null u_c.a:11 u_c.b:12 u_c.c:13 u_c.crdb_internal_mvcc_timestamp:14 u_c.tableoid:15
+      ├── fetch columns: u_a.a:6 u_a.b:7 u_a.c:8
+      ├── return-mapping:
+      │    ├── u_a.a:6 => u_a.a:1
+      │    ├── u_a.b:7 => u_a.b:2
+      │    └── u_a.c:8 => u_a.c:3
+      ├── passthrough columns u_c.a:11 u_c.b:12 u_c.c:13 u_c.crdb_internal_mvcc_timestamp:14 u_c.tableoid:15
+      └── select
+           ├── columns: u_a.a:6!null u_a.b:7 u_a.c:8!null u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_c.a:11!null u_c.b:12 u_c.c:13!null u_c.crdb_internal_mvcc_timestamp:14 u_c.tableoid:15
+           ├── inner-join (cross)
+           │    ├── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_c.a:11!null u_c.b:12 u_c.c:13 u_c.crdb_internal_mvcc_timestamp:14 u_c.tableoid:15
+           │    ├── scan u_a
+           │    │    └── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10
+           │    ├── scan u_c
+           │    │    └── columns: u_c.a:11!null u_c.b:12 u_c.c:13 u_c.crdb_internal_mvcc_timestamp:14 u_c.tableoid:15
+           │    └── filters (true)
+           └── filters
+                └── (u_c.a:11 > u_a.c:8) AND (u_c.c:13 <= 4)
+
+# Test if RETURNING * returns everything
+build
+DELETE FROM u_a USING u_b WHERE c = u_b.a AND u_b.b = 'd' RETURNING *
+----
+project
+ ├── columns: a:1!null b:2 c:3!null a:11 b:12
+ └── delete u_a
+      ├── columns: u_a.a:1!null u_a.b:2 c:3!null u_b.a:11 u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+      ├── fetch columns: u_a.a:6 u_a.b:7 c:8
+      ├── return-mapping:
+      │    ├── u_a.a:6 => u_a.a:1
+      │    ├── u_a.b:7 => u_a.b:2
+      │    └── c:8 => c:3
+      ├── passthrough columns u_b.a:11 u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+      └── select
+           ├── columns: u_a.a:6!null u_a.b:7 c:8!null u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_b.a:11!null u_b.b:12!null u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+           ├── inner-join (cross)
+           │    ├── columns: u_a.a:6!null u_a.b:7 c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+           │    ├── scan u_a
+           │    │    └── columns: u_a.a:6!null u_a.b:7 c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10
+           │    ├── scan u_b
+           │    │    └── columns: u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+           │    └── filters (true)
+           └── filters
+                └── (c:8 = u_b.a:11) AND (u_b.b:12 = 'd')
+
+# Test aliased table names and order by and limit
+build
+DELETE FROM abcde AS foo USING xyz AS bar WHERE bar.y > 0 ORDER BY bar.y LIMIT 5;
+----
+delete abcde [as=foo]
+ ├── columns: <none>
+ ├── fetch columns: a:9 b:10 c:11 d:12 e:13 rowid:14
+ ├── passthrough columns x:17 y:18 z:19 bar.crdb_internal_mvcc_timestamp:20 bar.tableoid:21
+ └── limit
+      ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null foo.crdb_internal_mvcc_timestamp:15 foo.tableoid:16 x:17!null y:18!null z:19 bar.crdb_internal_mvcc_timestamp:20 bar.tableoid:21
+      ├── internal-ordering: +18
+      ├── sort
+      │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null foo.crdb_internal_mvcc_timestamp:15 foo.tableoid:16 x:17!null y:18!null z:19 bar.crdb_internal_mvcc_timestamp:20 bar.tableoid:21
+      │    ├── ordering: +18
+      │    ├── limit hint: 5.00
+      │    └── select
+      │         ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null foo.crdb_internal_mvcc_timestamp:15 foo.tableoid:16 x:17!null y:18!null z:19 bar.crdb_internal_mvcc_timestamp:20 bar.tableoid:21
+      │         ├── inner-join (cross)
+      │         │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null foo.crdb_internal_mvcc_timestamp:15 foo.tableoid:16 x:17!null y:18 z:19 bar.crdb_internal_mvcc_timestamp:20 bar.tableoid:21
+      │         │    ├── scan abcde [as=foo]
+      │         │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 rowid:14!null foo.crdb_internal_mvcc_timestamp:15 foo.tableoid:16
+      │         │    │    └── computed column expressions
+      │         │    │         ├── d:12
+      │         │    │         │    └── (b:10 + c:11) + 1
+      │         │    │         └── e:13
+      │         │    │              └── a:9
+      │         │    ├── scan xyz [as=bar]
+      │         │    │    └── columns: x:17!null y:18 z:19 bar.crdb_internal_mvcc_timestamp:20 bar.tableoid:21
+      │         │    └── filters (true)
+      │         └── filters
+      │              └── y:18 > 0
+      └── 5
+
+# Test if DELETE FROM ... USING can return hidden columns
+build
+DELETE FROM
+  abcde
+USING
+  u_e
+WHERE
+  abcde.a = u_e.a
+RETURNING
+  u_e.rowid
+----
+project
+ ├── columns: rowid:19
+ └── delete abcde
+      ├── columns: abcde.a:1!null abcde.b:2 c:3 d:4 e:5 abcde.rowid:6!null u_e.a:17 u_e.b:18 u_e.rowid:19 u_e.crdb_internal_mvcc_timestamp:20 u_e.tableoid:21
+      ├── fetch columns: abcde.a:9 abcde.b:10 c:11 d:12 e:13 abcde.rowid:14
+      ├── return-mapping:
+      │    ├── abcde.a:9 => abcde.a:1
+      │    ├── abcde.b:10 => abcde.b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    ├── e:13 => e:5
+      │    └── abcde.rowid:14 => abcde.rowid:6
+      ├── passthrough columns u_e.a:17 u_e.b:18 u_e.rowid:19 u_e.crdb_internal_mvcc_timestamp:20 u_e.tableoid:21
+      └── select
+           ├── columns: abcde.a:9!null abcde.b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 u_e.a:17!null u_e.b:18 u_e.rowid:19!null u_e.crdb_internal_mvcc_timestamp:20 u_e.tableoid:21
+           ├── inner-join (cross)
+           │    ├── columns: abcde.a:9!null abcde.b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 u_e.a:17!null u_e.b:18 u_e.rowid:19!null u_e.crdb_internal_mvcc_timestamp:20 u_e.tableoid:21
+           │    ├── scan abcde
+           │    │    ├── columns: abcde.a:9!null abcde.b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
+           │    │    └── computed column expressions
+           │    │         ├── d:12
+           │    │         │    └── (abcde.b:10 + c:11) + 1
+           │    │         └── e:13
+           │    │              └── abcde.a:9
+           │    ├── scan u_e
+           │    │    └── columns: u_e.a:17!null u_e.b:18 u_e.rowid:19!null u_e.crdb_internal_mvcc_timestamp:20 u_e.tableoid:21
+           │    └── filters (true)
+           └── filters
+                └── abcde.a:9 = u_e.a:17
+
+# Test if returning returns columns in the target table and USING table
+build
+DELETE FROM u_a USING u_b WHERE u_a.a = u_b.a RETURNING u_b.a, u_a.a
+----
+project
+ ├── columns: a:11 a:1!null
+ └── delete u_a
+      ├── columns: u_a.a:1!null u_a.b:2 c:3 u_b.a:11 u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+      ├── fetch columns: u_a.a:6 u_a.b:7 c:8
+      ├── return-mapping:
+      │    ├── u_a.a:6 => u_a.a:1
+      │    ├── u_a.b:7 => u_a.b:2
+      │    └── c:8 => c:3
+      ├── passthrough columns u_b.a:11 u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+      └── select
+           ├── columns: u_a.a:6!null u_a.b:7 c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+           ├── inner-join (cross)
+           │    ├── columns: u_a.a:6!null u_a.b:7 c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+           │    ├── scan u_a
+           │    │    └── columns: u_a.a:6!null u_a.b:7 c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10
+           │    ├── scan u_b
+           │    │    └── columns: u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+           │    └── filters (true)
+           └── filters
+                └── u_a.a:6 = u_b.a:11
+
+# Test if DELETE FROM ... USING works with LATERAL
+build
+DELETE FROM u_a USING u_b, LATERAL (SELECT a FROM u_c WHERE u_b.a > u_c.a) AS other WHERE other.a > 6
+----
+delete u_a
+ ├── columns: <none>
+ ├── fetch columns: u_a.a:6 u_a.b:7 u_a.c:8
+ ├── passthrough columns u_b.a:11 u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14 u_c.a:15
+ └── select
+      ├── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14 u_c.a:15!null
+      ├── inner-join (cross)
+      │    ├── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10 u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14 u_c.a:15!null
+      │    ├── scan u_a
+      │    │    └── columns: u_a.a:6!null u_a.b:7 u_a.c:8 u_a.crdb_internal_mvcc_timestamp:9 u_a.tableoid:10
+      │    ├── inner-join-apply
+      │    │    ├── columns: u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14 u_c.a:15!null
+      │    │    ├── scan u_b
+      │    │    │    └── columns: u_b.a:11!null u_b.b:12 u_b.crdb_internal_mvcc_timestamp:13 u_b.tableoid:14
+      │    │    ├── project
+      │    │    │    ├── columns: u_c.a:15!null
+      │    │    │    └── select
+      │    │    │         ├── columns: u_c.a:15!null u_c.b:16 u_c.c:17 u_c.crdb_internal_mvcc_timestamp:18 u_c.tableoid:19
+      │    │    │         ├── scan u_c
+      │    │    │         │    └── columns: u_c.a:15!null u_c.b:16 u_c.c:17 u_c.crdb_internal_mvcc_timestamp:18 u_c.tableoid:19
+      │    │    │         └── filters
+      │    │    │              └── u_b.a:11 > u_c.a:15
+      │    │    └── filters (true)
+      │    └── filters (true)
+      └── filters
+           └── u_c.a:15 > 6
+
+# Test if DELETE FROM ... USING works with partial indexes
+
+exec-ddl
+CREATE TABLE pindex (
+  a DECIMAL(10, 2),
+  CHECK (a > 0)
+)
+----
+
+build
+DELETE FROM pindex p USING (VALUES (1.0)) v(b) WHERE p.a = v.b RETURNING p.a, v.b
+----
+project
+ ├── columns: a:1!null b:9
+ └── delete pindex [as=p]
+      ├── columns: a:1!null rowid:2!null column1:9
+      ├── fetch columns: a:5 rowid:6
+      ├── return-mapping:
+      │    ├── a:5 => a:1
+      │    └── rowid:6 => rowid:2
+      ├── passthrough columns column1:9
+      └── select
+           ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           ├── inner-join (cross)
+           │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    ├── scan pindex [as=p]
+           │    │    └── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    ├── values
+           │    │    ├── columns: column1:9!null
+           │    │    └── (1.0,)
+           │    └── filters (true)
+           └── filters
+                └── a:5 = column1:9

@@ -184,8 +184,9 @@ type mutationBuilder struct {
 
 	// extraAccessibleCols stores all the columns that are available to the
 	// mutation that are not part of the target table. This is useful for
-	// UPDATE ... FROM queries, as the columns from the FROM tables must be
-	// made accessible to the RETURNING clause.
+	// UPDATE ... FROM queries and DELETE ... USING queries, as the columns
+	// from the FROM and USING tables must be made accessible to the
+	// RETURNING clause, respectively.
 	extraAccessibleCols []scopeColumn
 
 	// fkCheckHelper is used to prevent allocating the helper separately.
@@ -375,11 +376,12 @@ func (mb *mutationBuilder) buildInputForUpdate(
 // buildInputForDelete constructs a Select expression from the fields in
 // the Delete operator, similar to this:
 //
-//	SELECT <cols>
-//	FROM <table>
-//	WHERE <where>
-//	ORDER BY <order-by>
-//	LIMIT <limit>
+//		SELECT <cols>
+//		FROM <table>
+//	  USING <tables>
+//		WHERE <where>
+//		ORDER BY <order-by>
+//		LIMIT <limit>
 //
 // All columns from the table to update are added to fetchColList.
 // TODO(andyk): Do needed column analysis to project fewer columns if possible.
@@ -418,7 +420,38 @@ func (mb *mutationBuilder) buildInputForDelete(
 		inScope,
 		false, /* disableNotVisibleIndex */
 	)
-	mb.outScope = mb.fetchScope
+
+	// Set list of columns that will be fetched by the input expression.
+	mb.setFetchColIDs(mb.fetchScope.cols)
+
+	// USING
+	usingClausePresent := len(using) > 0
+	if usingClausePresent {
+
+		usingScope := mb.b.buildFromTables(using, noRowLocking, inScope)
+
+		// Check that the same table name is not used multiple times
+		mb.b.validateJoinTableNames(mb.fetchScope, usingScope)
+
+		mb.extraAccessibleCols = usingScope.cols
+
+		// Add the columns to the USING scope.
+		// We create a new scope so that fetchScope is not modified
+		// as fetchScope contains the set of columns from the target
+		// table specified by USING. This will be used later with partial
+		// index predicate expressions and will prevent ambiguities with
+		// column names in the USING clause.
+		mb.outScope = mb.fetchScope.replace()
+		mb.outScope.appendColumnsFromScope(mb.fetchScope)
+		mb.outScope.appendColumnsFromScope(usingScope)
+
+		left := mb.fetchScope.expr
+		right := usingScope.expr
+
+		mb.outScope.expr = mb.b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+	} else {
+		mb.outScope = mb.fetchScope
+	}
 
 	// WHERE
 	mb.b.buildWhere(where, mb.outScope)
@@ -430,20 +463,12 @@ func (mb *mutationBuilder) buildInputForDelete(
 	mb.b.buildOrderBy(mb.outScope, projectionsScope, orderByScope)
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 
-	// USING
-	if using != nil {
-		panic("DELETE USING is unimplemented so should not be used")
-	}
-
 	// LIMIT
 	if limit != nil {
 		mb.b.buildLimit(limit, inScope, projectionsScope)
 	}
 
 	mb.outScope = projectionsScope
-
-	// Set list of columns that will be fetched by the input expression.
-	mb.setFetchColIDs(mb.outScope.cols)
 }
 
 // addTargetColsByName adds one target column for each of the names in the given
@@ -1011,8 +1036,9 @@ func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
 
 	// extraAccessibleCols contains all the columns that the RETURNING
 	// clause can refer to in addition to the table columns. This is useful for
-	// UPDATE ... FROM statements, where all columns from tables in the FROM clause
-	// are in scope for the RETURNING clause.
+	// UPDATE ... FROM and DELETE ... USING statements, where all columns from
+	// tables in the FROM clause and USING clause are in scope for the RETURNING
+	// clause, respectively.
 	inScope.appendColumns(mb.extraAccessibleCols)
 
 	// Construct the Project operator that projects the RETURNING expressions.
