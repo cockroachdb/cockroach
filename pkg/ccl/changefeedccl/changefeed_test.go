@@ -339,6 +339,51 @@ func TestChangefeedIdleness(t *testing.T) {
 	}, feedTestEnterpriseSinks)
 }
 
+func TestChangefeedPausedMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		currentlyPaused := registry.MetricsStruct().JobMetrics[jobspb.TypeChangefeed].CurrentlyPaused
+		waitForPausedCount := func(numIdle int64) {
+			testutils.SucceedsSoon(t, func() error {
+				if currentlyPaused.Value() != numIdle {
+					return fmt.Errorf("expected (%+v) paused changefeeds, found (%+v)", numIdle, currentlyPaused.Value())
+				}
+				return nil
+			})
+		}
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (b INT PRIMARY KEY)`)
+		cf1 := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo")
+		cf2 := feed(t, f, "CREATE CHANGEFEED FOR TABLE bar")
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (0)`)
+		waitForPausedCount(0)
+
+		jobFeed1 := cf1.(cdctest.EnterpriseTestFeed)
+		jobFeed2 := cf2.(cdctest.EnterpriseTestFeed)
+
+		require.NoError(t, jobFeed1.Pause())
+		waitForPausedCount(1)
+
+		require.NoError(t, jobFeed1.Resume())
+		waitForPausedCount(0)
+
+		require.NoError(t, jobFeed1.Pause())
+		require.NoError(t, jobFeed2.Pause())
+		waitForPausedCount(2)
+
+		closeFeed(t, cf1)
+		waitForPausedCount(1)
+		closeFeed(t, cf2)
+		waitForPausedCount(0)
+	}, feedTestEnterpriseSinks)
+}
+
 // TestChangefeedSendError validates that SendErrors do not fail the changefeed
 // as they can occur in normal situations such as a cluster update
 func TestChangefeedSendError(t *testing.T) {

@@ -128,9 +128,9 @@ func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobU
 //	  if md.Status != StatusRunning {
 //	    return errors.New("job no longer running")
 //	  }
-//	  md.UpdateStatus(StatusPaused)
+//	  ju.UpdateStatus(StatusPaused)
 //	  // <modify md.Payload>
-//	  md.UpdatePayload(md.Payload)
+//	  ju.UpdatePayload(md.Payload)
 //	}
 //
 // Note that there are various convenience wrappers (like FractionProgressed)
@@ -149,7 +149,10 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 	var status Status
 	var runStats *RunStats
 
+	metricUpdates := make(map[jobspb.Type]int)
+
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
+		metricUpdates = make(map[jobspb.Type]int)
 		payload, progress, runStats = nil, nil, nil
 		var err error
 		var row tree.Datums
@@ -174,6 +177,7 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 		if progress, err = UnmarshalProgress(row[2]); err != nil {
 			return err
 		}
+		typ := payload.Type()
 		if j.session != nil {
 			if row[3] == tree.DNull {
 				return errors.Errorf(
@@ -229,6 +233,13 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 
 		if !ju.hasUpdates() {
 			return nil
+		}
+
+		if ju.md.Status != StatusPaused && md.Status == StatusPaused {
+			if _, found := metricUpdates[typ]; !found {
+				metricUpdates[typ] = 0
+			}
+			metricUpdates[typ]++
 		}
 
 		// Build a statement of the following form, depending on which properties
@@ -294,6 +305,10 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 		return nil
 	}); err != nil {
 		return errors.Wrapf(err, "job %d", j.id)
+	} else {
+		for typ, count := range metricUpdates {
+			j.registry.metrics.JobMetrics[typ].CurrentlyPaused.Dec(int64(count))
+		}
 	}
 	func() {
 		j.mu.Lock()

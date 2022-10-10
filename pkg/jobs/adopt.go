@@ -437,11 +437,15 @@ const pauseAndCancelUpdate = `
           claim_instance_id = NULL
     WHERE (status IN ('` + string(StatusPauseRequested) + `', '` + string(StatusCancelRequested) + `'))
       AND ((claim_session_id = $1) AND (claim_instance_id = $2))
-RETURNING id, status
+RETURNING id, status, payload
 `
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
-	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	metricUpdates := make(map[jobspb.Type]int)
+	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// In case of transaction retries, reset this map here.
+		metricUpdates = make(map[jobspb.Type]int)
+
 		// Run the claim transaction at low priority to ensure that it does not
 		// contend with foreground reads.
 		if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
@@ -464,8 +468,15 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 			statusString := *row[1].(*tree.DString)
 			switch Status(statusString) {
 			case StatusPaused:
+				payload, err := UnmarshalPayload(row[2])
+				if err != nil {
+					return err
+				}
+				if _, ok := metricUpdates[payload.Type()]; !ok {
+					metricUpdates[payload.Type()] = 0
+				}
+				metricUpdates[payload.Type()]++
 				r.cancelRegisteredJobContext(id)
-				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StatusReverting:
 				if err := job.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
 					r.cancelRegisteredJobContext(id)
@@ -489,4 +500,10 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 		}
 		return nil
 	})
+	if err == nil {
+		for typ, count := range metricUpdates {
+			r.metrics.JobMetrics[typ].CurrentlyPaused.Inc(int64(count))
+		}
+	}
+	return err
 }
