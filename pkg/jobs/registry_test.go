@@ -119,6 +119,10 @@ func TestRegistryGC(t *testing.T) {
 				// test itself.
 				ManagerDisableJobCreation: true,
 			},
+			JobsTestingKnobs: &TestingKnobs{
+				// Disable the jobs metrics polling job to avoid edge cases in this test.
+				DisableJobsMetricsPolling: true,
+			},
 		},
 	})
 	defer s.Stopper().Stop(ctx)
@@ -260,6 +264,10 @@ func TestRegistryGCPagination(t *testing.T) {
 				// test itself.
 				ManagerDisableJobCreation: true,
 			},
+			JobsTestingKnobs: &TestingKnobs{
+				// Disable the jobs metrics polling job to avoid edge cases in this test.
+				DisableJobsMetricsPolling: true,
+			},
 		},
 	})
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -330,6 +338,7 @@ func TestBatchJobsCreation(t *testing.T) {
 						JobID:    r.MakeJobID(),
 						Details:  jobspb.ImportDetails{},
 						Progress: jobspb.ImportProgress{},
+						Username: username.TestUserName(),
 					})
 				}
 				// Create jobs in a batch.
@@ -452,6 +461,11 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		// Set up the test cluster.
 		knobs := &TestingKnobs{
 			TimeSource: timeSource,
+			// Disable the background job metrics polling job. This knob is enabled because
+			// this test uses bti.resumed = bti.registry.metrics.ResumedJobs, which counts
+			// the number of resumed jobs of all types. At the moment, there is no way to
+			// count resumed jobs of a specific type.
+			DisableJobsMetricsPolling: true,
 		}
 		if bti.afterJobStateMachineKnob != nil {
 			knobs.AfterJobStateMachine = bti.afterJobStateMachineKnob
@@ -1013,6 +1027,7 @@ func TestJobIdleness(t *testing.T) {
 			_, err := r.CreateJobWithTxn(ctx, Record{
 				Details:  jobspb.ImportDetails{},
 				Progress: jobspb.ImportProgress{},
+				Username: username.MakeSQLUsernameFromPreNormalizedString("test"),
 			}, jobID, txn)
 			return err
 		}))
@@ -1029,31 +1044,37 @@ func TestJobIdleness(t *testing.T) {
 			[][]string{{string(status)}})
 	}
 
+	getRunningNonIdleJobs := func() int64 {
+		return r.metrics.JobMetrics[jobspb.TypeImport].CurrentlyRunning.Value() - r.metrics.JobMetrics[jobspb.TypeImport].CurrentlyIdle.Value()
+	}
+
 	t.Run("MarkIdle", func(t *testing.T) {
 		job1 := createJob()
 		job2 := createJob()
 
 		require.False(t, r.TestingIsJobIdle(job1.ID()))
-		require.EqualValues(t, 2, r.metrics.RunningNonIdleJobs.Value())
+		require.EqualValues(t, 2,
+			getRunningNonIdleJobs(),
+		)
 		r.MarkIdle(job1, true)
 		r.MarkIdle(job2, true)
 		require.True(t, r.TestingIsJobIdle(job1.ID()))
 		require.Equal(t, int64(2), currentlyIdle.Value())
-		require.EqualValues(t, 0, r.metrics.RunningNonIdleJobs.Value())
+		require.EqualValues(t, 0, getRunningNonIdleJobs())
 
 		// Repeated calls should not increase metric
 		r.MarkIdle(job1, true)
 		r.MarkIdle(job1, true)
 		require.Equal(t, int64(2), currentlyIdle.Value())
-		require.EqualValues(t, 0, r.metrics.RunningNonIdleJobs.Value())
+		require.EqualValues(t, 0, getRunningNonIdleJobs())
 
 		r.MarkIdle(job1, false)
 		require.Equal(t, int64(1), currentlyIdle.Value())
 		require.False(t, r.TestingIsJobIdle(job1.ID()))
-		require.EqualValues(t, 1, r.metrics.RunningNonIdleJobs.Value())
+		require.EqualValues(t, 1, getRunningNonIdleJobs())
 		r.MarkIdle(job2, false)
 		require.Equal(t, int64(0), currentlyIdle.Value())
-		require.EqualValues(t, 2, r.metrics.RunningNonIdleJobs.Value())
+		require.EqualValues(t, 2, getRunningNonIdleJobs())
 
 		// Let the jobs complete
 		resumeErrChan <- nil
