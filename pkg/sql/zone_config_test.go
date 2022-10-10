@@ -657,9 +657,9 @@ func BenchmarkGetZoneConfig(b *testing.B) {
 	s := srv.(*server.TestServer)
 	cfg := forceNewConfig(b, s)
 
+	key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		key := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0)))
 		_, _, err := config.TestingGetSystemTenantZoneConfigForKey(cfg, key)
 		if err != nil {
 			b.Fatal(err)
