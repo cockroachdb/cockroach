@@ -908,7 +908,7 @@ func TestReplicaLease(t *testing.T) {
 	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tsc.TestingKnobs.TestingApplyFilter = applyFilter
+	tsc.TestingKnobs.TestingApplyCalledTwiceFilter = applyFilter
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 	if err != nil {
@@ -8080,12 +8080,11 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 
 	ctx := context.Background()
 
-	var filterActive int32
-	var incCmdID kvserverbase.CmdIDKey
+	const incCmdID = "deadbeef"
 	var incApplyCount int64
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingApplyFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
-		if atomic.LoadInt32(&filterActive) != 0 && filterArgs.CmdID == incCmdID {
+	tsc.TestingKnobs.TestingPostApplyFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+		if filterArgs.ForcedError == nil && filterArgs.CmdID == incCmdID {
 			atomic.AddInt64(&incApplyCount, 1)
 		}
 		return 0, nil
@@ -8129,8 +8128,6 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	ba.Add(inc)
 	ba.Timestamp = tc.Clock().Now()
 
-	incCmdID = makeIDKey()
-	atomic.StoreInt32(&filterActive, 1)
 	st := repl.CurrentLeaseStatus(ctx)
 	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, allSpansGuard(), &st, uncertainty.Interval{})
 	if pErr != nil {
@@ -8151,6 +8148,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
 		if p == proposal && !assigned {
 			assigned = true
+			t.Logf("assigned wrong LAI %d", ai-1)
 			return ai - 1
 		}
 		return 0
@@ -9692,7 +9690,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	storeKnobs.TestingApplyFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+	storeKnobs.TestingApplyCalledTwiceFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		if atomic.LoadInt32(&filterActive) == 1 {
 			return 0, roachpb.NewErrorf("boom")
 		}
@@ -9768,7 +9766,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 
 	var filterActive int32
 	blockRaftApplication := make(chan struct{})
-	tsc.TestingKnobs.TestingApplyFilter =
+	tsc.TestingKnobs.TestingApplyCalledTwiceFilter =
 		func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 			if atomic.LoadInt32(&filterActive) == 1 {
 				<-blockRaftApplication
@@ -9829,7 +9827,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	var filterActive int32
 	blockRaftApplication := make(chan struct{})
 	blockingRaftApplication := make(chan struct{}, 1)
-	tsc.TestingKnobs.TestingApplyFilter =
+	tsc.TestingKnobs.TestingApplyCalledTwiceFilter =
 		func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 			if atomic.LoadInt32(&filterActive) == 1 {
 				select {
@@ -13290,7 +13288,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 		},
 		// Detect the application of the proposal to repropose it and also
 		// invalidate the lease.
-		TestingApplyFilter: func(args kvserverbase.ApplyFilterArgs) (retry int, pErr *roachpb.Error) {
+		TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (retry int, pErr *roachpb.Error) {
 			if seen || args.CmdID != cmdID {
 				return 0, nil
 			}

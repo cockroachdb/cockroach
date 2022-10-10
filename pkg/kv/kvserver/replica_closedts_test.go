@@ -152,7 +152,7 @@ func TestBumpSideTransportClosed(t *testing.T) {
 					}
 					return 0, nil
 				}
-				return &kvserver.StoreTestingKnobs{TestingApplyFilter: testingApplyFilter}, applyC
+				return &kvserver.StoreTestingKnobs{TestingApplyCalledTwiceFilter: testingApplyFilter}, applyC
 			},
 			setup: func(a setupArgs) (chan struct{}, chan error, error) {
 				// Initiate a Raft proposal and pause it during application.
