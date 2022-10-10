@@ -39,82 +39,80 @@ type mtFairnessSpec struct {
 }
 
 func registerMultiTenantFairness(r registry.Registry) {
+	// With AC off tests are too flakey.
+	acEnabled := true
 	acStr := map[bool]string{
 		true:  "admission",
 		false: "no-admission",
 	}
-	for _, acEnabled := range []bool{true, false} {
-		kvSpecs := []mtFairnessSpec{
-			{
-				name:        "same",
-				concurrency: func(int) int { return 250 },
-			},
-			{
-				name:        "concurrency-skew",
-				concurrency: func(i int) int { return i * 250 },
-			},
-		}
-		for i := range kvSpecs {
-			s := kvSpecs[i]
-			s.blockSize = 5
-			s.readPercent = 95
-			s.acEnabled = acEnabled
-			s.duration = 5 * time.Minute
-			s.batchSize = 100
-			s.maxLoadOps = 100_000
+	kvSpecs := []mtFairnessSpec{
+		{
+			name:        "same",
+			concurrency: func(int) int { return 250 },
+		},
+		{
+			name:        "concurrency-skew",
+			concurrency: func(i int) int { return i * 250 },
+		},
+	}
+	for i := range kvSpecs {
+		s := kvSpecs[i]
+		s.blockSize = 5
+		s.readPercent = 95
+		s.acEnabled = acEnabled
+		s.duration = 5 * time.Minute
+		s.batchSize = 100
+		s.maxLoadOps = 100_000
 
-			r.Add(registry.TestSpec{
-				Skip:              "#83994",
-				Name:              fmt.Sprintf("multitenant/fairness/kv/%s/%s", s.name, acStr[s.acEnabled]),
-				Cluster:           r.MakeClusterSpec(5),
-				Owner:             registry.OwnerSQLQueries,
-				NonReleaseBlocker: false,
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runMultiTenantFairness(ctx, t, c, s, "SELECT k, v FROM kv")
-				},
-			})
-		}
-		storeSpecs := []mtFairnessSpec{
-			{
-				name:        "same",
-				concurrency: func(i int) int { return 50 },
+		r.Add(registry.TestSpec{
+			Name:              fmt.Sprintf("multitenant/fairness/kv/%s/%s", s.name, acStr[s.acEnabled]),
+			Cluster:           r.MakeClusterSpec(5),
+			Owner:             registry.OwnerSQLQueries,
+			NonReleaseBlocker: false,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runMultiTenantFairness(ctx, t, c, s, "SELECT k, v FROM kv")
 			},
-			{
-				name:        "concurrency-skew",
-				concurrency: func(i int) int { return i * 50 },
-			},
-		}
-		for i := range storeSpecs {
-			s := storeSpecs[i]
-			s.blockSize = 50_000
-			s.readPercent = 5
-			s.acEnabled = acEnabled
-			s.duration = 10 * time.Minute
-			s.batchSize = 1
-			s.maxLoadOps = 1000
+		})
+	}
+	storeSpecs := []mtFairnessSpec{
+		{
+			name:        "same",
+			concurrency: func(i int) int { return 50 },
+		},
+		{
+			name:        "concurrency-skew",
+			concurrency: func(i int) int { return i * 50 },
+		},
+	}
+	for i := range storeSpecs {
+		s := storeSpecs[i]
+		s.blockSize = 50_000
+		s.readPercent = 5
+		s.acEnabled = acEnabled
+		s.duration = 10 * time.Minute
+		s.batchSize = 1
+		s.maxLoadOps = 1000
 
-			r.Add(registry.TestSpec{
-				Skip:              "#83994",
-				Name:              fmt.Sprintf("multitenant/fairness/store/%s/%s", s.name, acStr[s.acEnabled]),
-				Cluster:           r.MakeClusterSpec(5),
-				Owner:             registry.OwnerSQLQueries,
-				NonReleaseBlocker: false,
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runMultiTenantFairness(ctx, t, c, s, "UPSERT INTO kv(k, v)")
-				},
-			})
-		}
+		r.Add(registry.TestSpec{
+			Name:              fmt.Sprintf("multitenant/fairness/store/%s/%s", s.name, acStr[s.acEnabled]),
+			Cluster:           r.MakeClusterSpec(5),
+			Owner:             registry.OwnerSQLQueries,
+			NonReleaseBlocker: false,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runMultiTenantFairness(ctx, t, c, s, "UPSERT INTO kv(k, v)")
+			},
+		})
 	}
 	if buildutil.CrdbTestBuild {
 		quick := mtFairnessSpec{
 			duration:    1,
-			acEnabled:   false,
+			acEnabled:   true,
 			readPercent: 95,
 			name:        "quick",
 			concurrency: func(i int) int { return 1 },
 			blockSize:   2,
 			batchSize:   10,
-			maxLoadOps:  1000,
+			maxLoadOps:  10000,
 		}
 		r.Add(registry.TestSpec{
 			Name:              "multitenant/fairness/quick",
@@ -132,19 +130,36 @@ func registerMultiTenantFairness(r registry.Registry) {
 func runMultiTenantFairness(
 	ctx context.Context, t test.Test, c cluster.Cluster, s mtFairnessSpec, query string,
 ) {
-	numTenants := c.Spec().NodeCount - 1
+	numTenants := 4
 	duration := s.duration
 
 	// For quick local testing.
 	quick := c.IsLocal() || s.name == "quick"
+	var kvstores option.NodeListOption
 	if quick {
+		numTenants = 1
 		duration = 30 * time.Second
 		s.concurrency = func(i int) int { return 4 }
+		kvstores = c.Node(1)
+	} else {
+		kvstores = c.Nodes(1)
 	}
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.Node(1))
+	// I think a more conformant test should have 3 kvserver nodes but this
+	// leads to crashes and in-stability so stay with 1 for now.
+	// if !quick {
+	// 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.Node(2))
+	// 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.Node(3))
+	// }
 	setAdmissionControl(ctx, t, c, s.acEnabled)
+
+	// This isn't working...
+	// promCfg := &prometheus.Config{}
+	// promCfg.WithPrometheusNode(c.Node(1).InstallNodes()[0])
+	// promCfg.WithNodeExporter(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
+	// promCfg.WithCluster(c.Range(1, c.Spec().NodeCount-1).InstallNodes())
 
 	setRateLimit := func(ctx context.Context, val int, node int) {
 		db := c.Conn(ctx, t.L(), node)
@@ -155,7 +170,7 @@ func runMultiTenantFairness(
 		}
 	}
 
-	setRateLimit(ctx, 1000000, 1)
+	setRateLimit(ctx, 1_000_000, 1)
 
 	const (
 		tenantBaseID       = 11
@@ -176,6 +191,23 @@ func runMultiTenantFairness(
 		return tenantBaseSQLPort
 	}
 
+	setTenantResourceLimits := func(tid int) {
+		db := c.Conn(ctx, t.L(), 1)
+		defer db.Close()
+		if _, err := db.ExecContext(
+			ctx, fmt.Sprintf(
+				"SELECT crdb_internal.update_tenant_resource_limits(%[1]d, 1000000000, 10000, 1000000, now(), 0)", tid)); err != nil {
+			t.Fatalf("failed to update_tenant_resource_limits: %v", err)
+		}
+	}
+
+	tenantNodeID := func(idx int) int {
+		if quick {
+			return idx + 1
+		}
+		return idx + 2
+	}
+
 	// Create the tenants.
 	t.L().Printf("initializing %d tenants", numTenants)
 	tenantIDs := make([]int, 0, numTenants)
@@ -185,26 +217,31 @@ func runMultiTenantFairness(
 
 	tenants := make([]*tenantNode, numTenants)
 	for i := 0; i < numTenants; i++ {
-		node := i + 2
-		_, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantBaseID+i)
+		node := tenantNodeID(i)
+        _, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantBaseID+i)
 		require.NoError(t, err)
 		tenant := createTenantNode(ctx, t, c, c.Node(1), tenantBaseID+i, node, tenantHTTPPort(i), tenantSQLPort(i), createTenantOtherTenantIDs(tenantIDs))
 		defer tenant.stop(ctx, t, c)
 		tenant.start(ctx, t, c, "./cockroach")
 		tenants[i] = tenant
+		setTenantResourceLimits(tenantBaseID + i)
 
 		// Init kv on each tenant.
 		cmd := fmt.Sprintf("./cockroach workload init kv '%s' --secure", tenant.secureURL())
 		err = c.RunE(ctx, c.Node(node), cmd)
 		require.NoError(t, err)
 
-		// This doesn't work on tenant, have to do it on kvserver
-		//setRateLimit(ctx, 1000000, node)
-		//  failed to set range_max_bytes: pq: unimplemented: operation is unsupported in multi-tenancy mode
-		//setMaxRangeBytes(ctx, 1<<18, node)
+		// promCfg.ScrapeConfigs = append(promCfg.ScrapeConfigs, prometheus.MakeWorkloadScrapeConfig(fmt.Sprintf("workload-%d", i),
+		// 	"/", makeWorkloadScrapeNodes(c.Node(node).InstallNodes()[0], []workloadInstance{
+		// 		{nodes: c.Node(node)},
+		// 	})))
 	}
 
-	m := c.NewMonitor(ctx, c.Node(1))
+	// promCfg.WithGrafanaDashboard("http://go.crdb.dev/p/snapshot-admission-control-grafana")
+	// _, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, nil)
+	// defer cleanupFunc()
+
+	m := c.NewMonitor(ctx, kvstores)
 
 	// NB: we're using --tolerate-errors because of sql liveness errors like this:
 	// ERROR: liveness session expired 571.043163ms before transaction
@@ -213,7 +250,7 @@ func runMultiTenantFairness(
 	t.L().Printf("running dataload 	")
 	for i := 0; i < numTenants; i++ {
 		tid := tenantBaseID + i
-		node := i + 2
+		node := tenantNodeID(i)
 		pgurl := tenants[i].secureURL()
 		m.Go(func(ctx context.Context) error {
 			cmd := fmt.Sprintf(
@@ -232,7 +269,7 @@ func runMultiTenantFairness(
 
 	for i := 0; i < numTenants; i++ {
 		tid := tenantBaseID + i
-		node := i + 2
+		node := tenantNodeID(i)
 		pgurl := tenants[i].secureURL()
 		m.Go(func(ctx context.Context) error {
 			cmd := fmt.Sprintf(
