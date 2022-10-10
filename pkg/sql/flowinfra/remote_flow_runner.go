@@ -12,6 +12,7 @@ package flowinfra
 
 import (
 	"context"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -35,13 +36,18 @@ type RemoteFlowRunner struct {
 	mu struct {
 		syncutil.Mutex
 		// runningFlows keeps track of all flows that are currently running via
-		// this RemoteFlowRunner. The mapping is from flow ID to the information
-		// about the flow (the timestamp when the flow started running, in the
-		// UTC timezone, as well as the SQL statement).
-		runningFlows map[execinfrapb.FlowID]execinfrapb.DistSQLRemoteFlowInfo
+		// this RemoteFlowRunner.
+		runningFlows map[execinfrapb.FlowID]flowWithTimestamp
 		acc          *mon.BoundAccount
 	}
 }
+
+type flowWithTimestamp struct {
+	flow      Flow
+	timestamp time.Time
+}
+
+const flowWithTimestampOverhead = int64(unsafe.Sizeof(flowWithTimestamp{}))
 
 // NewRemoteFlowRunner creates a new RemoteFlowRunner which must be initialized
 // before use.
@@ -52,7 +58,8 @@ func NewRemoteFlowRunner(
 		AmbientContext: ambient,
 		stopper:        stopper,
 	}
-	r.mu.runningFlows = make(map[execinfrapb.FlowID]execinfrapb.DistSQLRemoteFlowInfo)
+	r.mu.runningFlows = make(map[execinfrapb.FlowID]flowWithTimestamp)
+	r.mu.acc = acc
 	return r
 }
 
@@ -61,10 +68,6 @@ func (r *RemoteFlowRunner) Init(metrics *execinfra.DistSQLMetrics) {
 	r.metrics = metrics
 }
 
-const runningFlowInfoOverhead = memsize.MapEntryOverhead +
-	int64(unsafe.Sizeof(execinfrapb.FlowID{})) +
-	int64(unsafe.Sizeof(execinfrapb.DistSQLRemoteFlowInfo{}))
-
 // RunFlow starts the given flow; does not wait for the flow to complete.
 func (r *RemoteFlowRunner) RunFlow(ctx context.Context, f Flow) error {
 	err := r.stopper.RunTaskWithErr(
@@ -72,17 +75,16 @@ func (r *RemoteFlowRunner) RunFlow(ctx context.Context, f Flow) error {
 			log.VEventf(ctx, 1, "flow runner running flow %s", f.GetID())
 			// Add this flow into the runningFlows map after performing the
 			// memory accounting.
-			memUsage := runningFlowInfoOverhead + int64(len(f.StatementSQL()))
+			memUsage := memsize.MapEntryOverhead + flowWithTimestampOverhead + f.MemUsage()
 			if err := func() error {
 				r.mu.Lock()
 				defer r.mu.Unlock()
 				if err := r.mu.acc.Grow(ctx, memUsage); err != nil {
 					return err
 				}
-				r.mu.runningFlows[f.GetID()] = execinfrapb.DistSQLRemoteFlowInfo{
-					FlowID:       f.GetID(),
-					Timestamp:    timeutil.Now(),
-					StatementSQL: f.StatementSQL(),
+				r.mu.runningFlows[f.GetID()] = flowWithTimestamp{
+					flow:      f,
+					timestamp: timeutil.Now(),
 				}
 				return nil
 			}(); err != nil {
@@ -128,6 +130,27 @@ func (r *RemoteFlowRunner) NumRunningFlows() int {
 	return len(r.mu.runningFlows)
 }
 
+// CancelDeadFlows cancels all flows specified in req that are currently
+// running.
+func (r *RemoteFlowRunner) CancelDeadFlows(
+	ctx context.Context, req *execinfrapb.CancelDeadFlowsRequest,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	log.VEventf(
+		ctx, 1, "remote flow runner will attempt to cancel %d dead flows, "+
+			"%d flows are running", len(req.FlowIDs), len(r.mu.runningFlows),
+	)
+	canceled := 0
+	for _, flowID := range req.FlowIDs {
+		if flow, ok := r.mu.runningFlows[flowID]; ok {
+			flow.flow.Cancel()
+			canceled++
+		}
+	}
+	log.VEventf(ctx, 1, "remote flow runner canceled %d dead flows", canceled)
+}
+
 // Serialize returns all currently running flows that were kicked off on behalf
 // of other nodes. Notably the returned slice doesn't contain the "local" flows
 // from the perspective of the gateway node of the query because such flows
@@ -137,7 +160,11 @@ func (r *RemoteFlowRunner) Serialize() (flows []execinfrapb.DistSQLRemoteFlowInf
 	defer r.mu.Unlock()
 	flows = make([]execinfrapb.DistSQLRemoteFlowInfo, 0, len(r.mu.runningFlows))
 	for _, info := range r.mu.runningFlows {
-		flows = append(flows, info)
+		flows = append(flows, execinfrapb.DistSQLRemoteFlowInfo{
+			FlowID:       info.flow.GetID(),
+			Timestamp:    info.timestamp,
+			StatementSQL: info.flow.StatementSQL(),
+		})
 	}
 	return flows
 }
