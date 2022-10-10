@@ -320,6 +320,12 @@ var (
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedPauses = metric.Metadata{
+		Name:        "changefeed.pauses",
+		Help:        "Total number of changefeed jobs which have been paused for any reason",
+		Measurement: "Pauses",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	metaEventQueueTime = metric.Metadata{
 		Name:        "changefeed.queue_time_nanos",
@@ -570,6 +576,7 @@ type Metrics struct {
 	KVFeedMetrics                  kvevent.Metrics
 	SchemaFeedMetrics              schemafeed.Metrics
 	Failures                       *metric.Counter
+	Pauses                         *metric.Counter
 	ResolvedMessages               *metric.Counter
 	QueueTimeNanos                 *metric.Counter
 	CheckpointHistNanos            *metric.Histogram
@@ -604,6 +611,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		SchemaFeedMetrics:              schemafeed.MakeMetrics(histogramWindow),
 		ResolvedMessages:               metric.NewCounter(metaChangefeedForwardedResolvedMessages),
 		Failures:                       metric.NewCounter(metaChangefeedFailures),
+		Pauses:                         metric.NewCounter(metaChangefeedPauses),
 		QueueTimeNanos:                 metric.NewCounter(metaEventQueueTime),
 		CheckpointHistNanos:            metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow, metric.IOLatencyBuckets),
 		FrontierUpdates:                metric.NewCounter(metaChangefeedFrontierUpdates),

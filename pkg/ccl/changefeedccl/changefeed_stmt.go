@@ -1092,6 +1092,13 @@ func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
 
 var _ jobs.PauseRequester = (*changefeedResumer)(nil)
 
+func (b *changefeedResumer) updatePausedMetrics(ctx context.Context, jobExec interface{}) {
+	exec := jobExec.(sql.JobExecContext)
+	telemetry.Count(`changefeed.enterprise.paused`)
+	exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Pauses.Inc(1)
+	logChangefeedFailedTelemetry(ctx, b.job, changefeedbase.UnknownError)
+}
+
 // OnPauseRequest implements jobs.PauseRequester. If this changefeed is being
 // paused, we may want to clear the protected timestamp record.
 func (b *changefeedResumer) OnPauseRequest(
@@ -1101,6 +1108,8 @@ func (b *changefeedResumer) OnPauseRequest(
 
 	cp := progress.GetChangefeed()
 	execCfg := jobExec.(sql.JobExecContext).ExecCfg()
+
+	b.updatePausedMetrics(ctx, jobExec)
 
 	if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldProtect {
 		// Release existing pts record to avoid a single changefeed left on pause
