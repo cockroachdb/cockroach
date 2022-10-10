@@ -402,7 +402,7 @@ func (c *parallelEventConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Eve
 	startTime := timeutil.Now().UnixNano()
 	defer func() {
 		time := timeutil.Now().UnixNano()
-		c.metrics.ParallelConsumerConsumeNanos.Inc(time - startTime)
+		c.metrics.ParallelConsumerConsumeNanos.RecordValue(time - startTime)
 	}()
 
 	bucket := c.getBucketForEvent(ev)
@@ -486,14 +486,13 @@ func (c *parallelEventConsumer) workerLoop(
 func (c *parallelEventConsumer) incInFlight() {
 	c.mu.Lock()
 	c.mu.inFlight++
+	c.metrics.ParallelConsumerInFlightEvents.Update(int64(c.mu.inFlight))
 	c.mu.Unlock()
-	c.metrics.ParallelConsumerInFlightEvents.Inc(1)
 }
 
 func (c *parallelEventConsumer) decInFlight() {
 	c.mu.Lock()
 	c.mu.inFlight--
-	c.metrics.ParallelConsumerInFlightEvents.Dec(1)
 	notifyFlush := c.mu.waiting && c.mu.inFlight == 0
 	c.mu.Unlock()
 
@@ -521,7 +520,7 @@ func (c *parallelEventConsumer) Flush(ctx context.Context) error {
 	startTime := timeutil.Now().UnixNano()
 	defer func() {
 		time := timeutil.Now().UnixNano()
-		c.metrics.ParallelConsumerFlushNanos.Inc(time - startTime)
+		c.metrics.ParallelConsumerFlushNanos.RecordValue(time - startTime)
 	}()
 
 	needFlush := func() bool {

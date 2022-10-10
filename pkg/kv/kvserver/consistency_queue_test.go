@@ -222,10 +222,12 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(pavelkalinnikov): not if we remove TestingSetRedactable below?
 	skip.UnderRaceWithIssue(t, 81819, "slow test, and TestingSetRedactable triggers race detector")
 
 	// This test prints a consistency checker diff, so it's
 	// good to make sure we're overly redacting said diff.
+	// TODO(pavelkalinnikov): remove this since we don't print diffs anymore?
 	defer log.TestingSetRedactable(true)()
 
 	// Test expects simple MVCC value encoding.

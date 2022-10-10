@@ -269,7 +269,7 @@ func newSchemaChangerTxnRunDependencies(
 		// nothing to save because nobody will ever try to resume.
 		scdeps.NewNoOpBackfillerTracker(execCfg.Codec),
 		scdeps.NewNoopPeriodicProgressFlusher(),
-		execCfg.IndexValidator,
+		execCfg.Validator,
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
 		metaDataUpdater,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),

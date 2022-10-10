@@ -1435,10 +1435,7 @@ message ComputeChecksumRequest {
   // The version used to pick the checksum method. It allows us to use a
   // consistent checksumming method across replicas.
   uint32 version = 2;
-  reserved 3;
-  // Compute a checksum along with a snapshot of the entire range, that will be
-  // used in logging a diff during checksum verification.
-  bool snapshot = 4;
+  reserved 3, 4;
   // The type of checksum to compute. See ChecksumMode.
   ChecksumMode mode = 5;
   // If set, a checkpoint (i.e. cheap backup) of the storage engine will be

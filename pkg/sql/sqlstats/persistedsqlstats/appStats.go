@@ -44,11 +44,11 @@ func (s *ApplicationStats) RecordStatement(
 	return fingerprintID, err
 }
 
-// ShouldSaveLogicalPlanDesc implements sqlstats.ApplicationStats interface.
-func (s *ApplicationStats) ShouldSaveLogicalPlanDesc(
+// ShouldSample implements sqlstats.ApplicationStats interface.
+func (s *ApplicationStats) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
-) bool {
-	return s.ApplicationStats.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, database)
+) (bool, bool) {
+	return s.ApplicationStats.ShouldSample(fingerprint, implicitTxn, database)
 }
 
 // RecordTransaction implements sqlstats.ApplicationStats interface and saves

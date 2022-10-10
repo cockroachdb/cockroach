@@ -264,20 +264,6 @@ func (mr *MockDependenciesMockRecorder) IndexSpanSplitter() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexSpanSplitter", reflect.TypeOf((*MockDependencies)(nil).IndexSpanSplitter))
 }
 
-// IndexValidator mocks base method.
-func (m *MockDependencies) IndexValidator() scexec.IndexValidator {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IndexValidator")
-	ret0, _ := ret[0].(scexec.IndexValidator)
-	return ret0
-}
-
-// IndexValidator indicates an expected call of IndexValidator.
-func (mr *MockDependenciesMockRecorder) IndexValidator() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexValidator", reflect.TypeOf((*MockDependencies)(nil).IndexValidator))
-}
-
 // PeriodicProgressFlusher mocks base method.
 func (m *MockDependencies) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
 	m.ctrl.T.Helper()
@@ -360,6 +346,20 @@ func (m *MockDependencies) User() username.SQLUsername {
 func (mr *MockDependenciesMockRecorder) User() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "User", reflect.TypeOf((*MockDependencies)(nil).User))
+}
+
+// Validator mocks base method.
+func (m *MockDependencies) Validator() scexec.Validator {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validator")
+	ret0, _ := ret[0].(scexec.Validator)
+	return ret0
+}
+
+// Validator indicates an expected call of Validator.
+func (mr *MockDependenciesMockRecorder) Validator() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validator", reflect.TypeOf((*MockDependencies)(nil).Validator))
 }
 
 // MockBackfiller is a mock of Backfiller interface.

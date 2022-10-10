@@ -43,7 +43,7 @@ func NewJobRunDependencies(
 	job *jobs.Job,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	indexValidator scexec.IndexValidator,
+	indexValidator scexec.Validator,
 	metadataUpdaterFactory MetadataUpdaterFactory,
 	statsRefresher scexec.StatsRefresher,
 	testingKnobs *scexec.TestingKnobs,
@@ -87,7 +87,7 @@ type jobExecutionDeps struct {
 	job                     *jobs.Job
 	kvTrace                 bool
 
-	indexValidator scexec.IndexValidator
+	indexValidator scexec.Validator
 
 	codec        keys.SQLCodec
 	settings     *cluster.Settings
@@ -117,7 +117,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				codec:              d.codec,
 				descsCollection:    descriptors,
 				jobRegistry:        d.jobRegistry,
-				indexValidator:     d.indexValidator,
+				validator:          d.indexValidator,
 				eventLogger:        d.eventLoggerFactory(txn),
 				statsRefresher:     d.statsRefresher,
 				schemaChangerJobID: d.job.ID(),

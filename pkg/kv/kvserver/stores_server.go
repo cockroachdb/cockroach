@@ -64,9 +64,6 @@ func (is Server) CollectChecksum(
 			if err != nil {
 				return err
 			}
-			if !req.WithSnapshot {
-				ccr.Snapshot = nil
-			}
 			resp = &ccr
 			return nil
 		})

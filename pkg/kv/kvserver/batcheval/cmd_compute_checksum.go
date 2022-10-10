@@ -63,12 +63,11 @@ func ComputeChecksum(
 
 	var pd result.Result
 	pd.Replicated.ComputeChecksum = &kvserverpb.ComputeChecksum{
-		Version:      args.Version,
-		ChecksumID:   reply.ChecksumID,
-		SaveSnapshot: args.Snapshot,
-		Mode:         args.Mode,
-		Checkpoint:   args.Checkpoint,
-		Terminate:    args.Terminate,
+		Version:    args.Version,
+		ChecksumID: reply.ChecksumID,
+		Mode:       args.Mode,
+		Checkpoint: args.Checkpoint,
+		Terminate:  args.Terminate,
 	}
 	return pd, nil
 }
