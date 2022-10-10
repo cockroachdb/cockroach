@@ -31,6 +31,7 @@ func TestGCJobGetsMarkedIdle(t *testing.T) {
 	ctx := context.Background()
 
 	params, _ := tests.CreateTestServerParams()
+	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	s, mainDB, _ := serverutils.StartServer(t, params)
 	sqltestutils.SetShortRangeFeedIntervals(t, mainDB)
 	defer s.Stopper().Stop(ctx)
