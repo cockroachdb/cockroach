@@ -1028,10 +1028,12 @@ func (a *Allocator) AllocateTargetFromList(
 		candidateStores,
 		constraintsChecker,
 		existingReplicaSet,
+		existingNonVoters,
 		a.StorePool.GetLocalitiesByStore(existingReplicaSet),
 		a.StorePool.IsStoreReadyForRoutineReplicaTransfer,
 		allowMultipleReplsPerNode,
 		options,
+		targetType,
 	)
 
 	log.KvDistribution.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
