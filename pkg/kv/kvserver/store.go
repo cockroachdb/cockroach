@@ -3149,7 +3149,13 @@ func (s *Store) RangeFeed(
 		// one here.
 		return roachpb.NewError(roachpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
 	}
-	return repl.RangeFeed(args, stream)
+
+	ctx := repl.AnnotateCtx(stream.Context())
+	tenID, _ := repl.TenantID()
+	if pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args); pacer != nil {
+		ctx = kvadmission.ContextWithPacer(ctx, pacer)
+	}
+	return repl.RangeFeed(ctx, args, stream)
 }
 
 // updateReplicationGauges counts a number of simple replication statistics for
