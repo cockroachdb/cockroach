@@ -11,8 +11,6 @@
 package gc
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -79,38 +77,6 @@ func (s *gcIteratorState) curIsNotValue() bool {
 // is an intent.
 func (s *gcIteratorState) curIsIntent() bool {
 	return s.next != nil && !s.next.Key.IsValue()
-}
-
-func kVString(v *storage.MVCCKeyValue) string {
-	b := strings.Builder{}
-	if v != nil {
-		b.WriteString(v.Key.String())
-		if len(v.Value) == 0 {
-			b.WriteString(" del")
-		}
-	} else {
-		b.WriteString("<nil>")
-	}
-	return b.String()
-}
-
-// String implements Stringer for debugging purposes.
-func (s *gcIteratorState) String() string {
-	b := strings.Builder{}
-	add := func(v *storage.MVCCKeyValue, last bool) {
-		b.WriteString(kVString(v))
-		if !last {
-			b.WriteString(", ")
-		}
-	}
-	add(s.cur, false)
-	add(s.next, false)
-	add(s.afterNext, true)
-	if ts := s.firstRangeTombstoneTsAtOrBelowGC; !ts.IsEmpty() {
-		b.WriteString(" rts@")
-		b.WriteString(ts.String())
-	}
-	return b.String()
 }
 
 // state returns the current state of the iterator. The state contains the
@@ -224,23 +190,6 @@ type gcIteratorRingBuf struct {
 	firstRangeTombstoneAtOrBelowGCTss [gcIteratorRingBufSize]hlc.Timestamp
 	len                               int
 	head                              int
-}
-
-func (b *gcIteratorRingBuf) String() string {
-	sb := strings.Builder{}
-	ptr := b.head
-	for i := 0; i < b.len; i++ {
-		sb.WriteString(kVString(&b.buf[ptr]))
-		if ts := b.firstRangeTombstoneAtOrBelowGCTss[ptr]; !ts.IsEmpty() {
-			sb.WriteString(" trs@")
-			sb.WriteString(b.firstRangeTombstoneAtOrBelowGCTss[ptr].String())
-		}
-		if i < b.len-1 {
-			sb.WriteString(", ")
-		}
-		ptr = (ptr + 1) % gcIteratorRingBufSize
-	}
-	return sb.String()
 }
 
 func (b *gcIteratorRingBuf) at(i int) (*storage.MVCCKeyValue, hlc.Timestamp) {
