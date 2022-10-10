@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -435,10 +436,10 @@ func intersectTypeSlices(xs, ys []*types.T) (out []*types.T) {
 // The function takes a slice of Exprs and indexes, but expects all the indexed
 // Exprs to wrap a Constant. The reason it does no take a slice of Constants
 // instead is to avoid forcing callers to allocate separate slices of Constant.
-func commonConstantType(vals []Expr, idxs []int) (*types.T, bool) {
+func commonConstantType(vals []Expr, idxs util.FastIntSet) (*types.T, bool) {
 	var candidates []*types.T
 
-	for _, i := range idxs {
+	for i, ok := idxs.Next(0); ok; i, ok = idxs.Next(i + 1) {
 		availableTypes := vals[i].(Constant).DesirableTypes()
 		if candidates == nil {
 			candidates = availableTypes
