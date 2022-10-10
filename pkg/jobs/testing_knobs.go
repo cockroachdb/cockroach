@@ -89,6 +89,9 @@ type TestingIntervalOverrides struct {
 	// Cancel overrides the cancelIntervalSetting cluster setting.
 	Cancel *time.Duration
 
+	// CollectMetrics overrides the pollJobsMetricsInterval cluster setting.
+	PollMetrics *time.Duration
+
 	// Gc overrides the gcIntervalSetting cluster setting.
 	Gc *time.Duration
 
@@ -109,16 +112,31 @@ type TestingIntervalOverrides struct {
 	WaitForJobsMaxDelay *time.Duration
 }
 
+const defaultShortInterval = 10 * time.Millisecond
+
 // NewTestingKnobsWithShortIntervals return a TestingKnobs structure with
-// overrides for short adopt and cancel intervals.
+// overrides for short adopt, cancel, and retry intervals.
 func NewTestingKnobsWithShortIntervals() *TestingKnobs {
-	defaultShortInterval := 10 * time.Millisecond
+	interval := defaultShortInterval
 	if util.RaceEnabled {
-		defaultShortInterval *= 5
+		interval *= 5
 	}
 	return NewTestingKnobsWithIntervals(
-		defaultShortInterval, defaultShortInterval, defaultShortInterval, defaultShortInterval,
+		interval, interval, interval, interval,
 	)
+}
+
+// NewTestingKnobsWithShortIntervalsWithMetricsPolling return a TestingKnobs structure with
+// overrides for short adopt, cancel, retry, and metrics polling intervals.
+func NewTestingKnobsWithShortIntervalsWithMetricsPolling() *TestingKnobs {
+	interval := defaultShortInterval
+	if util.RaceEnabled {
+		interval *= 5
+	}
+
+	shortIntervalsKnobs := NewTestingKnobsWithShortIntervals()
+	shortIntervalsKnobs.IntervalOverrides.PollMetrics = &interval
+	return shortIntervalsKnobs
 }
 
 // NewTestingKnobsWithIntervals return a TestingKnobs structure with overrides
@@ -126,12 +144,15 @@ func NewTestingKnobsWithShortIntervals() *TestingKnobs {
 func NewTestingKnobsWithIntervals(
 	adopt, cancel, initialDelay, maxDelay time.Duration,
 ) *TestingKnobs {
+	var zero time.Duration
 	return &TestingKnobs{
 		IntervalOverrides: TestingIntervalOverrides{
 			Adopt:             &adopt,
 			Cancel:            &cancel,
 			RetryInitialDelay: &initialDelay,
 			RetryMaxDelay:     &maxDelay,
+			// Disable automatic metrics polling during tests by default.
+			PollMetrics: &zero,
 		},
 	}
 }

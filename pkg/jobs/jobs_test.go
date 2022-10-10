@@ -220,10 +220,15 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				rts.afterJobStateMachine()
 			}
 		}
-		args.Knobs.JobsTestingKnobs = knobs
+		// Disable automatic jobs such as the auto span config reconciliation job
+		// and poll stats job. This ensures only rts.mockJob is running in the
+		// registry state machine, which makes it easier to assert the lifecycle of
+		// this job to test the state machine.
 		args.Knobs.SpanConfig = &spanconfig.TestingKnobs{
 			ManagerDisableJobCreation: true,
 		}
+
+		args.Knobs.JobsTestingKnobs = knobs
 
 		if rts.traceRealSpan {
 			baseDir, dirCleanupFn := testutils.TempDir(t)
@@ -3420,4 +3425,102 @@ func TestPausepoints(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestPausedMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervalsWithMetricsPolling(),
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	reg := s.JobRegistry().(*jobs.Registry)
+
+	waitForPausedCount := func(typ jobspb.Type, numPaused int64) {
+		testutils.SucceedsSoon(t, func() error {
+			currentlyPaused := reg.MetricsStruct().JobMetrics[typ].CurrentlyPaused.Value()
+			if reg.MetricsStruct().JobMetrics[typ].CurrentlyPaused.Value() != numPaused {
+				return fmt.Errorf(
+					"expected (%+v) paused jobs of type (%+v), found (%+v)",
+					numPaused,
+					typ,
+					currentlyPaused,
+				)
+			}
+			return nil
+		})
+	}
+
+	typeToRecord := map[jobspb.Type]jobs.Record{
+		jobspb.TypeChangefeed: {
+			Details:  jobspb.ChangefeedDetails{},
+			Progress: jobspb.ChangefeedProgress{},
+			Username: username.TestUserName(),
+		},
+		jobspb.TypeImport: {
+			Details:  jobspb.ImportDetails{},
+			Progress: jobspb.ImportProgress{},
+			Username: username.TestUserName(),
+		},
+		jobspb.TypeSchemaChange: {
+			Details:  jobspb.SchemaChangeDetails{},
+			Progress: jobspb.SchemaChangeProgress{},
+			Username: username.TestUserName(),
+		},
+	}
+	for typ := range typeToRecord {
+		jobs.RegisterConstructor(typ, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return jobs.FakeResumer{
+				OnResume: func(ctx context.Context) error {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				},
+			}
+		}, jobs.UsesTenantCostControl)
+	}
+
+	makeJob := func(ctx context.Context,
+		typ jobspb.Type,
+	) *jobs.StartableJob {
+		j, err := jobs.TestingCreateAndStartJob(ctx, reg, kvDB, typeToRecord[typ])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
+
+	cfJob := makeJob(context.Background(), jobspb.TypeChangefeed)
+	cfJob2 := makeJob(context.Background(), jobspb.TypeChangefeed)
+	importJob := makeJob(context.Background(), jobspb.TypeImport)
+	scJob := makeJob(context.Background(), jobspb.TypeSchemaChange)
+
+	// Pause all job types.
+	runner.Exec(t, "PAUSE JOB $1", cfJob.ID())
+	waitForPausedCount(jobspb.TypeChangefeed, 1)
+	runner.Exec(t, "PAUSE JOB $1", cfJob2.ID())
+	waitForPausedCount(jobspb.TypeChangefeed, 2)
+	runner.Exec(t, "PAUSE JOB $1", importJob.ID())
+	waitForPausedCount(jobspb.TypeImport, 1)
+	runner.Exec(t, "PAUSE JOB $1", scJob.ID())
+	waitForPausedCount(jobspb.TypeSchemaChange, 1)
+
+	// Resume / cancel jobs.
+	runner.Exec(t, "RESUME JOB $1", cfJob.ID())
+	waitForPausedCount(jobspb.TypeChangefeed, 1)
+	runner.Exec(t, "CANCEL JOB $1", cfJob2.ID())
+	waitForPausedCount(jobspb.TypeChangefeed, 0)
+	runner.Exec(t, "RESUME JOB $1", importJob.ID())
+	waitForPausedCount(jobspb.TypeImport, 0)
+	runner.Exec(t, "CANCEL JOB $1", scJob.ID())
+	waitForPausedCount(jobspb.TypeSchemaChange, 0)
+
+	runner.Exec(t, "CANCEL JOB $1", cfJob.ID())
+	runner.Exec(t, "CANCEL JOB $1", importJob.ID())
 }
