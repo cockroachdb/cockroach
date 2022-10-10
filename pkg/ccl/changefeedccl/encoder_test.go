@@ -607,7 +607,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 		// workers, the results below may change, so disable parallel workers
 		// here for simplicity.
 		changefeedbase.EventConsumerWorkers.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 0)
+			context.Background(), &s.Server.ClusterSettings().SV, -1)
 
 		sqlDB.Exec(t, `CREATE DATABASE movr`)
 		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
