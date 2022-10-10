@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 // DefaultStorageEngine represents the default storage engine to use.
@@ -992,6 +993,13 @@ type Metrics struct {
 	// DiskStallCount counts the number of times Pebble observes slow writes
 	// on disk lasting longer than MaxSyncDuration (`storage.max_sync_duration`).
 	DiskStallCount int64
+}
+
+// MetricsForInterval is a set of pebble.Metrics that need to be saved in order to
+// compute metrics according to an interval.
+type MetricsForInterval struct {
+	WALFsyncLatency      prometheusgo.Metric
+	FlushWriteThroughput pebble.ThroughputMetric
 }
 
 // NumSSTables returns the total number of SSTables in the LSM, aggregated
