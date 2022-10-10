@@ -157,7 +157,8 @@ func EngineKeyEqual(a, b []byte) bool {
 	// need to split the "user key" from the version suffix before comparing to
 	// compute equality. Instead, we can check for byte equality immediately.
 	const withWall = mvccEncodedTimeSentinelLen + mvccEncodedTimeWallLen
-	if aVerLen <= withWall && bVerLen <= withWall {
+	const withLockTableLen = mvccEncodedTimeSentinelLen + engineKeyVersionLockTableLen
+	if (aVerLen <= withWall && bVerLen <= withWall) || (aVerLen == withLockTableLen && bVerLen == withLockTableLen) {
 		return bytes.Equal(a, b)
 	}
 
