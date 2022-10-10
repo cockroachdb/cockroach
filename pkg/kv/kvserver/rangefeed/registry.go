@@ -300,7 +300,7 @@ func (r *registration) disconnect(pErr *roachpb.Error) {
 // have been emitted.
 func (r *registration) outputLoop(ctx context.Context) error {
 	// If the registration has a catch-up scan, run it.
-	if err := r.maybeRunCatchUpScan(); err != nil {
+	if err := r.maybeRunCatchUpScan(ctx); err != nil {
 		err = errors.Wrap(err, "catch-up scan failed")
 		log.Errorf(ctx, "%v", err)
 		return err
@@ -372,7 +372,7 @@ func (r *registration) drainAllocations(ctx context.Context) {
 //
 // If the registration does not have a catchUpIteratorConstructor, this method
 // is a no-op.
-func (r *registration) maybeRunCatchUpScan() error {
+func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 	catchUpIter := r.detachCatchUpIter()
 	if catchUpIter == nil {
 		return nil
@@ -383,7 +383,7 @@ func (r *registration) maybeRunCatchUpScan() error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(r.stream.Send, r.withDiff)
+	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff)
 }
 
 // ID implements interval.Interface.
