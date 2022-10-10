@@ -208,7 +208,7 @@ func TestBasicParquetTypes(t *testing.T) {
 	tests := []parquetTest{
 		{
 			filePrefix:     "basic",
-			stmt:           `CREATE CHANGEFEED for foo into 'nodelocal://0/basic' with initial_scan='only',format='parquet',key_in_value`,
+			stmt:           `CREATE CHANGEFEED for foo with initial_scan='only',format='parquet',key_in_value`,
 			validationStmt: `select * from foo`,
 		},
 	}
@@ -223,6 +223,7 @@ func TestBasicParquetTypes(t *testing.T) {
 
 		sqlDB.Exec(t, test.stmt)
 		time.Sleep(3 * time.Second)
+		// parquetFiles := getParquetFilesWithTimeOut(t, foo)
 		test.dir = dir
 		test.dbName = dbName
 		paths, err := filepath.Glob(filepath.Join(test.dir, test.filePrefix))

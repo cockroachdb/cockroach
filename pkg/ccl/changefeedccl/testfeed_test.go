@@ -1095,8 +1095,6 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 					return m, nil
 				case changefeedbase.OptFormatCSV:
 					return m, nil
-				case changefeedbase.OptFormatParquet:
-					return m, nil
 				default:
 					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
 				}
@@ -1112,12 +1110,90 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 		case <-c.shutdown:
 			return nil, c.terminalJobError()
 		}
-		fmt.Printf("xkcd: form next cloudfeed\n")
 
 		if err := filepath.Walk(c.dir, c.walkDir); err != nil {
 			return nil, err
 		}
 	}
+}
+
+func (c *cloudFeed) getParquetFiles() (map[string]string, error) {
+	// TODO(ganeshb): Make sure to wait for job to finish before getting
+	//the parquet files. for now, assume that test will wait for job to finish.
+	fmt.Printf("xkcd: inside get parquet files")
+
+	parquetFiles := make(map[string]string)
+	if err := filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
+		return c.walkDirParquet(path, info, err, parquetFiles)
+	}); err != nil {
+		return nil, err
+	}
+
+	return parquetFiles, nil
+
+}
+
+func (c *cloudFeed) walkDirParquet(path string, info os.FileInfo, err error, parquetFiles map[string]string) error {
+	// TODO(ganeshb): find a way to deduplicated code between this and walkdir
+
+	if strings.HasSuffix(path, `.tmp`) {
+		// File in the process of being written by ExternalStorage. Ignore.
+		return nil
+	}
+
+	if err != nil {
+		// From filepath.WalkFunc:
+		//  If there was a problem walking to the file or directory named by
+		//  path, the incoming error will describe the problem and the function
+		//  can decide how to handle that error (and Walk will not descend into
+		//  that directory). In the case of an error, the info argument will be
+		//  nil. If an error is returned, processing stops.
+		return err
+	}
+
+	if info.IsDir() {
+		// Nothing to do for directories.
+		return nil
+	}
+
+	tsFromPath := func(p string) string {
+		return strings.Split(filepath.Base(p), "-")[0]
+	}
+
+	// Skip files with timestamp greater than the previously observed timestamp.
+	// Note: theoretically, we should be able to skip any file with timestamp
+	// greater *or equal* to the previously observed timestamp.  However, alter
+	// changefeed pose a problem, since a table maybe added with initial scan
+	// option, causing new events (possibly including resolved event) to be
+	// emitted as of previously emitted timestamp.
+	// See https://github.com/cockroachdb/cockroach/issues/84102
+	if strings.Compare(tsFromPath(c.resolved), tsFromPath(path)) >= 0 {
+		// Already output this in a previous walkDir.
+		return nil
+	}
+
+	if strings.HasSuffix(path, `RESOLVED`) {
+		resolvedPayload, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		resolvedEntry := cloudFeedEntry{payload: resolvedPayload}
+		c.rows = append(c.rows, resolvedEntry)
+		c.resolved = path
+		return nil
+	}
+
+	var topic string
+	subs := cloudFeedFileRE.FindStringSubmatch(filepath.Base(path))
+	if subs == nil {
+		return errors.Errorf(`unexpected file: %s`, path)
+	}
+	topic = subs[5]
+
+	// cloud storage uses a different delimiter. Let tests be agnostic.
+	topic = strings.Replace(topic, `+`, `.`, -1)
+	parquetFiles[topic] = path
+	return nil
 }
 
 func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {

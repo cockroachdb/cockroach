@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+
 	// Imported to allow locality-related table mutations
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
@@ -177,6 +178,34 @@ func checkPerKeyOrdering(payloads []cdctest.TestFeedMessage) (bool, error) {
 	return true, nil
 }
 
+func getParquetFilesWithTimeOut(t testing.TB, f cdctest.TestFeed) map[string]string {
+	t.Helper()
+	timeoutCollect := collectParquetPayloadTimeout()
+
+	var parquetFiles map[string]string
+	require.NoError(t, withTimeout(f, timeoutCollect,
+		func(ctx context.Context) error {
+			var err error
+			parquetFiles, err = getParquetFiles(t, f)
+			return err
+		}))
+
+	return parquetFiles
+
+}
+
+func getParquetFiles(t testing.TB, f cdctest.TestFeed) (map[string]string, error) {
+	// t.Helper()
+	fmt.Println("xkcd: get parquet file")
+
+	if cloudFeed, ok := f.(*cloudFeed); ok {
+		fmt.Println("xkcd: get parquet file")
+		return cloudFeed.getParquetFiles()
+	} else {
+		return nil, errors.Errorf("Parquet is only supported with cloudstorage sink.")
+	}
+
+}
 func assertPayloadsBase(
 	t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
 ) {
@@ -241,6 +270,10 @@ func assertPayloadsTimeout() time.Duration {
 	if util.RaceEnabled {
 		return 5 * time.Minute
 	}
+	return 30 * time.Second
+}
+
+func collectParquetPayloadTimeout() time.Duration {
 	return 30 * time.Second
 }
 
