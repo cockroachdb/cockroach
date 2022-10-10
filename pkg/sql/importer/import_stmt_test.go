@@ -6162,6 +6162,11 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		return base.TestServerArgs{
 			Settings:      s,
 			ExternalIODir: baseDir,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					DisableJobsMetricsPolling: true,
+				},
+			},
 		}
 	}
 

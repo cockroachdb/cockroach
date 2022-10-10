@@ -88,7 +88,7 @@ func TestExpiringSessionsAndClaimJobsDoesNotTouchTerminalJobs(t *testing.T) {
 	adopt := 10 * time.Hour
 	cancel := 10 * time.Millisecond
 	args := base.TestServerArgs{Knobs: base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(adopt, cancel, adopt, adopt),
+		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(adopt, cancel, adopt, adopt, adopt),
 	}}
 
 	ctx := context.Background()

@@ -185,7 +185,7 @@ type registryTestSuite struct {
 
 	// afterJobStateMachine is invoked in the AfterJobStateMachine testing knob if
 	// non-nil.
-	afterJobStateMachine func()
+	afterJobStateMachine func(job *jobs.Job)
 
 	// Instead of a ch for success, use a variable because it can retry since it
 	// is in a transaction.
@@ -215,9 +215,10 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			}
 			return nil
 		}
-		knobs.AfterJobStateMachine = func() {
+		//knobs.DisableJobsMetricsPolling = true
+		knobs.AfterJobStateMachine = func(job *jobs.Job) {
 			if rts.afterJobStateMachine != nil {
-				rts.afterJobStateMachine()
+				rts.afterJobStateMachine(job)
 			}
 		}
 		args.Knobs.JobsTestingKnobs = knobs
@@ -237,7 +238,10 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.sqlDB = sqlutils.MakeSQLRunner(rts.outerDB)
 	rts.registry = rts.s.JobRegistry().(*jobs.Registry)
 	rts.done = make(chan struct{})
-	rts.mockJob = jobs.Record{Details: jobspb.ImportDetails{}, Progress: jobspb.ImportProgress{}}
+	rts.mockJob = jobs.Record{
+		Details: jobspb.ImportDetails{}, Progress: jobspb.ImportProgress{},
+		Username: username.MakeSQLUsernameFromPreNormalizedString("test"),
+	}
 
 	rts.resumeCh = make(chan error)
 	rts.progressCh = make(chan struct{})
@@ -1013,8 +1017,11 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
 		completeCh := make(chan struct{})
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			completeCh <- struct{}{}
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func(job *jobs.Job) {
+			pl := job.Payload()
+			if (&pl).Type() == jobspb.TypeImport {
+				completeCh <- struct{}{}
+			}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
@@ -1062,8 +1069,11 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("dump traces on fail", func(t *testing.T) {
 		completeCh := make(chan struct{})
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			completeCh <- struct{}{}
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func(job *jobs.Job) {
+			pl := job.Payload()
+			if (&pl).Type() == jobspb.TypeImport {
+				completeCh <- struct{}{}
+			}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
@@ -1105,8 +1115,11 @@ func TestRegistryLifecycle(t *testing.T) {
 
 	t.Run("dump traces on cancel", func(t *testing.T) {
 		completeCh := make(chan struct{})
-		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func() {
-			completeCh <- struct{}{}
+		rts := registryTestSuite{traceRealSpan: true, afterJobStateMachine: func(job *jobs.Job) {
+			pl := job.Payload()
+			if (&pl).Type() == jobspb.TypeImport {
+				completeCh <- struct{}{}
+			}
 		}}
 		rts.setUp(t)
 		defer rts.tearDown()
@@ -2326,7 +2339,7 @@ func TestJobInTxn(t *testing.T) {
 
 	// Set the adoption interval to be very long to test the adoption channel.
 	args := base.TestServerArgs{Knobs: base.TestingKnobs{
-		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour, time.Hour, time.Hour)},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour, time.Hour, time.Hour, time.Hour)},
 	}
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, args)
@@ -2886,6 +2899,7 @@ func TestMetrics(t *testing.T) {
 			DescriptorIDs: []descpb.ID{1},
 			Details:       jobspb.BackupDetails{},
 			Progress:      jobspb.BackupProgress{},
+			Username:      username.TestUserName(),
 		}
 		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, registry.MakeJobID(), nil /* txn */)
 		require.NoError(t, err)
@@ -2902,6 +2916,7 @@ func TestMetrics(t *testing.T) {
 			DescriptorIDs: []descpb.ID{1},
 			Details:       jobspb.ImportDetails{},
 			Progress:      jobspb.ImportProgress{},
+			Username:      username.TestUserName(),
 		}
 		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
 
@@ -2958,6 +2973,7 @@ func TestMetrics(t *testing.T) {
 			DescriptorIDs: []descpb.ID{1},
 			Details:       jobspb.ImportDetails{},
 			Progress:      jobspb.ImportProgress{},
+			Username:      username.TestUserName(),
 		}
 		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
 
@@ -2993,6 +3009,7 @@ func TestMetrics(t *testing.T) {
 			DescriptorIDs: []descpb.ID{1},
 			Details:       jobspb.ImportDetails{},
 			Progress:      jobspb.ImportProgress{},
+			Username:      username.TestUserName(),
 		}
 		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
 
@@ -3047,7 +3064,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	// Disable the loops from messing with the job execution.
-	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour, time.Hour, time.Hour)}
+	knobs := base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour, time.Hour, time.Hour, time.Hour)}
 
 	ctx := context.Background()
 
@@ -3142,6 +3159,7 @@ func TestPauseReason(t *testing.T) {
 		DescriptorIDs: []descpb.ID{1},
 		Details:       jobspb.ImportDetails{},
 		Progress:      jobspb.ImportProgress{},
+		Username:      username.TestUserName(),
 	}
 	tdb := sqlutils.MakeSQLRunner(db)
 

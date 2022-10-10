@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const jobExistsOp = "get-jobs"
+
 // RunningJobExists checks that whether there are any other jobs (matched by
 // payloadPredicate callback) in the pending, running, or paused status that
 // started earlier than the job with provided jobID.
@@ -43,7 +45,7 @@ ORDER BY created`
 
 	it, err := ie.QueryIterator(
 		ctx,
-		"get-jobs",
+		jobExistsOp,
 		txn,
 		stmt,
 	)
@@ -68,6 +70,49 @@ ORDER BY created`
 				break
 			}
 
+			return true /* exists */, nil /* retErr */
+		}
+	}
+	return false /* exists */, err
+}
+
+// JobExists checks that whether there are any job records which exist that match
+// the payloadPredicate callback.
+func JobExists(
+	ctx context.Context,
+	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
+	payloadPredicate func(payload *jobspb.Payload) bool,
+) (exists bool, retErr error) {
+	const stmt = `
+SELECT
+  id, payload
+FROM
+  system.jobs
+ORDER BY created`
+
+	it, err := ie.QueryIterator(
+		ctx,
+		jobExistsOp,
+		txn,
+		stmt,
+	)
+	if err != nil {
+		return false /* exists */, err
+	}
+	// We have to make sure to close the iterator since we might return from the
+	// for loop early (before Next() returns false).
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
+		payload, err := UnmarshalPayload(row[1])
+		if err != nil {
+			return false /* exists */, err
+		}
+
+		if payloadPredicate(payload) {
 			return true /* exists */, nil /* retErr */
 		}
 	}

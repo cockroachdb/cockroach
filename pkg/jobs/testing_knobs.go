@@ -64,7 +64,7 @@ type TestingKnobs struct {
 	// AfterJobStateMachine is called once the running instance of the job has
 	// returned from the state machine that transitions it from one state to
 	// another.
-	AfterJobStateMachine func()
+	AfterJobStateMachine func(job *Job)
 
 	// TimeSource replaces registry's clock.
 	TimeSource *hlc.Clock
@@ -75,6 +75,9 @@ type TestingKnobs struct {
 	// BeforeWaitForJobsQuery is called once per invocation of the
 	// poll-show-jobs query in WaitForJobs.
 	BeforeWaitForJobsQuery func()
+
+	// Disable the creation of the single jobs metric polling job from being created.
+	DisableJobsMetricsPolling bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -88,6 +91,9 @@ type TestingIntervalOverrides struct {
 
 	// Cancel overrides the cancelIntervalSetting cluster setting.
 	Cancel *time.Duration
+
+	// CollectMetrics overrides the pollJobsMetricsInterval cluster setting.
+	PollMetrics *time.Duration
 
 	// Gc overrides the gcIntervalSetting cluster setting.
 	Gc *time.Duration
@@ -117,14 +123,14 @@ func NewTestingKnobsWithShortIntervals() *TestingKnobs {
 		defaultShortInterval *= 5
 	}
 	return NewTestingKnobsWithIntervals(
-		defaultShortInterval, defaultShortInterval, defaultShortInterval, defaultShortInterval,
+		defaultShortInterval, defaultShortInterval, defaultShortInterval, defaultShortInterval, defaultShortInterval,
 	)
 }
 
 // NewTestingKnobsWithIntervals return a TestingKnobs structure with overrides
 // for adopt and cancel intervals.
 func NewTestingKnobsWithIntervals(
-	adopt, cancel, initialDelay, maxDelay time.Duration,
+	adopt, cancel, initialDelay, maxDelay time.Duration, collectMetrics time.Duration,
 ) *TestingKnobs {
 	return &TestingKnobs{
 		IntervalOverrides: TestingIntervalOverrides{
@@ -132,6 +138,7 @@ func NewTestingKnobsWithIntervals(
 			Cancel:            &cancel,
 			RetryInitialDelay: &initialDelay,
 			RetryMaxDelay:     &maxDelay,
+			PollMetrics:       &collectMetrics,
 		},
 	}
 }
