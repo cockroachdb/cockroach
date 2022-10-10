@@ -52,7 +52,7 @@ func TestTryFilterTrigram(t *testing.T) {
 		ok      bool
 		unique  bool
 	}{
-		// Test LIKE with percents on both sides
+		// Test LIKE with percents on both sides.
 		// TODO(jordan): we could make expressions with just a single trigram
 		// tight, because we would know for sure that we wouldn't need to recheck
 		// the condition once the row is returned. But, it's probably not that
@@ -71,6 +71,12 @@ func TestTryFilterTrigram(t *testing.T) {
 		// AND and OR for two LIKE queries behave as expected.
 		{filters: "s LIKE '%lkj%' AND s LIKE '%bla%'", ok: true, unique: true},
 		{filters: "s LIKE '%lkj%' OR s LIKE '%bla%'", ok: true, unique: false},
+
+		// LIKE with variables on the right-hand side.
+		{filters: "'abc' LIKE s", ok: false},
+		{filters: "'abc' ILIKE s", ok: false},
+		{filters: "'abc%' LIKE s", ok: false},
+		{filters: "'%abc' LIKE s", ok: false},
 
 		// Similarity queries.
 		{filters: "s % 'lkjsdlkj'", ok: true, unique: false},
