@@ -301,11 +301,20 @@ const (
 	// SupportAssumeRoleAuth is the version where assume role authorization is
 	// supported in cloud storage and KMS.
 	SupportAssumeRoleAuth
-
 	// FixUserfileRelatedDescriptorCorruption adds a migration which uses
 	// heuristics to identify invalid table descriptors for userfile-related
 	// descriptors.
 	FixUserfileRelatedDescriptorCorruption
+
+	// EnableRangefeedElasticCPUControl enables automatic pacing of rangefeed
+	// scans through admission control. This needs version gating as it relies
+	// on admission headers being fully populated for RangefeedRequests,
+	// something that was not true in older versions.
+	//
+	// TODO(irfansharif): Depends on v22.2 being minted first.
+	//
+	//   EnableRangefeedElasticCPUControl
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.

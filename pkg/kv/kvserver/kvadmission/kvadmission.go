@@ -51,6 +51,26 @@ var elasticCPUDurationPerExportRequest = settings.RegisterDurationSetting(
 	},
 )
 
+// elasticCPUDurationPerRangefeedScanUnit controls how many CPU tokens are
+// allotted for each unit of work during rangefeed catchup scans.
+var elasticCPUDurationPerRangefeedScanUnit = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kvadmission.elastic_cpu.duration_per_rangefeed_scan_unit",
+	"controls how many CPU tokens are allotted for each unit of work during rangefeed catchup scans",
+	admission.MaxElasticCPUDuration,
+	func(duration time.Duration) error {
+		if duration < admission.MinElasticCPUDuration {
+			return fmt.Errorf("minimum CPU duration allowed is %s, got %s",
+				admission.MinElasticCPUDuration, duration)
+		}
+		if duration > admission.MaxElasticCPUDuration {
+			return fmt.Errorf("maximum CPU duration allowed is %s, got %s",
+				admission.MaxElasticCPUDuration, duration)
+		}
+		return nil
+	},
+)
+
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
@@ -58,23 +78,25 @@ type Controller interface {
 	// populated for admission to work correctly. If err is non-nil, the
 	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
 	// called after the KV work is done executing.
-	AdmitKVWork(
-		ctx context.Context, tenantID roachpb.TenantID, ba *roachpb.BatchRequest,
-	) (Handle, error)
+	AdmitKVWork(context.Context, roachpb.TenantID, *roachpb.BatchRequest) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
 	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
+	// AdmitRangefeedRequest must be called before serving rangefeed requests.
+	// It returns a Pacer that's used within rangefeed catchup scans (typically
+	// CPU-intensive and affects scheduling latencies negatively).
+	AdmitRangefeedRequest(roachpb.TenantID, *roachpb.RangeFeedRequest) *Pacer
 	// SetTenantWeightProvider is used to set the provider that will be
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
-	SetTenantWeightProvider(provider TenantWeightProvider, stopper *stop.Stopper)
+	SetTenantWeightProvider(TenantWeightProvider, *stop.Stopper)
 	// SnapshotIngested informs admission control about a range snapshot
 	// ingestion.
-	SnapshotIngested(storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats)
+	SnapshotIngested(roachpb.StoreID, pebble.IngestOperationStats)
 	// FollowerStoreWriteBytes informs admission control about writes
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
-	FollowerStoreWriteBytes(storeID roachpb.StoreID, followerWriteBytes FollowerStoreWriteBytes)
+	FollowerStoreWriteBytes(roachpb.StoreID, FollowerStoreWriteBytes)
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -266,6 +288,27 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 	}
 }
 
+// AdmitRangefeedRequest implements the Controller interface.
+func (n *controllerImpl) AdmitRangefeedRequest(
+	tenantID roachpb.TenantID, request *roachpb.RangeFeedRequest,
+) *Pacer {
+	// TODO(irfansharif): We need to version gate/be defensive when integrating
+	// rangefeeds since admission headers will not be fully set on older version
+	// nodes. See EnableRangefeedElasticCPUControl in cockroach_versions.go.
+	// Consider a cluster setting too.
+
+	return &Pacer{
+		unit: elasticCPUDurationPerRangefeedScanUnit.Get(&n.settings.SV),
+		wi: admission.WorkInfo{
+			TenantID:        tenantID,
+			Priority:        admissionpb.WorkPriority(request.AdmissionHeader.Priority),
+			CreateTime:      request.AdmissionHeader.CreateTime,
+			BypassAdmission: false,
+		},
+		wq: n.elasticCPUWorkQueue,
+	}
+}
+
 // SetTenantWeightProvider implements the Controller interface.
 func (n *controllerImpl) SetTenantWeightProvider(
 	provider TenantWeightProvider, stopper *stop.Stopper,
@@ -381,4 +424,68 @@ func (wb *StoreWriteBytes) Release() {
 		return
 	}
 	storeWriteBytesPool.Put(wb)
+}
+
+// Pacer is used in tight loops (CPU-bound) for non-premptible elastic work.
+// Callers are expected to invoke Pace() every loop iteration and Close() once
+// done. Internally this type integrates with elastic CPU work queue, acquiring
+// tokens for the CPU work being done, and blocking if tokens are unavailable.
+// This allows for a form of cooperative scheduling with elastic CPU granters.
+type Pacer struct {
+	unit time.Duration
+	wi   admission.WorkInfo
+	wq   *admission.ElasticCPUWorkQueue
+
+	cur *admission.ElasticCPUWorkHandle
+}
+
+// Pace is part of the Pacer interface.
+func (p *Pacer) Pace(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+
+	if overLimit, _ := p.cur.OverLimit(); overLimit {
+		p.wq.AdmittedWorkDone(p.cur)
+		p.cur = nil
+	}
+
+	if p.cur == nil {
+		handle, err := p.wq.Admit(ctx, p.unit, p.wi)
+		if err != nil {
+			return err
+		}
+		p.cur = handle
+	}
+	return nil
+}
+
+// Close is part of the Pacer interface.
+func (p *Pacer) Close() {
+	if p == nil || p.cur == nil {
+		return
+	}
+
+	p.wq.AdmittedWorkDone(p.cur)
+	p.cur = nil
+}
+
+type pacerKey struct{}
+
+// ContextWithPacer returns a Context wrapping the supplied Pacer, if any.
+func ContextWithPacer(ctx context.Context, h *Pacer) context.Context {
+	if h == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, pacerKey{}, h)
+}
+
+// PacerFromContext returns the Pacer contained in the Context, if any.
+func PacerFromContext(ctx context.Context) *Pacer {
+	val := ctx.Value(pacerKey{})
+	h, ok := val.(*Pacer)
+	if !ok {
+		return nil
+	}
+	return h
 }
