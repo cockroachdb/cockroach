@@ -178,17 +178,6 @@ func (t *Task) assertDecoded() {
 //     it is applied. Because of this, the client can be informed of the success of
 //     a write at this point, but we cannot release that write's latches until the
 //     write has applied. See ProposalData.signalProposalResult/finishApplication.
-//
-//  4. etcd/raft may provided a series of CommittedEntries in a Ready struct that
-//     haven't actually been appended to our own log. This is most common in single
-//     node replication groups, but it is possible when a follower in a multi-node
-//     replication group is catching up after falling behind. In the first case,
-//     the entries are not yet committed so acknowledging them would be a lie. In
-//     the second case, the entries are committed so we could acknowledge them at
-//     this point, but doing so seems risky. To avoid complications in either case,
-//     the method takes a maxIndex parameter that limits the indexes that it will
-//     acknowledge. Typically, callers will supply the highest index that they have
-//     durably written to their raft log for this upper bound.
 func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxIndex uint64) error {
 	t.assertDecoded()
 	if !t.anyLocal {
