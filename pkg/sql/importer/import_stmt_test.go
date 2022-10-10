@@ -7203,3 +7203,42 @@ CREATE TABLE simple (
 		sqlDB.CheckQueryResults(t, `SELECT i FROM simple@idx WHERE i < 0`, res)
 	})
 }
+
+func TestImportIntoWithHashShardedIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "avro")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	tc := serverutils.StartNewTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	t.Run("hash-sharded-index", func(t *testing.T) {
+		sqlDB.Exec(t, `
+CREATE TABLE t (
+    x INT,
+    y INT,
+    INDEX (x) USING HASH
+)
+`)
+		data = "1,1\n2,2\n3,3"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (x, y) CSV DATA ('%s')`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+			{"1", "1"}, {"2", "2"}, {"3", "3"},
+		})
+		sqlDB.CheckQueryResults(t, `SELECT constraint_name, validated from [SHOW CONSTRAINTS FROM t] ORDER BY 1;`, [][]string{
+			{"check_crdb_internal_x_shard_16", "true"}, {"t_pkey", "true"},
+		})
+	})
+}
