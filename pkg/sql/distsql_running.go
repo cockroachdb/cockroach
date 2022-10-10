@@ -272,6 +272,10 @@ type deadFlowsOnNode struct {
 // cancelFlowsCoordinator is responsible for batching up the requests to cancel
 // remote flows initiated on the behalf of the current node when the local flows
 // errored out.
+//
+// This mechanism is used in addition to the cancellation that occurs when the
+// gRPC streams are closed between nodes, which happens when the query errors
+// out. This mechanism works on the best-effort basis.
 type cancelFlowsCoordinator struct {
 	mu struct {
 		syncutil.Mutex
@@ -619,18 +623,8 @@ func (dsp *DistSQLPlanner) Run(
 		defer func() {
 			if recv.resultWriter.Err() != nil {
 				// The execution of this query encountered some error, so we
-				// will eagerly cancel all scheduled flows on the remote nodes
-				// (if they haven't been started yet) because they are now dead.
-				// TODO(yuzefovich): consider whether augmenting
-				// ConnectInboundStream to keep track of the streams that
-				// initiated FlowStream RPC is worth it - the flows containing
-				// such streams must have been started, so there is no point in
-				// trying to cancel them this way. This will allow us to reduce
-				// the size of the CancelDeadFlows request and speed up the
-				// lookup on the remote node whether a particular dead flow
-				// should be canceled. However, this improves the unhappy case,
-				// but it'll slowdown the happy case - by introducing additional
-				// tracking.
+				// will eagerly cancel all flows running on the remote nodes
+				// because they are now dead.
 				dsp.cancelFlowsCoordinator.addFlowsToCancel(flows)
 			}
 		}()
