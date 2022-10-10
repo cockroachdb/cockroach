@@ -3409,10 +3409,12 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				sl,
 				allocationConstraintsChecker,
 				existingRepls,
+				nil,
 				a.StorePool.GetLocalitiesByStore(existingRepls),
 				a.StorePool.IsStoreReadyForRoutineReplicaTransfer,
 				false, /* allowMultipleReplsPerNode */
 				a.ScorerOptions(ctx),
+				VoterTarget,
 			)
 
 			if !expectedStoreIDsMatch(tc.expected, candidates) {
@@ -3751,10 +3753,12 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			sl,
 			checkFn,
 			existingRepls,
+			nil,
 			a.StorePool.GetLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.StoreID) bool { return true },
 			false, /* allowMultipleReplsPerNode */
 			a.ScorerOptions(ctx),
+			VoterTarget,
 		)
 		best := candidates.best()
 		match := true
@@ -8177,4 +8181,118 @@ func initTestStores(testStores []testStore, firstRangeSize int64, firstStoreQPS 
 
 	// Initialize the cluster with a single range.
 	testStores[0].add(firstRangeSize, firstStoreQPS)
+}
+
+func TestNonVoterPrioritizationInVoterAdditions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 514},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 520},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 470},
+		},
+		{
+			StoreID: 4,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 4,
+				Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 480},
+		},
+		{
+			StoreID:  5,
+			Node:     roachpb.NodeDescriptor{NodeID: 5},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 516},
+		},
+		{
+			StoreID:  6,
+			Node:     roachpb.NodeDescriptor{NodeID: 6},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 500},
+		},
+	}
+
+	ctx := context.Background()
+	stopper, g, _, a, _ := CreateTestAllocator(ctx, 10, false /* deterministic */)
+	defer stopper.Stop(ctx)
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+
+	testCases := []struct {
+		existingVoters         []roachpb.ReplicaDescriptor
+		existingNonVoters      []roachpb.ReplicaDescriptor
+		spanConfig             roachpb.SpanConfig
+		expectedTargetAllocate roachpb.ReplicationTarget
+	}{
+		// NB: Store 5 has a non-voter and range count 516 and store 4 can add a
+		// voter and has range count 480. Allocator should select store 5 with the
+		// non-voter despite having higher range count than store 4 with the voter.
+		{
+			existingVoters: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 3, StoreID: 3},
+			},
+			existingNonVoters: []roachpb.ReplicaDescriptor{
+				{NodeID: 5, StoreID: 5},
+			},
+			spanConfig:             emptySpanConfig(),
+			expectedTargetAllocate: roachpb.ReplicationTarget{NodeID: 5, StoreID: 5},
+		},
+		// NB: Store 3 can add a voter and has range count 470 (underfull), and
+		// stores 4 and 5 have non-voters and range counts > 475 (not underfull).
+		// Allocator should select store 3 with the lower balance score despite
+		// not having a non-voter like stores 4 and 5.
+		{
+			existingVoters: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+			},
+			existingNonVoters: []roachpb.ReplicaDescriptor{
+				{NodeID: 4, StoreID: 4},
+				{NodeID: 5, StoreID: 5},
+			},
+			spanConfig:             emptySpanConfig(),
+			expectedTargetAllocate: roachpb.ReplicationTarget{NodeID: 3, StoreID: 3},
+		},
+		// NB: Store 4 can add a voter and satisfies the voter constraints, and
+		// store 5 has a non-voter but does not satisfy the voter constraints.
+		// Allocator should select store 4 that satisfies the voter constraints
+		// despite not having a non-voter like store 5.
+		{
+			existingVoters: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 2},
+				{NodeID: 3, StoreID: 3},
+			},
+			existingNonVoters: []roachpb.ReplicaDescriptor{
+				{NodeID: 5, StoreID: 5},
+			},
+			spanConfig: roachpb.SpanConfig{
+				VoterConstraints: []roachpb.ConstraintsConjunction{
+					{
+						Constraints: []roachpb.Constraint{
+							{Value: "a", Type: roachpb.Constraint_REQUIRED},
+						},
+					},
+				},
+			},
+			expectedTargetAllocate: roachpb.ReplicationTarget{NodeID: 4, StoreID: 4},
+		},
+	}
+
+	for i, tc := range testCases {
+		result, _, _ := a.AllocateVoter(ctx, tc.spanConfig, tc.existingVoters, tc.existingNonVoters, Alive)
+		assert.Equal(t, tc.expectedTargetAllocate, result, "Unexpected replication target returned by allocate voter in test %d", i)
+	}
 }
