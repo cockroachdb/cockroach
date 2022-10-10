@@ -343,6 +343,105 @@ func (h *Histogram) ValueAtQuantileWindowed(q float64) float64 {
 	return ValueAtQuantileWindowed(h.ToPrometheusMetricWindowed().Histogram, q)
 }
 
+var _ PrometheusExportable = (*ManualWindowHistogram)(nil)
+var _ Iterable = (*ManualWindowHistogram)(nil)
+var _ WindowedHistogram = (*ManualWindowHistogram)(nil)
+
+// NewManualWindowHistogram is a prometheus-backed histogram. Depending on the
+// value of the buckets parameter, this is suitable for recording any kind of
+// quantity. The histogram is very similar to Histogram produced by NewHistogram
+// with the main difference being that Histogram supports collecting values over
+// time using the Histogram.RecordValue whereas this histogram does not support
+// collecting values. Instead, this histogram supports replacing the cumulative
+// and windowed histogram. This means that it is the responsibility of the
+// creator of this histogram to replace the values by calling
+// ManualWindowHistogram.Update.
+func NewManualWindowHistogram(meta Metadata, buckets []float64) *ManualWindowHistogram {
+	opts := prometheus.HistogramOpts{
+		Buckets: buckets,
+	}
+	cum := prometheus.NewHistogram(opts)
+	h := &ManualWindowHistogram{
+		Metadata:          meta,
+		cum:               cum,
+		windowedHistogram: nil,
+	}
+	return h
+}
+
+// ManualWindowHistogram is a prometheus-backed histogram. Internally there are
+// two sets of histograms: one is the cumulative set (i.e. data is never
+// evicted) which is a prometheus.Histogram and the other is the windowed set
+// (which keeps only recently collected samples) which is a
+// prometheusgo.Histogram. Both histograms must be updated by the client by
+// calling ManualWindowHistogram.Update.
+type ManualWindowHistogram struct {
+	Metadata
+	syncutil.RWMutex
+	cum               prometheus.Histogram
+	windowedHistogram *prometheusgo.Histogram
+}
+
+// Update replaces the cumulative and window histograms.
+func (mwh *ManualWindowHistogram) Update(cum prometheus.Histogram, window *prometheusgo.Histogram) {
+	mwh.Lock()
+	defer mwh.Unlock()
+	mwh.cum = cum
+	mwh.windowedHistogram = window
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (mwh *ManualWindowHistogram) GetMetadata() Metadata {
+	return mwh.Metadata
+}
+
+// Inspect calls the closure.
+func (mwh *ManualWindowHistogram) Inspect(f func(interface{})) {
+	f(mwh)
+}
+
+// GetType returns the prometheus type enum for this metric.
+func (mwh *ManualWindowHistogram) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_HISTOGRAM.Enum()
+}
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	m := &prometheusgo.Metric{}
+	if err := mwh.cum.Write(m); err != nil {
+		panic(err)
+	}
+	return m
+}
+
+// TotalCountWindowed implements the WindowedHistogram interface.
+func (mwh *ManualWindowHistogram) TotalCountWindowed() int64 {
+	mwh.RLock()
+	defer mwh.RUnlock()
+	return int64(mwh.windowedHistogram.GetSampleCount())
+}
+
+// TotalSumWindowed implements the WindowedHistogram interface.
+func (mwh *ManualWindowHistogram) TotalSumWindowed() float64 {
+	mwh.RLock()
+	defer mwh.RUnlock()
+	return mwh.windowedHistogram.GetSampleSum()
+}
+
+// ValueAtQuantileWindowed implements the WindowedHistogram interface.
+//
+// This function is very similar to Histogram.ValueAtQuantileWindowed. Thus see
+// Histogram.ValueAtQuantileWindowed for a more in-depth description.
+func (mwh *ManualWindowHistogram) ValueAtQuantileWindowed(q float64) float64 {
+	mwh.RLock()
+	defer mwh.RUnlock()
+	if mwh.windowedHistogram == nil {
+		return 0
+	}
+	return ValueAtQuantileWindowed(mwh.windowedHistogram, q)
+}
+
 // A Counter holds a single mutable atomic value.
 type Counter struct {
 	Metadata
