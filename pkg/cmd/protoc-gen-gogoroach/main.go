@@ -28,6 +28,7 @@ func fixImports(s string) string {
 	lines := strings.Split(s, "\n")
 	var builder strings.Builder
 	for _, line := range lines {
+		line = strings.ReplaceAll(line, "\"etcd/api/versionpb\"", "\"go.etcd.io/etcd/api/v3/versionpb\"")
 		if strings.Contains(line, "import _ ") ||
 			strings.Contains(line, "import fmt \"github.com/cockroachdb/cockroach/pkg/fmt\"") ||
 			strings.Contains(line, "import math \"github.com/cockroachdb/cockroach/pkg/math\"") {

@@ -908,7 +908,7 @@ func TestReplicaLease(t *testing.T) {
 	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
 	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
-	tsc.TestingKnobs.TestingApplyFilter = applyFilter
+	tsc.TestingKnobs.TestingApplyCalledTwiceFilter = applyFilter
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(ctx)
 	if err != nil {
@@ -2922,7 +2922,9 @@ func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 		tc := testContext{}
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
-		tc.Start(ctx, t, stopper)
+		sc := TestStoreConfig(nil)
+		sc.TestingKnobs.DisableCanAckBeforeApplication = true
+		tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
 		tsOld := tc.Clock().Now()
 		tsNew := tsOld.Add(time.Millisecond.Nanoseconds(), 0).WithSynthetic(synthetic)
@@ -6229,7 +6231,11 @@ func TestRangeStatsComputation(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
+	sc := TestStoreConfig(hlc.NewClock(tc.manualClock, 500*time.Millisecond))
+
+	sc.TestingKnobs.DisableCanAckBeforeApplication = true
+	tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
 	baseStats := tc.repl.GetMVCCStats()
 
@@ -6466,7 +6472,9 @@ func TestAppliedIndex(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	sc := TestStoreConfig(nil)
+	sc.TestingKnobs.DisableCanAckBeforeApplication = true
+	tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
 	var appliedIndex uint64
 	var sum int64
@@ -6608,6 +6616,7 @@ func TestReplicaDanglingMetaIntent(t *testing.T) {
 		defer stopper.Stop(ctx)
 		cfg := TestStoreConfig(nil)
 		cfg.TestingKnobs.DontPushOnWriteIntentError = true
+		cfg.TestingKnobs.DisableCanAckBeforeApplication = true
 		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 		key := roachpb.Key("a")
@@ -7342,7 +7351,9 @@ func TestGCIncorrectRange(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	sc := TestStoreConfig(nil)
+	sc.TestingKnobs.DisableCanAckBeforeApplication = true
+	tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
 	// Split range into two ranges.
 	splitKey := roachpb.RKey("c")
@@ -7690,7 +7701,9 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	var tc testContext
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	sc := TestStoreConfig(nil)
+	sc.TestingKnobs.DisableCanAckBeforeApplication = true
+	tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
 	type magicKey struct{}
 
@@ -7860,6 +7873,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 	// Raft leadership instability.
 	cfg.TestingKnobs.DisableRefreshReasonNewLeader = true
 	cfg.TestingKnobs.DisableRefreshReasonNewLeaderOrConfigChange = true
+	cfg.TestingKnobs.DisableCanAckBeforeApplication = true
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -8080,12 +8094,11 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 
 	ctx := context.Background()
 
-	var filterActive int32
-	var incCmdID kvserverbase.CmdIDKey
+	const incCmdID = "deadbeef"
 	var incApplyCount int64
 	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.TestingApplyFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
-		if atomic.LoadInt32(&filterActive) != 0 && filterArgs.CmdID == incCmdID {
+	tsc.TestingKnobs.TestingPostApplyFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+		if filterArgs.ForcedError == nil && filterArgs.CmdID == incCmdID {
 			atomic.AddInt64(&incApplyCount, 1)
 		}
 		return 0, nil
@@ -8129,8 +8142,6 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	ba.Add(inc)
 	ba.Timestamp = tc.Clock().Now()
 
-	incCmdID = makeIDKey()
-	atomic.StoreInt32(&filterActive, 1)
 	st := repl.CurrentLeaseStatus(ctx)
 	proposal, pErr := repl.requestToProposal(ctx, incCmdID, &ba, allSpansGuard(), &st, uncertainty.Interval{})
 	if pErr != nil {
@@ -8151,6 +8162,7 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	repl.mu.proposalBuf.testing.leaseIndexFilter = func(p *ProposalData) (indexOverride uint64) {
 		if p == proposal && !assigned {
 			assigned = true
+			t.Logf("assigned wrong LAI %d", ai-1)
 			return ai - 1
 		}
 		return 0
@@ -9692,7 +9704,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	storeKnobs.TestingApplyFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+	storeKnobs.TestingApplyCalledTwiceFilter = func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		if atomic.LoadInt32(&filterActive) == 1 {
 			return 0, roachpb.NewErrorf("boom")
 		}
@@ -9768,7 +9780,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 
 	var filterActive int32
 	blockRaftApplication := make(chan struct{})
-	tsc.TestingKnobs.TestingApplyFilter =
+	tsc.TestingKnobs.TestingApplyCalledTwiceFilter =
 		func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 			if atomic.LoadInt32(&filterActive) == 1 {
 				<-blockRaftApplication
@@ -9829,7 +9841,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 	var filterActive int32
 	blockRaftApplication := make(chan struct{})
 	blockingRaftApplication := make(chan struct{}, 1)
-	tsc.TestingKnobs.TestingApplyFilter =
+	tsc.TestingKnobs.TestingApplyCalledTwiceFilter =
 		func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 			if atomic.LoadInt32(&filterActive) == 1 {
 				select {
@@ -10514,7 +10526,10 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	sc := TestStoreConfig(nil)
+	sc.TestingKnobs.DisableCanAckBeforeApplication = true
+	tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
+	tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
 	// Increment the clock so that all the transactions in the tests run at a
 	// different physical timestamp than the one used to initialize the replica's
@@ -11560,7 +11575,9 @@ func TestRangeStatsRequest(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	sc := TestStoreConfig(nil)
+	sc.TestingKnobs.DisableCanAckBeforeApplication = true
+	tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
 	keyPrefix := roachpb.Key("dummy-prefix")
 
@@ -13290,7 +13307,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 		},
 		// Detect the application of the proposal to repropose it and also
 		// invalidate the lease.
-		TestingApplyFilter: func(args kvserverbase.ApplyFilterArgs) (retry int, pErr *roachpb.Error) {
+		TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (retry int, pErr *roachpb.Error) {
 			if seen || args.CmdID != cmdID {
 				return 0, nil
 			}
