@@ -3082,6 +3082,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 func checkBundle(t *testing.T, zipFile string, expectedFiles []string) {
 	t.Helper()
 	r, err := zip.OpenReader(zipFile)
+	defer func() { _ = r.Close() }()
 	require.NoError(t, err)
 
 	// Make sure the bundle contains the expected list of files.
