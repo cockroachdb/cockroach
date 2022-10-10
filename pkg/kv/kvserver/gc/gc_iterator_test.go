@@ -127,14 +127,25 @@ func TestGCIterator(t *testing.T) {
 	checkExpectations := func(
 		t *testing.T, step int, data []dataItem, ex stateExpectations, s gcIteratorState,
 	) {
-		check := func(ex int, role string, kv *storage.MVCCKeyValue) {
+		check := func(ex int, role string, kv *mvccKeyValue) {
 			switch {
 			case ex >= 0:
-				require.EqualValues(t, &data[ex].kv, kv, "step %d: unexpected data for %s at index %d", step, role, ex)
+				require.EqualValues(t, data[ex].kv.Key, kv.key, "step %d: unexpected key for %s at index %d", step, role, ex)
+				if data[ex].kv.Key.IsValue() {
+					mvccVal, err := storage.DecodeMVCCValue(data[ex].kv.Value)
+					require.NoError(t, err, "step %d: unexpected error for %s at index %d", step, role, ex)
+					require.Equal(t, len(data[ex].kv.Value), kv.mvccValueLen,
+						"step %d: unexpected value length for %s at index %d", step, role, ex)
+					require.Equal(t, mvccVal.IsTombstone(), kv.mvccValueIsTombstone,
+						"step %d: unexpected isTombstone for %s at index %d", step, role, ex)
+				} else {
+					require.EqualValues(t, data[ex].kv.Value, kv.metaValue,
+						"step %d: unexpected value for %s at index %d", step, role, ex)
+				}
 			case ex == isNil:
 				require.Nil(t, kv, "step %d", step)
 			case ex == isMD:
-				require.False(t, kv.Key.IsValue(), "step %d: expected metadata, found value", step)
+				require.False(t, kv.key.IsValue(), "step %d: expected metadata, found value", step)
 			}
 		}
 		check(ex.cur, "cur", s.cur)

@@ -398,10 +398,10 @@ func processReplicatedKeyRange(
 
 	// handleIntent will deserialize transaction info and if intent is older than
 	// threshold enqueue it to batcher, otherwise ignore it.
-	handleIntent := func(keyValue *storage.MVCCKeyValue) error {
+	handleIntent := func(keyValue *mvccKeyValue) error {
 		meta := &enginepb.MVCCMetadata{}
-		if err := protoutil.Unmarshal(keyValue.Value, meta); err != nil {
-			log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", keyValue.Key, err)
+		if err := protoutil.Unmarshal(keyValue.metaValue, meta); err != nil {
+			log.Errorf(ctx, "unable to unmarshal MVCC metadata for key %q: %+v", keyValue.key, err)
 			return nil
 		}
 		if meta.Txn != nil {
@@ -409,7 +409,7 @@ func processReplicatedKeyRange(
 			// expiration threshold.
 			if meta.Timestamp.ToTimestamp().Less(intentExp) {
 				info.IntentsConsidered++
-				if err := intentBatcher.addAndMaybeFlushIntents(ctx, keyValue.Key.Key, meta); err != nil {
+				if err := intentBatcher.addAndMaybeFlushIntents(ctx, keyValue.key.Key, meta); err != nil {
 					if errors.Is(err, ctx.Err()) {
 						return err
 					}
@@ -459,12 +459,12 @@ func processReplicatedKeyRange(
 		isNewestPoint := s.curIsNewest()
 		if garbage, err :=
 			isGarbage(threshold, s.cur, s.next, isNewestPoint, s.firstRangeTombstoneTsAtOrBelowGC); garbage && err == nil {
-			keyBytes := int64(s.cur.Key.EncodedSize())
+			keyBytes := int64(s.cur.key.EncodedSize())
 			batchGCKeysBytes += keyBytes
 			haveGarbageForThisKey = true
-			gcTimestampForThisKey = s.cur.Key.Timestamp
+			gcTimestampForThisKey = s.cur.key.Timestamp
 			info.AffectedVersionsKeyBytes += keyBytes
-			info.AffectedVersionsValBytes += int64(len(s.cur.Value))
+			info.AffectedVersionsValBytes += int64(s.cur.mvccValueLen)
 		} else if err != nil {
 			return false, err
 		}
@@ -480,9 +480,9 @@ func processReplicatedKeyRange(
 		}
 		shouldSendBatch := batchGCKeysBytes >= KeyVersionChunkBytes
 		if shouldSendBatch || isNewestPoint && haveGarbageForThisKey {
-			alloc, s.cur.Key.Key = alloc.Copy(s.cur.Key.Key, 0)
+			alloc, s.cur.key.Key = alloc.Copy(s.cur.key.Key, 0)
 			batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{
-				Key:       s.cur.Key.Key,
+				Key:       s.cur.key.Key,
 				Timestamp: gcTimestampForThisKey,
 			})
 			haveGarbageForThisKey = false
@@ -665,15 +665,15 @@ func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
 // deleted value is the most recent before expiration, it can be deleted.
 func isGarbage(
 	threshold hlc.Timestamp,
-	cur, next *storage.MVCCKeyValue,
+	cur, next *mvccKeyValue,
 	isNewestPoint bool,
 	firstRangeTombstoneTsAtOrBelowGC hlc.Timestamp,
 ) (bool, error) {
 	// If the value is not at or below the threshold then it's not garbage.
-	if belowThreshold := cur.Key.Timestamp.LessEq(threshold); !belowThreshold {
+	if belowThreshold := cur.key.Timestamp.LessEq(threshold); !belowThreshold {
 		return false, nil
 	}
-	if cur.Key.Timestamp.Less(firstRangeTombstoneTsAtOrBelowGC) {
+	if cur.key.Timestamp.Less(firstRangeTombstoneTsAtOrBelowGC) {
 		if util.RaceEnabled {
 			if threshold.Less(firstRangeTombstoneTsAtOrBelowGC) {
 				panic(fmt.Sprintf("gc attempt to remove key: using range tombstone %s above gc threshold %s",
@@ -682,16 +682,7 @@ func isGarbage(
 		}
 		return true, nil
 	}
-	// Possible premature optimization, but may help in workloads where most
-	// keys are rapidly inserted and deleted, making tombstones quite common.
-	isDelete := len(cur.Value) == 0
-	if !isDelete {
-		v, err := storage.DecodeMVCCValue(cur.Value)
-		if err != nil {
-			return false, err
-		}
-		isDelete = v.IsTombstone()
-	}
+	isDelete := cur.mvccValueIsTombstone
 	if isNewestPoint && !isDelete {
 		return false, nil
 	}
@@ -705,7 +696,7 @@ func isGarbage(
 	if !isDelete && next == nil {
 		panic("huh")
 	}
-	return isDelete || next.Key.Timestamp.LessEq(threshold), nil
+	return isDelete || next.key.Timestamp.LessEq(threshold), nil
 }
 
 // processLocalKeyRange scans the local range key entries, consisting of
