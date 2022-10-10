@@ -2350,6 +2350,133 @@ top-k
       │    └── [/10/4 - /10/4]
       └── key: (1-4)
 
+# Repro for #82730
+exec-ddl
+CREATE TABLE table1 (
+  col1_0 NAME,
+  col1_1 INT8,
+  col1_3 INT8,
+  col1_5 VARCHAR,
+  PRIMARY KEY (col1_0 ASC),
+  UNIQUE (col1_1 ASC, col1_3 ASC)
+    PARTITION BY LIST (col1_1,col1_3) (
+      PARTITION table1_part_0 VALUES IN (
+                                (
+                                  1,
+                                  NULL
+                                )
+                              ),
+      PARTITION table1_part_1 VALUES IN (
+                                (
+                                  1000000000,
+                                  NULL
+                                )
+                              ),
+      PARTITION table1_part_2 VALUES IN (
+                                (
+                                  2000000000,
+                                  NULL
+                                )
+                              )
+      )
+)
+----
+
+opt expect-not=SplitLimitedSelectIntoUnionSelects
+UPDATE table1
+     SET col1_5 = col1_5
+   WHERE col1_0 ILIKE col1_0
+ORDER BY col1_3
+   LIMIT 84
+----
+update table1
+ ├── columns: <none>
+ ├── fetch columns: col1_0:7 col1_1:8 col1_3:9 col1_5:10
+ ├── update-mapping:
+ │    └── col1_5:10 => col1_5:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── top-k
+      ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+      ├── internal-ordering: +9
+      ├── k: 84
+      ├── cardinality: [0 - 84]
+      ├── key: (7)
+      ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
+      └── select
+           ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           ├── key: (7)
+           ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           ├── scan table1
+           │    ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           │    ├── key: (7)
+           │    └── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           └── filters
+                └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
+
+exec-ddl
+CREATE TABLE table2 (
+  col1_0 NAME,
+  col1_1 INT8,
+  col1_3 INT8,
+  col1_5 VARCHAR,
+  PRIMARY KEY (col1_0 ASC),
+  UNIQUE (col1_1 ASC, col1_3 ASC)
+    PARTITION BY LIST (col1_1,col1_3) (
+      PARTITION table2_part_0 VALUES IN (
+                                (
+                                  1,
+                                  NULL
+                                )
+                              ),
+      PARTITION table2_part_1 VALUES IN (
+                                (
+                                  5,
+                                  NULL
+                                )
+                              ),
+      PARTITION table2_part_2 VALUES IN (
+                                (
+                                  5000000,
+                                  NULL
+                                )
+                              )
+      )
+)
+----
+
+opt expect=SplitLimitedSelectIntoUnionSelects
+UPDATE table2 AS tab_41831
+     SET col1_5 = col1_5
+   WHERE col1_0 ILIKE col1_0
+ORDER BY col1_3
+   LIMIT 84
+----
+update table2 [as=tab_41831]
+ ├── columns: <none>
+ ├── fetch columns: col1_0:7 col1_1:8 col1_3:9 col1_5:10
+ ├── update-mapping:
+ │    └── col1_5:10 => col1_5:4
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── top-k
+      ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+      ├── internal-ordering: +9
+      ├── k: 84
+      ├── cardinality: [0 - 84]
+      ├── key: (7)
+      ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
+      └── select
+           ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           ├── key: (7)
+           ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           ├── scan table2 [as=tab_41831]
+           │    ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           │    ├── key: (7)
+           │    └── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           └── filters
+                └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
+
 # Regression test for #88993. Do not construct an unordered limit below the
 # UnionAll.
 exec-ddl
