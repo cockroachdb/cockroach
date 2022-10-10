@@ -1517,7 +1517,7 @@ func filterRangeLog(
 	eventType kvserverpb.RangeLogEventType,
 	reason kvserverpb.RangeLogEventReason,
 ) ([]kvserverpb.RangeLogEvent_Info, error) {
-	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "rangeID" = $1 AND "eventType" = $2 AND info LIKE concat('%', $3, '%');`, rangeID, eventType.String(), reason)
+	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "rangeID" = $1 AND "eventType" = $2 AND info LIKE concat('%', $3, '%') ORDER BY timestamp ASC;`, rangeID, eventType.String(), reason)
 }
 
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
@@ -1963,4 +1963,216 @@ func TestReplicateQueueAcquiresInvalidLeases(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func iterateOverAllStores(
+	t *testing.T,
+	tc *testcluster.TestCluster,
+	f func(*kvserver.Store) error,
+) {
+	for _, server := range tc.Servers {
+		require.NoError(t, server.Stores().VisitStores(f))
+	}
+}
+
+// TestMultiRegion tests the prioritization of non-voters when switching from
+// ZONE to REGION survival i.e.
+//
+// ZONE survival configuration:
+// Region 1: Voter, Voter, Voter
+// Region 2: Non-Voter
+// Region 3: Non-Voter
+// to REGION survival configuration:
+// Region 1: Voter, Voter
+// Region 2: Voter, Voter
+// Region 3: Voter
+//
+// Here we have 7 stores: 3 in Region 1, 2 in Region 2, and 2 in Region 3.
+//
+// The expected behaviour is that there should not be any add voter events in
+// the range log where the added replica type is a LEARNER.
+func TestMultiRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Create 7 stores: 3 in Region 1, 2 in Region 2, and 2 in Region 3.
+	const numNodes = 7
+	serverArgs := make(map[int]base.TestServerArgs)
+	regions := [numNodes]int{1, 1, 1, 2, 2, 3, 3}
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key: "region", Value: strconv.Itoa(regions[i]),
+					},
+				},
+			},
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
+				},
+			},
+		}
+	}
+
+	// Start test cluster.
+	clusterArgs := base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationAuto,
+		ServerArgsPerNode: serverArgs,
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+	db := tc.ServerConn(0)
+
+	// Ensure all stores have the same range count initially, to allow for more
+	// predictable behaviour when the allocator ranks stores using balance score.
+	_, err := db.Exec(
+		"ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 7, num_voters = 7",
+	)
+	require.NoError(t, err)
+	_, err = db.Exec(
+		"ALTER RANGE system CONFIGURE ZONE USING num_replicas = 7, num_voters = 7",
+	)
+	require.NoError(t, err)
+	_, err = db.Exec(
+		"ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 7, num_voters = 7",
+	)
+	require.NoError(t, err)
+	_, err = db.Exec(
+		"ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7, num_voters = 7",
+	)
+	require.NoError(t, err)
+	_, err = db.Exec(
+		"ALTER RANGE default CONFIGURE ZONE USING num_replicas = 7, num_voters = 7",
+	)
+	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+			return err
+		}
+		rangeCount := -1
+		allEqualRangeCount := true
+		iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
+			if rangeCount == -1 {
+				rangeCount = s.ReplicaCount()
+			} else if rangeCount != s.ReplicaCount() {
+				allEqualRangeCount = false
+			}
+			return nil
+		})
+		if !allEqualRangeCount {
+			return errors.New("Range counts are not all equal")
+		}
+		return nil
+	})
+
+	// Create a new range to simulate switching from ZONE to REGION survival.
+	_, err = db.Exec("CREATE TABLE t (i INT PRIMARY KEY, s STRING)")
+	require.NoError(t, err)
+
+	// ZONE survival configuration.
+	_, err = db.Exec(
+		"ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5, num_voters = 3, " +
+			"constraints = '{\"+region=2\": 1, \"+region=3\": 1}', " +
+			"voter_constraints = '{\"+region=1\": 3}'",
+	)
+	require.NoError(t, err)
+
+	// computeNumberOfReplicas is used to find the number of voters and
+	// non-voters to check if we are meeting our zone configuration.
+	computeNumberOfReplicas := func(
+		t *testing.T,
+		tc *testcluster.TestCluster,
+		db *gosql.DB,
+	) (numVoters, numNonVoters int, err error) {
+		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+			return 0, 0, err
+		}
+
+		var rangeID roachpb.RangeID
+		if err := db.QueryRow("select range_id from [show ranges from table t] limit 1").Scan(&rangeID); err != nil {
+			return 0, 0, err
+		}
+		iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
+			if replica, err := s.GetReplica(rangeID); err == nil {
+				rd, err := replica.GetReplicaDescriptor()
+				if err != nil {
+					return err
+				}
+				switch rd.Type {
+				case roachpb.VOTER_FULL:
+					numVoters++
+				case roachpb.NON_VOTER:
+					numNonVoters++
+				}
+			}
+			return nil
+		})
+		return numVoters, numNonVoters, nil
+	}
+
+	// Ensure we are meeting our ZONE survival configuration.
+	testutils.SucceedsSoon(t, func() error {
+		numVoters, numNonVoters, err := computeNumberOfReplicas(t, tc, db)
+		require.NoError(t, err)
+		if numVoters != 3 {
+			return errors.Newf("expected 3 voters; got %d", numVoters)
+		}
+		if numNonVoters != 2 {
+			return errors.Newf("expected 2 non-voters; got %v", numNonVoters)
+		}
+		return nil
+	})
+
+	// REGION survival configuration.
+	_, err = tc.ServerConn(0).Exec(
+		"ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5, num_voters = 5, " +
+			"constraints = '{}', " +
+			"voter_constraints = '{\"+region=1\": 2, \"+region=2\": 2, \"+region=3\": 1}'",
+	)
+	require.NoError(t, err)
+
+	// Ensure we are meeting our REGION survival configuration.
+	testutils.SucceedsSoon(t, func() error {
+		numVoters, numNonVoters, err := computeNumberOfReplicas(t, tc, db)
+		require.NoError(t, err)
+		if numVoters != 5 {
+			return errors.Newf("expected 5 voters; got %d", numVoters)
+		}
+		if numNonVoters != 0 {
+			return errors.Newf("expected 0 non-voters; got %v", numNonVoters)
+		}
+		return nil
+	})
+
+	// Retrieve the add voter events from the range log.
+	var rangeID roachpb.RangeID
+	err = db.QueryRow("select range_id from [show ranges from table t] limit 1").Scan(&rangeID)
+	require.NoError(t, err)
+	addVoterEvents, err := filterRangeLog(tc.Conns[0], rangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated)
+	require.NoError(t, err)
+
+	// Check if an add voter event has an added replica of type LEARNER, and if
+	// it does, it shows that we are adding a new voter rather than promoting an
+	// existing non-voter, which is unexpected.
+	for _, addVoterEvent := range addVoterEvents {
+		switch addVoterEvent.AddedReplica.Type {
+		case roachpb.LEARNER:
+			require.Failf(
+				t,
+				"Expected to promote non-voter, instead added voter",
+				"Added voter store ID: %v\nAdd voter events: %v",
+				addVoterEvent.AddedReplica.StoreID, addVoterEvents)
+		case roachpb.VOTER_FULL:
+		default:
+			require.Failf(
+				t,
+				"Unexpected added replica type",
+				"Replica type: %v\nAdd voter events: %v",
+				addVoterEvent.AddedReplica.Type, addVoterEvents)
+		}
+	}
 }
