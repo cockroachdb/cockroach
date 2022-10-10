@@ -255,24 +255,40 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 		// non-deterministic flush to cause the test to fail.
 		tc.store.engine.RegisterFlushCompletedCallback(func() {})
 		r := tc.repl
-		r.mu.Lock()
-		raftAppliedIndex := r.mu.state.RaftAppliedIndex
-		truncatedIndex := r.mu.state.TruncatedState.Index
-		raftLogSize := r.mu.raftLogSize
-		// Overwrite to be trusted, since we want to check if transitions to false
-		// or not.
-		r.mu.raftLogSizeTrusted = true
-		r.mu.Unlock()
-		expectedFirstIndex := truncatedIndex + 1
-		if !accurate {
-			expectedFirstIndex = truncatedIndex
+
+		{
+			k := tc.repl.Desc().EndKey.AsRawKey().Prevish(10)
+			pArgs := putArgs(k, []byte("foo"))
+			_, pErr := tc.SendWrapped(&pArgs)
+			require.NoError(t, pErr.GoError())
+			gArgs := getArgs(k)
+			_, pErr = tc.SendWrapped(&gArgs)
+			require.NoError(t, pErr.GoError())
 		}
 
-		// Enqueue the truncation.
-		func() {
-			// Lock the replica.
+		raftLogSize, truncatedIndex := func() (_rls int64, truncIdx uint64) {
+			// Lock the replica. We do this early to avoid interference from any other
+			// moving parts on the Replica, whatever they may be. For example, we don't
+			// want a skewed lease applied index because commands are applying concurrently
+			// while we are busy picking values. Though note that we flush out commands above
+			// because even if we serialize correctly, there might be an unapplied command
+			// that already consumed our chosen lease index, we just wouldn't know.
 			r.raftMu.Lock()
 			defer r.raftMu.Unlock()
+			r.mu.Lock()
+			raftAppliedIndex := r.mu.state.RaftAppliedIndex
+			truncatedIndex := r.mu.state.TruncatedState.Index
+			raftLogSize := r.mu.raftLogSize
+			// Overwrite to be trusted, since we want to check if transitions to false
+			// or not.
+			r.mu.raftLogSizeTrusted = true
+			r.mu.Unlock()
+			expectedFirstIndex := truncatedIndex + 1
+			if !accurate {
+				expectedFirstIndex = truncatedIndex
+			}
+
+			// Enqueue the truncation.
 			sm := r.getStateMachine()
 
 			// Create a new application batch.
@@ -329,6 +345,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			require.Equal(t, expectedFirstIndex, trunc.expectedFirstIndex)
 			require.EqualValues(t, -1, trunc.logDeltaBytes)
 			require.True(t, trunc.isDeltaTrusted)
+			return raftLogSize, truncatedIndex
 		}()
 		require.NoError(t, tc.store.Engine().Flush())
 		// Asynchronous call to advance durability.

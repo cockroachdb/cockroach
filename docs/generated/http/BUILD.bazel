@@ -48,6 +48,7 @@ genrule(
         "@com_google_protobuf//:timestamp_proto",
         "@go_googleapis//google/api:annotations_proto",
         "@io_etcd_go_etcd_raft_v3//raftpb:raftpb_proto",
+        "@io_etcd_go_etcd_api_v3//versionpb:versionpb_proto",
     ],
     outs = [
         "full.md",

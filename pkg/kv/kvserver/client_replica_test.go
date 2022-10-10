@@ -2688,7 +2688,13 @@ func TestClearRange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
+			// This makes sure that our writes are visible when we go
+			// straight to the engine to check them.
+			DisableCanAckBeforeApplication: true,
+		}},
+	})
 	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
