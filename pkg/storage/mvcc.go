@@ -1940,7 +1940,19 @@ func mvccPutInternal(
 			if txn == nil {
 				readTimestamp = writeTimestamp
 			}
-			if value, err = maybeGetValue(ctx, iter, key, value, ok, readTimestamp, valueFn); err != nil {
+			// When reading below the meta record, we have to inspect the existing
+			// value at the read timestamp to determine exReplaced, even if valueFn
+			// wasn't passed. We need to return this even if maybeTooOldErr is set
+			// above, since evaluateBatch may omit it and we need the reader to see a
+			// consistent snapshot as of the read timestamp.
+			exReplacedFn := func(exVal optionalValue) (roachpb.Value, error) {
+				exReplaced = exVal.exists && exVal.IsPresent()
+				if valueFn != nil {
+					return valueFn(exVal)
+				}
+				return value, nil
+			}
+			if value, err = maybeGetValue(ctx, iter, key, value, ok, readTimestamp, exReplacedFn); err != nil {
 				return false, err
 			}
 		} else {

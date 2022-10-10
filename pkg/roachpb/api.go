@@ -1281,6 +1281,15 @@ func (*IncrementRequest) flags() flag {
 }
 
 func (*DeleteRequest) flags() flag {
+	// NB: Even though DeleteRequest returns a FoundKey field indicating whether
+	// an existing key was replaced (a read operation), we don't set isRead
+	// because the read doesn't affect the write outcome, so there is no need to
+	// discard the written intent (as a non-blind write would otherwise do).
+	//
+	// NB: If a write below an existing key returns a WriteTooOldError, and this
+	// is handled internally via a successful read refresh, then the txn may
+	// successfully commit at the higher write timestamp without surfacing
+	// FoundKey:true to the caller.
 	return isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
 }
 
