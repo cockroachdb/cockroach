@@ -1196,20 +1196,22 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 	// the set of full or incoming voters that will remain after the joint configuration is
 	// complete. If we don't find the current leaseholder there this means it's being removed,
 	// and we're going to transfer the lease to another voter below, before exiting the JOINT config.
-	beingRemoved := true
 	voterIncomingTarget := roachpb.ReplicaDescriptor{}
 	for _, v := range voters {
-		if beingRemoved && v.ReplicaID == r.ReplicaID() {
-			beingRemoved = false
+		if v.ReplicaID == r.ReplicaID() {
+			// We are still a voter.
+			return nil
 		}
 		if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) && v.Type == roachpb.VOTER_INCOMING {
 			voterIncomingTarget = v
 		}
 	}
-	if !beingRemoved {
-		return nil
-	}
 
+	// We are being removed as a voter.
+	voterDemotingTarget, err := r.GetReplicaDescriptor()
+	if err != nil {
+		return err
+	}
 	if voterIncomingTarget == (roachpb.ReplicaDescriptor{}) {
 		// Couldn't find a VOTER_INCOMING target. When the leaseholder is being
 		// removed, we only enter a JOINT config if there is a VOTER_INCOMING
@@ -1221,18 +1223,30 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 		// to continue trying to leave the JOINT config. If this is the case,
 		// our replica will not be able to leave the JOINT config, but the new
 		// leaseholder will be able to do so.
-		log.Infof(ctx, "no VOTER_INCOMING to transfer lease to. This replica probably lost the lease,"+
-			" but still thinks its the leaseholder. In this case the new leaseholder is expected to "+
+		log.Warningf(ctx, "no VOTER_INCOMING to transfer lease to. This replica probably lost the "+
+			"lease, but still thinks its the leaseholder. In this case the new leaseholder is expected to "+
 			"complete LEAVE_JOINT. Range descriptor: %v", desc)
 		return nil
 	}
-	log.VEventf(ctx, 5, "current leaseholder %v is being removed through an"+
-		" atomic replication change. Transferring lease to %v", r.String(), voterIncomingTarget)
-	err := r.store.DB().AdminTransferLease(ctx, r.startKey, voterIncomingTarget.StoreID)
+	log.VEventf(ctx, 2, "leaseholder %v is being removed through an atomic "+
+		"replication change, transferring lease to %v", voterDemotingTarget, voterIncomingTarget)
+	// We bypass safety checks when transferring the lease to the VOTER_INCOMING.
+	// We do so because we could get stuck without a path to exit the joint
+	// configuration if we rejected this lease transfer while waiting to confirm
+	// that the target is up-to-date on its log. That confirmation may never
+	// arrive if the target is dead or partitioned away, and while we'd rather not
+	// transfer the lease to a dead node, at least we have a mechanism to recovery
+	// from that state. We also just sent the VOTER_INCOMING a snapshot (as a
+	// LEARNER, before promotion), so it is unlikely that the replica is actually
+	// dead or behind on its log.
+	// TODO(nvanbenschoten): this isn't great. Instead of bypassing safety checks,
+	// we should build a mechanism to choose an alternate lease transfer target
+	// after some amount of time.
+	err = r.store.DB().AdminTransferLeaseBypassingSafetyChecks(ctx, r.startKey, voterIncomingTarget.StoreID)
 	if err != nil {
 		return err
 	}
-	log.VEventf(ctx, 5, "leaseholder transfer to %v complete", voterIncomingTarget)
+	log.VEventf(ctx, 2, "lease transfer to %v complete", voterIncomingTarget)
 	return nil
 }
 
@@ -1251,7 +1265,7 @@ func (r *Replica) maybeLeaveAtomicChangeReplicas(
 		return desc, nil
 	}
 	// NB: this is matched on in TestMergeQueueSeesLearner.
-	log.Eventf(ctx, "transitioning out of joint configuration %s", desc)
+	log.VEventf(ctx, 2, "transitioning out of joint configuration %s", desc)
 
 	// If the leaseholder is being demoted, leaving the joint config is only
 	// possible if we first transfer the lease. A range not being able to exit
@@ -3635,7 +3649,7 @@ func (r *Replica) adminScatter(
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
 			if targetStoreID != r.store.StoreID() {
 				log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
-				if err := r.AdminTransferLease(ctx, targetStoreID); err != nil {
+				if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
 					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
 				}
 			}

@@ -880,6 +880,14 @@ message AdminMergeResponse {
 message AdminTransferLeaseRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   int32 target = 2 [(gogoproto.casttype) = "StoreID"];
+  // When set to true, bypass_safety_checks configures the lease transfer to
+  // skip safety checks that ensure that the transfer target is known to be
+  // (according to the outgoing leaseholder) alive and sufficiently caught up on
+  // its log. This option should be used sparingly — typically only by outgoing
+  // leaseholders who both have some other reason to believe that the target is
+  // alive and caught up on its log (e.g. they just sent it a snapshot) and also
+  // can't tolerate rejected lease transfers.
+  bool bypass_safety_checks = 3;
 }
 
 message AdminTransferLeaseResponse {
@@ -1380,6 +1388,14 @@ message TransferLeaseRequest {
   // The previous lease is specified by the caller to verify
   // it has not changed when executing this command.
   Lease prev_lease = 3 [(gogoproto.nullable) = false];
+  // When set to true, bypass_safety_checks configures the lease transfer to
+  // skip safety checks that ensure that the transfer target is known to be
+  // (according to the outgoing leaseholder) alive and sufficiently caught up on
+  // its log. This option should be used sparingly — typically only by outgoing
+  // leaseholders who both have some other reason to believe that the target is
+  // alive and caught up on its log (e.g. they just sent it a snapshot) and also
+  // can't tolerate rejected lease transfers.
+  bool bypass_safety_checks = 4;
 }
 
 // LeaseInfoRequest is the argument to the LeaseInfo() method, for getting
