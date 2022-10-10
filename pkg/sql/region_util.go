@@ -1440,6 +1440,12 @@ var SynthesizeRegionConfigOptionUseCache SynthesizeRegionConfigOption = func(o *
 	o.useCache = true
 }
 
+// errNotMultiRegionDatabase is returned from SynthesizeRegionConfig when the
+// requested database is not a multi-region database.
+var errNotMultiRegionDatabase = errors.New(
+	"database is not a multi-region database",
+)
+
 // SynthesizeRegionConfig returns a RegionConfig representing the user
 // configured state of a multi-region database by coalescing state from both
 // the database descriptor and multi-region type descriptor. By default, it
@@ -1466,7 +1472,10 @@ func SynthesizeRegionConfig(
 		IncludeOffline: o.includeOffline,
 	})
 	if err != nil {
-		return regionConfig, err
+		return multiregion.RegionConfig{}, err
+	}
+	if !dbDesc.IsMultiRegion() {
+		return multiregion.RegionConfig{}, errNotMultiRegionDatabase
 	}
 
 	regionEnumID, err := dbDesc.MultiRegionEnumID()
