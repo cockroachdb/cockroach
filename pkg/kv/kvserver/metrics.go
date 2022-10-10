@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/slidingwindow"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/pebble"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -1670,6 +1671,13 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Flush Utilization",
 		Unit:        metric.Unit_PERCENT,
 	}
+
+	metaStorageFsyncLatency = metric.Metadata{
+		Name:        "storage.wal.fsync.latency",
+		Help:        "The write ahead log fsync latency",
+		Measurement: "Fsync Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1966,6 +1974,7 @@ type StoreMetrics struct {
 	ReplicaWriteBatchEvaluationLatency *metric.Histogram
 
 	FlushUtilization *metric.GaugeFloat64
+	FsyncLatency     *metric.ManualWindowHistogram
 }
 
 type tenantMetricsRef struct {
@@ -2504,6 +2513,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			metaReplicaWriteBatchEvaluationLatency, histogramWindow, metric.IOLatencyBuckets,
 		),
 		FlushUtilization: metric.NewGaugeFloat64(metaStorageFlushUtilization),
+		FsyncLatency:     metric.NewManualWindowHistogram(metaStorageFsyncLatency, pebble.FsyncLatencyBuckets),
 	}
 
 	{

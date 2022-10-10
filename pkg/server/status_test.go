@@ -345,7 +345,7 @@ func startServer(t *testing.T) *TestServer {
 	// Make sure the node status is available. This is done by forcing stores to
 	// publish their status, synchronizing to the event feed with a canary
 	// event, and then forcing the server to write summaries immediately.
-	if err := ts.node.computeMetricsPeriodically(context.Background(), map[*kvserver.Store]*storage.Metrics{}, 0); err != nil {
+	if err := ts.node.computeMetricsPeriodically(context.Background(), map[*kvserver.Store]*storage.MetricsForInterval{}, 0); err != nil {
 		t.Fatalf("error publishing store statuses: %s", err)
 	}
 

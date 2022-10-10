@@ -95,3 +95,15 @@ groups:
     expr: histogram_quantile(0.95, raft_process_commandcommit_latency_bucket:rate1m)
   - record: raft_process_commandcommit_latency:rate1m:quantile_99
     expr: histogram_quantile(0.99, raft_process_commandcommit_latency_bucket:rate1m)
+  - record: storage_wal_fsync_latency_bucket:rate1m
+    expr: rate(storage_wal_fsync_latency_bucket{job="cockroachdb"}[1m])
+  - record: storage_wal_fsync_latency:rate1m:quantile_50
+    expr: histogram_quantile(0.5, storage_wal_fsync_latency_bucket:rate1m)
+  - record: storage_wal_fsync_latency:rate1m:quantile_75
+    expr: histogram_quantile(0.75, storage_wal_fsync_latency_bucket:rate1m)
+  - record: storage_wal_fsync_latency:rate1m:quantile_90
+    expr: histogram_quantile(0.9, storage_wal_fsync_latency_bucket:rate1m)
+  - record: storage_wal_fsync_latency:rate1m:quantile_95
+    expr: histogram_quantile(0.95, storage_wal_fsync_latency_bucket:rate1m)
+  - record: storage_wal_fsync_latency:rate1m:quantile_99
+    expr: histogram_quantile(0.99, storage_wal_fsync_latency_bucket:rate1m)
