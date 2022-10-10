@@ -692,7 +692,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	if job != nil {
 		jobID = job.ID()
 	}
-	exists, err := jobs.RunningJobExists(ctx, jobID, p.ExecCfg().InternalExecutor, nil /* txn */, func(payload *jobspb.Payload) bool {
+	exists, err := jobs.JobExists(ctx, jobID, p.ExecCfg().InternalExecutor, nil /* txn */, true, func(payload *jobspb.Payload) bool {
 		return payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats
 	})
 

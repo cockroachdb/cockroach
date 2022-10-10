@@ -119,6 +119,7 @@ func TestRegistryGC(t *testing.T) {
 				// test itself.
 				ManagerDisableJobCreation: true,
 			},
+			JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
 		},
 	})
 	defer s.Stopper().Stop(ctx)
@@ -260,6 +261,7 @@ func TestRegistryGCPagination(t *testing.T) {
 				// test itself.
 				ManagerDisableJobCreation: true,
 			},
+			JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
 		},
 	})
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -450,18 +452,13 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		bti.clock = timeutil.NewManualTime(timeutil.Now())
 		timeSource := hlc.NewClock(bti.clock, base.DefaultMaxClockOffset)
 		// Set up the test cluster.
-		knobs := &TestingKnobs{
-			TimeSource: timeSource,
-		}
+		// Set a small adopt and cancel intervals to reduce test time.
+		knobs := NewTestingKnobsWithIntervals(unitTime, unitTime, initialDelay, maxDelay)
+		knobs.TimeSource = timeSource
 		if bti.afterJobStateMachineKnob != nil {
 			knobs.AfterJobStateMachine = bti.afterJobStateMachineKnob
 		}
 		cs := cluster.MakeTestingClusterSettings()
-		// Set a small adopt and cancel intervals to reduce test time.
-		adoptIntervalSetting.Override(ctx, &cs.SV, unitTime)
-		cancelIntervalSetting.Override(ctx, &cs.SV, unitTime)
-		retryInitialDelaySetting.Override(ctx, &cs.SV, initialDelay)
-		retryMaxDelaySetting.Override(ctx, &cs.SV, maxDelay)
 		args := base.TestServerArgs{
 			Settings: cs,
 			Knobs: base.TestingKnobs{
@@ -974,19 +971,13 @@ func TestJobIdleness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	intervalOverride := time.Millisecond
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		// Ensure no other jobs are created and adoptions and cancellations are quick
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				ManagerDisableJobCreation: true,
 			},
-			JobsTestingKnobs: &TestingKnobs{
-				IntervalOverrides: TestingIntervalOverrides{
-					Adopt:  &intervalOverride,
-					Cancel: &intervalOverride,
-				},
-			},
+			JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
 		},
 	})
 	defer s.Stopper().Stop(ctx)
