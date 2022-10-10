@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -131,22 +132,24 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with an optional error when the rangefeed is
-// complete. The provided ConcurrentRequestLimiter is used to limit the number
-// of rangefeeds using catch-up iterators at the same time.
+// complete. The surrounding store's ConcurrentRequestLimiter is used to limit
+// the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
+	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
 ) *roachpb.Error {
-	return r.rangeFeedWithRangeID(r.RangeID, args, stream)
+	return r.rangeFeedWithRangeID(ctx, r.RangeID, args, stream)
 }
 
 func (r *Replica) rangeFeedWithRangeID(
-	_forStacks roachpb.RangeID, args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
+	ctx context.Context,
+	_forStacks roachpb.RangeID,
+	args *roachpb.RangeFeedRequest,
+	stream roachpb.RangeFeedEventSink,
 ) *roachpb.Error {
 	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
-	ctx := r.AnnotateCtx(stream.Context())
 
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
@@ -222,7 +225,7 @@ func (r *Replica) rangeFeedWithRangeID(
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			return rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease)
+			return rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease, kvadmission.PacerFromContext(ctx))
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
