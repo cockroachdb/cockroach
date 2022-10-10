@@ -19,13 +19,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog/internal/rangelogtestpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -43,7 +45,12 @@ import (
 //go:embed testdata/rangelog.bin
 var encodedRangeLogData []byte
 
-func TestRangeLogRoundTrips(t *testing.T) {
+// TestRangeLog tests the RangeLogWriter implementation by ensuring that
+// a representative set of events (encoded in a testdata file) can be
+// round-tripped through the system, read from sql, and written to the
+// key-value store in the same way that a legacy, internal executor-backed
+// implementation would.
+func TestRangeLog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// We're going to test that the data we have stored as encoded protobuf
@@ -58,37 +65,72 @@ func TestRangeLogRoundTrips(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	// Inject a table to write into.
+	// Inject two table to write into. The first table will be written into by
+	// kv-based implementation. The second table will be written into by the
+	// internal-executor based implementation. We'll then ensure that the data
+	// written by the two are the same.
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tn := tree.MakeTableNameWithSchema("defaultdb", "public", "rangelog")
-	injectRangelogTable(t, tdb, tn)
+	tn1 := tree.MakeTableNameWithSchema("defaultdb", "public", "rangelog")
+	td1 := injectRangelogTable(t, tdb, tn1)
+	tn2 := tree.MakeTableNameWithSchema("defaultdb", "public", "rangelog2")
+	td2 := injectRangelogTable(t, tdb, tn2)
 
 	// Write the data.
-	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
-	require.NoError(t, insertRangeLogData(ctx, kvDB, ie, tn, &rangeLogData))
+	ec := s.ExecutorConfig().(sql.ExecutorConfig)
+	codec := ec.Codec
+	ie := ec.InternalExecutor
+	mkWriter := func(genID func() int64) kvserver.RangeLogWriter {
+		genA, genB := makeTeeIDGen(genID)
+		return &teeWriter{
+			a: rangelog.NewTestWriter(codec, genA, td1),
+			b: rangelog.NewInternalExecutorWriter(genB, ie, tn2.String()),
+		}
+	}
+	require.NoError(t, insertRangeLogData(ctx, kvDB, mkWriter, &rangeLogData))
 
-	// Validate that it round-trips.
-	got := tdb.QueryStr(t, "SELECT * FROM "+tn.String())
-	after, err := rangelogtestpb.ParseRows(got)
-	require.NoError(t, err)
-	require.Equal(t, &rangeLogData, after)
+	// Ensure that the data written to both tables is identical except for the
+	// key prefix and checksum.
+	const rawKVsWithoutPrefix = `
+SELECT crdb_internal.pretty_key(key, 1), 
+       substring(encode(val, 'hex') from 9) -- strip the checksum
+  FROM crdb_internal.scan(crdb_internal.index_span($1, 1)) as t(key, val)`
+	require.Equal(t,
+		tdb.QueryStr(t, rawKVsWithoutPrefix, td2.GetID()),
+		tdb.QueryStr(t, rawKVsWithoutPrefix, td1.GetID()))
+
+	// Validate that the data can be read from SQL.
+	checkDataRoundTrips := func(tn tree.TableName) {
+		beforeEncoded, err := protoutil.Marshal(&rangeLogData)
+		require.NoError(t, err)
+		got := tdb.QueryStr(t, "SELECT * FROM "+tn.String())
+		after, err := rangelogtestpb.ParseRows(got)
+		require.NoError(t, err)
+		afterEncoded, err := protoutil.Marshal(after)
+		require.NoError(t, err)
+		require.Equal(t, beforeEncoded, afterEncoded)
+	}
+	checkDataRoundTrips(tn1)
+	checkDataRoundTrips(tn2)
 }
 
-// insertRangeLogData transactionally inserts the provided rangeLogData.
+type idGen = rangelog.IDGen
+
+// insertRangeLogData inserts the provided rangeLogData in a transaction.
 func insertRangeLogData(
 	ctx context.Context,
 	kvDB *kv.DB,
-	ie sqlutil.InternalExecutor,
-	tn tree.TableName,
+	c func(gen idGen) kvserver.RangeLogWriter,
 	rangeLogData *rangelogtestpb.RangeLogData,
 ) error {
-	doInserts := func() (isRestart bool, _ error) {
+	makeIDGen := func() idGen {
 		var offset int
-		genID := func() int64 {
+		return func() int64 {
 			defer func() { offset++ }()
 			return rangeLogData.UniqueIds[offset]
 		}
-		w := rangelog.NewTestWriter(genID, ie, tn.String())
+	}
+	doInserts := func() (isRestart bool, _ error) {
+		w := c(makeIDGen())
 		var called bool
 		errRestart := errors.New("restart")
 		err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -176,4 +218,37 @@ SELECT "parentID", "parentSchemaID", id, crdb_internal_mvcc_timestamp
 	tdb.Exec(t, "SELECT crdb_internal.unsafe_upsert_descriptor($1, $2)",
 		clone.ID, data)
 	return clone.ImmutableCopy().(catalog.TableDescriptor)
+}
+
+// makeTeeIDGen takes a function which returns an integer and
+// returns two functions, each of which will return the same
+// sequence of integers.
+func makeTeeIDGen(id idGen) (genA, genB idGen) {
+	var a, b []int64
+	makeGen := func(s *[]int64) func() int64 {
+		return func() (ret int64) {
+			if len(*s) == 0 {
+				v := id()
+				a, b = append(a, v), append(b, v)
+			}
+			ret, (*s) = (*s)[0], (*s)[1:]
+			return ret
+		}
+	}
+	return makeGen(&a), makeGen(&b)
+}
+
+// teeWriter writes all entries to both a and b. If an error occurs writing to
+// a, no write to b is attempted.
+type teeWriter struct {
+	a, b kvserver.RangeLogWriter
+}
+
+func (t teeWriter) WriteRangeLogEvent(
+	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
+) error {
+	if err := t.a.WriteRangeLogEvent(ctx, txn, event); err != nil {
+		return err
+	}
+	return t.b.WriteRangeLogEvent(ctx, txn, event)
 }
