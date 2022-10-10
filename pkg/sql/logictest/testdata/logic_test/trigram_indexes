@@ -236,3 +236,18 @@ CREATE TABLE public.t86614 (
    INVERTED INDEX t86614_a_s_idx (a ASC, s gin_trgm_ops),
    FAMILY fam_0_a_s_rowid (a, s, rowid)
 )
+
+# Regression test for #88925. Return correct result with a variable on the RHS
+# of LIKE.
+statement ok
+CREATE TABLE t88558 (
+  a INT PRIMARY KEY,
+  b TEXT,
+  INVERTED INDEX (b gin_trgm_ops)
+);
+INSERT INTO t88558 VALUES (1, '%');
+
+query IT
+SELECT * FROM t88558 WHERE 'aab':::STRING LIKE b;
+----
+1  %
