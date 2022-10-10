@@ -398,7 +398,7 @@ func MemberOfWithAdminOption(
 	txn *kv.Txn,
 	member security.SQLUsername,
 ) (map[security.SQLUsername]bool, error) {
-	if txn == nil || !txn.IsOpen() {
+	if txn == nil {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
 	}
 
