@@ -84,6 +84,7 @@ Informational
   \du [USER]        list the specified user, or list the users for all databases if no user is specified.
   \d [TABLE]        show details about columns in the specified table, or alias for '\dt' if no table is specified.
   \dd TABLE         show details about constraints on the specified table.
+  \df               show the functions that are defined in the current database.
 
 Formatting
   \x [on|off]       toggle records display format.
@@ -1281,6 +1282,10 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\dt`:
 		c.concatLines = `SHOW TABLES`
+		return cliRunStatement
+
+	case `\df`:
+		c.concatLines = `SHOW FUNCTIONS`
 		return cliRunStatement
 
 	case `\copy`:

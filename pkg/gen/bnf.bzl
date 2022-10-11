@@ -216,6 +216,7 @@ BNF_SRCS = [
   "//docs/generated/sql/bnf:show_default_privileges_stmt.bnf",
   "//docs/generated/sql/bnf:show_enums.bnf",
   "//docs/generated/sql/bnf:show_full_scans.bnf",
+  "//docs/generated/sql/bnf:show_functions_stmt.bnf",
   "//docs/generated/sql/bnf:show_grants_stmt.bnf",
   "//docs/generated/sql/bnf:show_indexes_stmt.bnf",
   "//docs/generated/sql/bnf:show_jobs.bnf",
