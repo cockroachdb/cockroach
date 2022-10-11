@@ -50,7 +50,7 @@ const (
 )
 
 var iterOpts = storage.IterOptions{
-	KeyTypes:   storage.IterKeyTypePointsAndRanges,
+	KeyTypes:   storage.IterKeyTypePointsOnly,
 	LowerBound: keys.LocalMax,
 	UpperBound: keys.MaxKey,
 }
@@ -961,23 +961,22 @@ func (si *SpanIterator) Next(span *roachpb.Span) bool {
 
 // FileIterator is a simple iterator to iterate over stats.TableStatisticProtos.
 type FileIterator struct {
-	mergedIterator   storage.SimpleMVCCIterator
-	backingIterators []storage.SimpleMVCCIterator
-	err              error
+	mergedIterator storage.SimpleMVCCIterator
+	err            error
 }
 
-// FileIter creates a new FileIterator for the backup metadata.
-func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
+// NewFileIter creates a new FileIterator for the backup metadata.
+func (b *BackupMetadata) NewFileIter(ctx context.Context) (*FileIterator, error) {
 	fileInfoIter := makeBytesIter(ctx, b.store, b.filename, []byte(sstFilesPrefix), b.enc,
 		false, b.kmsEnv)
 	defer fileInfoIter.close()
 
-	var iters []storage.SimpleMVCCIterator
+	var storeFiles []storageccl.StoreFile
 	var encOpts *roachpb.FileEncryptionOptions
 	if b.enc != nil {
 		key, err := backupencryption.GetEncryptionKey(ctx, b.enc, b.kmsEnv)
 		if err != nil {
-			return FileIterator{err: err}
+			return nil, err
 		}
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
@@ -988,30 +987,24 @@ func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
 		if err != nil {
 			break
 		}
-		iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: b.store,
-			FilePath: path}}, encOpts, iterOpts)
-		if err != nil {
-			return FileIterator{err: err}
-		}
-		iters = append(iters, iter)
+		storeFiles = append(storeFiles, storageccl.StoreFile{Store: b.store,
+			FilePath: path})
 	}
 
 	if fileInfoIter.err() != nil {
-		return FileIterator{err: fileInfoIter.err()}
+		return nil, fileInfoIter.err()
 	}
-
-	mergedIter := storage.MakeMultiIterator(iters)
-	mergedIter.SeekGE(storage.MVCCKey{})
-	return FileIterator{mergedIterator: mergedIter, backingIterators: iters}
+	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, encOpts, iterOpts)
+	if err != nil {
+		return nil, err
+	}
+	iter.SeekGE(storage.MVCCKey{})
+	return &FileIterator{mergedIterator: iter}, nil
 }
 
 // Close closes the iterator.
 func (fi *FileIterator) Close() {
-	for _, it := range fi.backingIterators {
-		it.Close()
-	}
-	fi.mergedIterator = nil
-	fi.backingIterators = fi.backingIterators[:0]
+	fi.mergedIterator.Close()
 }
 
 // Err returns the iterator's error.
