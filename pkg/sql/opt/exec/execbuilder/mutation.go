@@ -146,8 +146,10 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	//     that we send, not a number of rows. We use this as a guideline only,
 	//     and there is no guarantee that we won't produce a bigger batch.)
 	values, ok := ins.Input.(*memo.ValuesExpr)
-	// TODO(mgartner): Prevent fast path if there is a UDF invocation.
-	if !ok || values.ChildCount() > mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) || values.Relational().HasSubquery {
+	if !ok ||
+		values.ChildCount() > mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) ||
+		values.Relational().HasSubquery ||
+		values.Relational().HasUDF {
 		return execPlan{}, false, nil
 	}
 

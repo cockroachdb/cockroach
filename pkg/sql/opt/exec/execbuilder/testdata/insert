@@ -534,6 +534,57 @@ vectorized: true
 statement ok
 ROLLBACK
 
+# ------------------------------------------------------------------------------
+# Insert fast path.
+# ------------------------------------------------------------------------------
+
+# Do not plan insert fast path when VALUES clause has a subquery.
+# statement ok
+query T
+EXPLAIN INSERT INTO kv VALUES (1, (SELECT v FROM kv))
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: kv(k, v)
+│   │ auto commit
+│   │
+│   └── • values
+│         size: 2 columns, 1 row
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT v FROM kv)
+    │ exec mode: one row
+    │
+    └── • max1row
+        │ estimated row count: 1
+        │
+        └── • scan
+              missing stats
+              table: kv@kv_pkey
+              spans: FULL SCAN
+
+statement ok
+CREATE FUNCTION foo() RETURNS VARCHAR LANGUAGE SQL AS 'SELECT v FROM kv'
+
+# Do not plan insert fast path when VALUES clause invokes a UDF.
+query T
+EXPLAIN INSERT INTO kv VALUES (1, foo())
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ into: kv(k, v)
+│ auto commit
+│
+└── • values
+      size: 2 columns, 1 row
+
 # Regression test for #35564: make sure we use the Insert's input required
 # ordering for the internal projection.
 
