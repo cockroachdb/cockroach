@@ -949,7 +949,7 @@ c_c_id  bill  rownum
 4       TX    2
 6       FL    1
 
-query TI colnames rowsort
+query TI colnames,rowsort
 SELECT
     *
 FROM
