@@ -255,7 +255,7 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 	// TODO(ajwerner): This should include constraints and enum values but it
 	// currently does not because we do not support dropping them unless we're
 	// dropping the descriptor and we do not support adding them.
-	return isIndex(e) || isColumn(e)
+	return isIndex(e) || isColumn(e) || isCheckConstraint(e)
 }
 
 func isIndex(e scpb.Element) bool {
@@ -367,6 +367,11 @@ func isIndexDependent(e scpb.Element) bool {
 		return true
 	}
 	return false
+}
+
+func isCheckConstraint(e scpb.Element) bool {
+	_, ok := e.(*scpb.CheckConstraint)
+	return ok
 }
 
 func isConstraint(e scpb.Element) bool {
