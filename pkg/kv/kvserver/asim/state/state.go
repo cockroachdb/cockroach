@@ -47,16 +47,17 @@ type State interface {
 	// with ID StoreID.
 	Store(StoreID) (Store, bool)
 	// Stores returns all stores that exist in this state.
-	Stores() map[StoreID]Store
+	Stores() []Store
 	// TODO(kvoli,lidorcarmel): This method is O(replicas), as it computes the
 	// store descriptor at request time. In a 64 store simulator cluster, with
 	// 5000 replicas per store, this function accounted for 50% of the total
 	// runtime in profiling. We should investigate optimizing it, by way of
 	// incremental descriptor computation, when replicas, leases or load is
 	// changed.
-	StoreDescriptors() []roachpb.StoreDescriptor
+	// StoreDescriptors returns the descriptors for the StoreIDs given.
+	StoreDescriptors(...StoreID) []roachpb.StoreDescriptor
 	// Nodes returns all nodes that exist in this state.
-	Nodes() map[NodeID]Node
+	Nodes() []Node
 	// RangeFor returns the range containing Key in [StartKey, EndKey). This
 	// cannot fail.
 	RangeFor(Key) Range
@@ -64,7 +65,7 @@ type State interface {
 	// with ID RangeID.
 	Range(RangeID) (Range, bool)
 	// Ranges returns all ranges that exist in this state.
-	Ranges() map[RangeID]Range
+	Ranges() []Range
 	// RangeCount returns the number of ranges currently in the cluster.
 	RangeCount() int64
 	// Replicas returns all replicas that exist on a store.
@@ -178,8 +179,9 @@ type Store interface {
 	Descriptor() roachpb.StoreDescriptor
 	// String returns a string representing the state of the store.
 	String() string
-	// Replicas returns all replicas that are on this store.
-	Replicas() map[RangeID]ReplicaID
+	// Replica returns the ID of the Replica belonging to the Range with ID
+	// RangeID, if it exists, otherwise false.
+	Replica(RangeID) (ReplicaID, bool)
 }
 
 // Range is a slice of the keyspace, which may have replicas that exist on
@@ -194,7 +196,10 @@ type Range interface {
 	// SpanConfig returns the span config for this range.
 	SpanConfig() roachpb.SpanConfig
 	// Replicas returns all replicas which exist for this range.
-	Replicas() map[StoreID]Replica
+	Replicas() []Replica
+	// Replica returns the replica that is on the store with ID StoreID if it
+	// exists, else false.
+	Replica(StoreID) (Replica, bool)
 	// Leaseholder returns the ID of the leaseholder for this Range if there is
 	// one, otherwise it returns a ReplicaID -1.
 	Leaseholder() ReplicaID
@@ -202,6 +207,8 @@ type Range interface {
 	// number of bytes ever written to the range because we currently do not
 	// support deletion and compaction.
 	Size() int64
+	// SetSize sets the size of the range in bytes.
+	SetSize(int64)
 }
 
 // Replica is a replica for a range that exists on a store. This is the

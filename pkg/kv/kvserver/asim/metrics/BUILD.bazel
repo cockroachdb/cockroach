@@ -1,0 +1,39 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "metrics",
+    srcs = [
+        "listener.go",
+        "mapper.go",
+        "plot.go",
+        "rated_listener.go",
+        "series_listener.go",
+        "tracker.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/util/encoding/csv",
+        "//pkg/util/log",
+        "@com_github_guptarohit_asciigraph//:asciigraph",
+    ],
+)
+
+go_test(
+    name = "metrics_test",
+    srcs = ["metrics_test.go"],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":metrics",
+        "//pkg/kv/kvserver/asim",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/workload",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

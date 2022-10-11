@@ -87,9 +87,7 @@ func (s *SplitDecider) Record(tick time.Time, rangeID RangeID, le workload.LoadE
 
 	qps := LoadEventQPS(le)
 	shouldSplit := decider.Record(context.Background(), tick, int(qps), func() roachpb.Span {
-		return roachpb.Span{
-			Key: Key(le.Key).ToRKey().AsRawKey(),
-		}
+		return roachpb.Span{Key: Key(le.Key).ToRKey().AsRawKey()}
 	})
 
 	if shouldSplit {
@@ -103,7 +101,7 @@ func (s *SplitDecider) Record(tick time.Time, rangeID RangeID, le workload.LoadE
 // given the recorded load, otherwise returning false.
 func (s *SplitDecider) SplitKey(tick time.Time, rangeID RangeID) (Key, bool) {
 	decider := s.deciders[rangeID]
-	if decider == nil {
+	if decider == nil || !decider.IsFinderReady(tick) {
 		return InvalidKey, false
 	}
 
@@ -120,7 +118,6 @@ func (s *SplitDecider) SplitKey(tick time.Time, rangeID RangeID) (Key, bool) {
 func (s *SplitDecider) ClearSplitKeys() []RangeID {
 	suggestions := make([]RangeID, len(s.suggestions))
 	copy(suggestions, s.suggestions)
-
 	s.suggestions = []RangeID{}
 	return suggestions
 }

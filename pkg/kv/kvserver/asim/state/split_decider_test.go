@@ -112,7 +112,7 @@ func TestSplitDeciderWorkload(t *testing.T) {
 			)
 			lastTick := int64(0)
 
-			for _, tick := range tc.ticks {
+			for tick := int64(0); tick < 80; tick += 3 {
 				tickDelta := tick - lastTick
 				lastTick = tick
 

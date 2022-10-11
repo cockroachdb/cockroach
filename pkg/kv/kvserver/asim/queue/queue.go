@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -102,6 +103,7 @@ func (pq *priorityQueue) Pop() interface{} {
 // baseQueue is an implementation of the ReplicateQueue interface.
 type baseQueue struct {
 	priorityQueue
+	settings       *config.SimulationSettings
 	storeID        state.StoreID
 	stateChanger   state.Changer
 	next, lastTick time.Time

@@ -2,41 +2,33 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "queue",
+    name = "gossip",
     srcs = [
-        "pacer.go",
-        "queue.go",
-        "replicate_queue.go",
-        "split_queue.go",
+        "exchange.go",
+        "gossip.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue",
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/allocator",
-        "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
-        "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/roachpb",
-        "//pkg/util/log",
     ],
 )
 
 go_test(
-    name = "queue_test",
+    name = "gossip_test",
     srcs = [
-        "pacer_test.go",
-        "replicate_queue_test.go",
-        "split_queue_test.go",
+        "exchange_test.go",
+        "gossip_test.go",
     ],
     args = ["-test.timeout=295s"],
-    embed = [":queue"],
+    embed = [":gossip"],
     deps = [
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/state",
-        "//pkg/kv/kvserver/asim/workload",
         "//pkg/roachpb",
         "@com_github_stretchr_testify//require",
     ],
