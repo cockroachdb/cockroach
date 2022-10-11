@@ -267,11 +267,8 @@ func isIndex(e scpb.Element) bool {
 }
 
 func isColumn(e scpb.Element) bool {
-	switch e.(type) {
-	case *scpb.Column:
-		return true
-	}
-	return false
+	_, ok := e.(*scpb.Column)
+	return ok
 }
 
 func isSimpleDependent(e scpb.Element) bool {
