@@ -281,7 +281,9 @@ func (r *Registry) makeCtx() (context.Context, func()) {
 
 // MakeJobID generates a new job ID.
 func (r *Registry) MakeJobID() jobspb.JobID {
-	return jobspb.JobID(builtins.GenerateUniqueInt(r.nodeID.SQLInstanceID()))
+	return jobspb.JobID(builtins.GenerateUniqueInt(
+		builtins.ProcessUniqueID(r.nodeID.SQLInstanceID()),
+	))
 }
 
 // newJob creates a new Job.
