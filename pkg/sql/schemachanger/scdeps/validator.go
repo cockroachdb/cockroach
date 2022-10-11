@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -28,7 +29,7 @@ type ValidateForwardIndexesFn func(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -40,7 +41,7 @@ type ValidateInvertedIndexesFn func(
 	codec keys.SQLCodec,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -95,15 +96,17 @@ func (vd validator) ValidateInvertedIndexes(
 // makeHistoricalInternalExecTxnRunner creates a new transaction runner which
 // always runs at the same time and that time is the current time as of when
 // this constructor was called.
-func (vd validator) makeHistoricalInternalExecTxnRunner() sqlutil.HistoricalInternalExecTxnRunner {
+func (vd validator) makeHistoricalInternalExecTxnRunner() descs.HistoricalInternalExecTxnRunner {
 	now := vd.db.Clock().Now()
-	return func(ctx context.Context, fn sqlutil.InternalExecFn) error {
-		validationTxn := vd.db.NewTxn(ctx, "validation")
-		err := validationTxn.SetFixedTimestamp(ctx, now)
-		if err != nil {
-			return err
-		}
-		return fn(ctx, validationTxn, vd.ieFactory.NewInternalExecutor(vd.newFakeSessionData(&vd.settings.SV)))
+	return func(ctx context.Context, fn descs.InternalExecFn) error {
+		return vd.ieFactory.(descs.TxnManager).DescsTxnWithExecutor(ctx, vd.db, vd.newFakeSessionData(&vd.settings.SV), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		) error {
+			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+				return err
+			}
+			return fn(ctx, txn, ie, descriptors)
+		})
 	}
 }
 
