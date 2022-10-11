@@ -347,29 +347,18 @@ func (mb *mutationBuilder) buildInputForUpdate(
 
 	mb.outScope = projectionsScope
 
-	// Build a distinct on to ensure there is at most one row in the joined output
-	// for every row in the table.
+	// Build a distinct-on operator on the primary key columns to ensure there
+	// is at most one row in the joined output for every row in the target
+	// table.
 	if fromClausePresent {
 		var pkCols opt.ColSet
-
-		// We need to ensure that the join has a maximum of one row for every row
-		// in the table and we ensure this by constructing a distinct on the primary
-		// key columns.
 		primaryIndex := mb.tab.Index(cat.PrimaryIndex)
 		for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
-			// If the primary key column is hidden, then we don't need to use it
-			// for the distinct on.
-			// TODO(radu): this logic seems fragile, is it assuming that only an
-			// implicit `rowid` column can be a hidden PK column?
-			if col := primaryIndex.Column(i); col.Visibility() != cat.Hidden {
-				pkCols.Add(mb.fetchColIDs[col.Ordinal()])
-			}
+			col := primaryIndex.Column(i)
+			pkCols.Add(mb.fetchColIDs[col.Ordinal()])
 		}
-
-		if !pkCols.Empty() {
-			mb.outScope = mb.b.buildDistinctOn(
-				pkCols, mb.outScope, false /* nullsAreDistinct */, "" /* errorOnDup */)
-		}
+		mb.outScope = mb.b.buildDistinctOn(
+			pkCols, mb.outScope, false /* nullsAreDistinct */, "" /* errorOnDup */)
 	}
 }
 

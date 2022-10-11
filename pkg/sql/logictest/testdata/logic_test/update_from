@@ -169,3 +169,14 @@ a  b    c    a  b    a  c
 # Make sure the FROM clause cannot reference the target table.
 statement error no data source matches prefix: abc
 UPDATE abc SET a = other.a FROM (SELECT abc.a FROM abc AS x) AS other WHERE abc.a=other.a
+
+# Regression test for #89779. Do not update the same row twice when the target
+# table has a hidden PK column.
+statement ok
+CREATE TABLE t89779 (a INT);
+INSERT INTO t89779 VALUES (1)
+
+query I
+UPDATE t89779 SET a = 2 FROM (VALUES (1), (1)) v(i) WHERE a = i RETURNING a
+----
+2
