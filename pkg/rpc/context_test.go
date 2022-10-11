@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -540,10 +541,64 @@ func TestConnectionRemoveNodeIDZero(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	clientCtx := newTestContext(uuid.MakeV4(), clock, stopper)
 	// Provoke an error.
-	_, err := clientCtx.GRPCDialNode("127.0.0.1:notaport", 1, DefaultClass).Connect(context.Background())
+	_, err := clientCtx.GRPCDialNode("127.0.0.1:notaport", 1, DefaultClass).Connect(ctx)
 	if err == nil {
 		t.Fatal("expected some kind of error, got nil")
 	}
+
+	// NB: this takes a moment because GRPCDialRaw only gives up on the initial
+	// connection after 1s (more precisely, the redialChan gets closed only after
+	// 1s), which seems difficult to configure ad-hoc.
+	testutils.SucceedsSoon(t, func() error {
+		var keys []connKey
+		clientCtx.conns.Range(func(k, v interface{}) bool {
+			keys = append(keys, k.(connKey))
+			return true
+		})
+		if len(keys) > 0 {
+			return errors.Errorf("still have connections %v", keys)
+		}
+		return nil
+	})
+}
+
+// TestConnectionSharingDoesNotLeak attempts to create race conditions between
+// multiple dial attempts which are allowed to share the same underlying RPC
+// connection. It verifies that if the shared connection fails, all references
+// to the connection are cleaned up and none are leaked.
+func TestConnectionSharingDoesNotLeak(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clientCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+
+	// Launch three goroutines, two of which use the same node ID and one of which
+	// uses node ID 0. All three point at the same address, so they are eligible to
+	// share a gRPC connection (if the timing works out).
+	addr := "127.0.0.1:notaport"
+	nodeIDs := []roachpb.NodeID{7, 7, 0}
+	var g errgroup.Group
+	for _, nodeID := range nodeIDs {
+		nodeID := nodeID // copy for goroutine
+		g.Go(func() error {
+			var conn *Connection
+			if nodeID == 0 {
+				conn = clientCtx.GRPCUnvalidatedDial(addr)
+			} else {
+				conn = clientCtx.GRPCDialNode(addr, nodeID, SystemClass)
+			}
+			_, err := conn.Connect(ctx)
+			if err == nil {
+				return errors.Errorf("expected some kind of error, got nil")
+			}
+			return nil
+		})
+	}
+	require.NoError(t, g.Wait())
 
 	// NB: this takes a moment because GRPCDialRaw only gives up on the initial
 	// connection after 1s (more precisely, the redialChan gets closed only after
