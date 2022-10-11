@@ -75,7 +75,7 @@ func (m *visitor) RemoveCheckConstraint(ctx context.Context, op scop.RemoveCheck
 	}
 	for i, m := range tbl.Mutations {
 		if c := m.GetConstraint(); c != nil &&
-			c.ConstraintType != descpb.ConstraintToUpdate_CHECK &&
+			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
 			c.Check.ConstraintID == op.ConstraintID {
 			tbl.Mutations = append(tbl.Mutations[:i], tbl.Mutations[i+1:]...)
 			found = true
