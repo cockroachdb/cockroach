@@ -57,6 +57,7 @@ type storeRebalancerState struct {
 
 	pendingRelocate, pendingTransfer kvserver.CandidateReplica
 	pendingRelocateTargets           []roachpb.ReplicationTarget
+	pendingRelocateExistingVoters    []roachpb.ReplicaDescriptor
 	pendingTransferTarget            roachpb.ReplicaDescriptor
 
 	pendingTicket op.DispatchedTicket
@@ -304,6 +305,9 @@ func (src *storeRebalancerControl) checkPendingRangeRebalance() bool {
 			src.rebalancerState.rctx,
 			src.rebalancerState.pendingRelocate,
 			src.rebalancerState.pendingRelocateTargets,
+			[]roachpb.ReplicationTarget{}, /* non-voter targets */
+			src.rebalancerState.pendingRelocateExistingVoters,
+			[]roachpb.ReplicaDescriptor{}, /* old non-voters */
 		)
 	}
 
@@ -335,6 +339,7 @@ func (src *storeRebalancerControl) applyRangeRebalance(
 	ticket := src.controller.Dispatch(ctx, tick, s, relocateOp)
 	src.rebalancerState.pendingRelocate = candidateReplica
 	src.rebalancerState.pendingRelocateTargets = voterTargets
+	src.rebalancerState.pendingRelocateExistingVoters = candidateReplica.Desc().Replicas().VoterDescriptors()
 	src.rebalancerState.pendingTicket = ticket
 }
 
