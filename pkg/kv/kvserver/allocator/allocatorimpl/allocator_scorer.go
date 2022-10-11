@@ -1365,7 +1365,19 @@ func rankedCandidateListForRebalancing(
 
 	var equivalenceClasses []equivalenceClass
 	var needRebalanceTo bool
-	for _, existing := range existingStores {
+
+	// NB: The existing stores must be sorted during iteration in order to
+	// ensure determinism. When determinism isn't required, we still sort them
+	// as the cases where ordering is relevant are rare enough to not cause
+	// instability.
+	existingStoreList := make(roachpb.StoreIDSlice, 0, len(existingStores))
+	for storeID := range existingStores {
+		existingStoreList = append(existingStoreList, storeID)
+	}
+	sort.Sort(existingStoreList)
+
+	for _, storeID := range existingStoreList {
+		existing := existingStores[storeID]
 		var comparableCands candidateList
 		for _, store := range allStores.Stores {
 			// Only process replacement candidates, not existing stores.
