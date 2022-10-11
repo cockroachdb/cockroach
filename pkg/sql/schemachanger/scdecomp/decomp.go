@@ -606,10 +606,11 @@ func (w *walkCtx) walkCheckConstraint(
 	}
 	// TODO(postamar): proper handling of constraint status
 	w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraint{
-		TableID:      tbl.GetID(),
-		ConstraintID: c.ConstraintID,
-		ColumnIDs:    catalog.MakeTableColSet(c.ColumnIDs...).Ordered(),
-		Expression:   *expr,
+		TableID:               tbl.GetID(),
+		ConstraintID:          c.ConstraintID,
+		ColumnIDs:             catalog.MakeTableColSet(c.ColumnIDs...).Ordered(),
+		Expression:            *expr,
+		FromHashShardedColumn: c.FromHashShardedColumn,
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintName{
 		TableID:      tbl.GetID(),

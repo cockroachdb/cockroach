@@ -82,6 +82,7 @@ CheckConstraint :  TableID
 CheckConstraint :  ConstraintID
 CheckConstraint : []ColumnIDs
 CheckConstraint :  Expression
+CheckConstraint :  FromHashShardedColumn
 
 object ForeignKeyConstraint
 
