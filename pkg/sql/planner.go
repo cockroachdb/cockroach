@@ -140,25 +140,6 @@ func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 	return &cpy
 }
 
-// QueueJob creates a new job from record and queues it for execution after
-// the transaction commits.
-func (evalCtx *extendedEvalContext) QueueJob(
-	ctx context.Context, record jobs.Record,
-) (*jobs.Job, error) {
-	jobID := evalCtx.ExecCfg.JobRegistry.MakeJobID()
-	job, err := evalCtx.ExecCfg.JobRegistry.CreateJobWithTxn(
-		ctx,
-		record,
-		jobID,
-		evalCtx.Txn,
-	)
-	if err != nil {
-		return nil, err
-	}
-	evalCtx.Jobs.add(jobID)
-	return job, nil
-}
-
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution. It is logically
 // scoped to the execution of a single statement, and should not be used to
@@ -1050,4 +1031,25 @@ func (p *planner) resetPlanner(
 	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
+}
+
+func (p *planner) QueueJob(
+	ctx context.Context, record jobs.Record,
+) (*jobs.Job, error) {
+	jobID := p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID()
+	var job *jobs.Job
+	var err error
+	if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		job, err = p.extendedEvalCtx.ExecCfg.JobRegistry.CreateJobWithTxn(
+			ctx,
+			record,
+			jobID,
+			txn, // This is p.Txn().
+		)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	p.extendedEvalCtx.Jobs.add(jobID)
+	return job, nil
 }

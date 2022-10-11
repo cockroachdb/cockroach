@@ -2348,7 +2348,7 @@ func TestJobInTxn(t *testing.T) {
 			}
 			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
-				job, err = execCtx.ExtendedEvalContext().QueueJob(
+				job, err = execCtx.QueueJob(
 					ctx,
 					jobs.Record{
 						Description: st.String(),
@@ -2385,7 +2385,7 @@ func TestJobInTxn(t *testing.T) {
 			}
 			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
-				job, err = execCtx.ExtendedEvalContext().QueueJob(
+				job, err = execCtx.QueueJob(
 					ctx,
 					jobs.Record{
 						Description: "RESTORE",
