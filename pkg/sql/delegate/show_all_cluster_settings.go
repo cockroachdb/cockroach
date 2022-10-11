@@ -28,14 +28,21 @@ func (d *delegator) delegateShowClusterSettingList(
 	hasModify := false
 	hasView := false
 	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.SystemPrivilegesTable) {
-		if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
+		privDesc, err := d.catalog.SynthesizePrivilegeDescriptor(
+			d.ctx, syntheticprivilege.GlobalPrivilegeObject.GetPath(), privilege.Global,
+		)
+		if err != nil {
+			return nil, err
+		}
+		globalPrivilege := syntheticprivilege.InitGlobalPrivilege(privDesc)
+		if err := d.catalog.CheckPrivilege(d.ctx, globalPrivilege, privilege.MODIFYCLUSTERSETTING); err == nil {
 			hasModify = true
 			hasView = true
 		} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
 			return nil, err
 		}
 		if !hasView {
-			if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING); err == nil {
+			if err := d.catalog.CheckPrivilege(d.ctx, globalPrivilege, privilege.VIEWCLUSTERSETTING); err == nil {
 				hasView = true
 			} else if pgerror.GetPGCode(err) != pgcode.InsufficientPrivilege {
 				return nil, err

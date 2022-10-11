@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -538,6 +539,12 @@ func (tc *Catalog) qualifyTableName(name *tree.TableName) {
 	// Use the current database.
 	name.CatalogName = testDB
 	name.SchemaName = tree.PublicSchemaName
+}
+
+func (oc *Catalog) SynthesizePrivilegeDescriptor(
+	ctx context.Context, path string, privilegeObjectType privilege.ObjectType,
+) (*catpb.PrivilegeDescriptor, error) {
+	return &catpb.PrivilegeDescriptor{}, nil
 }
 
 // Schema implements the cat.Schema interface for testing purposes.

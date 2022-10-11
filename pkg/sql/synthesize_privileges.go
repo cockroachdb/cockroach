@@ -70,8 +70,8 @@ func (p *PrivilegeSynthesizer) SynthesizePrivilegeDescriptor(
 		if isEligibleForCache := cache.ClearCacheIfStaleLocked(ctx, tableVersions); isEligibleForCache {
 			val, ok := cache.GetValueLocked(privilegeObjectPath)
 			if ok {
-				privilegeDescriptor := val.(*catpb.PrivilegeDescriptor)
-				return true, privilegeDescriptor
+				privilegeDescriptor := val.(catpb.PrivilegeDescriptor)
+				return true, &privilegeDescriptor
 			}
 
 		}
@@ -177,20 +177,23 @@ func (p *PrivilegeSynthesizer) SynthesizePrivilegeDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	cache.MaybeWriteBackToCache(ctx, tableVersions, privilegeObjectPath, val)
+	privDesc := val.(*catpb.PrivilegeDescriptor)
+	// Only write back to the cache if the table version is
+	// committed.
+	cache.MaybeWriteBackToCache(ctx, tableVersions, privilegeObjectPath, *privDesc)
 	return val.(*catpb.PrivilegeDescriptor), nil
 }
 
-//// SynthesizePrivilegeDescriptor is part of the Planner interface.
-//func (p *planner) SynthesizePrivilegeDescriptor(
-//	ctx context.Context, path string, privilegeObjectType privilege.ObjectType,
-//) (*catpb.PrivilegeDescriptor, error) {
-//	found, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(), syntheticprivilege.SystemPrivilegesTableName, tree.ObjectLookupFlags{})
-//	if err != nil {
-//		return nil, err
-//	}
-//	if !found {
-//		return nil, errors.AssertionFailedf("failed to find system.privileges table")
-//	}
-//	return p.privilegeSynthesizer.SynthesizePrivilegeDescriptor(ctx, p.Txn(), path, privilegeObjectType, desc.GetVersion())
-//}
+// SynthesizePrivilegeDescriptor is part of the Planner interface.
+func (p *planner) SynthesizePrivilegeDescriptor(
+	ctx context.Context, path string, privilegeObjectType privilege.ObjectType,
+) (*catpb.PrivilegeDescriptor, error) {
+	found, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(), syntheticprivilege.SystemPrivilegesTableName, tree.ObjectLookupFlags{})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errors.AssertionFailedf("failed to find system.privileges table")
+	}
+	return p.privilegeSynthesizer.SynthesizePrivilegeDescriptor(ctx, p.Txn(), path, privilegeObjectType, desc.GetVersion())
+}

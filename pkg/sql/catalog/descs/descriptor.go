@@ -401,7 +401,7 @@ func (tc *Collection) getVirtualDescriptorByName(
 			privDesc := catpb.NewPrivilegeDescriptor(
 				username.PublicRoleName(), privilege.List{privilege.SELECT},
 				privilege.List{}, username.AdminRoleName())
-			if !tc.settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			if tc.settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
 				found, desc, err := tc.GetImmutableTableByName(
 					ctx, txn, syntheticprivilege.SystemPrivilegesTableName, tree.ObjectLookupFlags{},
 				)

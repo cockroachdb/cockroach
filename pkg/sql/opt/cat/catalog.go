@@ -16,6 +16,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -180,4 +181,10 @@ type Catalog interface {
 
 	// RoleExists returns true if the role exists.
 	RoleExists(ctx context.Context, role username.SQLUsername) (bool, error)
+
+	// SynthesizePrivilegeDescriptor synthesizes a PrivilegeDescriptor for
+	// the given path and PrivilegeObject.
+	SynthesizePrivilegeDescriptor(
+		ctx context.Context, path string, privilegeObjectType privilege.ObjectType,
+	) (*catpb.PrivilegeDescriptor, error)
 }

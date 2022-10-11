@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -376,7 +375,7 @@ func getDescForDataSource(o cat.DataSource) (catalog.TableDescriptor, error) {
 // CheckPrivilege is part of the cat.Catalog interface.
 func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
 	if o.ID() == 0 {
-		return oc.planner.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, priv)
+		return oc.planner.CheckPrivilege(ctx, o.(catalog.PrivilegeObject), priv)
 	}
 	desc, err := getDescFromCatalogObjectForPermissions(o)
 	if err != nil {
@@ -573,6 +572,12 @@ func (oc *optCatalog) codec() keys.SQLCodec {
 // the cat.Object, cat.DataSource, and cat.View interfaces.
 type optView struct {
 	desc catalog.TableDescriptor
+}
+
+func (oc *optCatalog) SynthesizePrivilegeDescriptor(
+	ctx context.Context, path string, privilegeObjectType privilege.ObjectType,
+) (*catpb.PrivilegeDescriptor, error) {
+	return oc.planner.SynthesizePrivilegeDescriptor(ctx, path, privilegeObjectType)
 }
 
 var _ cat.View = &optView{}
