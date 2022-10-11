@@ -16,13 +16,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -31,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,51 +39,6 @@ import (
 type ttlProcessor struct {
 	execinfra.ProcessorBase
 	ttlSpec execinfrapb.TTLSpec
-
-	// ttlProcessorOverride allows the job to override fields that would normally
-	// come from the DistSQL processor for 22.1 compatibility.
-	ttlProcessorOverride *ttlProcessorOverride
-}
-
-type ttlProcessorOverride struct {
-	descsCol       *descs.Collection
-	db             *kv.DB
-	codec          keys.SQLCodec
-	jobRegistry    *jobs.Registry
-	sqlInstanceID  base.SQLInstanceID
-	settingsValues *settings.Values
-	ie             sqlutil.InternalExecutor
-}
-
-func (t *ttlProcessor) getWorkFields() (
-	*descs.Collection,
-	*kv.DB,
-	keys.SQLCodec,
-	*jobs.Registry,
-	base.SQLInstanceID,
-) {
-	tpo := t.ttlProcessorOverride
-	if tpo != nil {
-		return tpo.descsCol, tpo.db, tpo.codec, tpo.jobRegistry, tpo.sqlInstanceID
-	}
-	flowCtx := t.FlowCtx
-	serverCfg := flowCtx.Cfg
-	return flowCtx.Descriptors, serverCfg.DB, serverCfg.Codec, serverCfg.JobRegistry, flowCtx.NodeID.SQLInstanceID()
-}
-
-func (t *ttlProcessor) getSpanFields() (
-	*settings.Values,
-	sqlutil.InternalExecutor,
-	*kv.DB,
-	*descs.Collection,
-) {
-	tpo := t.ttlProcessorOverride
-	if tpo != nil {
-		return tpo.settingsValues, tpo.ie, tpo.db, tpo.descsCol
-	}
-	flowCtx := t.FlowCtx
-	serverCfg := flowCtx.Cfg
-	return &serverCfg.Settings.SV, serverCfg.Executor, serverCfg.DB, flowCtx.Descriptors
 }
 
 func (t *ttlProcessor) Start(ctx context.Context) {
@@ -99,7 +50,10 @@ func (t *ttlProcessor) Start(ctx context.Context) {
 func (t *ttlProcessor) work(ctx context.Context) error {
 
 	ttlSpec := t.ttlSpec
-	descsCol, db, codec, jobRegistry, sqlInstanceID := t.getWorkFields()
+	flowCtx := t.FlowCtx
+	serverCfg := flowCtx.Cfg
+	descsCol := flowCtx.Descriptors
+	codec := serverCfg.Codec
 	details := ttlSpec.RowLevelTTLDetails
 
 	deleteRateLimit := ttlSpec.DeleteRateLimit
@@ -115,7 +69,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	var pkColumns []string
 	var pkTypes []*types.T
 	var labelMetrics bool
-	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := descsCol.GetImmutableTableByID(
 			ctx,
 			txn,
@@ -154,6 +108,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		return err
 	}
 
+	jobRegistry := serverCfg.JobRegistry
 	metrics := jobRegistry.MetricsStruct().RowLevelTTL.(*RowLevelTTLAggMetrics).loadMetrics(
 		labelMetrics,
 		relationName,
@@ -221,6 +176,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		return err
 	}
 
+	sqlInstanceID := flowCtx.NodeID.SQLInstanceID()
 	jobID := ttlSpec.JobID
 	return jobRegistry.UpdateJobWithTxn(
 		ctx,
@@ -270,7 +226,9 @@ func (t *ttlProcessor) runTTLOnSpan(
 	tableID := details.TableID
 	cutoff := details.Cutoff
 	ttlExpr := ttlSpec.TTLExpr
-	settingsValues, ie, db, descsCol := t.getSpanFields()
+	flowCtx := t.FlowCtx
+	serverCfg := flowCtx.Cfg
+	ie := serverCfg.Executor
 
 	selectBatchSize := ttlSpec.SelectBatchSize
 
@@ -319,6 +277,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 		}
 	}
 
+	settingsValues := &serverCfg.Settings.SV
 	for {
 		// Check the job is enabled on every iteration.
 		if err := checkEnabled(settingsValues); err != nil {
@@ -343,10 +302,10 @@ func (t *ttlProcessor) runTTLOnSpan(
 				until = numExpiredRows
 			}
 			deleteBatch := expiredRowsPKs[startRowIdx:until]
-			if err := db.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
+			if err := serverCfg.DB.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
 				// If we detected a schema change here, the DELETE will not succeed
 				// (the SELECT still will because of the AOST). Early exit here.
-				desc, err := descsCol.GetImmutableTableByID(
+				desc, err := flowCtx.Descriptors.GetImmutableTableByID(
 					ctx,
 					txn,
 					details.TableID,
