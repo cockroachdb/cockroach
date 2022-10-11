@@ -1477,6 +1477,7 @@ func (k kafkaManager) chaosLoop(
 	ctx context.Context, period, downTime time.Duration, stopper chan struct{},
 ) error {
 	t := time.NewTicker(period)
+	defer t.Stop()
 	for {
 		select {
 		case <-stopper:

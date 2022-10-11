@@ -388,6 +388,7 @@ func makeCSVReporter(w io.Writer, format TableDisplayFormat) (*csvReporter, func
 	r.stop = make(chan struct{}, 1)
 	go func() {
 		ticker := time.NewTicker(csvFlushInterval)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
