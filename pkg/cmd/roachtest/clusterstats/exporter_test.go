@@ -176,7 +176,7 @@ func TestClusterStatsCollectorSummaryCollector(t *testing.T) {
 
 	makeExpectedTs := func(ts promTimeSeries, aggQuery AggQuery, ticks int, tags ...string) StatSummary {
 		filteredMap := filterTSMap(ts.values, ticks, tags...)
-		tsMat := convertEqualLengthMapToMat(filteredMap)
+		tsMat := ConvertEqualLengthMapToMat(filteredMap)
 		tag, val := aggQuery.AggFn("", tsMat)
 		return StatSummary{
 			Time:   makeTickList(statsTestingStartTime, fooTS.interval, ticks-1),
@@ -277,7 +277,7 @@ func TestClusterStatsCollectorSummaryCollector(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			summaries, err := c.collectSummaries(
+			summaries, err := c.CollectSummaries(
 				ctx,
 				logger,
 				Interval{statsTestingStartTime, statsTestingStartTime.Add(statsTestingDuration * time.Duration(tc.ticks))},

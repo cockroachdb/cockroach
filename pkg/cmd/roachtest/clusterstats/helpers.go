@@ -169,10 +169,10 @@ func trimSeries(interval Interval, series StatSeries) (StatSeries, error) {
 	return series[lb:ub], nil
 }
 
-// convertEqualLengthMapToMat converts a map of string:slice pairs, into a
+// ConvertEqualLengthMapToMat converts a map of string:slice pairs, into a
 // matrix, where each row (i) are the sorted label values at index [i]. This
 // function requires that all the slice values in the map are of equal length.
-func convertEqualLengthMapToMat(vals map[string][]float64) [][]float64 {
+func ConvertEqualLengthMapToMat(vals map[string][]float64) [][]float64 {
 	numLabels := len(vals)
 	labels := make([]string, numLabels)
 

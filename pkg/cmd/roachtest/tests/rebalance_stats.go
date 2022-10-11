@@ -18,9 +18,13 @@ import (
 )
 
 var (
-	qpsStat = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_queriespersecond"}
-	wpsStat = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_writespersecond"}
-	rpsStat = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_readspersecond"}
+	replicasStat = clusterstats.ClusterStat{LabelName: "store", Query: "replicas"}
+	leasesStat   = clusterstats.ClusterStat{LabelName: "store", Query: "replicas_leaseholders"}
+	qpsStat      = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_queriespersecond"}
+	wpsStat      = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_writespersecond"}
+	wbpsStat     = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_writebytespersecond"}
+	rpsStat      = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_readspersecond"}
+	rbpsStat     = clusterstats.ClusterStat{LabelName: "store", Query: "rebalancing_readbytespersecond"}
 	// NB: CPU is fractional, roachperf will only take integers on a detailed
 	//     view. Scale by 100 to get % here. When aggregating on cpu, measure
 	//     of distribution that are normalized are preferred, due to scale.
