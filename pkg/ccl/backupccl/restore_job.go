@@ -1785,10 +1785,10 @@ func revalidateIndexes(
 
 	// We don't actually need the 'historical' read the way the schema change does
 	// since our table is offline.
-	var runner sqlutil.HistoricalInternalExecTxnRunner = func(ctx context.Context, fn sqlutil.InternalExecFn) error {
+	var runner descs.HistoricalInternalExecTxnRunner = func(ctx context.Context, fn descs.InternalExecFn) error {
 		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			ie := job.MakeSessionBoundInternalExecutor(sql.NewFakeSessionData(execCfg.SV())).(*sql.InternalExecutor)
-			return fn(ctx, txn, ie)
+			return fn(ctx, txn, ie, nil /* descriptors */)
 		})
 	}
 

@@ -970,6 +970,17 @@ func (s *TestState) Validator() scexec.Validator {
 	return s
 }
 
+// ValidateCheckConstraint implements the validator interface.
+func (s *TestState) ValidateCheckConstraint(
+	ctx context.Context,
+	tbl catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	s.LogSideEffectf("validate check constraint %v in table #%d", constraint.GetConstraintName(), tbl.GetID())
+	return nil
+}
+
 // LogEvent implements scexec.EventLogger.
 func (s *TestState) LogEvent(
 	_ context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
