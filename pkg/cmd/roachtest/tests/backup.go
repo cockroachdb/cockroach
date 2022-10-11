@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1103,6 +1104,369 @@ func registerBackup(r registry.Registry) {
 		},
 	})
 
+	r.Add(registry.TestSpec{
+		Name:              "backup/mvcc-range-tombstones",
+		Owner:             registry.OwnerDisasterRecovery,
+		Timeout:           2 * time.Hour,
+		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runBackupMVCCRangeTombstones(ctx, t, c)
+		},
+	})
+}
+
+// runBackupMVCCRangeTombstones tests that backup and restore works in the
+// presence of MVCC range tombstones. It uses data from TPCH's order table, 16
+// GB across 8 CSV files.
+//
+//  1. Import half of the tpch.orders table (odd-numbered files).
+//  2. Take fingerprint, time 'initial'.
+//  3. Take a full database backup.
+//  4. Import the other half (even-numbered files), but cancel the import
+//     and roll the data back using MVCC range tombstones. Done twice.
+//  5. Take fingerprint, time 'canceled'.
+//  6. Successfully import the other half.
+//  7. Take fingerprint, time 'completed'.
+//  8. Drop the table and wait for deletion with MVCC range tombstone.
+//  9. Take an incremental database backup with revision history.
+//
+// We then do point-in-time restores of the database at times 'initial',
+// 'canceled', 'completed', and the latest time, and compare the fingerprints to
+// the original data.
+func runBackupMVCCRangeTombstones(ctx context.Context, t test.Test, c cluster.Cluster) {
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	t.Status("starting csv servers")
+	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+
+	conn := c.Conn(ctx, t.L(), 1)
+
+	// Configure cluster.
+	t.Status("configuring cluster")
+	if _, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = 't'`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for ranges to upreplicate.
+	if err := WaitFor3XReplication(ctx, t, conn); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create the orders table. It's about 16 GB across 8 files.
+	t.Status("creating table")
+	if _, err := conn.Exec(`CREATE DATABASE tpch`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.Exec(`USE tpch`); err != nil {
+		t.Fatal(err)
+	}
+	createStmt, err := readCreateTableFromFixture(
+		"gs://cockroach-fixtures/tpch-csv/schema/orders.sql?AUTH=implicit", conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, createStmt); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set up some helpers.
+	waitForStatus := func(
+		jobID string,
+		expectStatus jobs.Status,
+		expectRunningStatus jobs.RunningStatus,
+		duration time.Duration,
+	) {
+		if err := retry.ForDuration(duration, func() error {
+			var status string
+			var payloadBytes, progressBytes []byte
+			err := conn.QueryRowContext(
+				ctx, `SELECT status, progress, payload FROM system.jobs WHERE id = $1`, jobID).
+				Scan(&status, &progressBytes, &payloadBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if jobs.Status(status) == jobs.StatusFailed {
+				var payload jobspb.Payload
+				if err := protoutil.Unmarshal(payloadBytes, &payload); err == nil {
+					t.Fatalf("job failed: %s", payload.Error)
+				}
+				t.Fatalf("job failed")
+			}
+			if jobs.Status(status) != expectStatus {
+				return errors.Errorf("expected job status %s, but got %s", expectStatus, status)
+			}
+			if expectRunningStatus != "" {
+				var progress jobspb.Progress
+				if err = protoutil.Unmarshal(progressBytes, &progress); err != nil {
+					t.Fatal(err)
+				}
+				if jobs.RunningStatus(progress.RunningStatus) != expectRunningStatus {
+					return errors.Errorf("expected running status %s, but got %s",
+						expectRunningStatus, progress.RunningStatus)
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	now := func() string {
+		var now string
+		if err = conn.QueryRowContext(ctx, `SELECT NOW()`).Scan(&now); err != nil {
+			t.Fatal(err)
+		}
+		return now
+	}
+
+	// Import the odd-numbered files.
+	t.Status("importing odd-numbered files")
+	files := []string{
+		`'gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.1?AUTH=implicit'`,
+		`'gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.3?AUTH=implicit'`,
+		`'gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.5?AUTH=implicit'`,
+		`'gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.7?AUTH=implicit'`,
+	}
+	var jobID string
+	err = conn.QueryRowContext(ctx, fmt.Sprintf(
+		`IMPORT INTO orders CSV DATA (%s) WITH delimiter='|', detached`, strings.Join(files, ", ")),
+	).Scan(&jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(jobID, jobs.StatusSucceeded, "", 20*time.Minute)
+
+	// Take a backup of the database, and fingerprint it for restore comparison.
+	// We do a full database backup in order to do a final incremental backup
+	// after the table is dropped.
+	t.Status("fingerprinting at time 'initial'")
+	timeInitial := now()
+	fpInitial, err := fingerprint(ctx, conn, "tpch", "orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Status("fingerprint:\n", fpInitial)
+
+	t.Status("taking full backup")
+	dest := fmt.Sprintf("nodelocal://1/%s", destinationName(c))
+	err = conn.QueryRowContext(ctx,
+		`BACKUP DATABASE tpch INTO $1 WITH revision_history, detached`, dest).Scan(&jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(jobID, jobs.StatusSucceeded, "", 10*time.Minute)
+
+	// Import and cancel even-numbered files twice.
+	files = []string{
+		`'gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.2?AUTH=implicit'`,
+		`'gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.4?AUTH=implicit'`,
+		`'gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.6?AUTH=implicit'`,
+		`'gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.8?AUTH=implicit'`,
+	}
+	for i := 0; i < 2; i++ {
+		t.Status("importing even-numbered files")
+		_, err = conn.ExecContext(ctx,
+			`SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = conn.QueryRowContext(ctx, fmt.Sprintf(
+			`IMPORT INTO orders CSV DATA (%s) WITH delimiter='|', detached`, strings.Join(files, ", ")),
+		).Scan(&jobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForStatus(jobID, jobs.StatusPaused, "", 20*time.Minute)
+
+		t.Status("canceling import")
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(`CANCEL JOB %s`, jobID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForStatus(jobID, jobs.StatusCanceled, "", 20*time.Minute)
+	}
+
+	// Check that we actually wrote MVCC range tombstones.
+	var rangeKeys int
+	err = conn.QueryRowContext(ctx, `
+		SELECT SUM((crdb_internal.range_stats(start_key)->'range_key_count')::INT)
+		FROM crdb_internal.ranges
+		WHERE database_name = 'tpch' AND table_name = 'orders'
+	`).Scan(&rangeKeys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rangeKeys == 0 {
+		t.Fatal("no MVCC range tombstones found")
+	}
+
+	// Fingerprint for restore comparison.
+	t.Status("fingerprinting at time 'canceled'")
+	timeCanceled := now()
+	fpCanceled, err := fingerprint(ctx, conn, "tpch", "orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Status("fingerprint:\n", fpCanceled)
+	if fpInitial != fpCanceled {
+		t.Fatal("fingerprint mismatch between initial data and import cancelation")
+	}
+
+	// Now actually import the even-numbered files.
+	t.Status("importing even-numbered files")
+	if _, err = conn.ExecContext(ctx, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`); err != nil {
+		t.Fatal(err)
+	}
+	err = conn.QueryRowContext(ctx, fmt.Sprintf(
+		`IMPORT INTO orders CSV DATA (%s) WITH delimiter='|', detached`, strings.Join(files, ", ")),
+	).Scan(&jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(jobID, jobs.StatusSucceeded, "", 20*time.Minute)
+
+	// Fingerprint for restore comparison.
+	t.Status("fingerprinting at time 'completed'")
+	timeCompleted := now()
+	fpCompleted, err := fingerprint(ctx, conn, "tpch", "orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Status("fingerprint:\n", fpCompleted)
+
+	// Drop the table, and wait for it to be deleted (but not GCed).
+	t.Status("dropping table")
+	if _, err = conn.ExecContext(ctx, `DROP TABLE orders`); err != nil {
+		t.Fatal(err)
+	}
+	err = conn.QueryRowContext(ctx,
+		`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'`).
+		Scan(&jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(jobID, jobs.StatusRunning, sql.RunningStatusWaitingForMVCCGC, 2*time.Minute)
+
+	// Check that the data has been deleted. We don't write MVCC range tombstones
+	// unless the range contains live data, so only assert their existence if the
+	// range has any user keys.
+	var rangeID int
+	var stats string
+	err = conn.QueryRowContext(ctx, `
+		SELECT range_id, stats::STRING
+		FROM [
+			SELECT range_id, crdb_internal.range_stats(start_key) AS stats
+			FROM crdb_internal.ranges
+			WHERE database_name = 'tpch'
+		]
+		WHERE (stats->'live_count')::INT != 0 OR (
+			(stats->'key_count')::INT > 0 AND (stats->'range_key_count')::INT = 0
+		)
+	`).Scan(&rangeID, &stats)
+	if err == nil {
+		t.Fatalf("range %d not fully deleted, stats: %s", rangeID, stats)
+	} else if !errors.Is(err, gosql.ErrNoRows) {
+		t.Fatal(err)
+	}
+
+	// Take a final incremental backup.
+	t.Status("taking incremental backup")
+	err = conn.QueryRowContext(ctx,
+		`BACKUP DATABASE tpch INTO LATEST IN $1 WITH revision_history, detached`, dest).Scan(&jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(jobID, jobs.StatusSucceeded, "", 20*time.Minute)
+
+	// Restore the initial backup.
+	t.Status("restoring backup at time 'initial'")
+	err = conn.QueryRowContext(ctx, fmt.Sprintf(
+		`RESTORE DATABASE tpch FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH new_db_name = '%s', detached`,
+		dest, timeInitial, "restore_initial")).
+		Scan(&jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(jobID, jobs.StatusSucceeded, "", 20*time.Minute)
+
+	t.Status("fingerprinting restore at time 'initial'")
+	fp, err := fingerprint(ctx, conn, "restore_initial", "orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Status("fingerprint:\n", fp)
+	if fp != fpInitial {
+		t.Fatal("fingerprint mismatch for restore at time 'initial'")
+	}
+
+	// Restore the canceled backup.
+	t.Status("restoring backup at time 'canceled'")
+	err = conn.QueryRowContext(ctx, fmt.Sprintf(
+		`RESTORE DATABASE tpch FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH new_db_name = '%s', detached`,
+		dest, timeCanceled, "restore_canceled")).
+		Scan(&jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(jobID, jobs.StatusSucceeded, "", 20*time.Minute)
+
+	t.Status("fingerprinting restore at time 'canceled'")
+	fp, err = fingerprint(ctx, conn, "restore_canceled", "orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Status("fingerprint:\n", fp)
+	if fp != fpCanceled {
+		t.Fatal("fingerprint mismatch for restore at time 'canceled'")
+	}
+
+	// Restore the completed backup.
+	t.Status("restoring backup at time 'completed'")
+	err = conn.QueryRowContext(ctx, fmt.Sprintf(
+		`RESTORE DATABASE tpch FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH new_db_name = '%s', detached`,
+		dest, timeCompleted, "restore_completed")).
+		Scan(&jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(jobID, jobs.StatusSucceeded, "", 20*time.Minute)
+
+	t.Status("fingerprinting restore at time 'completed'")
+	fp, err = fingerprint(ctx, conn, "restore_completed", "orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Status("fingerprint:\n", fp)
+	if fp != fpCompleted {
+		t.Fatal("fingerprint mismatch for restore at time 'completed'")
+	}
+
+	// Restore the final backup. It shouldn't have any tables.
+	t.Status("restoring latest backup")
+	err = conn.QueryRowContext(ctx,
+		`RESTORE DATABASE tpch FROM LATEST IN $1 WITH new_db_name = $2, detached`,
+		dest, "restore_final").
+		Scan(&jobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForStatus(jobID, jobs.StatusSucceeded, "", 10*time.Minute)
+
+	var tableCount int
+	err = conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM [SHOW TABLES FROM restore_final]`).
+		Scan(&tableCount)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tableCount != 0 {
+		t.Fatalf("found %d tables in final restore", tableCount)
+	}
+	t.Status("latest backup was empty, as expected")
 }
 
 func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {
