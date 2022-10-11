@@ -245,6 +245,8 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 	t := timeutil.NewTimer()
+	defer t.Stop()
+
 	t.Reset(0)
 	for {
 		select {
