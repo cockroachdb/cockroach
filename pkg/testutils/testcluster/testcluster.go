@@ -448,6 +448,16 @@ func (tc *TestCluster) Start(t testing.TB) {
 
 	// Wait until a NodeStatus is persisted for every node (see #25488, #25649, #31574).
 	tc.WaitForNodeStatuses(t)
+	testutils.SucceedsSoon(t, func() error {
+		var err error
+		for _, ssrv := range tc.Servers {
+			for _, dsrv := range tc.Servers {
+				_, e := ssrv.RPCContext().GRPCDialNode(dsrv.ServingRPCAddr(), dsrv.NodeID(), rpc.DefaultClass).Connect(context.TODO())
+				err = errors.CombineErrors(err, e)
+			}
+		}
+		return err
+	})
 }
 
 type checkType bool
