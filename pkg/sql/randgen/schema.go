@@ -277,6 +277,14 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 //
 // If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
 // handle this table's schema. Consider increasing numInserts or filing a bug.
+//
+// It's also worth noting that inserting data into a table with a virtually
+// computed column may cause a later select statement on the column to fail. E.g.
+// consider the following table: "CREATE TABLE math (foo INT4, baz INT4, bar AS
+// (foo + baz) VIRTUAL)"; and suppose that foo and baz had really large values
+// such that it causes bar's value to be out of INT4's range! A select * on the table
+// would then fail.
+//
 // TODO(harding): Populate data in partitions.
 func PopulateTableWithRandData(
 	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int,

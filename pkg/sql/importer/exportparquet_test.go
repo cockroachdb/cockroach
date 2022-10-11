@@ -253,6 +253,11 @@ func TestRandomParquetExports(t *testing.T) {
 							User:     username.RootUserName(),
 							Database: dbName},
 						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tableName))
+					if err != nil && strings.Contains(err.Error(), "integer out of range") {
+						// Implies a computed column with type INT2 or INT4 overflowed,
+						// throw out the table
+						return err
+					}
 					require.NoError(t, err)
 
 					for _, col := range cols {
