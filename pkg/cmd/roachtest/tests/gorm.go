@@ -24,7 +24,7 @@ import (
 )
 
 var gormReleaseTag = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var gormSupportedTag = "v1.23.8"
+var gormSupportedTag = "v1.24.0"
 
 func registerGORM(r registry.Registry) {
 	runGORM := func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -93,10 +93,8 @@ func registerGORM(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailures, ignorelistName, ignoredFailures := gormBlocklists.getLists(version)
-		if expectedFailures == nil {
-			t.Fatalf("No gorm blocklist defined for cockroach version %s", version)
-		}
+		blocklistName, expectedFailures := "gormBlocklist", gormBlocklist
+		ignorelistName, ignoredFailures := "gormIgnorelist", gormIgnorelist
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
 		err = c.RunE(ctx, node, `./cockroach sql -e "CREATE DATABASE gorm" --insecure`)
@@ -113,10 +111,14 @@ func registerGORM(r registry.Registry) {
 		t.Status("running gorm test suite and collecting results")
 
 		// Ignore the error as there will be failing tests.
+		// TODO(rafi): migrate_test.go is removed here since it relies on
+		// multi-dimensional arrays, which aren't supported, and leads to a panic in
+		// the test runner.
 		err = c.RunE(
 			ctx,
 			node,
-			fmt.Sprintf(`cd %s && GORM_DIALECT="postgres" GORM_DSN="user=root password= dbname=gorm host=localhost port=26257 sslmode=disable"
+			fmt.Sprintf(`cd %s && rm migrate_test.go &&
+				GORM_DIALECT="postgres" GORM_DSN="user=root password= dbname=gorm host=localhost port=26257 sslmode=disable"
 				go test -v ./... 2>&1 | %s/bin/go-junit-report > %s`,
 				gormTestPath, goPath, resultsPath),
 		)
