@@ -224,7 +224,7 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 			if err != nil {
 				t.Fatal(err)
 			}
-			fprintV.DBFunc(cmvt.cdcDBConn(getConn)).ValidateDuplicatedEvents()
+			fprintV.DBFunc(cmvt.cdcDBConn(getConn))
 			validators := cdctest.Validators{
 				cdctest.NewOrderValidator(tableName),
 				fprintV,
