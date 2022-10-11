@@ -30,7 +30,8 @@ import moment from "moment";
 // Transaction insight events.
 
 // There are three transaction contention event insight queries:
-// 1. A query that selects transaction contention events from crdb_internal.cluster_contention_events.
+// 1. A query that selects transaction contention events from crdb_internal.transaction_contention_events
+// and joins on transaction ids from crdb_internal.cluster_execution_insights.
 // 2. A query that selects statement fingerprint IDS from crdb_internal.transaction_statistics, filtering on the
 // fingerprint IDs recorded in the contention events.
 // 3. A query that selects statement queries from crdb_internal.statement_statistics, filtering on the fingerprint IDs
