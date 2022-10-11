@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1321,7 +1322,9 @@ func TestEncodeDecodeJSONInvertedIndex(t *testing.T) {
 		}
 
 		for j, path := range enc {
-			str := encoding.PrettyPrintValue(nil, path, "/")
+			var buf redact.StringBuilder
+			encoding.PrettyPrintValue(&buf, nil, path, "/")
+			str := buf.String()
 			if str != c.expEnc[j] {
 				t.Errorf("unexpected encoding mismatch for %v. expected [%s], got [%s]",
 					c.value, c.expEnc[j], str)

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -912,7 +913,9 @@ func TestPrettyPrintValue(t *testing.T) {
 			dirStr = "Desc"
 		}
 		t.Run(test.exp[1:]+"/"+dirStr, func(t *testing.T) {
-			got := PrettyPrintValue([]Direction{test.dir}, test.key, "/")
+			var buf redact.StringBuilder
+			PrettyPrintValue(&buf, []Direction{test.dir}, test.key, "/")
+			got := buf.String()
 			if got != test.exp {
 				t.Errorf("expected %q, got %q", test.exp, got)
 			}

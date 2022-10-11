@@ -12,7 +12,6 @@ package ts
 
 import (
 	"bytes"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Time series keys are carefully constructed to usefully sort the data in the
@@ -114,15 +114,16 @@ func decodeDataKeySuffix(key roachpb.Key) (string, string, Resolution, int64, er
 	return string(name), string(source), resolution, timestamp, nil
 }
 
-func prettyPrintKey(key roachpb.Key) string {
+func prettyPrintKey(buf *redact.StringBuilder, key roachpb.Key) {
 	name, source, resolution, timestamp, err := decodeDataKeySuffix(key)
 	if err != nil {
 		// Not a valid timeseries key, fall back to doing the best we can to display
 		// it.
-		return encoding.PrettyPrintValue(nil /* dirs */, key, "/")
+		encoding.PrettyPrintValue(buf, nil /* dirs */, key, "/")
+		return
 	}
-	return fmt.Sprintf("/%s/%s/%s/%s", name, resolution,
-		timeutil.Unix(0, timestamp).Format(time.RFC3339Nano), source)
+	buf.Printf("/%s/%s/%s/%s", name, resolution,
+		redact.Safe(timeutil.Unix(0, timestamp).Format(time.RFC3339Nano)), source)
 }
 
 func init() {
