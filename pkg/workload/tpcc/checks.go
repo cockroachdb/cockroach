@@ -273,14 +273,22 @@ func check3325(db *gosql.DB, asOfSystemTime string) (retErr error) {
 EXCEPT ALL
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)`)
 	if err := firstQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
-		return errors.Errorf("left EXCEPT right returned nonzero results.")
+		if err != nil {
+			return errors.Wrapf(err, "unexpected error during check")
+		} else {
+			return errors.Errorf("left EXCEPT right returned nonzero results.")
+		}
 	}
 	secondQuery := txn.QueryRow(`
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 EXCEPT ALL
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)`)
 	if err := secondQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
-		return errors.Errorf("right EXCEPT left returned nonzero results.")
+		if err != nil {
+			return errors.Wrapf(err, "unexpected error during check")
+		} else {
+			return errors.Errorf("right EXCEPT right returned nonzero results.")
+		}
 	}
 	return nil
 }
@@ -303,7 +311,11 @@ EXCEPT ALL
   GROUP BY (ol_w_id, ol_d_id, ol_o_id)
   ORDER BY ol_w_id, ol_d_id, ol_o_id DESC)`)
 	if err := firstQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
-		return errors.Errorf("left EXCEPT right returned nonzero results")
+		if err != nil {
+			return errors.Wrapf(err, "unexpected error during check")
+		} else {
+			return errors.Errorf("left EXCEPT right returned nonzero results.")
+		}
 	}
 	secondQuery := txn.QueryRow(`
 (SELECT ol_w_id, ol_d_id, ol_o_id, count(*) FROM order_line
@@ -312,7 +324,11 @@ EXCEPT ALL
 (SELECT o_w_id, o_d_id, o_id, o_ol_cnt FROM "order"
   ORDER BY o_w_id, o_d_id, o_id DESC)`)
 	if err := secondQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
-		return errors.Errorf("right EXCEPT left returned nonzero results")
+		if err != nil {
+			return errors.Wrapf(err, "unexpected error during check")
+		} else {
+			return errors.Errorf("right EXCEPT right returned nonzero results.")
+		}
 	}
 	return nil
 }
