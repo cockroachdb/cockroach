@@ -255,7 +255,7 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 	// TODO(ajwerner): This should include constraints and enum values but it
 	// currently does not because we do not support dropping them unless we're
 	// dropping the descriptor and we do not support adding them.
-	return isIndex(e) || isColumn(e)
+	return isIndex(e) || isColumn(e) || isSupportedConstraint(e)
 }
 
 func isIndex(e scpb.Element) bool {
@@ -364,6 +364,21 @@ func isIndexDependent(e scpb.Element) bool {
 	case *scpb.IndexName, *scpb.IndexComment, *scpb.IndexColumn:
 		return true
 	case *scpb.IndexPartitioning, *scpb.SecondaryIndexPartial:
+		return true
+	}
+	return false
+}
+
+// We only properly support Unique (implicit), PrimaryKey (implicit)
+// and Check (explicit) constraints now.
+// TODO (xiang): Support UniqueWithoutIndex and ForeignKey
+// constraints so we can remove this function and just
+// use `isConstraint` below.
+func isSupportedConstraint(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
+		return true
+	case *scpb.CheckConstraint:
 		return true
 	}
 	return false

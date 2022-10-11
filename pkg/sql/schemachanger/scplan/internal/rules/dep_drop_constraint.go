@@ -18,6 +18,12 @@ import (
 
 // These rules ensure that constraint-dependent elements, like an constraint's
 // name, etc. disappear once the constraint reaches a suitable state.
+// TODO (xiang): The reason why we have two ugly dep rules here is because
+// we only properly supported check constraint, but not UniqueWithIndex nor
+// ForeignKey constraint yet. They currently directly transition between public
+// and absent, while they should transition through an intermediate state.
+// We can come back and condense all three rule into one rule -- constraint
+// dependent absent right before constraint reaches validated (i.e. non-pubic).
 func init() {
 
 	registerDepRuleForDrop(
@@ -28,7 +34,7 @@ func init() {
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.typeFilter(isConstraintDependent),
-				to.typeFilter(isConstraint, not(isIndex)),
+				to.typeFilter(isConstraint, not(isSupportedConstraint)),
 				joinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
@@ -38,11 +44,11 @@ func init() {
 		"constraint dependent absent right before constraint",
 		scgraph.SameStagePrecedence,
 		"dependent", "constraint",
-		scpb.Status_VALIDATED, scpb.Status_ABSENT,
+		scpb.Status_ABSENT, scpb.Status_VALIDATED,
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.typeFilter(isConstraintDependent),
-				to.typeFilter(isConstraint, isIndex),
+				to.typeFilter(isSupportedConstraint),
 				joinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},

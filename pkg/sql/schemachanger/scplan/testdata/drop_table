@@ -1233,7 +1233,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 114
-PreCommitPhase stage 1 of 1 with 16 MutationType ops
+PreCommitPhase stage 1 of 1 with 15 MutationType ops
   transitions:
     [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
@@ -1269,7 +1269,7 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
     [[SecondaryIndexPartial:{DescID: 114, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 114, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[ConstraintName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
@@ -1309,14 +1309,9 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
         DescriptorID: 114
         Name: greeter
         SchemaID: 101
-    *scop.RemoveCheckConstraint
+    *scop.MakePublicCheckConstraintValidated
       ConstraintID: 2
       TableID: 114
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 114
-      TypeIDs:
-      - 112
-      - 113
     *scop.SetJobStateOnDescriptor
       DescriptorID: 112
       Initialize: true
@@ -1335,12 +1330,12 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
       - 114
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.greeter
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹greeter›
         statementtag: DROP TABLE
-PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Table:{DescID: 114}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -1350,6 +1345,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
     [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 114, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], VALIDATED] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -1423,6 +1419,14 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 114
+    *scop.RemoveCheckConstraint
+      ConstraintID: 2
+      TableID: 114
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 114
+      TypeIDs:
+      - 112
+      - 113
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 112
       JobID: 1

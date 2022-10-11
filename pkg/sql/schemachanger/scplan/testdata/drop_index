@@ -401,12 +401,12 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
     [[IndexColumn:{DescID: 104, ColumnID: 5, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
-    [[CheckConstraint:{DescID: 104, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraint:{DescID: 104, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[ConstraintName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.NotImplemented
       ElementType: scpb.ConstraintName
-    *scop.RemoveCheckConstraint
+    *scop.MakePublicCheckConstraintValidated
       ConstraintID: 2
       TableID: 104
     *scop.SetJobStateOnDescriptor
@@ -419,18 +419,22 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       - 104
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops pending
       Statements:
       - statement: DROP INDEX idx3 CASCADE
         redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx3› CASCADE
         statementtag: DROP INDEX
-PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[CheckConstraint:{DescID: 104, ConstraintID: 2}, ABSENT], VALIDATED] -> ABSENT
   ops:
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 5
+      TableID: 104
+    *scop.RemoveCheckConstraint
+      ConstraintID: 2
       TableID: 104
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 6
@@ -498,6 +502,14 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
 deps
 DROP INDEX idx3 CASCADE
 ----
+- from: [CheckConstraint:{DescID: 104, ConstraintID: 2}, PUBLIC]
+  to:   [CheckConstraint:{DescID: 104, ConstraintID: 2}, VALIDATED]
+  kind: PreviousTransactionPrecedence
+  rule: CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
+- from: [CheckConstraint:{DescID: 104, ConstraintID: 2}, VALIDATED]
+  to:   [CheckConstraint:{DescID: 104, ConstraintID: 2}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
 - from: [Column:{DescID: 104, ColumnID: 5}, DELETE_ONLY]
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: PreviousTransactionPrecedence
@@ -531,7 +543,7 @@ DROP INDEX idx3 CASCADE
   kind: SameStagePrecedence
   rules: [dependents removed before column; column type removed right before column when not dropping relation]
 - from: [ConstraintName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT]
-  to:   [CheckConstraint:{DescID: 104, ConstraintID: 2}, ABSENT]
+  to:   [CheckConstraint:{DescID: 104, ConstraintID: 2}, VALIDATED]
   kind: SameStagePrecedence
   rule: constraint dependent absent right before constraint
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}, ABSENT]
