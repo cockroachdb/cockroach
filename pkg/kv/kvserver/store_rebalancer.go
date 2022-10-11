@@ -162,6 +162,7 @@ func SimulatorStoreRebalancer(
 	getRaftStatusFn func(replica CandidateReplica) *raft.Status,
 ) *StoreRebalancer {
 	sr := &StoreRebalancer{
+		AmbientContext:  log.MakeTestingAmbientCtxWithNewTracer(),
 		metrics:         makeStoreRebalancerMetrics(),
 		st:              &cluster.Settings{},
 		storeID:         storeID,
@@ -179,7 +180,6 @@ type RebalanceContext struct {
 	QPSMaxThreshold                    float64
 	options                            *allocatorimpl.QPSScorerOptions
 	mode                               LBRebalancingMode
-	storeMap                           map[roachpb.StoreID]*roachpb.StoreDescriptor
 	allStoresList                      storepool.StoreList
 	hottestRanges, rebalanceCandidates []CandidateReplica
 }
@@ -192,7 +192,6 @@ func NewRebalanceContext(
 	options *allocatorimpl.QPSScorerOptions,
 	mode LBRebalancingMode,
 	qpsMaxThreshold float64,
-	storeMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
 	allStoresList storepool.StoreList,
 	hottestRanges, rebalanceCandidates []CandidateReplica,
 ) *RebalanceContext {
@@ -201,7 +200,6 @@ func NewRebalanceContext(
 		options:             options,
 		mode:                mode,
 		QPSMaxThreshold:     qpsMaxThreshold,
-		storeMap:            storeMap,
 		allStoresList:       allStoresList,
 		hottestRanges:       hottestRanges,
 		rebalanceCandidates: rebalanceCandidates,
@@ -296,7 +294,6 @@ func (sr *StoreRebalancer) makeRebalanceContext(ctx context.Context) *RebalanceC
 		options:             options,
 		mode:                LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
 		QPSMaxThreshold:     allocatorimpl.OverfullQPSThreshold(options, allStoresList.CandidateQueriesPerSecond.Mean),
-		storeMap:            allStoresList.ToMap(),
 		allStoresList:       allStoresList,
 		hottestRanges:       sr.replicaRankings.TopQPS(),
 		rebalanceCandidates: []CandidateReplica{},
@@ -367,8 +364,10 @@ func (sr *StoreRebalancer) rebalanceStore(ctx context.Context, rctx *RebalanceCo
 		if outcome == NoRebalanceTarget {
 			break
 		}
+		oldVoters := candidateReplica.Desc().Replicas().VoterDescriptors()
+		oldNonVoters := candidateReplica.Desc().Replicas().NonVoterDescriptors()
 		if ok := sr.applyRangeRebalance(ctx, candidateReplica, voterTargets, nonVoterTargets); ok {
-			sr.PostRangeRebalance(rctx, candidateReplica, voterTargets)
+			sr.PostRangeRebalance(rctx, candidateReplica, voterTargets, nonVoterTargets, oldVoters, oldNonVoters)
 		}
 	}
 	// Log the range rebalancing outcome, we ignore whether we were succesful
@@ -425,6 +424,8 @@ func (sr *StoreRebalancer) RebalanceLeases(
 		return NoRebalanceNeeded, candidateReplica, target
 	}
 
+	//log.Infof(ctx, "storemap state %v\n storepool state %v\n", rctx.)
+
 	candidateReplica, target, considerForRebalance := sr.chooseLeaseToTransfer(
 		ctx,
 		rctx,
@@ -458,6 +459,17 @@ func (sr *StoreRebalancer) applyLeaseRebalance(
 	return true
 }
 
+// RefreshContext updates the local rebalance loop context to use the latest
+// storepool information. After a rebalance or lease transfer the storepool is
+// updated.
+func (sr *StoreRebalancer) RefreshContext(rctx *RebalanceContext) {
+	if localDesc, ok := sr.allocator.StorePool.GetStoreDescriptor(rctx.LocalDesc.StoreID); ok {
+		rctx.LocalDesc = &localDesc
+	}
+	allStoresList, _, _ := sr.allocator.StorePool.GetStoreList(storepool.StoreFilterSuspect)
+	rctx.allStoresList = allStoresList
+}
+
 // PostLeaseRebalance applies housekeeping to the store rebalancer state,
 // updating metrics the local store descriptor capacity and the capacity of
 // target stores.
@@ -465,15 +477,7 @@ func (sr *StoreRebalancer) PostLeaseRebalance(
 	rctx *RebalanceContext, candidateReplica CandidateReplica, target roachpb.ReplicaDescriptor,
 ) {
 	sr.metrics.LeaseTransferCount.Inc(1)
-	// Finally, update our local copies of the descriptors so that if
-	// additional transfers are needed we'll be making the decisions with more
-	// up-to-date info. The StorePool copies are updated by transferLease.
-	rctx.LocalDesc.Capacity.LeaseCount--
-	rctx.LocalDesc.Capacity.QueriesPerSecond -= candidateReplica.QPS()
-	if otherDesc := rctx.storeMap[target.StoreID]; otherDesc != nil {
-		otherDesc.Capacity.LeaseCount++
-		otherDesc.Capacity.QueriesPerSecond += candidateReplica.QPS()
-	}
+	sr.RefreshContext(rctx)
 }
 
 // TransferToRebalanceRanges determines whether the store rebalancer should
@@ -515,6 +519,7 @@ func (sr *StoreRebalancer) LogRangeRebalanceOutcome(ctx context.Context, rctx *R
 		log.KvDistribution.Infof(ctx,
 			"ran out of replicas worth transferring and qps (%.2f) is still above desired threshold (%.2f); will check again soon",
 			rctx.LocalDesc.Capacity.QueriesPerSecond, rctx.QPSMaxThreshold)
+		return
 	}
 
 	// We successfully rebalanced below or equal to the max threshold,
@@ -546,9 +551,6 @@ func (sr *StoreRebalancer) RebalanceRanges(
 	)
 
 	if candidateReplica == nil {
-		log.KvDistribution.Infof(ctx,
-			"ran out of replicas worth transferring and qps (%.2f) is still above desired threshold (%.2f); will check again soon",
-			rctx.LocalDesc.Capacity.QueriesPerSecond, rctx.QPSMaxThreshold)
 		return NoRebalanceTarget, candidateReplica, voterTargets, nonVoterTargets
 	}
 
@@ -596,23 +598,21 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 func (sr *StoreRebalancer) PostRangeRebalance(
 	rctx *RebalanceContext,
 	candidateReplica CandidateReplica,
-	voterTargets []roachpb.ReplicationTarget,
+	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	oldVoters, oldNonVoters []roachpb.ReplicaDescriptor,
 ) {
 	sr.metrics.RangeRebalanceCount.Inc(1)
+
 	// Finally, update our local copies of the descriptors so that if
 	// additional transfers are needed we'll be making the decisions with more
 	// up-to-date info.
-	rctx.LocalDesc.Capacity.LeaseCount--
-	rctx.LocalDesc.Capacity.QueriesPerSecond -= candidateReplica.QPS()
-	for i := range voterTargets {
-		if storeDesc := rctx.storeMap[voterTargets[i].StoreID]; storeDesc != nil {
-			storeDesc.Capacity.RangeCount++
-			if i == 0 {
-				storeDesc.Capacity.LeaseCount++
-				storeDesc.Capacity.QueriesPerSecond += candidateReplica.QPS()
-			}
-		}
-	}
+	sr.allocator.StorePool.UpdateLocalStoreAfterRelocate(
+		voterTargets, nonVoterTargets,
+		oldVoters, oldNonVoters,
+		rctx.LocalDesc.StoreID,
+		candidateReplica.QPS(),
+	)
+	sr.RefreshContext(rctx)
 }
 
 func (sr *StoreRebalancer) chooseLeaseToTransfer(
@@ -702,7 +702,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			considerForRebalance = append(considerForRebalance, candidateReplica)
 			continue
 		}
-		if targetStore, ok := rctx.storeMap[candidate.StoreID]; ok {
+		if targetStore, ok := sr.allocator.StorePool.GetStoreDescriptor(candidate.StoreID); ok {
 			log.KvDistribution.VEventf(
 				ctx,
 				1,
