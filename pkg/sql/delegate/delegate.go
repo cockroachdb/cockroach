@@ -127,6 +127,9 @@ func TryDelegate(
 	case *tree.ShowSyntax:
 		return d.delegateShowSyntax(t)
 
+	case *tree.ShowFunctions:
+		return d.delegateShowFunctions(t)
+
 	case *tree.ShowTables:
 		return d.delegateShowTables(t)
 

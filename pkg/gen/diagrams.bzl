@@ -214,6 +214,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:show_default_privileges.html",
   "//docs/generated/sql/bnf:show_enums.html",
   "//docs/generated/sql/bnf:show_full_scans.html",
+  "//docs/generated/sql/bnf:show_functions.html",
   "//docs/generated/sql/bnf:show_grants.html",
   "//docs/generated/sql/bnf:show_indexes.html",
   "//docs/generated/sql/bnf:show_jobs.html",

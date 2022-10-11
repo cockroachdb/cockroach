@@ -2124,7 +2124,9 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDInt(GenerateUniqueInt(evalCtx.NodeID.SQLInstanceID())), nil
+				return tree.NewDInt(GenerateUniqueInt(
+					ProcessUniqueID(evalCtx.NodeID.SQLInstanceID()),
+				)), nil
 			},
 			Info: "Returns a unique ID used by CockroachDB to generate unique row IDs if a " +
 				"Primary Key isn't defined for the table. The value is a combination of the " +
@@ -8844,7 +8846,7 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 // empty so that negative values are not returned. The 48 bits following after
 // represent the reversed timestamp and then 15 bits of the node id.
 func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
-	orig := uint64(GenerateUniqueInt(instanceID))
+	orig := uint64(GenerateUniqueInt(ProcessUniqueID(instanceID)))
 	uniqueUnorderedID := mapToUnorderedUniqueInt(orig)
 	return tree.DInt(uniqueUnorderedID)
 }
@@ -8859,6 +8861,19 @@ func mapToUnorderedUniqueInt(val uint64) uint64 {
 	return v
 }
 
+// ProcessUniqueID is an ID which is unique to this process in the cluster.
+// It is used to generate unique integer keys via GenerateUniqueInt. Generally
+// it is the node ID of a system tenant or the sql instance ID of a secondary
+// tenant.
+//
+// Note that for its uniqueness property to hold, the value must use no more
+// than 15 bits. Nothing enforces this for node IDs, but, in practice, they
+// do not generally get to be more than 16k unless nodes are being added and
+// removed frequently. In order to eliminate this bug, we ought to use the
+// leased SQLInstanceID instead of the NodeID to generate these unique integers
+// in all cases.
+type ProcessUniqueID int32
+
 // GenerateUniqueInt creates a unique int composed of the current time at a
 // 10-microsecond granularity and the instance-id. The instance-id is stored in the
 // lower 15 bits of the returned value and the timestamp is stored in the upper
@@ -8872,7 +8887,7 @@ func mapToUnorderedUniqueInt(val uint64) uint64 {
 // TODO(pmattis): Do we have to worry about persisting the milliseconds value
 // periodically to avoid the clock ever going backwards (e.g. due to NTP
 // adjustment)?
-func GenerateUniqueInt(instanceID base.SQLInstanceID) tree.DInt {
+func GenerateUniqueInt(instanceID ProcessUniqueID) tree.DInt {
 	const precision = uint64(10 * time.Microsecond)
 
 	nowNanos := timeutil.Now().UnixNano()

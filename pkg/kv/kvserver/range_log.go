@@ -12,87 +12,72 @@ package kvserver
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
 
-func (s *Store) insertRangeLogEvent(
+// RangeLogWriter is used to write range log events to the rangelog
+// table.
+type RangeLogWriter interface {
+	WriteRangeLogEvent(context.Context, *kv.Txn, kvserverpb.RangeLogEvent) error
+}
+
+// wrappedRangeLogWriter implements RangeLogWriter, performing logging and
+// metric incrementing, and consulting an oracle to decide whether it should
+// delegate to the underlying implementation.
+type wrappedRangeLogWriter struct {
+	getCounter  rangeLogEventTypeCounterFunc
+	shouldWrite func() bool
+	underlying  RangeLogWriter
+}
+
+type rangeLogEventTypeCounterFunc = func(
+	eventType kvserverpb.RangeLogEventType,
+) *metric.Counter
+
+func newWrappedRangeLogWriter(
+	getCounter rangeLogEventTypeCounterFunc, shouldWrite func() bool, underlying RangeLogWriter,
+) RangeLogWriter {
+	return &wrappedRangeLogWriter{
+		getCounter:  getCounter,
+		shouldWrite: shouldWrite,
+		underlying:  underlying,
+	}
+}
+
+var _ RangeLogWriter = (*wrappedRangeLogWriter)(nil)
+
+func (w *wrappedRangeLogWriter) WriteRangeLogEvent(
 	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
 ) error {
+	maybeLogRangeLogEvent(ctx, event)
+	if c := w.getCounter(event.EventType); c != nil {
+		c.Inc(1)
+	}
+	if w.shouldWrite() && w.underlying != nil {
+		return w.underlying.WriteRangeLogEvent(ctx, txn, event)
+	}
+	return nil
+}
+
+func maybeLogRangeLogEvent(ctx context.Context, event kvserverpb.RangeLogEvent) {
+	if !log.V(1) {
+		return
+	}
 	// Record range log event to console log.
 	var info string
 	if event.Info != nil {
 		info = event.Info.String()
 	}
-	if log.V(1) {
-		log.Infof(ctx, "Range Event: %q, range: %d, info: %s",
-			event.EventType, event.RangeID, info)
-	}
-
-	const insertEventTableStmt = `
-	INSERT INTO system.rangelog (
-		timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info
-	)
-	VALUES(
-		$1, $2, $3, $4, $5, $6
-	)
-	`
-	args := []interface{}{
-		event.Timestamp,
-		event.RangeID,
-		event.StoreID,
-		event.EventType.String(),
-		nil, // otherRangeID
-		nil, // info
-	}
-	if event.OtherRangeID != 0 {
-		args[4] = event.OtherRangeID
-	}
-	if event.Info != nil {
-		infoBytes, err := json.Marshal(*event.Info)
-		if err != nil {
-			return err
-		}
-		args[5] = string(infoBytes)
-	}
-
-	// Update range event metrics. We do this close to the insertion of the
-	// corresponding range log entry to reduce potential skew between metrics and
-	// range log.
-	switch event.EventType {
-	case kvserverpb.RangeLogEventType_split:
-		s.metrics.RangeSplits.Inc(1)
-	case kvserverpb.RangeLogEventType_merge:
-		s.metrics.RangeMerges.Inc(1)
-	case kvserverpb.RangeLogEventType_add_voter:
-		s.metrics.RangeAdds.Inc(1)
-	case kvserverpb.RangeLogEventType_remove_voter:
-		s.metrics.RangeRemoves.Inc(1)
-	}
-
-	if !s.cfg.LogRangeAndNodeEvents || !logRangeAndNodeEventsEnabled.Get(&s.ClusterSettings().SV) {
-		return nil
-	}
-
-	rows, err := s.cfg.SQLExecutor.ExecEx(ctx, "log-range-event", txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		insertEventTableStmt, args...)
-	if err != nil {
-		return err
-	}
-	if rows != 1 {
-		return errors.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
-	}
-	return nil
+	log.Infof(ctx, "Range Event: %q, range: %d, info: %s",
+		event.EventType, event.RangeID, info)
 }
 
 // logSplit logs a range split event into the event table. The affected range is
@@ -101,7 +86,7 @@ func (s *Store) insertRangeLogEvent(
 func (s *Store) logSplit(
 	ctx context.Context, txn *kv.Txn, updatedDesc, newDesc roachpb.RangeDescriptor, reason string,
 ) error {
-	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
+	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedDesc.RangeID,
 		EventType:    kvserverpb.RangeLogEventType_split,
@@ -123,7 +108,7 @@ func (s *Store) logSplit(
 func (s *Store) logMerge(
 	ctx context.Context, txn *kv.Txn, updatedLHSDesc, rhsDesc roachpb.RangeDescriptor,
 ) error {
-	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
+	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
 		Timestamp:    selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:      updatedLHSDesc.RangeID,
 		EventType:    kvserverpb.RangeLogEventType_merge,
@@ -188,7 +173,7 @@ func (s *Store) logChange(
 		return errors.Errorf("unknown replica change type %s", changeType)
 	}
 
-	return s.insertRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
+	return s.cfg.RangeLogWriter.WriteRangeLogEvent(ctx, txn, kvserverpb.RangeLogEvent{
 		Timestamp: selectEventTimestamp(s, txn.ReadTimestamp()),
 		RangeID:   desc.RangeID,
 		EventType: logType,

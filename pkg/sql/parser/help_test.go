@@ -370,6 +370,10 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW ENUMS ??`, `SHOW ENUMS`},
 		{`SHOW TYPES ??`, `SHOW TYPES`},
 
+		{`SHOW FUNCTIONS ??`, `SHOW FUNCTIONS`},
+		{`SHOW FUNCTIONS FROM ??`, `SHOW FUNCTIONS`},
+		{`SHOW FUNCTIONS FROM blah ??`, `SHOW FUNCTIONS`},
+
 		{`SHOW GRANTS ON ??`, `SHOW GRANTS`},
 		{`SHOW GRANTS ON foo FOR ??`, `SHOW GRANTS`},
 		{`SHOW GRANTS ON foo FOR bar ??`, `SHOW GRANTS`},

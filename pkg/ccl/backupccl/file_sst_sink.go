@@ -376,5 +376,6 @@ func (s *fileSSTSink) copyRangeKeys(dataSST []byte) error {
 func generateUniqueSSTName(nodeID base.SQLInstanceID) string {
 	// The data/ prefix, including a /, is intended to group SSTs in most of the
 	// common file/bucket browse UIs.
-	return fmt.Sprintf("data/%d.sst", builtins.GenerateUniqueInt(nodeID))
+	return fmt.Sprintf("data/%d.sst",
+		builtins.GenerateUniqueInt(builtins.ProcessUniqueID(nodeID)))
 }

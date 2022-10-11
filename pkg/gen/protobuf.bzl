@@ -33,6 +33,7 @@ PROTOBUF_SRCS = [
   "//pkg/kv/kvserver/loqrecovery/loqrecoverypb:loqrecoverypb_go_proto",
   "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
   "//pkg/kv/kvserver/protectedts/ptstorage:ptstorage_go_proto",
+  "//pkg/kv/kvserver/rangelog/internal/rangelogtestpb:rangelogtestpb_go_proto",
   "//pkg/kv/kvserver/readsummary/rspb:rspb_go_proto",
   "//pkg/kv/kvserver:kvserver_go_proto",
   "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:v1_go_proto",

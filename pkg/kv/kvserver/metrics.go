@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -2660,4 +2661,21 @@ func storageLevelGaugeFloat64Slice(sl [7]metric.Metadata) [7]*metric.GaugeFloat6
 		gs[i] = metric.NewGaugeFloat64(sl[i])
 	}
 	return gs
+}
+
+func (sm *StoreMetrics) getCounterForRangeLogEventType(
+	eventType kvserverpb.RangeLogEventType,
+) *metric.Counter {
+	switch eventType {
+	case kvserverpb.RangeLogEventType_split:
+		return sm.RangeSplits
+	case kvserverpb.RangeLogEventType_merge:
+		return sm.RangeMerges
+	case kvserverpb.RangeLogEventType_add_voter:
+		return sm.RangeAdds
+	case kvserverpb.RangeLogEventType_remove_voter:
+		return sm.RangeRemoves
+	default:
+		return nil
+	}
 }

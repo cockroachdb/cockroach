@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -50,7 +51,7 @@ func logPendingLossOfQuorumRecoveryEvents(ctx context.Context, stores *kvserver.
 }
 
 func publishPendingLossOfQuorumRecoveryEvents(
-	ctx context.Context, stores *kvserver.Stores, stopper *stop.Stopper,
+	ctx context.Context, ie sqlutil.InternalExecutor, stores *kvserver.Stores, stopper *stop.Stopper,
 ) {
 	_ = stopper.RunAsyncTask(ctx, "publish-loss-of-quorum-events", func(ctx context.Context) {
 		if err := stores.VisitStores(func(s *kvserver.Store) error {
@@ -59,7 +60,7 @@ func publishPendingLossOfQuorumRecoveryEvents(
 				s.Engine(),
 				func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 					sqlExec := func(ctx context.Context, stmt string, args ...interface{}) (int, error) {
-						return s.GetStoreConfig().SQLExecutor.ExecEx(ctx, "", nil,
+						return ie.ExecEx(ctx, "", nil,
 							sessiondata.InternalExecutorOverride{User: username.RootUserName()}, stmt, args...)
 					}
 					if err := loqrecovery.UpdateRangeLogWithRecovery(ctx, sqlExec, record); err != nil {
