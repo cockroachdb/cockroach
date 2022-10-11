@@ -321,6 +321,8 @@ message CheckConstraint {
   uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
   repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   Expression embedded_expr = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // FromHashShardedColumn indicates whether this check constraint comes from a hash sharded column.
+  bool from_hash_sharded_column = 5;
 }
 
 message ForeignKeyConstraint {
