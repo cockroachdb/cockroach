@@ -442,20 +442,81 @@ project
            ├── columns: check1:11!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null a_cast:10!null
            ├── project
            │    ├── columns: a_cast:10!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
-           │    ├── select
+           │    ├── distinct-on
            │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
-           │    │    ├── inner-join (cross)
-           │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
-           │    │    │    ├── scan t61520 [as=t]
-           │    │    │    │    └── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           │    │    │    ├── values
-           │    │    │    │    ├── columns: column1:9!null
-           │    │    │    │    └── (1.0,)
-           │    │    │    └── filters (true)
-           │    │    └── filters
-           │    │         └── a:5 = column1:9
+           │    │    ├── grouping columns: rowid:6!null
+           │    │    ├── select
+           │    │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    │    │    ├── inner-join (cross)
+           │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    │    │    │    ├── scan t61520 [as=t]
+           │    │    │    │    │    └── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │    │    │    ├── values
+           │    │    │    │    │    ├── columns: column1:9!null
+           │    │    │    │    │    └── (1.0,)
+           │    │    │    │    └── filters (true)
+           │    │    │    └── filters
+           │    │    │         └── a:5 = column1:9
+           │    │    └── aggregations
+           │    │         ├── first-agg [as=a:5]
+           │    │         │    └── a:5
+           │    │         ├── first-agg [as=crdb_internal_mvcc_timestamp:7]
+           │    │         │    └── crdb_internal_mvcc_timestamp:7
+           │    │         ├── first-agg [as=tableoid:8]
+           │    │         │    └── tableoid:8
+           │    │         └── first-agg [as=column1:9]
+           │    │              └── column1:9
            │    └── projections
            │         └── assignment-cast: DECIMAL(10,2) [as=a_cast:10]
            │              └── column1:9
            └── projections
                 └── a_cast:10 > 0 [as=check1:11]
+
+# Regression test for #89779. Do not should not omit hidden PK columns from the
+# distinct-on operator the deduplicates rows from the target table.
+exec-ddl
+CREATE TABLE t89779 (a INT)
+----
+
+build
+UPDATE t89779 SET a = 2 FROM (VALUES (1)) v(i) WHERE a = i RETURNING rowid, a
+----
+project
+ ├── columns: rowid:2!null a:1!null
+ └── update t89779
+      ├── columns: a:1!null rowid:2!null column1:9
+      ├── fetch columns: a:5 rowid:6
+      ├── passthrough columns: column1:9
+      ├── update-mapping:
+      │    └── a_new:10 => a:1
+      ├── return-mapping:
+      │    ├── a_new:10 => a:1
+      │    └── rowid:6 => rowid:2
+      └── project
+           ├── columns: a_new:10!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           ├── distinct-on
+           │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    ├── grouping columns: rowid:6!null
+           │    ├── select
+           │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    │    ├── inner-join (cross)
+           │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    │    │    ├── scan t89779
+           │    │    │    │    └── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │    │    ├── values
+           │    │    │    │    ├── columns: column1:9!null
+           │    │    │    │    └── (1,)
+           │    │    │    └── filters (true)
+           │    │    └── filters
+           │    │         └── a:5 = column1:9
+           │    └── aggregations
+           │         ├── first-agg [as=a:5]
+           │         │    └── a:5
+           │         ├── first-agg [as=crdb_internal_mvcc_timestamp:7]
+           │         │    └── crdb_internal_mvcc_timestamp:7
+           │         ├── first-agg [as=tableoid:8]
+           │         │    └── tableoid:8
+           │         └── first-agg [as=column1:9]
+           │              └── column1:9
+           └── projections
+                └── 2 [as=a_new:10]
