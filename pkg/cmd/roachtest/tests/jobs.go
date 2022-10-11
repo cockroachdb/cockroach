@@ -75,6 +75,8 @@ func jobSurvivesNodeShutdown(
 
 		pollInterval := 5 * time.Second
 		ticker := time.NewTicker(pollInterval)
+		defer ticker.Stop()
+
 		var status string
 		for {
 			select {

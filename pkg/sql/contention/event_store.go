@@ -208,6 +208,8 @@ func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
 
 		initialDelay := s.resolutionIntervalWithJitter()
 		timer := timeutil.NewTimer()
+		defer timer.Stop()
+
 		timer.Reset(initialDelay)
 
 		for {
@@ -216,13 +218,13 @@ func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
 
 			select {
 			case <-timer.C:
+				timer.Read = true
 				if err := s.flushAndResolve(ctx); err != nil {
 					if log.V(1) {
 						log.Warningf(ctx, "unexpected error encountered when performing "+
 							"txn id resolution %s", err)
 					}
 				}
-				timer.Read = true
 			case <-resolutionIntervalChanged:
 				continue
 			case <-stopper.ShouldQuiesce():
