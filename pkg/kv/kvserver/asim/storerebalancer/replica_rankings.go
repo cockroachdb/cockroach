@@ -22,7 +22,7 @@ func hottestRanges(state state.State, storeID state.StoreID) []kvserver.Candidat
 	// regardless of whether the replica is a lease holder. These are later
 	// filtered out in the store rebalancer.
 	for _, repl := range state.Replicas(storeID) {
-		candidateReplica := newSimulatorReplica(repl, state)
+		candidateReplica := NewSimulatorReplica(repl, state)
 		accumulator.AddReplica(candidateReplica)
 	}
 	replRankings.Update(accumulator)

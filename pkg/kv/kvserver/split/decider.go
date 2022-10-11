@@ -186,6 +186,14 @@ func (d *Decider) recordLocked(
 	return false
 }
 
+// IsFinderReady returns true if the decider has an initialized finder, having
+// exceeded the split threshold recently and the finder is ready to find a key.
+func (d *Decider) IsFinderReady(now time.Time) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.mu.splitFinder != nil && d.mu.splitFinder.Ready(now)
+}
+
 // RecordMax adds a QPS measurement directly into the Decider's historical QPS
 // tracker. The QPS sample is considered to have been captured at the provided
 // time.
