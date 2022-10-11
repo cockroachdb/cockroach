@@ -58,24 +58,24 @@ func (s rowLevelTTLExecutor) OnDrop(
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-) error {
+) (int, error) {
 
 	var args catpb.ScheduledRowLevelTTLArgs
 	if err := pbtypes.UnmarshalAny(schedule.ExecutionArgs().Args, &args); err != nil {
-		return err
+		return 0, err
 	}
 
 	canDrop, err := canDropTTLSchedule(ctx, txn, descsCol, schedule, args)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	if !canDrop {
 		tn, err := descs.GetTableNameByID(ctx, txn, descsCol, args.TableID)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		return errors.WithHintf(
+		return 0, errors.WithHintf(
 			pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot drop a row level TTL schedule",
@@ -84,7 +84,7 @@ func (s rowLevelTTLExecutor) OnDrop(
 			tn.FQString(),
 		)
 	}
-	return nil
+	return 0, nil
 }
 
 // canDropTTLSchedule determines whether we can drop a given row-level TTL
