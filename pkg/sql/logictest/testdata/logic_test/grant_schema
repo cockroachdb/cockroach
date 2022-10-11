@@ -108,7 +108,7 @@ testuser2  test           s                   CREATE          NO
 testuser   test           s                   ALL             YES
 
 # Check grants for testuser2, which should inherit from the public role.
-query TBB colnames rowsort
+query TBB colnames,rowsort
 WITH schema_names(schema_name) AS (
    SELECT n.nspname AS schema_name
      FROM pg_catalog.pg_namespace n

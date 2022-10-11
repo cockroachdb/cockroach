@@ -248,7 +248,7 @@ SELECT z FROM test where y=2;
 statement ok
 SELECT x FROM test where y=1;
 
-query TB colnames rowsort
+query TB colnames,rowsort
 SELECT key, implicit_txn
   FROM crdb_internal.node_statement_statistics
  WHERE application_name = 'implicit_txn_test' ORDER BY key, implicit_txn;

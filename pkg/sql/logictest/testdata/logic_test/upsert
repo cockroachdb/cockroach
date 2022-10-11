@@ -716,7 +716,7 @@ subtest visible_returning_columns
 statement ok
 BEGIN; ALTER TABLE tc DROP COLUMN y
 
-query I colnames rowsort
+query I colnames,rowsort
 UPSERT INTO tc VALUES (1), (2) RETURNING *
 ----
 x
