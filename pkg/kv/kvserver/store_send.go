@@ -216,18 +216,11 @@ func (s *Store) SendWithWriteBytes(
 				for _, union := range ba.Requests {
 					arg := union.GetInner()
 					header := arg.Header()
-					tenantID, ok := roachpb.TenantFromContext(ctx)
-					if !ok {
-						tenantID = roachpb.SystemTenantID
-					}
 
-					err := s.spanStatsCollector.Increment(
-						tenantID,
-						roachpb.Span{Key: header.Key, EndKey: header.EndKey})
-
-					if err != nil {
-						log.Warningf(ctx, "error incrementing span stats: %v", err)
-					}
+					// Tell the SpanStatsCollector about the request for this span.
+					s.spanStatsCollector.Increment(
+						roachpb.Span{Key: header.Key, EndKey: header.EndKey},
+					)
 				}
 			}
 

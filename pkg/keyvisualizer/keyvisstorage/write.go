@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanstats/spanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -83,7 +82,7 @@ func writeBuckets(
 	sampleID string,
 	existingKeys map[string]string,
 	newKeys map[string]string,
-	sample *spanstatspb.Sample,
+	sample *keyvispb.Sample,
 ) error {
 
 	values := make([]string, 0)
@@ -133,7 +132,7 @@ func writeBuckets(
 }
 
 func getKeys(
-	ctx context.Context, ie *sql.InternalExecutor, sample *spanstatspb.Sample,
+	ctx context.Context, ie *sql.InternalExecutor, sample *keyvispb.Sample,
 ) (map[string]string, map[string]string, error) {
 
 	// query unique_keys for all keys in the sample
@@ -196,9 +195,9 @@ func getKeys(
 
 // WriteSamples persists the keyvispb.GetSamplesResponse.
 func WriteSamples(
-	ctx context.Context, ie *sql.InternalExecutor, samples *keyvispb.GetSamplesResponse,
+	ctx context.Context, ie *sql.InternalExecutor, samples []*keyvispb.Sample,
 ) error {
-	for _, sample := range samples.Samples {
+	for _, sample := range samples {
 
 		// write a new sample, returning the primary key.
 		sampleID, err := writeSample(ctx, ie, sample.SampleTime)

@@ -12,12 +12,11 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/keyvisualizer",
+        "//pkg/keyvisualizer/keyvispb",
         "//pkg/keyvisualizer/keyvisstorage",
         "//pkg/kv/kvclient/kvcoord",
-        "//pkg/kv/kvserver/spanstats/spanstatspb",
         "//pkg/roachpb",
         "//pkg/sql",
-        "//pkg/util/hlc",
         "//pkg/util/timeutil",
     ],
 )

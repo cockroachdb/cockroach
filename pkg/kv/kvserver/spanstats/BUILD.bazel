@@ -1,1 +1,0 @@
-load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")

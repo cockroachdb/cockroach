@@ -12,7 +12,6 @@ package keyvisjob
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap/testdata/src/github.com/cockroachdb/errors"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 type resumer struct {
@@ -84,11 +84,8 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 
 	runConsumer := func() error {
 		// TODO(zachlite): wrap this in a retry for better fault-tolerance
-		if err := consumer.DecideBoundaries(ctx); err != nil {
-			return errors.Wrap(err, "decide boundaries failed")
-		}
-		if err := consumer.FetchStats(ctx); err != nil {
-			return errors.Wrap(err, "fetch stats failed")
+		if err := consumer.FlushSamples(ctx); err != nil {
+			return errors.Wrap(err, "flush samples failed")
 		}
 		if err := consumer.DeleteOldestSamples(ctx); err != nil {
 			return errors.Wrap(err, "delete oldest samples failed")

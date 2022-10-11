@@ -17,12 +17,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanstats/spanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -34,37 +32,22 @@ type SpanStatsServer struct {
 
 var _ keyvispb.KeyVisualizerServer = &SpanStatsServer{}
 
-// getTenant returns the tenantID from the context,
-// if it exists. If it doesn't exist, it returns the system tenant ID.
-// The ctx lacks the tenantID when the request originates from the key
-// visualizer job located on the same node, so assuming the system tenant is fine.
-// Secondary tenants will always communicate across a gRPC boundary.
-// TODO(zachlite): What is the strategy for operating a secondary tenant in
-// insecure mode?
-func getTenant(ctx context.Context) roachpb.TenantID {
-	tID, ok := roachpb.TenantFromContext(ctx)
-	if !ok {
-		tID = roachpb.SystemTenantID
-	}
-	return tID
-}
+func (s *SpanStatsServer) saveBoundaries(
+	ctx context.Context,
+	boundaries []*roachpb.Span,
+	) error {
 
-// SaveBoundaries implements the keyvispb.KeyVisualizerServer interface.
-func (s *SpanStatsServer) SaveBoundaries(
-	ctx context.Context, req *keyvispb.SaveBoundariesRequest,
-) (*keyvispb.SaveBoundariesResponse, error) {
-
-	tID := getTenant(ctx)
 	encoded, err := protoutil.Marshal(&keyvispb.BoundaryUpdate{
-		Tenant:     &tID,
-		Boundaries: req.Boundaries})
+		Boundaries: boundaries,
+	})
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	stmt := fmt.Sprintf("UPSERT INTO system.span_stats_tenant_boundaries ("+
-		"tenant_id, boundaries) VALUES (%d, x'%s')", tID.ToUint64(),
+		"tenant_id, boundaries) VALUES (%d, x'%s')",
+		roachpb.SystemTenantID.ToUint64(),
 		hex.EncodeToString(encoded))
 
 	_, err = s.server.sqlServer.internalExecutor.ExecEx(
@@ -74,11 +57,7 @@ func (s *SpanStatsServer) SaveBoundaries(
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		stmt)
 
-	if err != nil {
-		return nil, err
-	}
-
-	return &keyvispb.SaveBoundariesResponse{}, nil
+	return err
 }
 
 func (s *SpanStatsServer) dialNode(
@@ -98,12 +77,12 @@ func (s *SpanStatsServer) dialNode(
 
 func (s *SpanStatsServer) getSamplesFromFanOut(
 	ctx context.Context,
-) (*keyvispb.GetSamplesResponse, error) {
+) (*keyvispb.FlushSamplesResponse, error) {
 	// dial each node and GetSamplesFromNode
 	// multiple samples can be returned from each node,
 	// but for now, assume that only one sample will be returned.
-	responsesByNodeID := make(map[roachpb.NodeID]keyvispb.GetSamplesResponse)
-	globalStats := make([]*spanstatspb.SpanStats, 0)
+	responsesByNodeID := make(map[roachpb.NodeID]keyvispb.FlushSamplesResponse)
+	globalStats := make([]*keyvispb.SpanStats, 0)
 
 	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
 		client, err := s.dialNode(ctx, nodeID)
@@ -113,7 +92,7 @@ func (s *SpanStatsServer) getSamplesFromFanOut(
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
 		c := client.(keyvispb.KeyVisualizerClient)
 
-		stats, err := c.GetSamples(ctx, &keyvispb.GetSamplesRequest{
+		stats, err := c.FlushSamples(ctx, &keyvispb.FlushSamplesRequest{
 			NodeID: nodeID,
 		})
 		if err != nil {
@@ -123,7 +102,7 @@ func (s *SpanStatsServer) getSamplesFromFanOut(
 	}
 
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
-		nodeResponse := resp.(*keyvispb.GetSamplesResponse)
+		nodeResponse := resp.(*keyvispb.FlushSamplesResponse)
 		responsesByNodeID[nodeID] = *nodeResponse
 	}
 
@@ -138,36 +117,33 @@ func (s *SpanStatsServer) getSamplesFromFanOut(
 	}
 
 	for _, samples := range responsesByNodeID {
-		for _, spanStat := range samples.Samples[0].SpanStats {
+		for _, spanStat := range samples.Samples.SpanStats {
 			globalStats = append(globalStats, spanStat)
 		}
 	}
 
 	// We set the timestamp here, because for now,
 	// collectors are not keeping historical samples.
-	timestamp := hlc.NewClockWithSystemTimeSource(0).Now()
-	samples := []*spanstatspb.Sample{{
+	timestamp := s.server.clock.Now()
+	samples := &keyvispb.Sample{
 		SampleTime: &timestamp,
 		SpanStats:  uniqueStats(globalStats),
-	}}
+	}
 
-	res := &keyvispb.GetSamplesResponse{Samples: samples}
+	res := &keyvispb.FlushSamplesResponse{Samples: samples}
 	return res, nil
 }
 
-func (s *SpanStatsServer) getLocalSamples(
-	tID roachpb.TenantID,
-) (*keyvispb.GetSamplesResponse, error) {
+func (s *SpanStatsServer) getLocalSamples() (*keyvispb.FlushSamplesResponse, error) {
 
-	localStats := make([]*spanstatspb.SpanStats, 0)
+	localStats := make([]*keyvispb.SpanStats, 0)
 	err := s.server.node.stores.VisitStores(func(s *kvserver.Store) error {
-		samples, err := s.GetSpanStatsCollector().GetSamples(tID)
+		spanStats, err := s.GetSpanStatsCollector().FlushSample()
 		if err != nil {
 			return err
 		}
 
-		stats := samples[0]
-		for _, stat := range stats.SpanStats {
+		for _, stat := range spanStats {
 			localStats = append(localStats, stat)
 		}
 		return nil
@@ -177,52 +153,52 @@ func (s *SpanStatsServer) getLocalSamples(
 		return nil, err
 	}
 
-	// TODO(zachlite): Right now,
-	// this response assumes the collector is only returning a single sample.
-	// Eventually, this function should find unique stats from the corresponding
-	// samples.
-	// The timestamps should originate from the collector.
-	samples := []*spanstatspb.Sample{{
+	// the timestamp is set by the node that initiates the fan-out.
+	samples := &keyvispb.Sample{
 		SampleTime: nil,
 		SpanStats:  uniqueStats(localStats),
-	}}
+	}
 
-	res := &keyvispb.GetSamplesResponse{Samples: samples}
+	res := &keyvispb.FlushSamplesResponse{Samples: samples}
 	return res, nil
 }
 
-func uniqueStats(stats []*spanstatspb.SpanStats) []*spanstatspb.SpanStats {
-	unique := make(map[string]*spanstatspb.SpanStats)
+func uniqueStats(stats []*keyvispb.SpanStats) []*keyvispb.SpanStats {
+	unique := make(map[string]*keyvispb.SpanStats)
 
 	for _, stat := range stats {
 		spanAsString := stat.Span.String()
 		if uniqueStat, ok := unique[spanAsString]; ok {
 			uniqueStat.Requests += stat.Requests
 		} else {
-			unique[spanAsString] = &spanstatspb.SpanStats{
+			unique[spanAsString] = &keyvispb.SpanStats{
 				Span:     stat.Span,
 				Requests: stat.Requests,
 			}
 		}
 	}
 
-	ret := make([]*spanstatspb.SpanStats, 0)
+	ret := make([]*keyvispb.SpanStats, 0)
 	for _, stat := range unique {
 		ret = append(ret, stat)
 	}
 	return ret
 }
 
-// GetSamples implements the keyvispb.KeyVisualizerServer interface.
-func (s *SpanStatsServer) GetSamples(
-	ctx context.Context, req *keyvispb.GetSamplesRequest,
-) (*keyvispb.GetSamplesResponse, error) {
+// FlushSamples implements the keyvispb.KeyVisualizerServer interface.
+func (s *SpanStatsServer) FlushSamples(
+	ctx context.Context, req *keyvispb.FlushSamplesRequest,
+) (*keyvispb.FlushSamplesResponse, error) {
 
 	if req.NodeID == 0 {
+
+		if err := s.saveBoundaries(ctx, req.Boundaries); err != nil {
+			return nil, err
+		}
+
 		return s.getSamplesFromFanOut(ctx)
 	}
 
-	tID := getTenant(ctx)
-	return s.getLocalSamples(tID)
+	return s.getLocalSamples()
 
 }

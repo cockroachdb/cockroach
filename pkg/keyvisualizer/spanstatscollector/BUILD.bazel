@@ -7,7 +7,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatscollector",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/kvserver/spanstats/spanstatspb",
+        "//pkg/keyvisualizer/keyvispb",
         "//pkg/roachpb",
         "//pkg/util/interval",
         "//pkg/util/syncutil",

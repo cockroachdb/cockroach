@@ -14,7 +14,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanstats/spanstatspb"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -40,7 +40,7 @@ func bucketImportance(value, mean, median float64) int {
 // mergeBuckets averages 2 or more buckets into one.
 // The resulting span start key is from the first bucket,
 // and the resulting span end key is from the last bucket.
-func mergeBuckets(buckets []*spanstatspb.SpanStats) *spanstatspb.SpanStats {
+func mergeBuckets(buckets []*keyvispb.SpanStats) *keyvispb.SpanStats {
 
 	first := buckets[0]
 	last := buckets[len(buckets)-1]
@@ -56,7 +56,7 @@ func mergeBuckets(buckets []*spanstatspb.SpanStats) *spanstatspb.SpanStats {
 		EndKey: last.Span.EndKey.Clone(),
 	}
 
-	return &spanstatspb.SpanStats{
+	return &keyvispb.SpanStats{
 		Span:     &span,
 		Requests: uint64(math.Ceil(requests)),
 	}
@@ -66,13 +66,13 @@ func mergeBuckets(buckets []*spanstatspb.SpanStats) *spanstatspb.SpanStats {
 // and will recursively merge adjacent buckets until the total number of buckets
 // is lte maxBuckets.
 func aggressiveAggregate(
-	spanStats []*spanstatspb.SpanStats, maxBuckets int,
-) []*spanstatspb.SpanStats {
+	spanStats []*keyvispb.SpanStats, maxBuckets int,
+) []*keyvispb.SpanStats {
 	if len(spanStats) <= maxBuckets {
 		return spanStats
 	}
 
-	ret := make([]*spanstatspb.SpanStats, 0)
+	ret := make([]*keyvispb.SpanStats, 0)
 
 	// merge adjacent buckets regardless of importance
 	for i := 0; i < len(spanStats); i += 2 {
@@ -90,10 +90,10 @@ func aggressiveAggregate(
 // aggregate considers the importance of each bucket and merges unimportant
 // buckets together.
 func aggregate(
-	spanStats []*spanstatspb.SpanStats, mean float64, median float64,
-) []*spanstatspb.SpanStats {
+	spanStats []*keyvispb.SpanStats, mean float64, median float64,
+) []*keyvispb.SpanStats {
 
-	ret := make([]*spanstatspb.SpanStats, 0)
+	ret := make([]*keyvispb.SpanStats, 0)
 
 	i := 0
 	for {
@@ -183,7 +183,8 @@ func median(s []float64) float64 {
 // Optionally, second,
 // buckets are merged with their neighbor recursively until maxBuckets is
 // reached.
-func downsample(spanStats []*spanstatspb.SpanStats, maxBuckets int) []*spanstatspb.SpanStats {
+func downsample(spanStats []*keyvispb.SpanStats, maxBuckets int) []*keyvispb.
+	SpanStats {
 
 	if len(spanStats) <= maxBuckets {
 		return spanStats

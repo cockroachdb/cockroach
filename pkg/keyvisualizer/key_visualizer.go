@@ -15,38 +15,34 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // KVAccessor provides a tenant with access to the keyvispb.KeyVisualizerServer.
 type KVAccessor interface {
-	GetKeyVisualizerSamples(
-		ctx context.Context,
-		start hlc.Timestamp,
-		end hlc.Timestamp,
-	) (*keyvispb.GetSamplesResponse, error)
 
-	UpdateBoundaries(
-		ctx context.Context,
-		boundaries []*roachpb.Span,
-	) (*keyvispb.SaveBoundariesResponse, error)
+	// FlushSamples gets the tenant's collected statistics from KV. It
+	// initiates a fan-out to all stores when FlushSamplesRequest.node_id is set
+	// to 0. Otherwise, it returns samples obtained from stores on the desired
+	// node. A FlushSamples call will reset the sample collection done in KV, and
+	// in effect marks the end of a sample period, and the beginning of the
+	// next one.
+	//
+	// Additionally, it provides the boundaries that the tenant wants
+	// statistics collected for. Samples returned are for the boundaries sent
+	// by the preceding FlushSamples call.
+	FlushSamples(ctx context.Context, boundaries []*roachpb.Span) (*keyvispb.FlushSamplesResponse,	error)
 }
 
-
-// SpanStatsConsumer runs in the tenant keyvisualizer job.
+// SpanStatsConsumer runs in the tenant key visualizer job.
 // It is the tenant's API to control statistic collection in KV.
 type SpanStatsConsumer interface {
 
-	// FetchStats requests span statistics from KV,
-	// downsamples them to an acceptable cardinality,
+	// FlushSamples requests samples from KV,
+	// and provides collection boundaries for the subsequent sample.
+	// After it receives samples, it downsamples them to an acceptable cardinality,
 	// and persists them to the tenant's key visualizer system tables.
-	FetchStats(ctx context.Context) error
-
-	// DecideBoundaries tells KV the key spans that this tenant wants statistics
-	// for. For now, it will tell KV to collect statistics over the tenant's own
-	// ranges.
-	DecideBoundaries(ctx context.Context) error
+	FlushSamples(context.Context) error
 
 	// DeleteOldestSamples deletes historical samples older than 2 weeks.
- 	DeleteOldestSamples(ctx context.Context) error
+	DeleteOldestSamples(context.Context) error
 }

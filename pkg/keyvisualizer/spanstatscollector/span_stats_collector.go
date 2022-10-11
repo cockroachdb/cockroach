@@ -11,51 +11,46 @@
 package spanstatscollector
 
 import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanstats/spanstatspb"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"sync/atomic"
 )
 
-// tenantStatsBucket implements the interval.Interface interface.
-type tenantStatsBucket struct {
+// statsBucket implements the interval.Interface interface.
+type statsBucket struct {
 	sp      roachpb.Span
 	id      uintptr
 	counter uint64
 }
 
-var _ interval.Interface = &tenantStatsBucket{}
+var _ interval.Interface = &statsBucket{}
 
-// Range implements the interval.Interface interface.
-func (t *tenantStatsBucket) Range() interval.Range {
+// Range is part of the interval.Interface interface.
+func (t *statsBucket) Range() interval.Range {
 	return t.sp.AsRange()
 }
 
-// ID implements the interval.Interface interface.
-func (t *tenantStatsBucket) ID() uintptr {
+// ID is part of the interval.Interface interface.
+func (t *statsBucket) ID() uintptr {
 	return t.id
 }
 
-type tenantStatsCollector struct {
-	stashedBoundaries []*roachpb.Span
+type SpanStatsCollector struct {
+	tree interval.Tree
 	mu struct {
 		syncutil.Mutex
-		tree              interval.Tree
+		stashedBoundaries []*roachpb.Span
 	}
 }
 
-func newTenantCollector(boundaries []*roachpb.Span) *tenantStatsCollector {
-	c := &tenantStatsCollector{}
-	c.stashedBoundaries = boundaries
-	tree, err := newTreeWithBoundaries(boundaries)
-	if err != nil {
-		panic(fmt.Sprintf("could not build new interval tree: %v", err))
-	}
-	c.mu.tree = tree
-	return c
+func New() *SpanStatsCollector {
+	collector := &SpanStatsCollector{}
+	t, _ := newTreeWithBoundaries(nil)
+	collector.tree = t
+	return collector
 }
 
 // newTreeWithBoundaries returns an error if an installed boundary is
@@ -64,12 +59,12 @@ func newTenantCollector(boundaries []*roachpb.Span) *tenantStatsCollector {
 func newTreeWithBoundaries(spans []*roachpb.Span) (interval.Tree, error) {
 	t := interval.NewTree(interval.ExclusiveOverlapper)
 	for i, sp := range spans {
-		bucket := tenantStatsBucket{
+		bucket := statsBucket{
 			sp:      *sp,
 			id:      uintptr(i),
 			counter: 0,
 		}
-		err := t.Insert(&bucket, false) // fast = false
+		err := t.Insert(&bucket, false /* fast */)
 		if err != nil {
 			return nil, err
 		}
@@ -78,20 +73,17 @@ func newTreeWithBoundaries(spans []*roachpb.Span) (interval.Tree, error) {
 	return t, nil
 }
 
-func (t *tenantStatsCollector) getStats() []*spanstatspb.SpanStats {
-	stats := make([]*spanstatspb.SpanStats, 0, t.mu.tree.Len())
+func (s *SpanStatsCollector) getStats() []*keyvispb.SpanStats {
+	stats := make([]*keyvispb.SpanStats, 0, s.tree.Len())
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	it := t.mu.tree.Iterator()
+	it := s.tree.Iterator()
 	for {
 		i, next := it.Next()
 		if next == false {
 			break
 		}
-		bucket := i.(*tenantStatsBucket)
-		stats = append(stats, &spanstatspb.SpanStats{
+		bucket := i.(*statsBucket)
+		stats = append(stats, &keyvispb.SpanStats{
 			Span:     &bucket.sp,
 			Requests: bucket.counter,
 		})
@@ -100,84 +92,47 @@ func (t *tenantStatsCollector) getStats() []*spanstatspb.SpanStats {
 	return stats
 }
 
-func (t *tenantStatsCollector) increment(sp roachpb.Span) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.mu.tree.DoMatching(func(i interval.Interface) (done bool) {
-		bucket := i.(*tenantStatsBucket)
-		bucket.counter++
+// Increment adds 1 to the counter that counts requests for this
+// span. If span does not fall within the previously saved boundaries,
+// this is a no-op. If boundaries have not yet been installed,
+// this function returns false.
+func (s *SpanStatsCollector) Increment(sp roachpb.Span) {
+	s.tree.DoMatching(func(i interval.Interface) (done bool) {
+		bucket := i.(*statsBucket)
+		atomic.AddUint64(&bucket.counter, 1)
 		return false // want more
 	}, sp.AsRange())
 }
 
-// SpanStatsCollector maintains span statistics for each tenant.
-type SpanStatsCollector struct {
-	collectors map[roachpb.TenantID]*tenantStatsCollector
+// SaveBoundaries persists the desired collection boundaries.
+// They will installed after the next call to FlushSample.
+func (s *SpanStatsCollector) SaveBoundaries(boundaries []*roachpb.Span) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.stashedBoundaries = boundaries
 }
 
-// New constructs a new SpanStatsCollector
-func New() *SpanStatsCollector {
-	return &SpanStatsCollector{
-		collectors: map[roachpb.TenantID]*tenantStatsCollector{},
-	}
-}
-
-// Increment adds 1 to the counter that counts requests for this tenant and
-// span. If span does not fall within the previously saved boundaries,
-// this is a no-op.
-func (s *SpanStatsCollector) Increment(id roachpb.TenantID, span roachpb.Span) error {
-
-	if collector, ok := s.collectors[id]; ok {
-		collector.increment(span)
-	} else {
-		// A collector for this tenant has not been installed.
-		// Under the current scheme, a collector for a tenant is installed
-		// by the first call to SaveBoundaries.
-		return errors.New("tenant not found")
-	}
-
-	return nil
-}
-
-// SaveBoundaries persists the desired collection boundaries for a given
-// tenant. If the tenant doesn't exist,
-// a collector is installed for the tenant.
-func (s *SpanStatsCollector) SaveBoundaries(id roachpb.TenantID, boundaries []*roachpb.Span) {
-
-	if collector, ok := s.collectors[id]; ok {
-		collector.stashedBoundaries = boundaries
-	} else {
-		s.collectors[id] = newTenantCollector(boundaries)
-	}
-}
-
-// GetSamples returns the tenant's statistics to the caller.
+// FlushSample returns the collected statistics to the caller.
 // It implicitly starts a new collection period by clearing the old
-// statistics. A sample period is therefore defined by the interval between a
-// tenant requesting samples.
+// statistics. A sample period is therefore defined by the interval between
+// FlushSample calls.
 // TODO(zachlite): this will change with improved fault tolerance mechanisms,
-// because the lifecycle of a sample period should be decoupled from a tenant
-// requesting samples.
-func (s *SpanStatsCollector) GetSamples(id roachpb.TenantID) ([]spanstatspb.Sample, error) {
+// because the lifecycle of a sample period should be decoupled from
+// FlushSample calls.
+func (s *SpanStatsCollector) FlushSample() ([]*keyvispb.SpanStats, error) {
 
-	collector, ok := s.collectors[id]
-	if !ok {
-		// A collector for this tenant has not been installed.
-		// Under the current scheme, a collector for a tenant is installed
-		// by the first call to SaveBoundaries.
-		return nil, errors.New("tenant not found")
+	stats := s.getStats()
+
+	// Reset the collector. This marks the beginning of a new sample period.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	newTree, err := newTreeWithBoundaries(s.mu.stashedBoundaries)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not install boundaries")
 	}
+	s.tree = newTree
 
-	stats := collector.getStats()
-
-	// install a fresh collector
-	s.collectors[id] = newTenantCollector(collector.stashedBoundaries)
-
-	// TODO(zachlite): until the collector can stash tenant samples,
+	// TODO(zachlite): until the collector can stash samples,
 	// the collector will only return one sample at a time.
-	// While this is the case, the server sets the timestamp of the outgoing sample.
-	return []spanstatspb.Sample{{
-		SampleTime: nil,
-		SpanStats:  stats,
-	}}, nil
+	return stats, nil
 }

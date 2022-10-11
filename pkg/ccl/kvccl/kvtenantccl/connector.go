@@ -487,33 +487,15 @@ func (c *Connector) TokenBucket(
 	return nil, ctx.Err()
 }
 
-// GetKeyVisualizerSamples implements the keyvisualizer.KVAccessor interface.
-func (c *Connector) GetKeyVisualizerSamples(
-	ctx context.Context, start hlc.Timestamp, end hlc.Timestamp,
-) (samples *keyvispb.GetSamplesResponse, _ error) {
-	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		var err error = nil
-		samples, err = c.GetSamples(ctx, &keyvispb.GetSamplesRequest{
-			NodeID: 0, // 0 indicates the server should issue a fan-out to all nodes.
-		})
-		if err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return samples, nil
-}
-
-// UpdateBoundaries implements the keyvisualizer.KVAccessor interface.
-func (c *Connector) UpdateBoundaries(
-	ctx context.Context, boundaries []*roachpb.Span,
-) (*keyvispb.
-	SaveBoundariesResponse, error) {
-	// TODO(zachlite): implement to support secondary tenants
+// FlushSamples implements the keyvisualizer.KVAccessor interface.
+func (c *Connector) FlushSamples(
+	ctx context.Context,
+	boundaries []*roachpb.Span,
+) (samples *keyvispb.FlushSamplesResponse, _ error) {
+	// TODO(zachlite): Implement key visualizer support for secondary tenants.
 	return nil, nil
 }
+
 
 // GetSpanConfigRecords implements the spanconfig.KVAccessor interface.
 func (c *Connector) GetSpanConfigRecords(

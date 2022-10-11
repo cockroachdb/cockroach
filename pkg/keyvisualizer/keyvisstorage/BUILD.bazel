@@ -13,7 +13,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keyvisualizer/keyvispb",
-        "//pkg/kv/kvserver/spanstats/spanstatspb",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/serverpb",

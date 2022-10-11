@@ -1438,13 +1438,7 @@ message KeyVisSamplesRequest {
 
 
 // KeyVisSamplesResponse returns a space-efficient representation of
-// key-vis samples. Spans are deduplicated, and are referenced by uuid.
-
-// its likely that a key can be reused across different buckest
-// so should I store spans, or should I store individual keys?
-// second problem: when normalizing a sample, how do I know if a span is
-// already in the unique_spans table in a performant way? I do not want to
-// have to issue a request for every bucket.
+// key visualizer samples. Spans are deduplicated, and are referenced by uuid.
 message KeyVisSamplesResponse {
   message Bucket {
     string start_key_id = 1;

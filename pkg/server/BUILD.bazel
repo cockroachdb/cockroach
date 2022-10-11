@@ -123,7 +123,6 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/kv/kvserver/rangefeed",
         "//pkg/kv/kvserver/reports",
-        "//pkg/kv/kvserver/spanstats/spanstatspb",
         "//pkg/multitenant",
         "//pkg/multitenant/multitenantio",
         "//pkg/multitenant/tenantcostmodel",

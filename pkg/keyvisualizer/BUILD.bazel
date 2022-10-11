@@ -9,7 +9,6 @@ go_library(
     deps = [
         "//pkg/keyvisualizer/keyvispb",
         "//pkg/roachpb",
-        "//pkg/util/hlc",
     ],
 )
 

@@ -1601,7 +1601,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.sqlServer.execCfg.SystemTableIDResolver,
 		func(update *keyvispb.BoundaryUpdate) error {
 			if err := s.node.stores.VisitStores(func(st *kvserver.Store) error {
-				st.GetSpanStatsCollector().SaveBoundaries(*update.Tenant, update.Boundaries)
+				st.GetSpanStatsCollector().SaveBoundaries(update.Boundaries)
 				return nil
 			}); err != nil {
 				return err

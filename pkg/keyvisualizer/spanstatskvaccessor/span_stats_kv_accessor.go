@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // spanStatsKVAccessor provides an API for co-located system tenant to interact with KV.
@@ -30,24 +29,15 @@ func New(server keyvispb.KeyVisualizerServer) keyvisualizer.KVAccessor {
 	return &spanStatsKVAccessor{server: server}
 }
 
-// GetKeyVisualizerSamples implements the keyvisualizer.KVAccessor interface.
-func (s *spanStatsKVAccessor) GetKeyVisualizerSamples(
-	ctx context.Context, start hlc.Timestamp, end hlc.Timestamp,
-) (*keyvispb.GetSamplesResponse, error) {
+// FlushSamples implements the keyvisualizer.KVAccessor interface.
+func (s *spanStatsKVAccessor) FlushSamples(
+	ctx context.Context, boundaries []*roachpb.Span,
+) (*keyvispb.FlushSamplesResponse, error) {
 
-	req := &keyvispb.GetSamplesRequest{
+	req := &keyvispb.FlushSamplesRequest{
 		NodeID: 0, // 0 indicates the server should begin a fan-out to all nodes.
+		Boundaries: boundaries,
 	}
 
-	return s.server.GetSamples(ctx, req)
-}
-
-// UpdateBoundaries implements the keyvisualizer.KVAccessor interface.
-func (s *spanStatsKVAccessor) UpdateBoundaries(
-	ctx context.Context, boundaries []*roachpb.Span,
-) (*keyvispb.SaveBoundariesResponse, error) {
-
-	return s.server.SaveBoundaries(ctx, &keyvispb.SaveBoundariesRequest{
-		Boundaries: boundaries,
-	})
+	return s.server.FlushSamples(ctx, req)
 }

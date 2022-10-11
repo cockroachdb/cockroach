@@ -12,6 +12,7 @@ package spanstatsconsumer
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -20,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -50,32 +50,33 @@ func New(
 	}
 }
 
-// FetchStats requests span statistics from KV,
-// downsamples them to an acceptable cardinality,
-// and persists them to the tenant's key visualizer system tables.
-func (s *SpanStatsConsumer) FetchStats(ctx context.Context) error {
+// FlushSamples implements the keyvisualizer.SpanStatsConsumer interface.
+func (s *SpanStatsConsumer) FlushSamples(ctx context.Context) error {
 
-	samples, err := s.kvAccessor.GetKeyVisualizerSamples(
-		ctx,
-		hlc.Timestamp{},
-		hlc.Timestamp{},
-	)
+	boundaries, err := s.decideBoundaries(ctx)
 
 	if err != nil {
 		return err
 	}
 
-	for _, sample := range samples.Samples {
-		sample.SpanStats = downsample(sample.SpanStats, 512)
+	sample, err := s.kvAccessor.FlushSamples(ctx, boundaries)
+
+	if err != nil {
+		return err
 	}
 
+	sample.Samples.SpanStats = downsample(sample.Samples.SpanStats, 512)
+
+	// WriteSamples expects multiple samples, so honor that contract.
+	samples := []*keyvispb.Sample{sample.Samples}
 	return keyvisstorage.WriteSamples(ctx, s.ie, samples)
 }
 
-// DecideBoundaries tells KV the key spans that this tenant wants statistics
+// decideBoundaries decides the key spans that this tenant wants statistics
 // for. For now, it will tell KV to collect statistics over the tenant's own
 // ranges.
-func (s *SpanStatsConsumer) DecideBoundaries(ctx context.Context) error {
+func (s *SpanStatsConsumer) decideBoundaries(ctx context.Context) ([]*roachpb.
+	Span, error) {
 
 	boundaries := make([]*roachpb.Span, 0)
 
@@ -92,7 +93,7 @@ func (s *SpanStatsConsumer) DecideBoundaries(ctx context.Context) error {
 
 	for  {
 		if !ri.Valid() {
-			return ri.Error()
+			return nil, ri.Error()
 		}
 
 		boundaries = append(boundaries, &roachpb.Span{
@@ -107,8 +108,7 @@ func (s *SpanStatsConsumer) DecideBoundaries(ctx context.Context) error {
 		ri.Next(ctx)
 	}
 
-	_, err := s.kvAccessor.UpdateBoundaries(ctx, boundaries)
-	return err
+	return boundaries, nil
 }
 
 // DeleteOldestSamples deletes historical samples older than 2 weeks.

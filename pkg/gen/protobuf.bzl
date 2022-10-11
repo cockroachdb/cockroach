@@ -35,7 +35,6 @@ PROTOBUF_SRCS = [
   "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
   "//pkg/kv/kvserver/protectedts/ptstorage:ptstorage_go_proto",
   "//pkg/kv/kvserver/readsummary/rspb:rspb_go_proto",
-  "//pkg/kv/kvserver/spanstats/spanstatspb:spanstatspb_go_proto",
   "//pkg/kv/kvserver:kvserver_go_proto",
   "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:v1_go_proto",
   "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:v1_go_proto",
