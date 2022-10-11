@@ -1862,17 +1862,20 @@ vectorized: true
 │   └── • buffer
 │       │ label: buffer 1
 │       │
-│       └── • cross join
+│       └── • distinct
+│           │ distinct on: rowid
 │           │
-│           ├── • scan
-│           │     missing stats
-│           │     table: uniq_hidden_pk@uniq_hidden_pk_pkey
-│           │     spans: FULL SCAN
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: other@other_pkey
-│                 spans: FULL SCAN
+│           └── • cross join
+│               │
+│               ├── • scan
+│               │     missing stats
+│               │     table: uniq_hidden_pk@uniq_hidden_pk_pkey
+│               │     spans: FULL SCAN
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: other@other_pkey
+│                     spans: FULL SCAN
 │
 ├── • constraint-check
 │   │

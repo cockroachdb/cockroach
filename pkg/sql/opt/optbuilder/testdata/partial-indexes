@@ -573,21 +573,33 @@ project
            ├── columns: partial_index_put1:11!null partial_index_del1:12!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null a_cast:10!null
            ├── project
            │    ├── columns: a_cast:10!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
-           │    ├── select
+           │    ├── distinct-on
            │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
-           │    │    ├── inner-join (cross)
-           │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
-           │    │    │    ├── scan t61520 [as=t]
-           │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           │    │    │    │    └── partial index predicates
-           │    │    │    │         └── t61520_a_idx: filters
-           │    │    │    │              └── a:5 > 0
-           │    │    │    ├── values
-           │    │    │    │    ├── columns: column1:9!null
-           │    │    │    │    └── (1.0,)
-           │    │    │    └── filters (true)
-           │    │    └── filters
-           │    │         └── a:5 = column1:9
+           │    │    ├── grouping columns: rowid:6!null
+           │    │    ├── select
+           │    │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    │    │    ├── inner-join (cross)
+           │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
+           │    │    │    │    ├── scan t61520 [as=t]
+           │    │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+           │    │    │    │    │    └── partial index predicates
+           │    │    │    │    │         └── t61520_a_idx: filters
+           │    │    │    │    │              └── a:5 > 0
+           │    │    │    │    ├── values
+           │    │    │    │    │    ├── columns: column1:9!null
+           │    │    │    │    │    └── (1.0,)
+           │    │    │    │    └── filters (true)
+           │    │    │    └── filters
+           │    │    │         └── a:5 = column1:9
+           │    │    └── aggregations
+           │    │         ├── first-agg [as=a:5]
+           │    │         │    └── a:5
+           │    │         ├── first-agg [as=crdb_internal_mvcc_timestamp:7]
+           │    │         │    └── crdb_internal_mvcc_timestamp:7
+           │    │         ├── first-agg [as=tableoid:8]
+           │    │         │    └── tableoid:8
+           │    │         └── first-agg [as=column1:9]
+           │    │              └── column1:9
            │    └── projections
            │         └── assignment-cast: DECIMAL(10,2) [as=a_cast:10]
            │              └── column1:9

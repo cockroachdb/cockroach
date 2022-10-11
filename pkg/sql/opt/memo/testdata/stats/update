@@ -149,12 +149,12 @@ WITH q AS (UPDATE child SET c = p FROM parent WHERE p = 1 RETURNING p) SELECT * 
 with &2 (q)
  ├── columns: p:18(int!null)
  ├── volatile, mutations
- ├── stats: [rows=1000, distinct(18)=1, null(18)=0]
+ ├── stats: [rows=1, distinct(18)=1, null(18)=0]
  ├── fd: ()-->(18)
  ├── project
  │    ├── columns: parent.p:11(int)
  │    ├── volatile, mutations
- │    ├── stats: [rows=1000, distinct(11)=1, null(11)=0]
+ │    ├── stats: [rows=632.3046, distinct(11)=632.305, null(11)=0]
  │    ├── fd: ()-->(11)
  │    └── update child
  │         ├── columns: x:1(int) child.c:2(int!null) rowid:3(int!null) parent.p:11(int) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
@@ -168,32 +168,53 @@ with &2 (q)
  │         │    └── rowid:8 => rowid:3
  │         ├── input binding: &1
  │         ├── volatile, mutations
- │         ├── stats: [rows=1000, distinct(11)=1, null(11)=0]
+ │         ├── stats: [rows=632.3046, distinct(11)=632.305, null(11)=0]
  │         ├── key: (3)
  │         ├── fd: ()-->(2,11-13), (2)==(11), (11)==(2), (3)-->(1)
- │         ├── select
+ │         ├── distinct-on
  │         │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
- │         │    ├── stats: [rows=1000, distinct(11)=1, null(11)=0]
+ │         │    ├── grouping columns: rowid:8(int!null)
+ │         │    ├── stats: [rows=632.3046, distinct(8)=632.305, null(8)=0, distinct(11)=632.305, null(11)=0]
  │         │    ├── key: (8)
- │         │    ├── fd: ()-->(11-13), (8)-->(6,7,9,10)
- │         │    ├── inner-join (cross)
+ │         │    ├── fd: ()-->(11-13), (8)-->(6,7,9-13)
+ │         │    ├── select
  │         │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
- │         │    │    ├── stats: [rows=1000000, distinct(8)=1000, null(8)=0, distinct(11)=1000, null(11)=0]
- │         │    │    ├── key: (8,11)
- │         │    │    ├── fd: (8)-->(6,7,9,10), (11)-->(12,13)
- │         │    │    ├── scan child
- │         │    │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid)
- │         │    │    │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
- │         │    │    │    ├── key: (8)
- │         │    │    │    └── fd: (8)-->(6,7,9,10)
- │         │    │    ├── scan parent
- │         │    │    │    ├── columns: parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
- │         │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
- │         │    │    │    ├── key: (11)
- │         │    │    │    └── fd: (11)-->(12,13)
- │         │    │    └── filters (true)
- │         │    └── filters
- │         │         └── parent.p:11 = 1 [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+ │         │    │    ├── stats: [rows=1000, distinct(8)=632.305, null(8)=0, distinct(11)=1, null(11)=0]
+ │         │    │    ├── key: (8)
+ │         │    │    ├── fd: ()-->(11-13), (8)-->(6,7,9,10)
+ │         │    │    ├── inner-join (cross)
+ │         │    │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
+ │         │    │    │    ├── stats: [rows=1000000, distinct(8)=1000, null(8)=0, distinct(11)=1000, null(11)=0]
+ │         │    │    │    ├── key: (8,11)
+ │         │    │    │    ├── fd: (8)-->(6,7,9,10), (11)-->(12,13)
+ │         │    │    │    ├── scan child
+ │         │    │    │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid)
+ │         │    │    │    │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
+ │         │    │    │    │    ├── key: (8)
+ │         │    │    │    │    └── fd: (8)-->(6,7,9,10)
+ │         │    │    │    ├── scan parent
+ │         │    │    │    │    ├── columns: parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
+ │         │    │    │    │    ├── stats: [rows=1000, distinct(11)=1000, null(11)=0]
+ │         │    │    │    │    ├── key: (11)
+ │         │    │    │    │    └── fd: (11)-->(12,13)
+ │         │    │    │    └── filters (true)
+ │         │    │    └── filters
+ │         │    │         └── parent.p:11 = 1 [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+ │         │    └── aggregations
+ │         │         ├── first-agg [as=x:6, type=int, outer=(6)]
+ │         │         │    └── x:6 [type=int]
+ │         │         ├── first-agg [as=child.c:7, type=int, outer=(7)]
+ │         │         │    └── child.c:7 [type=int]
+ │         │         ├── first-agg [as=child.crdb_internal_mvcc_timestamp:9, type=decimal, outer=(9)]
+ │         │         │    └── child.crdb_internal_mvcc_timestamp:9 [type=decimal]
+ │         │         ├── first-agg [as=child.tableoid:10, type=oid, outer=(10)]
+ │         │         │    └── child.tableoid:10 [type=oid]
+ │         │         ├── first-agg [as=parent.p:11, type=int, outer=(11)]
+ │         │         │    └── parent.p:11 [type=int]
+ │         │         ├── first-agg [as=parent.crdb_internal_mvcc_timestamp:12, type=decimal, outer=(12)]
+ │         │         │    └── parent.crdb_internal_mvcc_timestamp:12 [type=decimal]
+ │         │         └── first-agg [as=parent.tableoid:13, type=oid, outer=(13)]
+ │         │              └── parent.tableoid:13 [type=oid]
  │         └── f-k-checks
  │              └── f-k-checks-item: child(c) -> parent(p)
  │                   └── anti-join (hash)
@@ -204,7 +225,7 @@ with &2 (q)
  │                        │    ├── columns: c:14(int!null)
  │                        │    ├── mapping:
  │                        │    │    └──  parent.p:11(int) => c:14(int)
- │                        │    ├── stats: [rows=1000, distinct(14)=1, null(14)=0]
+ │                        │    ├── stats: [rows=632.3046, distinct(14)=632.305, null(14)=0]
  │                        │    └── fd: ()-->(14)
  │                        ├── scan parent
  │                        │    ├── columns: parent.p:15(int!null)
@@ -214,13 +235,13 @@ with &2 (q)
  │                             └── c:14 = parent.p:15 [type=bool, outer=(14,15), constraints=(/14: (/NULL - ]; /15: (/NULL - ]), fd=(14)==(15), (15)==(14)]
  └── select
       ├── columns: p:18(int!null)
-      ├── stats: [rows=1000, distinct(18)=1, null(18)=0]
+      ├── stats: [rows=1, distinct(18)=1, null(18)=0]
       ├── fd: ()-->(18)
       ├── with-scan &2 (q)
       │    ├── columns: p:18(int)
       │    ├── mapping:
       │    │    └──  parent.p:11(int) => p:18(int)
-      │    ├── stats: [rows=1000, distinct(18)=1, null(18)=0]
+      │    ├── stats: [rows=632.3046, distinct(18)=632.305, null(18)=0]
       │    └── fd: ()-->(18)
       └── filters
            └── p:18 = 1 [type=bool, outer=(18), constraints=(/18: [/1 - /1]; tight), fd=()-->(18)]
