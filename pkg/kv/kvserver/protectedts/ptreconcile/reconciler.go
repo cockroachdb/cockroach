@@ -98,6 +98,7 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 		return time.Duration(float64(interval) * (1 + (rand.Float64()-.5)*jitterFrac))
 	}
 	timer := timeutil.NewTimer()
+	defer timer.Stop()
 	for {
 		timer.Reset(timeutil.Until(lastReconciled.Add(getInterval())))
 		select {
