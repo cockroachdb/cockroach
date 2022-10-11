@@ -415,15 +415,15 @@ func extractBackupStatement(sj *jobs.ScheduledJob) (*annotatedBackupStatement, e
 
 var _ jobs.ScheduledJobController = &scheduledBackupExecutor{}
 
-func unlinkDependentSchedule(
+func unlinkOrDropDependentSchedule(
 	ctx context.Context,
 	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
 	args *backuppb.ScheduledBackupExecutionArgs,
-) error {
+) (int, error) {
 	if args.DependentScheduleID == 0 {
-		return nil
+		return 0, nil
 	}
 
 	// Load the dependent schedule.
@@ -432,22 +432,36 @@ func unlinkDependentSchedule(
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
 			log.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
-			return nil
+			return 0, nil
 		}
-		return errors.Wrapf(err, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+		return 0, errors.Wrapf(err, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+	}
+
+	if args.BackupType == backuppb.ScheduledBackupExecutionArgs_FULL &&
+		dependentArgs.BackupType == backuppb.ScheduledBackupExecutionArgs_INCREMENTAL {
+		any, err := pbtypes.MarshalAny(dependentArgs)
+		if err != nil {
+			return 0, err
+		}
+		dependentSj.SetExecutionDetails(dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
+		if err := dependentSj.Delete(ctx, scheduleControllerEnv.InternalExecutor(), txn); err != nil {
+			return 0, err
+		}
+
+		return 1, releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
+			dependentArgs.ProtectedTimestampRecord)
 	}
 
 	// Clear the DependentID field since we are dropping the record associated
 	// with it.
-	// TODO(benbardin): Resolve https://github.com/cockroachdb/cockroach/issues/87435 as well.
 	dependentArgs.DependentScheduleID = 0
 	dependentArgs.UnpauseOnSuccess = 0
 	any, err := pbtypes.MarshalAny(dependentArgs)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	dependentSj.SetExecutionDetails(dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
-	return dependentSj.Update(ctx, scheduleControllerEnv.InternalExecutor(), txn)
+	return 0, dependentSj.Update(ctx, scheduleControllerEnv.InternalExecutor(), txn)
 }
 
 // OnDrop implements the ScheduledJobController interface.
@@ -462,16 +476,19 @@ func (e *scheduledBackupExecutor) OnDrop(
 	sj *jobs.ScheduledJob,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-) error {
+) (int, error) {
 	args := &backuppb.ScheduledBackupExecutionArgs{}
+
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
-		return errors.Wrap(err, "un-marshaling args")
+		return 0, errors.Wrap(err, "un-marshaling args")
 	}
 
-	if err := unlinkDependentSchedule(ctx, scheduleControllerEnv, env, txn, args); err != nil {
-		return errors.Wrap(err, "failed to unlink dependent schedule")
+	dependentRowsDropped, err := unlinkOrDropDependentSchedule(ctx, scheduleControllerEnv, env, txn, args)
+	if err != nil {
+		return dependentRowsDropped, errors.Wrap(err, "failed to unlink dependent schedule")
 	}
-	return releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
+
+	return dependentRowsDropped, releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
 		args.ProtectedTimestampRecord)
 }
 
