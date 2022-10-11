@@ -38,6 +38,9 @@ func TestIOLoadListener(t *testing.T) {
 	req := &testRequesterForIOLL{}
 	kvGranter := &testGranterWithIOTokens{}
 	var ioll *ioLoadListener
+	var cumFlushBytes int64
+	var cumFlushWork, cumFlushIdle time.Duration
+
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	datadriven.RunTest(t, testutils.TestDataPath(t, "io_load_listener"),
@@ -56,6 +59,11 @@ func TestIOLoadListener(t *testing.T) {
 				// active.
 				ioll.mu.Mutex = &syncutil.Mutex{}
 				ioll.mu.kvGranter = kvGranter
+
+				// Reset the cumulative data
+				cumFlushBytes = 0
+				cumFlushWork = time.Duration(0)
+				cumFlushIdle = time.Duration(0)
 				return ""
 
 			case "prep-admission-stats":
@@ -112,13 +120,15 @@ func TestIOLoadListener(t *testing.T) {
 					d.ScanArgs(t, "flush-work-sec", &flushWorkSec)
 					d.ScanArgs(t, "flush-idle-sec", &flushIdleSec)
 				}
-				flushMetric := pebble.ThroughputMetric{
-					Bytes:        int64(flushBytes),
-					WorkDuration: time.Duration(flushWorkSec) * time.Second,
-					IdleDuration: time.Duration(flushIdleSec) * time.Second,
-				}
-				im := &pebble.InternalIntervalMetrics{}
-				im.Flush.WriteThroughput = flushMetric
+
+				cumFlushIdle += time.Duration(flushIdleSec) * time.Second
+				cumFlushWork += time.Duration(flushWorkSec) * time.Second
+				cumFlushBytes += int64(flushBytes)
+
+				metrics.Flush.WriteThroughput.Bytes = cumFlushBytes
+				metrics.Flush.WriteThroughput.IdleDuration = cumFlushIdle
+				metrics.Flush.WriteThroughput.WorkDuration = cumFlushWork
+
 				var writeStallCount int
 				if d.HasArg("write-stall-count") {
 					d.ScanArgs(t, "write-stall-count", &writeStallCount)
@@ -151,10 +161,10 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("print-only-first-tick") {
 					d.ScanArgs(t, "print-only-first-tick", &printOnlyFirstTick)
 				}
+
 				ioll.pebbleMetricsTick(ctx, StoreMetrics{
-					Metrics:                 &metrics,
-					WriteStallCount:         int64(writeStallCount),
-					InternalIntervalMetrics: im,
+					Metrics:         &metrics,
+					WriteStallCount: int64(writeStallCount),
 					DiskStats: DiskStats{
 						BytesRead:            uint64(bytesRead),
 						BytesWritten:         uint64(bytesWritten),
@@ -212,10 +222,8 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 		Sublevels: 100,
 		NumFiles:  10000,
 	}
-	ioll.pebbleMetricsTick(ctx,
-		StoreMetrics{Metrics: &m, InternalIntervalMetrics: &pebble.InternalIntervalMetrics{}})
-	ioll.pebbleMetricsTick(ctx,
-		StoreMetrics{Metrics: &m, InternalIntervalMetrics: &pebble.InternalIntervalMetrics{}})
+	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
+	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
 	ioll.allocateTokensTick()
 }
 
@@ -257,7 +265,7 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 	for _, tt := range tests {
 		buf.Printf("%s:\n", tt.name)
 		res := (*ioLoadListener)(nil).adjustTokensInner(
-			ctx, tt.prev, tt.l0Metrics, 12, &pebble.InternalIntervalMetrics{},
+			ctx, tt.prev, tt.l0Metrics, 12, pebble.ThroughputMetric{},
 			100, 10, 0.50)
 		buf.Printf("%s\n", res)
 	}
@@ -303,9 +311,8 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		randomValues()
 		ioll.pebbleMetricsTick(ctx, StoreMetrics{
-			Metrics:                 &m,
-			InternalIntervalMetrics: &pebble.InternalIntervalMetrics{},
-			DiskStats:               d,
+			Metrics:   &m,
+			DiskStats: d,
 		})
 		for j := 0; j < ticksInAdjustmentInterval; j++ {
 			ioll.allocateTokensTick()

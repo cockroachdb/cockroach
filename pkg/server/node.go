@@ -856,17 +856,15 @@ func (n *Node) GetPebbleMetrics() []admission.StoreMetrics {
 	var metrics []admission.StoreMetrics
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 		m := store.Engine().GetMetrics()
-		im := store.Engine().GetInternalIntervalMetrics()
 		diskStats := admission.DiskStats{ProvisionedBandwidth: clusterProvisionedBandwidth}
 		if s, ok := storeIDToDiskStats[store.StoreID()]; ok {
 			diskStats = s
 		}
 		metrics = append(metrics, admission.StoreMetrics{
-			StoreID:                 int32(store.StoreID()),
-			Metrics:                 m.Metrics,
-			WriteStallCount:         m.WriteStallCount,
-			InternalIntervalMetrics: im,
-			DiskStats:               diskStats})
+			StoreID:         int32(store.StoreID()),
+			Metrics:         m.Metrics,
+			WriteStallCount: m.WriteStallCount,
+			DiskStats:       diskStats})
 		return nil
 	})
 	return metrics

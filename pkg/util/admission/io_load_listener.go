@@ -175,8 +175,9 @@ type ioLoadListenerState struct {
 	// Gauge.
 	curL0Bytes int64
 	// Cumulative.
-	cumWriteStallCount int64
-	diskBW             struct {
+	cumWriteStallCount      int64
+	cumFlushWriteThroughput pebble.ThroughputMetric
+	diskBW                  struct {
 		// Cumulative
 		bytesRead        uint64
 		bytesWritten     uint64
@@ -309,10 +310,12 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 		io.diskBW.bytesRead = metrics.DiskStats.BytesRead
 		io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
 		io.diskBW.incomingLSMBytes = cumLSMIncomingBytes
+		io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
 		io.copyAuxEtcFromPerWorkEstimator()
 		return
 	}
 	io.adjustTokens(ctx, metrics)
+	io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
 }
 
 // allocateTokensTick gives out 1/ticksInAdjustmentInterval of the
@@ -380,10 +383,13 @@ func computeIntervalDiskLoadInfo(
 // 100+ms for all write traffic.
 func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics) {
 	sas := io.kvRequester.getStoreAdmissionStats()
-	// Copy the cumulative disk banwidth values for later use.
+	// Copy the cumulative disk bandwidth values for later use.
 	cumDiskBW := io.ioLoadListenerState.diskBW
+	wt := metrics.Flush.WriteThroughput
+	wt.Subtract(io.cumFlushWriteThroughput)
+
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState,
-		metrics.Levels[0], metrics.WriteStallCount, metrics.InternalIntervalMetrics,
+		metrics.Levels[0], metrics.WriteStallCount, wt,
 		L0FileCountOverloadThreshold.Get(&io.settings.SV),
 		L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
 		MinFlushUtilizationFraction.Get(&io.settings.SV),
@@ -480,7 +486,7 @@ func (*ioLoadListener) adjustTokensInner(
 	prev ioLoadListenerState,
 	l0Metrics pebble.LevelMetrics,
 	cumWriteStallCount int64,
-	im *pebble.InternalIntervalMetrics,
+	flushWriteThroughput pebble.ThroughputMetric,
 	threshNumFiles, threshNumSublevels int64,
 	minFlushUtilTargetFraction float64,
 ) adjustTokensResult {
@@ -611,12 +617,12 @@ func (*ioLoadListener) adjustTokensInner(
 	// Compute flush utilization for this interval. A very low flush utilization
 	// will cause flush tokens to be unlimited.
 	intFlushUtilization := float64(0)
-	if im.Flush.WriteThroughput.WorkDuration > 0 {
-		intFlushUtilization = float64(im.Flush.WriteThroughput.WorkDuration) /
-			float64(im.Flush.WriteThroughput.WorkDuration+im.Flush.WriteThroughput.IdleDuration)
+	if flushWriteThroughput.WorkDuration > 0 {
+		intFlushUtilization = float64(flushWriteThroughput.WorkDuration) /
+			float64(flushWriteThroughput.WorkDuration+flushWriteThroughput.IdleDuration)
 	}
 	// Compute flush tokens for this interval that would cause 100% utilization.
-	intFlushTokens := float64(im.Flush.WriteThroughput.PeakRate()) * adjustmentInterval
+	intFlushTokens := float64(flushWriteThroughput.PeakRate()) * adjustmentInterval
 	intWriteStalls := cumWriteStallCount - prev.cumWriteStallCount
 
 	// Ensure flushUtilTargetFraction is in the configured bounds. This also

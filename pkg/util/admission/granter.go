@@ -643,7 +643,6 @@ type StoreMetrics struct {
 	StoreID int32
 	*pebble.Metrics
 	WriteStallCount int64
-	*pebble.InternalIntervalMetrics
 	// Optional.
 	DiskStats DiskStats
 }
