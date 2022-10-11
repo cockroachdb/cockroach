@@ -19,19 +19,39 @@ func init() {
 	opRegistry.register((*scpb.CheckConstraint)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
+			to(scpb.Status_WRITE_ONLY,
+				emit(func(this *scpb.CheckConstraint) *scop.MakeAbsentCheckConstraintValidating {
+					return &scop.MakeAbsentCheckConstraintValidating{
+						TableID:               this.TableID,
+						ConstraintID:          this.ConstraintID,
+						ColumnIDs:             this.ColumnIDs,
+						Expression:            this.Expression,
+						FromHashShardedColumn: this.FromHashShardedColumn,
+					}
+				}),
+			),
+			to(scpb.Status_VALIDATED,
+				emit(func(this *scpb.CheckConstraint) *scop.ValidateCheckConstraint {
+					return &scop.ValidateCheckConstraint{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+					}
+				}),
+			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.CheckConstraint) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.CheckConstraint) *scop.MakeValidatedCheckConstraintPublic {
+					return &scop.MakeValidatedCheckConstraintPublic{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_ABSENT,
-				// TODO(postamar): remove revertibility constraint when possible
-				revertible(false),
-				emit(func(this *scpb.CheckConstraint) *scop.RemoveCheckConstraint {
-					return &scop.RemoveCheckConstraint{
+			to(scpb.Status_VALIDATED,
+				emit(func(this *scpb.CheckConstraint) *scop.MakePublicCheckConstraintValidated {
+					return &scop.MakePublicCheckConstraintValidated{
 						TableID:      this.TableID,
 						ConstraintID: this.ConstraintID,
 					}
@@ -52,6 +72,17 @@ func init() {
 					return &scop.UpdateBackReferencesInSequences{
 						SequenceIDs:           this.UsesSequenceIDs,
 						BackReferencedTableID: this.TableID,
+					}
+				}),
+			),
+			equiv(scpb.Status_WRITE_ONLY),
+			to(scpb.Status_ABSENT,
+				// TODO(postamar): remove revertibility constraint when possible
+				revertible(false),
+				emit(func(this *scpb.CheckConstraint) *scop.RemoveCheckConstraint {
+					return &scop.RemoveCheckConstraint{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
 					}
 				}),
 			),

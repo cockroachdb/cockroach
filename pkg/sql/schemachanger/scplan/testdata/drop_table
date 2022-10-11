@@ -164,6 +164,20 @@ PreCommitPhase stage 1 of 1 with 32 MutationType ops
       TypeIDs:
       - 107
       - 108
+    *scop.RemoveForeignKeyBackReference
+      OriginConstraintID: 2
+      OriginTableID: 109
+      ReferencedTableID: 104
+    *scop.RemoveForeignKeyConstraint
+      ConstraintID: 2
+      TableID: 109
+    *scop.RemoveForeignKeyBackReference
+      OriginConstraintID: 3
+      OriginTableID: 109
+      ReferencedTableID: 105
+    *scop.RemoveForeignKeyConstraint
+      ConstraintID: 3
+      TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
     *scop.RemoveAllTableComments
@@ -188,20 +202,6 @@ PreCommitPhase stage 1 of 1 with 32 MutationType ops
       TableID: 109
     *scop.RemoveOwnerBackReferenceInSequence
       SequenceID: 110
-    *scop.RemoveForeignKeyBackReference
-      OriginConstraintID: 2
-      OriginTableID: 109
-      ReferencedTableID: 104
-    *scop.RemoveForeignKeyConstraint
-      ConstraintID: 2
-      TableID: 109
-    *scop.RemoveForeignKeyBackReference
-      OriginConstraintID: 3
-      OriginTableID: 109
-      ReferencedTableID: 105
-    *scop.RemoveForeignKeyConstraint
-      ConstraintID: 3
-      TableID: 109
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -738,18 +738,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Column:{DescID: 111, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: constraint dependent absent right before constraint
-- from: [ConstraintName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: constraint dependent absent right before constraint
-- from: [ConstraintName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, ConstraintID: 3, ReferencedDescID: 105}, ABSENT]
-  kind: SameStagePrecedence
-  rule: constraint dependent absent right before constraint
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1220,7 +1208,7 @@ CREATE TABLE defaultdb.greeter (
 ops
 DROP TABLE defaultdb.greeter
 ----
-StatementPhase stage 1 of 1 with 1 MutationType op
+StatementPhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [[Table:{DescID: 114}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -1230,10 +1218,19 @@ StatementPhase stage 1 of 1 with 1 MutationType op
     [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[PrimaryIndex:{DescID: 114, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 114
-PreCommitPhase stage 1 of 1 with 16 MutationType ops
+    *scop.MakePublicCheckConstraintValidated
+      ConstraintID: 2
+      TableID: 114
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 114
+      TypeIDs:
+      - 112
+      - 113
+PreCommitPhase stage 1 of 1 with 14 MutationType ops
   transitions:
     [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
@@ -1269,7 +1266,6 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
     [[SecondaryIndexPartial:{DescID: 114, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 114, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
@@ -1309,14 +1305,6 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
         DescriptorID: 114
         Name: greeter
         SchemaID: 101
-    *scop.RemoveCheckConstraint
-      ConstraintID: 2
-      TableID: 114
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 114
-      TypeIDs:
-      - 112
-      - 113
     *scop.SetJobStateOnDescriptor
       DescriptorID: 112
       Initialize: true
@@ -1335,12 +1323,12 @@ PreCommitPhase stage 1 of 1 with 16 MutationType ops
       - 114
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.greeter
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹greeter›
         statementtag: DROP TABLE
-PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Table:{DescID: 114}, ABSENT], DROPPED] -> ABSENT
     [[Column:{DescID: 114, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
@@ -1350,6 +1338,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
     [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[PrimaryIndex:{DescID: 114, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], VALIDATED] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -1422,6 +1411,9 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
+      TableID: 114
+    *scop.RemoveCheckConstraint
+      ConstraintID: 2
       TableID: 114
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 112
