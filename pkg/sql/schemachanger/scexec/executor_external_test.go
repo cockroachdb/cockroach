@@ -483,6 +483,15 @@ func (noopValidator) ValidateInvertedIndexes(
 	return nil
 }
 
+func (noopValidator) ValidateCheckConstraint(
+	ctx context.Context,
+	tbl catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return nil
+}
+
 type noopEventLogger struct{}
 
 var _ scexec.EventLogger = noopEventLogger{}
