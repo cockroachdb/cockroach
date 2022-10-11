@@ -34,6 +34,14 @@ tc_end_block "Generate Diagrams"
 tc_start_block "Push Diagrams to Git"
 cd generated-diagrams
 
+changed_diagrams=$(git status --porcelain)
+if [ -z "$changed_diagrams" ]
+then
+	echo "No diagrams changed. Exiting."
+  tc_end_block "Push Diagrams to Git"
+	exit 0
+fi
+
 git add .
 git commit -m "Snapshot $cockroach_ref"
 
