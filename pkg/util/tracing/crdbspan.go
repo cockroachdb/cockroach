@@ -143,9 +143,13 @@ type recordingState struct {
 	recordingType atomicRecordingType
 
 	logs sizeLimitedBuffer // of *tracingpb.LogRecords
-	// structured accumulates StructuredRecord's. It will contain the events
-	// recorded on this span, and also the ones recorded on children that
-	// finished while this parent span's recording was not verbose.
+	// structured accumulates StructuredRecord's.
+	//
+	// Note that structured events that originally belonged to child spans but
+	// bubbled up to this parent in various ways (e.g. children finished while
+	// this span was not recording verbosely, or children that were dropped from a
+	// verbose recording because of the span limit) are not part of this buffer;
+	// they're in finishedChildren.Root.StructuredRecords.
 	structured sizeLimitedBuffer
 
 	// notifyParentOnStructuredEvent is true if the span's parent has asked to be
@@ -168,13 +172,14 @@ type recordingState struct {
 	// that were manually imported, as well as recordings from local children
 	// that Finish()ed.
 	//
-	// Only child spans that finished while this span was in the
-	// RecordingVerbose mode are included here. For children finished while this
-	// span is not in RecordingVerbose, only their structured events are copied
-	// to structured above.
+	// Only child spans that finished while this span was in the RecordingVerbose
+	// mode are included here. Structured events from children finished while this
+	// parent was in RecordingStructured mode are stored
+	// finishedChildren.Root.Structured.
 	//
 	// It's convenient to store finishedChildren as a Trace, even though the
-	// finishedChildren.Root will only be initialized when the span finishes.
+	// finishedChildren.Root will only be initialized when the span finishes
+	// (other that Root.Structured, which can accumulate events from children).
 	finishedChildren Trace
 
 	// childrenMetadata is a mapping from operation to the aggregated metadata of
@@ -816,7 +821,7 @@ func (s *crdbSpan) recordFinishedChildren(childRecording Trace) {
 	s.recordFinishedChildrenLocked(childRecording)
 }
 
-// s takes ownership of childRecording; the caller is not allowed to use them
+// s takes ownership of childRec; the caller is not allowed to use them
 // anymore.
 func (s *crdbSpan) recordFinishedChildrenLocked(childRec Trace) {
 	if childRec.Empty() {
@@ -837,7 +842,10 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRec Trace) {
 		buf := childRec.appendStructuredEventsRecursively(nil /* buffer */)
 		for i := range buf {
 			event := &buf[i]
-			s.recordInternalLocked(event, &s.mu.recording.structured)
+			if s.mu.recording.finishedChildren.StructuredRecordsSizeBytes+int64(event.MemorySize()) < maxStructuredBytesPerTrace {
+				size := s.mu.recording.finishedChildren.Root.AddStructuredRecord(event)
+				s.mu.recording.finishedChildren.StructuredRecordsSizeBytes += size
+			}
 		}
 	case tracingpb.RecordingOff:
 		break

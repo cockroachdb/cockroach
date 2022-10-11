@@ -240,17 +240,14 @@ func TestImportRemoteRecordingMaintainsRightByteSize(t *testing.T) {
 	child.RecordStructured(&types.StringValue{Value: "test"})
 
 	root := tr1.StartSpan("root", WithRecording(tracingpb.RecordingStructured))
-	root.ImportRemoteRecording(child.GetRecording(tracingpb.RecordingStructured))
-	c := root.i.crdb
-	c.mu.Lock()
-	buf := c.mu.recording.structured
-	sz := 0
-	for i := 0; i < buf.Len(); i++ {
-		sz += buf.Get(i).(memorySizable).MemorySize()
-	}
-	c.mu.Unlock()
-	require.NotZero(t, buf.bytesSize)
-	require.Equal(t, int64(sz), buf.bytesSize)
+	childTrace := child.i.crdb.GetRecording(tracingpb.RecordingStructured, false /* finishing */)
+	childTrace.check(t)
+
+	root.ImportRemoteRecording(childTrace.Flatten())
+	rootTrace := root.i.crdb.GetRecording(tracingpb.RecordingStructured, false /* finishing */)
+	require.Len(t, rootTrace.Root.StructuredRecords, 2)
+	require.Equal(t, childTrace.StructuredRecordsSizeBytes, rootTrace.Root.StructuredRecordsSizeBytes)
+	rootTrace.check(t)
 }
 
 func TestSpanRecordStructured(t *testing.T) {
@@ -613,10 +610,12 @@ func (t *Trace) check(test *testing.T) {
 		}
 		t.Children[i].check(test)
 		numSpans += t.Children[i].NumSpans
+		size += t.Children[i].StructuredRecordsSizeBytes
 	}
 	if numSpans != t.NumSpans {
 		test.Fatalf("%s: expected %d spans, got %d", t.Root.Operation, numSpans, t.NumSpans)
 	}
+	require.Equal(test, size, t.StructuredRecordsSizeBytes)
 }
 
 // Test that structured logs are preserved when trimSpans drops a span.
@@ -1087,6 +1086,39 @@ func TestStructuredRecording(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStructuredRecordingSizeLimit(t *testing.T) {
+	tr := NewTracer()
+	root := tr.StartSpan("root", WithRecording(tracingpb.RecordingStructured))
+	defer root.Finish()
+	payload := &types.StringValue{Value: "test"}
+	p, err := types.MarshalAny(payload)
+	require.NoError(t, err)
+	record := &tracingpb.StructuredRecord{Payload: p}
+	eventSize := record.MemorySize()
+	maxEventsPerSpan := maxStructuredBytesPerSpan / eventSize
+	maxEventPerTrace := maxStructuredBytesPerTrace / eventSize
+	// Try to record more events than the per-span limit allows, and check that
+	// some get dropped.
+	for i := 0; i < maxEventsPerSpan+10; i++ {
+		root.RecordStructured(payload)
+	}
+	require.Len(t, root.GetConfiguredRecording()[0].StructuredRecords, maxEventsPerSpan)
+
+	// Try to record in child spans more events than the per-trace limit allows,
+	// and check that some get dropped.
+	numSpans := maxEventPerTrace / maxEventsPerSpan
+	for i := 0; i < numSpans+10; i++ {
+		sp := tr.StartSpan("root", WithParent(root))
+		for j := 0; j < maxEventsPerSpan+10; j++ {
+			sp.RecordStructured(payload)
+		}
+		sp.Finish()
+	}
+	// Because of implementation details, the events in the root span don't count
+	// towards the limit, so we can get a trace that's slightly over the limit.
+	require.Len(t, root.GetConfiguredRecording()[0].StructuredRecords, maxEventPerTrace+maxEventsPerSpan)
 }
 
 // TestVerboseRecordingFinishedChildrenDurations tests that the VerboseRecording
