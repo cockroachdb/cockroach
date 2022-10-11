@@ -502,6 +502,45 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 	sp.DetailsMu.StoreDetails[storeID] = &detail
 }
 
+// UpdateLocalStoreAfterRelocate is used to update the local copy of the
+// previous and new replica stores immediately after a successful relocate
+// range.
+func (sp *StorePool) UpdateLocalStoreAfterRelocate(
+	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	oldVoters, oldNonVoters []roachpb.ReplicaDescriptor,
+	localStore roachpb.StoreID,
+	rangeQPS float64,
+) {
+	if len(voterTargets) < 1 {
+		return
+	}
+	leaseTarget := voterTargets[0]
+	sp.UpdateLocalStoresAfterLeaseTransfer(localStore, leaseTarget.StoreID, rangeQPS)
+
+	sp.DetailsMu.Lock()
+	defer sp.DetailsMu.Unlock()
+
+	updateTargets := func(targets []roachpb.ReplicationTarget) {
+		for _, target := range targets {
+			if toDetail := sp.GetStoreDetailLocked(target.StoreID); toDetail != nil {
+				toDetail.Desc.Capacity.RangeCount++
+			}
+		}
+	}
+	updatePrevious := func(previous []roachpb.ReplicaDescriptor) {
+		for _, old := range previous {
+			if toDetaill := sp.GetStoreDetailLocked(old.StoreID); toDetaill != nil {
+				toDetaill.Desc.Capacity.RangeCount--
+			}
+		}
+	}
+
+	updateTargets(voterTargets)
+	updateTargets(nonVoterTargets)
+	updatePrevious(oldVoters)
+	updatePrevious(oldNonVoters)
+}
+
 // UpdateLocalStoresAfterLeaseTransfer is used to update the local copies of the
 // involved store descriptors immediately after a lease transfer.
 func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
