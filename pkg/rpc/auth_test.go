@@ -242,7 +242,7 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq(prefix(5, "a"), prefix(5, "b")),
 				)},
-				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/5{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
@@ -254,33 +254,33 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq(prefix(50, "a"), prefix(50, "b")),
 				)},
-				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/50{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq("a", "b"),
 					makeReq(prefix(5, "a"), prefix(5, "b")),
 				)},
-				expErr: `requested key span {a-/Tenant/5"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span {a-/Tenant/5b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq(prefix(5, "a"), prefix(5, "b")),
 					makeReq(prefix(10, "a"), prefix(10, "b")),
 				)},
-				expErr: `requested key span /Tenant/{5"a"-10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/{5a-10b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq("a", prefix(10, "b")),
 				)},
-				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span {a-/Tenant/10b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeReq(prefix(10, "a"), prefix(20, "b")),
 				)},
-				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/{10a-20b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
@@ -330,7 +330,7 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeAdminSplitReq(prefix(50, "a")),
 				)},
-				expErr: `requested key span /Tenant/50"a{"-\\x00"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/50a{-\\x00} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
@@ -362,7 +362,7 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: &roachpb.BatchRequest{Requests: makeReqs(
 					makeAdminScatterReq(prefix(50, "a")),
 				)},
-				expErr: `requested key span /Tenant/50"a{"-\\x00"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/50a{-\\x00} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: &roachpb.BatchRequest{Requests: makeReqs(
@@ -421,7 +421,7 @@ func TestTenantAuthRequest(t *testing.T) {
 			},
 			{
 				req:    &roachpb.RangeFeedRequest{Span: makeSpan(prefix(5, "a"), prefix(5, "b"))},
-				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/5{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req:    &roachpb.RangeFeedRequest{Span: makeSpan(prefix(10, "a"), prefix(10, "b"))},
@@ -429,15 +429,15 @@ func TestTenantAuthRequest(t *testing.T) {
 			},
 			{
 				req:    &roachpb.RangeFeedRequest{Span: makeSpan(prefix(50, "a"), prefix(50, "b"))},
-				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/50{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req:    &roachpb.RangeFeedRequest{Span: makeSpan("a", prefix(10, "b"))},
-				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span {a-/Tenant/10b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req:    &roachpb.RangeFeedRequest{Span: makeSpan(prefix(10, "a"), prefix(20, "b"))},
-				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/{10a-20b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 		},
 		"/cockroach.roachpb.Internal/GossipSubscription": {
@@ -497,7 +497,7 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: makeGetSpanConfigsReq(
 					makeSpanTarget(makeSpan(prefix(5, "a"), prefix(5, "b"))),
 				),
-				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/5{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeGetSpanConfigsReq(
@@ -509,19 +509,19 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: makeGetSpanConfigsReq(
 					makeSpanTarget(makeSpan(prefix(50, "a"), prefix(50, "b"))),
 				),
-				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/50{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeGetSpanConfigsReq(
 					makeSpanTarget(makeSpan("a", prefix(10, "b"))),
 				),
-				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span {a-/Tenant/10b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeGetSpanConfigsReq(
 					makeSpanTarget(makeSpan(prefix(10, "a"), prefix(20, "b"))),
 				),
-				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/{10a-20b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req:    makeGetSpanConfigsReq(makeSystemSpanConfigTarget(10, 10)),
@@ -577,7 +577,7 @@ func TestTenantAuthRequest(t *testing.T) {
 					makeSpanTarget(makeSpan(prefix(5, "a"), prefix(5, "b"))),
 					true,
 				),
-				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/5{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeUpdateSpanConfigsReq(
@@ -591,21 +591,21 @@ func TestTenantAuthRequest(t *testing.T) {
 					makeSpanTarget(makeSpan(prefix(50, "a"), prefix(50, "b"))),
 					true,
 				),
-				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/50{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeUpdateSpanConfigsReq(
 					makeSpanTarget(makeSpan("a", prefix(10, "b"))),
 					true,
 				),
-				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span {a-/Tenant/10b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeUpdateSpanConfigsReq(
 					makeSpanTarget(makeSpan(prefix(10, "a"), prefix(20, "b"))),
 					true,
 				),
-				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/{10a-20b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeUpdateSpanConfigsReq(
@@ -619,7 +619,7 @@ func TestTenantAuthRequest(t *testing.T) {
 					makeSpanTarget(makeSpan(prefix(5, "a"), prefix(5, "b"))),
 					false,
 				),
-				expErr: `requested key span /Tenant/5"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/5{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeUpdateSpanConfigsReq(
@@ -633,21 +633,21 @@ func TestTenantAuthRequest(t *testing.T) {
 					makeSpanTarget(makeSpan(prefix(50, "a"), prefix(50, "b"))),
 					false,
 				),
-				expErr: `requested key span /Tenant/50"{a"-b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/50{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeUpdateSpanConfigsReq(
 					makeSpanTarget(makeSpan("a", prefix(10, "b"))),
 					false,
 				),
-				expErr: `requested key span {a-/Tenant/10"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span {a-/Tenant/10b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req: makeUpdateSpanConfigsReq(
 					makeSpanTarget(makeSpan(prefix(10, "a"), prefix(20, "b"))),
 					false,
 				),
-				expErr: `requested key span /Tenant/{10"a"-20"b"} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+				expErr: `requested key span /Tenant/{10a-20b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 			{
 				req:    makeUpdateSpanConfigsReq(makeSystemSpanConfigTarget(10, 10), false),

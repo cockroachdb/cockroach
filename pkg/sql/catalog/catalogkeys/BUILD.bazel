@@ -15,6 +15,7 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/util/encoding",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

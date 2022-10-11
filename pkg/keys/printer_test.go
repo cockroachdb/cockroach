@@ -69,7 +69,7 @@ func TestSafeFormatKey_SystemTenant(t *testing.T) {
 		{
 			"namespace table handled as standard system tenant table",
 			keys.NamespaceTableMin,
-			"/Table/30",
+			"/NamespaceTable/30",
 		},
 		{
 			"table index without index key",
@@ -105,6 +105,14 @@ func TestSafeFormatKey_SystemTenant(t *testing.T) {
 			makeKey(tenSysCodec.TablePrefix(42), []byte{0x12, 'a', 0x00, 0x03}),
 			`/Table/42/‹???›`,
 		},
+		{
+			"marks safe reserved key prefix",
+			makeKey(keys.Meta1Prefix,
+				tenSysCodec.TablePrefix(42),
+				encoding.EncodeStringAscending(nil, "California"),
+				encoding.EncodeStringAscending(nil, "Los Angeles")),
+			`/Meta1/Table/42/‹"California"›/‹"Los Angeles"›`,
+		},
 	}
 
 	for _, test := range testCases {
@@ -114,17 +122,16 @@ func TestSafeFormatKey_SystemTenant(t *testing.T) {
 	}
 }
 
-func TestSafeFormatKey_UnsupportedKeyspace(t *testing.T) {
-	ten5Codec := keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+func TestSafeFormatKey_Basic(t *testing.T) {
 	testCases := []struct {
 		name string
 		key  roachpb.Key
 		exp  string
 	}{
 		{
-			"key-spaces without a safe format function implementation are fully redacted",
-			keys.MakeRangeKeyPrefix(roachpb.RKey(ten5Codec.TablePrefix(42))),
-			`‹/Local/Range/Tenant/5/Table/42›`,
+			"ensure constants get redacted",
+			makeKey(keys.Meta2Prefix, roachpb.Key("foo")),
+			`/Meta2/‹"foo"›`,
 		},
 	}
 

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -84,7 +85,9 @@ func IndexKeyValDirs(index catalog.Index) []encoding.Direction {
 // currently true for the fields we care about stripping (the table and index
 // ID).
 func PrettyKey(valDirs []encoding.Direction, key roachpb.Key, skip int) string {
-	p := key.StringWithDirs(valDirs)
+	var buf redact.StringBuilder
+	key.StringWithDirs(&buf, valDirs)
+	p := buf.String()
 	for i := 0; i <= skip; i++ {
 		n := strings.IndexByte(p[1:], '/')
 		if n == -1 {

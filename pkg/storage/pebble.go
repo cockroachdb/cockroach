@@ -847,11 +847,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// The context dance here is done so that we have a clean context without
 	// timeouts that has a copy of the log tags.
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
-	logCtx = logtags.AddTag(logCtx, "pebble", nil)
 	// The store id, could not necessarily be determined when this function
 	// is called. Therefore, we use a container for the store id.
 	storeIDContainer := &base.StoreIDContainer{}
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
+	logCtx = logtags.AddTag(logCtx, "pebble", nil)
 
 	if cfg.Opts.Logger == nil {
 		cfg.Opts.Logger = pebbleLogger{
