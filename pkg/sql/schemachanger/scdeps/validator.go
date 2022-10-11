@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -28,7 +30,7 @@ type ValidateForwardIndexesFn func(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -40,9 +42,19 @@ type ValidateInvertedIndexesFn func(
 	codec keys.SQLCodec,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
-	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
+	execOverride sessiondata.InternalExecutorOverride,
+) error
+
+// ValidateCheckConstraintFn callback function for validting check constraints.
+type ValidateCheckConstraintFn func(
+	ctx context.Context,
+	tbl catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	sessionData *sessiondata.SessionData,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) error
 
@@ -57,6 +69,7 @@ type validator struct {
 	ieFactory               sqlutil.InternalExecutorFactory
 	validateForwardIndexes  ValidateForwardIndexesFn
 	validateInvertedIndexes ValidateInvertedIndexesFn
+	validateCheckConstraint ValidateCheckConstraintFn
 	newFakeSessionData      NewFakeSessionDataFn
 }
 
@@ -92,18 +105,30 @@ func (vd validator) ValidateInvertedIndexes(
 	)
 }
 
+func (vd validator) ValidateCheckConstraint(
+	ctx context.Context,
+	tbl catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return vd.validateCheckConstraint(ctx, tbl, constraint, vd.newFakeSessionData(&vd.settings.SV),
+		vd.makeHistoricalInternalExecTxnRunner(), override)
+}
+
 // makeHistoricalInternalExecTxnRunner creates a new transaction runner which
 // always runs at the same time and that time is the current time as of when
 // this constructor was called.
-func (vd validator) makeHistoricalInternalExecTxnRunner() sqlutil.HistoricalInternalExecTxnRunner {
+func (vd validator) makeHistoricalInternalExecTxnRunner() descs.HistoricalInternalExecTxnRunner {
 	now := vd.db.Clock().Now()
-	return func(ctx context.Context, fn sqlutil.InternalExecFn) error {
-		validationTxn := vd.db.NewTxn(ctx, "validation")
-		err := validationTxn.SetFixedTimestamp(ctx, now)
-		if err != nil {
-			return err
-		}
-		return fn(ctx, validationTxn, vd.ieFactory.NewInternalExecutor(vd.newFakeSessionData(&vd.settings.SV)))
+	return func(ctx context.Context, fn descs.InternalExecFn) error {
+		return vd.ieFactory.(descs.TxnManager).DescsTxnWithExecutor(ctx, vd.db, vd.newFakeSessionData(&vd.settings.SV), func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		) error {
+			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+				return err
+			}
+			return fn(ctx, txn, ie, descriptors)
+		})
 	}
 }
 
@@ -116,6 +141,7 @@ func NewValidator(
 	ieFactory sqlutil.InternalExecutorFactory,
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
+	validateCheckConstraint ValidateCheckConstraintFn,
 	newFakeSessionData NewFakeSessionDataFn,
 ) scexec.Validator {
 	return validator{
@@ -125,6 +151,7 @@ func NewValidator(
 		ieFactory:               ieFactory,
 		validateForwardIndexes:  validateForwardIndexes,
 		validateInvertedIndexes: validateInvertedIndexes,
+		validateCheckConstraint: validateCheckConstraint,
 		newFakeSessionData:      newFakeSessionData,
 	}
 }

@@ -232,14 +232,6 @@ type InternalExecutorFactory interface {
 	TxnWithExecutor(context.Context, *kv.DB, *sessiondata.SessionData, func(context.Context, *kv.Txn, InternalExecutor) error, ...TxnOption) error
 }
 
-// InternalExecFn is the type of functions that operates using an internalExecutor.
-type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie InternalExecutor) error
-
-// HistoricalInternalExecTxnRunner is like historicalTxnRunner except it only
-// passes the fn the exported InternalExecutor instead of the whole unexported
-// extendedEvalContenxt, so it can be implemented outside pkg/sql.
-type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
-
 // TxnOption is used to configure a Txn or TxnWithExecutor.
 type TxnOption interface {
 	Apply(*TxnConfig)

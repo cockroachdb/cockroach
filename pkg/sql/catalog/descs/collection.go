@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -611,3 +612,11 @@ func MakeTestCollection(ctx context.Context, leaseManager *lease.Manager) Collec
 		leased:   makeLeasedDescriptors(leaseManager),
 	}
 }
+
+// InternalExecFn is the type of functions that operates using an internalExecutor.
+type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, descriptors *Collection) error
+
+// HistoricalInternalExecTxnRunner is like historicalTxnRunner except it only
+// passes the fn the exported InternalExecutor and *Collection, instead of
+// the whole unexported extendedEvalContenxt, so it can be implemented outside pkg/sql.
+type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
