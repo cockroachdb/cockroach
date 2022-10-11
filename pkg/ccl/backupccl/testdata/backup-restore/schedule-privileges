@@ -122,20 +122,9 @@ exec-sql user=testuser
 DROP SCHEDULE $fullID
 ----
 
-query-sql
-with schedules as (SHOW SCHEDULES FOR BACKUP) SELECT label,command,owner FROM schedules WHERE id IN
-($fullID, $incID) ORDER BY next_run;
-----
-foocluster_admin BACKUP INTO LATEST IN 'external://foo/cluster' WITH detached root
-
 exec-sql
 REVOKE ADMIN FROM testuser
 ----
-
-exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to DROP it) user=testuser
-DROP SCHEDULE $incID
-----
-regex matches error
 
 # Save the schedule IDs for the schedules that were created by non-admin testuser.
 let $testuserFullID $testuserIncID
@@ -169,26 +158,5 @@ exec-sql user=testuser
 DROP SCHEDULE $testuserFullID;
 DROP SCHEDULE $testuserIncID;
 ----
-
-# But testuser can't drop, alter, resume or pause the root owned schedules.
-exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to PAUSE it) user=testuser
-PAUSE SCHEDULE $incID
-----
-regex matches error
-
-exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to RESUME it) user=testuser
-RESUME SCHEDULE $incID
-----
-regex matches error
-
-exec-sql user=testuser expect-error-regex=(incremental backup schedule [0-9]+ has no corresponding full backup schedule)
-ALTER BACKUP SCHEDULE $incID SET WITH revision_history = false;
-----
-regex matches error
-
-exec-sql expect-error-regex=(must be admin or owner of the schedule [0-9]+ to DROP it) user=testuser
-DROP SCHEDULE $incID;
-----
-regex matches error
 
 subtest end

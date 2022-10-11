@@ -240,13 +240,6 @@ INSERT INTO t values (1), (10), (100);
 		th.waitForSuccessfulScheduledJob(t, schedule.ScheduleID())
 	}
 
-	clearSuccessfulJobForSchedule := func(t *testing.T, schedule *jobs.ScheduledJob) {
-		query := "DELETE FROM " + th.env.SystemJobsTableName() +
-			" WHERE status=$1 AND created_by_type=$2 AND created_by_id=$3"
-		_, err := th.sqlDB.DB.ExecContext(context.Background(), query, jobs.StatusSucceeded,
-			jobs.CreatedByScheduledJobs, schedule.ScheduleID())
-		require.NoError(t, err)
-	}
 	clusterBackupStmt := `BACKUP INTO 'nodelocal://1/%s'`
 
 	ctx := context.Background()
@@ -293,18 +286,6 @@ INSERT INTO t values (1), (10), (100);
 			hlc.Timestamp{WallTime: backupAsOfTimes[0].Round(time.Microsecond).UnixNano()})
 
 		th.sqlDB.Exec(t, `DROP SCHEDULE $1`, fullID)
-
-		// Run the inc schedule.
-		runSchedule(t, incSchedule)
-		checkPTSRecord(ctx, t, th, *ptsOnIncID, incSchedule,
-			hlc.Timestamp{WallTime: backupAsOfTimes[1].Round(time.Microsecond).UnixNano()})
-		clearSuccessfulJobForSchedule(t, incSchedule)
-
-		// Run it again.
-		incSchedule = th.loadSchedule(t, incID)
-		runSchedule(t, incSchedule)
-		checkPTSRecord(ctx, t, th, *ptsOnIncID, incSchedule,
-			hlc.Timestamp{WallTime: backupAsOfTimes[2].Round(time.Microsecond).UnixNano()})
 	})
 }
 

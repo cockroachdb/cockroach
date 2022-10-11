@@ -77,7 +77,7 @@ type ScheduledJobController interface {
 		schedule *ScheduledJob,
 		txn *kv.Txn,
 		descsCol *descs.Collection,
-	) error
+	) (int, error)
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.
