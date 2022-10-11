@@ -2740,7 +2740,7 @@ root      other_db       public              ALL             YES
 ## information_schema.table_privileges and information_schema.role_table_grants
 
 # root can see everything
-query TTTTTTTT colnames rowsort
+query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.table_privileges ORDER BY table_schema, table_name, table_schema, grantee, privilege_type
 ----
 grantor  grantee  table_catalog  table_schema        table_name                             privilege_type  is_grantable  with_hierarchy
