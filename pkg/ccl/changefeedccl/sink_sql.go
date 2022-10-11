@@ -16,7 +16,6 @@ import (
 	"hash/fnv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -182,7 +181,7 @@ func (s *sqlSink) emit(
 	// Generate the message id on the client to match the guaranttees of kafka
 	// (two messages are only guaranteed to keep their order if emitted from the
 	// same producer to the same partition).
-	messageID := builtins.GenerateUniqueInt(base.SQLInstanceID(partition))
+	messageID := builtins.GenerateUniqueInt(builtins.ProcessUniqueID(partition))
 	s.rowBuf = append(s.rowBuf, topic, partition, messageID, key, value, resolved)
 	if len(s.rowBuf)/sqlSinkEmitCols >= sqlSinkRowBatchSize {
 		return s.Flush(ctx)

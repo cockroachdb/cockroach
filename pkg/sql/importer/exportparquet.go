@@ -730,7 +730,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 	defer span.Finish()
 
 	instanceID := sp.flowCtx.EvalCtx.NodeID.SQLInstanceID()
-	uniqueID := builtins.GenerateUniqueInt(instanceID)
+	uniqueID := builtins.GenerateUniqueInt(builtins.ProcessUniqueID(instanceID))
 
 	err := func() error {
 		typs := sp.input.OutputTypes()

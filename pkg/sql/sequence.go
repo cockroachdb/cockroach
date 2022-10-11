@@ -121,7 +121,9 @@ func incrementSequenceHelper(
 
 	var val int64
 	if seqOpts.Virtual {
-		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID.SQLInstanceID())
+		rowid := builtins.GenerateUniqueInt(
+			builtins.ProcessUniqueID(p.EvalContext().NodeID.SQLInstanceID()),
+		)
 		val = int64(rowid)
 	} else {
 		val, err = p.incrementSequenceUsingCache(ctx, descriptor)
