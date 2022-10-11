@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -995,9 +994,6 @@ type StoreConfig struct {
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
 
-	// SQLExecutor is used by the store to execute SQL statements.
-	SQLExecutor sqlutil.InternalExecutor
-
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
 	TimeSeriesDataStore TimeSeriesDataStore
@@ -1097,6 +1093,9 @@ type StoreConfig struct {
 	//
 	// TODO(ajwerner): Remove in 22.2.
 	SystemConfigProvider config.SystemConfigProvider
+
+	// RangeLogWriter is used to write entries to the system.rangelog table.
+	RangeLogWriter RangeLogWriter
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -1217,6 +1216,15 @@ func NewStore(
 		nil,
 		math.MaxInt64,
 		cfg.Settings,
+	)
+
+	s.cfg.RangeLogWriter = newWrappedRangeLogWriter(
+		s.metrics.getCounterForRangeLogEventType,
+		func() bool {
+			return cfg.LogRangeAndNodeEvents &&
+				logRangeAndNodeEventsEnabled.Get(&cfg.Settings.SV)
+		},
+		cfg.RangeLogWriter,
 	)
 
 	s.draining.Store(false)

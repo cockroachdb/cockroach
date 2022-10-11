@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
@@ -72,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule" // register schedules declared outside of pkg/sql
@@ -636,6 +638,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedTSReader = spanconfigptsreader.NewAdapter(protectedtsProvider.(*ptprovider.Provider).Cache, spanConfig.subscriber)
 	}
 
+	rangeLogWriter := rangelog.NewWriter(
+		keys.SystemSQLCodec,
+		func() int64 {
+			return int64(builtins.GenerateUniqueInt(
+				builtins.ProcessUniqueID(nodeIDContainer.Get()),
+			))
+		},
+	)
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:        cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                 st,
@@ -653,7 +663,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ScanMaxIdleTime:          cfg.ScanMaxIdleTime,
 		HistogramWindowInterval:  cfg.HistogramWindowInterval(),
 		StorePool:                storePool,
-		SQLExecutor:              internalExecutor,
 		LogRangeAndNodeEvents:    cfg.EventLogEnabled,
 		RangeDescriptorCache:     distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:      tsDB,
@@ -667,6 +676,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SpanConfigsDisabled:      cfg.SpanConfigsDisabled,
 		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
+		RangeLogWriter:           rangeLogWriter,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -1654,7 +1664,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// range logs. We do it as a separate stage to log events early just in case
 	// startup fails, and write to range log once the server is running as we need
 	// to run sql statements to update rangelog.
-	publishPendingLossOfQuorumRecoveryEvents(ctx, s.node.stores, s.stopper)
+	publishPendingLossOfQuorumRecoveryEvents(
+		ctx, s.node.execCfg.InternalExecutor, s.node.stores, s.stopper,
+	)
 
 	log.Event(ctx, "server initialized")
 

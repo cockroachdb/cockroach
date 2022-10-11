@@ -1,0 +1,86 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package rangelog
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/errors"
+)
+
+// InternalExecutorWriter implements kvserver.RangeLogWriter
+// using the InternalExecutor.
+type InternalExecutorWriter struct {
+	generateUniqueID func() int64
+	ie               sqlutil.InternalExecutor
+	insertQuery      string
+}
+
+// NewInternalExecutorWriter returns a new InternalExecutorWriter which
+// implements kvserver.RangeLogWriter using the InternalExecutor.
+func NewInternalExecutorWriter(
+	generateUniqueID func() int64, ie sqlutil.InternalExecutor, tableName string,
+) *InternalExecutorWriter {
+	return &InternalExecutorWriter{
+		generateUniqueID: generateUniqueID,
+		ie:               ie,
+		insertQuery: fmt.Sprintf(`
+	INSERT INTO %s (
+		timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info, "uniqueID"
+	)
+	VALUES(
+		$1, $2, $3, $4, $5, $6, $7
+	)
+	`, tableName),
+	}
+}
+
+func (s *InternalExecutorWriter) WriteRangeLogEvent(
+	ctx context.Context, txn *kv.Txn, event kvserverpb.RangeLogEvent,
+) error {
+	args := []interface{}{
+		event.Timestamp,
+		event.RangeID,
+		event.StoreID,
+		event.EventType.String(),
+		nil, // otherRangeID
+		nil, // info
+		s.generateUniqueID(),
+	}
+	if event.OtherRangeID != 0 {
+		args[4] = event.OtherRangeID
+	}
+	if event.Info != nil {
+		infoBytes, err := json.Marshal(*event.Info)
+		if err != nil {
+			return err
+		}
+		args[5] = string(infoBytes)
+	}
+
+	rows, err := s.ie.ExecEx(ctx, "log-range-event", txn,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		s.insertQuery, args...)
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return errors.Errorf("%d rows affected by log insertion; expected exactly one row affected.", rows)
+	}
+	return nil
+}
