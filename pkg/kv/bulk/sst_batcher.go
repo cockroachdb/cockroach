@@ -306,11 +306,10 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 		return err
 	}
 
-	// If we do not allowing shadowing of keys when ingesting an SST via
-	// AddSSTable, then we can update the MVCCStats on the fly because we are
-	// guaranteed to ingest unique keys. This saves us an extra iteration in
-	// AddSSTable which has been identified as a significant performance
-	// regression for IMPORT.
+	// If we do not allow shadowing of keys when ingesting an SST via AddSSTable,
+	// then we can update the MVCCStats on the fly because we are guaranteed to
+	// ingest unique keys. This saves us an extra iteration in AddSSTable which
+	// has been identified as a significant performance regression for IMPORT.
 	if !b.disallowShadowingBelow.IsEmpty() {
 		b.updateMVCCStats(key, value)
 	}
