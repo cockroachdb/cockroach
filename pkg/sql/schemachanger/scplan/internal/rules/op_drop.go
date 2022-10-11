@@ -168,6 +168,7 @@ func init() {
 				(*scpb.View)(nil),
 			),
 			constraint.Type(
+				(*scpb.CheckConstraint)(nil),
 				(*scpb.UniqueWithoutIndexConstraint)(nil),
 			),
 
@@ -177,6 +178,10 @@ func init() {
 			relation.targetStatus(scpb.ToAbsent),
 			constraint.joinTargetNode(),
 			constraint.targetStatus(scpb.ToAbsent),
+			constraint.currentStatus(
+				// Only skip ops in the transition from PUBLIC on relation drop.
+				scpb.Status_PUBLIC,
+			),
 		),
 	)
 

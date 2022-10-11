@@ -18,31 +18,34 @@ import (
 
 // These rules ensure that constraint-dependent elements, like an constraint's
 // name, etc. disappear once the constraint reaches a suitable state.
+// TODO (xiang): The dep rules here are not complete, as they are aimed specifically
+// for check constraints only. Complete them when we properly support the
+// other constraints: UniqueWithoutIndex, ForeignKey, Unique, and Not Null.
 func init() {
 
 	registerDepRuleForDrop(
-		"constraint dependent absent right before constraint",
-		scgraph.SameStagePrecedence,
-		"dependent", "constraint",
-		scpb.Status_ABSENT, scpb.Status_ABSENT,
+		"constraint no longer public before dependents",
+		scgraph.Precedence,
+		"constraint", "dependent",
+		scpb.Status_VALIDATED, scpb.Status_ABSENT,
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isConstraintDependent),
-				to.typeFilter(isConstraint, not(isIndex)),
+				from.typeFilter(isSupportedNonIndexBackedConstraint),
+				to.typeFilter(isConstraintDependent),
 				joinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
 	)
 
 	registerDepRuleForDrop(
-		"constraint dependent absent right before constraint",
-		scgraph.SameStagePrecedence,
-		"dependent", "constraint",
-		scpb.Status_VALIDATED, scpb.Status_ABSENT,
+		"dependents removed before constraint",
+		scgraph.Precedence,
+		"dependents", "constraint",
+		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.typeFilter(isConstraintDependent),
-				to.typeFilter(isConstraint, isIndex),
+				to.typeFilter(isSupportedNonIndexBackedConstraint),
 				joinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
