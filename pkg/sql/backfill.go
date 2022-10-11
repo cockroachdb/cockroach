@@ -1618,6 +1618,19 @@ func ValidateInvertedIndexes(
 	return nil
 }
 
+// ValidateCheckConstraint checks all rows satisfy the check constraint.
+func ValidateCheckConstraint(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	sessionData *sessiondata.SessionData,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
+	execOverride sessiondata.InternalExecutorOverride,
+) (err error) {
+	// TODO (xiang): implement this.
+	return nil
+}
+
 func countExpectedRowsForInvertedIndex(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,

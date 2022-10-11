@@ -211,6 +211,13 @@ type Validator interface {
 		indexes []catalog.Index,
 		override sessiondata.InternalExecutorOverride,
 	) error
+
+	ValidateCheckConstraint(
+		ctx context.Context,
+		tbl catalog.TableDescriptor,
+		constraint *descpb.ConstraintDetail,
+		override sessiondata.InternalExecutorOverride,
+	) error
 }
 
 // IndexSpanSplitter can try to split an index span in the current transaction

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -47,6 +48,16 @@ type ValidateInvertedIndexesFn func(
 	execOverride sessiondata.InternalExecutorOverride,
 ) error
 
+// ValidateCheckConstraintFn callback function for validting check constraints.
+type ValidateCheckConstraintFn func(
+	ctx context.Context,
+	tbl catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	sessionData *sessiondata.SessionData,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
+	execOverride sessiondata.InternalExecutorOverride,
+) error
+
 // NewFakeSessionDataFn callback function used to create session data
 // for the internal executor.
 type NewFakeSessionDataFn func(sv *settings.Values) *sessiondata.SessionData
@@ -58,6 +69,7 @@ type validator struct {
 	ieFactory               sqlutil.InternalExecutorFactory
 	validateForwardIndexes  ValidateForwardIndexesFn
 	validateInvertedIndexes ValidateInvertedIndexesFn
+	validateCheckConstraint ValidateCheckConstraintFn
 	newFakeSessionData      NewFakeSessionDataFn
 }
 
@@ -93,6 +105,16 @@ func (vd validator) ValidateInvertedIndexes(
 	)
 }
 
+func (vd validator) ValidateCheckConstraint(
+	ctx context.Context,
+	tbl catalog.TableDescriptor,
+	constraint *descpb.ConstraintDetail,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return vd.validateCheckConstraint(ctx, tbl, constraint, vd.newFakeSessionData(&vd.settings.SV),
+		vd.makeHistoricalInternalExecTxnRunner(), override)
+}
+
 // makeHistoricalInternalExecTxnRunner creates a new transaction runner which
 // always runs at the same time and that time is the current time as of when
 // this constructor was called.
@@ -119,6 +141,7 @@ func NewValidator(
 	ieFactory sqlutil.InternalExecutorFactory,
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
+	validateCheckConstraint ValidateCheckConstraintFn,
 	newFakeSessionData NewFakeSessionDataFn,
 ) scexec.Validator {
 	return validator{
@@ -128,6 +151,7 @@ func NewValidator(
 		ieFactory:               ieFactory,
 		validateForwardIndexes:  validateForwardIndexes,
 		validateInvertedIndexes: validateInvertedIndexes,
+		validateCheckConstraint: validateCheckConstraint,
 		newFakeSessionData:      newFakeSessionData,
 	}
 }
