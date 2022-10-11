@@ -49,6 +49,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
@@ -2051,12 +2052,19 @@ func (rpcCtx *Context) runHeartbeat(
 	// connection; a new one will be created by the connection pool as needed.
 	// This simple model should work well in practice and it avoids serious
 	// problems that could arise from keeping unhealthy connections in the pool.
-	for {
+	connFailedCh := make(chan connectivity.State, 1)
+	for i := 0; ; i++ {
 		select {
 		case <-ctx.Done():
 			return nil // server shutting down
 		case <-heartbeatTimer.C:
 			heartbeatTimer.Read = true
+		case <-connFailedCh:
+			// gRPC has signaled that the connection is now failed, which implies that
+			// we will need to start a new connection (since we set things up that way
+			// using onlyOnceDialer). But we go through the motions and run the
+			// heartbeat so that there is a unified path that reports the error,
+			// in order to provide a good UX.
 		}
 
 		if err := rpcCtx.Stopper.RunTaskWithErr(ctx, "rpc heartbeat", func(ctx context.Context) error {
@@ -2082,7 +2090,7 @@ func (rpcCtx *Context) runHeartbeat(
 			}
 			var err error
 			if rpcCtx.heartbeatTimeout > 0 {
-				err = contextutil.RunWithTimeout(ctx, "rpc heartbeat", rpcCtx.heartbeatTimeout, ping)
+				err = contextutil.RunWithTimeout(ctx, "conn heartbeat", rpcCtx.heartbeatTimeout, ping)
 			} else {
 				err = ping(ctx)
 			}
@@ -2143,18 +2151,36 @@ func (rpcCtx *Context) runHeartbeat(
 				cb()
 			}
 
-			select {
-			default:
-				// First heartbeat succeeded.
-				rpcCtx.metrics.HeartbeatsNominal.Inc(1)
-				log.Health.Infof(ctx, "connection is now ready")
-				close(conn.initialHeartbeatDone)
-			case <-conn.initialHeartbeatDone:
-			}
-
 			return nil
 		}); err != nil {
 			return err
+		}
+
+		if i == 0 {
+			// First heartbeat succeeded.
+			rpcCtx.metrics.HeartbeatsNominal.Inc(1)
+			log.Health.Infof(ctx, "connection is now ready")
+			close(conn.initialHeartbeatDone)
+			// The connection should be `Ready` now since we just used it for a
+			// heartbeat RPC. Any additional state transition indicates that we need
+			// to remove it, and we want to do so reactively. Unfortunately, gRPC
+			// forces us to spin up a separate goroutine for this purpose even
+			// though it internally uses a channel.
+			// Note also that the implementation of this in gRPC is clearly racy,
+			// so consider this somewhat best-effort.
+			_ = rpcCtx.Stopper.RunAsyncTask(ctx, "conn state watcher", func(ctx context.Context) {
+				st := connectivity.Ready
+				for {
+					if !conn.grpcConn.WaitForStateChange(ctx, st) {
+						return
+					}
+					st = conn.grpcConn.GetState()
+					if st == connectivity.TransientFailure {
+						connFailedCh <- st
+						return
+					}
+				}
+			})
 		}
 
 		heartbeatTimer.Reset(rpcCtx.Config.RPCHeartbeatIntervalAndHalfTimeout)

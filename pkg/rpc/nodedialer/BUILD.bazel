@@ -10,7 +10,6 @@ go_library(
         "//pkg/kv/kvbase",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/util/grpcutil",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
