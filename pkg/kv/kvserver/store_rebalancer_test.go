@@ -662,7 +662,9 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			loadRanges(rr, s, []testRange{{voters: tc.storeIDs, qps: tc.qps}})
-			rctx := sr.makeRebalanceContext(ctx)
+			options := sr.scorerOptions(ctx)
+			hottestRanges := sr.replicaRankings.TopQPS()
+			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)))
 			_, target, _ := sr.chooseLeaseToTransfer(
 				ctx,
 				rctx,
@@ -793,7 +795,13 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 					{voters: voterStores, nonVoters: nonVoterStores, qps: perReplicaQPS},
 				},
 			)
-			rctx := sr.makeRebalanceContext(ctx)
+
+			options := sr.scorerOptions(ctx)
+			hottestRanges := sr.replicaRankings.TopQPS()
+			rctx := sr.NewRebalanceContext(
+				ctx, options, hottestRanges,
+				LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
+			)
 			rctx.options = &allocatorimpl.QPSScorerOptions{
 				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
 				Deterministic:         false,
@@ -1125,7 +1133,13 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 					{voters: tc.voters, nonVoters: tc.nonVoters, qps: testingQPS},
 				},
 			)
-			rctx := sr.makeRebalanceContext(ctx)
+
+			options := sr.scorerOptions(ctx)
+			hottestRanges := sr.replicaRankings.TopQPS()
+			rctx := sr.NewRebalanceContext(
+				ctx, options, hottestRanges,
+				LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
+			)
 			rctx.options = &allocatorimpl.QPSScorerOptions{
 				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthBlockRebalanceTo},
 				Deterministic:         true,
@@ -1203,7 +1217,12 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 	// cannot find better rebalance opportunities for.
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{localDesc.StoreID}, qps: 100}})
 
-	rctx := sr.makeRebalanceContext(ctx)
+	options := sr.scorerOptions(ctx)
+	hottestRanges := sr.replicaRankings.TopQPS()
+	rctx := sr.NewRebalanceContext(
+		ctx, options, hottestRanges,
+		LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
+	)
 	rctx.options = &allocatorimpl.QPSScorerOptions{
 		StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
 		Deterministic:         true,
@@ -1351,7 +1370,13 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters))
 			loadRanges(rr, s, []testRange{{voters: tc.voters, qps: tc.QPS}})
-			rctx := sr.makeRebalanceContext(ctx)
+
+			options := sr.scorerOptions(ctx)
+			hottestRanges := sr.replicaRankings.TopQPS()
+			rctx := sr.NewRebalanceContext(
+				ctx, options, hottestRanges,
+				LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
+			)
 			rctx.options = &allocatorimpl.QPSScorerOptions{
 				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
 				Deterministic:         true,
@@ -1438,7 +1463,13 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	// Load in a range with replicas on an overfull node, a slightly underfull
 	// node, and a very underfull node.
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 4, 5}, qps: 100}})
-	rctx := sr.makeRebalanceContext(ctx)
+
+	options := sr.scorerOptions(ctx)
+	hottestRanges := sr.replicaRankings.TopQPS()
+	rctx := sr.NewRebalanceContext(
+		ctx, options, hottestRanges,
+		LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
+	)
 	repl := rctx.hottestRanges[0]
 
 	_, target, _ := sr.chooseLeaseToTransfer(ctx, rctx)
@@ -1452,7 +1483,12 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	// that's behind, and see how a new replica is preferred as the leaseholder
 	// over it.
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100}})
-	rctx = sr.makeRebalanceContext(ctx)
+
+	hottestRanges = sr.replicaRankings.TopQPS()
+	rctx = sr.NewRebalanceContext(
+		ctx, options, hottestRanges,
+		LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
+	)
 	rctx.options = &allocatorimpl.QPSScorerOptions{
 		StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
 		Deterministic:         true,
@@ -1616,7 +1652,12 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 			// node, and a very underfull node.
 			loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100}})
 
-			rctx := sr.makeRebalanceContext(ctx)
+			options := sr.scorerOptions(ctx)
+			hottestRanges := sr.replicaRankings.TopQPS()
+			rctx := sr.NewRebalanceContext(
+				ctx, options, hottestRanges,
+				LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)),
+			)
 			rctx.options = &allocatorimpl.QPSScorerOptions{
 				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: test.enforcement, L0SublevelThreshold: allocatorimpl.MaxL0SublevelThreshold},
 				Deterministic:         true,
