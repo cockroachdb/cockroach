@@ -421,25 +421,15 @@ func unlinkDependentSchedule(
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
 	args *backuppb.ScheduledBackupExecutionArgs,
+	dependentSj *jobs.ScheduledJob,
+	dependentArgs *backuppb.ScheduledBackupExecutionArgs,
 ) error {
 	if args.DependentScheduleID == 0 {
 		return nil
 	}
 
-	// Load the dependent schedule.
-	dependentSj, dependentArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
-		scheduleControllerEnv.InternalExecutor().(*sql.InternalExecutor), args.DependentScheduleID)
-	if err != nil {
-		if jobs.HasScheduledJobNotFoundError(err) {
-			log.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
-			return nil
-		}
-		return errors.Wrapf(err, "failed to resolve dependent schedule %d", args.DependentScheduleID)
-	}
-
 	// Clear the DependentID field since we are dropping the record associated
 	// with it.
-	// TODO(benbardin): Resolve https://github.com/cockroachdb/cockroach/issues/87435 as well.
 	dependentArgs.DependentScheduleID = 0
 	dependentArgs.UnpauseOnSuccess = 0
 	any, err := pbtypes.MarshalAny(dependentArgs)
@@ -448,6 +438,32 @@ func unlinkDependentSchedule(
 	}
 	dependentSj.SetExecutionDetails(dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
 	return dependentSj.Update(ctx, scheduleControllerEnv.InternalExecutor(), txn)
+}
+
+func dropDependentSchedule(
+	ctx context.Context,
+	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
+	env scheduledjobs.JobSchedulerEnv,
+	txn *kv.Txn,
+	args *backuppb.ScheduledBackupExecutionArgs,
+	dependentSj *jobs.ScheduledJob,
+	dependentArgs *backuppb.ScheduledBackupExecutionArgs,
+) (int, error) {
+	if args.DependentScheduleID == 0 {
+		return 0, nil
+	}
+
+	any, err := pbtypes.MarshalAny(dependentArgs)
+	if err != nil {
+		return 0, err
+	}
+	dependentSj.SetExecutionDetails(dependentSj.ExecutorType(), jobspb.ExecutionArguments{Args: any})
+	if err := dependentSj.Delete(ctx, scheduleControllerEnv.InternalExecutor(), txn); err != nil {
+		return 0, err
+	}
+
+	return 1, releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
+		dependentArgs.ProtectedTimestampRecord)
 }
 
 // OnDrop implements the ScheduledJobController interface.
@@ -462,16 +478,38 @@ func (e *scheduledBackupExecutor) OnDrop(
 	sj *jobs.ScheduledJob,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-) error {
+) (int, error) {
 	args := &backuppb.ScheduledBackupExecutionArgs{}
+
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
-		return errors.Wrap(err, "un-marshaling args")
+		return 0, errors.Wrap(err, "un-marshaling args")
 	}
 
-	if err := unlinkDependentSchedule(ctx, scheduleControllerEnv, env, txn, args); err != nil {
-		return errors.Wrap(err, "failed to unlink dependent schedule")
+	// Load the dependent schedule.
+	dependentSj, dependentArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
+		scheduleControllerEnv.InternalExecutor().(*sql.InternalExecutor), args.DependentScheduleID)
+	if err != nil {
+		if jobs.HasScheduledJobNotFoundError(err) {
+			log.Warningf(ctx, "failed to resolve dependent schedule %d", args.DependentScheduleID)
+			return 0, nil
+		}
+		return 0, errors.Wrapf(err, "failed to resolve dependent schedule %d", args.DependentScheduleID)
 	}
-	return releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
+
+	if err := unlinkDependentSchedule(ctx, scheduleControllerEnv, env, txn, args, dependentSj, dependentArgs); err != nil {
+		return 0, errors.Wrap(err, "failed to unlink dependent schedule")
+	}
+
+	numRowsDropped := 0
+	if args.BackupType == backuppb.ScheduledBackupExecutionArgs_FULL &&
+		dependentArgs.BackupType == backuppb.ScheduledBackupExecutionArgs_INCREMENTAL {
+		numRowsDropped, err = dropDependentSchedule(ctx, scheduleControllerEnv, env, txn, args, dependentSj, dependentArgs)
+		if err != nil {
+			return numRowsDropped, errors.Wrap(err, "failed to drop dependent incremental schedule")
+		}
+	}
+
+	return numRowsDropped, releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
 		args.ProtectedTimestampRecord)
 }
 
