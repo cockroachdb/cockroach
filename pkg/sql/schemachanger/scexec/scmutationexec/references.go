@@ -15,9 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -87,6 +89,98 @@ func (m *visitor) RemoveCheckConstraint(ctx context.Context, op scop.RemoveCheck
 			op.ConstraintID, tbl.GetName(), tbl.GetID())
 	}
 	return nil
+}
+
+func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
+	ctx context.Context, op scop.MakeAbsentCheckConstraintWriteOnly,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	if op.ConstraintID >= tbl.NextConstraintID {
+		tbl.NextConstraintID = op.ConstraintID + 1
+	}
+
+	// We should have already validated that the check constraint
+	// is syntactically valid in the builder, so we just need to
+	// enqueue it to the descriptor's mutation slice.
+	ck := &descpb.TableDescriptor_CheckConstraint{
+		Expr:                  string(op.Expr),
+		Name:                  tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
+		Validity:              descpb.ConstraintValidity_Validating,
+		ColumnIDs:             op.ColumnIDs,
+		FromHashShardedColumn: op.FromHashShardedColumn,
+		ConstraintID:          op.ConstraintID,
+	}
+	return enqueueAddCheckConstraintMutation(tbl, ck)
+}
+
+func (m *visitor) MakeValidatedCheckConstraintPublic(
+	ctx context.Context, op scop.MakeValidatedCheckConstraintPublic,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	var found bool
+	for idx, mutation := range tbl.Mutations {
+		if c := mutation.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
+			c.Check.ConstraintID == op.ConstraintID {
+			tbl.Checks = append(tbl.Checks, &c.Check)
+
+			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
+			// call will also mark the above added check as VALIDATED.
+			// If this is a rollback of a drop, we are trying to add the check constraint
+			// back, so swap the direction before making it complete.
+			mutation.Direction = descpb.DescriptorMutation_ADD
+			err = tbl.MakeMutationComplete(mutation)
+			if err != nil {
+				return err
+			}
+			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
+
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return errors.AssertionFailedf("failed to find check constraint %d in table %q (%d)",
+			op.ConstraintID, tbl.GetName(), tbl.GetID())
+	}
+
+	if len(tbl.Mutations) == 0 {
+		tbl.Mutations = nil
+	}
+
+	return nil
+}
+
+func (m *visitor) MakePublicCheckConstraintValidated(
+	ctx context.Context, op scop.MakePublicCheckConstraintValidated,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	for i, ck := range tbl.Checks {
+		if ck.ConstraintID == op.ConstraintID {
+			tbl.Checks = append(tbl.Checks[:i], tbl.Checks[i+1:]...)
+			// TODO (xiang): We ought to check whether the check constraint
+			// is Unvalidated. If so, we can drop it immediately without
+			// enqueuing a mutation. We need modify the next operation accordingly
+			// bc such a change means it's possible we might no longer find
+			// a mutation later.
+			clone := protoutil.Clone(ck).(*descpb.TableDescriptor_CheckConstraint)
+			clone.Validity = descpb.ConstraintValidity_Dropping
+			return enqueueDropCheckConstraintMutation(tbl, clone)
+		}
+	}
+
+	return errors.AssertionFailedf("failed to find check constraint %d in descriptor %v", op.ConstraintID, tbl)
 }
 
 func (m *visitor) RemoveForeignKeyBackReference(

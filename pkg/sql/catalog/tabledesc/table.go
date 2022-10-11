@@ -655,6 +655,12 @@ func IndexNamePlaceholder(id descpb.IndexID) string {
 	return fmt.Sprintf("crdb_internal_index_%d_name_placeholder", id)
 }
 
+// ConstraintNamePlaceholder constructs a placeholder name for a constraint based
+// on its id.
+func ConstraintNamePlaceholder(id descpb.ConstraintID) string {
+	return fmt.Sprintf("crdb_internal_constraint_%d_name_placeholder", id)
+}
+
 // RenameColumnInTable will rename the column in tableDesc from oldName to
 // newName, including in expressions as well as shard columns.
 // The function is recursive because of this, but there should only be one level
