@@ -48,14 +48,14 @@ func (tc *Collection) GetMutableFunctionByID(
 func (tc *Collection) getFunctionByID(
 	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
 ) (catalog.FunctionDescriptor, error) {
-	descs, err := tc.getDescriptorsByID(ctx, txn, flags.CommonLookupFlags, fnID)
+	desc, err := tc.getDescriptorByID(ctx, txn, flags.CommonLookupFlags, fnID)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", fnID)
 		}
 		return nil, err
 	}
-	fn, ok := descs[0].(catalog.FunctionDescriptor)
+	fn, ok := desc.(catalog.FunctionDescriptor)
 	if !ok {
 		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d does not exist", fnID)
 	}
