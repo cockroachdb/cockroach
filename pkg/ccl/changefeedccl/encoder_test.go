@@ -20,9 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -1058,59 +1056,21 @@ func TestParquetEncoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
-		// ctx := context.Background()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		ctx := context.Background()
 
-		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, city STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Berlin')`)
-		ie := s.SystemServer.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, city STRING, arrayCol STRING[])`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Berlin', ARRAY['hi', 'bye'])`)
 
 		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
 			`WITH format=%s,initial_scan='only'`, changefeedbase.OptFormatParquet))
 		defer closeFeed(t, foo)
-		jobFeed := foo.(cdctest.EnterpriseTestFeed)
-		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
-			return s == jobs.StatusSucceeded
-		}))
-		// time.Sleep(3 * time.Second)
-		// sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL,
-		// INDEX (y))`)
-		// sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
-		// 2, CAST('nan' AS FLOAT),false),(3, 'Carl', 1, 0.5032135844230652,true),(4, 'Alex', 3, 14.3, NULL), (5,
-		// 'Bobby', 2, 3.4,false), (6, NULL, NULL, 4.5, NULL)`)
 
-		tests := []parquetTest{
-			{
-				filePrefix: "basic",
-				stmt:       `CREATE CHANGEFEED for foo with initial_scan='only',format='parquet',key_in_value`,
-				//TODO(ganeshb): construct this statement dynamically based on topic
-				validationStmt: `select * from foo`,
-			},
-		}
-
-		for _, test := range tests {
-			t.Logf("Test %s", test.filePrefix)
-			if test.prep != nil {
-				for _, cmd := range test.prep {
-					sqlDB.Exec(t, cmd)
-				}
-			}
-
-			fmt.Println("xkcd: get parquet file")
-
-			fmt.Println("xkcd: get parquet file")
-			test.dbName = `d`
-			parquetFiles, err := getParquetFiles(t, foo)
-			require.NoError(t, err)
-
-			for _, path := range parquetFiles {
-				validateParquetFile(t, ctx, ie, test, path)
-			}
-		}
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"arrayCol":{"hi","bye"},city":"Berlin","id":1}`,
+		})
 
 	}
-	cdcTestWithSystem(t, testFn, feedTestForceSink("cloudstorage"))
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }

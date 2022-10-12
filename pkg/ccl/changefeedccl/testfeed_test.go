@@ -16,6 +16,7 @@ import (
 	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/url"
 	"os"
@@ -53,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	goparquet "github.com/fraugster/parquet-go"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -971,7 +973,7 @@ type cloudFeed struct {
 	isBare bool
 
 	resolved string
-	rows     []cloudFeedEntry
+	rows     []*cdctest.TestFeedMessage
 }
 
 var _ cdctest.TestFeed = (*cloudFeed)(nil)
@@ -1055,52 +1057,81 @@ func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []b
 	return key, value, nil
 }
 
+func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) error {
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fr, err := goparquet.NewFileReader(f)
+	if err != nil {
+		return err
+	}
+
+	keyCols, ok := fr.MetaData()["pkeys"]
+	if !ok {
+		return err
+	}
+	keyColsSet := make(map[string]struct{})
+	for _, key := range strings.Split(keyCols, ",") {
+		keyColsSet[key] = struct{}{}
+	}
+
+	for {
+		row, err := fr.NextRow()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		value := make(map[string]interface{})
+		key := make([]interface{}, 0)
+		for k, v := range row {
+
+			if vv, ok := v.([]byte); ok {
+				value[k] = string(vv)
+				fmt.Printf("xkcd: value of bytes: %s", value[k])
+			} else {
+				value[k] = v
+			}
+			if _, ok := keyColsSet[k]; ok {
+				key = append(key, value[k])
+			}
+		}
+		jsonValue, err := gojson.Marshal(value)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("xkcd: vlaue after json marshal: %s\n", jsonValue)
+
+		jsonKey, err := gojson.Marshal(key)
+		if err != nil {
+			return err
+		}
+
+		m := &cdctest.TestFeedMessage{
+			Topic: topic,
+			Value: jsonValue,
+			Key:   jsonKey,
+		}
+
+		c.rows = append(c.rows, m)
+	}
+
+	return nil
+}
+
 // Next implements the TestFeed interface.
 func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		if len(c.rows) > 0 {
 			e := c.rows[0]
 			c.rows = c.rows[1:]
-			m := &cdctest.TestFeedMessage{
-				Topic:    e.topic,
-				Value:    e.value,
-				Resolved: e.payload,
-			}
-
-			// The other TestFeed impls check both key and value here, but cloudFeeds
-			// don't have keys.
-			if len(m.Value) > 0 {
-				details, err := c.Details()
-				if err != nil {
-					return nil, err
-				}
-
-				switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
-				case ``, changefeedbase.OptFormatJSON:
-					// Cloud storage sinks default the `WITH key_in_value` option so that
-					// the key is recoverable. Extract it out of the value (also removing it
-					// so the output matches the other sinks). Note that this assumes the
-					// format is json, this will have to be fixed once we add format=avro
-					// support to cloud storage.
-					//
-					// TODO(dan): Leave the key in the value if the TestFeed user
-					// specifically requested it.
-					if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
-						return nil, err
-					}
-					if isNew := c.markSeen(m); !isNew {
-						continue
-					}
-					m.Resolved = nil
-					return m, nil
-				case changefeedbase.OptFormatCSV:
-					return m, nil
-				default:
-					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
-				}
-			}
-			m.Key, m.Value = nil, nil
-			return m, nil
+			return e, nil
 		}
 
 		select {
@@ -1115,85 +1146,6 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return nil, err
 		}
 	}
-}
-
-func (c *cloudFeed) getParquetFiles() (map[string]string, error) {
-	// TODO(ganeshb): Make sure to wait for job to finish before getting
-	//the parquet files. for now, assume that test will wait for job to finish.
-	fmt.Printf("xkcd: inside get parquet files")
-
-	parquetFiles := make(map[string]string)
-	if err := filepath.Walk(c.dir, func(path string, info os.FileInfo, err error) error {
-		return c.walkDirParquet(path, info, err, parquetFiles)
-	}); err != nil {
-		return nil, err
-	}
-
-	return parquetFiles, nil
-
-}
-
-func (c *cloudFeed) walkDirParquet(path string, info os.FileInfo, err error, parquetFiles map[string]string) error {
-	// TODO(ganeshb): find a way to deduplicated code between this and walkdir
-
-	if strings.HasSuffix(path, `.tmp`) {
-		// File in the process of being written by ExternalStorage. Ignore.
-		return nil
-	}
-
-	if err != nil {
-		// From filepath.WalkFunc:
-		//  If there was a problem walking to the file or directory named by
-		//  path, the incoming error will describe the problem and the function
-		//  can decide how to handle that error (and Walk will not descend into
-		//  that directory). In the case of an error, the info argument will be
-		//  nil. If an error is returned, processing stops.
-		return err
-	}
-
-	if info.IsDir() {
-		// Nothing to do for directories.
-		return nil
-	}
-
-	tsFromPath := func(p string) string {
-		return strings.Split(filepath.Base(p), "-")[0]
-	}
-
-	// Skip files with timestamp greater than the previously observed timestamp.
-	// Note: theoretically, we should be able to skip any file with timestamp
-	// greater *or equal* to the previously observed timestamp.  However, alter
-	// changefeed pose a problem, since a table maybe added with initial scan
-	// option, causing new events (possibly including resolved event) to be
-	// emitted as of previously emitted timestamp.
-	// See https://github.com/cockroachdb/cockroach/issues/84102
-	if strings.Compare(tsFromPath(c.resolved), tsFromPath(path)) >= 0 {
-		// Already output this in a previous walkDir.
-		return nil
-	}
-
-	if strings.HasSuffix(path, `RESOLVED`) {
-		resolvedPayload, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		resolvedEntry := cloudFeedEntry{payload: resolvedPayload}
-		c.rows = append(c.rows, resolvedEntry)
-		c.resolved = path
-		return nil
-	}
-
-	var topic string
-	subs := cloudFeedFileRE.FindStringSubmatch(filepath.Base(path))
-	if subs == nil {
-		return errors.Errorf(`unexpected file: %s`, path)
-	}
-	topic = subs[5]
-
-	// cloud storage uses a different delimiter. Let tests be agnostic.
-	topic = strings.Replace(topic, `+`, `.`, -1)
-	parquetFiles[topic] = path
-	return nil
 }
 
 func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
@@ -1238,7 +1190,7 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		resolvedEntry := cloudFeedEntry{payload: resolvedPayload}
+		resolvedEntry := &cdctest.TestFeedMessage{Resolved: resolvedPayload}
 		c.rows = append(c.rows, resolvedEntry)
 		c.resolved = path
 		return nil
@@ -1261,14 +1213,53 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 	defer f.Close()
 	// NB: This is the logic for JSON. Avro will involve parsing an
 	// "Object Container File".
-	s := bufio.NewScanner(f)
-	for s.Scan() {
-		c.rows = append(c.rows, cloudFeedEntry{
-			topic: topic,
-			value: append([]byte(nil), s.Bytes()...),
-		})
+	details, err := c.Details()
+	if err != nil {
+		return nil
+	}
+
+	switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+	case changefeedbase.OptFormatParquet:
+		err := c.appendParquetTestFeedMessages(path, topic)
+		if err != nil {
+			return err
+		}
+	default:
+		s := bufio.NewScanner(f)
+		for s.Scan() {
+			value := append([]byte(nil), s.Bytes()...)
+			m := &cdctest.TestFeedMessage{
+				Topic: topic,
+				Value: value,
+			}
+
+			switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+			case ``, changefeedbase.OptFormatJSON:
+				// Cloud storage sinks default the `WITH key_in_value` option so that
+				// the key is recoverable. Extract it out of the value (also removing it
+				// so the output matches the other sinks). Note that this assumes the
+				// format is json, this will have to be fixed once we add format=avro
+				// support to cloud storage.
+				//
+				// TODO(dan): Leave the key in the value if the TestFeed user
+				// specifically requested it.
+				if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
+					return nil
+				}
+				if isNew := c.markSeen(m); !isNew {
+					continue
+				}
+				m.Resolved = nil
+				c.rows = append(c.rows, m)
+			case changefeedbase.OptFormatCSV:
+				c.rows = append(c.rows, m)
+			default:
+				return errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
+			}
+		}
 	}
 	return nil
+
 }
 
 // teeGroup facilitates reading messages from input channel

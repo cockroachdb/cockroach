@@ -49,7 +49,8 @@ func (pqcs *parquetCloudStorageSink) EmitRow(
 	topic TopicDescriptor,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
-	alloc kvevent.Alloc) error {
+	alloc kvevent.Alloc,
+) error {
 
 	return errors.Errorf("Emit Row should not be called for parquet format")
 
@@ -64,9 +65,8 @@ func (s *parquetCloudStorageSink) Dial() error {
 }
 
 func (s *parquetCloudStorageSink) EmitResolvedTimestamp(
-	ctx context.Context,
-	encoder Encoder,
-	resolved hlc.Timestamp) error {
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
 	return errors.Errorf("parquet format does not support emitting resolved timestamp")
 }
 
@@ -170,7 +170,9 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 
 }
 
-func makeparquetWriterWrapper(ctx context.Context, row cdcevent.Row, buf *bytes.Buffer) (*parquetWriterWrapper, error) {
+func makeparquetWriterWrapper(
+	ctx context.Context, row cdcevent.Row, buf *bytes.Buffer,
+) (*parquetWriterWrapper, error) {
 
 	parquetColumns, err := getParquetColumnTypes(ctx, row)
 	if err != nil {
@@ -179,10 +181,19 @@ func makeparquetWriterWrapper(ctx context.Context, row cdcevent.Row, buf *bytes.
 
 	schema := pqexporter.NewParquetSchema(parquetColumns)
 
+	keyCols := make(map[string]string)
+	colNames := ""
+	row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		colNames += col.Name + ","
+		return nil
+	})
+	keyCols["pkeys"] = colNames
+
 	// Revisit: not using parquets inbuilt compressor, relying on sinks
 	// compression
 	pqw := goparquet.NewFileWriter(buf,
 		goparquet.WithSchemaDefinition(schema),
+		goparquet.WithMetaData(keyCols),
 	)
 
 	pqww := &parquetWriterWrapper{
