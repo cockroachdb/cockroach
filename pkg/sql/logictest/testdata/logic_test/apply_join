@@ -604,3 +604,23 @@ LEFT JOIN LATERAL (
 ) ON true;
 ----
 NULL
+
+subtest regression_89601
+
+statement ok
+CREATE TABLE t89601 (i INT4);
+INSERT INTO t89601 VALUES (0)
+
+# Regression test for #89601. All with bindings should be added to the new
+# metadata when planning the RHS of an apply-join.
+statement ok
+SELECT NULL
+FROM t89601 t1, t89601 t2
+WHERE EXISTS(
+  SELECT NULL
+  FROM t89601 t3, t89601 t4
+  WHERE t3.i IN (
+     WITH w AS (SELECT NULL)
+     SELECT t4.i::INT8 FROM w
+  )
+)
