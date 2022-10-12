@@ -1669,6 +1669,7 @@ func (ef *execFactory) ConstructDelete(
 	table cat.Table,
 	fetchColOrdSet exec.TableColumnOrdinalSet,
 	returnColOrdSet exec.TableColumnOrdinalSet,
+	passthrough colinfo.ResultColumns,
 	autoCommit bool,
 ) (exec.Node, error) {
 	// Derive table and column descriptors.
@@ -1696,7 +1697,8 @@ func (ef *execFactory) ConstructDelete(
 		source: input.(planNode),
 		run: deleteRun{
 			td:                        tableDeleter{rd: rd, alloc: ef.getDatumAlloc()},
-			partialIndexDelValsOffset: len(rd.FetchCols),
+			partialIndexDelValsOffset: len(rd.FetchCols) + len(passthrough),
+			numPassthrough:            len(passthrough),
 		},
 	}
 
@@ -1706,6 +1708,9 @@ func (ef *execFactory) ConstructDelete(
 		// Delete returns the non-mutation columns specified, in the same
 		// order they are defined in the table.
 		del.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+
+		// Add the passthrough columns to the returning columns.
+		del.columns = append(del.columns, passthrough...)
 
 		del.run.rowIdxToRetIdx = row.ColMapping(rd.FetchCols, returnCols)
 		del.run.rowsNeeded = true

@@ -493,25 +493,39 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	//
 	// TODO(andyk): Using ensureColumns here can result in an extra Render.
 	// Upgrade execution engine to not require this.
-	colList := make(opt.ColList, 0, len(del.FetchCols)+len(del.PartialIndexDelCols))
+	colList := make(opt.ColList, 0, len(del.FetchCols)+len(del.PartialIndexDelCols)+len(del.PassthroughCols))
 	colList = appendColsWhenPresent(colList, del.FetchCols)
 	colList = appendColsWhenPresent(colList, del.PartialIndexDelCols)
+
+	if del.NeedResults() {
+		colList = append(colList, del.PassthroughCols...)
+	}
 
 	input, err := b.buildMutationInput(del, del.Input, colList, &del.MutationPrivate)
 	if err != nil {
 		return execPlan{}, err
 	}
-
 	// Construct the Delete node.
 	md := b.mem.Metadata()
 	tab := md.Table(del.Table)
 	fetchColOrds := ordinalSetFromColList(del.FetchCols)
 	returnColOrds := ordinalSetFromColList(del.ReturnCols)
+
+	//Construct the result columns for the passthrough set
+	var passthroughCols colinfo.ResultColumns
+	if del.NeedResults() {
+		for _, passthroughCol := range del.PassthroughCols {
+			colMeta := b.mem.Metadata().ColumnMeta(passthroughCol)
+			passthroughCols = append(passthroughCols, colinfo.ResultColumn{Name: colMeta.Alias, Typ: colMeta.Type})
+		}
+	}
+
 	node, err := b.factory.ConstructDelete(
 		input.root,
 		tab,
 		fetchColOrds,
 		returnColOrds,
+		passthroughCols,
 		b.allowAutoCommit && len(del.FKChecks) == 0 && len(del.FKCascades) == 0,
 	)
 	if err != nil {
