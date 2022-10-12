@@ -155,6 +155,21 @@ func (e *encryptedDataKeyMap) rangeOverMap(fn func(masterKeyID hashedMasterKeyID
 	}
 }
 
+// includeTableSpans returns true if the backup should include spans for the
+// given table descriptor.
+func includeTableSpans(table *descpb.TableDescriptor) bool {
+	// We do not backup spans for views here as they do not contain data.
+	//
+	// Additionally, because we do not split ranges at view boundaries, it is
+	// possible that the range the view span belongs to is shared by another
+	// object in the cluster (that we may or may not be backing up) that might
+	// have its own bespoke zone configurations, namely one with a short GC TTL.
+	// This could lead to a situation where the short GC TTL on the range we are
+	// not backing up causes our protectedts verification to fail when attempting
+	// to backup the view span.
+	return table.IsPhysicalTable()
+}
+
 // getPublicIndexTableSpans returns all the public index spans of the
 // provided table.
 func getPublicIndexTableSpans(
@@ -1166,13 +1181,55 @@ func getReintroducedSpans(
 ) ([]roachpb.Span, error) {
 	reintroducedTables := make(map[descpb.ID]struct{})
 
+	// First, create a map that indicates which tables from the previous backup
+	// were offline when the last backup was taken. To create this map, we must
+	// iterate two fields in the _last_ backup's manifest:
+	//
+	// 1. manifest.Descriptors contains a list of descriptors _explicitly_
+	// included in the backup, gathered at backup startTime. This includes all
+	// public descriptors, and in the case of cluster backups, offline
+	// descriptors.
+	//
+	// 2. manifest.DescriptorChanges contains a list of descriptor changes tracked
+	// in the backup. While investigating #88042, it was discovered that during
+	// revision history database and table.* backups, a table can get included in
+	// manifest.DescriptorChanges when it transitions from an online to offline
+	// state, causing its spans to get backed up. However, if this table was
+	// offline when the backup began, it's excluded from manifest.Descriptors.
+	// Therefore, to find all descriptors covered in the backup that were offline
+	// at backup time, we must find all tables in manifest.DescriptorChanges whose
+	// last change brought the table offline.
 	offlineInLastBackup := make(map[descpb.ID]struct{})
 	lastBackup := prevBackups[len(prevBackups)-1]
+
 	for _, desc := range lastBackup.Descriptors {
 		// TODO(pbardea): Also check that lastWriteTime is set once those are
 		// populated on the table descriptor.
 		if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Offline() {
 			offlineInLastBackup[table.GetID()] = struct{}{}
+		}
+	}
+
+	// Gather all the descriptors that were offline at the endTime of the last
+	// backup, according the backup's descriptor changes. If the last descriptor
+	// change in the previous backup interval put the table offline, then that
+	// backup was offline at the endTime of the last backup.
+	latestTableDescChangeInLastBackup := make(map[descpb.ID]*descpb.TableDescriptor)
+	for _, rev := range lastBackup.DescriptorChanges {
+		if table, _, _, _ := descpb.FromDescriptor(rev.Desc); table != nil {
+			if trackedRev, ok := latestTableDescChangeInLastBackup[table.GetID()]; !ok {
+				latestTableDescChangeInLastBackup[table.GetID()] = table
+			} else if trackedRev.Version < table.Version {
+				latestTableDescChangeInLastBackup[table.GetID()] = table
+			}
+		}
+	}
+
+	if knobs := execCfg.BackupRestoreTestingKnobs; knobs == nil || !knobs.SkipDescriptorChangeIntroduction {
+		for _, table := range latestTableDescChangeInLastBackup {
+			if table.Offline() {
+				offlineInLastBackup[table.GetID()] = struct{}{}
+			}
 		}
 	}
 
@@ -1190,6 +1247,7 @@ func getReintroducedSpans(
 	// table may have been OFFLINE at the time of the last backup, and OFFLINE at
 	// the time of the current backup, but may have been PUBLIC at some time in
 	// between.
+
 	for _, rev := range revs {
 		rawTable, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTable == nil {
@@ -1214,7 +1272,6 @@ func getReintroducedSpans(
 			allRevs = append(allRevs, rev)
 		}
 	}
-
 	tableSpans, err := spansForAllTableIndexes(execCfg, tablesToReinclude, allRevs)
 	if err != nil {
 		return nil, err
@@ -1547,8 +1604,7 @@ func getBackupDetailAndManifest(
 		}
 	}
 
-	var newSpans roachpb.Spans
-
+	var newSpans, reIntroducedSpans roachpb.Spans
 	var priorIDs map[descpb.ID]descpb.ID
 
 	var revs []BackupManifest_DescriptorRevision
@@ -1629,11 +1685,11 @@ func getBackupDetailAndManifest(
 
 		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
 
-		tableSpans, err := getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
+		reIntroducedSpans, err = getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
 			return jobspb.BackupDetails{}, BackupManifest{}, err
 		}
-		newSpans = append(newSpans, tableSpans...)
+		newSpans = append(newSpans, reIntroducedSpans...)
 	}
 
 	// if CompleteDbs is lost by a 1.x node, FormatDescriptorTrackingVersion

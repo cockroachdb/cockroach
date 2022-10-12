@@ -372,6 +372,135 @@ func fullClusterTargetsBackup(
 	return fullClusterDescs, fullClusterDBIDs, nil
 }
 
+// checkMissingIntroducedSpans asserts that each backup's IntroducedSpans
+// contain all tables that require an introduction (i.e. a backup from ts=0), if
+// they are also restore targets. This specifically entails checking the
+// following invariant on each table we seek to restore: if the nth backup
+// contains an online table in its backupManifest.Descriptors field or
+// backupManifest.DescriptorsChanges field but the n-1th does not contain it online in
+// its Descriptors field, then that table must be covered by the nth backup's
+// manifest.IntroducedSpans field. Note: this check assumes that
+// mainBackupManifests are sorted by Endtime and this check only applies to
+// backups with a start time that is less than the restore AOST.
+func checkMissingIntroducedSpans(
+	restoringDescs []catalog.Descriptor,
+	mainBackupManifests []BackupManifest,
+	endTime hlc.Timestamp,
+	codec keys.SQLCodec,
+) error {
+	// Gather the tables we'd like to restore.
+	requiredTables := make(map[descpb.ID]struct{})
+	for _, restoringDesc := range restoringDescs {
+		if _, ok := restoringDesc.(catalog.TableDescriptor); ok {
+			requiredTables[restoringDesc.GetID()] = struct{}{}
+		}
+	}
+
+	for i, b := range mainBackupManifests {
+		if !endTime.IsEmpty() && endTime.Less(b.StartTime) {
+			// No need to check a backup that began after the restore AOST.
+			return nil
+		}
+
+		if i == 0 {
+			// The full backup does not contain reintroduced spans.
+			continue
+		}
+
+		// Gather the _online_ tables included in the previous backup.
+		prevOnlineTables := make(map[descpb.ID]struct{})
+		for _, desc := range mainBackupManifests[i-1].Descriptors {
+			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Public() {
+				prevOnlineTables[table.GetID()] = struct{}{}
+			}
+		}
+
+		// Gather the tables that were reintroduced in the current backup (i.e.
+		// backed up from ts=0).
+		tablesIntroduced := make(map[descpb.ID]struct{})
+		for _, span := range mainBackupManifests[i].IntroducedSpans {
+			_, tableID, err := codec.DecodeTablePrefix(span.Key)
+			if err != nil {
+				return err
+			}
+			tablesIntroduced[descpb.ID(tableID)] = struct{}{}
+		}
+
+		// requiredIntroduction affirms that the given table in backup i was either
+		// introduced in backup i, or included online in backup i-1.
+		requiredIntroduction := func(table *descpb.TableDescriptor) error {
+			if _, required := requiredTables[table.GetID()]; !required {
+				// The table is not required for the restore, so there's no need to check coverage.
+				return nil
+			}
+
+			if !includeTableSpans(table) {
+				return nil
+			}
+
+			if _, introduced := tablesIntroduced[table.GetID()]; introduced {
+				// The table was introduced, thus the table is properly covered at
+				// this point in the backup chain.
+				return nil
+			}
+
+			if _, inPrevBackup := prevOnlineTables[table.GetID()]; inPrevBackup {
+				// The table was included in the previous backup, which implies the
+				// table was online at prevBackup.Endtime, and therefore does not need
+				// to be introduced.
+				return nil
+			}
+			tableError := errors.Newf("table %q cannot be safely restored from this backup."+
+				" This backup is affected by issue #88042, which produced incorrect backups after an IMPORT."+
+				" To continue the restore, you can either:"+
+				" 1) restore to a system time before the import completed, %v;"+
+				" 2) restore with a newer backup chain (a full backup [+ incrementals])"+
+				" taken after the current backup target;"+
+				" 3) or remove table %v from the restore targets.",
+				table.Name, mainBackupManifests[i].StartTime.GoTime().String(), table.Name)
+			return errors.WithIssueLink(tableError, errors.IssueLink{
+				IssueURL: "https://www.cockroachlabs.com/docs/advisories/a88042",
+				Detail: `An incremental database backup with revision history can incorrectly backup data for a table 
+that was running an IMPORT at the time of the previous incremental in this chain of backups.`,
+			})
+		}
+
+		for _, desc := range mainBackupManifests[i].Descriptors {
+			// Check that all online tables at backup time were either introduced or
+			// in the previous backup.
+			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Public() {
+				if err := requiredIntroduction(table); err != nil {
+					return err
+				}
+			}
+		}
+
+		// As described in the docstring for getReintroducedSpans(), there are cases
+		// where a descriptor may appear in manifest.DescriptorChanges but not
+		// manifest.Descriptors. If a descriptor switched from offline to online at
+		// any moment during the backup interval, it needs to be reintroduced.
+		for _, desc := range mainBackupManifests[i].DescriptorChanges {
+			if table, _, _, _ := descpb.FromDescriptor(desc.Desc); table != nil && table.Public() {
+				if err := requiredIntroduction(table); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// selectTargets loads all descriptors from the selected backup manifest(s),
+// filters the descriptors based on the targets specified in the restore, and
+// calculates the max descriptor ID in the backup.
+// Post filtering, the method returns:
+//   - A list of all descriptors (table, type, database, schema) along with their
+//     parent databases.
+//   - A list of database descriptors IFF the user is restoring on the cluster or
+//     database level.
+//   - A map of table patterns to the resolved descriptor IFF the user is
+//     restoring on the table leve.
+//   - A list of tenants to restore, if applicable.
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
@@ -495,13 +624,18 @@ func MakeBackupTableEntry(
 		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
 	}
 
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(backupManifests, hlc.Timestamp{})
+	if err != nil {
+		return BackupTableEntry{}, err
+	}
+
 	entry := makeSimpleImportSpans(
 		[]roachpb.Span{tablePrimaryIndexSpan},
 		backupManifests,
-		nil,           /*backupLocalityInfo*/
+		nil, /*backupLocalityInfo*/
+		introducedSpanFrontier,
 		roachpb.Key{}, /*lowWaterMark*/
 	)
-
 	lastSchemaChangeTime := findLastSchemaChangeTime(backupManifests, tbDesc, endTime)
 
 	backupTableEntry := BackupTableEntry{
