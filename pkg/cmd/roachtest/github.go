@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
@@ -152,11 +153,22 @@ func (g *githubIssues) createPostRequest(
 	}
 }
 
-func (g *githubIssues) MaybePost(t test.Test, cat issueCategory, message string) error {
+func (g *githubIssues) MaybePost(t *testImpl, message string) error {
 	if !g.shouldPost(t) {
 		return nil
 	}
 
+	//TODO: perhaps remove category completely and move this to
+	// issuePoster?
+	cat := otherErr
+
+	// Overrides to shield eng teams from potential flakes
+	firstFailure := t.firstFailure()
+	if failureContainsError(errClusterProvisioningFailed, firstFailure) {
+		cat = clusterCreationErr
+	} else if failureContainsError(rperrors.ErrSSH255, firstFailure) {
+		cat = sshErr
+	}
 	return g.issuePoster(
 		context.Background(),
 		issues.UnitTestFormatter,
