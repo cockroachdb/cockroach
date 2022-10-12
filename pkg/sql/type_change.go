@@ -494,8 +494,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		}
 	}
 
-	// If the type is being dropped, remove the descriptor here.
-	if typeDesc.Dropped() {
+	// If the type is being dropped, remove the descriptor here only
+	// if the declarative schema changer is not in use.
+	if typeDesc.Dropped() && typeDesc.GetDeclarativeSchemaChangerState() == nil {
 		if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			b := txn.NewBatch()
 			b.Del(catalogkeys.MakeDescMetadataKey(codec, typeDesc.GetID()))
