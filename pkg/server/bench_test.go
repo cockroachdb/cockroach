@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -58,10 +57,8 @@ func BenchmarkSetupSpanForIncomingRPC(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, sp := setupSpanForIncomingRPC(
-					ctx, roachpb.SystemTenantID, ba, tr, cluster.MakeTestingClusterSettings(),
-				)
-				sp.finish(nil /* br */)
+				_, sp := setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba, tr)
+				sp.finish(nil /* br */, dontRedactEvenIfTenantRequest)
 			}
 		})
 	}

@@ -3070,7 +3070,16 @@ func (s *adminServer) SendKVBatch(
 
 	ctx, sp := s.server.node.setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba)
 	var br *roachpb.BatchResponse
-	defer func() { sp.finish(br) }()
+	// NB: wrapped to delay br evaluation to its value when returning.
+	defer func() {
+		var redact redactOpt
+		if redactServerTracesForSecondaryTenants.Get(&s.server.ClusterSettings().SV) {
+			redact = redactIfTenantRequest
+		} else {
+			redact = dontRedactEvenIfTenantRequest
+		}
+		sp.finish(br, redact)
+	}()
 	br, pErr := s.server.db.NonTransactionalSender().Send(ctx, *ba)
 	if br == nil {
 		br = &roachpb.BatchResponse{}
