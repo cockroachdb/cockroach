@@ -30,8 +30,8 @@ var (
   aliases:
     cockroachdb/rfc-prs: other
   triage_column_id: 0
-  label: T-testeng
 cockroachdb/test-eng:
+  label: T-testeng
   triage_column_id: 14041337
 cockroachdb/dev-inf:
   triage_column_id: 10210759`
@@ -206,18 +206,22 @@ func TestCreatePostRequest(t *testing.T) {
 			expectedTeam := "@cockroachdb/unowned"
 			expectedName := "github_test"
 			expectedLabel := ""
+			expectedMessagePrefix := ""
 
 			if c.category == clusterCreationErr {
 				expectedTeam = "@cockroachdb/dev-inf"
 				expectedName = "cluster_creation"
+				expectedMessagePrefix = "test github_test was skipped due to "
 			} else if c.category == sshErr {
 				expectedTeam = "@cockroachdb/test-eng"
 				expectedName = "ssh_problem"
 				expectedLabel = "T-testeng"
+				expectedMessagePrefix = "test github_test failed due to "
 			}
 
 			require.Contains(t, req.MentionOnCreate, expectedTeam)
 			require.Equal(t, expectedName, req.TestName)
+			require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
 			if expectedLabel != "" {
 				require.Contains(t, req.ExtraLabels, expectedLabel)
 			}

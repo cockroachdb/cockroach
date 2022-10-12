@@ -245,8 +245,8 @@ func checkCallExpr(pass *analysis.Pass, enclosingFnName string, call *ast.CallEx
 		return
 	}
 
-	pass.Reportf(call.Lparen, escNl("%s(): %s argument is not a constant expression"+Tip),
-		enclosingFnName, argType)
+	pass.Reportf(call.Lparen, escNl("%s() [calling %s]: %s argument is not a constant expression"+Tip),
+		enclosingFnName, fnName, argType)
 }
 
 // Tip is exported for use in tests.
