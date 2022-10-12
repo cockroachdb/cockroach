@@ -231,7 +231,11 @@ message BackupDetails {
   // The interval is expressed in nanoseconds.
   int64 as_of_interval = 22;
 
-  // NEXT ID: 23;
+  // ApplicationName is the application name in the session where the backup was
+  // invoked.
+  string application_name = 23;
+
+  // NEXT ID: 24;
 }
 
 message BackupProgress {

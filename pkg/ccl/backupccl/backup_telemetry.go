@@ -164,6 +164,7 @@ func createBackupRecoveryEvent(
 		JobID:                   uint64(jobID),
 		AsOfInterval:            initialDetails.AsOfInterval,
 		Options:                 options,
+		ApplicationName:         initialDetails.ApplicationName,
 	}
 
 	event.DestinationAuthTypes = make([]string, 0, len(authTypes))
@@ -315,6 +316,7 @@ func logRestoreTelemetry(
 	descsByTablePattern map[tree.TablePattern]catalog.Descriptor,
 	restoreDBs []catalog.DatabaseDescriptor,
 	debugPauseOn string,
+	applicationName string,
 ) {
 	var requestedTargets []descpb.Descriptor
 	for _, desc := range descsByTablePattern {
@@ -411,6 +413,7 @@ func logRestoreTelemetry(
 		DebugPauseOn:            debugPauseOn,
 		JobID:                   uint64(jobID),
 		Options:                 options,
+		ApplicationName:         applicationName,
 	}
 
 	event.DestinationAuthTypes = make([]string, 0, len(authTypes))
