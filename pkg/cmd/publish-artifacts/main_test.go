@@ -11,241 +11,242 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"os"
-	"regexp"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/alessio/shellescape"
+	"github.com/cockroachdb/cockroach/pkg/release"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/stretchr/testify/require"
 )
 
-// Whether to run slow tests.
-var slow bool
-
-func init() {
-	if err := os.Setenv("AWS_ACCESS_KEY_ID", "testing"); err != nil {
-		panic(err)
-	}
-	if err := os.Setenv("AWS_SECRET_ACCESS_KEY", "hunter2"); err != nil {
-		panic(err)
-	}
+type mockStorage struct {
+	puts []string
 }
 
-type recorder struct {
-	reqs []s3.PutObjectInput
+var _ release.ObjectPutGetter = (*mockStorage)(nil)
+
+func (s *mockStorage) Bucket() string {
+	return "cockroach"
 }
 
-func (r *recorder) PutObject(req *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
-	r.reqs = append(r.reqs, *req)
-	return &s3.PutObjectOutput{}, nil
+func (s mockStorage) URL(key string) string {
+	return "storage://bucket/" + key
 }
 
-func mockPutter(p s3putter) func() {
-	origPutter := testableS3
-	f := func() {
-		testableS3 = origPutter
-	}
-	testableS3 = func() (s3putter, error) {
-		return p, nil
-	}
-	return f
+func (s *mockStorage) GetObject(*release.GetObjectInput) (*release.GetObjectOutput, error) {
+	return &release.GetObjectOutput{}, nil
 }
 
-// NB: the function name TestMain is special as it is expected to be a function
-// which takes a *testing.M as a parameter. Somehow `go test` allows TestMain to
-// also work if passed a *testing.T, in which case it acts like a normal test
-// function. Bazel prohibits this, so give this test function a name which
-// doesn't collide with TestMain.
-func TestMainF(t *testing.T) {
-	if !slow {
-		skip.IgnoreLint(t, "only to be run manually via `./build/builder.sh go test -tags slow -timeout 1h -v ./pkg/cmd/publish-artifacts`")
+func (s *mockStorage) PutObject(i *release.PutObjectInput) error {
+	url := fmt.Sprintf(`s3://%s/%s`, s.Bucket(), *i.Key)
+	if i.CacheControl != nil {
+		url += `/` + *i.CacheControl
 	}
-	r := &recorder{}
-	undo := mockPutter(r)
-	defer undo()
-
-	shaPat := regexp.MustCompile(`[a-f0-9]{40}`)
-	const shaStub = "<sha>"
-
-	type testCase struct {
-		Bucket, ContentDisposition, Key, WebsiteRedirectLocation, CacheControl string
+	if i.Body != nil {
+		bytes, err := io.ReadAll(i.Body)
+		if err != nil {
+			return err
+		}
+		if strings.HasSuffix(*i.Key, release.ChecksumSuffix) {
+			// Unfortunately the archive tarball checksum changes every time,
+			// because we generate tarballs and the copy file modification time from the generated files.
+			// This makes the checksum not reproducible.
+			s.puts = append(s.puts, fmt.Sprintf("%s CONTENTS <sha256sum>", url))
+		} else if utf8.Valid(bytes) {
+			s.puts = append(s.puts, fmt.Sprintf("%s CONTENTS %s", url, bytes))
+		} else {
+			s.puts = append(s.puts, fmt.Sprintf("%s CONTENTS <binary stuff>", url))
+		}
+	} else if i.WebsiteRedirectLocation != nil {
+		s.puts = append(s.puts, fmt.Sprintf("%s REDIRECT %s", url, *i.WebsiteRedirectLocation))
 	}
-	exp := []testCase{
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=cockroach.darwin-amd64." + shaStub,
-			Key:                "/cockroach/cockroach.darwin-amd64." + shaStub,
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/cockroach.darwin-amd64.LATEST",
-			WebsiteRedirectLocation: "/cockroach/cockroach.darwin-amd64." + shaStub,
-		},
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=libgeos.darwin-amd64." + shaStub + ".dylib",
-			Key:                "/cockroach/lib/libgeos.darwin-amd64." + shaStub + ".dylib",
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/lib/libgeos.darwin-amd64.dylib.LATEST",
-			WebsiteRedirectLocation: "/cockroach/lib/libgeos.darwin-amd64." + shaStub + ".dylib",
-		},
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=libgeos_c.darwin-amd64." + shaStub + ".dylib",
-			Key:                "/cockroach/lib/libgeos_c.darwin-amd64." + shaStub + ".dylib",
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST",
-			WebsiteRedirectLocation: "/cockroach/lib/libgeos_c.darwin-amd64." + shaStub + ".dylib",
-		},
+	return nil
+}
 
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=cockroach.linux-gnu-amd64." + shaStub,
-			Key:                "/cockroach/cockroach.linux-gnu-amd64." + shaStub,
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/cockroach.linux-gnu-amd64.LATEST",
-			WebsiteRedirectLocation: "/cockroach/cockroach.linux-gnu-amd64." + shaStub,
-		},
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=libgeos.linux-gnu-amd64." + shaStub + ".so",
-			Key:                "/cockroach/lib/libgeos.linux-gnu-amd64." + shaStub + ".so",
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST",
-			WebsiteRedirectLocation: "/cockroach/lib/libgeos.linux-gnu-amd64." + shaStub + ".so",
-		},
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=libgeos_c.linux-gnu-amd64." + shaStub + ".so",
-			Key:                "/cockroach/lib/libgeos_c.linux-gnu-amd64." + shaStub + ".so",
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST",
-			WebsiteRedirectLocation: "/cockroach/lib/libgeos_c.linux-gnu-amd64." + shaStub + ".so",
-		},
+type mockExecRunner struct {
+	fakeBazelBin string
+	cmds         []string
+}
 
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=cockroach.race.linux-gnu-amd64." + shaStub,
-			Key:                "/cockroach/cockroach.race.linux-gnu-amd64." + shaStub,
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/cockroach.race.linux-gnu-amd64.LATEST",
-			WebsiteRedirectLocation: "/cockroach/cockroach.race.linux-gnu-amd64." + shaStub,
-		},
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=libgeos.race.linux-gnu-amd64." + shaStub + ".so",
-			Key:                "/cockroach/lib/libgeos.race.linux-gnu-amd64." + shaStub + ".so",
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/lib/libgeos.race.linux-gnu-amd64.so.LATEST",
-			WebsiteRedirectLocation: "/cockroach/lib/libgeos.race.linux-gnu-amd64." + shaStub + ".so",
-		},
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=libgeos_c.race.linux-gnu-amd64." + shaStub + ".so",
-			Key:                "/cockroach/lib/libgeos_c.race.linux-gnu-amd64." + shaStub + ".so",
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/lib/libgeos_c.race.linux-gnu-amd64.so.LATEST",
-			WebsiteRedirectLocation: "/cockroach/lib/libgeos_c.race.linux-gnu-amd64." + shaStub + ".so",
-		},
+func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
+	if r.fakeBazelBin == "" {
+		panic("r.fakeBazelBin not set")
+	}
+	if c.Dir == `` {
+		return nil, fmt.Errorf("`Dir` must be specified")
+	}
+	cmd := fmt.Sprintf("env=%s args=%s", c.Env, shellescape.QuoteCommand(c.Args))
+	r.cmds = append(r.cmds, cmd)
 
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=cockroach.windows-amd64." + shaStub + ".exe",
-			Key:                "/cockroach/cockroach.windows-amd64." + shaStub + ".exe",
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/cockroach.windows-amd64.LATEST",
-			WebsiteRedirectLocation: "/cockroach/cockroach.windows-amd64." + shaStub + ".exe",
-		},
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=libgeos.windows-amd64." + shaStub + ".dll",
-			Key:                "/cockroach/lib/libgeos.windows-amd64." + shaStub + ".dll",
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/lib/libgeos.windows-amd64.dll.LATEST",
-			WebsiteRedirectLocation: "/cockroach/lib/libgeos.windows-amd64." + shaStub + ".dll",
-		},
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=libgeos_c.windows-amd64." + shaStub + ".dll",
-			Key:                "/cockroach/lib/libgeos_c.windows-amd64." + shaStub + ".dll",
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/lib/libgeos_c.windows-amd64.dll.LATEST",
-			WebsiteRedirectLocation: "/cockroach/lib/libgeos_c.windows-amd64." + shaStub + ".dll",
-		},
-
-		{
-			Bucket:             "cockroach",
-			ContentDisposition: "attachment; filename=workload." + shaStub,
-			Key:                "/cockroach/workload." + shaStub,
-		},
-		{
-			Bucket:                  "cockroach",
-			CacheControl:            "no-cache",
-			Key:                     "cockroach/workload.LATEST",
-			WebsiteRedirectLocation: "/cockroach/workload." + shaStub,
-		},
+	var paths []string
+	if c.Args[0] == "bazel" && c.Args[1] == "info" && c.Args[2] == "bazel-bin" {
+		return []byte(r.fakeBazelBin), nil
+	}
+	if c.Args[0] == "bazel" && c.Args[1] == "build" && c.Args[2] == "//pkg/cmd/workload" {
+		paths = append(paths, filepath.Join(r.fakeBazelBin, "pkg", "cmd", "workload", "workload_", "workload"))
+	} else if c.Args[0] == "bazel" && c.Args[1] == "build" {
+		path := filepath.Join(r.fakeBazelBin, "pkg", "cmd", "cockroach", "cockroach_", "cockroach")
+		pathSQL := filepath.Join(r.fakeBazelBin, "pkg", "cmd", "cockroach-sql", "cockroach-sql_", "cockroach-sql")
+		var platform release.Platform
+		for _, arg := range c.Args {
+			if strings.HasPrefix(arg, `--config=`) {
+				switch strings.TrimPrefix(arg, `--config=`) {
+				case "crosslinuxbase":
+					platform = release.PlatformLinux
+				case "crossmacosbase":
+					platform = release.PlatformMacOS
+				case "crosswindowsbase":
+					platform = release.PlatformWindows
+					path += ".exe"
+					pathSQL += ".exe"
+				case "ci", "with_ui":
+				default:
+					panic(fmt.Sprintf("Unexpected configuration %s", arg))
+				}
+			}
+		}
+		paths = append(paths, path, pathSQL)
+		ext := release.SharedLibraryExtensionFromPlatform(platform)
+		for _, lib := range release.CRDBSharedLibraries {
+			libDir := "lib"
+			if platform == release.PlatformWindows {
+				libDir = "bin"
+			}
+			paths = append(paths, filepath.Join(r.fakeBazelBin, "c-deps", "libgeos", libDir, lib+ext))
+		}
 	}
 
-	if err := os.Setenv("TC_BUILD_BRANCH", "master"); err != nil {
-		t.Fatal(err)
-	}
-	main()
-
-	var acts []testCase
-	for _, req := range r.reqs {
-		var act testCase
-		if req.Bucket != nil {
-			act.Bucket = *req.Bucket
+	for _, path := range paths {
+		if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
+			return nil, err
 		}
-		if req.ContentDisposition != nil {
-			act.ContentDisposition = shaPat.ReplaceAllLiteralString(*req.ContentDisposition, shaStub)
+		if err := os.WriteFile(path, []byte(cmd), 0666); err != nil {
+			return nil, err
 		}
-		if req.Key != nil {
-			act.Key = shaPat.ReplaceAllLiteralString(*req.Key, shaStub)
-		}
-		if req.WebsiteRedirectLocation != nil {
-			act.WebsiteRedirectLocation = shaPat.ReplaceAllLiteralString(*req.WebsiteRedirectLocation, shaStub)
-		}
-		if req.CacheControl != nil {
-			act.CacheControl = *req.CacheControl
-		}
-		acts = append(acts, act)
 	}
 
-	require.Equal(t, exp, acts)
+	var output []byte
+	return output, nil
+}
+
+func TestPublish(t *testing.T) {
+	tests := []struct {
+		name         string
+		flags        runFlags
+		expectedCmds []string
+		expectedPuts []string
+	}{
+		{
+			name: `release`,
+			flags: runFlags{
+				branch: "master",
+				sha:    "1234567890abcdef",
+			},
+			expectedCmds: []string{
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' -c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
+				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' -c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' -c opt --config=ci --config=with_ui --config=crosswindowsbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=with_ui --config=crosswindowsbase",
+				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinux --config=ci",
+				"env=[] args=bazel info bazel-bin -c opt --config=crosslinux --config=ci",
+			},
+			expectedPuts: []string{
+				"s3://cockroach/cockroach/cockroach.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"s3://cockroach/cockroach/cockroach.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-amd64.1234567890abcdef",
+				"s3://cockroach/cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"s3://cockroach/cockroach/cockroach-sql.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef",
+				"s3://cockroach/cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"s3://cockroach/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so",
+				"s3://cockroach/cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"s3://cockroach/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so",
+				"s3://cockroach/cockroach/cockroach.darwin-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"s3://cockroach/cockroach/cockroach.darwin-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.darwin-amd64.1234567890abcdef",
+				"s3://cockroach/cockroach/cockroach-sql.darwin-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"s3://cockroach/cockroach/cockroach-sql.darwin-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.darwin-amd64.1234567890abcdef",
+				"s3://cockroach/cockroach/lib/libgeos.darwin-amd64.1234567890abcdef.dylib CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"s3://cockroach/cockroach/lib/libgeos.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.darwin-amd64.1234567890abcdef.dylib",
+				"s3://cockroach/cockroach/lib/libgeos_c.darwin-amd64.1234567890abcdef.dylib CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"s3://cockroach/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-amd64.1234567890abcdef.dylib",
+				"s3://cockroach/cockroach/cockroach.windows-amd64.1234567890abcdef.exe CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosswindowsbase",
+				"s3://cockroach/cockroach/cockroach.windows-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.windows-amd64.1234567890abcdef.exe",
+				"s3://cockroach/cockroach/cockroach-sql.windows-amd64.1234567890abcdef.exe CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosswindowsbase",
+				"s3://cockroach/cockroach/cockroach-sql.windows-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.windows-amd64.1234567890abcdef.exe",
+				"s3://cockroach/cockroach/lib/libgeos.windows-amd64.1234567890abcdef.dll CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosswindowsbase",
+				"s3://cockroach/cockroach/lib/libgeos.windows-amd64.dll.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.windows-amd64.1234567890abcdef.dll",
+				"s3://cockroach/cockroach/lib/libgeos_c.windows-amd64.1234567890abcdef.dll CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //c-deps:libgeos //pkg/cmd/cockroach-sql " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' " +
+					"-c opt --config=ci --config=with_ui --config=crosswindowsbase",
+				"s3://cockroach/cockroach/lib/libgeos_c.windows-amd64.dll.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.windows-amd64.1234567890abcdef.dll",
+				"s3://cockroach/cockroach/workload.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinux --config=ci",
+				"s3://cockroach/cockroach/workload.LATEST/no-cache REDIRECT /cockroach/workload.1234567890abcdef",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir, cleanup := testutils.TempDir(t)
+			defer cleanup()
+
+			var s3 mockStorage
+			var gcs mockStorage
+			var runner mockExecRunner
+			fakeBazelBin, cleanup := testutils.TempDir(t)
+			defer cleanup()
+			runner.fakeBazelBin = fakeBazelBin
+			flags := test.flags
+			flags.pkgDir = dir
+			execFn := release.ExecFn{MockExecFn: runner.run}
+			run([]release.ObjectPutGetter{&s3, &gcs}, flags, execFn)
+			require.Equal(t, test.expectedCmds, runner.cmds)
+			require.Equal(t, test.expectedPuts, s3.puts)
+			require.Equal(t, test.expectedPuts, gcs.puts)
+		})
+	}
 }

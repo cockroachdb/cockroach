@@ -49,7 +49,6 @@ pkg/acceptance/BUILD.bazel
 pkg/cmd/cockroach-oss/BUILD.bazel
 pkg/cmd/github-post/BUILD.bazel
 pkg/cmd/prereqs/BUILD.bazel
-pkg/cmd/publish-artifacts/BUILD.bazel
 pkg/cmd/roachtest/BUILD.bazel
 pkg/cmd/teamcity-trigger/BUILD.bazel
 "
