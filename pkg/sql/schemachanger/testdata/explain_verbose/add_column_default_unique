@@ -3,9 +3,9 @@ CREATE DATABASE db;
 CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 
 /* test */
-EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_random_uuid() UNIQUE;
+EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT CAST(date_part('year', now()) AS INT);
 ----
-• Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT gen_random_uuid(); 
+• Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8); 
 │
 ├── • StatementPhase
 │   │
@@ -112,7 +112,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_r
 │           │     EventBase:
 │           │       Authorization:
 │           │         UserName: root
-│           │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT gen_random_uuid()
+│           │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
+│           │         now()) AS INT8)
 │           │       StatementTag: ALTER TABLE
 │           │       TargetMetadata:
 │           │         SourceElementID: 1
@@ -131,14 +132,15 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_r
 │           │       TableID: 106
 │           │       TypeT:
 │           │         Type:
-│           │           family: UuidFamily
-│           │           oid: 2950
+│           │           family: IntFamily
+│           │           oid: 20
+│           │           width: 64
 │           │
 │           ├── • AddColumnDefaultExpression
 │           │     Default:
 │           │       ColumnID: 2
 │           │       Expression:
-│           │         Expr: gen_random_uuid()
+│           │         Expr: CAST(date_part('year':::STRING, now():::TIMESTAMPTZ) AS INT8)
 │           │       TableID: 106
 │           │
 │           ├── • MakeAbsentIndexBackfilling
@@ -198,9 +200,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_r
 │                 JobID: 1
 │                 RunningStatus: PostCommitPhase stage 1 of 15 with 2 MutationType ops pending
 │                 Statements:
-│                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()
-│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT
-│                     gen_random_uuid()
+│                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
+│                     now()) AS INT8)
+│                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT
+│                     CAST(date_part(‹'year'›, now()) AS INT8)
 │                   statementtag: ALTER TABLE
 │
 ├── • PostCommitPhase
@@ -511,7 +514,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_r
 │   │       │     EventBase:
 │   │       │       Authorization:
 │   │       │         UserName: root
-│   │       │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT gen_random_uuid()
+│   │       │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
+│   │       │         now()) AS INT8)
 │   │       │       StatementTag: ALTER TABLE
 │   │       │       TargetMetadata:
 │   │       │         SourceElementID: 1
@@ -835,7 +839,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_r
     │       │     EventBase:
     │       │       Authorization:
     │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT gen_random_uuid()
+    │       │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
+    │       │         now()) AS INT8)
     │       │       StatementTag: ALTER TABLE
     │       │       TargetMetadata:
     │       │         SourceElementID: 1
@@ -943,7 +948,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_r
             │     EventBase:
             │       Authorization:
             │         UserName: root
-            │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT gen_random_uuid()
+            │       Statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
+            │         now()) AS INT8)
             │       StatementTag: ALTER TABLE
             │       TargetMetadata:
             │         SourceElementID: 1
@@ -954,7 +960,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_r
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
+            │         now()) AS INT8)
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -964,7 +971,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_r
             ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
+            │         now()) AS INT8)
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -974,7 +982,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_r
             ├── • CreateGCJobForIndex
             │     IndexID: 5
             │     StatementForDropJob:
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
+            │         now()) AS INT8)
             │     TableID: 106
             │
             ├── • RemoveJobStateFromDescriptor

@@ -7,8 +7,82 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 +schema {104 0 public} -> 105
 +object {104 105 tbl} -> 106
 
+stage-exec phase=PostCommitPhase stage=1:2 schemaChangeExecError=(.*duplicate key value violates unique constraint.*)
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+
+# Execute deletes to make sure these function correctly.
+stage-exec phase=PostCommitPhase stage=3
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+INSERT INTO db.public.tbl VALUES($stageKey + 2);
+DELETE FROM db.public.tbl WHERE i=$stageKey OR i=$stageKey+1
+----
+
+# Execute a harmless update that will change an existing value.
+stage-exec phase=PostCommitPhase stage=4
+UPDATE db.public.tbl SET i=$stageKey;
+----
+
+
+stage-exec phase=PostCommitPhase stage=5:14 schemaChangeExecError=(.*duplicate key value violates unique constraint.*)
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=1:2
+SELECT count(*) FROM db.public.tbl;
+----
+2
+
+stage-query phase=PostCommitPhase stage=3:4
+SELECT count(*) FROM db.public.tbl;
+----
+1
+
+stage-query phase=PostCommitPhase stage=5:14
+SELECT count(*) FROM db.public.tbl;
+----
+2
+
+stage-exec phase=PostCommitPhase stage=15:
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+duplicate key value violates unique constraint "tbl_j_key".*
+
+# Later on the unique constraint is enforced, so we expect the second
+# insert to fail.
+stage-query phase=PostCommitPhase stage=15:
+SELECT count(*) FROM db.public.tbl;
+----
+1
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey + 1);
+----
+duplicate key value violates unique constraint "tbl_j_key".*
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=2:
+INSERT INTO db.public.tbl VALUES($stageKey);
+----
+duplicate key value violates unique constraint "tbl_j_key".*
+
+# We will only succeed in inserting a single row, all other rows will be duplicates.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*) FROM db.public.tbl;
+----
+1
+
+# Add a column with a default value such that only a single value will be allowed,
+# we will intentionally use an expression to make things more complex.
 test
-ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_random_uuid() UNIQUE;
+ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT CAST(date_part('year', now()) AS INT);
 ----
 begin transaction #1
 # begin StatementPhase
@@ -16,7 +90,7 @@ checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
-increment telemetry for sql.schema.new_column_type.uuid
+increment telemetry for sql.schema.new_column_type.int8
 ## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #106
   ...
@@ -33,14 +107,15 @@ upsert descriptor #106
      modificationTime: {}
   +  mutations:
   +  - column:
-  +      defaultExpr: gen_random_uuid()
+  +      defaultExpr: CAST(date_part('year':::STRING, now():::TIMESTAMPTZ) AS INT8)
   +      id: 2
   +      name: j
   +      nullable: true
   +      pgAttributeNum: 2
   +      type:
-  +        family: UuidFamily
-  +        oid: 2950
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
   +    direction: ADD
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -112,7 +187,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
-write *eventpb.AlterTable to event log: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT gen_random_uuid()
+write *eventpb.AlterTable to event log: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8)
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -127,9 +202,10 @@ upsert descriptor #106
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› UUID UNIQUE
-  +          DEFAULT gen_random_uuid()
-  +        statement: ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE
+  +          DEFAULT CAST(date_part(‹'year'›, now()) AS INT8)
+  +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
+  +          now()) AS INT8)
   +        statementTag: ALTER TABLE
   +    revertible: true
   +    targetRanks: <redacted>
@@ -141,7 +217,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
-create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()"
+create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)"
   descriptor IDs: [106]
 # end PreCommitPhase
 commit transaction #1
@@ -467,18 +543,19 @@ upsert descriptor #106
   ...
          oid: 20
          width: 64
-  +  - defaultExpr: gen_random_uuid()
+  +  - defaultExpr: CAST(date_part('year':::STRING, now():::TIMESTAMPTZ) AS INT8)
   +    id: 2
   +    name: j
   +    nullable: true
   +    pgAttributeNum: 2
   +    type:
-  +      family: UuidFamily
-  +      oid: 2950
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
-           statement: ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()
+             now()) AS INT8)
            statementTag: ALTER TABLE
   -    revertible: true
        targetRanks: <redacted>
@@ -511,14 +588,15 @@ upsert descriptor #106
      modificationTime: {}
      mutations:
   -  - column:
-  -      defaultExpr: gen_random_uuid()
+  -      defaultExpr: CAST(date_part('year':::STRING, now():::TIMESTAMPTZ) AS INT8)
   -      id: 2
   -      name: j
   -      nullable: true
   -      pgAttributeNum: 2
   -      type:
-  -        family: UuidFamily
-  -        oid: 2950
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
   -    direction: ADD
   -    mutationId: 1
   -    state: WRITE_ONLY
@@ -597,9 +675,10 @@ upsert descriptor #106
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› UUID UNIQUE
-  -          DEFAULT gen_random_uuid()
-  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE
+  -          DEFAULT CAST(date_part(‹'year'›, now()) AS INT8)
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
+  -          now()) AS INT8)
   -        statementTag: ALTER TABLE
   -    targetRanks: <redacted>
   -    targets: <redacted>
@@ -692,7 +771,7 @@ upsert descriptor #106
   -  version: "12"
   +  version: "13"
 write *eventpb.FinishSchemaChange to event log
-create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()"
+create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
