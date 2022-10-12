@@ -37,9 +37,7 @@ func FindBinaryOverload(
 	// right children. No more than one match should ever be found. The
 	// TestTypingBinaryAssumptions test ensures this will be the case even if
 	// new operators or overloads are added.
-	for _, binOverloads := range BinOps[bin] {
-		o := binOverloads.(*BinOp)
-
+	for _, o := range *BinOps[bin] {
 		if leftType.Family() == types.UnknownFamily {
 			if rightType.Equivalent(o.RightType) {
 				return o, true

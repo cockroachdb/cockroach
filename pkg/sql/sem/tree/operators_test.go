@@ -137,24 +137,33 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	// Check unary ops. We don't just go through the map so we process them in
 	// an orderly fashion.
 	for op := UnaryOperatorSymbol(0); op < NumUnaryOperatorSymbols; op++ {
-		for _, impl := range UnaryOps[op] {
-			o := impl.(*UnaryOp)
+		s, ok := UnaryOps[op]
+		if !ok {
+			continue
+		}
+		for _, o := range *s {
 			check(op.String(), nil /* leftType */, o.Typ, o.Volatility)
 		}
 	}
 
 	// Check comparison ops.
 	for op := treecmp.ComparisonOperatorSymbol(0); op < treecmp.NumComparisonOperatorSymbols; op++ {
-		for _, impl := range CmpOps[op] {
-			o := impl.(*CmpOp)
+		s, ok := CmpOps[op]
+		if !ok {
+			continue
+		}
+		for _, o := range *s {
 			check(op.String(), o.LeftType, o.RightType, o.Volatility)
 		}
 	}
 
 	// Check binary ops.
 	for op := treebin.BinaryOperatorSymbol(0); op < treebin.NumBinaryOperatorSymbols; op++ {
-		for _, impl := range BinOps[op] {
-			o := impl.(*BinOp)
+		s, ok := BinOps[op]
+		if !ok {
+			continue
+		}
+		for _, o := range *s {
 			check(op.String(), o.LeftType, o.RightType, o.Volatility)
 		}
 	}

@@ -85,24 +85,26 @@ func (*UnaryOp) preferred() bool {
 }
 
 func unaryOpFixups(
-	ops map[UnaryOperatorSymbol]unaryOpOverload,
-) map[UnaryOperatorSymbol]unaryOpOverload {
-	for op, overload := range ops {
-		for i, impl := range overload {
-			casted := impl.(*UnaryOp)
-			casted.types = ArgTypes{{"arg", casted.Typ}}
-			casted.retType = FixedReturnType(casted.ReturnType)
-			ops[op][i] = casted
+	ops map[UnaryOperatorSymbol]*unaryOpOverload,
+) map[UnaryOperatorSymbol]*unaryOpOverload {
+	for _, overload := range ops {
+		for _, impl := range *overload {
+			impl.types = ArgTypes{{"arg", impl.Typ}}
+			impl.retType = FixedReturnType(impl.ReturnType)
 		}
 	}
 	return ops
 }
 
 // unaryOpOverload is an overloaded set of unary operator implementations.
-type unaryOpOverload []overloadImpl
+// It implements overloadSet.
+type unaryOpOverload []*UnaryOp
+
+func (u *unaryOpOverload) len() int               { return len(*u) }
+func (u *unaryOpOverload) get(i int) overloadImpl { return (*u)[i] }
 
 // UnaryOps contains the unary operations indexed by operation type.
-var UnaryOps = unaryOpFixups(map[UnaryOperatorSymbol]unaryOpOverload{
+var UnaryOps = unaryOpFixups(map[UnaryOperatorSymbol]*unaryOpOverload{
 	UnaryPlus: {
 		&UnaryOp{
 			Typ:        types.Int,
@@ -282,16 +284,19 @@ func PrependToMaybeNullArray(typ *types.T, left Datum, right Datum) (Datum, erro
 func initArrayElementConcatenation() {
 	for _, t := range types.Scalar {
 		typ := t
-		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
+		s, ok := BinOps[treebin.Concat]
+		if !ok {
+			s = new(binOpOverload)
+			BinOps[treebin.Concat] = s
+		}
+		*s = append(*s, &BinOp{
 			LeftType:          types.MakeArray(typ),
 			RightType:         typ,
 			ReturnType:        types.MakeArray(typ),
 			CalledOnNullInput: true,
 			EvalOp:            &AppendToMaybeNullArrayOp{Typ: typ},
 			Volatility:        volatility.Immutable,
-		})
-
-		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
+		}, &BinOp{
 			LeftType:          typ,
 			RightType:         types.MakeArray(typ),
 			ReturnType:        types.MakeArray(typ),
@@ -391,7 +396,12 @@ func initArrayToArrayConcatenation() {
 	for _, t := range types.Scalar {
 		typ := t
 		at := types.MakeArray(typ)
-		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
+		s, ok := BinOps[treebin.Concat]
+		if !ok {
+			s = new(binOpOverload)
+			BinOps[treebin.Concat] = s
+		}
+		*s = append(*s, &BinOp{
 			LeftType:          at,
 			RightType:         at,
 			ReturnType:        at,
@@ -406,7 +416,12 @@ func initArrayToArrayConcatenation() {
 // and nonarrayelement + string concatenation.
 func initNonArrayToNonArrayConcatenation() {
 	addConcat := func(leftType, rightType *types.T, volatility volatility.V) {
-		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
+		s, ok := BinOps[treebin.Concat]
+		if !ok {
+			s = new(binOpOverload)
+			BinOps[treebin.Concat] = s
+		}
+		*s = append(*s, &BinOp{
 			LeftType:          leftType,
 			RightType:         rightType,
 			ReturnType:        types.String,
@@ -442,24 +457,25 @@ func init() {
 }
 
 func init() {
-	for op, overload := range BinOps {
-		for i, impl := range overload {
-			casted := impl.(*BinOp)
-			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
-			casted.retType = FixedReturnType(casted.ReturnType)
-			BinOps[op][i] = casted
+	for _, overload := range BinOps {
+		for _, impl := range *overload {
+			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
+			impl.retType = FixedReturnType(impl.ReturnType)
 		}
 	}
 }
 
 // binOpOverload is an overloaded set of binary operator implementations.
-type binOpOverload []overloadImpl
+// It implements overloadSet.
+type binOpOverload []*BinOp
 
-func (o binOpOverload) LookupImpl(left, right *types.T) (*BinOp, bool) {
-	for _, fn := range o {
-		casted := fn.(*BinOp)
-		if casted.matchParams(left, right) {
-			return casted, true
+func (o *binOpOverload) len() int               { return len(*o) }
+func (o *binOpOverload) get(i int) overloadImpl { return (*o)[i] }
+
+func (o *binOpOverload) LookupImpl(left, right *types.T) (*BinOp, bool) {
+	for i := range *o {
+		if ol := (*o)[i]; ol.matchParams(left, right) {
+			return ol, true
 		}
 	}
 	return nil, false
@@ -480,7 +496,7 @@ func GetJSONPath(j json.JSON, ary DArray) (json.JSON, error) {
 }
 
 // BinOps contains the binary operations indexed by operation type.
-var BinOps = map[treebin.BinaryOperatorSymbol]binOpOverload{
+var BinOps = map[treebin.BinaryOperatorSymbol]*binOpOverload{
 	treebin.Bitand: {
 		&BinOp{
 			LeftType:   types.Int,
@@ -1324,11 +1340,10 @@ func (op *CmpOp) preferred() bool {
 }
 
 func cmpOpFixups(
-	cmpOps map[treecmp.ComparisonOperatorSymbol]cmpOpOverload,
-) map[treecmp.ComparisonOperatorSymbol]cmpOpOverload {
+	cmpOps map[treecmp.ComparisonOperatorSymbol]*cmpOpOverload,
+) map[treecmp.ComparisonOperatorSymbol]*cmpOpOverload {
 	findVolatility := func(op treecmp.ComparisonOperatorSymbol, t *types.T) volatility.V {
-		for _, impl := range cmpOps[treecmp.EQ] {
-			o := impl.(*CmpOp)
+		for _, o := range *cmpOps[treecmp.EQ] {
 			if o.LeftType.Equivalent(t) && o.RightType.Equivalent(t) {
 				return o.Volatility
 			}
@@ -1338,26 +1353,33 @@ func cmpOpFixups(
 
 	// Array equality comparisons.
 	for _, t := range append(types.Scalar, types.AnyEnum) {
-		cmpOps[treecmp.EQ] = append(cmpOps[treecmp.EQ], &CmpOp{
+		appendCmpOp := func(sym treecmp.ComparisonOperatorSymbol, cmpOp *CmpOp) {
+			s, ok := cmpOps[sym]
+			if !ok {
+				s = new(cmpOpOverload)
+				cmpOps[sym] = s
+			}
+			*s = append(*s, cmpOp)
+		}
+		appendCmpOp(treecmp.EQ, &CmpOp{
 			LeftType:   types.MakeArray(t),
 			RightType:  types.MakeArray(t),
 			EvalOp:     &CompareScalarOp{treecmp.MakeComparisonOperator(treecmp.EQ)},
 			Volatility: findVolatility(treecmp.EQ, t),
 		})
-		cmpOps[treecmp.LE] = append(cmpOps[treecmp.LE], &CmpOp{
+		appendCmpOp(treecmp.LE, &CmpOp{
 			LeftType:   types.MakeArray(t),
 			RightType:  types.MakeArray(t),
 			EvalOp:     &CompareScalarOp{treecmp.MakeComparisonOperator(treecmp.LE)},
 			Volatility: findVolatility(treecmp.LE, t),
 		})
-		cmpOps[treecmp.LT] = append(cmpOps[treecmp.LT], &CmpOp{
+		appendCmpOp(treecmp.LT, &CmpOp{
 			LeftType:   types.MakeArray(t),
 			RightType:  types.MakeArray(t),
 			EvalOp:     &CompareScalarOp{treecmp.MakeComparisonOperator(treecmp.LT)},
 			Volatility: findVolatility(treecmp.LT, t),
 		})
-
-		cmpOps[treecmp.IsNotDistinctFrom] = append(cmpOps[treecmp.IsNotDistinctFrom], &CmpOp{
+		appendCmpOp(treecmp.IsNotDistinctFrom, &CmpOp{
 			LeftType:          types.MakeArray(t),
 			RightType:         types.MakeArray(t),
 			EvalOp:            &CompareScalarOp{treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom)},
@@ -1366,11 +1388,9 @@ func cmpOpFixups(
 		})
 	}
 
-	for op, overload := range cmpOps {
-		for i, impl := range overload {
-			casted := impl.(*CmpOp)
-			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
-			cmpOps[op][i] = casted
+	for _, overload := range cmpOps {
+		for _, impl := range *overload {
+			impl.types = ArgTypes{{"left", impl.LeftType}, {"right", impl.RightType}}
 		}
 	}
 
@@ -1378,13 +1398,20 @@ func cmpOpFixups(
 }
 
 // cmpOpOverload is an overloaded set of comparison operator implementations.
-type cmpOpOverload []overloadImpl
+type cmpOpOverload []*CmpOp
+
+func (o cmpOpOverload) len() int {
+	return len(o)
+}
+
+func (o cmpOpOverload) get(i int) overloadImpl {
+	return o[i]
+}
 
 func (o cmpOpOverload) LookupImpl(left, right *types.T) (*CmpOp, bool) {
 	for _, fn := range o {
-		casted := fn.(*CmpOp)
-		if casted.matchParams(left, right) {
-			return casted, true
+		if fn.matchParams(left, right) {
+			return fn, true
 		}
 	}
 	return nil, false
@@ -1416,7 +1443,7 @@ func makeIsFn(a, b *types.T, v volatility.V) *CmpOp {
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
-var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
+var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*cmpOpOverload{
 	treecmp.EQ: {
 		// Single-type comparisons.
 		makeEqFn(types.AnyEnum, types.AnyEnum, volatility.Immutable),
@@ -1717,21 +1744,23 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 		},
 	},
 
-	treecmp.RegMatch: append(
-		cmpOpOverload{
-			&CmpOp{
+	treecmp.RegMatch: func() *cmpOpOverload {
+		r := append(cmpOpOverload{
+			{
 				LeftType:   types.String,
 				RightType:  types.String,
 				EvalOp:     &MatchRegexpOp{},
 				Volatility: volatility.Immutable,
 			},
 		},
-		makeBox2DComparisonOperators(
-			func(lhs, rhs *geo.CartesianBoundingBox) bool {
-				return lhs.Covers(rhs)
-			},
-		)...,
-	),
+			makeBox2DComparisonOperators(
+				func(lhs, rhs *geo.CartesianBoundingBox) bool {
+					return lhs.Covers(rhs)
+				},
+			)...,
+		)
+		return &r
+	}(),
 
 	treecmp.RegIMatch: {
 		&CmpOp{
@@ -1798,27 +1827,27 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]cmpOpOverload{
 			Volatility: volatility.Immutable,
 		},
 	},
-	treecmp.Overlaps: append(
-		cmpOpOverload{
-			&CmpOp{
+	treecmp.Overlaps: func() *cmpOpOverload {
+		r := append(cmpOpOverload{
+			{
 				LeftType:   types.AnyArray,
 				RightType:  types.AnyArray,
 				EvalOp:     &OverlapsArrayOp{},
 				Volatility: volatility.Immutable,
 			},
-			&CmpOp{
+			{
 				LeftType:   types.INet,
 				RightType:  types.INet,
 				EvalOp:     &OverlapsINetOp{},
 				Volatility: volatility.Immutable,
 			},
-		},
-		makeBox2DComparisonOperators(
+		}, makeBox2DComparisonOperators(
 			func(lhs, rhs *geo.CartesianBoundingBox) bool {
 				return lhs.Intersects(rhs)
 			},
-		)...,
-	),
+		)...)
+		return &r
+	}(),
 })
 
 func makeBox2DComparisonOperators(op func(lhs, rhs *geo.CartesianBoundingBox) bool) cmpOpOverload {
