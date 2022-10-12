@@ -6377,6 +6377,8 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer utilccl.TestingEnableEnterprise()()
 
 	t.Run(`kafka`, kafkaTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		changefeedbase.BatchReductionRetryEnabled.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, true)
 		knobs := f.(*kafkaFeedFactory).knobs
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
@@ -6416,9 +6418,11 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 				`foo: [6]->{"after": {"a": 6}}`,
 			})
 		})
-	}))
+	}, feedTestNoTenants))
 
 	t.Run(`kafka`, kafkaTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		changefeedbase.BatchReductionRetryEnabled.Override(
+			context.Background(), &f.Server().ClusterSettings().SV, true)
 		knobs := f.(*kafkaFeedFactory).knobs
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		t.Run(`succeed against a large backfill`, func(t *testing.T) {
@@ -6445,7 +6449,7 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 			}
 			assertPayloads(t, foo, expected)
 		})
-	}))
+	}, feedTestNoTenants))
 
 	for _, failTest := range []struct {
 		failInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
@@ -6491,6 +6495,8 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 		},
 	} {
 		t.Run(`kafka`, kafkaTest(func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+			changefeedbase.BatchReductionRetryEnabled.Override(
+				context.Background(), &f.Server().ClusterSettings().SV, true)
 			knobs := f.(*kafkaFeedFactory).knobs
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			// Validate that different failure scenarios result in a full changefeed retry
@@ -6515,11 +6521,7 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 					}
 					return nil
 				})
-				sqlDB.Exec(t, `CANCEL JOB $1`, feedJob.JobID())
-				require.NoError(t, feedJob.WaitForStatus(func(s jobs.Status) bool {
-					return s == jobs.StatusCanceled
-				}))
 			})
-		}))
+		}, feedTestNoTenants))
 	}
 }
