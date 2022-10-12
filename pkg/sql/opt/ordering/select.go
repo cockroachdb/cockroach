@@ -36,13 +36,13 @@ func selectBuildChildReqOrdering(
 	// Use interesting orderings from the child to "guide" the required ordering
 	// that gets passed down and make it more likely that the child will be able
 	// to provide the ordering. This step is needed before the call to
-	// trimColumnGroups, since that function will arbitrarily remove columns from
+	// TrimColumnGroups, since that function will arbitrarily remove columns from
 	// each group to ensure all columns in the group are equivalent according to
 	// the child FDs.
 	//
 	// For example, suppose the required ordering is +(1|2),+3, and the child has
 	// an interesting ordering of +1,+2,+3. +1,+2,+3 implies +(1|2),+3, so the
-	// child can provide the ordering. However, trimColumnGroups will convert
+	// child can provide the ordering. However, TrimColumnGroups will convert
 	// +(1|2),+3 to +1,+3, which the child cannot provide. We should instead pass
 	// down +1,+2,+3 as the required ordering to avoid an unnecessary sort.
 	//
@@ -61,16 +61,16 @@ func selectBuildChildReqOrdering(
 			break
 		}
 	}
-	return trimColumnGroups(required, &child.Relational().FuncDeps)
+	return TrimColumnGroups(required, &child.Relational().FuncDeps)
 }
 
-// trimColumnGroups removes columns from ColumnOrderingChoice groups as
+// TrimColumnGroups removes columns from ColumnOrderingChoice groups as
 // necessary, so that all columns in each group are equivalent according to
 // the given FDs. It is used when the parent expression can have column
 // equivalences that the input expression does not (for example a Select with an
 // equality condition); the columns in a group must be equivalent at the level
 // of the operator where the ordering is required.
-func trimColumnGroups(required *props.OrderingChoice, fds *props.FuncDepSet) props.OrderingChoice {
+func TrimColumnGroups(required *props.OrderingChoice, fds *props.FuncDepSet) props.OrderingChoice {
 	res := *required
 	copied := false
 	for i := range res.Columns {

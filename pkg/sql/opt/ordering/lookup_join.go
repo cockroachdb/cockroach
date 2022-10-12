@@ -41,7 +41,7 @@ func lookupJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingCho
 		// expression. This results in an equivalent ordering, but with fewer
 		// options in the OrderingChoice.
 		child := lookupJoin.Input
-		res := projectOrderingToInput(child, required)
+		res := ProjectOrderingToInput(child, required)
 		// It is in principle possible that the lookup join has an ON condition that
 		// forces an equality on two columns in the input. In this case we need to
 		// trim the column groups to keep the ordering valid w.r.t the child FDs
@@ -49,7 +49,7 @@ func lookupJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingCho
 		//
 		// This case indicates that we didn't do a good job pushing down equalities
 		// (see #36219), but it should be handled correctly here nevertheless.
-		res = trimColumnGroups(&res, &child.Relational().FuncDeps)
+		res = TrimColumnGroups(&res, &child.Relational().FuncDeps)
 		return CanProvide(child, &res)
 	}
 	if !canProjectUsingOnlyInputCols {
@@ -106,7 +106,7 @@ func lookupOrIndexJoinBuildChildReqOrdering(
 
 	// We may need to remove ordering columns that are not output by the input
 	// expression.
-	res := projectOrderingToInput(child, required)
+	res := ProjectOrderingToInput(child, required)
 	// It is in principle possible that the lookup join has an ON condition that
 	// forces an equality on two columns in the input. In this case we need to
 	// trim the column groups to keep the ordering valid w.r.t the child FDs
@@ -114,7 +114,7 @@ func lookupOrIndexJoinBuildChildReqOrdering(
 	//
 	// This case indicates that we didn't do a good job pushing down equalities
 	// (see #36219), but it should be handled correctly here nevertheless.
-	res = trimColumnGroups(&res, &child.Relational().FuncDeps)
+	res = TrimColumnGroups(&res, &child.Relational().FuncDeps)
 
 	// The propagation of FDs might not be perfect; in that case we need to
 	// simplify the required ordering, or risk passing through unnecessary columns

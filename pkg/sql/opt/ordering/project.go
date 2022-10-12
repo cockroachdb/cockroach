@@ -53,16 +53,16 @@ func projectBuildChildReqOrdering(
 
 	// We may need to remove ordering columns that are not output by the input
 	// expression.
-	result := projectOrderingToInput(proj.Input, &simplified)
+	result := ProjectOrderingToInput(proj.Input, &simplified)
 
 	return result
 }
 
-// projectOrderingToInput projects out columns from an ordering (if necessary);
+// ProjectOrderingToInput projects out columns from an ordering (if necessary);
 // can only be used if the ordering can be expressed in terms of the input
 // columns. If projection is not necessary, returns a shallow copy of the
 // ordering.
-func projectOrderingToInput(
+func ProjectOrderingToInput(
 	input memo.RelExpr, ordering *props.OrderingChoice,
 ) props.OrderingChoice {
 	childOutCols := input.Relational().OutputCols

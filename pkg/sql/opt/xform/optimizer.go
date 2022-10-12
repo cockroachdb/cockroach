@@ -546,6 +546,34 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 	return state
 }
 
+// assertEnforcibleProps panics with a useful error it is illegal to apply the
+// given required physical properties to the given relExpr. For example, it is
+// illegal to apply a distribution or ordering to the first join of a paired join,
+// which could not be applied on its input.
+func (o *Optimizer) assertEnforcibleProps(relExpr memo.RelExpr, required *physical.Required) bool {
+	if lookupJoinExpr, ok := relExpr.(*memo.LookupJoinExpr); ok {
+		if lookupJoinExpr.IsFirstJoinInPairedJoiner {
+			if !required.Distribution.Any() || !required.Ordering.Any() {
+				child := lookupJoinExpr.Input
+
+				// This logic is borrowed from lookupJoinCanProvideOrdering.
+				childRequired := ordering.ProjectOrderingToInput(child, &required.Ordering)
+				childRequired = ordering.TrimColumnGroups(&childRequired, &child.Relational().FuncDeps)
+
+				if !CanProvidePhysicalProps(o.ctx, o.evalCtx, lookupJoinExpr, required) ||
+					!ordering.CanProvide(child, &childRequired) {
+					// The required physical properties must be providable by the child as
+					// well since the parent enforcer is optimized first. Only inputs
+					// which are already sorted would allow enforcement of the property on
+					// this lookup join to be elided.
+					panic(errors.AssertionFailedf("cannot enforce physical properties on first join of paired joins: %s", required.String()))
+				}
+			}
+		}
+	}
+	return false
+}
+
 // optimizeGroupMember determines whether the group member expression can
 // provide the required properties. If so, it recursively optimizes the
 // expression's child groups and computes the cost of the expression. In
@@ -555,6 +583,11 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 func (o *Optimizer) optimizeGroupMember(
 	state *groupState, member memo.RelExpr, required *physical.Required,
 ) (fullyOptimized bool) {
+
+	// Was a required physical property applied which is unenforcible on the group
+	// member and might do something bad like require an illegal sort?
+	o.assertEnforcibleProps(member, required)
+
 	// Compute the cost for enforcers to provide the required properties. This
 	// may be lower than the expression providing the properties itself. For
 	// example, it might be better to sort the results of a hash join than to

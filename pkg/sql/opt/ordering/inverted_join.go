@@ -33,7 +33,7 @@ func invertedJoinBuildChildReqOrdering(
 	// We may need to remove ordering columns that are not output by the input
 	// expression.
 	child := parent.Child(0).(memo.RelExpr)
-	res := projectOrderingToInput(child, required)
+	res := ProjectOrderingToInput(child, required)
 	// It is in principle possible that the inverted join has an ON condition that
 	// forces an equality on two columns in the input. In this case we need to
 	// trim the column groups to keep the ordering valid w.r.t the child FDs
@@ -41,7 +41,7 @@ func invertedJoinBuildChildReqOrdering(
 	//
 	// This case indicates that we didn't do a good job pushing down equalities
 	// (see #36219), but it should be handled correctly here nevertheless.
-	return trimColumnGroups(&res, &child.Relational().FuncDeps)
+	return TrimColumnGroups(&res, &child.Relational().FuncDeps)
 }
 
 func invertedJoinBuildProvided(expr memo.RelExpr, required *props.OrderingChoice) opt.Ordering {
