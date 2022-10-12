@@ -1116,7 +1116,9 @@ SELECT count(*) FROM %s
 }
 
 var (
-	regexpUnknownSchemaErr = regexp.MustCompile(`unknown schema \[\d+\]`)
+	// regexpUnknownSchemaErr matches unknown schema errors with
+	// a descriptor ID, which will have the form: unknown schema "[123]"
+	regexpUnknownSchemaErr = regexp.MustCompile(`unknown schema "\[\d+]"`)
 )
 
 // checkAndAdjustForUnknownSchemaErrors in certain contexts we will attempt to
@@ -1129,7 +1131,7 @@ func (og *operationGenerator) checkAndAdjustForUnknownSchemaErrors(err error) er
 		if regexpUnknownSchemaErr.MatchString(pgErr.Message) {
 			og.opGenLog.WriteString(fmt.Sprintf("Rolling back due to unknown schema error %v",
 				err))
-			// Force a rollback and log inside the oepration generator.
+			// Force a rollback and log inside the operation generator.
 			return errors.Mark(err, errRunInTxnRbkSentinel)
 		}
 	}
