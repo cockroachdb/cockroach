@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
@@ -35,9 +36,9 @@ type githubIssues struct {
 type issueCategory int
 
 const (
-	clusterCreationErr issueCategory = iota
+	otherErr issueCategory = iota
+	clusterCreationErr
 	sshErr
-	otherErr
 )
 
 func newGithubIssues(
@@ -76,13 +77,16 @@ func (g *githubIssues) createPostRequest(
 	issueOwner := t.Spec().(*registry.TestSpec).Owner
 	issueName := t.Name()
 
+	messagePrefix := ""
 	// Overrides to shield eng teams from potential flakes
 	if cat == clusterCreationErr {
 		issueOwner = registry.OwnerDevInf
 		issueName = "cluster_creation"
+		messagePrefix = fmt.Sprintf("test %s was skipped due to ", t.Name())
 	} else if cat == sshErr {
 		issueOwner = registry.OwnerTestEng
 		issueName = "ssh_problem"
+		messagePrefix = fmt.Sprintf("test %s failed due to ", t.Name())
 	}
 
 	teams, err := g.teamLoader()
@@ -135,7 +139,7 @@ func (g *githubIssues) createPostRequest(
 		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        issueName,
-		Message:         message,
+		Message:         messagePrefix + message,
 		Artifacts:       artifacts,
 		ExtraLabels:     labels,
 		ExtraParams:     clusterParams,
@@ -152,9 +156,19 @@ func (g *githubIssues) createPostRequest(
 	}
 }
 
-func (g *githubIssues) MaybePost(t test.Test, cat issueCategory, message string) error {
+func (g *githubIssues) MaybePost(t *testImpl, message string) error {
 	if !g.shouldPost(t) {
 		return nil
+	}
+
+	cat := otherErr
+
+	// Overrides to shield eng teams from potential flakes
+	firstFailure := t.firstFailure()
+	if failureContainsError(firstFailure, errClusterProvisioningFailed) {
+		cat = clusterCreationErr
+	} else if failureContainsError(firstFailure, rperrors.ErrSSH255) {
+		cat = sshErr
 	}
 
 	return g.issuePoster(
