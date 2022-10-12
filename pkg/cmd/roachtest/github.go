@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
@@ -35,9 +36,9 @@ type githubIssues struct {
 type issueCategory int
 
 const (
-	clusterCreationErr issueCategory = iota
+	otherErr issueCategory = iota
+	clusterCreationErr
 	sshErr
-	otherErr
 )
 
 func newGithubIssues(
@@ -152,9 +153,19 @@ func (g *githubIssues) createPostRequest(
 	}
 }
 
-func (g *githubIssues) MaybePost(t test.Test, cat issueCategory, message string) error {
+func (g *githubIssues) MaybePost(t *testImpl, message string) error {
 	if !g.shouldPost(t) {
 		return nil
+	}
+
+	cat := otherErr
+
+	// Overrides to shield eng teams from potential flakes
+	firstFailure := t.firstFailure()
+	if failureContainsError(firstFailure, errClusterProvisioningFailed) {
+		cat = clusterCreationErr
+	} else if failureContainsError(firstFailure, rperrors.ErrSSH255) {
+		cat = sshErr
 	}
 
 	return g.issuePoster(
