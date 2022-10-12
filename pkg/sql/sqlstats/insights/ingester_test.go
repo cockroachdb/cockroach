@@ -76,7 +76,7 @@ func TestIngester(t *testing.T) {
 			)
 
 			provider.Start(ctx, stopper)
-			writer := provider.Writer()
+			writer := provider.Writer(false /* internal */)
 			reader := provider.Reader()
 
 			for _, e := range tc.observations {
@@ -120,8 +120,17 @@ func TestIngester_Disabled(t *testing.T) {
 	// to make sure it doesn't hold onto any statement or transaction info if
 	// the underlying registry is currently disabled.
 	ingester := newConcurrentBufferIngester(newRegistry(cluster.MakeTestingClusterSettings(), &fakeDetector{}))
-	ingester.ObserveStatement(clusterunique.ID{}, &Statement{})
-	ingester.ObserveTransaction(clusterunique.ID{}, &Transaction{})
+	writer := ingester.Writer(false /* internal */)
+	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
+	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
+	require.Nil(t, ingester.guard.eventBuffer[0])
+}
+
+func TestIngester_WriterIgnoresInternalExecutorObservations(t *testing.T) {
+	ingester := newConcurrentBufferIngester(newRegistry(cluster.MakeTestingClusterSettings(), &fakeDetector{stubEnabled: true}))
+	writer := ingester.Writer(true /* internal */)
+	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
+	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
 	require.Nil(t, ingester.guard.eventBuffer[0])
 }
 
