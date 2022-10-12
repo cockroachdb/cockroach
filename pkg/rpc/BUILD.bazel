@@ -34,6 +34,7 @@ go_library(
         "//pkg/security/certnames",
         "//pkg/security/username",
         "//pkg/settings/cluster",
+        "//pkg/util/buildutil",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/growstack",
@@ -64,13 +65,14 @@ go_library(
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//backoff",
         "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//connectivity",
         "@org_golang_google_grpc//credentials",
+        "@org_golang_google_grpc//credentials/insecure",
         "@org_golang_google_grpc//encoding",
         "@org_golang_google_grpc//keepalive",
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//peer",
         "@org_golang_google_grpc//status",
-        "@org_golang_x_sync//syncmap",
     ],
 )
 
@@ -82,6 +84,7 @@ go_test(
         "clock_offset_test.go",
         "codec_test.go",
         "context_test.go",
+        "down_node_test.go",
         "heartbeat_test.go",
         "helpers_test.go",
         "main_test.go",
@@ -127,7 +130,6 @@ go_test(
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//peer",
         "@org_golang_google_grpc//status",
-        "@org_golang_x_sync//errgroup",
     ],
 )
 

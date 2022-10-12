@@ -14,6 +14,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"math"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -34,7 +35,7 @@ func GetAddJoinDialOptions(certPool *x509.CertPool) []grpc.DialOption {
 	dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	dialOpts = append(dialOpts, grpc.WithNoProxy())
 	backoffConfig := backoff.DefaultConfig
-	backoffConfig.MaxDelay = maxBackoff
+	backoffConfig.MaxDelay = time.Second
 	dialOpts = append(dialOpts, grpc.WithConnectParams(grpc.ConnectParams{
 		Backoff:           backoffConfig,
 		MinConnectTimeout: minConnectionTimeout}))

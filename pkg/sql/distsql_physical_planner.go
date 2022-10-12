@@ -993,9 +993,8 @@ func (h *distSQLNodeHealth) checkSystem(
 		// artifact of rpcContext's reconnection mechanism at the time of
 		// writing). This is better than having it used in 100% of cases
 		// (until the liveness check below kicks in).
-		err := h.connHealth(roachpb.NodeID(sqlInstanceID), rpc.DefaultClass)
-		if err != nil && !errors.Is(err, rpc.ErrNotHeartbeated) {
-			// This host is known to be unhealthy. Don't use it (use the gateway
+		if err := h.connHealth(roachpb.NodeID(sqlInstanceID), rpc.DefaultClass); err != nil {
+			// This host isn't known to be healthy. Don't use it (use the gateway
 			// instead). Note: this can never happen for our sqlInstanceID (which
 			// always has its address in the nodeMap).
 			log.VEventf(ctx, 1, "marking n%d as unhealthy for this plan: %v", sqlInstanceID, err)

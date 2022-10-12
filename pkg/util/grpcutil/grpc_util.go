@@ -12,25 +12,22 @@ package grpcutil
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
 )
 
-// ErrCannotReuseClientConn is returned when a failed connection is
+// ErrConnectionInterrupted is returned when a failed connection is
 // being reused. We require that new connections be created with
 // pkg/rpc.GRPCDial instead.
-var ErrCannotReuseClientConn = errors.New(errCannotReuseClientConnMsg)
+var ErrConnectionInterrupted = errors.New(errConnectionInterruptedMsg)
 
-const errCannotReuseClientConnMsg = "cannot reuse client connection"
+const errConnectionInterruptedMsg = "connection interrupted (did the remote node shut down or are there networking issues?)"
 
 type localRequestKey struct{}
 
@@ -69,7 +66,7 @@ func IsContextCanceled(err error) bool {
 // IsClosedConnection returns true if err's Cause is an error produced by gRPC
 // on closed connections.
 func IsClosedConnection(err error) bool {
-	if errors.Is(err, ErrCannotReuseClientConn) {
+	if errors.Is(err, ErrConnectionInterrupted) {
 		return true
 	}
 	err = errors.Cause(err)
@@ -130,57 +127,22 @@ func IsAuthError(err error) bool {
 // RequestDidNotStart returns true if the given error from gRPC
 // means that the request definitely could not have started on the
 // remote server.
-//
-// This method currently depends on implementation details, matching
-// on the text of an error message that is known to only be used
-// in this case in the version of gRPC that we use today. We will
-// need to watch for changes here in future versions of gRPC.
-// TODO(bdarnell): Replace this with a cleaner mechanism when/if
-// https://github.com/grpc/grpc-go/issues/1443 is resolved.
 func RequestDidNotStart(err error) bool {
-	if errors.HasType(err, connectionNotReadyError{}) ||
-		errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) ||
+	if errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) ||
 		errors.Is(err, circuit.ErrBreakerOpen) ||
 		IsConnectionRejected(err) {
 		return true
 	}
-	s, ok := status.FromError(errors.Cause(err))
+	_, ok := status.FromError(errors.Cause(err))
 	if !ok {
 		// This is a non-gRPC error; assume nothing.
 		return false
 	}
-	// TODO(bdarnell): In gRPC 1.7, we have no good way to distinguish
-	// ambiguous from unambiguous failures, so we must assume all gRPC
-	// errors are ambiguous.
-	// https://github.com/cockroachdb/cockroach/issues/19708#issuecomment-343891640
-	if false && s.Code() == codes.Unavailable && s.Message() == "grpc: the connection is unavailable" {
-		return true
-	}
+	// This is where you'd hope to treat some gRPC errors as unambiguous.
+	// Unfortunately, gRPC provides no good way to distinguish ambiguous from
+	// unambiguous failures.
+	//
+	// https://github.com/grpc/grpc-go/issues/1443
+	// https://github.com/cockroachave hdb/cockroach/issues/19708#issuecomment-343891640
 	return false
-}
-
-// ConnectionReady returns nil if the given connection is ready to
-// send a request, or an error (which will pass RequestDidNotStart) if
-// not.
-//
-// This is a workaround for the fact that gRPC 1.7 fails to
-// distinguish between ambiguous and unambiguous errors.
-//
-// This is designed for use with connections prepared by
-// pkg/rpc.Connection.Connect (which performs an initial heartbeat and
-// thereby ensures that we will never see a connection in the
-// first-time Connecting state).
-func ConnectionReady(conn *grpc.ClientConn) error {
-	if s := conn.GetState(); s == connectivity.TransientFailure {
-		return connectionNotReadyError{s}
-	}
-	return nil
-}
-
-type connectionNotReadyError struct {
-	state connectivity.State
-}
-
-func (e connectionNotReadyError) Error() string {
-	return fmt.Sprintf("connection not ready: %s", e.state)
 }

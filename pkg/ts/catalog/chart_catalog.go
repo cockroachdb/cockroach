@@ -475,9 +475,7 @@ var charts = []sectionDescription{
 			{
 				Title: "Overview",
 				Metrics: []string{
-					"rpc.heartbeats.initializing",
 					"rpc.heartbeats.nominal",
-					"rpc.heartbeats.failed",
 				},
 				AxisLabel: "Heartbeats",
 			},

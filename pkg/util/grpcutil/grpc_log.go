@@ -215,24 +215,22 @@ func (l *grpcLogger) V(i int) bool {
 }
 
 // https://github.com/grpc/grpc-go/blob/v1.29.1/clientconn.go#L1275
-const (
-	outgoingConnSpamReSrc = `^grpc: addrConn\.createTransport failed to connect to.*(` +
-		// *nix
-		`connection refused` + `|` +
-		// Windows
-		`No connection could be made because the target machine actively refused it` + `|` +
-		// Host removed from the network and no longer resolvable:
-		// https://github.com/golang/go/blob/go1.8.3/src/net/net.go#L566
-		`no such host` + `|` +
-		// RPC dialer is currently failing but also retrying.
-		errCannotReuseClientConnMsg +
-		`)`
+var outgoingConnSpamReSrc = `^grpc: addrConn\.createTransport failed to connect to.*(` +
+	// *nix
+	`connection refused` + `|` +
+	// Windows
+	`No connection could be made because the target machine actively refused it` + `|` +
+	// Host removed from the network and no longer resolvable:
+	// https://github.com/golang/go/blob/go1.8.3/src/net/net.go#L566
+	`no such host` + `|` +
+	// RPC dialer is currently failing but also retrying.
+	regexp.QuoteMeta(errConnectionInterruptedMsg) +
+	`)`
 
-	// When a TCP probe simply opens and immediately closes the
-	// connection, gRPC is unhappy that the TLS handshake did not
-	// complete. We don't care.
-	incomingConnSpamReSrc = `^grpc: Server\.Serve failed to complete security handshake from "[^"]*": EOF`
-)
+// When a TCP probe simply opens and immediately closes the
+// connection, gRPC is unhappy that the TLS handshake did not
+// complete. We don't care.
+const incomingConnSpamReSrc = `^grpc: Server\.Serve failed to complete security handshake from "[^"]*": EOF`
 
 var outgoingConnSpamRe = regexp.MustCompile(outgoingConnSpamReSrc)
 var incomingConnSpamRe = regexp.MustCompile(incomingConnSpamReSrc)
