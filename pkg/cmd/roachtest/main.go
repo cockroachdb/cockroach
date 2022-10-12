@@ -335,7 +335,7 @@ runner itself.
 		if errors.Is(err, errTestsFailed) {
 			code = ExitCodeTestsFailed
 		}
-		if errors.Is(err, errClusterProvisioningFailed) {
+		if errors.Is(err, errSomeClusterProvisioningFailed) {
 			code = ExitCodeClusterProvisioningFailed
 		}
 		// Cobra has already printed the error message.

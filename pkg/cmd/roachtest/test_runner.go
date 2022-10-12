@@ -50,8 +50,13 @@ import (
 )
 
 var (
-	errTestsFailed               = fmt.Errorf("some tests failed")
-	errClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+	errTestsFailed = fmt.Errorf("some tests failed")
+
+	// reference error used by main.go at the end of a run of tests
+	errSomeClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+
+	// reference error used when cluster creation fails for a test
+	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
 )
 
 // testRunner runs tests.
@@ -305,7 +310,7 @@ func (r *testRunner) Run(
 
 	if r.numClusterErrs > 0 {
 		shout(ctx, l, lopt.stdout, "%d clusters could not be created", r.numClusterErrs)
-		return errClusterProvisioningFailed
+		return errSomeClusterProvisioningFailed
 	}
 
 	if len(r.status.fail) > 0 {
@@ -543,6 +548,7 @@ func (r *testRunner) runWorker(
 			wStatus.SetStatus("creating cluster")
 			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
 			if clusterCreateErr != nil {
+				clusterCreateErr = errors.Mark(clusterCreateErr, errClusterProvisioningFailed)
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
 					testToRun.spec.Name, clusterCreateErr)
@@ -590,12 +596,9 @@ func (r *testRunner) runWorker(
 			// Instead, let's report an infrastructure issue, mark the test as failed and continue with the next test.
 
 			// Generate failure reason and mark the test failed to preclude fetching (cluster) artifacts.
-			t.addFailure(clusterCreateErr)
-			issueOutput := "test %s was skipped due to %s"
-			issueOutput = fmt.Sprintf(issueOutput, t.spec.Name, t.FailureMsg())
-
+			t.Error(clusterCreateErr)
 			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
-			if err := github.MaybePost(t, clusterCreationErr, issueOutput); err != nil {
+			if err := github.MaybePost(t, t.failureMsg()); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		} else {
@@ -627,7 +630,7 @@ func (r *testRunner) runWorker(
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
 			// Mark the test as failed if it isn't already.
 			if !t.Failed() {
-				t.addFailure(err)
+				t.Error(err)
 			}
 		} else {
 			msg := "test passed: %s (run %d)"
@@ -643,7 +646,7 @@ func (r *testRunner) runWorker(
 			if err != nil {
 				failureMsg += fmt.Sprintf("%+v", err)
 			} else {
-				failureMsg += t.FailureMsg()
+				failureMsg += t.failureMsg()
 			}
 			if c != nil {
 				if debug {
@@ -765,10 +768,7 @@ func (r *testRunner) runTest(
 		// goroutine accidentally ends up calling t.Fatal; the test runs in a
 		// different goroutine.
 		if err := recover(); err != nil && err != errTestFatal {
-			if _, ok := err.(error); !ok {
-				err = errors.Newf("%v", err)
-			}
-			t.addFailure(err.(error))
+			t.Error(err)
 		}
 
 		t.mu.Lock()
@@ -777,7 +777,7 @@ func (r *testRunner) runTest(
 
 		durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 		if t.Failed() {
-			output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.FailureMsg())
+			output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.failureMsg())
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
@@ -786,14 +786,7 @@ func (r *testRunner) runTest(
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
 
-			cat := otherErr
-
-			// This will override the created issue's owner as it is likely due to an SSH flake
-			if strings.Contains(output, "SSH_PROBLEM") {
-				cat = sshErr
-			}
-
-			if err := github.MaybePost(t, cat, output); err != nil {
+			if err := github.MaybePost(t, output); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		} else {
@@ -830,7 +823,7 @@ func (r *testRunner) runTest(
 			start:   t.start,
 			end:     t.end,
 			pass:    !t.Failed(),
-			failure: t.FailureMsg(),
+			failure: t.failureMsg(),
 		})
 		r.status.Lock()
 		delete(r.status.running, t)
