@@ -775,3 +775,11 @@ func (md *Metadata) WithBinding(id WithID) Expr {
 	}
 	return res
 }
+
+// ForEachWithBinding calls fn with each bound (WithID, Expr) pair in the
+// metadata.
+func (md *Metadata) ForEachWithBinding(fn func(WithID, Expr)) {
+	for id, expr := range md.withBindings {
+		fn(id, expr)
+	}
+}

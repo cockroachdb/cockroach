@@ -1121,10 +1121,9 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 				// because the call to Factory.CopyAndReplace below clears With
 				// expressions in the metadata.
 				if !addedWithBindings {
-					for i, n := opt.WithID(1), b.mem.MaxWithID(); i <= n; i++ {
-						memoExpr := b.mem.Metadata().WithBinding(i)
-						f.Metadata().AddWithBinding(i, memoExpr)
-					}
+					b.mem.Metadata().ForEachWithBinding(func(id opt.WithID, expr opt.Expr) {
+						f.Metadata().AddWithBinding(id, expr)
+					})
 					addedWithBindings = true
 				}
 				// Fall through.
