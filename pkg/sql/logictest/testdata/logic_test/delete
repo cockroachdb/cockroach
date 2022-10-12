@@ -307,9 +307,6 @@ SELECT x, y, z FROM family
 1  1  NULL
 3  3  NULL
 
-statement error at or near "where": syntax error: unimplemented: this syntax
-DELETE FROM family USING family, other_table WHERE x=2
-
 # Verify that the fast path does its deletes at the expected timestamp.
 statement ok
 CREATE TABLE a (a INT PRIMARY KEY)
@@ -337,3 +334,200 @@ SELECT * FROM a AS OF SYSTEM TIME $ts
 3
 4
 5
+
+# Test that USING works.
+
+statement ok
+CREATE TABLE u_a (
+    a INT NOT NULL PRIMARY KEY,
+    b STRING,
+    c INT
+)
+
+statement ok
+CREATE TABLE u_b (
+  a INT NOT NULL PRIMARY KEY,
+  b STRING
+)
+
+statement ok
+CREATE TABLE u_c (
+  a INT NOT NULL PRIMARY KEY,
+  b STRING,
+  c INT
+)
+
+statement ok
+CREATE TABLE u_d (
+  a INT,
+  b INT
+)
+
+statement ok
+INSERT INTO u_a VALUES (1, 'a', 10), (2, 'b', 20), (3, 'c', 30), (4, 'd', 40)
+
+statement ok
+INSERT INTO u_b VALUES (10, 'a'), (20, 'b'), (30, 'c'), (40, 'd')
+
+statement ok
+INSERT INTO u_c VALUES (1, 'a', 10), (2, 'b', 50), (3, 'c', 50), (4, 'd', 40)
+
+# Test a join with a filter.
+statement ok
+DELETE FROM u_a USING u_b WHERE c = u_b.a AND u_b.b = 'd'
+
+query ITI rowsort
+SELECT * FROM u_a;
+----
+1  a  10
+2  b  20
+3  c  30
+
+# Test a self join.
+statement ok
+INSERT INTO u_a VALUES (5, 'd', 5), (6, 'e', 6)
+
+statement ok
+DELETE FROM u_a USING u_a u_a2 WHERE u_a.a = u_a2.c
+
+query ITI rowsort
+SELECT * FROM u_a;
+----
+1  a  10
+2  b  20
+3  c  30
+
+# Test when USING uses multiple tables.
+
+statement ok
+INSERT INTO u_c VALUES (30, 'a', 1)
+
+statement ok
+DELETE FROM u_a USING u_b, u_c WHERE u_a.c = u_b.a AND u_a.c = u_c.a
+
+query ITI rowsort
+SELECT * FROM u_a;
+----
+1  a  10
+2  b  20
+
+# Test if USING works well with RETURNING expressions that reference
+# the USING table and target table.
+query ITIT colnames,rowsort
+DELETE FROM u_a USING u_b WHERE u_a.c = u_b.a RETURNING u_b.a, u_b.b, u_a.a, u_a.b;
+----
+a   b  a  b
+10  a  1  a
+20  b  2  b
+
+query ITI rowsort
+SELECT * FROM u_a;
+----
+
+statement ok
+INSERT INTO u_a VALUES (1, 'a', 10), (2, 'b', 20), (3, 'c', 30), (4, 'd', 40);
+
+# Test if RETURNING * returns everything.
+query ITIITI colnames,rowsort
+DELETE FROM u_a USING u_c WHERE u_a.c = u_c.c RETURNING *;
+----
+a  b  c   a  b  c
+1  a  10  1  a  10
+4  d  40  4  d  40
+
+# Clean u_a to input a new set of data, and to improve test readability.
+statement ok
+TRUNCATE u_a
+
+statement ok
+INSERT INTO u_a VALUES (1, 'a', 5), (2, 'b', 10), (3, 'c', 15), (4, 'd', 20), (5, 'd', 25), (6, 'd', 30), (7, 'd', 35), (8, 'd', 40), (9, 'd', 45)
+
+# Using ORDER BY and LIMIT with a `DELETE ... USING` where ORDER BY and LIMIT references the USING
+# table is not supported.
+# TODO(#89817): Add support in DELETE ... USING for ORDER BY clauses to reference the USING
+# table. This is not supported in UPDATE ... FROM either: #89817.
+statement error SELECT DISTINCT ON expressions must match initial ORDER BY expressions
+DELETE FROM u_a AS foo USING u_b AS bar WHERE bar.a > foo.c ORDER BY bar.a DESC LIMIT 3 RETURNING *;
+
+# Test aliased table names, ORDER BY and LIMIT where ORDER BY references the target
+# table.
+query ITIIT
+DELETE FROM u_a AS foo USING u_b AS bar WHERE bar.a > foo.c ORDER BY foo.a DESC LIMIT 3 RETURNING *;
+----
+7  d  35  40  d
+6  d  30  40  d
+5  d  25  40  d
+
+query ITI rowsort
+SELECT * FROM u_a;
+----
+1  a  5
+2  b  10
+3  c  15
+4  d  20
+8  d  40
+9  d  45
+
+statement ok
+INSERT INTO u_d VALUES (1, 10), (2, 20), (3, 30), (4, 40)
+
+query IT rowsort
+SELECT * FROM u_b;
+----
+10  a
+20  b
+30  c
+40  d
+
+query ITI rowsort
+SELECT * FROM u_c;
+----
+1   a  10
+2   b  50
+3   c  50
+4   d  40
+30  a  1
+
+# Test if DELETE FROM ... USING works with LATERAL.
+
+statement ok
+DELETE FROM u_a USING u_b, LATERAL (SELECT u_c.a, u_c.b, u_c.c FROM u_c WHERE u_b.b = u_c.b) AS other WHERE other.c = 1 AND u_a.c = 35
+
+query ITI rowsort
+SELECT * FROM u_a
+----
+1  a  5
+2  b  10
+3  c  15
+4  d  20
+8  d  40
+9  d  45
+
+# Test if DELETE FROM ... USING works with partial indexes.
+
+statement ok
+CREATE TABLE pindex (
+  a DECIMAL(10, 2),
+  INDEX (a) WHERE a > 3
+)
+
+statement ok
+INSERT INTO pindex VALUES (1.0), (2.0), (3.0), (4.0), (5.0), (8.0)
+
+statement ok
+DELETE FROM pindex USING (VALUES (5.0), (6.0)) v(b) WHERE pindex.a = v.b
+
+query F rowsort
+SELECT * FROM pindex;
+----
+1.00
+2.00
+3.00
+4.00
+8.00
+
+query F rowsort
+SELECT a FROM pindex@pindex_a_idx WHERE a > 3
+----
+4.00
+8.00
