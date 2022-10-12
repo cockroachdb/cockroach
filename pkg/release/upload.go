@@ -34,8 +34,6 @@ type PutReleaseOptions struct {
 	// VersionStr is the version (SHA/branch name) of the release.
 	VersionStr string
 
-	// Files are all the files to be included in the archive.
-	Files         []ArchiveFile
 	ArchivePrefix string
 }
 
@@ -47,22 +45,29 @@ type PutNonReleaseOptions struct {
 	Files []NonReleaseFile
 }
 
-// PutRelease uploads a compressed archive containing the release
-// files and a checksum file of the archive.
-func PutRelease(svc ObjectPutGetter, o PutReleaseOptions) {
-	keys := makeArchiveKeys(o.Platform, o.VersionStr, o.ArchivePrefix)
+// CreateArchive creates a release archive and returns its binary contents.
+func CreateArchive(
+	platform Platform, version string, prefix string, files []ArchiveFile,
+) (bytes.Buffer, error) {
+	keys := makeArchiveKeys(platform, version, prefix)
 	var body bytes.Buffer
 
 	if strings.HasSuffix(keys.archive, ".zip") {
-		if err := createZip(o.Files, &body, keys.base); err != nil {
-			log.Fatalf("cannot create zip %s: %s", keys.archive, err)
+		if err := createZip(files, &body, keys.base); err != nil {
+			return bytes.Buffer{}, fmt.Errorf("cannot create zip %s: %w", keys.archive, err)
 		}
 	} else {
-		if err := createTarball(o.Files, &body, keys.base); err != nil {
-			log.Fatalf("cannot create tarball %s: %s", keys.archive, err)
+		if err := createTarball(files, &body, keys.base); err != nil {
+			return bytes.Buffer{}, fmt.Errorf("cannot create tarball %s: %w", keys.archive, err)
 		}
 	}
+	return body, nil
+}
 
+// PutRelease uploads a compressed archive containing the release
+// files and a checksum file of the archive.
+func PutRelease(svc ObjectPutGetter, o PutReleaseOptions, body bytes.Buffer) {
+	keys := makeArchiveKeys(o.Platform, o.VersionStr, o.ArchivePrefix)
 	log.Printf("Uploading to %s", svc.URL(keys.archive))
 	putObjectInput := PutObjectInput{
 		Key:  &keys.archive,
@@ -74,8 +79,8 @@ func PutRelease(svc ObjectPutGetter, o PutReleaseOptions) {
 	if err := svc.PutObject(&putObjectInput); err != nil {
 		log.Fatalf("failed uploading %s: %s", keys.archive, err)
 	}
-	// Generate a SHA256 checksum file with a single entry.
-	checksumContents := fmt.Sprintf("%x %s\n", sha256.Sum256(body.Bytes()),
+	// Generate a SHA256 checksum file with a single entry. Make sure there are 2 spaces in between.
+	checksumContents := fmt.Sprintf("%x  %s\n", sha256.Sum256(body.Bytes()),
 		filepath.Base(keys.archive))
 	targetChecksum := keys.archive + ChecksumSuffix
 	log.Printf("Uploading to %s", svc.URL(targetChecksum))
