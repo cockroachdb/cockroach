@@ -431,7 +431,15 @@ func maybeRevertToCutoverTimestamp(
 	}
 
 	updateRunningStatus(ctx, j, fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTime))
-	spans := []roachpb.Span{sd.Span}
+	if err := issueRevertRangeRequests(ctx, db, roachpb.Spans{sd.Span}, cutoverTime); err != nil {
+		return false, err
+	}
+	return true, j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
+}
+
+func issueRevertRangeRequests(
+	ctx context.Context, db *kv.DB, spans roachpb.Spans, cutoverTime hlc.Timestamp,
+) error {
 	for len(spans) != 0 {
 		var b kv.Batch
 		for _, span := range spans {
@@ -440,13 +448,13 @@ func maybeRevertToCutoverTimestamp(
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
-				TargetTime:                          sp.StreamIngest.CutoverTime,
+				TargetTime:                          cutoverTime,
 				EnableTimeBoundIteratorOptimization: true, // NB: Must set for 22.1 compatibility.
 			})
 		}
 		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize
 		if err := db.Run(ctx, &b); err != nil {
-			return false, err
+			return err
 		}
 
 		spans = spans[:0]
@@ -454,13 +462,13 @@ func maybeRevertToCutoverTimestamp(
 			r := raw.GetRevertRange()
 			if r.ResumeSpan != nil {
 				if !r.ResumeSpan.Valid() {
-					return false, errors.Errorf("invalid resume span: %s", r.ResumeSpan)
+					return errors.Errorf("invalid resume span: %s", r.ResumeSpan)
 				}
 				spans = append(spans, *r.ResumeSpan)
 			}
 		}
 	}
-	return true, j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
+	return nil
 }
 
 func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachpb.TenantID) error {
