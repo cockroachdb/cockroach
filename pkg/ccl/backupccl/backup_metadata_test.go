@@ -189,7 +189,10 @@ func checkFiles(
 ) {
 	var metaFiles []backuppb.BackupManifest_File
 	var file backuppb.BackupManifest_File
-	it := bm.FileIter(ctx)
+	it, err := bm.NewFileIter(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer it.Close()
 
 	for it.Next(&file) {
