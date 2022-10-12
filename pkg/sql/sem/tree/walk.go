@@ -79,11 +79,12 @@ func (expr *BinaryExpr) Walk(v Visitor) Expr {
 // copyNode makes a copy of this Expr without recursing in any child Exprs.
 func (expr *CaseExpr) copyNode() *CaseExpr {
 	exprCopy := *expr
-	// Copy the Whens slice.
+	// Copy the Whens slice. Amortize into 1 allocation.
+	whens := make([]When, len(expr.Whens))
 	exprCopy.Whens = make([]*When, len(expr.Whens))
 	for i, w := range expr.Whens {
-		wCopy := *w
-		exprCopy.Whens[i] = &wCopy
+		whens[i] = *w
+		exprCopy.Whens[i] = &whens[i]
 	}
 	return &exprCopy
 }
@@ -1306,10 +1307,11 @@ func (stmt *Select) copyNode() *Select {
 	if stmt.With != nil {
 		withCopy := *stmt.With
 		stmtCopy.With = &withCopy
+		cteList := make([]CTE, len(stmt.With.CTEList))
 		stmtCopy.With.CTEList = make([]*CTE, len(stmt.With.CTEList))
 		for i, cte := range stmt.With.CTEList {
-			cteCopy := *cte
-			stmtCopy.With.CTEList[i] = &cteCopy
+			cteList[i] = *cte
+			stmtCopy.With.CTEList[i] = &cteList[i]
 		}
 	}
 	return &stmtCopy
@@ -1578,10 +1580,11 @@ func (stmt *SetClusterSetting) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Update) copyNode() *Update {
 	stmtCopy := *stmt
+	exprs := make([]UpdateExpr, len(stmt.Exprs))
 	stmtCopy.Exprs = make(UpdateExprs, len(stmt.Exprs))
 	for i, e := range stmt.Exprs {
-		eCopy := *e
-		stmtCopy.Exprs[i] = &eCopy
+		exprs[i] = *e
+		stmtCopy.Exprs[i] = &exprs[i]
 	}
 	if stmt.Where != nil {
 		wCopy := *stmt.Where
