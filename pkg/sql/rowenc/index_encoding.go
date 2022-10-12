@@ -913,7 +913,7 @@ func encodeOverlapsArrayInvertedIndexSpans(
 // expression must match every trigram in the input. Otherwise, it will match
 // any trigram in the input.
 func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error) {
-	// We do not pad the trigrams when searching the index. To see why, observe
+	// We do not pad the trigrams when allMustMatch is true. To see why, observe
 	// the keys that we insert for a string "zfooz":
 	//
 	// "  z", " zf", "zfo", "foo", "foz", "oz "
@@ -922,7 +922,7 @@ func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error
 	// keys as well, we'd be searching for the key "  f", which doesn't exist
 	// in the index for zfooz, even though zfooz is like %foo%.
 	keys, err := encodeTrigramInvertedIndexTableKeys(s, nil, /* inKey */
-		descpb.LatestIndexDescriptorVersion, false /* pad */)
+		descpb.LatestIndexDescriptorVersion, !allMustMatch /* pad */)
 	if err != nil {
 		return nil, err
 	}
