@@ -1090,18 +1090,40 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 
 		value := make(map[string]interface{})
 		key := make([]interface{}, 0)
+
 		for k, v := range row {
 
-			if vv, ok := v.([]byte); ok {
+			switch vv := v.(type) {
+			case []byte:
 				value[k] = string(vv)
-				fmt.Printf("xkcd: value of bytes: %s", value[k])
-			} else {
-				value[k] = v
+			case map[string]interface{}:
+				//https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
+				vtemp := make([]interface{}, 0)
+				if castedValue, ok := vv["list"].([]map[string]interface{}); ok {
+					for _, ele := range castedValue {
+						if elementVal, ok := ele["element"]; ok {
+							if byteTypeElement, ok := elementVal.([]byte); ok {
+								vtemp = append(vtemp, string(byteTypeElement))
+							} else {
+								vtemp = append(vtemp, ele["element"])
+							}
+						} else {
+							return errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+						}
+					}
+				} else {
+					return errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+				}
+				value[k] = vtemp
+			default:
+				value[k] = vv
 			}
+
 			if _, ok := keyColsSet[k]; ok {
 				key = append(key, value[k])
 			}
 		}
+
 		jsonValue, err := gojson.Marshal(value)
 		if err != nil {
 			return err
