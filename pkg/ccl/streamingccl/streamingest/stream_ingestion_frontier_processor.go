@@ -380,11 +380,11 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 				redact.Safe(resolved.Timestamp), redact.Safe(sf.highWaterAtStart))
 		}
 
-		if changed, err := sf.frontier.Forward(resolved.Span, resolved.Timestamp); err == nil {
-			frontierChanged = frontierChanged || changed
-		} else {
+		changed, err := sf.frontier.Forward(resolved.Span, resolved.Timestamp)
+		if err != nil {
 			return false, err
 		}
+		frontierChanged = frontierChanged || changed
 	}
 
 	return frontierChanged, nil
@@ -413,7 +413,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 
 	sf.lastPartitionUpdate = timeutil.Now()
 
-	err := registry.UpdateJobWithTxn(ctx, jobID, nil, false, func(
+	if err := registry.UpdateJobWithTxn(ctx, jobID, nil, false, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
@@ -441,13 +441,12 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 			ju.UpdateRunStats(1, md.RunStats.LastRun)
 		}
 		return nil
-	})
-
-	if err == nil {
-		sf.metrics.JobProgressUpdates.Inc(1)
-		sf.persistedHighWater = f.Frontier()
-		sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
+	}); err != nil {
+		return err
 	}
+	sf.metrics.JobProgressUpdates.Inc(1)
+	sf.persistedHighWater = f.Frontier()
+	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
 
-	return err
+	return nil
 }
