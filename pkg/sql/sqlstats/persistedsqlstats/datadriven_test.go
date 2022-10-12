@@ -85,7 +85,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	server := cluster.Server(0 /* idx */)
 	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
-	appStats := sqlStats.GetApplicationStats("app1")
+	appStats := sqlStats.GetApplicationStats("app1", false)
 
 	// Open two connections so that we can run statements without messing up
 	// the SQL stats.
