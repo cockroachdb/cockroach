@@ -44,6 +44,7 @@ storiesOf("Transactions Page", module)
       onFilterChange={noop}
       onSortingChange={noop}
       refreshData={noop}
+      refreshNodes={noop}
       resetSQLStats={noop}
       search={""}
       sortSetting={sortSetting}
@@ -61,6 +62,7 @@ storiesOf("Transactions Page", module)
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
+        refreshNodes={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
@@ -86,6 +88,7 @@ storiesOf("Transactions Page", module)
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
+        refreshNodes={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
@@ -104,6 +107,7 @@ storiesOf("Transactions Page", module)
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
+        refreshNodes={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
@@ -129,6 +133,7 @@ storiesOf("Transactions Page", module)
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
+        refreshNodes={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}

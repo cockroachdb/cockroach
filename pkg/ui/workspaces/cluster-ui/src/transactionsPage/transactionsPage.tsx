@@ -96,6 +96,7 @@ export interface TransactionsPageStateProps {
 
 export interface TransactionsPageDispatchProps {
   refreshData: (req: StatementsRequest) => void;
+  refreshNodes: () => void;
   resetSQLStats: (req: StatementsRequest) => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
@@ -195,6 +196,9 @@ export class TransactionsPage extends React.Component<
 
   componentDidMount(): void {
     this.refreshData();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
   }
 
   updateQueryParams(): void {
@@ -231,6 +235,9 @@ export class TransactionsPage extends React.Component<
 
   componentDidUpdate(): void {
     this.updateQueryParams();
+    if (!this.props.isTenant) {
+      this.props.refreshNodes();
+    }
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {

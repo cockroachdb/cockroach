@@ -11,7 +11,11 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshStatements, refreshUserSQLRoles } from "src/redux/apiReducers";
+import {
+  refreshNodes,
+  refreshStatements,
+  refreshUserSQLRoles,
+} from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { txnFingerprintIdAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
@@ -80,6 +84,7 @@ export default withRouter(
     },
     {
       refreshData: refreshStatements,
+      refreshNodes,
       refreshUserSQLRoles,
       onTimeScaleChange: setGlobalTimeScaleAction,
     },
