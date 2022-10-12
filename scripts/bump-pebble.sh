@@ -32,6 +32,17 @@ fi
 COCKROACH_DIR="$(go env GOPATH)/src/github.com/cockroachdb/cockroach"
 PEBBLE_DIR="$(go env GOPATH)/src/github.com/cockroachdb/pebble"
 VENDORED_DIR="$COCKROACH_DIR/vendor"
+UPSTREAM="upstream"
+
+# Using count since error code is ignored
+MATCHING_UPSTREAMS=$(git remote | grep -c ${UPSTREAM} || true )
+if [ $MATCHING_UPSTREAMS = 0 ]; then
+  echo This script expects the upstream to point to github.com/cockroachdb/cockroach.
+  echo However no remote matches \"$UPSTREAM\".
+  echo The available remotes are:
+  git remote
+  read -p "Please enter a remote to use: " UPSTREAM
+fi
 
 # Make sure that the cockroachdb remotes match what we expect. The
 # `upstream` remote must point to github.com/cockroachdb/cockroach.
@@ -48,7 +59,7 @@ VENDORED_UPSTREAM_URL="git@github.com:cockroachdb/vendored.git"
 pushd "$COCKROACH_DIR"
 git fetch "$COCKROACH_UPSTREAM_URL" "$BRANCH"
 git checkout "$BRANCH"
-git rebase "upstream/$BRANCH"
+git rebase "$UPSTREAM/$BRANCH"
 OLD_SHA=$(grep 'github.com/cockroachdb/pebble' go.mod | grep -o -E '[a-f0-9]{12}$')
 popd
 
@@ -56,7 +67,7 @@ popd
 # and grab the desired Pebble SHA.
 pushd "$PEBBLE_DIR"
 git fetch "$PEBBLE_UPSTREAM_URL" "$PEBBLE_BRANCH"
-NEW_SHA=$(git rev-parse "upstream/$PEBBLE_BRANCH")
+NEW_SHA=$(git rev-parse "$UPSTREAM/$PEBBLE_BRANCH")
 COMMITS=$(git log --pretty='format:%h %s' "$OLD_SHA..$NEW_SHA" | grep -v 'Merge pull request')
 echo "$COMMITS"
 popd
