@@ -251,3 +251,23 @@ query IT
 SELECT * FROM t88558 WHERE 'aab':::STRING LIKE b;
 ----
 1  %
+
+# Regression test for #89609. Pad trigrams when building inverted spans for
+# similarity filters.
+statement ok
+CREATE TABLE t89609 (
+  t TEXT,
+  INVERTED INDEX idx (t gin_trgm_ops)
+);
+INSERT INTO t89609 VALUES ('aaaaaa');
+SET pg_trgm.similarity_threshold=.3
+
+query T
+SELECT t FROM t89609@primary WHERE t::STRING % 'aab';
+----
+aaaaaa
+
+query T
+SELECT t FROM t89609@idx WHERE t::STRING % 'aab';
+----
+aaaaaa
