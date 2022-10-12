@@ -139,7 +139,10 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 var aesSize int
 var overwriteKey bool
 
-var genEncryptionKeyCmd = &cobra.Command{
+// GenEncryptionKeyCmd is a command to generate a store key for Encryption At
+// Rest.
+// Exported to allow use by CCL code.
+var GenEncryptionKeyCmd = &cobra.Command{
 	Use:   "encryption-key <key-file>",
 	Short: "generate store key for encryption at rest",
 	Long: `Generate store key for encryption at rest.
@@ -274,7 +277,7 @@ var genCmds = []*cobra.Command{
 	genExamplesCmd,
 	genHAProxyCmd,
 	genSettingsListCmd,
-	genEncryptionKeyCmd,
+	GenEncryptionKeyCmd,
 }
 
 func init() {
@@ -285,9 +288,9 @@ func init() {
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
 	cliflagcfg.VarFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
-	genEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSize, "size", "s", 128,
+	GenEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSize, "size", "s", 128,
 		"AES key size for encryption at rest (one of: 128, 192, 256)")
-	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,
+	GenEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,
 		"Overwrite key if it exists")
 	genSettingsListCmd.PersistentFlags().BoolVar(&includeReservedSettings, "include-reserved", false,
 		"include undocumented 'reserved' settings")
