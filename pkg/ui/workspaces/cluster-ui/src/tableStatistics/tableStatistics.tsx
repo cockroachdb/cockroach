@@ -36,7 +36,7 @@ interface TableStatistics {
 // This component has also a clear filter option.
 export const TableStatistics: React.FC<TableStatistics> = ({
   pagination,
-  totalCount,
+  totalCount = 0,
   search,
   arrayItemName,
   onClearFilters,
