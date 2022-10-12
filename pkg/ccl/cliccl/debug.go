@@ -92,11 +92,22 @@ stdout.
 		RunE: clierrorplus.MaybeDecorateError(runDecrypt),
 	}
 
+	encryptionRegistryList := &cobra.Command{
+		Use:   "encryption-registry-list <directory>",
+		Short: "list files in the encryption-at-rest file registry",
+		Long: `Prints a list of files in an Encryption At Rest file registry, along
+with their env type and encryption settings (if applicable).
+`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: clierrorplus.MaybeDecorateError(runList),
+	}
+
 	// Add commands to the root debug command.
 	// We can't add them to the lists of commands (eg: DebugCmdsForPebble) as cli init() is called before us.
 	cli.DebugCmd.AddCommand(encryptionStatusCmd)
 	cli.DebugCmd.AddCommand(encryptionActiveKeyCmd)
 	cli.DebugCmd.AddCommand(encryptionDecryptCmd)
+	cli.DebugCmd.AddCommand(encryptionRegistryList)
 
 	// Add the encryption flag to commands that need it.
 	// For the encryption-status command.
@@ -107,6 +118,9 @@ stdout.
 		"print active store key ID and exit")
 	// For the encryption-decrypt command.
 	f = encryptionDecryptCmd.Flags()
+	cliflagcfg.VarFlag(f, &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
+	// For the encryption-registry-list command.
+	f = encryptionRegistryList.Flags()
 	cliflagcfg.VarFlag(f, &storeEncryptionSpecs, cliflagsccl.EnterpriseEncryption)
 
 	// Add encryption flag to all OSS debug commands that want it.
