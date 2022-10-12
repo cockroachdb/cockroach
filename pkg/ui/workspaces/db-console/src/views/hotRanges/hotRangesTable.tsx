@@ -179,11 +179,17 @@ const HotRangesTable = ({
             Table
           </Tooltip>
         ),
-        cell: val => (
-          <Link to={`/database/${val.database_name}/table/${val.table_name}`}>
-            {val.table_name}
-          </Link>
-        ),
+        cell: val =>
+          // A hot range may not necessarily back a SQL table. If we see a
+          // "table name" that starts with a slash, it is not a table name but
+          // instead the start key of the range, and we should not link it.
+          val.table_name.startsWith("/") ? (
+            val.table_name
+          ) : (
+            <Link to={`/database/${val.database_name}/table/${val.table_name}`}>
+              {val.table_name}
+            </Link>
+          ),
         sort: val => val.table_name,
       },
       {
