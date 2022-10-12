@@ -33,6 +33,10 @@ const (
 	unclassifiedExitCode = 1
 )
 
+// ErrSSH255 is a reference error used to mark an SSH error with an exit
+// code of 255. This could be indicative of an SSH flake.
+var ErrSSH255 = errors.New("SSH error occurred with exit code 255")
+
 // Cmd wraps errors that result from a command run against the cluster.
 type Cmd struct {
 	Err error
@@ -116,7 +120,7 @@ func ClassifyCmdError(err error) Error {
 
 	if exitErr, ok := asExitError(err); ok {
 		if exitErr.ExitCode() == 255 {
-			return SSH{err}
+			return SSH{errors.Mark(err, ErrSSH255)}
 		}
 		return Cmd{err}
 	}
