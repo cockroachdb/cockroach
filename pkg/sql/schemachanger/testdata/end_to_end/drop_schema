@@ -100,14 +100,3 @@ set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 commit transaction #3
 # end PostCommitPhase
-
-setup
-CREATE SCHEMA db.sc;
-CREATE TABLE db.sc.t (k INT, v STRING);
-CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
-----
-...
-+schema {104 0 sc} -> 107
-+object {104 107 t} -> 108
-+object {104 107 e} -> 109
-+object {104 107 _e} -> 110
