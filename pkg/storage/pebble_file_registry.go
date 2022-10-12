@@ -532,6 +532,13 @@ func (r *PebbleFileRegistry) getRegistryCopy() *enginepb.FileRegistry {
 	return rv
 }
 
+// List returns a mapping of file in the registry to their enginepb.FileEntry.
+func (r *PebbleFileRegistry) List() map[string]*enginepb.FileEntry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.entries
+}
+
 // Close closes the record writer and record file used for the registry.
 // It should be called when a Pebble instance is closed.
 func (r *PebbleFileRegistry) Close() error {
