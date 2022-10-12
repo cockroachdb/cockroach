@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package a;
+
+import "sub/sub1.proto";
+import weak "sub/sub2.proto";
+import weak "one/one.proto";

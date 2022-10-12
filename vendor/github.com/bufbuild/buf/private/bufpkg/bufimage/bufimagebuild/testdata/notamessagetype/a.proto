@@ -1,0 +1,10 @@
+syntax="proto3";
+
+package a;
+
+message Foo{}
+message Bar{}
+
+service MyService{
+  rpc Foo(Foo) returns (Bar);
+}

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package a;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+
+service Two {
+  rpc Foo(stream google.protobuf.Any) returns (google.protobuf.Any) {}
+  rpc Bar(google.protobuf.Any) returns (stream google.protobuf.Any) {}
+  rpc Baz(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bat(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}

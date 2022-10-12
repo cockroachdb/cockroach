@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package a;
+
+service One2 {}
+service Two2 {}
+service Three2 {}

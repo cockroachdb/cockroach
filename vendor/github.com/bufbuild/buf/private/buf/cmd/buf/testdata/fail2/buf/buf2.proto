@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package buf;
+
+import "buf/buf.proto";
+
+message Foo2 {
+  int64 one_two = 1;
+  int64 oneThree = 3;
+  Foo foo = 4;
+}

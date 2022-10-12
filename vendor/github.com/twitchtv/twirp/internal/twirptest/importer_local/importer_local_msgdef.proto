@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+package twirp.internal.twirptest.importer_local;
+option go_package = "github.com/twitchtv/twirp/internal/twirptest/importer_local";
+
+message Msg {}

@@ -1,0 +1,73 @@
+# Build customization
+builds:
+  - env:
+      - CGO_ENABLED=0
+    main: ./cmd/asciigraph/main.go
+    ldflags: '-s -w'
+    # GOOS list to build in.
+    # For more info refer to https://golang.org/doc/install/source#environment
+    goos:
+      - linux
+      - darwin
+      - windows
+    # GOARCH to build in.
+    # For more info refer to https://golang.org/doc/install/source#environment
+    goarch:
+      - 386
+      - amd64
+      - arm
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: 386
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_sha512-checksums.txt'
+  algorithm: sha512
+# Archive customization
+archives:
+  - id: tar
+    format: tar.gz
+    files:
+      - LICENSE
+      - README.md
+    # Replacements for GOOS and GOARCH on the archive name.
+    replacements:
+      '386': i386
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      amd64: x86_64
+    format_overrides:
+      - goos: windows
+        format: zip
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+release:
+  github:
+    owner: guptarohit
+    name: asciigraph
+  # If set to true, will not auto-publish the release.
+  # Default is false.
+  draft: true
+dockers:
+  - image_templates:
+      - 'ghcr.io/guptarohit/asciigraph:{{ .Version }}'
+      - 'ghcr.io/guptarohit/asciigraph:{{ .Tag }}'
+      - 'ghcr.io/guptarohit/asciigraph:v{{ .Major }}'
+      - 'ghcr.io/guptarohit/asciigraph:v{{ .Major }}.{{ .Minor }}'
+      - 'ghcr.io/guptarohit/asciigraph:latest'
+    dockerfile: goreleaser.dockerfile
+    build_flag_templates:
+      - '--label=org.opencontainers.image.title={{ .ProjectName }}'
+      - '--label=org.opencontainers.image.name={{ .ProjectName }}'
+      - '--label=org.opencontainers.image.description=Go package to make lightweight line graphs ╭┈╯ in CLI'
+      - '--label=org.opencontainers.image.url=https://github.com/guptarohit/asciigraph'
+      - '--label=org.opencontainers.image.source=https://github.com/guptarohit/asciigraph'
+      - '--label=org.opencontainers.image.version={{ .Version }}'
+      - '--label=org.opencontainers.image.created={{ .Date }}'
+      - '--label=org.opencontainers.image.revision={{ .FullCommit }}'
+      - '--label=org.opencontainers.image.licenses=BSD-3-Clause'

@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+// To team members: I am sorry you have to read such a bad file.
+// To others: Do the opposite of whatever this file does.
+
+// buf:lint:ignore PACKAGE_DIRECTORY_MATCH
+// buf:lint:ignore PACKAGE_LOWER_SNAKE_CASE
+// buf:lint:ignore PACKAGE_VERSION_SUFFIX
+package A;
+
+// buf:lint:ignore IMPORT_NO_PUBLIC
+import public "google/protobuf/empty.proto";
+
+// buf:lint:ignore ENUM_PASCAL_CASE
+enum enumFoo {
+  // buf:lint:ignore ENUM_NO_ALLOW_ALIAS
+  option allow_alias = true;
+  // buf:lint:ignore ENUM_ZERO_VALUE_SUFFIX
+  // buf:lint:ignore ENUM_VALUE_UPPER_SNAKE_CASE
+  enumFooNone = 0;
+  // buf:lint:ignore ENUM_VALUE_UPPER_SNAKE_CASE
+  enumFooOne = 1;
+  // buf:lint:ignore ENUM_VALUE_UPPER_SNAKE_CASE
+  enumFooTwo = 1;
+}
+
+// buf:lint:ignore MESSAGE_PASCAL_CASE
+message messageFoo {
+  // buf:lint:ignore MESSAGE_PASCAL_CASE
+  message messageBar {
+    // buf:lint:ignore MESSAGE_PASCAL_CASE
+    message messageBaz {
+      // buf:lint:ignore ENUM_PASCAL_CASE
+      enum enumFoo {
+        // buf:lint:ignore ENUM_NO_ALLOW_ALIAS
+        option allow_alias = true;
+        // buf:lint:ignore ENUM_ZERO_VALUE_SUFFIX
+        // buf:lint:ignore ENUM_VALUE_UPPER_SNAKE_CASE
+        enumFooNone = 0;
+        // buf:lint:ignore ENUM_VALUE_UPPER_SNAKE_CASE
+        enumFooOne = 1;
+        // buf:lint:ignore ENUM_VALUE_UPPER_SNAKE_CASE
+        enumFooTwo = 1;
+      }
+      // buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+      int64 Foo = 1;
+      // buf:lint:ignore ONEOF_LOWER_SNAKE_CASE
+      oneof Bar {
+        // buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+        int64 Baz = 2;
+      }
+    }
+    // buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+    int64 Foo = 1;
+    // buf:lint:ignore ONEOF_LOWER_SNAKE_CASE
+    oneof Bar {
+      // buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+      int64 Baz = 2;
+    }
+  }
+  // buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+  int64 Foo = 1;
+  // buf:lint:ignore ONEOF_LOWER_SNAKE_CASE
+  oneof Bar {
+    // buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+    int64 Baz = 2;
+  }
+}
+
+// buf:lint:ignore SERVICE_PASCAL_CASE
+service serviceFoo {
+  // buf:lint:ignore RPC_PASCAL_CASE
+  // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+  rpc methodFoo(
+      // buf:lint:ignore RPC_REQUEST_STANDARD_NAME
+      google.protobuf.Empty
+    ) returns (
+      // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+      google.protobuf.Empty
+    ) {}
+}

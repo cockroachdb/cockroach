@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package c;
+
+import "a/b/b1.proto";
+import "a/b/b2.proto";
+import "google/protobuf/timestamp.proto";
+
+message See {
+  a.b.BeeOne bee_one = 1;
+  a.b.BeeTwo bee_two = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}

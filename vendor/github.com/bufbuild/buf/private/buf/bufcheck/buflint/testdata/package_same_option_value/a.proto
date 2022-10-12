@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package a;
+
+option csharp_namespace = "foo";
+option java_multiple_files = true;
+option java_package = "foo";
+option go_package = "foo";
+option php_namespace = "foo";
+option ruby_package = "foo";
+option swift_prefix = "foo";

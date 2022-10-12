@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+package twirp.internal.gen.typemap.testdata.root_pkg;
+
+// RootMsg leading
+message RootMsg {}

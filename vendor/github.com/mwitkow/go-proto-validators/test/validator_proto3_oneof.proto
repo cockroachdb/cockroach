@@ -1,0 +1,28 @@
+// Copyright 2016 Michal Witkowski. All Rights Reserved.
+// See LICENSE for licensing terms.
+
+syntax = "proto3";
+package validatortest;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "github.com/mwitkow/go-proto-validators/validator.proto";
+
+message ExternalMsg {
+  string Identifier = 1 [(validator.field) = {regex: "^[a-z]{2,5}$"}];
+  int64 SomeValue = 2 [(validator.field) = {int_gt: 0, int_lt: 100}];
+}
+
+message OneOfMessage3 {
+  uint32 SomeInt = 1  [(validator.field) = {int_gt: 10}];
+
+  oneof type {
+    ExternalMsg one_msg = 2;
+    uint32 one_int = 3 [(validator.field) = {int_gt: 20}];
+    uint32 two_int = 4 [(validator.field) = {int_gt: 100}];
+  }
+
+  oneof something {
+    uint32 three_int = 5 [(validator.field) = {int_gt: 20}];
+    uint32 four_int = 6 [(validator.field) = {int_gt: 100}];
+  }
+}

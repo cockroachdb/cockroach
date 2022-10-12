@@ -1,0 +1,723 @@
+Changes
+=======
+
+v1.2.25 23 May 2022
+[Bug Fixes][Security]
+  * [jwe] An old bug from at least 7 years ago existed in handling AES-CBC unpadding,
+    where the unpad operation might remove more bytes than necessary (#744)
+    This affects all jwx code that is available before v2.0.2 and v1.2.25. 
+
+v1.2.24 05 May 2022
+[Security]
+  * Upgrade golang.org/x/crypto (#724)
+
+v1.2.23 13 Apr 2022
+[Bug fixes]
+  * [jwk] jwk.AutoRefresh had a race condition when `Configure()` was
+    called concurrently (#686)
+    (It has been patched correctly, but we may come back to revisit
+     the design choices in the near future)
+
+v1.2.22 08 Apr 2022
+[Bug fixes]
+  * [jws] jws.Verify was ignoring the `b64` header when it was present
+    in the protected headers (#681). Now the following should work:
+
+      jws.Sign(..., jws.WithDetachedPayload(payload))
+      // previously payload had to be base64 encoded
+      jws.Verify(..., jws.WithDetachedPayload(payload))
+
+    (note: v2 branch was not affected)
+
+v1.2.21 30 Mar 2022
+[Bug fixes]
+  * [jwk] RSA keys without p and q can now be parsed.
+
+v1.2.20 03 Mar 2022
+[Miscellaneous]
+  * Dependency on golang.org/x/crypto has been upgraded to
+    v0.0.0-20220214200702-86341886e292 to address
+    https://nvd.nist.gov/vuln/detail/CVE-2020-14040 (#598)
+
+v1.2.19 22 Feb 2022
+[New Feature]
+  * [jwk] jwk.Parse (and (jwk.AutoRefresh).Configure) can accept a new
+    option `jwk.WithIgnoreParseError(bool)`, which allows users to ignore
+    errors during parsing of each key contained in the JWKS, allowing
+    you to "skip" invalid keys.
+
+    This option should not be used lightly, as it hides the presence of
+    possibly faulty keys. However, this can be an escape hatch if you are
+    faced with a faulty JWKS that you do not control.
+
+v1.2.18 23 Jan 2022
+[Bug fixes]
+  * [jwe] When presented with jwk.Key with a key ID, the jwe encryption
+    code path did not assign this key ID to the resulting data structure.
+    This has been fixed, and now the key ID is properly applied to the
+    `kid` field.
+  * [jws] Use for `crypto.Signer`s were implemented for signing, but verification was
+    never properly implemented. This has been fixed.
+
+[Miscellaneous]
+  * [jws] Because of fixes to code path that deals with `crypto.Signer`s, we are
+    now able to fully integrate with Cloud services, such as Google's Cloud KMS
+    and AWS KMS, that provide key management and signing payloads
+
+    An implementation for these are available at https://github.com/jwx-go/crypto-signer.
+
+    Suppot `crypto.Signer` in JWE encryption has not been implemented.
+
+v1.2.17 12 Jan 2022
+[Miscellaneous]
+  * Re-release v1.2.16 as v1.2.17 because of an error in the release process.
+    The code is exactly the same as what v1.2.16 intended to release.
+    v1.2.16 has been retracted in go.mod.
+
+v1.2.16 12 Jan 2022 
+
+  THIS VERSION HAS BEEN RETRACTED. PLEASE USE v1.2.17
+
+[Bug Fixes]
+  * Peviously, `jws.Sign()` could not create a signed payload with
+    detached and unencoded payload, even when the documentation said it could.
+    Now you may use the `jws.Sign()` in the following way to create
+    a JWS message with detached, unencoded state:
+
+       hdrs := jws.NewHeaders()
+       hdrs.Set("b64", false)
+       hdrs.Set("crit", "b64")
+       jws.Sign(nil, alg, key, jws.WithDetachedPayload(payload), jws.WithHeaders(hdrs))
+
+    Notice the use of `nil` for the first parameter, and the use of
+    `jws.WithDetachedPayload()`.
+
+    We realize this is not exactly a clean API, but this is currently the
+    only way to implement this in a backward-compatible fashion. Most likely
+    this will change in a future major version.
+[Miscellaneous]
+  * `jws.WithDetachedPayload()` is now of type `jws.SignVerifyOption`, which
+    satisfies both `jws.SignOption` and `jws.VerifyOption`
+   
+
+v1.2.15 07 Jan 2022
+[New Features]
+  * `(jwk.AutoRefresh).Remove()` has been implemented.
+[Bug Fixes]
+  * ES256K is now included in the list of JWS inferred algorithms, if it's
+    enabled via -tags jwx_es256k
+[Miscellaneous]
+  * `jwt.Parse` has been improved for efficiency and has more tests to
+    cover corner cases.
+  * Documentation fixes
+
+v1.2.14 22 Dec 2021
+[New Features]
+  * `jwk.Fetch()` and `(*jwk.AutoRefresh).Configure()` can now take `jwk.Whitelist`
+    object to check for the validity of a url to be fetched
+  * `jws.VerifyAuto()` has been added to verify payloads that can be verified
+    using the JWK set provided in the "jku" field. This function is purposely
+    separated from the `jws.Verify()` function because 1) the required parameters
+    are different, and 2) Users MUST be aware that they are doing a totally
+    different operation than a regular `jws.Verify()`
+  * `(jwk.AutoRefresh).IsRegistered()` has been added.
+
+[Bug fixes]
+  * `jws.SignMulti()` has been fixed to assign the "kid" field of the key used
+    for signing the payload
+  * `jws.SignMulti()` has been fixed to respect the "kid" field of the protected
+    header, not the public header
+
+v1.2.13 07 Dec 2021
+[New Features]
+  * `jwt` package now has a `Builder` that may make it easier to programmatically
+    create a JWT for some users. 
+  * `jwt` errors now can be distinguished between validation errors and others.
+    Use `jwt.IsValidationError()` to check if it's a validation error, and then
+    use `errors.Is()` to check if it's one of the known (oft-used) errors
+
+v1.2.12 01 Dec 2021
+[New Features]
+  * `jwk.Set` can now parse private parameters. For example, after parsing
+    a JWKS serialized as `{"foo": "bar", "keys": [...]}`, users can get to
+    the value of `"foo"` by calling `set.Field("foo")`
+  * `jwk.Set` now has `Set()` method to set field values.
+
+v1.2.11 14 Nov 2021
+[Security Fix]
+  * It was reported that since v1.2.6, it was possible to craft
+    a special JSON object to bypass JWT verification via `jwt.Parse`.
+    If you relied on this module to perform all the verification,
+    upgrade is strongly recommended.
+
+v1.2.10 09 Nov 2021
+[Bug fixes]
+  * Parsing OpenID claims were not working for some fields.
+    This was caused by the same problem as the problem fixed in v1.2.9.
+    Proper tests have been added.
+
+v1.2.9 26 Oct 2021
+[Bug fixes]
+  * Parsing `key_ops` for JWKs which was broken in v1.2.8 has been fixed.
+
+v1.2.8 21 Oct 2021
+[Miscellaneous]
+  * `jws.Message`, `jws.Signature`, `jws.Headers` have been reworked
+    to allow JSON messages to be verified correctly. The problem can
+    be caused when protected headers are serialized one way (perhaps
+    `{"c":3","a":1,"b":2}` was used before being base64-encoded) but
+    the Go serialization differed from it (Go serializes in alphabetical
+    order: `{"a":1,"b":2,"c":3}`)
+
+    Messages serialized in compact form do NOT suffer from the
+    same problem.
+
+    This is close to fixes that went in v1.2.2. It boils down to the
+    fact that once deserialized, the JWS messages lose part of its
+    information (namely, the raw, original protected header value),
+    and neither users nor the developers of this library should
+    rely on it.
+
+  * Code generation has be refactored. The main go.mod should now
+    have slightly less dependencies.
+
+v1.2.7 26 Sep 2021
+[New features]
+  * `jwt.InferAlgorithmFromKey()` option is now available to "guess"
+    the algorithm used to verify the JWS signature on a JWT using
+    a JWKS (key set). This allows you to match JWKs that do not have
+    the `alg` field populated.
+
+    We understand that some providers do not provide the `alg` field,
+    which is a nuisance to users. But from a purely security minded PoV,
+    we don't think that this "try until something works" approach is a
+    good one, even if there are no known exploits. This is why the
+    default `jwt.Parse` mechanism is unchanged, and an explicit option
+    has been added.
+
+  * Types `jwt.KeySetProvider` and `jwk.KeySetProviderFunc` have been
+    added. Along with `jwt.WithKeySetProvider()` option, `jwt.Parse`
+    can now choose the `jwk.Set` to use for signature verification
+    dynamically using the UNVERFIEID token as a clue.
+
+    You should NOT trust the token information too much. For example,
+    DO NOT directly use values from the token as verificatin parameters
+    (such as the signature algorithm)
+
+  * `jwt.WithValidator()` has been added to allow users pass in aribtrary
+    validation code to the `jwt.Validate()` method.
+
+    It is also now possible to pass in a `context.Context` object to
+    `jwt.Validate()` using `jwt.WithContext()` option.
+
+[Miscellaneous]
+  * Make the error messages when `jwt.ParseRequest` fails a bit better.
+  * Moved around documentation within the repository
+  * Validation logic for `jwt.Validate()` has been refactored to use the
+    new `jwt.Validator` mechanism
+
+v1.2.6 24 Aug 2021
+[New features]
+  * Support `crypto.Signer` keys for RSA, ECDSA, and EdDSA family
+    of signatures in `jws.Sign`
+[Miscellaneous]
+  * `jwx.GuessFormat()` now requires the presense of both `payload` and
+    `signatures` keys for it to guess that a JSON object is a JWS message.
+  * Slightly enhance `jwt.Parse()` performance.
+
+v1.2.5 04 Aug 2021
+[New features]
+  * Implement RFC7797. The value of the header field `b64` changes
+    how the payload is treated in JWS
+  * Implement detached payloads for JWS
+  * Implement (jwk.AutoRefresh).ErrorSink() to register a channel
+    where you can receive errors from fetches and parses that occur during
+    JWK(s) retrieval.
+
+v1.2.4 15 Jul 2021
+[Bug fixes]
+  * We had the same off-by-one in another place and jumped the gun on
+    releasing a new version. At least we were making mistakes uniformally :/
+    `(jwk.Set).Remove` should finally be fixed.
+
+[New features]
+  * `(jwk.Set).Clone()` has been added.
+
+v1.2.3 15 Jul 2021
+[Bug fixes]
+  * jwk.Set incorrectly removed 2 elements instead of one.
+
+[Miscellaneous]
+  * github.com/goccy/go-json has been upgraded to v0.7.4
+
+v1.2.2 13 Jul 2021
+[Deprecation notice]
+  * `(jwe.Message).Decrypt()` will be removed from the API upon the next
+    major release.
+
+[Bug Fixes]
+  * `jwe.Decrypt` and `(jwe.Message).Decrypt()` failed to decrypt even
+    with the correct message contents when used along with `jwe.RegisterCustomField`
+
+[New features]
+  JWX
+  * Add GuessFormat() function to guess what the payload is.
+
+  JWT
+  * Options `jwt.WithMinDelta()`, `jwt.WithMaxDelta()` have been added.
+    These can be used to compare time-based fields in the JWT object.
+  * Option `jwt.WithRequiredClaim()` has been added. This can be used
+    to check that JWT contains the given claim.
+  * `jwt.Parse` now understands payloads that have been encrypted _and_ signed.
+    This is more in line with the RFC than the previous implementation, but
+    due to the fact that it requires a couple of extra unmarshaling, it may
+    add some amount of overhead.
+  * `jwt.Serializer` has been added as an easy wrapper to perform multiple
+     levels of serializations (e.g. apply JWS, then JWE)
+
+  JWE
+  * Option `jwe.WithMessage()` has been added. This allows the user to
+    obtain both the decrypted payload _and_ the raw `*jwe.Message` in one
+    go when `jwe.Decrypt()` is called
+  * Option `jwe.WithPostParser()`, along with `jwe.PostParser` and `jwe.PostParseFunc`
+    has been added. This allows advanced users to hook into the `jwe.Decrypt()`
+    process. The hook is called right after the JWE message has been parsed,
+    but before the actual decryption has taken place.
+  * `(jwe.Message).Decrypt()` has been marked for deprecation in a next major release.
+
+  JWS
+  * Option `jwe.WithMessage()` has been added. This allows the user to
+    obtain both the verified payload _and_ the raw `*jws.Message` in one
+    go when `jws.Verify()` is called
+  * Options to `jws.Sign()` are not of type `jws.SignOption`. There should be
+    no user-visible effects unless you were storing these somewhere.
+
+v1.2.1 02 Jun 2021
+[New features]
+  * Option `jwt.WithTypedClaim()` and `jwk.WithTypedField()` have been added.
+    They allow a per-object custom conversion from their JSON representation
+    to a Go object, much like `RegisterCustomField`.
+
+    The difference is that whereas `RegisterCustomField` has global effect,
+    these typed fields only take effect in the call where the option was
+    explicitly passed.
+
+    `jws` and `jwe` does not have these options because
+    (1) JWS and JWE messages don't generally carry much in terms of custom data
+    (2) This requires changes in function signatures.
+
+    Only use these options when you absolutely need to. While it is a powerful
+    tool, they do have many caveats, and abusing these features will have
+    negative effects. See the documentation for details
+
+v1.2.0 30 Apr 2021
+
+This is a security fix release with minor incompatibilities from earlier version
+with regards to the behavior of `jwt.Verify()` function
+
+[Security Fix]
+  * `jwt.Verify()` had improperly used the `"alg"` header from the JWS message
+    when `jwt.WithKeySet()` option was used (potentially allowing exploits
+    described in https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/.
+    This has been fixed by ONLY trusting the keys that you provide and
+    using the `"alg"` header from the keys themselves. (#375, #381)
+
+    As a side effect, `jwt.WithKeySet()` requires that all applicable keys
+    to contain a valid `"alg"` header. Without this we cannot safely choose a key to use,
+    and hence verification will fail.
+
+    The requirement for the `"alg"` header on keys is an INCOMPATIBLE behavior.
+    This may break existing code, if the key does not already have an `"alg"` header.
+
+[New features]
+  * `jwt.Settings()` and `jwt.WithFlattenAudience(bool)` has been added
+    to control how the "aud" claim is serialized into JSON. When this
+    is enabled, all JWTs with a single "aud" claim will serialize
+    the field as a single string, instead of an array of strings with
+    a single element, i.e.:
+
+    // jwt.WithFlattenAudience(true)
+    {"aud": "foo"}
+
+    // jwt.WithFlattenAudience(false)
+    {"aud": ["foo"]}
+
+    This setting has a global effect.
+
+[Buf fixes]
+  * jwt.Validate now returns true if the value in `nbf` field is exactly
+    the same as what the clock returns (e.g. token.nbf == time.Now())
+
+v1.1.7 02 Apr 2021
+[New features]
+  * `jwk.New` `jwk.Parse`, `jwk.ParseKey` can now take a Certificate in
+    ASN.1 DER format in PEM encoding to create a JWK.
+
+[Bug fixes]
+  * Protect `jwk.New()` from invalid RSA/ECDSA keys (#360, #361)
+
+[Miscellaneous]
+  * Removed "internal/blackmagic" and separated it to its own repository.
+  * Removed unused "marshal proxy" objects in jwt
+  * Added FAQ in `jwt` package
+
+v1.1.6 28 Mar 2021
+[Bug fixes]
+  * When an object (e.g. JWT) has a null value and `AsMap()` is called,
+    `github.com/lestrrat-go/iter` would panic.
+    This should be fixed in `github.com/lestrrat-go/iter@v1.0.1` and
+    the dependency has been updated accordingly
+
+[Miscellaneous]
+  * Added How-to style docs under `docs/`
+  * github.com/goccy/go-json dependency has been updated to v0.4.8
+
+v1.1.5 12 Mar 2021
+  This is a security fix release. The JWT validation could be skipped
+  for empty values. Upgrade recommended
+
+[Security Fix]
+  * JWT validation could be skipped for empty fields (#352).
+
+[Bug fixes]
+  * Allow setting JWT "typ" fields to any value (#351).
+  * Remove stray replace directive in cmd/jwx/go.mod (#349)
+
+v1.1.4 02 Mar 2021
+[New features]
+  * jwt.ParseRequest, jwt.ParseHeader, jwt.ParseForm have been added.
+    They are convenience functions to parse JWTs out of a HTTP request.
+
+[Miscellaneous]
+  * Fix jwt.Equals() so that comparison between values containing time.Time
+    actually work
+
+  * ES256K has been made non-default. You must enable it using a build tag
+
+     go build -tags jwx_es256k ...
+
+    Your program will still compile without this tag, but it will return
+    an error during runtime, when ES256K is encountered.
+    This feature is still experimental.
+
+v1.1.3 22 Feb 2021
+[New features]
+  * Implemented ES256K signing (#337)
+    This feature should be considered experimental
+
+[Miscellaneous]
+  * Bump minimum required version to go1.15
+  * Fix examples, bench, and cmd/jwx accidentally requiring go1.16
+  * Dependencies for "github.com/goccy/go-json" has been upgraded to
+    v0.4.7
+
+v1.1.2 16 Feb 2021
+[New features]
+  * `RegisterCustomField()` has been added, which allows users to
+    specify a private claim/field/header to decode into a particular
+    object of choice, instead of map[string]interface{} or []interface{} (#332, #333)
+
+[Bug fixes]
+  * Failures for `jwk.Key.MarshalJSON()` were not properly reported (#330, #331)
+
+[Miscellaneous]
+  * `jwe.Encrypt()` now takes options. This should not matter unless you
+    were somehow depending on its method signature.
+  * Dependencies for "github.com/goccy/go-json" has been upgraded to
+    v0.4.2
+
+v1.1.1 05 Feb 2021
+[New features]
+  * Command line tool `jwx` has ben completely reworked, and it is
+    now actually useful.
+
+  * JWKs can now be serialized into PEM files with ASN.1 DER format
+    data, which is useful when you need to work between JSON and PEM
+    data formats.
+
+  * Constants in jwa package now have can be listed via functions
+    in each category.
+
+  * jwe.Encrypt and jwe.Decrypt can now handle jwk.Key objects
+
+v1.1.0 31 Jan 2021
+  v1.1.0 is a release that attempts to fix as many of the quirky APIs
+  that survived the API breaking change of v0.9.x -> v1.0.0. This is
+  hopefully the last releases that change backwards compatibility
+  in a major way, at least for some time to come.
+
+  It is unfortunate that we need to introduce API changes, but we
+  keep learning how the library is being used and the pain points
+  of using this library. Most of the times these pain points are
+  things that we initially did not think about, which in turn
+  requires us to rethink of the API.
+
+  If you do not wish to spend the time fixing your usage, make sure
+  you have your go.mod set up to not automatically track the latest
+  changes.
+
+  However, if you do decide to use the latest version, we believe
+  the API is more uniform across packages, and generally is easier
+  to understand. We hope this library helps some of you out there.
+
+[BREAKING CHANGES]
+  * `jwk.Parse(io.Reader)`, `jws.Parse(io.Reader)`, `jwt.Parse(io.Reader)`, 
+    have all been changed to `Parse([]byte)`. To use an `io.Reader`,
+    use `ParseReader(io.Reader)`. `jwe.Parse` already took `[]byte`, so
+    has not been changed.
+
+    With this change, all four package `jwe`, `jwk`, `jws`, and `jwt` follow
+    the same API design, which should make things easier to navigate:
+
+      Parse([]byte)
+      ParseString(string)
+      ParseReader(io.Reader)
+
+  * `jwk.Set` is now an interface, not a struct. `jwk.Set` now has a
+    well-defined API to access and modify the `jwk.Key` objects that it holds.
+
+      Add(jwk.Key) bool
+      Clear()
+      Get(int) (jwk.Key, bool)
+      Index(jwk.Key) int
+      Len() int
+      LookupKeyID() (jwk.Key, bool) // Read the section about it below
+      Remove(jwk.Key) bool
+      Iterate(context.Context) KeyIterator
+
+  * `(jwk.Set).LookupKeyID()` no longer returns an array of `jwk.Key`.
+    Instead, only the first key matching the given key ID will be returned.
+    If you need to work with multiple keys, use `(jwk.Set).Iterate()` or
+    `(jwk.Set).Get()` to look for matching keys.
+
+  * `jwk.PublicKeyOf()` has been renamed to `jwk.PublicRawKeyOf()`,
+    which converts raw keys (e.g. `rsa.PrivateKey`) to their public
+    counter part (e.g. `rsa.PublicKey`)
+
+    `jwk.PublicKeyOf()` is now used to get the public counter part of
+    `jwk.Key` objects (e.g. `jwk.RSAPrivateKey` to `jwk.RSAPublicKey`)
+
+    `jwk.PublicSetOf()` has been added to get a new `jwk.Set` but with
+    all keys transformed to public keys via `jwk.PublicKeyOf()`
+
+  * `jwk.FetchXXXX` functions have been removed. `jwk.Fetch()` remains, but
+    it now takes `context.Context`, and doesn't support retrieving files
+    from the local file system. See `ReadFile()` for that.
+
+  * `jws.VerifyWithJKU()`, `jws.VerifyWithJWK()`, `jwk.VerifyWithJWKSet()`
+    have all been removed, but `jwk.VerifySet(jwk.Set)` has been added.
+
+  * `jws.SplitCompact(io.Reader)` has been changd to `jws.SplitCompact([]byte)`
+    Similar to `Parse()`, `SplitCompactReader(io.Reader)` and `SplitCompactString(string)`
+    have been added
+
+  * `jws.SignLiteral` has been removed.
+
+  * `jws.PayloadSigner` has been removed (but should not matter, because
+    this as internal-use only anyways)
+
+  * `jwe.WithPrettyJSONFormat` has been renamed to `jwe.WithPrettyFormat`
+
+  * `jwt.Verify` has been removed. Use `jwt.Parse()` aloing with the `jwt.WithVerify()`
+    option to perform signature verification. Validation of verified data
+    can be performed via `(jwt.Token).Validate()` method, which has been available
+    since v1.0.6
+
+  * Package `buffer` has been removed. This package should have been an internal
+    package to start with, but it was left because it had been incorporated
+    in the public API in our initial versions.
+
+  * `(jwk.Key).Get(jwk.X509CertChainKey)` no longer returns a `jwk.CertificateChain`.
+    Instead it returns a raw []*x509.Certificate.
+
+  * `(jwt.Token).Size() has been removed.
+
+  * `jwt.WithOpenIDClaims()` has been removed. Use `jwt.WithToken(openid.New())` instead.
+
+[New Features]
+  * `jwe.ReadFile(string)`, `jwk.ReadFile(string)`, `jws.ReadFile(string)`, and
+    `jwt.ReadFile(string)` have been added. In the future, we plan to introduce
+    a `WithFS` option so you can read from an arbitrary file system, but this cannot
+    be added while we keep go < 1.16 compatibility. If you want something like that,
+    you will need to put an adapter over the jwx for the time being.
+
+  * `(jwk.Key).PublicKey()` has been added. This method creates a corresponding
+    public key, with all fields (except those that shouldn't be) copied over.
+    This allows you to easily create a public key of a private key with the
+    same "kid" attribute.
+
+  * Both `jws.Verify` and `jws.Sign` methods can now handle `jwk.Key` objects, on
+    top of raw keys (e.g. rsa.PrivateKey). You no longer need to conver the
+    `jwk.Key` objects that you have in to raw keys before using these functions.
+
+  * `(jws.Header).Remove(string)`, `(jwk.Key).Remove(string)`, and
+    `(jwt.Token).Remove(string)` have been added. `jwe.Header` already had a `Remove()`
+    method, so it has not been changed.
+
+  * `(jwk.Key).Clone() has been added.
+
+[Miscellaneous]
+  * Default branch for the repository is now `main`.
+
+  * Options have been reworked. In most instances, option types should now reflect
+    better the contexts in which they can be used. For example, `jwk` now has
+    `AutoRefreshOption` and `FetchOption` instead of a single `Option`.
+
+  * JSON marshaling should be 10~30% faster by default (though they may take
+    more allocations to achieve this).
+
+    However, if performance is really bogging you down, you can try to enable
+    the optional module github.com/goccy/go-json by enabling the "jwx_goccy" tag
+
+      go build -tags jwx_goccy ...
+
+    In some cases you get an extra 40~50% performance improvement in serailization
+    https://github.com/lestrrat-go/jwx/pull/314#issue-560594020
+    https://github.com/lestrrat-go/jwx/pull/314#issuecomment-766343888
+
+  * Location for examples and benchmarks have changed: Now examples/ and bench/ 
+    are their respective locations, and they are each a standalone module,
+    so that in case we need extra imports (such as the case in examples)
+    they do not interfere with users who just want to include jwx in their projects.
+
+v1.0.8 15 Jan 2021
+[New features]
+  * Fixed `jws.Message` and `jws.Signature` to be properly formatted when
+    marshaled into JSON. In the same manner, `json.Unmarshal` should also
+    work as expected.
+  * Added API to programatically manipulate `jws.Message` and `jws.Signature`
+[Miscellaneous]
+  * The order of keys are now consistent as when used with `json.Marshal`.
+    Previously some objects used their own ordering, but now the code goes
+    through one extra roundtrip of `json.Unmarshal`/`json.Marshal` to preserve
+    compatible behavior. This *may* lead to slightly slower performance if
+    you are performing `json.Marshal` over and over in very quick succession.
+    Please file an issue if you have real world cases where the change
+    causes problems for you.
+  * Added more examples in various places.
+  * Tests runs have been sped up for the most oft used cases
+
+v1.0.7 11 Jan 2021
+[New features]
+  * Added jwk.AutoRefresh, which is a tool to periodically refresh JWKS. (#265)
+  * Added experimental ed25519 support (#252)
+[Bug fixes]
+  * Fix `Set()` method for jwk Keys to properly accept either `jwk.KeyUsageType`
+    or a simple string.
+[Miscellaneous]
+  * Updated dependencies
+  * Changed options to use github.com/lestrrat-go/option
+  * Various typos, unused annotations, etc, have been fixed by contributors
+  * Nobody except for the author really should care, but the underlying
+    `pdebug` utility, which is used for print debugging, has been
+    upgraded to v3, which should stop parallel test execution from throwing
+    an error when run with -race
+
+v1.0.6 17 Dec 2020
+  * Fix ECDHES ciphers where padding in AAD et al was creating
+    incomptabile values with jose tool
+  * Also fix ECDH-ES cek handling (#248)
+  * Implement direct key encoding (#213, #249)
+  * Allow JWT tokens to use default JWK if only one key is given
+    and the JWT does not necessarily specifies a key (#214)
+  * Deprecate jwt.Verify and introduce jwt.Validate. JWS verification
+    used the term Verify, which was confusing when users wanted to
+    validate the JWT token itself. (#220)
+  * JWT library optins have been explicitly typed as ValidationOption
+    and ParseOption (#220, #223)
+  * Add jwx.DecoderSettings and jwx.WithUseNumber option to globally
+    change how jwx parses JSON objects (#222)
+  * Encode x5c field as base64 with padding (#244)
+  * Add more interoperability tests against jose tool.
+  * Special thanks to anatol and imirkin!
+
+v1.0.5 - 28 Sep 2020
+  * Reinstate PrivateParams() method in jws and jwe packages.
+    These used to be available until v1.0.0, but somehow got lost during the
+    big change.
+    As a workaround for users of versions 1.0.0 to 1.0.4, you could have
+    achieved the same thing using AsMap() methods, albeit with a slight
+    performance penality (#205, #206)
+
+v1.0.4 - 15 Aug 2020
+  * Fix jwt.WithOpenIDClaims(). Looks like something got lost along
+    the way, and it never really worked. (#201 #202)
+
+v1.0.3 - 08 Jul 2020
+  * `jws.Sign`, and therefore `jwt.Sign` now accept `jwk.Key` as the
+    key to use for signature. (#199)
+  * `jwt.Sign` could sometimes return a nil error when setting bad
+    values to the protected header failed (#195)
+  * More golangci-lint cleanup (#193)
+
+v1.0.2 - 07 May 2020
+  * Since 1.0.0, we took some time to play the test coverage game.
+    The coverage is around 30% better, and we _did_ uncover some
+    inconsistencies in the API, which got promptly fixed.
+    But I'm tired of the coverage game for the time being. PR's welcome!
+  * Add jwk.AssignKeyID to automatically assign a `kid` field to a JWK
+  * Fix jwe.Encrypt / jwe.Decrypt to properly look at the `zip` field
+  * Change jwe.Message accessors to return []byte, not buffer.Buffer
+
+v1.0.1 - 04 May 2020
+  * Normalize all JWK serialization to use padding-less base64 encoding (#185)
+  * Fix edge case unmarshaling openid.AddressClaim within a openid.Token
+  * Fix edge case unmarshaling jwe.Message
+  * Export JWK key-specific constants, such as jwk.RSANKey, jwk.SymmetricOctetsKey, etc
+  * Remove some unused code
+
+v1.0.0 - 03 May 2020
+  * All packages (`jws`, `jwe`, `jwk`, `jwt`) have all been reworked from
+    the ground-up.
+    * These packages now hide the actual implementation of the main structs behind an interface.
+    * Header/Token structs must now be instantiated using proper constructors
+      (most notably, json.Unmarshal will miserably fail if you just pass
+       and empty interface via `xxx.Token` or similar)
+    * Token/Header interfaces are now more or less standardized.
+      The following API should be consistent between all relevant packages:
+      * New()
+      * Get()
+      * Set()
+      * Remove()
+      * Iterate()
+      * Walk()
+      * AsMap()
+    * Oft-used fields are no longer directly accessible: 
+      e.g. `token.KeyID = v` is no longer valid. You must set using `Set`
+      (and `Remove`, if you are removing it), and use either `Get` or
+      one of the utility methods such as `token.KeyID()`
+    * Many helper functions and structs have been unexported. They were never
+      meant to be anything useful for end-users, and hopefully it does not
+      cause any problems.
+    * Most errors type/instances have been removed from the public API
+  * `jwt` package can now work with different token types, such as OpenID tokens.
+    * `token.Sign` and `token.Verify` have been changed from methods to
+      package functions `jwt.Sign` and `jwt.Verify`, to allow different
+      types of tokens to be passed to the same logic.
+    * Added a custom token type in `openid` sub-package to make it easier to
+      work with OpenID claims
+    * `jwt.Parse` (and its siblings) now accept `jwt.WithOpenIDClaims()`
+  * `jwe` API has been reworked:
+    * `MultiEncrypt` has been removed.
+    * Serializer structs have been removed. Now you just need to call
+      `jwe.Compact` or `jwe.JSON`
+  * `jwk` API has been reworked:
+    * `jwk.ParseKey` has been added
+    * `jwk.Materialize` has been renamed to `Raw()`. A new corresponding
+      method to initialize the key from a raw key (RSA/ECDSA/byte keys)
+      called `FromRaw()` has also been added, which makes a nice pair.
+  * `jws` API has been reworked
+  * CI has been changed from Travis CI to Github Actions, and tests now
+    include linting via `golangci-lint`
+
+v0.9.2 - 15 Apr 2020 
+  * Maintenance release to protect users from upcoming breaking changes
+
+v0.9.1 - 27 Feb 2020
+  * Fix error wrapping in certain cases
+  * Add Claims(), Walk(), and AsMap() to iterate claims, as well as
+    getting the entire data out as a single map
+  * Work with alternate base64 encodings when decoding
+
+v0.9.0 - 22 May 2019
+  * Start tagging versions for good measure.

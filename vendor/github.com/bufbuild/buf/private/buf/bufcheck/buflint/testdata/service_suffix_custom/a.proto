@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package a;
+
+service SuccessAPI {}
+service SuccessTwoAPI {}
+service SuccessThree_API {}
+service Fail {}
+service FailService {}
+service FailAPI_ {}
+service FailApi_ {}

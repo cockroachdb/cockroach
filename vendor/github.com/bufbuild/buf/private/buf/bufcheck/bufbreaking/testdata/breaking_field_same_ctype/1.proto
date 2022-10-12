@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package a;
+
+message Two {
+  string one = 1 [ctype = STRING_PIECE];
+  string two = 2;
+}
+
+message Three {
+  message Four {
+    message Five {
+      string one = 1 [ctype = STRING_PIECE];
+      string two = 2;
+    }
+    message Six {
+      string one = 1;
+      string two = 2;
+    }
+  }
+  message Seven {
+    string one = 1 [ctype = STRING];
+    string two = 2 [ctype = CORD];
+  }
+  message Eight {
+    string one = 1;
+    string two = 2;
+  }
+  string one = 1;
+  string two = 2;
+}

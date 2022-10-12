@@ -1,0 +1,345 @@
+syntax = "proto2";
+
+package foo.bar;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos";
+
+message Simple {
+  optional string name = 1;
+
+  optional uint64 id = 2;
+}
+
+extend google.protobuf.ExtensionRangeOptions {
+  optional string label = 20000;
+}
+
+message Test {
+  optional string foo = 1 [json_name = "|foo|"];
+
+  repeated int32 array = 2;
+
+  optional Simple s = 3;
+
+  repeated Simple r = 4;
+
+  map<string, int32> m = 5;
+
+  optional bytes b = 6 [default = "\000\001\002\003\004\005\006\007fubar!"];
+
+  extensions 100 to 200;
+
+  extensions 300 to 350, 500 to 550 [(label) = "jazz"];
+
+  message Nested {
+    extend google.protobuf.MessageOptions {
+      optional int32 fooblez = 20003;
+    }
+
+    message _NestedNested {
+      option (fooblez) = 10101;
+
+      option (rept) = { foo:"goo" [foo.bar.Test.Nested._NestedNested._garblez]:"boo" };
+
+      enum EEE {
+        OK = 0;
+
+        V1 = 1;
+
+        V2 = 2;
+
+        V3 = 3;
+
+        V4 = 4;
+
+        V5 = 5;
+
+        V6 = 6;
+      }
+
+      extend Test {
+        optional string _garblez = 100;
+      }
+
+      message NestedNestedNested {
+        option (rept) = { foo:"hoo" [foo.bar.Test.Nested._NestedNested._garblez]:"spoo" };
+
+        optional Test Test = 1;
+      }
+    }
+  }
+}
+
+enum EnumWithReservations {
+  X = 2;
+
+  Y = 3;
+
+  Z = 4;
+
+  reserved 1000 to max, -2 to 1, 5 to 10, 12 to 15, 18, -5 to -3;
+
+  reserved "C", "B", "A";
+}
+
+message MessageWithReservations {
+  reserved 5 to 10, 12 to 15, 18, 1000 to max;
+
+  reserved "A", "B", "C";
+}
+
+extend google.protobuf.MessageOptions {
+  repeated Test rept = 20002;
+
+  optional Test.Nested._NestedNested.EEE eee = 20010;
+
+  optional Another a = 20020;
+}
+
+message Another {
+  option (a) = { test:<foo:"m&m" array:1 array:2 s:<name:"yolo" id:98765> m:<key:"bar" value:200> m:<key:"foo" value:100>> fff:OK };
+
+  option (eee) = V1;
+
+  option (rept) = { foo:"abc" array:1 array:2 array:3 s:<name:"foo" id:123> r:<name:"f"> r:<name:"s"> r:<id:456> };
+  option (rept) = { foo:"def" array:3 array:2 array:1 s:<name:"bar" id:321> r:<name:"g"> r:<name:"s"> };
+  option (rept) = { foo:"def" };
+
+  optional Test test = 1;
+
+  optional Test.Nested._NestedNested.EEE fff = 2 [default = V1];
+}
+
+message Validator {
+  optional bool authenticated = 1;
+
+  enum Action {
+    LOGIN = 0;
+
+    READ = 1;
+
+    WRITE = 2;
+  }
+
+  message Permission {
+    optional Action action = 1;
+
+    optional string entity = 2;
+  }
+
+  repeated Permission permission = 2;
+}
+
+extend google.protobuf.MethodOptions {
+  optional Validator validator = 12345;
+}
+
+service TestTestService {
+  rpc UserAuth ( Test ) returns ( Test ) {
+    option (validator) = { authenticated:true permission:<action:LOGIN entity:"client"> };
+  }
+
+  rpc Get ( Test ) returns ( Test ) {
+    option (validator) = { authenticated:true permission:<action:READ entity:"user"> };
+  }
+}
+
+message Rule {
+  message StringRule {
+    optional string pattern = 1;
+
+    optional bool allow_empty = 2;
+
+    optional int32 min_len = 3;
+
+    optional int32 max_len = 4;
+  }
+
+  message IntRule {
+    optional int64 min_val = 1;
+
+    optional uint64 max_val = 2;
+  }
+
+  message RepeatedRule {
+    optional bool allow_empty = 1;
+
+    optional int32 min_items = 2;
+
+    optional int32 max_items = 3;
+
+    optional Rule items = 4;
+  }
+
+  oneof rule {
+    StringRule string = 1;
+
+    RepeatedRule repeated = 2;
+
+    IntRule int = 3;
+  }
+
+
+}
+
+extend google.protobuf.FieldOptions {
+  optional Rule rules = 1234;
+}
+
+message IsAuthorizedReq {
+  repeated string subjects = 1 [(rules) = { repeated:<min_items:1 items:<string:<pattern:"^(?:(?:team:(?:local|ldap))|user):[[:alnum:]_-]+$">>> }];
+}
+
+message KeywordCollisions {
+  optional bool syntax = 1;
+
+  optional bool import = 2;
+
+  optional bool public = 3;
+
+  optional bool weak = 4;
+
+  optional bool package = 5;
+
+  optional string string = 6;
+
+  optional bytes bytes = 7;
+
+  optional int32 int32 = 8;
+
+  optional int64 int64 = 9;
+
+  optional uint32 uint32 = 10;
+
+  optional uint64 uint64 = 11;
+
+  optional sint32 sint32 = 12;
+
+  optional sint64 sint64 = 13;
+
+  optional fixed32 fixed32 = 14;
+
+  optional fixed64 fixed64 = 15;
+
+  optional sfixed32 sfixed32 = 16;
+
+  optional sfixed64 sfixed64 = 17;
+
+  optional bool bool = 18;
+
+  optional float float = 19;
+
+  optional double double = 20;
+
+  optional bool optional = 21;
+
+  optional bool repeated = 22;
+
+  optional bool required = 23;
+
+  optional bool message = 24;
+
+  optional bool enum = 25;
+
+  optional bool service = 26;
+
+  optional bool rpc = 27;
+
+  optional bool option = 28;
+
+  optional bool extend = 29;
+
+  optional bool extensions = 30;
+
+  optional bool reserved = 31;
+
+  optional bool to = 32;
+
+  optional int32 true = 33;
+
+  optional int32 false = 34;
+
+  optional int32 default = 35;
+}
+
+extend google.protobuf.FieldOptions {
+  optional bool syntax = 20001;
+
+  optional bool import = 20002;
+
+  optional bool public = 20003;
+
+  optional bool weak = 20004;
+
+  optional bool package = 20005;
+
+  optional string string = 20006;
+
+  optional bytes bytes = 20007;
+
+  optional int32 int32 = 20008;
+
+  optional int64 int64 = 20009;
+
+  optional uint32 uint32 = 20010;
+
+  optional uint64 uint64 = 20011;
+
+  optional sint32 sint32 = 20012;
+
+  optional sint64 sint64 = 20013;
+
+  optional fixed32 fixed32 = 20014;
+
+  optional fixed64 fixed64 = 20015;
+
+  optional sfixed32 sfixed32 = 20016;
+
+  optional sfixed64 sfixed64 = 20017;
+
+  optional bool bool = 20018;
+
+  optional float float = 20019;
+
+  optional double double = 20020;
+
+  optional bool optional = 20021;
+
+  optional bool repeated = 20022;
+
+  optional bool required = 20023;
+
+  optional bool message = 20024;
+
+  optional bool enum = 20025;
+
+  optional bool service = 20026;
+
+  optional bool rpc = 20027;
+
+  optional bool option = 20028;
+
+  optional bool extend = 20029;
+
+  optional bool extensions = 20030;
+
+  optional bool reserved = 20031;
+
+  optional bool to = 20032;
+
+  optional int32 true = 20033;
+
+  optional int32 false = 20034;
+
+  optional int32 default = 20035;
+
+  optional KeywordCollisions boom = 20036;
+}
+
+message KeywordCollisionOptions {
+  optional uint64 id = 1 [(bool) = true, (bytes) = "bytes", (default) = 222, (double) = 3.141590, (enum) = true, (extend) = true, (extensions) = true, (false) = -111, (fixed32) = 3232, (fixed64) = 6464, (float) = 3.140000, (import) = true, (int32) = 32, (int64) = 64, (message) = true, (option) = true, (optional) = true, (package) = true, (public) = true, (repeated) = true, (required) = true, (reserved) = true, (rpc) = true, (service) = true, (sfixed32) = -3232, (sfixed64) = -6464, (sint32) = -32, (sint64) = -64, (string) = "string", (syntax) = true, (to) = true, (true) = 111, (uint32) = 3200, (uint64) = 6400, (weak) = true];
+
+  optional string name = 2 [(boom) = { syntax:true import:true public:true weak:true package:true string:"string" bytes:"bytes" int32:32 int64:64 uint32:3200 uint64:6400 sint32:-32 sint64:-64 fixed32:3232 fixed64:6464 sfixed32:-3232 sfixed64:-6464 bool:true float:3.14 double:3.14159 optional:true repeated:true required:true message:true enum:true service:true rpc:true option:true extend:true extensions:true reserved:true to:true true:111 false:-111 default:222 }];
+}

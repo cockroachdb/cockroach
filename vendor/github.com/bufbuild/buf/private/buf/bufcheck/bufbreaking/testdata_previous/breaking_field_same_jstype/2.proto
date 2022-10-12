@@ -1,0 +1,41 @@
+syntax = "proto2";
+
+package a;
+
+message One2 {
+  optional int64 one = 1 [jstype = JS_NUMBER];
+  required int64 two = 2 [jstype = JS_STRING];
+}
+
+message Two2 {
+  optional int64 one = 1 [jstype = JS_NUMBER];
+  required int64 two = 2 [jstype = JS_STRING];
+}
+
+message Three2 {
+  message Four2 {
+    message Five2 {
+      optional int64 one = 1 [jstype = JS_NUMBER];
+      required int64 two = 2 [jstype = JS_STRING];
+    }
+    message Six2 {
+      optional int64 one = 1;
+      required int64 two = 2;
+    }
+  }
+  message Seven2 {
+    optional int64 one = 1;
+    required int64 two = 2;
+  }
+  message Eight2 {
+    optional int64 one = 1;
+    required int64 two = 2;
+  }
+  optional int64 one = 1;
+  required int64 two = 2;
+}
+
+message Nine2 {
+  optional int64 one = 1 [jstype = JS_NUMBER];
+  required int64 two = 2 [jstype = JS_STRING];
+}

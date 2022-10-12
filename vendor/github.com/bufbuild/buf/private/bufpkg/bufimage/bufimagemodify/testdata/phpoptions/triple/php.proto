@@ -1,0 +1,4 @@
+package acme.weather.data.v1;
+
+option php_namespace = "foo";
+option php_metadata_namespace = "foo";

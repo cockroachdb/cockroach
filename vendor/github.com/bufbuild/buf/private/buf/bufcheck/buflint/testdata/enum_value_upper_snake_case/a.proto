@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package a;
+
+enum Test {
+  TEST_UNSPECIFIED = 0;
+  TEST_SUCCESS = 1;
+  TEST_SUCCESS_TWO = 2;
+  TEST_SUCCESS_THREE3 = 3;
+  TEST_FAIl = 4;
+  test_fail_five = 5;
+  testFailSix = 6;
+  TEST_SUCCESS_7 = 7;
+}
+
+message Foo {
+  message Bar {
+    enum Test {
+      TEST_UNSPECIFIED = 0;
+      TEST_SUCCESS = 1;
+      TEST_SUCCESS_TWO = 2;
+      TEST_SUCCESS_THREE3 = 3;
+      TEST_FAIl = 4;
+      test_fail_five = 5;
+      testFailSix = 6;
+      TEST_SUCCESS_7 = 7;
+    }
+  }
+  enum Test {
+    TEST_UNSPECIFIED = 0;
+    TEST_SUCCESS = 1;
+    TEST_SUCCESS_TWO = 2;
+    TEST_SUCCESS_THREE3 = 3;
+    TEST_FAIl = 4;
+    test_fail_five = 5;
+    testFailSix = 6;
+    TEST_SUCCESS_7 = 7;
+  }
+}

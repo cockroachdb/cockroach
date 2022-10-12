@@ -1,0 +1,58 @@
+/*
+ * Copyright 2022 gRPC authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+syntax = "proto3";
+
+option go_package = "google.golang.org/grpc/reflection/grpc_testing_not_regenerate";
+
+package grpc.testingv3;
+
+message SearchResponseV3 {
+  message Result {
+    string url = 1;
+    string title = 2;
+    repeated string snippets = 3;
+    message Value {
+      oneof val {
+        string str = 1;
+        int64 int = 2;
+        double real = 3;
+      }
+    }
+    map<string, Value> metadata = 4;
+  }
+  enum State {
+    UNKNOWN = 0;
+    FRESH = 1;
+    STALE = 2;
+  }
+  repeated Result results = 1;
+  State state = 2;
+}
+
+message SearchRequestV3 {
+  string query = 1;
+}
+
+// SearchServiceV3 is used to test grpc server reflection.
+service SearchServiceV3 {
+  // Search is a unary RPC.
+  rpc Search(SearchRequestV3) returns (SearchResponseV3);
+
+  // StreamingSearch is a streaming RPC.
+  rpc StreamingSearch(stream SearchRequestV3) returns (stream SearchResponseV3);
+}

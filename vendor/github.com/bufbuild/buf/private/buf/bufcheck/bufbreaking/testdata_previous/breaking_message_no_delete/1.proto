@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package a;
+
+message One {}
+
+message Two {}
+
+message Three {
+  message Four {
+    message Five {}
+    message Six {}
+  }
+  message Seven{}
+  message Eight{}
+}

@@ -1,0 +1,122 @@
+syntax = "proto2";
+
+package foo.bar;
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos";
+
+import public "google/protobuf/empty.proto";
+
+import "desc_test_options.proto";
+
+// We need a request for our RPC service below.
+message Request {
+  option deprecated = true;
+
+  // A field comment
+  repeated int32 ids = 1 [packed = true, json_name = "|foo|", (testprotos.ffubar) = "abc", (testprotos.ffubarb) = "xyz"];
+
+  option (testprotos.mfubar) = true;
+
+  // label comment
+  optional string name = 2 [default = "fubar"];
+
+  extensions 100 to 200;
+
+  extensions 201 to 250 [(testprotos.exfubarb) = "\000\001\002\003\004\005\006\007", (testprotos.exfubar) = "splat!"];
+
+  reserved 10 to 20, 30 to 50;
+
+  reserved "foo", "bar", "baz";
+
+  // Group comment
+  optional group Extras = 3 {
+    option (testprotos.mfubar) = false;
+
+    optional double dbl = 1;
+
+    optional float flt = 2;
+
+    option no_standard_descriptor_accessor = false;
+
+    // Leading comment...
+    optional string str = 3;
+  }
+
+  enum MarioCharacters {
+    option allow_alias = true;
+
+    MARIO = 1 [(testprotos.evfubars) = -314, (testprotos.evfubar) = 278];
+
+    LUIGI = 2 [(testprotos.evfubaruf) = 100, (testprotos.evfubaru) = 200];
+
+    PEACH = 3;
+
+    BOWSER = 4;
+
+    option (testprotos.efubars) = -321;
+
+    WARIO = 5;
+
+    WALUIGI = 6;
+
+    SHY_GUY = 7 [(testprotos.evfubarsf) = 10101];
+
+    HEY_HO = 7;
+
+    MAGIKOOPA = 8;
+
+    KAMEK = 8;
+
+    SNIFIT = -101;
+
+    option (testprotos.efubar) = 123;
+  }
+
+  // can be this or that
+  oneof abc {
+    string this = 4;
+
+    int32 that = 5;
+  }
+
+  // can be these or those
+  oneof xyz {
+    string these = 6;
+
+    int32 those = 7;
+  }
+
+  // map field
+  map<string, string> things = 8;
+}
+
+extend Request {
+  // comment for guid1
+  optional uint64 guid1 = 123;
+
+  // ... and a comment for guid2
+  optional uint64 guid2 = 124;
+}
+
+message AnEmptyMessage {
+}
+
+// Service comment
+service RpcService {
+  option (testprotos.sfubar) = { id:100 name:"bob"  };
+
+  option deprecated = false;
+
+  option (testprotos.sfubare) = VALUE;
+
+  // Method comment
+  rpc StreamingRpc ( stream Request ) returns ( Request );
+
+  rpc UnaryRpc ( Request ) returns ( google.protobuf.Empty ) {
+    option deprecated = true;
+
+    option (testprotos.mtfubar) = 12.340000;
+
+    option (testprotos.mtfubard) = 123.456000;
+  }
+}

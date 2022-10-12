@@ -1,0 +1,54 @@
+syntax = "proto2";
+
+import "google/protobuf/descriptor.proto";
+
+package com.pseudomuto.protokit.v1;
+
+/**
+ * Extension of protobuf file options.
+ */
+ extend google.protobuf.FileOptions {
+  optional bool extend_file = 20000;
+}
+
+/**
+ * Extension of protobuf service options.
+ */
+ extend google.protobuf.ServiceOptions {
+  optional bool extend_service = 20000;
+}
+
+/**
+ * Extension of protobuf method options.
+ */
+extend google.protobuf.MethodOptions {
+  optional bool extend_method = 20000;
+}
+
+/**
+ * Extension of protobuf enum options.
+ */
+extend google.protobuf.EnumOptions {
+  optional bool extend_enum = 20000;
+}
+
+/**
+ * Extension of protobuf enum value options.
+ */
+extend google.protobuf.EnumValueOptions {
+  optional bool extend_enum_value = 20000;
+}
+
+/**
+ * Extension of protobuf message options.
+ */
+extend google.protobuf.MessageOptions {
+  optional bool extend_message = 20000;
+}
+
+/**
+ * Extension of protobuf field options.
+ */
+extend google.protobuf.FieldOptions {
+  optional bool extend_field = 20000;
+}

@@ -1,0 +1,3 @@
+package acme.weather.v1;
+
+option ruby_package = "foo";

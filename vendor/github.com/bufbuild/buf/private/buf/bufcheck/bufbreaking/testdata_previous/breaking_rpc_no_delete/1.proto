@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package a;
+
+import "google/protobuf/empty.proto";
+
+service One {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}
+
+service Two {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}
+
+service Three {
+  rpc Foo(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Baz(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+}

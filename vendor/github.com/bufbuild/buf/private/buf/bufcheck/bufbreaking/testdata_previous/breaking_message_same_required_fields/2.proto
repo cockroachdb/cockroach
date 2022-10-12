@@ -1,0 +1,11 @@
+syntax = "proto2";
+
+package a;
+
+message One2 {
+  required string one = 1;
+}
+
+message Two {
+  required string one = 1;
+}

@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package a;
+
+message One {
+  int32 one = 1;
+  One two = 2;
+  repeated int32 three = 3;
+  repeated One four = 4;
+  map<int32, int32> five = 5;
+  map<int32, One> six = 6;
+}
+
+message Two {
+  int32 one = 1;
+  One two = 2;
+  repeated int32 three = 3;
+  repeated One four = 4;
+  map<int32, int32> five = 5;
+  map<int32, One> six = 6;
+}
+
+message Three {
+  message Four {
+    message Five {
+      int32 one = 1;
+      One two = 2;
+      repeated int32 three = 3;
+      repeated One four = 4;
+      map<int32, int32> five = 5;
+      map<int32, One> six = 6;
+    }
+    message Six {
+      int32 one = 1;
+      One two = 2;
+      repeated int32 three = 3;
+      repeated One four = 4;
+      map<int32, int32> five = 5;
+      map<int32, One> six = 6;
+    }
+  }
+  message Seven {
+    int32 one = 1;
+    One two = 2;
+    repeated int32 three = 3;
+    repeated One four = 4;
+    map<int32, int32> five = 5;
+    map<int32, One> six = 6;
+  }
+  message Eight {
+    int32 one = 1;
+    One two = 2;
+    repeated int32 three = 3;
+    repeated One four = 4;
+    map<int32, int32> five = 5;
+    map<int32, One> six = 6;
+  }
+}
+
+message Nine {
+  oneof foo {
+    int32 one = 1;
+    One two = 2;
+  }
+}
+
+message Ten {
+  int64 one = 1;
+  int64 two = 2;
+}

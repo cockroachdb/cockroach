@@ -1,0 +1,101 @@
+// Top-level comments are attached to the syntax directive.
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "extend.proto";
+import public "todo_import.proto";
+option go_package = "todo";
+
+// The official documentation for the Todo API.
+//
+// Some parts of this file are unnecessarily complicated. In order to have a test for nested messages, enums, etc. I've
+// added some odd looking implementation details. So you know, don't use this in real life for a todo service.
+//
+// The get started run the following:
+//
+// * `make setup`
+// * `make test`
+package com.pseudomuto.protokit.v1;
+
+option (com.pseudomuto.protokit.v1.extend_file) = true;
+
+// A service for managing "todo" items.
+//
+// Add, complete, and remove your items on your todo lists.
+service Todo {
+  option (com.pseudomuto.protokit.v1.extend_service) = true;
+
+  // Create a new todo list
+  rpc CreateList(CreateListRequest) returns (CreateListResponse) {
+    option (com.pseudomuto.protokit.v1.extend_method) = true;
+  }
+
+  // Add an item to your list
+  //
+  // Adds a new item to the specified list.
+  rpc AddItem(AddItemRequest) returns (AddItemResponse);
+}
+
+// An enumeration of list types
+enum ListType {
+  option (com.pseudomuto.protokit.v1.extend_enum) = true;
+
+  REMINDERS = 0; // The reminders type.
+  CHECKLIST = 1 [(com.pseudomuto.protokit.v1.extend_enum_value) = true]; // The checklist type.
+}
+
+// A list object.
+message List {
+  option (com.pseudomuto.protokit.v1.extend_message) = true;
+
+  int64 id                             = 1; // The id of the list.
+  string name                          = 2 [(com.pseudomuto.protokit.v1.extend_field) = true]; // The name of the list.
+  ListType type                        = 3; // The type of list
+  google.protobuf.Timestamp created_at = 4; // The timestamp for creation.
+  google.protobuf.Any details          = 5; // Some arbitrary list details.
+}
+
+// A request object for creating todo lists.
+message CreateListRequest {
+  // The name of the list.
+  string name = 1;
+}
+
+// A successfully created list response.
+message CreateListResponse {
+  // An internal status message
+  message Status {
+    sint32 code = 1; // The status code.
+  }
+
+  List list     = 1; // The list that was created.
+  Status status = 2; // The status for the response.
+}
+
+// A list item
+message Item {
+  // An enumeration of possible statuses
+  enum Status {
+    PENDING   = 0; // The pending status.
+    COMPLETED = 1; // The completed status.
+  }
+
+  int64 id                             = 1; // The id of the item.
+  string title                         = 2; // The title of the item.
+  Status completed                     = 3; // The current status of the item.
+  google.protobuf.Timestamp created_at = 4; // The timestamp for creation.
+  ListItemDetails details              = 5; // Item details.
+}
+
+// A request message for adding new items.
+message AddItemRequest {
+  int64 list_id  = 1; // The id of the list to add to.
+  string title   = 2; // The title of the item.
+  bool completed = 3; // Whether or not the item is completed.
+}
+
+// A successfully added item response.
+message AddItemResponse {
+  Item item = 1; // The list item that was added.
+}

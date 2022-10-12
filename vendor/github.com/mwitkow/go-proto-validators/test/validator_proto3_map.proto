@@ -1,0 +1,26 @@
+// Copyright 2016 Michal Witkowski. All Rights Reserved.
+// See LICENSE for licensing terms.
+
+syntax = "proto3";
+package validatortest;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "github.com/mwitkow/go-proto-validators/validator.proto";
+
+message ValueType {
+  string something  = 1 ;
+}
+
+// This needs to be able to compile. Fixes https://github.com/mwitkow/go-proto-validators/issues/1
+message ValidatorMapMessage3 {
+	map<string, string> SomeStringMap = 1;
+
+  message NestedType {
+      string something = 1 ;
+  }
+
+  map<string, ValueType> SomeExtMap = 2;
+  map<int32, ValidatorMapMessage3.NestedType> SomeNestedMap = 3;
+}
+
+

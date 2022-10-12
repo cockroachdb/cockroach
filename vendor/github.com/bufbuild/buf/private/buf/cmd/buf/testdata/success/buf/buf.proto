@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package buf;
+
+import "google/protobuf/descriptor.proto";
+
+message Foo {
+  int64 one = 1;
+  google.protobuf.DescriptorProto two = 2;
+}

@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package a;
+
+message One {
+  oneof success {
+    int32 one = 1;
+  }
+  oneof success_two {
+    int32 two = 2;
+  }
+  oneof Fail {
+    int32 three = 3;
+  }
+  oneof FailTwo {
+    int32 four = 4;
+  }
+  oneof failThree {
+    int32 five = 5;
+  }
+  oneof fail_four_ {
+    int32 six = 6;
+  }
+  oneof _fail_five {
+    int32 seven = 7;
+  }
+}
+
+message Two {
+  message Three {
+    message Four {
+      oneof success {
+        int32 one = 1;
+      }
+      oneof success_two {
+        int32 two = 2;
+      }
+      oneof Fail {
+        int32 three = 3;
+      }
+      oneof FailTwo {
+        int32 four = 4;
+      }
+      oneof failThree {
+        int32 five = 5;
+      }
+      oneof fail_four_ {
+        int32 six = 6;
+      }
+      oneof _fail_five {
+        int32 seven = 7;
+      }
+    }
+    oneof success {
+      int32 one = 1;
+    }
+    oneof success_two {
+      int32 two = 2;
+    }
+    oneof Fail {
+      int32 three = 3;
+    }
+    oneof FailTwo {
+      int32 four = 4;
+    }
+    oneof failThree {
+      int32 five = 5;
+    }
+    oneof fail_four_ {
+      int32 six = 6;
+    }
+    oneof _fail_five {
+      int32 seven = 7;
+    }
+  }
+}
+
+// checking to see if the implicit oneof triggers the linter, which it should not
+message Three {
+  message Four {
+    message Five {
+      optional string one = 1;
+    }
+    optional string one = 1;
+  }
+  optional string one = 1;
+}

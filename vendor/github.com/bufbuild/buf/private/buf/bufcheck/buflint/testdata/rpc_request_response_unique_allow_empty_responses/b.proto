@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package b;
+
+import "a.proto";
+
+service Foo {
+  rpc Baz(a.Six) returns (a.Five) {}
+}

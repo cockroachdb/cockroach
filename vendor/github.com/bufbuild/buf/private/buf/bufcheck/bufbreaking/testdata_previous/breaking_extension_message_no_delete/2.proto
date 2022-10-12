@@ -1,0 +1,63 @@
+syntax = "proto2";
+
+package a;
+
+message One2 {
+  extensions 4 to 5, 100 to 200;
+  extensions 300, 301, 1000 to max;
+  optional int32 one = 1;
+  optional int32 two = 2;
+  optional int32 three = 3;
+}
+
+message Two2 {
+  extensions 4 to 5, 100 to 200;
+  extensions 300, 301, 1000 to max;
+  optional int32 one = 1;
+  optional int32 two = 2;
+  optional int32 three = 3;
+}
+
+message Three2 {
+  message Four2 {
+    message Five2 {
+      extensions 4 to 5, 100 to 200;
+      extensions 300, 301, 1000 to max;
+      optional int32 one = 1;
+      optional int32 two = 2;
+      optional int32 three = 3;
+    }
+    message Six2 {
+      extensions 4 to 5, 100 to 200;
+      extensions 300, 301, 1000 to max;
+      optional int32 one = 1;
+      optional int32 two = 2;
+      optional int32 three = 3;
+    }
+  }
+  message Seven2 {
+    extensions 4 to 5, 100 to 200;
+    extensions 300, 301, 1000 to max;
+    optional int32 one = 1;
+    optional int32 two = 2;
+    optional int32 three = 3;
+  }
+  message Eight2 {
+    extensions 4 to 5, 100 to 200;
+    extensions 300, 301, 1000 to max;
+    optional int32 one = 1;
+    optional int32 two = 2;
+    optional int32 three = 3;
+  }
+  optional int32 one = 1;
+  optional int32 two = 2;
+  optional int32 three = 3;
+}
+
+message Nine2 {
+  extensions 4 to 5, 100 to 200;
+  extensions 300, 301, 1000 to max;
+  optional int32 one = 1;
+  optional int32 two = 2;
+  optional int32 three = 3;
+}

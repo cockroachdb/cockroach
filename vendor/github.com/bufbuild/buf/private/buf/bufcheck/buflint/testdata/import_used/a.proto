@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package a;
+
+import "sub/sub1.proto";
+import "sub/sub2.proto";
+import "one/one.proto";
+
+message A {
+  sub.Sub2 sub2 = 1;
+}

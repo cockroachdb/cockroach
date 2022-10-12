@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package a;
+
+message One {
+  oneof foo {
+  int32 one = 1;
+  }
+  oneof bar {
+  int32 two = 2;
+  }
+  int32 three = 3;
+}
+
+message Two {
+  oneof foo {
+  int32 one = 1;
+  }
+  oneof bar {
+  int32 two = 2;
+  }
+  int32 three = 3;
+}
+
+message Three {
+  message Four {
+    message Five {
+  oneof foo {
+  int32 one = 1;
+  }
+  oneof bar {
+  int32 two = 2;
+  }
+  int32 three = 3;
+    }
+    message Six {
+  oneof foo {
+  int32 one = 1;
+  }
+  oneof bar {
+  int32 two = 2;
+  }
+  int32 three = 3;
+    }
+  }
+  message Seven {
+  oneof foo {
+  int32 one = 1;
+  }
+  oneof bar {
+  int32 two = 2;
+  }
+  int32 three = 3;
+  }
+  message Eight {
+  oneof foo {
+  int32 one = 1;
+  }
+  oneof bar {
+  int32 two = 2;
+  }
+  int32 three = 3;
+  }
+  oneof foo {
+  int32 one = 1;
+  }
+  oneof bar {
+  int32 two = 2;
+  }
+  int32 three = 3;
+}
+
+message Nine {
+  oneof foo {
+  int32 one = 1;
+  }
+  oneof bar {
+  int32 two = 2;
+  }
+  int32 three = 3;
+}

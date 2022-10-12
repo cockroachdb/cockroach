@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package b;
+
+option java_package = "bar";
+option java_outer_classname = "bar";
+option java_multiple_files = true;
+option go_package = "bar";
+option objc_class_prefix = "bar";
+option csharp_namespace = "bar";
+option swift_prefix = "bar";
+option php_class_prefix = "bar";
+option php_namespace = "bar";
+option php_metadata_namespace = "bar";
+option ruby_package = "bar";
+
+option java_string_check_utf8 = true;
+option optimize_for = CODE_SIZE;
+option cc_generic_services = true;
+option java_generic_services = true;
+option py_generic_services = true;
+option php_generic_services = true;
+option cc_enable_arenas = false; // the default option is true as of 3.12, so this should be changed now

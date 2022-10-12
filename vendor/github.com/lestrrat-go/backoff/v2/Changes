@@ -1,0 +1,8 @@
+v2.0.8 - 28 Feb 2021
+  * Fix possible goroutine leak (#30)
+
+v2.0.7 - 26 Jan 2021
+  * Cosmetic go.mod / go.sum changes
+
+v2.0.6 - 25 Jan 2021
+  * Add jitter to constant backoff

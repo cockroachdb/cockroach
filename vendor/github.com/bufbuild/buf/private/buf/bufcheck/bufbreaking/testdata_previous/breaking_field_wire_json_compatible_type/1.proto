@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package a;
+
+message CompatiblePrimitives {
+  int32 int32_field_1 = 1;
+  uint32 uint32_field_1 = 2;
+
+  int64 int64_field_1 = 3;
+  uint64 uint64_field_1 = 4;
+
+  fixed32 fixed32_field_1 = 5;
+  sfixed32 sfixed32_field_1 = 6;
+
+  fixed64 fixed64_field_1 = 7;
+  sfixed64 sfixed64_field_1 = 8;
+
+  bool bool_field_1 = 9;
+
+  sint32 sint32_field_1 = 10;
+
+  sint64 sint64_field_1 = 11;
+
+  string string_field_1 = 12;
+
+  bytes bytes_field_1 = 14;
+
+  float float_field_1 = 15;
+
+  double double_field_1 = 16;
+}
+
+message IncompatiblePrimitives {
+  int32 int32_field_1 = 1;
+  uint32 uint32_field_1 = 2;
+  int64 int64_field_1 = 3;
+  uint64 uint64_field_1 = 4;
+  bool bool_field_1 = 5;
+  sint32 sint32_field_1 = 6;
+  sint64 sint64_field_1 = 7;
+  fixed32 fixed32_field_1 = 8;
+  sfixed32 sfixed32_field_1 = 9;
+  fixed64 fixed64_field_1 = 10;
+  sfixed64 sfixed64_field_1 = 11;
+  string string_field_1 = 12;
+  bytes bytes_field_1 = 14;
+  float float_field_1 = 15;
+  double double_field_1 = 16;
+}
+
+
+enum Foo {
+  FOO_UNSPECIFIED = 0;
+  FOO_ONE = 1;
+}
+
+message WithCompatibleEnums {
+  enum Baz {
+    BAZ_UNSPECIFIED = 0;
+    BAZ_ONE = 1;
+  }
+  Foo foo = 1;
+  Baz baz = 2;
+}
+
+enum Bar {
+  BAR_UNSPECIFIED = 0;
+  BAR_ONE = 1;
+}
+
+message WithIncompatibleEnums {
+  enum Bat {
+    BAT_UNSPECIFIED = 0;
+    BAT_ONE = 1;
+  }
+  enum Bam {
+    BAM_UNSPECIFIED = 0;
+    BAM_ONE = 1;
+  }
+  Bar bar = 1;
+  Bat bat = 2;
+  Bam bam = 3;
+}
+
+message StringBytes {
+  string string_field_1 = 1;
+  bytes bytes_field_1 = 2;
+}

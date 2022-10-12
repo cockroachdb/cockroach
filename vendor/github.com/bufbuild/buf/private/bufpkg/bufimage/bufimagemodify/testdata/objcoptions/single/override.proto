@@ -1,0 +1,3 @@
+package acme.v1;
+
+option objc_class_prefix = "foo";

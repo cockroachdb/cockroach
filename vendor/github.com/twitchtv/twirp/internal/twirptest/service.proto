@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package twirp.internal.twirptest;
+option go_package = "/twirptest";
+
+message Hat {
+  int32 size = 1;
+  string color = 2;
+  string name = 3;
+}
+
+message Size {
+  int32 inches = 1;
+}
+
+// A Haberdasher makes hats for clients.
+service Haberdasher {
+  // MakeHat produces a hat of mysterious, randomly-selected color!
+  rpc MakeHat(Size) returns (Hat);
+}

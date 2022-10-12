@@ -1,0 +1,63 @@
+syntax = "proto2";
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos";
+
+package testprotos;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.MessageOptions {
+	optional bool mfubar = 10101;
+}
+
+extend google.protobuf.FieldOptions {
+	repeated string ffubar = 10101;
+	optional bytes ffubarb = 10102;
+}
+
+extend google.protobuf.EnumOptions {
+	optional int32 efubar = 10101;
+	optional sint32 efubars = 10102;
+	optional sfixed32 efubarsf = 10103;
+	optional uint32 efubaru = 10104;
+	optional fixed32 efubaruf = 10105;
+}
+
+extend google.protobuf.EnumValueOptions {
+	optional int64 evfubar = 10101;
+	optional sint64 evfubars = 10102;
+	optional sfixed64 evfubarsf = 10103;
+	optional uint64 evfubaru = 10104;
+	optional fixed64 evfubaruf = 10105;
+}
+
+extend google.protobuf.ServiceOptions {
+	optional ReallySimpleMessage sfubar = 10101;
+	optional ReallySimpleEnum sfubare = 10102;
+}
+
+extend google.protobuf.MethodOptions {
+	repeated float mtfubar = 10101;
+	optional double mtfubard = 10102;
+}
+
+// Test message used by custom options
+message ReallySimpleMessage {
+	optional uint64 id = 1;
+	optional string name = 2;
+}
+
+// Test enum used by custom options
+enum ReallySimpleEnum {
+	VALUE = 1;
+}
+
+extend google.protobuf.ExtensionRangeOptions {
+	repeated string exfubar = 10101;
+	optional bytes exfubarb = 10102;
+}
+
+extend google.protobuf.OneofOptions {
+	repeated string oofubar = 10101;
+	optional bytes oofubarb = 10102;
+}

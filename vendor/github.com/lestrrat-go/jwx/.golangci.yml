@@ -1,0 +1,92 @@
+run:
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - shadow
+      - fieldalignment
+
+linters:
+  enable-all: true
+  disable:
+    - cyclop
+    - dupl
+    - exhaustive
+    - exhaustivestruct
+    - errorlint
+    - funlen
+    - gci
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - goerr113
+    - gofumpt
+    - golint #deprecated
+    - gomnd
+    - gomoddirectives # I think it's broken
+    - gosec
+    - govet
+    - interfacer # deprecated
+    - ifshort
+    - ireturn # No, I _LIKE_ returning interfaces
+    - lll
+    - maintidx # Do this in code review
+    - maligned # deprecated
+    - makezero
+    - nakedret
+    - nestif
+    - nlreturn
+    - paralleltest
+    - scopelint # deprecated
+    - tagliatelle
+    - testpackage
+    - thelper    # Tests are fine
+    - varnamelen # Short names are ok
+    - wrapcheck
+    - wsl
+
+issues:
+  exclude-rules:
+    # not needed
+    - path: /*.go
+      text: "ST1003: should not use underscores in package names"
+      linters:
+        - stylecheck
+    - path: /*.go
+      text: "don't use an underscore in package name"
+      linters:
+        - revive
+    - path: /main.go
+      linters:
+        - errcheck
+    - path: internal/codegen/codegen.go
+      linters:
+        - errcheck
+    - path: internal/jwxtest/jwxtest.go
+      linters:
+        - errcheck
+        - errchkjson
+        - forcetypeassert
+    - path: /*_test.go
+      linters:
+        - errcheck
+        - errchkjson
+        - forcetypeassert
+    - path: /*_example_test.go
+      linters:
+        - forbidigo
+    - path: cmd/jwx/jwx.go
+      linters:
+        - forbidigo
+
+  # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
+  max-same-issues: 0
+

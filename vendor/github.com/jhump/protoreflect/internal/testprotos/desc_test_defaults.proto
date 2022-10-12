@@ -1,0 +1,124 @@
+syntax = "proto" // multi-line string literal
+         "2";
+
+option go_package = "github.com/" // more multi-line string literals
+                    "jhump/protoreflect/"
+                    "internal/testprotos";
+
+package testprotos;
+
+message PrimitiveDefaults {
+	//// Floats
+
+	// simple default
+	optional float fl32 = 1 [default = 3.14159];
+	optional double fl64 = 2 [default = 3.14159];
+
+	// exponent notation
+	optional float fl32d = 3 [default = 6.022140857e23];
+	optional double fl64d = 4 [default = 6.022140857e23];
+
+	// special values: inf, -inf, and nan
+	optional float fl32inf = 5 [default = inf];
+	optional double fl64inf = 6 [default = inf];
+	optional float fl32negInf = 7 [default = -inf];
+	optional double fl64negInf = 8 [default = -inf];
+	optional float fl32nan = 9 [default = nan];
+	optional double fl64nan = 10 [default = nan];
+
+	//// Booleans
+
+	optional bool bl1 = 11 [default = true];
+	optional bool bl2 = 12 [default = false];
+
+	//// Ints
+
+	// signed
+	optional int32 i32 = 13 [default = 10101];
+	optional int32 i32n = 14 [default = -10101];
+	optional int32 i32x = 15 [default = 0x20202];
+	optional int32 i32xn = 16 [default = -0x20202];
+	optional int64 i64 = 17 [default = 10101];
+	optional int64 i64n = 18 [default = -10101];
+	optional int64 i64x = 19 [default = 0x20202];
+	optional int64 i64xn = 20 [default = -0x20202];
+	optional sint32 i32s = 21 [default = 10101];
+	optional sint32 i32sn = 22 [default = -10101];
+	optional sint32 i32sx = 23 [default = 0x20202];
+	optional sint32 i32sxn = 24 [default = -0x20202];
+	optional sint64 i64s = 25 [default = 10101];
+	optional sint64 i64sn = 26 [default = -10101];
+	optional sint64 i64sx = 27 [default = 0x20202];
+	optional sint64 i64sxn = 28 [default = -0x20202];
+	optional sfixed32 i32f = 29 [default = 10101];
+	optional sfixed32 i32fn = 30 [default = -10101];
+	optional sfixed32 i32fx = 31 [default = 0x20202];
+	optional sfixed32 i32fxn = 32 [default = -0x20202];
+	optional sfixed64 i64f = 33 [default = 10101];
+	optional sfixed64 i64fn = 34 [default = -10101];
+	optional sfixed64 i64fx = 35 [default = 0x20202];
+	optional sfixed64 i64fxn = 36 [default = -0x20202];
+
+	// unsigned
+	optional uint32 u32 = 37 [default = 10101];
+	optional uint32 u32x = 38 [default = 0x20202];
+	optional uint64 u64 = 39 [default = 10101];
+	optional uint64 u64x = 40 [default = 0x20202];
+	optional fixed32 u32f = 41 [default = 10101];
+	optional fixed32 u32fx = 42 [default = 0x20202];
+	optional fixed64 u64f = 43 [default = 10101];
+	optional fixed64 u64fx = 44 [default = 0x20202];
+}
+
+message StringAndBytesDefaults {
+	optional string dq = 1 [default = "this is a string with \"nested quotes\""];
+	optional string sq = 2 [default = 'this is a string with "nested quotes"'];
+
+	optional bytes escaped_bytes = 3 [default = "\0\001\a\b\f\n\r\t\v\\\'\"\xfe"];
+	optional string utf8_string = 4 [default = "\341\210\264"]; // this is utf-8 for \u1234
+  	optional string string_with_zero = 5 [default = "hel\000lo"];
+  	optional bytes bytes_with_zero = 6 [default = "wor\000ld"];
+
+	optional string really_long_string = 7 [default = "this is "
+                                           "a really long string constant, so it "
+                                           "spans multiple lines! it also tests "
+                                           "support for multi-line string literals "
+                                           "in option values"];
+}
+
+enum Color {
+	RED = 0;
+	GREEN = 1;
+	BLUE = 2;
+}
+
+enum Number {
+	option allow_alias = true;
+	ZERO = 0;
+	ZED = 0;
+	NIL = 0;
+	NULL = 0;
+	ONE = 1;
+	UNO = 1;
+	TWO = 2;
+	DOS = 2;
+}
+
+message EnumDefaults {
+	optional Color red = 1 [default = RED];
+	optional Color green = 2 [default = GREEN];
+	optional Color blue = 3 [default = BLUE];
+	optional Number zero = 4 [default = ZERO];
+	optional Number zed = 5 [default = ZED];
+	optional Number one = 6 [default = ONE];
+	optional Number dos = 7 [default = DOS];
+}
+
+message MoarFloats {
+	optional float a = 1 [default = 1];
+	optional float b = 2 [default = 1.];
+	optional float c = 3 [default = 1.01];
+	optional float d = 4 [default = .1];
+	optional float e = 5 [default = 1.e5];
+	optional float f = 6 [default = 1.e-5];
+}

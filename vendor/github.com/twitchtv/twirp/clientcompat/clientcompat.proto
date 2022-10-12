@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package twirp.clientcompat;
+option go_package = "/internal/clientcompat";
+
+service CompatService {
+  rpc Method(Req) returns (Resp);
+  rpc NoopMethod(Empty) returns (Empty);
+}
+
+message Empty {}
+
+message Req {
+  string v = 1;
+}
+
+message Resp {
+  int32 v = 1;
+}
+
+message ClientCompatMessage {
+  string service_address = 1;
+  enum CompatServiceMethod {
+    NOOP = 0;
+    METHOD = 1;
+  }
+  CompatServiceMethod method = 2;
+  bytes request = 3;
+}

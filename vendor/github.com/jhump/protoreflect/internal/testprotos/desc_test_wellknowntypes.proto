@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos";
+
+package testprotos;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/wrappers.proto";
+
+message TestWellKnownTypes {
+	google.protobuf.Timestamp start_time = 1;
+	google.protobuf.Duration elapsed = 2;
+
+	google.protobuf.DoubleValue dbl = 3;
+	google.protobuf.FloatValue flt = 4;
+	google.protobuf.BoolValue bl = 5;
+	google.protobuf.Int32Value i32 = 6;
+	google.protobuf.Int64Value i64 = 7;
+	google.protobuf.UInt32Value u32 = 8;
+	google.protobuf.UInt64Value u64 = 9;
+	google.protobuf.StringValue str = 10;
+	google.protobuf.BytesValue byt = 11;
+
+	repeated google.protobuf.Value json = 12;
+
+	repeated google.protobuf.Any extras = 13;
+}

@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package a;
+
+enum Success {
+  SUCCESSOTHER = 0;
+}
+
+enum SuccessTwo {
+  SUCCESS_TWOOTHER = 0;
+}
+
+enum SuccessThree {
+  SUCCESS_THREE_OTHER = 0;
+}
+
+enum FailTwo {
+  FAIL_TWOOTHEr = 0;
+}
+
+enum FailThree {
+  FAIL_TWO_UNSPECIFIED = 0;
+}
+
+message Foo {
+  message Bar {
+    enum Success {
+      SUCCESSOTHER = 0;
+    }
+
+    enum SuccessTwo {
+      SUCCESS_TWOOTHER = 0;
+    }
+
+    enum SuccessThree {
+      SUCCESS_THREE_OTHER = 0;
+    }
+
+    enum FailTwo {
+      FAIL_TWOOTHEr = 0;
+    }
+
+    enum FailThree {
+      FAIL_TWO_UNSPECIFIED = 0;
+    }
+  }
+  enum Success {
+    SUCCESSOTHER = 0;
+  }
+
+  enum SuccessTwo {
+    SUCCESS_TWOOTHER = 0;
+  }
+
+  enum SuccessThree {
+    SUCCESS_THREE_OTHER = 0;
+  }
+
+  enum FailTwo {
+    FAIL_TWOOTHEr = 0;
+  }
+
+  enum FailThree {
+    FAIL_TWO_UNSPECIFIED = 0;
+  }
+}
+
+enum SuccessFour {
+  SUCCESS_FOUROTHER = 0;
+  SUCCESS_FOUR_ONE = 1;
+}

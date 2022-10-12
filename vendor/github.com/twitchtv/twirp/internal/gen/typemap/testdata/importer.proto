@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package twirp.internal.gen.typemap.testdata.importer;
+
+import "root_pkg.proto";
+
+message ImporterMsg {
+  root_pkg.RootMsg a = 1;
+
+  message ImporterInner {}
+}

@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package a;
+
+enum One {
+  reserved 3 to 5, 100 to 200;
+  reserved 300, 301, 1000 to max;
+  reserved "foo", "bar";
+  reserved "baz";
+  ONE_UNSPECIFIED = 0;
+  ONE_ONE = 1;
+  ONE_TWO = 2;
+}
+
+enum Two {
+  reserved 3 to 5, 100 to 200;
+  reserved 300, 301, 1000 to max;
+  reserved "foo", "bar";
+  reserved "baz";
+  TWO_UNSPECIFIED = 0;
+  TWO_ONE = 1;
+  TWO_TWO = 2;
+}
+
+message Three {
+  message Four {
+    enum Five {
+      reserved 3 to 5, 100 to 200;
+      reserved 300, 301, 1000 to max;
+      reserved "foo", "bar";
+      reserved "baz";
+      FIVE_UNSPECIFIED = 0;
+      FIVE_ONE = 1;
+      FIVE_TWO = 2;
+    }
+    enum Six {
+      reserved 3 to 5, 100 to 200;
+      reserved 300, 301, 1000 to max;
+      reserved "foo", "bar";
+      reserved "baz";
+      SIX_UNSPECIFIED = 0;
+      SIX_ONE = 1;
+      SIX_TWO = 2;
+    }
+  }
+  enum Seven {
+    reserved 3 to 5, 100 to 200;
+    reserved 300, 301, 1000 to max;
+    reserved "foo", "bar";
+    reserved "baz";
+    SEVEN_UNSPECIFIED = 0;
+    SEVEN_ONE = 1;
+    SEVEN_TWO = 2;
+  }
+  enum Eight {
+    reserved 3 to 5, 100 to 200;
+    reserved 300, 301, 1000 to max;
+    reserved "foo", "bar";
+    reserved "baz";
+    EIGHT_UNSPECIFIED = 0;
+    EIGHT_ONE = 1;
+    EIGHT_TWO = 2;
+  }
+}
+
+enum Nine {
+  reserved 3 to 5, 100 to 200;
+  reserved 300, 301, 1000 to max;
+  reserved "foo", "bar";
+  reserved "baz";
+  NINE_UNSPECIFIED = 0;
+  NINE_ONE = 1;
+  NINE_TWO = 2;
+}

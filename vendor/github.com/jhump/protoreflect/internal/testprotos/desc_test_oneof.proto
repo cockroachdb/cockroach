@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos";
+
+package testprotos;
+
+message OneOfMessage {
+  oneof value {
+    bytes binary_value = 1;
+    string string_value = 2;
+    bool boolean_value = 3;
+    int32 int_value = 4;
+    int64 int64_value = 5;
+    double double_value = 6;
+    float float_value = 7;
+    OneOfMessage msg_value = 8;
+  }
+}

@@ -1,0 +1,21 @@
+syntax = "proto2";
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos/pkg;pkg";
+
+package jhump.protoreflect.desc;
+
+enum Foo {
+	ABC = 0;
+	DEF = 1;
+	GHI = 2;
+	JKL = 3;
+	MNO = 4;
+	PQR = 5;
+	STU = 6;
+	VWX = 7;
+	Y_Z = 8;
+}
+
+message Bar {
+	repeated Foo baz = 1;
+}

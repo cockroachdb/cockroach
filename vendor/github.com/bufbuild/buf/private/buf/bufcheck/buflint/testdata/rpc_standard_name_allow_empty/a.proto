@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package a;
+
+import "google/protobuf/empty.proto";
+
+service Foo {
+  rpc Success(SuccessRequest) returns (SuccessResponse) {}
+  rpc AnotherSuccess(FooAnotherSuccessRequest) returns (FooAnotherSuccessResponse) {}
+  rpc FailRequest(Bar) returns (FailRequestResponse) {}
+  rpc FailResponse(FailResponseRequest) returns (Bar) {}
+  rpc AllowEmptyRequest(google.protobuf.Empty) returns (AllowEmptyRequestResponse) {}
+  rpc AllowEmptyResponse(AllowEmptyResponseRequest) returns (google.protobuf.Empty) {}
+}
+
+message SuccessRequest {}
+message SuccessResponse {}
+message FooAnotherSuccessRequest {}
+message FooAnotherSuccessResponse {}
+message FailRequestResponse {}
+message FailResponseRequest {}
+message AllowEmptyRequestResponse {}
+message AllowEmptyResponseRequest {}
+message Bar {}

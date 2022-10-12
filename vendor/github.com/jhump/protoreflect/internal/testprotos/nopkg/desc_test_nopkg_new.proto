@@ -1,0 +1,23 @@
+syntax = "proto2";
+
+option go_package = "github.com/jhump/protoreflect/internal/testprotos/nopkg;nopkg";
+
+message TopLevel {
+	optional int32 i = 1;
+	optional int64 j = 2;
+	optional sint32 k = 3;
+	optional sint64 l = 4;
+	optional uint32 m = 5;
+	optional uint64 n = 6;
+	optional fixed32 o = 7;
+	optional fixed64 p = 8;
+	optional sfixed32 q = 9;
+	optional sfixed64 r = 10;
+	optional float s = 11;
+	optional double t = 12;
+	optional bytes u = 13;
+	optional string v = 14;
+	optional bool w = 15;
+
+	extensions 100 to 1000;
+}

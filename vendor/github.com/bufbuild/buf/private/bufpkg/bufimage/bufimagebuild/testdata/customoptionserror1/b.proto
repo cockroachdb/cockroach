@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package a;
+
+import "a.proto";
+
+message Baz {
+  // the name is actually (a.foo).bar
+  string bat = 1 [(a.foo).bat = 1];
+}

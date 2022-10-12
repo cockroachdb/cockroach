@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package a;
+
+message Success {}
+message SuccessTwo {}
+message SuccessFOOThree {
+  message fail {}
+  message failTwo {
+    message fail_three {}
+  }
+}
+
+message fail {}
+message failTwo {}
+message fail_three {}
+message Fail_four {
+  message fail {}
+  message failTwo {
+    message fail_three {}
+  }
+}

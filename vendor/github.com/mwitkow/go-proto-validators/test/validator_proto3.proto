@@ -1,0 +1,72 @@
+// Copyright 2016 Michal Witkowski. All Rights Reserved.
+// See LICENSE for licensing terms.
+
+syntax = "proto3";
+package validatortest;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "github.com/mwitkow/go-proto-validators/validator.proto";
+
+message ValidatorMessage3 {
+	// Embedded message test structure.
+	message Embedded {
+		string Identifier = 1 [(validator.field) = {regex: "^[a-z]{2,5}$"}];
+		int64 SomeValue = 2 [(validator.field) = {int_gt: 0, int_lt: 100}];
+	}
+
+	// String regex constraint tests.
+	string SomeString = 1 [(validator.field) = {regex: "^.{2,5}$"}];
+	repeated string SomeStringRep = 2 [(validator.field) = {regex: "^.{2,5}$"}];
+	string SomeStringNoQuotes = 3 [(validator.field) = {regex: "^[^\"]{2,5}$"}];
+	string SomeStringUnescaped = 4 [(validator.field) = {regex: "[\\p{L}\\p{N}]({\\p{L}\\p{N}_- ]{0,28}[\\p{L}\\p{N}])?."}];
+
+	// Strict integer inequality constraint tests.
+	uint32 SomeInt = 6 [(validator.field) = {int_gt: 10}];
+	repeated uint32 SomeIntRep = 7 [(validator.field) = {int_gt: 10}];
+	repeated uint32 SomeIntRepNonNull = 8 [(validator.field) = {int_gt: 10}];
+
+	// Embedded message existence and recursive constraint tests.
+	Embedded someEmbedded = 10;
+	Embedded someEmbeddedNonNullable = 11 [(gogoproto.nullable) = false];
+	Embedded someEmbeddedExists = 12 [(validator.field) = {msg_exists : true}];
+	repeated Embedded someEmbeddedRep = 14;
+	repeated Embedded someEmbeddedRepNonNullable = 15 [(gogoproto.nullable) = false];
+
+	// Custom error tests.
+	int32 CustomErrorInt = 16 [(validator.field) = {int_lt: 10, human_error: "My Custom Error"}];
+
+	// Strict floating-point inequality constraint tests.
+	// With this epsilon value, the limits become
+	//	SomeFloat+0.05 > 0.35
+	// 	SomeFloat-0.05 < 0.65
+	double StrictSomeDouble = 17 [(validator.field) = {float_gt: 0.35, float_lt: 0.65, float_epsilon: 0.05}];
+	repeated double StrictSomeDoubleRep = 19 [(validator.field) = {float_gt: 0.35, float_lt: 0.65, float_epsilon: 0.05}];
+	repeated double StrictSomeDoubleRepNonNull = 20 [(validator.field) = {float_gt: 0.35, float_lt: 0.65, float_epsilon: 0.05}];
+	float StrictSomeFloat = 21 [(validator.field) = {float_gt: 0.35, float_lt: 0.65, float_epsilon: 0.05}];
+	repeated float StrictSomeFloatRep = 22 [(validator.field) = {float_gt: 0.35, float_lt: 0.65, float_epsilon: 0.05}];
+	repeated float StrictSomeFloatRepNonNull = 23 [(validator.field) = {float_gt: 0.35, float_lt: 0.65, float_epsilon: 0.05}];
+
+	// Non-strict floating-point inequality constraint tests.
+	double SomeDouble = 24 [(validator.field) = {float_gte: 0.25, float_lte: 0.75}];
+	repeated double SomeDoubleRep = 25 [(validator.field) = {float_gte: 0.25, float_lte: 0.75}];
+	repeated double SomeDoubleRepNonNull = 26 [(validator.field) = {float_gte: 0.25, float_lte: 0.75}];
+	float SomeFloat = 27 [(validator.field) = {float_gte: 0.25, float_lte: 0.75}];
+	repeated float SomeFloatRep = 28 [(validator.field) = {float_gte: 0.25, float_lte: 0.75}];
+	repeated float SomeFloatRepNonNull = 30 [(validator.field) = {float_gte: 0.25, float_lte: 0.75}];
+
+	// String not-empty constraint tests.
+	string SomeNonEmptyString = 31 [(validator.field) = {string_not_empty: true}];
+
+	// Repeated base-type without constraint tests.
+	repeated int32 RepeatedBaseType = 32;
+
+	// Repeated element count constraint tests.
+	repeated int32 Repeated = 33 [(validator.field) = {repeated_count_min: 2, repeated_count_max: 5}];
+	string SomeStringLtReq = 36 [(validator.field) = {length_gt: 2}];
+	string SomeStringGtReq = 37 [(validator.field) = {length_lt: 12}];
+	string SomeStringEqReq = 38 [(validator.field) = {length_eq: 10}];
+
+	bytes SomeBytesLtReq = 39 [(validator.field) = {length_gt: 5}];
+	bytes SomeBytesGtReq = 40 [(validator.field) = {length_lt: 20}];
+	bytes SomeBytesEqReq = 41 [(validator.field) = {length_eq: 12}];
+}

@@ -1,0 +1,8 @@
+syntax = "proto2";
+
+package a;
+
+message One2 {
+  option message_set_wire_format = true;
+  extensions 4 to max;
+}

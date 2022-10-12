@@ -1,0 +1,45 @@
+syntax = "proto2";
+
+package a;
+
+message One {
+  optional string descriptor = 1;
+  optional string Descriptor = 2;
+  optional string descRiptor = 3;
+  optional string _descriptor = 4;
+  optional string __descriptor = 5;
+  optional string descriptor_ = 6;
+  optional string descriptor__ = 7;
+  optional string __descriptor__ = 8;
+}
+
+message Two {
+  message Three {
+    message Four {
+      optional string descriptor = 1;
+      optional string Descriptor = 2;
+      optional string descRiptor = 3;
+      optional string _descriptor = 4;
+      optional string __descriptor = 5;
+      optional string descriptor_ = 6;
+      optional string descriptor__ = 7;
+      optional string __descriptor__ = 8;
+    }
+    optional string descriptor = 1;
+    optional string Descriptor = 2;
+    optional string descRiptor = 3;
+    optional string _descriptor = 4;
+    optional string __descriptor = 5;
+    optional string descriptor_ = 6;
+    optional string descriptor__ = 7;
+    optional string __descriptor__ = 8;
+  }
+  optional string descriptor = 1;
+  optional string Descriptor = 2;
+  optional string descRiptor = 3;
+  optional string _descriptor = 4;
+  optional string __descriptor = 5;
+  optional string descriptor_ = 6;
+  optional string descriptor__ = 7;
+  optional string __descriptor__ = 8;
+}
