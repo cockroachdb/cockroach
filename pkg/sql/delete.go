@@ -50,8 +50,8 @@ type deleteRun struct {
 	traceKV bool
 
 	// partialIndexDelValsOffset is the offset of partial index delete
-	// indicators in the source values. It is equal to the number of fetched
-	// columns.
+	// indicators in the source values. It is equal to the sum of the number
+	// of fetched columns and the number of passthrough columns.
 	partialIndexDelValsOffset int
 
 	// rowIdxToRetIdx is the mapping from the columns returned by the deleter
@@ -60,6 +60,11 @@ type deleteRun struct {
 	// of the mutation. Otherwise, the value at the i-th index refers to the
 	// index of the resultRowBuffer where the i-th column is to be returned.
 	rowIdxToRetIdx []int
+
+	// numPassthrough is the number of columns in addition to the set of columns
+	// of the target table being returned, that must be passed through from the
+	// input node.
+	numPassthrough int
 }
 
 var _ mutationPlanNode = &deleteNode{}
@@ -184,10 +189,30 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// d.run.rows.NumCols() is guaranteed to only contain the requested
 		// public columns.
 		resultValues := make(tree.Datums, d.run.td.rows.NumCols())
-		for i, retIdx := range d.run.rowIdxToRetIdx {
+		largestRetIdx := -1
+		for i := range d.run.rowIdxToRetIdx {
+			retIdx := d.run.rowIdxToRetIdx[i]
 			if retIdx >= 0 {
+				if retIdx >= largestRetIdx {
+					largestRetIdx = retIdx
+				}
 				resultValues[retIdx] = sourceVals[i]
 			}
+		}
+
+		// At this point we've extracted all the RETURNING values that are part
+		// of the target table. We must now extract the columns in the RETURNING
+		// clause that refer to other tables (from the USING clause of the delete).
+		if d.run.numPassthrough > 0 {
+			passthroughBegin := len(d.run.td.rd.FetchCols)
+			passthroughEnd := passthroughBegin + d.run.numPassthrough
+			passthroughValues := sourceVals[passthroughBegin:passthroughEnd]
+
+			for i := 0; i < d.run.numPassthrough; i++ {
+				largestRetIdx++
+				resultValues[largestRetIdx] = passthroughValues[i]
+			}
+
 		}
 
 		if _, err := d.run.td.rows.AddRow(params.ctx, resultValues); err != nil {

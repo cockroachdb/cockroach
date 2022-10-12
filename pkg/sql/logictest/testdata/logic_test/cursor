@@ -598,4 +598,3 @@ FETCH 1 a b;
 
 statement ok
 COMMIT;
-
