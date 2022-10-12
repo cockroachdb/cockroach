@@ -3,10 +3,10 @@ CREATE DATABASE db;
 CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 
 /* test */
-ALTER TABLE db.public.tbl ADD COLUMN j UUID DEFAULT gen_random_uuid() UNIQUE;
+ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT CAST(date_part('year', now()) AS INT);
 EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT gen_random_uuid(); 
+• Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8); 
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -132,7 +132,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
             │     EventBase:
             │       Authorization:
             │         UserName: root
-            │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT gen_random_uuid()
+            │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
+            │         now()) AS INT8)
             │       StatementTag: ALTER TABLE
             │       TargetMetadata:
             │         SourceElementID: 1
@@ -144,7 +145,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
             │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j UUID UNIQUE DEFAULT gen_random_uuid()
+            │       Statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year',
+            │         now()) AS INT8)
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
@@ -156,7 +158,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
             │     EventBase:
             │       Authorization:
             │         UserName: root
-            │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› UUID UNIQUE DEFAULT gen_random_uuid()
+            │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
+            │         now()) AS INT8)
             │       StatementTag: ALTER TABLE
             │       TargetMetadata:
             │         SourceElementID: 1
