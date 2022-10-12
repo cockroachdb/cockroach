@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//vfs",
         "@com_github_spf13_cobra//:cobra",
     ],
 )
@@ -52,8 +53,10 @@ go_test(
         "//pkg/server",
         "//pkg/storage",
         "//pkg/testutils/serverutils",
+        "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/randutil",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_stretchr_testify//require",
     ],

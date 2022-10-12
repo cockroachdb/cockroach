@@ -9,6 +9,9 @@ load
 ----
 open-dir("")
 
+list
+----
+
 close
 ----
 close("")
@@ -24,6 +27,9 @@ load
 ----
 open-dir("")
 
+list
+----
+
 set filename=foo settings=bar
 ----
 create("COCKROACHDB_REGISTRY_000001")
@@ -34,6 +40,10 @@ close("marker.registry.000001.COCKROACHDB_REGISTRY_000001")
 sync("")
 write("COCKROACHDB_REGISTRY_000001", <...23 bytes...>)
 sync("COCKROACHDB_REGISTRY_000001")
+
+list
+----
+name=foo,type=Data,settings=bar
 
 close
 ----
@@ -65,6 +75,9 @@ remove("COCKROACHDB_REGISTRY_000001")
 write("COCKROACHDB_REGISTRY_000002", <...14 bytes...>)
 sync("COCKROACHDB_REGISTRY_000002")
 
+list
+----
+
 close
 ----
 write("COCKROACHDB_REGISTRY_000002", <...0 bytes...>)
@@ -85,6 +98,9 @@ open-dir("")
 open("COCKROACHDB_REGISTRY_000002")
 close("COCKROACHDB_REGISTRY_000002")
 
+list
+----
+
 set filename=foo settings=bar
 ----
 create("COCKROACHDB_REGISTRY_000003")
@@ -97,6 +113,10 @@ sync("")
 remove("COCKROACHDB_REGISTRY_000002")
 write("COCKROACHDB_REGISTRY_000003", <...23 bytes...>)
 sync("COCKROACHDB_REGISTRY_000003")
+
+list
+----
+name=foo,type=Data,settings=bar
 
 get filename=foo
 ----
@@ -138,6 +158,9 @@ remove("COCKROACHDB_REGISTRY_000003")
 write("COCKROACHDB_REGISTRY_000004", <...14 bytes...>)
 sync("COCKROACHDB_REGISTRY_000004")
 
+list
+----
+
 get filename=foo
 ----
 
@@ -160,6 +183,9 @@ load
 ----
 open-dir("")
 
+list
+----
+
 set filename=foo settings=helloworld
 ----
 create("COCKROACHDB_REGISTRY_000001")
@@ -178,6 +204,11 @@ set filename=bar settings=hi
 ----
 write("COCKROACHDB_REGISTRY_000001", <...22 bytes...>)
 sync("COCKROACHDB_REGISTRY_000001")
+
+list
+----
+name=bar,type=Data,settings=hi
+name=foo,type=Data,settings=helloworld
 
 close
 ----
@@ -209,6 +240,11 @@ close("COCKROACHDB_REGISTRY_000001")
 stat("bar")
 stat("foo")
 
+list
+----
+name=bar,type=Data,settings=hi
+name=foo,type=Data,settings=helloworld
+
 get filename=bar
 ----
 hi
@@ -225,6 +261,12 @@ sync("")
 remove("COCKROACHDB_REGISTRY_000001")
 write("COCKROACHDB_REGISTRY_000002", <...25 bytes...>)
 sync("COCKROACHDB_REGISTRY_000002")
+
+list
+----
+name=bar,type=Data,settings=hi
+name=bax,type=Data,settings=hello
+name=foo,type=Data,settings=helloworld
 
 close
 ----
