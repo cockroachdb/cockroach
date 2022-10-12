@@ -79,12 +79,11 @@ func TestTryFilterTrigram(t *testing.T) {
 
 		// Similarity queries.
 		{filters: "s % 'lkjsdlkj'", ok: true, unique: false},
-		{filters: "s % 'lkj'", ok: true, unique: true},
-		// Can't generate trigrams from such a short constant.
-		{filters: "s % 'lj'", ok: false},
+		{filters: "s % 'lkj'", ok: true, unique: false},
+		{filters: "s % 'lj'", ok: true, unique: false},
 
 		// AND and OR for two similarity queries behave as expected.
-		{filters: "s % 'lkj' AND s % 'bla'", ok: true, unique: true},
+		{filters: "s % 'lkj' AND s % 'bla'", ok: true, unique: false},
 		{filters: "s % 'lkj' OR s % 'bla'", ok: true, unique: false},
 
 		// Can combine similarity and LIKE queries and still get inverted
