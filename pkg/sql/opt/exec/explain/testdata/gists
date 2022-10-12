@@ -699,8 +699,8 @@ explain(gist):
 gist-explain-roundtrip
 DELETE FROM foo
 ----
-hash: 5369057709634423529
-plan-gist: AgFqAgAHAAAAI2oB
+hash: 17378315733259356217
+plan-gist: AgFqAgAHAAAAI2oAAQ==
 explain(shape):
 • delete
 │ from: foo
@@ -722,8 +722,8 @@ explain(gist):
 gist-explain-roundtrip
 DELETE FROM foo WHERE a = 1
 ----
-hash: 7691685103096689151
-plan-gist: AgFqAgAHAgAAI2oB
+hash: 11485970487285265051
+plan-gist: AgFqAgAHAgAAI2oAAQ==
 explain(shape):
 • delete
 │ from: foo
@@ -740,6 +740,27 @@ explain(gist):
 └── • scan
       table: foo@foo_pkey
       spans: 1 span
+
+opt
+DELETE FROM foo WHERE a = 1
+----
+delete t.public.foo
+ ├── columns: <none>
+ ├── fetch columns: t.public.foo.a:7(int) t.public.foo.b:8(int[]) t.public.foo.c:9(string)
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 5.08
+ └── scan t.public.foo
+      ├── columns: t.public.foo.a:7(int!null) t.public.foo.b:8(int[]) t.public.foo.c:9(string)
+      ├── constraint: /7: [/1 - /1]
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(7)=1, null(7)=0]
+      ├── cost: 5.07
+      ├── key: ()
+      ├── fd: ()-->(7-9)
+      └── prune: (8,9)
+
 
 # createTableOp
 gist-explain-roundtrip
