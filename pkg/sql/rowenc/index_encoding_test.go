@@ -912,8 +912,10 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 		value string
 		// Whether we're using LIKE or % operator for the search.
 		searchType trigramSearchType
-		// Whether we expect that the spans should contain all of the keys produced
-		// by indexing the indexedValue.
+		// Whether we expect that the spans should contain the keys produced by
+		// indexing the indexedValue. If the searchType is similar, then the
+		// spans should contain at least one of the indexed keys, otherwise the
+		// spans should contain all the indexed keys.
 		containsKeys bool
 		// Whether we expect that the indexed value should evaluate as matching
 		// the LIKE or % expression that we're testing.
@@ -940,9 +942,10 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 		// Similarity (%) queries.
 		{`staticcheck`, `staricheck`, similar, true, true, false},
 		{`staticcheck`, `blevicchlrk`, similar, true, false, false},
-		{`staticcheck`, `che`, similar, true, false, true},
-		{`staticcheck`, `xxx`, similar, false, false, true},
+		{`staticcheck`, `che`, similar, true, false, false},
+		{`staticcheck`, `xxx`, similar, false, false, false},
 		{`staticcheck`, `xxxyyy`, similar, false, false, false},
+		{`aaaaaa`, `aab`, similar, true, true, false},
 
 		// Equality queries.
 		{`staticcheck`, `staticcheck`, eq, true, true, false},
@@ -979,10 +982,23 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 		}
 		require.Equal(t, expectUnique, spanExpr.Unique, "%s, %s: unexpected unique attribute", indexedValue, value)
 
-		// Check if the indexedValue is included by the spans.
-		containsKeys, err := spanExpr.ContainsKeys(keys)
-		require.NoError(t, err)
-
+		// Check if the indexedValue is included by the spans. If the search is
+		// a similarity search, the spans should contain at least one key.
+		// Otherwise, the spans should contain all the keys.
+		var containsKeys bool
+		if searchType == similar {
+			for i := range keys {
+				containsKey, err := spanExpr.ContainsKeys([][]byte{keys[i]})
+				require.NoError(t, err)
+				if containsKey {
+					containsKeys = true
+					break
+				}
+			}
+		} else {
+			containsKeys, err = spanExpr.ContainsKeys(keys)
+			require.NoError(t, err)
+		}
 		require.Equal(t, expectContainsKeys, containsKeys, "%s, %s: expected containsKeys", indexedValue, value)
 
 		// Since the spans are never tight, apply an additional filter to determine
@@ -1012,13 +1028,13 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 
 		for _, searchType := range []trigramSearchType{like, eq, similar} {
 			expr := makeTrigramBinOp(t, left, right, searchType)
-			lTrigrams := trigram.MakeTrigrams(left, false /* pad */)
+			lTrigrams := trigram.MakeTrigrams(left, searchType == similar /* pad */)
 			// Check for intersection. We're looking for a non-zero intersection
 			// for similar, and complete containment of the right trigrams in the left
 			// for eq and like.
 			any := false
 			all := true
-			rTrigrams := trigram.MakeTrigrams(right, false /* pad */)
+			rTrigrams := trigram.MakeTrigrams(right, searchType == similar /* pad */)
 			for _, trigram := range rTrigrams {
 				idx := sort.Search(len(lTrigrams), func(i int) bool {
 					return lTrigrams[i] >= trigram
@@ -1036,15 +1052,17 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 				expectedContainsKeys = all
 			}
 
+			t.Logf("left: %s\nright: %s\nlTrigrams: %v\nrTrigrams: %v\nany: %v\nall: %v\n", left, right, lTrigrams, rTrigrams, any, all)
+
 			d, err := eval.Expr(context.Background(), &evalCtx, expr)
 			require.NoError(t, err)
 			expected := bool(*d.(*tree.DBool))
-			trigrams := trigram.MakeTrigrams(right, false /* pad */)
+			trigrams := trigram.MakeTrigrams(right, searchType == similar /* pad */)
 			nTrigrams := len(trigrams)
 			valid := nTrigrams > 0
 			unique := nTrigrams == 1
 			if !valid {
-				_, err := EncodeTrigramSpans(right, true /* allMustMatch */)
+				_, err := EncodeTrigramSpans(right, searchType != similar /* allMustMatch */)
 				require.Error(t, err)
 				continue
 			}
@@ -1080,19 +1098,31 @@ func TestEncodeTrigramInvertedIndexSpansError(t *testing.T) {
 	// Make sure that any input with a chunk with fewer than 3 characters returns
 	// an error, since we can't produce trigrams from strings that don't meet a
 	// minimum of 3 characters.
-	inputs := []string{
-		"fo",
-		"a",
-		"",
+	testCases := []struct {
+		input           string
+		allMustMatchErr bool
+		anyMustMatchErr bool
+	}{
+		{"fo", true, false},
+		{"a", true, false},
+		{"", true, true},
 		// Non-alpha characters don't count against the limit.
-		"fo ",
-		"%fo%",
-		"#$(*",
+		{"fo ", true, false},
+		{"%fo%", true, false},
+		{"#$(*)", true, true},
 	}
-	for _, input := range inputs {
-		_, err := EncodeTrigramSpans(input, true /* allMustMatch */)
-		require.Error(t, err)
-		_, err = EncodeTrigramSpans(input, false /* allMustMatch */)
-		require.Error(t, err)
+	for _, tc := range testCases {
+		_, err := EncodeTrigramSpans(tc.input, true /* allMustMatch */)
+		if tc.allMustMatchErr {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
+		_, err = EncodeTrigramSpans(tc.input, false /* allMustMatch */)
+		if tc.anyMustMatchErr {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+		}
 	}
 }
