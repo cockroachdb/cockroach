@@ -38,7 +38,7 @@ func New(
 	maxTxnFingerprints *settings.IntSetting,
 	curMemoryBytesCount *metric.Gauge,
 	maxMemoryBytesHist *metric.Histogram,
-	insightsWriter insights.Writer,
+	insightsWriter insights.WriterProvider,
 	pool *mon.BytesMonitor,
 	reportingSink Sink,
 	knobs *sqlstats.TestingKnobs,
@@ -93,7 +93,7 @@ func (s *SQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 }
 
 // GetApplicationStats implements sqlstats.Provider interface.
-func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats {
+func (s *SQLStats) GetApplicationStats(appName string, internal bool) sqlstats.ApplicationStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if a, ok := s.mu.apps[appName]; ok {
@@ -108,7 +108,7 @@ func (s *SQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.insights,
+		s.insights(internal),
 	)
 	s.mu.apps[appName] = a
 	return a
