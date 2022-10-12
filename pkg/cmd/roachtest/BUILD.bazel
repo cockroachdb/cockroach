@@ -27,6 +27,7 @@ go_library(
         "//pkg/internal/team",
         "//pkg/roachprod",
         "//pkg/roachprod/config",
+        "//pkg/roachprod/errors",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",

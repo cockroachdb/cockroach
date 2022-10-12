@@ -23,7 +23,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -616,7 +615,7 @@ func runCmdOnSingleNode(
 		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", node, cmd)
 		err = errors.WithDetail(err, detailMsg)
 		err = rperrors.ClassifyCmdError(err)
-		if reflect.TypeOf(err) == reflect.TypeOf(rperrors.SSH{}) {
+		if errors.Is(err, rperrors.ErrSSH255) {
 			result.RemoteExitStatus = "255"
 		}
 		result.Err = err

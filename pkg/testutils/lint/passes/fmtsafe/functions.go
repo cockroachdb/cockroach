@@ -90,12 +90,15 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/util/grpcutil.grpcLogger).Fatalf":   true,
 
 	// Both of these signatures need to be included for the linter to not flag
-	// roachtest testImpl.Errorf since it is in the main package
-	"(*main.testImpl).Errorf": true,
-	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).Errorf": true,
+	// roachtest testImpl.addFailure since it is in the main package
+	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).addFailure": true,
+	"(*main.testImpl).addFailure": true,
 
 	"(*main.testImpl).Fatalf": true,
 	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).Fatalf": true,
+
+	"(*main.testImpl).Errorf": true,
+	"(*github.com/cockroachdb/cockroach/pkg/cmd/roachtest.testImpl).Errorf": true,
 
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Debugf":   true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Infof":    true,

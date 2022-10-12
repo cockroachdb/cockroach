@@ -39,6 +39,18 @@ type testStatus struct {
 	progress float64
 }
 
+// Holds all error information from a single invocation of t.{Fatal,Error}{,f} to
+// preserve any structured errors
+// e.g. t.Fatalf("foo %s %s %s", "hello", err1, err2) would mean that
+// failure.errors == [err1, err2], with all args (including the non error "hello")
+// being captured in the squashedErr
+type failure struct {
+	// This is the single error created from variadic args passed to t.{Fatal,Error}{,f}
+	squashedErr error
+	// errors are all the `errors` present in the variadic args
+	errors []error
+}
+
 type testImpl struct {
 	spec *registry.TestSpec
 
@@ -73,18 +85,12 @@ type testImpl struct {
 		// test is being marked as failed (i.e. when the failed field above is also
 		// set). This is used to cancel the context passed to t.spec.Run(), so async
 		// test goroutines can be notified.
-		cancel  func()
-		failLoc struct {
-			file string
-			line int
-		}
+		cancel func()
 
-		// Errors are all the errors passed to `addFailure`, in order of
-		// these calls.
-		//
-		// NB: the first failure is not always the relevant one due to:
-		// https://github.com/cockroachdb/cockroach/issues/44436
-		errors []error
+		// failures added via addFailures, in order
+		// A test can have multiple calls to t.Fail()/Error(), with each call
+		// referencing 0+ errors. failure captures all the errors
+		failures []failure
 
 		// status is a map from goroutine id to status set by that goroutine. A
 		// special goroutine is indicated by runnerID; that one provides the test's
@@ -102,6 +108,10 @@ type testImpl struct {
 	//
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
+}
+
+func newFailure(squashedErr error, errs []error) failure {
+	return failure{squashedErr: squashedErr, errors: errs}
 }
 
 // BuildVersion exposes the build version of the cluster
@@ -242,21 +252,15 @@ func (t *testImpl) Skipf(format string, args ...interface{}) {
 	panic(errTestFatal)
 }
 
-// This creates an error from the first arg, and adds each subsequent arg
-// as error detail
-func argsToErr(depth int, args ...interface{}) error {
-	// NB: we'd probably not allow multiple arguments here and we'd want
-	// the one remaining arg to be an `error`, but we are trying to be
-	// compatible with `(*testing.T).Fatal`.
-	var err error
-	for _, arg := range args {
-		if err == nil {
-			err = errors.NewWithDepthf(depth+1, "%v", arg)
-			continue
+// collectErrors extracts any arg that is an error
+func collectErrors(args []interface{}) []error {
+	var errs []error
+	for _, a := range args {
+		if err, ok := a.(error); ok {
+			errs = append(errs, err)
 		}
-		err = errors.WithDetailf(err, "%v", arg)
 	}
-	return err
+	return errs
 }
 
 // Fatal marks the test as failed, prints the args to t.L(), and calls
@@ -268,61 +272,69 @@ func argsToErr(depth int, args ...interface{}) error {
 // ATTENTION: Since this calls panic(errTestFatal), it should only be called
 // from a test's closure. The test runner itself should never call this.
 func (t *testImpl) Fatal(args ...interface{}) {
-	t.addFailure(argsToErr(1, args...))
+	t.addFailure("", args...)
 	panic(errTestFatal)
 }
 
 // Fatalf is like Fatal, but takes a format string.
 func (t *testImpl) Fatalf(format string, args ...interface{}) {
-	t.addFailure(errors.NewWithDepthf(1, format, args...))
+	t.addFailure(format, args...)
 	panic(errTestFatal)
 }
 
 // FailNow implements the TestingT interface.
 func (t *testImpl) FailNow() {
-	t.addFailure(errors.NewWithDepthf(1, "FailNow called"))
+	t.addFailure("FailNow called")
 	panic(errTestFatal)
 }
 
+// Error implements the TestingT interface
 func (t *testImpl) Error(args ...interface{}) {
-	t.addFailure(argsToErr(1, args...))
+	t.addFailure("", args...)
 }
 
 // Errorf implements the TestingT interface.
 func (t *testImpl) Errorf(format string, args ...interface{}) {
-	t.addFailure(errors.NewWithDepthf(1, format, args...))
+	t.addFailure(format, args...)
 }
 
-func formatFailure(b *strings.Builder, errs ...error) {
-	for i, err := range errs {
+// We take the first error from each failure which is the
+// "squashed" error that contains all information of a failure
+func formatFailure(b *strings.Builder, reportFailures ...failure) {
+	for i, failure := range reportFailures {
 		if i > 0 {
 			fmt.Fprintln(b)
 		}
-		file, line, fn, ok := errors.GetOneLineSource(err)
+		file, line, fn, ok := errors.GetOneLineSource(failure.squashedErr)
 		if !ok {
 			file, line, fn = "<unknown>", 0, "unknown"
 		}
-		fmt.Fprintf(b, "(%s:%d).%s: %v", file, line, fn, err)
+		fmt.Fprintf(b, "(%s:%d).%s: %v", file, line, fn, failure.squashedErr)
 	}
 }
 
-func (t *testImpl) addFailure(reportErr error) {
+func (t *testImpl) addFailure(format string, args ...interface{}) {
+	if format == "" {
+		format = strings.Repeat(" %v", len(args))[1:]
+	}
+	reportFailure := newFailure(errors.NewWithDepthf(1, format, args...), collectErrors(args))
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.mu.errors = append(t.mu.errors, reportErr)
+	t.mu.failures = append(t.mu.failures, reportFailure)
 
 	var b strings.Builder
-	formatFailure(&b, reportErr)
+	formatFailure(&b, reportFailure)
 	msg := b.String()
 
-	t.L().Printf("test failure #%d: %s", len(t.mu.errors), msg)
+	t.L().Printf("test failure #%d: %s", len(t.mu.failures), msg)
 	// Also dump the verbose error (incl. all stack traces) to a log file, in case
 	// we need it. The stacks are sometimes helpful, but we don't want them in the
 	// main log as they are highly verbose.
 	{
 		cl, err := t.L().ChildLogger(
-			fmt.Sprintf("failure_%d", len(t.mu.errors)),
+			fmt.Sprintf("failure_%d", len(t.mu.failures)),
 			logger.QuietStderr, logger.QuietStdout,
 		)
 		if err == nil {
@@ -331,7 +343,7 @@ func (t *testImpl) addFailure(reportErr error) {
 			// so it's better to write only it to the file to avoid confusion.
 			path := cl.File.Name()
 			cl.Close() // we just wanted the filename
-			_ = os.WriteFile(path, []byte(fmt.Sprintf("%+v", reportErr)), 0644)
+			_ = os.WriteFile(path, []byte(fmt.Sprintf("%+v", reportFailure.squashedErr)), 0644)
 		}
 	}
 
@@ -353,15 +365,35 @@ func (t *testImpl) Failed() bool {
 }
 
 func (t *testImpl) failedRLocked() bool {
-	return len(t.mu.errors) > 0
+	return len(t.mu.failures) > 0
 }
 
-func (t *testImpl) FailureMsg() string {
+func (t *testImpl) firstFailure() failure {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if len(t.mu.failures) <= 0 {
+		return failure{}
+	}
+	return t.mu.failures[0]
+}
+
+func (t *testImpl) failureMsg() string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	var b strings.Builder
-	formatFailure(&b, t.mu.errors...)
+	formatFailure(&b, t.mu.failures...)
 	return b.String()
+}
+
+// failureContainsError returns true if any of the errors in a given failure
+// matches the reference error
+func failureContainsError(f failure, refError error) bool {
+	for _, err := range f.errors {
+		if errors.Is(err, refError) {
+			return true
+		}
+	}
+	return errors.Is(f.squashedErr, refError)
 }
 
 func (t *testImpl) ArtifactsDir() string {
