@@ -1062,7 +1062,7 @@ func getReintroducedSpans(
 	// backup was offline at the endTime of the last backup.
 	latestTableDescChangeInLastBackup := make(map[descpb.ID]*descpb.TableDescriptor)
 	for _, rev := range lastBackup.DescriptorChanges {
-		if table, _, _, _, _ := descpb.FromDescriptor(rev.Desc); table != nil {
+		if table, _, _, _, _ := descpb.GetDescriptors(rev.Desc); table != nil {
 			if trackedRev, ok := latestTableDescChangeInLastBackup[table.GetID()]; !ok {
 				latestTableDescChangeInLastBackup[table.GetID()] = table
 			} else if trackedRev.Version < table.Version {

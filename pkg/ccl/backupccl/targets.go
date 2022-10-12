@@ -375,7 +375,7 @@ func checkMissingIntroducedSpans(
 		// Gather the _online_ tables included in the previous backup.
 		prevOnlineTables := make(map[descpb.ID]struct{})
 		for _, desc := range mainBackupManifests[i-1].Descriptors {
-			if table, _, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Public() {
+			if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Public() {
 				prevOnlineTables[table.GetID()] = struct{}{}
 			}
 		}
@@ -433,7 +433,7 @@ that was running an IMPORT at the time of the previous incremental in this chain
 		for _, desc := range mainBackupManifests[i].Descriptors {
 			// Check that all online tables at backup time were either introduced or
 			// in the previous backup.
-			if table, _, _, _, _ := descpb.FromDescriptor(&desc); table != nil && table.Public() {
+			if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
 					return err
 				}
@@ -445,7 +445,7 @@ that was running an IMPORT at the time of the previous incremental in this chain
 		// manifest.Descriptors. If a descriptor switched from offline to online at
 		// any moment during the backup interval, it needs to be reintroduced.
 		for _, desc := range mainBackupManifests[i].DescriptorChanges {
-			if table, _, _, _, _ := descpb.FromDescriptor(desc.Desc); table != nil && table.Public() {
+			if table, _, _, _, _ := descpb.GetDescriptors(desc.Desc); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
 					return err
 				}
