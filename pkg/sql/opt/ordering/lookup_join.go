@@ -31,7 +31,8 @@ func lookupJoinCanProvideOrdering(expr memo.RelExpr, required *props.OrderingCho
 	inputCols := lookupJoin.Input.Relational().OutputCols
 	canProjectUsingOnlyInputCols := required.CanProjectCols(inputCols)
 
-	if canProjectUsingOnlyInputCols && lookupJoin.IsSecondJoinInPairedJoiner {
+	if canProjectUsingOnlyInputCols &&
+		(lookupJoin.IsFirstJoinInPairedJoiner || lookupJoin.IsSecondJoinInPairedJoiner) {
 		// Can only pass through ordering if the ordering can be provided by the
 		// child, since we don't want a sort to be interposed between the child
 		// and this join.
