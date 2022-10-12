@@ -144,7 +144,11 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 			b := prettyNamespaceDump(t, tdb)
 			setupStmts = stmts
 			return sctestutils.Diff(a, b, sctestutils.DiffArgs{CompactLevel: 1})
-
+		case "stage-exec":
+			fallthrough
+		case "stage-query":
+			// Nothing to do in this case, expect the expected output.
+			return d.Expected
 		case "test":
 			require.Lessf(t, numTestStatementsObserved, 1, "only one test per-file.")
 			numTestStatementsObserved++

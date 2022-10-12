@@ -4,6 +4,17 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((
 ...
 +object {100 101 t} -> 104
 
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey, $stageKey);
+----
+pq: column "j" does not exist
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t (i, j, k) VALUES($stageKey, $stageKey, $stageKey);
+----
+pq: column "j" does not exist
+
 test
 ALTER TABLE t DROP COLUMN j CASCADE;
 ALTER TABLE t DROP COLUMN k CASCADE;
