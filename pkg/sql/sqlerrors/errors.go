@@ -12,16 +12,12 @@
 package sqlerrors
 
 import (
-	"context"
-	"runtime/debug"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -109,7 +105,6 @@ func NewInvalidSchemaDefinitionError(err error) error {
 // NewUndefinedSchemaError creates an error for an undefined schema.
 // TODO (lucy): Have this take a database name.
 func NewUndefinedSchemaError(name string) error {
-	log.Errorf(context.Background(), "MISSING SCHEMA: %s", debug.Stack())
 	return pgerror.Newf(pgcode.InvalidSchemaName, "unknown schema %q", name)
 }
 
