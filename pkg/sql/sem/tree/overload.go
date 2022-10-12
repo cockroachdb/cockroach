@@ -564,7 +564,7 @@ func returnTypeToFixedType(s ReturnTyper, inputTyps []TypedExpr) *types.T {
 	return types.Any
 }
 
-type typeCheckOverloadState struct {
+type overloadTypeChecker struct {
 	overloads       []overloadImpl
 	params          []TypeList
 	overloadIdxs    []uint8 // index into overloads
@@ -578,14 +578,16 @@ type typeCheckOverloadState struct {
 
 var overloadTypeCheckerPool = sync.Pool{
 	New: func() interface{} {
-		var s typeCheckOverloadState
+		var s overloadTypeChecker
 		s.overloadIdxs = s.overloadsIdxArr[:0]
 		return &s
 	},
 }
 
-func getOverloadTypeChecker(o overloadSet, exprs ...Expr) *typeCheckOverloadState {
-	s := overloadTypeCheckerPool.Get().(*typeCheckOverloadState)
+// getOverloadTypeChecker initialized an overloadTypeChecker from the pool. The
+// returned object should be returned to the pool via its release method.
+func getOverloadTypeChecker(o overloadSet, exprs ...Expr) *overloadTypeChecker {
+	s := overloadTypeCheckerPool.Get().(*overloadTypeChecker)
 	n := o.len()
 	if n > cap(s.overloads) {
 		s.overloads = make([]overloadImpl, n)
@@ -603,7 +605,7 @@ func getOverloadTypeChecker(o overloadSet, exprs ...Expr) *typeCheckOverloadStat
 	return s
 }
 
-func (s *typeCheckOverloadState) release() {
+func (s *overloadTypeChecker) release() {
 	for i := range s.overloads {
 		s.overloads[i] = nil
 	}
@@ -644,7 +646,7 @@ type overloadSet interface {
 // The inBinOp parameter denotes whether this type check is occurring within a binary operator,
 // in which case we may need to make a guess that the two parameters are of the same type if one
 // of them is NULL.
-func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
+func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T, inBinOp bool,
 ) (_ error) {
 	numOverloads := len(s.overloads)
@@ -708,20 +710,16 @@ func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
 
 	// Filter out incorrect parameter length overloads.
 	exprsLen := len(s.exprs)
-	s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-		params TypeList,
-	) bool {
-		return params.MatchLen(exprsLen)
-	})
+	matchLen := func(params TypeList) bool { return params.MatchLen(exprsLen) }
+	s.overloadIdxs = filterParams(s.overloadIdxs, s.params, matchLen)
 
 	// Filter out overloads which constants cannot become.
 	for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 		constExpr := s.exprs[i].(Constant)
-		s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-			params TypeList,
-		) bool {
+		filter := func(params TypeList) bool {
 			return canConstantBecome(constExpr, params.GetAt(i))
-		})
+		}
+		s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
 	}
 
 	// TODO(nvanbenschoten): We should add a filtering step here to filter
@@ -819,11 +817,10 @@ func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
 				}
 				if allConstantsAreHomogenous {
 					for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-						s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-							params TypeList,
-						) bool {
+						filter := func(params TypeList) bool {
 							return params.GetAt(i).Equivalent(homogeneousTyp)
-						})
+						}
+						s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
 					}
 				}
 			}
@@ -837,11 +834,10 @@ func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
 			for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 				natural := naturalConstantType(s.exprs[i].(Constant))
 				if natural != nil {
-					s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-						params TypeList,
-					) bool {
+					filter := func(params TypeList) bool {
 						return params.GetAt(i).Equivalent(natural)
-					})
+					}
+					s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
 				}
 			}
 		}); ok {
@@ -901,13 +897,12 @@ func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
 		}
 		for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 			constExpr := s.exprs[i].(Constant)
-			s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-				params TypeList,
-			) bool {
+			filter := func(params TypeList) bool {
 				semaCtx := MakeSemaContext()
 				_, err := constExpr.ResolveAsType(ctx, &semaCtx, params.GetAt(i))
 				return err == nil
-			})
+			}
+			s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
 		}
 		if ok, err := checkReturn(ctx, semaCtx, s); ok {
 			return err
@@ -921,11 +916,10 @@ func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
 			// instead of unsupported error (0 overloads) when applicable.
 			prevOverloadIdxs := s.overloadIdxs
 			for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
-				s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-					params TypeList,
-				) bool {
+				filter := func(params TypeList) bool {
 					return params.GetAt(i).Equivalent(bestConstType)
-				})
+				}
+				s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
 			}
 			if ok, err := checkReturn(ctx, semaCtx, s); ok {
 				if len(s.overloadIdxs) == 0 {
@@ -966,11 +960,10 @@ func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
 			if _, err := s.exprs[i].TypeCheck(ctx, semaCtx, homogeneousTyp); err != nil {
 				return err
 			}
-			s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-				params TypeList,
-			) bool {
+			filter := func(params TypeList) bool {
 				return params.GetAt(i).Equivalent(homogeneousTyp)
-			})
+			}
+			s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
 		}
 		if ok, err := checkReturn(ctx, semaCtx, s); ok {
 			return err
@@ -1081,12 +1074,11 @@ func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
 				if rightIsNull {
 					rightType = leftType
 				}
-				s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-					params TypeList,
-				) bool {
+				filter := func(params TypeList) bool {
 					return params.GetAt(0).Equivalent(leftType) &&
 						params.GetAt(1).Equivalent(rightType)
-				})
+				}
+				s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
 			}
 		}); ok {
 			return err
@@ -1125,12 +1117,11 @@ func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
 				if rightIsNull {
 					rightType = types.String
 				}
-				s.overloadIdxs = filterParams(s.overloadIdxs, s.params, func(
-					params TypeList,
-				) bool {
+				filter := func(params TypeList) bool {
 					return params.GetAt(0).Equivalent(leftType) &&
 						params.GetAt(1).Equivalent(rightType)
-				})
+				}
+				s.overloadIdxs = filterParams(s.overloadIdxs, s.params, filter)
 			}
 		}); ok {
 			return err
@@ -1149,7 +1140,7 @@ func (s *typeCheckOverloadState) typeCheckOverloadedExprs(
 // convenience) and a possible error. If it fails, it will return false and
 // undo any filtering performed during the attempt.
 func filterAttempt(
-	ctx context.Context, semaCtx *SemaContext, s *typeCheckOverloadState, attempt func(),
+	ctx context.Context, semaCtx *SemaContext, s *overloadTypeChecker, attempt func(),
 ) (ok bool, _ error) {
 	before := s.overloadIdxs
 	attempt()
@@ -1193,7 +1184,7 @@ func filterOverloads(idxs []uint8, params []overloadImpl, fn func(overloadImpl) 
 // defaultTypeCheck type checks the constant and placeholder expressions without a preference
 // and adds them to the type checked slice.
 func defaultTypeCheck(
-	ctx context.Context, semaCtx *SemaContext, s *typeCheckOverloadState, errorOnPlaceholders bool,
+	ctx context.Context, semaCtx *SemaContext, s *overloadTypeChecker, errorOnPlaceholders bool,
 ) error {
 	for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 		typ, err := s.exprs[i].TypeCheck(ctx, semaCtx, types.Any)
@@ -1224,7 +1215,7 @@ func defaultTypeCheck(
 // it returns true, which signals to the calling function that it should
 // immediately return, so any mutations to s are irrelevant.
 func checkReturn(
-	ctx context.Context, semaCtx *SemaContext, s *typeCheckOverloadState,
+	ctx context.Context, semaCtx *SemaContext, s *overloadTypeChecker,
 ) (ok bool, _ error) {
 	switch len(s.overloadIdxs) {
 	case 0:
@@ -1265,7 +1256,7 @@ func checkReturn(
 // overload at the input index are valid. It has the same return values
 // as checkReturn.
 func checkReturnPlaceholdersAtIdx(
-	ctx context.Context, semaCtx *SemaContext, s *typeCheckOverloadState, idx uint8,
+	ctx context.Context, semaCtx *SemaContext, s *overloadTypeChecker, idx uint8,
 ) (ok bool, _ error) {
 	p := s.params[idx]
 	for i, ok := s.placeholderIdxs.Next(0); ok; i, ok = s.placeholderIdxs.Next(i + 1) {

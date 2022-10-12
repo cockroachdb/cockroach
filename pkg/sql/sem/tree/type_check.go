@@ -330,7 +330,7 @@ func (expr *BinaryExpr) TypeCheck(
 		if len(s.overloadIdxs) > 0 {
 			noneAcceptNull := true
 			for _, idx := range s.overloadIdxs {
-				if (*ops)[idx].CalledOnNullInput {
+				if ops.overloads[idx].CalledOnNullInput {
 					noneAcceptNull = false
 					break
 				}
@@ -361,7 +361,7 @@ func (expr *BinaryExpr) TypeCheck(
 		return nil, err
 	}
 
-	binOp := (*ops)[s.overloadIdxs[0]]
+	binOp := ops.overloads[s.overloadIdxs[0]]
 	if err := semaCtx.checkVolatility(binOp.Volatility); err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
 	}
@@ -1536,7 +1536,7 @@ func (expr *UnaryExpr) TypeCheck(
 		return nil, err
 	}
 
-	unaryOp := (*ops)[s.overloadIdxs[0]]
+	unaryOp := ops.overloads[s.overloadIdxs[0]]
 	if err := semaCtx.checkVolatility(unaryOp.Volatility); err != nil {
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s", expr.Operator)
 	}
@@ -2109,7 +2109,7 @@ func typeCheckComparisonOpWithSubOperator(
 
 // deepCheckValidCmpOp performs extra checks that a given operation is valid
 // when the types are tuples.
-func deepCheckValidCmpOp(ops *cmpOpOverload, leftType, rightType *types.T) bool {
+func deepCheckValidCmpOp(ops *CmpOpOverloads, leftType, rightType *types.T) bool {
 	if leftType.Family() == types.TupleFamily && rightType.Family() == types.TupleFamily {
 		l := leftType.TupleContents()
 		r := rightType.TupleContents()
@@ -2269,7 +2269,7 @@ func typeCheckComparisonOp(
 		if len(s.overloadIdxs) > 0 {
 			noneAcceptNull := true
 			for _, idx := range s.overloadIdxs {
-				e := (*ops)[idx]
+				e := ops.overloads[idx]
 				if e.CalledOnNullInput {
 					noneAcceptNull = false
 					break
@@ -2313,7 +2313,7 @@ func typeCheckComparisonOp(
 		err = errors.WithHintf(err, candidatesHintFmt, fnsStr)
 		return nil, nil, nil, false, err
 	}
-	return leftExpr, rightExpr, (*ops)[s.overloadIdxs[0]], false, nil
+	return leftExpr, rightExpr, ops.overloads[s.overloadIdxs[0]], false, nil
 }
 
 type typeCheckExprsState struct {
