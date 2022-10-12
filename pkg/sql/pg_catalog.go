@@ -2188,7 +2188,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 			if cmpOp == treecmp.In {
 				continue
 			}
-			for _, overload := range overloads {
+			for _, overload := range *overloads {
 				params, returnType := tree.GetParamsAndReturnType(overload)
 				if err := addOp(cmpOp.String(), infixKind, params, returnType); err != nil {
 					return err
@@ -2201,7 +2201,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 			}
 		}
 		for binOp, overloads := range tree.BinOps {
-			for _, overload := range overloads {
+			for _, overload := range *overloads {
 				params, returnType := tree.GetParamsAndReturnType(overload)
 				if err := addOp(binOp.String(), infixKind, params, returnType); err != nil {
 					return err
@@ -2209,7 +2209,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 			}
 		}
 		for unaryOp, overloads := range tree.UnaryOps {
-			for _, overload := range overloads {
+			for _, overload := range *overloads {
 				params, returnType := tree.GetParamsAndReturnType(overload)
 				if err := addOp(unaryOp.String(), prefixKind, params, returnType); err != nil {
 					return err

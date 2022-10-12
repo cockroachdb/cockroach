@@ -41,8 +41,7 @@ func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 	unaryOp := opt.UnaryOpReverseMap[op]
 
 	// Find the unary op that matches the type of the expression's child.
-	for _, op := range tree.UnaryOps[unaryOp] {
-		o := op.(*tree.UnaryOp)
+	for _, o := range *tree.UnaryOps[unaryOp] {
 		if inputType.Equivalent(o.Typ) {
 			return o.ReturnType
 		}
@@ -405,8 +404,7 @@ func FindBinaryOverload(op opt.Operator, leftType, rightType *types.T) (_ *tree.
 func FindUnaryOverload(op opt.Operator, typ *types.T) (_ *tree.UnaryOp, ok bool) {
 	unary := opt.UnaryOpReverseMap[op]
 
-	for _, unaryOverloads := range tree.UnaryOps[unary] {
-		o := unaryOverloads.(*tree.UnaryOp)
+	for _, o := range *tree.UnaryOps[unary] {
 		if o.Typ.Equivalent(typ) {
 			return o, true
 		}
@@ -436,9 +434,7 @@ func FindComparisonOverload(
 	// right children. No more than one match should ever be found. The
 	// TestTypingComparisonAssumptions test ensures this will be the case even if
 	// new operators or overloads are added.
-	for _, cmpOverloads := range tree.CmpOps[comp] {
-		o := cmpOverloads.(*tree.CmpOp)
-
+	for _, o := range *tree.CmpOps[comp] {
 		if leftType.Family() == types.UnknownFamily {
 			if rightType.Equivalent(o.RightType) {
 				return o, flipped, not, true

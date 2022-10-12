@@ -1219,8 +1219,7 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ *types.T) *UnaryExp
 	node := &UnaryExpr{Operator: op, Expr: expr}
 	node.typ = typ
 	innerType := expr.ResolvedType()
-	for _, o := range UnaryOps[op.Symbol] {
-		o := o.(*UnaryOp)
+	for _, o := range *UnaryOps[op.Symbol] {
 		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
 			node.op = o
 			return node
