@@ -103,8 +103,7 @@ func generateOperators() []byte {
 	ops := make(map[string]operations)
 	for optyp, overloads := range tree.UnaryOps {
 		op := optyp.String()
-		for _, untyped := range overloads {
-			v := untyped.(*tree.UnaryOp)
+		for _, v := range *overloads {
 			ops[op] = append(ops[op], operation{
 				left: v.Typ.String(),
 				ret:  v.ReturnType.String(),
@@ -114,8 +113,7 @@ func generateOperators() []byte {
 	}
 	for optyp, overloads := range tree.BinOps {
 		op := optyp.String()
-		for _, untyped := range overloads {
-			v := untyped.(*tree.BinOp)
+		for _, v := range *overloads {
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
@@ -128,8 +126,7 @@ func generateOperators() []byte {
 	}
 	for optyp, overloads := range tree.CmpOps {
 		op := optyp.String()
-		for _, untyped := range overloads {
-			v := untyped.(*tree.CmpOp)
+		for _, v := range *overloads {
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
