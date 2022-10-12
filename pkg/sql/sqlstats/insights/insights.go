@@ -143,6 +143,10 @@ type Writer interface {
 	ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction)
 }
 
+// WriterProvider offers a Writer.
+// Pass true for internal when called by the internal executor.
+type WriterProvider func(internal bool) Writer
+
 // Reader offers access to the currently retained set of insights.
 type Reader interface {
 	// IterateInsights calls visitor with each of the currently retained set of insights.
@@ -155,7 +159,8 @@ type Provider interface {
 	Start(ctx context.Context, stopper *stop.Stopper)
 
 	// Writer returns an object that observes statement and transaction executions.
-	Writer() Writer
+	// Pass true for internal when called by the internal executor.
+	Writer(internal bool) Writer
 
 	// Reader returns an object that offers read access to any detected insights.
 	Reader() Reader

@@ -108,7 +108,13 @@ func (i *concurrentBufferIngester) Reader() Reader {
 	return i.registry
 }
 
-func (i *concurrentBufferIngester) Writer() Writer {
+var nullWriterInstance Writer = &nullWriter{}
+
+func (i *concurrentBufferIngester) Writer(internal bool) Writer {
+	// We ignore statements and transactions run by the internal executor.
+	if internal {
+		return nullWriterInstance
+	}
 	return i
 }
 
@@ -165,4 +171,12 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIng
 		},
 	)
 	return i
+}
+
+type nullWriter struct{}
+
+func (n *nullWriter) ObserveStatement(_ clusterunique.ID, _ *Statement) {
+}
+
+func (n *nullWriter) ObserveTransaction(_ clusterunique.ID, _ *Transaction) {
 }

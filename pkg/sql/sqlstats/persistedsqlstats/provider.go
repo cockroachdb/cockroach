@@ -202,8 +202,10 @@ func (s *PersistedSQLStats) jitterInterval(interval time.Duration) time.Duration
 }
 
 // GetApplicationStats implements sqlstats.Provider interface.
-func (s *PersistedSQLStats) GetApplicationStats(appName string) sqlstats.ApplicationStats {
-	appStats := s.SQLStats.GetApplicationStats(appName)
+func (s *PersistedSQLStats) GetApplicationStats(
+	appName string, internal bool,
+) sqlstats.ApplicationStats {
+	appStats := s.SQLStats.GetApplicationStats(appName, internal)
 	return &ApplicationStats{
 		ApplicationStats:     appStats,
 		memoryPressureSignal: s.memoryPressureSignal,
