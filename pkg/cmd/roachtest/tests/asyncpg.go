@@ -23,6 +23,7 @@ import (
 )
 
 const asyncpgRunTestCmd = `
+source venv/bin/activate && 
 cd /mnt/data1/asyncpg && 
 PGPORT=26257 PGHOST=localhost PGUSER=root PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
 `
@@ -84,7 +85,13 @@ func registerAsyncpg(r registry.Registry) {
 			c,
 			node,
 			"install python and pip",
-			`sudo apt-get -qq install python3.7 python3-pip libpq-dev python-dev`,
+			`sudo apt-get -qq install python3.7 python3-pip libpq-dev python-dev python3-virtualenv`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, t, c, node, "create virtualenv", `virtualenv venv`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -95,14 +102,12 @@ func registerAsyncpg(r registry.Registry) {
 			c,
 			node,
 			"install asyncpg's dependencies",
-			"cd /mnt/data1/asyncpg && sudo pip3 install django && pip3 install -e ."); err != nil {
+			"source venv/bin/activate && cd /mnt/data1/asyncpg && pip3 install -e ."); err != nil {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailureList, ignoredlistName, ignoredlist := asyncpgBlocklists.getLists(version)
-		if expectedFailureList == nil {
-			t.Fatalf("No asyncpg blocklist defined for cockroach version %s", version)
-		}
+		blocklistName, expectedFailureList := "asyncpgBlocklist", asyncpgBlocklist
+		ignoredlistName, ignoredlist := "asyncpgIgnoreList", asyncpgIgnoreList
 		if ignoredlist == nil {
 			t.Fatalf("No asyncpg ignorelist defined for cockroach version %s", version)
 		}
@@ -140,5 +145,6 @@ func registerAsyncpg(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAsyncpg(ctx, t, c)
 		},
+		Skip: "asyncpg isn't officially supported on v22.1",
 	})
 }

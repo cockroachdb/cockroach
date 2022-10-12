@@ -37,7 +37,7 @@ func TestBlocklists(t *testing.T) {
 		"pgjdbc":       pgjdbcBlockList20_2,
 		"psycopg":      psycopgBlockList20_2,
 		"django":       djangoBlocklist,
-		"sqlAlchemy":   sqlAlchemyBlocklist20_2,
+		"sqlAlchemy":   sqlAlchemyBlocklist,
 		"libpq":        libPQBlocklist20_2,
 		"gopg":         gopgBlockList20_2,
 		"pgx":          pgxBlocklist20_2,

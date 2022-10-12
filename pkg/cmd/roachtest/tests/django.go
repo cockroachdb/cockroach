@@ -93,9 +93,7 @@ func registerDjango(r registry.Registry) {
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "create virtualenv",
-			`virtualenv venv &&
-				source venv/bin/activate`,
+			ctx, t, c, node, "create virtualenv", `virtualenv venv`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -106,13 +104,21 @@ func registerDjango(r registry.Registry) {
 			c,
 			node,
 			"install pytest",
-			`pip3 install pytest pytest-xdist psycopg2`,
+			`source venv/bin/activate && pip3 install pytest pytest-xdist psycopg2`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "remove old django", `rm -rf /mnt/data1/django`,
+			ctx,
+			t,
+			c,
+			node,
+			"install django-cockroachdb",
+			fmt.Sprintf(
+				`source venv/bin/activate && pip3 install django-cockroachdb==%s`,
+				djangoCockroachDBSupportedTag,
+			),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -161,6 +167,7 @@ func registerDjango(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "install django's dependencies", `
+				source venv/bin/activate &&
 				cd /mnt/data1/django/tests &&
 				pip3 install -e .. &&
 				pip3 install -r requirements/py3.txt &&
@@ -244,8 +251,8 @@ func registerDjango(r registry.Registry) {
 
 // Test results are only in stderr, so stdout is redirected and printed later.
 const djangoRunTestCmd = `
-cd /mnt/data1/django/tests &&
-RUNNING_COCKROACH_BACKEND_TESTS=1 python3 runtests.py %[1]s --settings cockroach_settings --parallel 1 -v 2 > %[1]s.stdout
+source venv/bin/activate && cd /mnt/data1/django/tests &&
+python3 runtests.py %[1]s --settings cockroach_settings -v 2 > %[1]s.stdout
 `
 
 const cockroachDjangoSettings = `
