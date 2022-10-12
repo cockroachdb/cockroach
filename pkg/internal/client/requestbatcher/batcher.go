@@ -445,26 +445,32 @@ func (b *RequestBatcher) run(ctx context.Context) {
 				b.batches.upsert(ba)
 			}
 		}
-		deadline      time.Time
-		timer         = timeutil.NewTimer()
-		maybeSetTimer = func() {
-			var nextDeadline time.Time
-			if next := b.batches.peekFront(); next != nil {
-				nextDeadline = next.deadline
-			}
-			if !deadline.Equal(nextDeadline) || timer.Read {
-				deadline = nextDeadline
-				if !deadline.IsZero() {
-					timer.Reset(timeutil.Until(deadline))
-				} else {
-					// Clear the current timer due to a sole batch already sent before
-					// the timer fired.
-					timer.Stop()
-					timer = timeutil.NewTimer()
-				}
+		deadline time.Time
+		timer    = timeutil.NewTimer()
+	)
+	// In any case, stop the timer when the function returns.
+	// We can't defer timer.Stop directly because we re-assign
+	// timer in maybeSetTimer below.
+	defer func() { timer.Stop() }()
+
+	maybeSetTimer := func() {
+		var nextDeadline time.Time
+		if next := b.batches.peekFront(); next != nil {
+			nextDeadline = next.deadline
+		}
+		if !deadline.Equal(nextDeadline) || timer.Read {
+			deadline = nextDeadline
+			if !deadline.IsZero() {
+				timer.Reset(timeutil.Until(deadline))
+			} else {
+				// Clear the current timer due to a sole batch already sent before
+				// the timer fired.
+				timer.Stop()
+				timer = timeutil.NewTimer()
 			}
 		}
-	)
+	}
+
 	for {
 		select {
 		case req := <-reqChan():
