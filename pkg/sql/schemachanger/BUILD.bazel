@@ -73,6 +73,7 @@ sctest_gen(
     test_data = glob(["testdata/end_to_end/**"]),
     tests = [
         "EndToEndSideEffects",
+        "ExecuteWithDMLInjection",
         "GenerateSchemaChangeCorpus",
         "Pause",
         "Rollback",

@@ -7,6 +7,40 @@ CREATE TABLE t (k INT PRIMARY KEY, v e NOT NULL);
 +object {100 101 _e} -> 105
 +object {100 101 t} -> 106
 
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES($stageKey, 'a');
+INSERT INTO t VALUES($stageKey + 1, 'b');
+INSERT INTO t VALUES($stageKey + 2, 'c');
+DELETE FROM t WHERE v = 'a' and k=$stageKey;
+INSERT INTO t VALUES($stageKey, 'a');
+UPDATE t SET v='a' WHERE k > 0;
+----
+
+# Each insert will be injected thrice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount*3 FROM t where v='a';
+----
+true
+
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES($stageKey, 'a');
+INSERT INTO t VALUES($stageKey + 1, 'b');
+INSERT INTO t VALUES($stageKey + 2, 'c');
+DELETE FROM t WHERE v = 'a' and k=$stageKey;
+INSERT INTO t VALUES($stageKey, 'a');
+UPDATE t SET v='a' WHERE k > 0;
+----
+
+# Each insert will be injected twice per stage, so we should always,
+# see a count of 2.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount*3 FROM t where v='a';
+----
+true
+
 test
 CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 ----
