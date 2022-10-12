@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -40,6 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -249,11 +253,13 @@ func TestCutoverBuiltin(t *testing.T) {
 		},
 	}
 	tc := testcluster.StartTestCluster(t, 1, args)
+	srv := tc.Server(0)
 	defer tc.Stopper().Stop(ctx)
-	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
+	registry := srv.JobRegistry().(*jobs.Registry)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	db := sqlDB.DB
 
+	// Create a mock streaming job
 	streamIngestJobRecord := jobs.Record{
 		Description: "test stream ingestion",
 		Username:    username.RootUserName(),
@@ -265,7 +271,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	}
 	var job *jobs.StartableJob
 	id := registry.MakeJobID()
-	err := tc.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	err := srv.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		return registry.CreateStartableJobWithTxn(ctx, &job, id, txn, streamIngestJobRecord)
 	})
 	require.NoError(t, err)
@@ -276,11 +282,10 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, sp.StreamIngest.CutoverTime.IsEmpty())
 
-	var highWater time.Time
+	// Add a high watermark to the job
+	highWater := timeutil.Now().Round(time.Microsecond)
 	err = job.Update(ctx, nil, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		highWater = timeutil.Now().Round(time.Microsecond)
-		hlcHighWater := hlc.Timestamp{WallTime: highWater.UnixNano()}
-		return jobs.UpdateHighwaterProgressed(hlcHighWater, md, ju)
+		return jobs.UpdateHighwaterProgressed(hlc.Timestamp{WallTime: highWater.UnixNano()}, md, ju)
 	})
 	require.NoError(t, err)
 
@@ -315,4 +320,73 @@ func TestCutoverBuiltin(t *testing.T) {
 	sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest)
 	require.True(t, ok)
 	require.Equal(t, hlc.Timestamp{WallTime: highWater.UnixNano()}, sp.StreamIngest.CutoverTime)
+}
+
+// BenchmarkCutover benchmarks issueRevertRangeRequests, the function which the
+// stream ingestion job will use to revert ranges to a specified cutover time.
+// For a given benchmark trial, the following occurs:
+//
+// 1. Insert X number of rows with random keys into the cluster, using the bank workload
+// 2. Issue Y splits
+// 3. Record a cutover time
+// 4. Insert another Z number of rows with random keys into the cluster
+// 5. Issue revert ranges on the bank table to the cutover time.
+func BenchmarkCutover(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	const payloadSize = 100
+
+	rowNums := []int{1000, 10000}
+	for _, initRows := range rowNums {
+		for _, splits := range []int{0, 10} {
+			if splits >= initRows {
+				continue
+			}
+			for _, cutoverRows := range rowNums {
+				if cutoverRows > initRows {
+					continue
+				}
+				subtestName := fmt.Sprintf("initRows=%d;numSplits=%d;cutoverRows=%d", initRows, splits, cutoverRows)
+				b.Run(subtestName, func(b *testing.B) {
+
+					tc := testcluster.StartTestCluster(b, 3, base.TestClusterArgs{})
+					defer tc.Stopper().Stop(ctx)
+					srv := tc.TenantOrServer(0)
+					codec := keys.MakeSQLCodec(srv.RPCContext().TenantID)
+					sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+					kvDB := tc.Server(0).DB()
+
+					// Lower the initial buffering adder ingest size to allow concurrent import jobs to run without
+					// borking the memory monitor.
+					sqlDB.Exec(b, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
+					sqlDB.Exec(b, `SET CLUSTER SETTING kv.bulk_ingest.index_buffer_size = '16MiB'`)
+
+					initData := bank.FromConfig(initRows, initRows, payloadSize, splits)
+					l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
+					_, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), initData, l)
+					require.NoError(b, err)
+					require.NoError(b, tc.WaitForFullReplication())
+
+					highWater := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+					cutoverData := bank.FromConfig(cutoverRows, cutoverRows, payloadSize, 0)
+					l.UseUpsert = true
+					_, err = l.InitialDataLoad(ctx, sqlDB.DB.(*gosql.DB), cutoverData)
+					require.NoError(b, err)
+
+					bankDesc := desctestutils.TestingGetPublicTableDescriptor(
+						kvDB, codec, "defaultdb", "bank")
+					bankSpan := bankDesc.TableSpan(codec)
+
+					// Since the high water mark is above the ts that all data was ingested,
+					// all data will get reverted.
+					b.ResetTimer()
+					require.NoError(b, issueRevertRangeRequests(ctx, kvDB,
+						roachpb.Spans{bankSpan}, highWater))
+				})
+			}
+		}
+	}
+
 }
