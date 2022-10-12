@@ -12,6 +12,7 @@ package ttljob
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -206,6 +207,16 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 		distSQLPlanner := jobExecCtx.DistSQLPlanner()
 		evalCtx := jobExecCtx.ExtendedEvalContext()
+
+		// Refresh the range cache so that the DistSQLPlanner allocates the correct spans to each processor.
+		if _, err := evalCtx.ExecCfg.InternalExecutor.Exec(
+			ctx,
+			"TTL refresh range cache",
+			nil, /* txn */
+			fmt.Sprintf("SELECT COUNT(*) FROM %s", relationName),
+		); err != nil {
+			return errors.Wrapf(err, "error refreshing range cache for table %s", relationName)
+		}
 
 		// We don't return the compatible nodes here since PartitionSpans will
 		// filter out incompatible nodes.
