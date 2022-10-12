@@ -152,11 +152,14 @@ func TestConnHealth(t *testing.T) {
 		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) != nil
 	}, time.Second, 10*time.Millisecond)
 
-	// When the heartbeat recovers, ConnHealth should too.
+	// When the heartbeat recovers, ConnHealth should too, assuming someone
+	// dials the node.
 	hb.setErr(nil)
-	require.Eventually(t, func() bool {
-		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) == nil
-	}, time.Second, 10*time.Millisecond)
+	{
+		_, err := nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
+		require.NoError(t, err)
+		require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+	}
 
 	// Tripping the breaker should return ErrBreakerOpen.
 	br := nd.getBreaker(staticNodeID, rpc.DefaultClass)
@@ -451,7 +454,7 @@ func newTestContext(
 ) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
-	cfg.RPCHeartbeatInterval = 100 * time.Millisecond
+	cfg.RPCHeartbeatIntervalAndHalfTimeout = 100 * time.Millisecond
 	ctx := context.Background()
 	rctx := rpc.NewContext(ctx, rpc.ContextOptions{
 		TenantID:  roachpb.SystemTenantID,
@@ -506,8 +509,9 @@ func (il *interceptingListener) popConn() net.Conn {
 	if len(il.mu.conns) == 0 {
 		return nil
 	}
-	c := il.mu.conns[0]
-	il.mu.conns = il.mu.conns[1:]
+	n := len(il.mu.conns)
+	c := il.mu.conns[n-1]
+	il.mu.conns = il.mu.conns[:n-1]
 	return c
 }
 

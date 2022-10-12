@@ -68,6 +68,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/ts/catalog",
         "//pkg/util",
+        "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",

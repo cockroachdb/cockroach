@@ -305,9 +305,6 @@ type TestTenantArgs struct {
 	// TracingDefault controls whether the tracing will be on or off by default.
 	TracingDefault tracing.TracingMode
 
-	// RPCHeartbeatInterval controls how often the tenant sends Ping requests.
-	RPCHeartbeatInterval time.Duration
-
 	// GoroutineDumpDirName is used to initialize the same named field on the
 	// SQLServer.BaseConfig field. It is used as the directory name for
 	// goroutine dumps using goroutinedumper. If set, this directory should

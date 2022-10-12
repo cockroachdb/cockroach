@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -199,16 +198,6 @@ func (n *Dialer) dial(
 			return nil, ctxErr
 		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
-		if breaker != nil {
-			breaker.Fail(err)
-		}
-		return nil, err
-	}
-	// Check to see if the connection is in the transient failure state. This can
-	// happen if the connection already existed, but a recent heartbeat has
-	// failed and we haven't yet torn down the connection.
-	if err := grpcutil.ConnectionReady(conn); err != nil {
-		err = errors.Wrapf(err, "failed to check for ready connection to n%d at %v", nodeID, addr)
 		if breaker != nil {
 			breaker.Fail(err)
 		}
