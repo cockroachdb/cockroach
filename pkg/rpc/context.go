@@ -1876,6 +1876,13 @@ func (m *connMap) TryInsert(k connKey) (_ *Connection, inserted bool) {
 	return newConn, true
 }
 
+func maybeFatal(ctx context.Context, err error) {
+	if err == nil || !buildutil.CrdbTestBuild {
+		return
+	}
+	log.FatalfDepth(ctx, 1, "%s", err)
+}
+
 // grpcDialNodeInternal connects to the remote node and sets up the async heartbeater.
 // This intentionally takes no `context.Context`; it uses one derived from rpcCtx.masterCtx.
 func (rpcCtx *Context) grpcDialNodeInternal(
@@ -1905,42 +1912,30 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 		ctx,
 		"rpc.Context: heartbeat", func(ctx context.Context) {
 			rpcCtx.metrics.HeartbeatLoopsStarted.Inc(1)
-			defer func() {
-				if err := rpcCtx.m.Remove(k, conn); err != nil {
-					if buildutil.CrdbTestBuild {
-						log.Fatalf(ctx, "%s", err)
-					} else {
-						log.Errorf(ctx, "%s", err)
-					}
-				}
-				// Context gets canceled on server shutdown, and if that's likely why
-				// the connection ended don't increment the metric as a result. We don't
-				// want activity on the metric every time a node gracefully shuts down.
-				//
-				// NB: the ordering here is such that the metric is decremented *after*
-				// the connection is removed from the pool. No strong reason but feels
-				// nicer that way and makes for fewer test flakes.
-				if ctx.Err() == nil {
-					rpcCtx.metrics.HeartbeatLoopsExited.Inc(1)
-				}
-			}()
 
 			// Run the heartbeat; this will block until the connection breaks for
-			// whatever reason.
-			err := rpcCtx.runHeartbeat(ctx, conn, target)
-			if err != nil && !grpcutil.IsClosedConnection(err) &&
-				!grpcutil.IsConnectionRejected(err) {
-				log.Health.Errorf(ctx, "removing connection to %s due to error: %v", target, err)
-			}
+			// whatever reason. We don't actually have to do anything with the error,
+			// so we ignore it.
+			_ = rpcCtx.runHeartbeat(ctx, conn, target)
+			maybeFatal(ctx, rpcCtx.m.Remove(k, conn))
 
-			// Remove the connection via defer.
+			// Context gets canceled on server shutdown, and if that's likely why
+			// the connection ended don't increment the metric as a result. We don't
+			// want activity on the metric every time a node gracefully shuts down.
+			//
+			// NB: the ordering here is such that the metric is decremented *after*
+			// the connection is removed from the pool. No strong reason but feels
+			// nicer that way and makes for fewer test flakes.
+			if ctx.Err() == nil {
+				rpcCtx.metrics.HeartbeatLoopsExited.Inc(1)
+			}
 		}); err != nil {
 		// If node is draining (`err` will always equal stop.ErrUnavailable
 		// here), return special error (see its comments).
 		_ = err // ignore this error
 		conn.err.Store(errDialRejected)
 		close(conn.initialHeartbeatDone)
-		_ = rpcCtx.m.Remove(k, conn) // ignoring error since it's just on shutdown anyway
+		maybeFatal(ctx, rpcCtx.m.Remove(k, conn))
 	}
 
 	return conn
