@@ -2359,7 +2359,7 @@ func init() {
 	// Alias `idle_session_timeout` to match the PG 14 name.
 	// We create `idle_in_session_timeout` before its existence.
 	varGen[`idle_session_timeout`] = varGen[`idle_in_session_timeout`]
-
+	varGen[`enable_auto_rehoming`] = varGen[`experimental_enable_auto_rehoming`]
 	// Initialize delegate.ValidVars.
 	for v := range varGen {
 		delegate.ValidVars[v] = struct{}{}
