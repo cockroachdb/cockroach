@@ -1010,7 +1010,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				return ctx.Err()
 			}
 
-			if flowinfra.IsFlowRetryableError(err) {
+			if flowinfra.IsFlowRetryableError(err) || strings.Contains(err.Error(), "draining") {
 				// We don't want to retry flowinfra retryable error in the retry loop above.
 				// This error currently indicates that this node is being drained.  As such,
 				// retries will not help.
