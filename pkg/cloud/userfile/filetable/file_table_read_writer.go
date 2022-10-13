@@ -462,7 +462,7 @@ func (f *FileToTableSystem) DeleteFile(ctx context.Context, filename string) err
 // Payload table.
 type payloadWriter struct {
 	fileID                  tree.Datum
-	ie                      sqlutil.InternalExecutor
+	ief                     sqlutil.InternalExecutorFactory
 	db                      *kv.DB
 	ctx                     context.Context
 	byteOffset              int
@@ -473,9 +473,12 @@ type payloadWriter struct {
 
 // WriteChunk inserts a single row into the Payload table as an operation in the
 // transaction txn.
-func (p *payloadWriter) WriteChunk(buf []byte, txn *kv.Txn) (int, error) {
+// TODO(janexing): can the insert happen with a nil txn?
+func (p *payloadWriter) WriteChunk(
+	buf []byte, txn *kv.Txn, ie sqlutil.InternalExecutor,
+) (int, error) {
 	insertChunkQuery := fmt.Sprintf(`INSERT INTO %s VALUES ($1, $2, $3)`, p.payloadTableName)
-	_, err := p.ie.ExecEx(p.ctx, "insert-file-chunk", txn, p.execSessionDataOverride,
+	_, err := ie.ExecEx(p.ctx, "insert-file-chunk", txn, p.execSessionDataOverride,
 		insertChunkQuery, p.fileID, p.byteOffset, buf)
 	if err != nil {
 		return 0, err
@@ -509,6 +512,7 @@ func newChunkWriter(
 	filename string,
 	user username.SQLUsername,
 	fileTableName, payloadTableName string,
+	ief sqlutil.InternalExecutorFactory,
 	ie sqlutil.InternalExecutor,
 	db *kv.DB,
 ) (*chunkWriter, error) {
@@ -531,7 +535,7 @@ func newChunkWriter(
 	}
 
 	pw := &payloadWriter{
-		res[0], ie, db, ctx, 0,
+		res[0], ief, db, ctx, 0,
 		execSessionDataOverride, fileTableName,
 		payloadTableName}
 	bytesBuffer := bytes.NewBuffer(make([]byte, 0, chunkSize))
@@ -577,8 +581,11 @@ func (w *chunkWriter) Write(buf []byte) (int, error) {
 		// If the buffer has been filled to capacity, write the chunk inside a txn
 		// retry loop.
 		if w.buf.Len() == w.buf.Cap() {
-			if err := w.pw.db.Txn(w.pw.ctx, func(ctx context.Context, txn *kv.Txn) error {
-				if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn); err != nil {
+			// TODO(janexing): Is it necessary to run the following within a txn?
+			if err := w.pw.ief.TxnWithExecutor(w.pw.ctx, w.pw.db, nil /* sessionData */, func(
+				ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+			) error {
+				if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn, ie); err != nil {
 					return err
 				} else if n != w.buf.Len() {
 					return errors.Wrap(io.ErrShortWrite, "error when writing in chunkWriter")
@@ -606,8 +613,11 @@ func (w *chunkWriter) Close() error {
 	// payloadWriter Write() method, then the txn is aborted and the error is
 	// propagated here.
 	if w.buf.Len() > 0 {
-		if err := w.pw.db.Txn(w.pw.ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn); err != nil {
+		// TODO(janexing): Is it necessary to run the following within a txn?
+		if err := w.pw.ief.TxnWithExecutor(w.pw.ctx, w.pw.db, nil /* sessionData */, func(
+			ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+		) error {
+			if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn, ie); err != nil {
 				return err
 			} else if n != w.buf.Len() {
 				return errors.Wrap(io.ErrShortWrite, "error when closing chunkWriter")
@@ -622,7 +632,8 @@ func (w *chunkWriter) Close() error {
 	// were actually written to the payload table.
 	updateFileSizeQuery := fmt.Sprintf(`UPDATE %s SET file_size=$1 WHERE filename=$2`,
 		w.fileTableName)
-	_, err := w.pw.ie.ExecEx(w.pw.ctx, "update-file-size",
+	ie := w.pw.ief.MakeInternalExecutorWithoutTxn()
+	_, err := ie.ExecEx(w.pw.ctx, "update-file-size",
 		nil /* txn */, w.execSessionDataOverride, updateFileSizeQuery, w.pw.byteOffset, w.filename)
 
 	return err
@@ -943,5 +954,5 @@ func (f *FileToTableSystem) NewFileWriter(
 	}
 
 	return newChunkWriter(ctx, chunkSize, filename, f.username, f.GetFQFileTableName(),
-		f.GetFQPayloadTableName(), e.ie, e.db)
+		f.GetFQPayloadTableName(), e.ief, e.ie, e.db)
 }
