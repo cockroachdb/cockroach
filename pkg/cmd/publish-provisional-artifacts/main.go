@@ -189,23 +189,32 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 				}
 			} else {
 				for _, provider := range providers {
+					crdbFiles := append(
+						[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath, "cockroach")},
+						release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.Platform)...,
+					)
+					crdbBody, err := release.CreateArchive(o.Platform, o.VersionStr, "cockroach", crdbFiles)
+					if err != nil {
+						log.Fatalf("cannot create crdb release archive %s", err)
+					}
+
+					sqlFiles := []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")}
+					sqlBody, err := release.CreateArchive(o.Platform, o.VersionStr, "cockroach-sql", sqlFiles)
+					if err != nil {
+						log.Fatalf("cannot create sql release archive %s", err)
+					}
 					release.PutRelease(provider, release.PutReleaseOptions{
 						NoCache:       false,
 						Platform:      o.Platform,
 						VersionStr:    o.VersionStr,
 						ArchivePrefix: "cockroach",
-						Files: append(
-							[]release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.AbsolutePath, "cockroach")},
-							release.MakeCRDBLibraryArchiveFiles(o.PkgDir, o.Platform)...,
-						),
-					})
+					}, crdbBody)
 					release.PutRelease(provider, release.PutReleaseOptions{
 						NoCache:       false,
 						Platform:      o.Platform,
 						VersionStr:    o.VersionStr,
 						ArchivePrefix: "cockroach-sql",
-						Files:         []release.ArchiveFile{release.MakeCRDBBinaryArchiveFile(o.CockroachSQLAbsolutePath, "cockroach-sql")},
-					})
+					}, sqlBody)
 				}
 			}
 		}
