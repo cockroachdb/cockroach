@@ -8,6 +8,7 @@ go_library(
         "descriptor_set.go",
         "descriptor_state.go",
         "descriptor_version_state.go",
+        "ie_writer.go",
         "lease.go",
         "lease_test_utils.go",
         "name_cache.go",

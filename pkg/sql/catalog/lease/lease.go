@@ -710,6 +710,7 @@ func NewLeaseManager(
 	lm := &Manager{
 		storage: storage{
 			nodeIDContainer:  nodeIDContainer,
+			writer:           &ieWriter{ie: internalExecutor},
 			db:               db,
 			clock:            clock,
 			internalExecutor: internalExecutor,
