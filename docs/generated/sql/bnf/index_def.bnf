@@ -1,12 +1,20 @@
 index_def ::=
-	'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
-	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
-	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
-	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH'  ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
-	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'  'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
-	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'  'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
-	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'  'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
-	| 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'   ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH'  ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')'  'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')'  'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')'  'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')'   ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH'  ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')'  'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')'  'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')'  'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')'   ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'COVERING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')' 'USING' 'HASH' 'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
@@ -15,5 +23,5 @@ index_def ::=
 	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'  'STORING' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'  'INCLUDE' '(' name_list ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'   ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INVERTED' 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'INVERTED' 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
-	| 'INVERTED' 'INDEX'  '(' index_elem ( ( ',' index_elem ) )* ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible

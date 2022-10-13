@@ -481,9 +481,9 @@ func TestMakeColumnNamesSQL(t *testing.T) {
 		expected string
 	}{
 		{[]string{"a"}, "a"},
-		{[]string{"index"}, `"index"`},
+		{[]string{"index"}, `index`},
 		{[]string{"a", "b"}, "a, b"},
-		{[]string{"escape-me", "index", "c"}, `"escape-me", "index", c`},
+		{[]string{"escape-me", "index", "c"}, `"escape-me", index, c`},
 	}
 
 	for _, tc := range testCases {

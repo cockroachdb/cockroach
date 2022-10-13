@@ -1547,6 +1547,14 @@ SELECT a FROM t ORDER BY INDEX t@foo -- literals removed
 SELECT _ FROM _ ORDER BY INDEX _@_ -- identifiers removed
 
 parse
+SELECT a FROM t ORDER BY INDEX t.t.t@foo
+----
+SELECT a FROM t ORDER BY INDEX t.t.t@foo
+SELECT (a) FROM t ORDER BY INDEX t.t.t@foo -- fully parenthesized
+SELECT a FROM t ORDER BY INDEX t.t.t@foo -- literals removed
+SELECT _ FROM _ ORDER BY INDEX _._._@_ -- identifiers removed
+
+parse
 SELECT a FROM t ORDER BY INDEX t@foo ASC
 ----
 SELECT a FROM t ORDER BY INDEX t@foo ASC
