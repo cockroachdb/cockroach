@@ -106,7 +106,7 @@
 <tr><td><code>server.user_login.timeout</code></td><td>duration</td><td><code>10s</code></td><td>timeout after which client authentication times out if some system range is unavailable (0 = no timeout)</td></tr>
 <tr><td><code>server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled</code></td><td>boolean</td><td><code>true</code></td><td>whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256</td></tr>
 <tr><td><code>server.web_session.auto_logout.timeout</code></td><td>duration</td><td><code>168h0m0s</code></td><td>the duration that web sessions will survive before being periodically purged, since they were last used</td></tr>
-<tr><td><code>server.web_session.purge.max_deletions_per_cycle</code></td><td>integer</td><td><code>10</code></td><td>the maximum number of old sessions to delete for each purge</td></tr>
+<tr><td><code>server.web_session.purge.max_deletions_per_cycle</code></td><td>integer</td><td><code>1000</code></td><td>the maximum number of old sessions to delete for each purge</td></tr>
 <tr><td><code>server.web_session.purge.period</code></td><td>duration</td><td><code>1h0m0s</code></td><td>the time until old sessions are deleted</td></tr>
 <tr><td><code>server.web_session.purge.ttl</code></td><td>duration</td><td><code>1h0m0s</code></td><td>if nonzero, entries in system.web_sessions older than this duration are periodically purged</td></tr>
 <tr><td><code>server.web_session_timeout</code></td><td>duration</td><td><code>168h0m0s</code></td><td>the duration that a newly created web session will be valid</td></tr>
