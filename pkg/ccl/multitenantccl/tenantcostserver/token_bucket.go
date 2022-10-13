@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,11 +53,11 @@ func (s *instance) TokenBucketRequest(
 
 	result := &roachpb.TokenBucketResponse{}
 	var consumption roachpb.TenantConsumption
-	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		*result = roachpb.TokenBucketResponse{}
 
-		h := makeSysTableHelper(ctx, s.executor, txn, tenantID)
-		tenant, instance, err := h.readTenantAndInstanceState(instanceID)
+		h := makeSysTableHelper(ctx, tenantID)
+		tenant, instance, err := h.readTenantAndInstanceState(txn, ie, instanceID)
 		if err != nil {
 			return err
 		}
@@ -65,7 +66,7 @@ func (s *instance) TokenBucketRequest(
 			// If there is no state, we will initialize it. But check that the tenant
 			// is valid and active. It is possible that the tenant was deleted and an
 			// existing tenant process is still sending requests.
-			if err := s.checkTenantID(ctx, txn, tenantID); err != nil {
+			if err := s.checkTenantID(ctx, txn, ie, tenantID); err != nil {
 				return err
 			}
 		}
@@ -73,7 +74,7 @@ func (s *instance) TokenBucketRequest(
 		tenant.update(now)
 
 		if !instance.Present {
-			if err := h.accomodateNewInstance(&tenant, &instance); err != nil {
+			if err := h.accomodateNewInstance(txn, ie, &tenant, &instance); err != nil {
 				return err
 			}
 		}
@@ -86,7 +87,7 @@ func (s *instance) TokenBucketRequest(
 
 		if in.NextLiveInstanceID != 0 {
 			if err := s.handleNextLiveInstanceID(
-				&h, &tenant, &instance, base.SQLInstanceID(in.NextLiveInstanceID),
+				&h, &tenant, &instance, base.SQLInstanceID(in.NextLiveInstanceID), txn, ie,
 			); err != nil {
 				return err
 			}
@@ -106,11 +107,11 @@ func (s *instance) TokenBucketRequest(
 		*result = tenant.Bucket.Request(ctx, in)
 
 		instance.LastUpdate.Time = now
-		if err := h.updateTenantAndInstanceState(tenant, instance); err != nil {
+		if err := h.updateTenantAndInstanceState(txn, ie, tenant, instance); err != nil {
 			return err
 		}
 
-		if err := h.maybeCheckInvariants(); err != nil {
+		if err := h.maybeCheckInvariants(txn, ie); err != nil {
 			panic(err)
 		}
 		consumption = tenant.Consumption
@@ -145,6 +146,8 @@ func (s *instance) handleNextLiveInstanceID(
 	tenant *tenantState,
 	instance *instanceState,
 	nextLiveInstanceID base.SQLInstanceID,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	// We use NextLiveInstanceID to figure out if there is a potential dead
 	// instance after this instance.
@@ -177,7 +180,7 @@ func (s *instance) handleNextLiveInstanceID(
 			// Case 2: range [instance.NextInstance, nextLiveInstanceID) potentially
 			// needs cleanup.
 			instance.NextInstance, err = h.maybeCleanupStaleInstances(
-				cutoff, instance.NextInstance, nextLiveInstanceID,
+				txn, ie, cutoff, instance.NextInstance, nextLiveInstanceID,
 			)
 			if err != nil {
 				return err
@@ -192,7 +195,7 @@ func (s *instance) handleNextLiveInstanceID(
 			// Case 2: range [tenant.FirstInstance, nextLiveInstanceID)
 			// potentially needs cleanup.
 			tenant.FirstInstance, err = h.maybeCleanupStaleInstances(
-				cutoff, tenant.FirstInstance, nextLiveInstanceID,
+				txn, ie, cutoff, tenant.FirstInstance, nextLiveInstanceID,
 			)
 			if err != nil {
 				return err
@@ -202,7 +205,7 @@ func (s *instance) handleNextLiveInstanceID(
 			// Case 2: in our table, this is not the largest ID. The range
 			// [instance.NextInstance, ∞) potentially needs cleanup.
 			instance.NextInstance, err = h.maybeCleanupStaleInstances(
-				cutoff, instance.NextInstance, -1,
+				txn, ie, cutoff, instance.NextInstance, -1,
 			)
 			if err != nil {
 				return err
