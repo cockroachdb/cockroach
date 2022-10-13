@@ -443,6 +443,11 @@ type StoreTestingKnobs struct {
 	// 1 byte, resulting in each key having its own block. This can provoke bugs
 	// in time-bound iterators.
 	SmallEngineBlocks bool
+
+	// PreStorageSnapshotButChecksCompleteInterceptor intercepts calls to
+	// Replica.executeReadOnlyBatch after checks have successfully determined
+	// execution can proceed but a storage snapshot has not been acquired.
+	PreStorageSnapshotButChecksCompleteInterceptor func(replica *Replica)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
