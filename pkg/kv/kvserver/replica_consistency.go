@@ -773,8 +773,8 @@ func (r *Replica) computeChecksumPostApply(
 
 		const attentionFmt = `ATTENTION:
 
-this node is terminating because a replica inconsistency was detected between %s
-and its other replicas. Please check your cluster-wide log files for more
+This node is terminating because a replica inconsistency was detected between %s
+and its other replicas: %v. Please check your cluster-wide log files for more
 information and contact the CockroachDB support team. It is not necessarily safe
 to replace this node; cluster data may still be at risk of corruption.
 
@@ -783,8 +783,31 @@ A checkpoints directory to aid (expert) debugging should be present in:
 
 A file preventing this node from restarting was placed at:
 %s
+
+Checkpoints are created on each node/store hosting this range, to help
+investigating the cause. Only nodes that are more likely to have incorrect data
+are terminated, usually a majority of replicas continue running. In the most
+serious cases, when there are more than one replica inconsistency, multiple
+nodes can be terminated which may lead to loss of quorum for this replica.
+
+The storage checkpoint directory MUST be deleted or moved away timely, on the
+nodes that continue operating. Over time the storage engine gets updated and
+compacted, which leads to checkpoints becoming a full copy of a past state. Even
+with no writes to the database, on these stores disk consumption may double in a
+matter of hours/days, depending on compaction schedule.
+
+Checkpoints are very helpful in debugging this issue, so before deleting them,
+please consider alternative actions:
+
+- If the store has enough capacity, hold off deleting the checkpoint until CRDB
+  developers have diagnosed the issue.
+- Consider backing up the checkpoints before removing them, e.g. by snapshotting
+  the disk.
+- If the stores are nearly full, but the cluster has enough capacity, consider
+  gradually decomissioning the affected nodes, to retain the checkpoints.
 `
-		preventStartupMsg := fmt.Sprintf(attentionFmt, r, auxDir, path)
+		attentionArgs := []any{r, desc.Replicas(), auxDir, path}
+		preventStartupMsg := fmt.Sprintf(attentionFmt, attentionArgs...)
 		if err := fs.WriteFile(r.store.engine, path, []byte(preventStartupMsg)); err != nil {
 			log.Warningf(ctx, "%v", err)
 		}
@@ -793,7 +816,7 @@ A file preventing this node from restarting was placed at:
 			p(*r.store.Ident)
 		} else {
 			time.Sleep(10 * time.Second)
-			log.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, r, auxDir, path)
+			log.Fatalf(r.AnnotateCtx(context.Background()), attentionFmt, attentionArgs...)
 		}
 	}); err != nil {
 		taskCancel()
