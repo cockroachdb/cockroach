@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -161,6 +162,8 @@ func (c *replicatedCmd) AckSuccess(ctx context.Context) error {
 	if !c.IsLocal() {
 		return nil
 	}
+
+	time.Sleep(time.Millisecond)
 
 	// Signal the proposal's response channel with the result.
 	// Make a copy of the response to avoid data races between client mutations
