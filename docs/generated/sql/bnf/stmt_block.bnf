@@ -1194,6 +1194,7 @@ unreserved_keyword ::=
 	| 'NEXT'
 	| 'NO'
 	| 'NORMAL'
+	| 'NOTHING'
 	| 'NO_INDEX_JOIN'
 	| 'NO_ZIGZAG_JOIN'
 	| 'NO_FULL_SCAN'

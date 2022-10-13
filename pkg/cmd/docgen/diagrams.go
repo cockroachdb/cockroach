@@ -315,6 +315,7 @@ func runParse(
 		return nil, errors.Wrap(err, "inline")
 	}
 	b, err := g.ExtractProduction(topStmt, descend, nosplit, match, exclude)
+	b = bytes.Replace(b, []byte("NOTHING_AFTER_RETURNING"), []byte("NOTHING"), -1)
 	b = bytes.Replace(b, []byte("'IDENT'"), []byte("'identifier'"), -1)
 	b = bytes.Replace(b, []byte("_LA"), []byte(""), -1)
 	return b, err

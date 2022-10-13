@@ -1,0 +1,23 @@
+parse
+CREATE TABLE nothing (nothing INT)
+----
+CREATE TABLE nothing (nothing INT8) -- normalized!
+CREATE TABLE nothing (nothing INT8) -- fully parenthesized
+CREATE TABLE nothing (nothing INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+SELECT nothing(nothing + 1) AS nothing
+----
+SELECT nothing(nothing + 1) AS nothing
+SELECT (nothing(((nothing) + (1)))) AS nothing -- fully parenthesized
+SELECT nothing(nothing + _) AS nothing -- literals removed
+SELECT nothing(_ + 1) AS _ -- identifiers removed
+
+parse
+SET a = nothing
+----
+SET a = nothing
+SET a = (nothing) -- fully parenthesized
+SET a = nothing -- literals removed
+SET a = _ -- identifiers removed
