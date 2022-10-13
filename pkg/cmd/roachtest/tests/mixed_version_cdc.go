@@ -38,6 +38,13 @@ const (
 	// resolvedInterval is the value passed to the `resolved` option
 	// when creating the changefeed
 	resolvedInterval = "10s"
+
+	// maxPreviousEntries is the maximum number of previously seen
+	// events the FingerprintValidator will keep in memory when
+	// validating changefeed semantics. The current value corresponds to
+	// less than 20MB of memory, and should be sufficient for about 50k
+	// bank workload transactions
+	maxPreviousEntries = 100_000
 )
 
 var (
@@ -47,15 +54,6 @@ var (
 	targetTable = "bank"
 
 	timeout = 30 * time.Minute
-	// set a fixed number of operations to be performed by the
-	// workload. Since we are validating events emitted by the
-	// changefeed in this test (ValidateDuplicatedEvents() call),
-	// enforcing a maximum number of operations sets a boundary on the
-	// validator's memory usage. The current value represents enough
-	// operations to allow for the validator to receive the desired
-	// amount of resolved events at different points of the upgrade
-	// process while staying within the current timeout.
-	maxOps = 12000
 )
 
 func registerCDCMixedVersions(r registry.Registry) {
@@ -88,11 +86,12 @@ type cdcMixedVersionTester struct {
 		syncutil.Mutex
 		C chan struct{}
 	}
-	crdbUpgrading syncutil.Mutex
-	kafka         kafkaManager
-	validator     *cdctest.CountValidator
-	workloadDone  bool
-	cleanup       func()
+	crdbUpgrading     syncutil.Mutex
+	kafka             kafkaManager
+	validator         *cdctest.CountValidator
+	testFinished      bool
+	validatorFinished chan struct{}
+	cleanup           func()
 }
 
 func newCDCMixedVersionTester(
@@ -105,11 +104,12 @@ func newCDCMixedVersionTester(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", lastNode)
 
 	return cdcMixedVersionTester{
-		ctx:           ctx,
-		crdbNodes:     crdbNodes,
-		workloadNodes: lastNode,
-		kafkaNodes:    lastNode,
-		monitor:       c.NewMonitor(ctx, crdbNodes),
+		ctx:               ctx,
+		crdbNodes:         crdbNodes,
+		workloadNodes:     lastNode,
+		kafkaNodes:        lastNode,
+		monitor:           c.NewMonitor(ctx, crdbNodes),
+		validatorFinished: make(chan struct{}),
 	}
 }
 
@@ -137,12 +137,11 @@ func (cmvt *cdcMixedVersionTester) installAndStartWorkload() versionStep {
 		t.Status("installing and running workload")
 		u.c.Run(ctx, cmvt.workloadNodes, "./workload init bank {pgurl:1}")
 		cmvt.monitor.Go(func(ctx context.Context) error {
-			defer func() { cmvt.workloadDone = true }()
 			return u.c.RunE(
 				ctx,
 				cmvt.workloadNodes,
-				fmt.Sprintf("./workload run bank {pgurl%s} --max-rate=10 --max-ops %d --tolerate-errors",
-					cmvt.crdbNodes, maxOps),
+				fmt.Sprintf("./workload run bank {pgurl%s} --max-rate=10 --tolerate-errors",
+					cmvt.crdbNodes),
 			)
 		})
 	}
@@ -183,12 +182,16 @@ func (cmvt *cdcMixedVersionTester) waitForResolvedTimestamps() versionStep {
 	}
 }
 
-// waitForWorkload waits for the workload to finish
-func (cmvt *cdcMixedVersionTester) waitForWorkload() versionStep {
+// finishTest marks the test as finished which will then prompt the
+// changefeed validator loop to return. This step will block until the
+// validator has finished; this is done to avoid the possibility of
+// the test closing the database connection while the validator is
+// running a query.
+func (cmvt *cdcMixedVersionTester) finishTest() versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		t.L().Printf("waiting for workload to finish...")
-		cmvt.monitor.Wait()
-		t.L().Printf("workload finished")
+		t.L().Printf("waiting for background tasks to finish")
+		cmvt.testFinished = true
+		<-cmvt.validatorFinished
 	}
 }
 
@@ -206,6 +209,7 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 		// error. However, calling t.Fatal directly lets us stop the test
 		// earlier
 		cmvt.monitor.Go(func(ctx context.Context) error {
+			defer close(cmvt.validatorFinished)
 			consumer, err := cmvt.kafka.consumer(ctx, targetTable)
 			if err != nil {
 				t.Fatal(err)
@@ -224,17 +228,22 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 			if err != nil {
 				t.Fatal(err)
 			}
-			fprintV.DBFunc(cmvt.cdcDBConn(getConn)).ValidateDuplicatedEvents()
+			fprintV.DBFunc(cmvt.cdcDBConn(getConn)).ValidateDuplicatedEvents(maxPreviousEntries)
 			validators := cdctest.Validators{
 				cdctest.NewOrderValidator(tableName),
 				fprintV,
 			}
 			cmvt.validator = cdctest.MakeCountValidator(validators)
 
-			for !cmvt.workloadDone {
+			for !cmvt.testFinished {
 				m := consumer.Next(ctx)
 				if m == nil {
-					t.Fatal("unexpected end of changefeed")
+					// this is expected to happen once the test has finished and
+					// Kafka is being shut down. If it happens in the middle of
+					// the test, it will eventually time out, and this message
+					// should allow us to see that the validator finished
+					// earlier than it should have
+					t.L().Printf("end of changefeed")
 					return nil
 				}
 
@@ -258,6 +267,7 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 					cmvt.timestampResolved()
 				}
 			}
+
 			return nil
 		})
 	}
@@ -392,7 +402,7 @@ func runCDCMixedVersions(
 		waitForUpgradeStep(tester.crdbNodes),
 
 		tester.waitForResolvedTimestamps(),
-		tester.waitForWorkload(),
+		tester.finishTest(),
 		tester.assertValid(),
 	).run(ctx, t)
 }

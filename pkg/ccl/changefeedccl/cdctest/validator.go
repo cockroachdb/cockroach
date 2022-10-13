@@ -349,7 +349,12 @@ type FingerprintValidator struct {
 	fprintOrigColumns int
 	fprintTestColumns int
 	buffer            []validatorRow
-	previouslySeen    map[string]struct{}
+
+	// previouslySeen keeps track of previous events to validate
+	// changefeed semantics. The map will store at most
+	// `maxPreviousEntries` events
+	previouslySeen     map[string]struct{}
+	maxPreviousEntries int
 
 	failures []string
 }
@@ -436,8 +441,9 @@ func (v *FingerprintValidator) DBFunc(
 // with a timestamp lower than the last `resolved` timestamp seen, we
 // verify that the event has been seen before (if it hasn't, that
 // would be a violation of the changefeed guarantees)
-func (v *FingerprintValidator) ValidateDuplicatedEvents() *FingerprintValidator {
+func (v *FingerprintValidator) ValidateDuplicatedEvents(maxEntries int) *FingerprintValidator {
 	v.previouslySeen = make(map[string]struct{})
+	v.maxPreviousEntries = maxEntries
 	return v
 }
 
@@ -461,8 +467,7 @@ func (v *FingerprintValidator) NoteRow(
 	}
 
 	v.buffer = append(v.buffer, row)
-	v.maybeAddSeenEvent(row)
-	return nil
+	return v.maybeAddSeenEvent(row)
 }
 
 // applyRowUpdate applies the update represented by `row` to the scratch table.
@@ -628,12 +633,17 @@ func (v *FingerprintValidator) NoteResolved(partition string, resolved hlc.Times
 // maybeAddSeenEvent is a no-op if the caller did not call
 // ValidateDuplicatedEvents. Otherwise, we keep a reference to the row
 // key and MVCC timestamp for later validation
-func (v *FingerprintValidator) maybeAddSeenEvent(row validatorRow) {
+func (v *FingerprintValidator) maybeAddSeenEvent(row validatorRow) error {
 	if v.previouslySeen == nil {
-		return
+		return nil
+	}
+
+	if len(v.previouslySeen) >= v.maxPreviousEntries {
+		return fmt.Errorf("trying to add more than %d previous events", v.maxPreviousEntries)
 	}
 
 	v.previouslySeen[row.eventKey()] = struct{}{}
+	return nil
 }
 
 // maybeValidateDuplicatedEvent is a no-op if the caller did not call
