@@ -146,6 +146,20 @@ func (e *element) setNonInlined(v []byte, b *Bytes) {
 			},
 			inlined: false,
 		}
+		// Use a custom append to grow the buffer faster than go does by default.
+		if rem := cap(b.buffer) - len(b.buffer); rem < len(v) {
+			increment := cap(b.buffer)                  // at least double the buffer
+			if need := len(v) - rem; increment < need { // grow enough to fit v
+				increment = need
+			}
+			const initialBufferSize = 256 // don't go smaller than this
+			if increment < initialBufferSize {
+				increment = initialBufferSize
+			}
+			realloc := make([]byte, len(b.buffer), cap(b.buffer)+increment)
+			copy(realloc, b.buffer)
+			b.buffer = realloc
+		}
 		b.buffer = append(b.buffer, v...)
 	}
 }
