@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -30,6 +31,9 @@ func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(1),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if runtime.GOARCH == "arm64" {
+				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+			}
 			runDeclSchemaChangeCompatMixedVersions(ctx, t, c, *t.BuildVersion())
 		},
 	})
