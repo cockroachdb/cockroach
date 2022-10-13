@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -29,6 +30,9 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 		// order to prevent bugs during upgrades.
 		Cluster: r.MakeClusterSpec(4),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if runtime.GOARCH == "arm64" {
+				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+			}
 			maxOps := 100
 			concurrency := 5
 			if c.IsLocal() {
