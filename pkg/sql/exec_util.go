@@ -302,7 +302,7 @@ var autoRehomingEnabledClusterMode = settings.RegisterBoolSetting(
 	"default value for experimental_enable_auto_rehoming;"+
 		" allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE",
 	false,
-).WithPublic()
+)
 
 var onUpdateRehomeRowEnabledClusterMode = settings.RegisterBoolSetting(
 	settings.TenantWritable,

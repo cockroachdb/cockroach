@@ -814,3 +814,45 @@ query T
 SHOW opt_split_scan_limit
 ----
 2048
+
+query T
+SHOW enable_auto_rehoming
+----
+off
+
+query T
+SHOW experimental_enable_auto_rehoming
+----
+off
+
+statement ok
+SET enable_auto_rehoming = on
+
+query T
+SHOW enable_auto_rehoming
+----
+on
+
+query T
+SHOW experimental_enable_auto_rehoming
+----
+on
+
+statement ok
+SET experimental_enable_auto_rehoming = off
+
+query T
+SHOW experimental_enable_auto_rehoming
+----
+off
+
+query T
+SHOW enable_auto_rehoming
+----
+off
+
+statement error pq: parameter "enable_auto_rehoming" requires a Boolean value
+SET enable_auto_rehoming = bogus
+
+statement error pq: parameter "enable_auto_rehoming" requires a Boolean value
+SET experimental_enable_auto_rehoming = bogus
