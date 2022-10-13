@@ -253,6 +253,8 @@ func TestJSONErrors(t *testing.T) {
 		{`true false`, `trailing characters after JSON document`},
 		{`trues`, `trailing characters after JSON document`},
 		{`1 2 3`, `trailing characters after JSON document`},
+		{`[1, 2, 3]]`, `trailing characters after JSON document`},
+		{`[1, 2, 3]} do not ignore`, `trailing characters after JSON document`},
 		// Here the decoder just grabs the 0 and leaves the 1. JSON numbers can't have
 		// leading 0s.
 		{`01`, `trailing characters after JSON document`},
@@ -1342,7 +1344,7 @@ func TestEncodeJSONInvertedIndex(t *testing.T) {
 			nil)}},
 		{`[["a"]]`, [][]byte{bytes.Join([][]byte{jsonPrefix, arrayPrefix, arrayPrefix, terminator, encoding.EncodeStringAscending(nil, "a")},
 			nil)}},
-		{`{"a":["b","c"]}]`, [][]byte{bytes.Join([][]byte{jsonPrefix, aEncoding, objectSeparator, arrayPrefix, terminator, encoding.EncodeStringAscending(nil, "b")}, nil),
+		{`{"a":["b","c"]}`, [][]byte{bytes.Join([][]byte{jsonPrefix, aEncoding, objectSeparator, arrayPrefix, terminator, encoding.EncodeStringAscending(nil, "b")}, nil),
 			bytes.Join([][]byte{jsonPrefix, aEncoding, objectSeparator, arrayPrefix, terminator, encoding.EncodeStringAscending(nil, "c")}, nil)}},
 		{`[]`, [][]byte{bytes.Join([][]byte{jsonPrefix, terminator, emptyArrayEncoding},
 			nil)}},
