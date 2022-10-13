@@ -50,7 +50,7 @@ var (
 		settings.TenantWritable,
 		"server.web_session.purge.max_deletions_per_cycle",
 		"the maximum number of old sessions to delete for each purge",
-		10,
+		1000,
 	).WithPublic()
 )
 
@@ -90,21 +90,21 @@ func (s *authenticationServer) purgeOldSessions(ctx context.Context) {
 		deleteOldExpiredSessionsStmt = `
 DELETE FROM system.web_sessions
 WHERE "expiresAt" < $1
-ORDER BY random()
+ORDER BY "expiresAt" ASC
 LIMIT $2
 RETURNING 1
 `
 		deleteOldRevokedSessionsStmt = `
 DELETE FROM system.web_sessions
 WHERE "revokedAt" < $1
-ORDER BY random()
+ORDER BY "expiresAt" ASC
 LIMIT $2
 RETURNING 1
 `
 		deleteSessionsAutoLogoutStmt = `
 DELETE FROM system.web_sessions
 WHERE "lastUsedAt" < $1
-ORDER BY random()
+ORDER BY "expiresAt" ASC
 LIMIT $2
 RETURNING 1
 `
