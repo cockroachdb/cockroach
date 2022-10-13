@@ -13,6 +13,7 @@ package insights_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -72,7 +73,7 @@ func BenchmarkInsights(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < numSessions; i++ {
-				sessionID := clusterunique.ID{Uint128: uint128.FromInts(0, uint64(i))}
+				sessionID := clusterunique.ID{Uint128: uint128.FromInts(rand.Uint64(), uint64(i))}
 				go func(i int) {
 					defer sessions.Done()
 					for j := 0; j < numTransactionsPerSession; j++ {

@@ -56,7 +56,7 @@ func TestCauses(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.ElementsMatch(t, tc.causes, p.examine(tc.statement))
+			require.ElementsMatch(t, tc.causes, p.examine(nil /* buf */, tc.statement))
 		})
 	}
 }

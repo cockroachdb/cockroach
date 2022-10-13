@@ -123,7 +123,7 @@ func TestIngester_Disabled(t *testing.T) {
 	writer := ingester.Writer(false /* internal */)
 	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
 	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
-	require.Nil(t, ingester.guard.eventBuffer[0])
+	require.Equal(t, event{}, ingester.guard.eventBuffer[0])
 }
 
 func TestIngester_WriterIgnoresInternalExecutorObservations(t *testing.T) {
@@ -131,7 +131,7 @@ func TestIngester_WriterIgnoresInternalExecutorObservations(t *testing.T) {
 	writer := ingester.Writer(true /* internal */)
 	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
 	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
-	require.Nil(t, ingester.guard.eventBuffer[0])
+	require.Equal(t, event{}, ingester.guard.eventBuffer[0])
 }
 
 func TestIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *testing.T) {
