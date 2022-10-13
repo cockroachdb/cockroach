@@ -112,10 +112,9 @@ func IsRetryableError(err error) bool {
 	// by avoiding string comparisons.
 
 	errStr := err.Error()
-	if strings.Contains(errStr, retryableErrorString) {
-		// If a RetryableError occurs on a remote node, DistSQL serializes it such
-		// that we can't recover the structure and we have to rely on this
-		// unfortunate string comparison.
+	if strings.Contains(errStr, retryableErrorString) ||
+		strings.Contains(errStr, "failed to send RPC") ||
+		strings.Contains(errStr, "draining") {
 		return true
 	}
 
