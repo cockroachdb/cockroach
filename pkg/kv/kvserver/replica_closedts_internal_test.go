@@ -969,6 +969,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
 				cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 				cfg.TestingKnobs.DontCloseTimestamps = true
+				cfg.TestingKnobs.DisableCanAckBeforeApplication = true
 				tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 				// Write an intent.
@@ -1146,6 +1147,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 			tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 1)) // required by StartWithStoreConfig
 			cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, 100*time.Nanosecond) /* maxOffset */)
 			cfg.TestingKnobs.DontCloseTimestamps = true
+			cfg.TestingKnobs.DisableCanAckBeforeApplication = true
 			tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 
 			// Set up the test.
