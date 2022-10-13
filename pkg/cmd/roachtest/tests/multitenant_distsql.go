@@ -217,27 +217,29 @@ func runMultiTenantDistSQL(
 			require.NoError(t, err)
 			t.L().Printf(str)
 		}
-		// Open bundle and verify its contents
 
-		sqlConnCtx := clisqlclient.Context{}
-		conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, instance1.pgURL)
-		bundles, err := clisqlclient.StmtDiagListBundles(ctx, conn)
-		require.NoError(t, err)
+		if bundle {
+			// Open bundle and verify its contents
+			sqlConnCtx := clisqlclient.Context{}
+			conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, instance1.pgURL)
+			bundles, err := clisqlclient.StmtDiagListBundles(ctx, conn)
+			require.NoError(t, err)
 
-		err = clisqlclient.StmtDiagDownloadBundle(ctx, conn, bundles[len(bundles)-1].ID, "bundle.zip")
-		require.NoError(t, err)
+			err = clisqlclient.StmtDiagDownloadBundle(ctx, conn, bundles[len(bundles)-1].ID, "bundle.zip")
+			require.NoError(t, err)
 
-		read, err := zip.OpenReader("bundle.zip")
-		require.NoError(t, err)
-		defer func() { _ = read.Close() }()
-		required := []string{"plan.txt", "statement.sql", "env.sql", "schema.sql", "stats-defaultdb.public.t.sql"}
-		zipNames := make(map[string]struct{})
-		for _, f := range read.File {
-			zipNames[f.Name] = struct{}{}
-		}
-		for _, i := range required {
-			_, found := zipNames[i]
-			require.True(t, found, "%s not found in bundle", i)
+			read, err := zip.OpenReader("bundle.zip")
+			require.NoError(t, err)
+			defer func() { _ = read.Close() }()
+			required := []string{"plan.txt", "statement.sql", "env.sql", "schema.sql", "stats-defaultdb.public.t.sql"}
+			zipNames := make(map[string]struct{})
+			for _, f := range read.File {
+				zipNames[f.Name] = struct{}{}
+			}
+			for _, i := range required {
+				_, found := zipNames[i]
+				require.True(t, found, "%s not found in bundle", i)
+			}
 		}
 	}
 }
