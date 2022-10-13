@@ -584,7 +584,8 @@ func randIndexTableDefFromCols(
 				t.Exprs = make([]tree.Expr, prefixLen)
 				for k := 0; k < prefixLen; k++ {
 					colType := tree.MustBeStaticallyKnownType(cols[k].Type)
-					t.Exprs[k] = RandDatum(rng, colType, cols[k].Nullable.Nullability != tree.NotNull)
+					// TODO(#82774): Allow null values once #82774 is addressed.
+					t.Exprs[k] = RandDatum(rng, colType, false /* nullOk */)
 					// Variable expressions are not supported in partitions, and NaN and
 					// infinity are considered variable expressions, so if one is
 					// generated then regenerate the value.
