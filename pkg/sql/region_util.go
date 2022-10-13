@@ -405,45 +405,52 @@ func synthesizeVoterConstraints(
 			},
 		}, nil
 	case descpb.SurvivalGoal_REGION_FAILURE:
+		// We constrain <quorum - 1> voting replicas to the primary region and
+		// allow the rest to "float" around. This allows the allocator inside KV
+		// to make dynamic placement decisions for the voting replicas that lie
+		// outside the primary/home region.
+		//
+		// It might appear that constraining just <quorum - 1> voting replicas
+		// to the primary region leaves open the possibility of a majority
+		// quorum coalescing inside of some other region. However, similar to
+		// the case above, the diversity heuristic in the allocator prevents
+		// this from happening as it will spread the unconstrained replicas out
+		// across nodes with the most diverse locality hierarchies.
+		//
+		// For instance, in a 3 region deployment (minimum for a database with
+		// "region" survivability), each with 3 AZs, we'd expect to see a
+		// configuration like the following:
+		//
+		// +---- Region A ------+   +---- Region B -----+    +----- Region C -----+
+		// |                    |   |                   |    |                    |
+		// |   +------------+   |   |  +------------+   |    |   +------------+   |
+		// |   |   VOTER    |   |   |  |   VOTER    |   |    |   |            |   |
+		// |   |            |   |   |  |            |   |    |   |            |   |
+		// |   +------------+   |   |  +------------+   |    |   +------------+   |
+		// |   +------------+   |   |  +------------+   |    |   +------------+   |
+		// |   |            |   |   |  |   VOTER    |   |    |   |   VOTER    |   |
+		// |   |            |   |   |  |            |   |    |   |            |   |
+		// |   +------------+   |   |  +------------+   |    |   +------------+   |
+		// |   +------------+   |   |  +------------+   |    |   +------------+   |
+		// |   |   VOTER    |   |   |  |            |   |    |   |            |   |
+		// |   |            |   |   |  |            |   |    |   |            |   |
+		// |   +------------+   |   |  +------------+   |    |   +------------+   |
+		// +--------------------+   +-------------------+    +--------------------+
+		//
 		numVoters, _ := getNumVotersAndNumReplicas(regionConfig)
-		return []zonepb.ConstraintsConjunction{
+		ret := []zonepb.ConstraintsConjunction{
 			{
-				// We constrain <quorum - 1> voting replicas to the primary region and
-				// allow the rest to "float" around. This allows the allocator inside KV
-				// to make dynamic placement decisions for the voting replicas that lie
-				// outside the primary/home region.
-				//
-				// It might appear that constraining just <quorum - 1> voting replicas
-				// to the primary region leaves open the possibility of a majority
-				// quorum coalescing inside of some other region. However, similar to
-				// the case above, the diversity heuristic in the allocator prevents
-				// this from happening as it will spread the unconstrained replicas out
-				// across nodes with the most diverse locality hierarchies.
-				//
-				// For instance, in a 3 region deployment (minimum for a database with
-				// "region" survivability), each with 3 AZs, we'd expect to see a
-				// configuration like the following:
-				//
-				// +---- Region A ------+   +---- Region B -----+    +----- Region C -----+
-				// |                    |   |                   |    |                    |
-				// |   +------------+   |   |  +------------+   |    |   +------------+   |
-				// |   |   VOTER    |   |   |  |   VOTER    |   |    |   |            |   |
-				// |   |            |   |   |  |            |   |    |   |            |   |
-				// |   +------------+   |   |  +------------+   |    |   +------------+   |
-				// |   +------------+   |   |  +------------+   |    |   +------------+   |
-				// |   |            |   |   |  |   VOTER    |   |    |   |   VOTER    |   |
-				// |   |            |   |   |  |            |   |    |   |            |   |
-				// |   +------------+   |   |  +------------+   |    |   +------------+   |
-				// |   +------------+   |   |  +------------+   |    |   +------------+   |
-				// |   |   VOTER    |   |   |  |            |   |    |   |            |   |
-				// |   |            |   |   |  |            |   |    |   |            |   |
-				// |   +------------+   |   |  +------------+   |    |   +------------+   |
-				// +--------------------+   +-------------------+    +--------------------+
-				//
 				NumReplicas: maxFailuresBeforeUnavailability(numVoters),
-				Constraints: makeConstraintsWithSecondaryRegion(region, regionConfig),
+				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
 			},
-		}, nil
+		}
+		if regionConfig.HasSecondaryRegion() && regionConfig.SecondaryRegion() != region {
+			ret = append(ret, zonepb.ConstraintsConjunction{
+				NumReplicas: maxFailuresBeforeUnavailability(numVoters),
+				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(regionConfig.SecondaryRegion())},
+			})
+		}
+		return ret, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown survival goal: %v", regionConfig.SurvivalGoal())
 	}
@@ -492,20 +499,22 @@ func synthesizeLeasePreferences(region catpb.RegionName) []zonepb.LeasePreferenc
 	}
 }
 
-// synthesizeLeasePreferencesWithSecondaryRegion generates a LeasePreferences clause representing
-// the `lease_preferences` field to be set for the primary region and secondary region of a
-// multi-region database or the home region of a table in such a database .
+// synthesizeLeasePreferencesWithSecondaryRegion generates a LeasePreferences
+// clause representing the `lease_preferences` field to be set for the primary
+// region and secondary region of a multi-region database or the home region of
+// a table in such a database .
 func synthesizeLeasePreferencesWithSecondaryRegion(
 	region catpb.RegionName, secondaryRegion catpb.RegionName,
 ) []zonepb.LeasePreference {
-	if region != secondaryRegion {
-		return []zonepb.LeasePreference{
-			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region), makeRequiredConstraintForRegion(secondaryRegion)}},
-		}
-	}
-	return []zonepb.LeasePreference{
+	ret := []zonepb.LeasePreference{
 		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)}},
 	}
+	if region != secondaryRegion {
+		ret = append(ret, zonepb.LeasePreference{
+			Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(secondaryRegion)},
+		})
+	}
+	return ret
 }
 
 // zoneConfigForMultiRegionTable generates a ZoneConfig stub for a
@@ -625,28 +634,21 @@ func zoneConfigForMultiRegionTable(
 	}
 }
 
-// makeConstraintsWithSecondaryRegion returns a list of constraints.
-// A constraint is added for the region passed in and a secondary lease
-// preference is added if the regionConfig has a secondary region.
-func makeConstraintsWithSecondaryRegion(
-	region catpb.RegionName, regionConfig multiregion.RegionConfig,
-) []zonepb.Constraint {
-	constraints := []zonepb.Constraint{makeRequiredConstraintForRegion(region)}
-	if regionConfig.HasSecondaryRegion() && region != regionConfig.SecondaryRegion() {
-		constraints = append(constraints, makeRequiredConstraintForRegion(regionConfig.SecondaryRegion()))
-	}
-	return constraints
-}
-
 // makeLeasePreferences returns a list of lease preference constraints.
 // A constraint is added for the region passed in and a secondary lease
 // preference is added if the regionConfig has a secondary region.
 func makeLeasePreferences(
 	region catpb.RegionName, regionConfig multiregion.RegionConfig,
 ) []zonepb.LeasePreference {
-	return []zonepb.LeasePreference{
-		{Constraints: makeConstraintsWithSecondaryRegion(region, regionConfig)},
+	ret := []zonepb.LeasePreference{
+		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)}},
 	}
+	if regionConfig.HasSecondaryRegion() && region != regionConfig.SecondaryRegion() {
+		ret = append(ret, zonepb.LeasePreference{
+			Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(regionConfig.SecondaryRegion())},
+		})
+	}
+	return ret
 }
 
 // applyZoneConfigForMultiRegionTableOption is an option that can be passed into
@@ -947,6 +949,16 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	// Build a zone config based on the RegionConfig information.
 	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(regionConfig)
 	if err != nil {
+		return err
+	}
+
+	// TODO(rafi): move both validate calls into generateAndValidateZoneConfigForMultiRegionDatabase
+	// Validate that there are no conflicts in the zone setup.
+	if err := validateNoRepeatKeysInZone(&dbZoneConfig); err != nil {
+		return err
+	}
+
+	if err := validateZoneAttrsAndLocalities(ctx, execConfig, &dbZoneConfig); err != nil {
 		return err
 	}
 
