@@ -1,0 +1,23 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "testingint",
+    srcs = ["testing_int64.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/buildutil/testingint",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_pkg_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "testingint_test",
+    srcs = ["testing_int64_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":testingint"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
+
+get_x_data(name = "get_x_data")

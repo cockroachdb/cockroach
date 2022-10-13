@@ -12,6 +12,7 @@ package kvnemesis
 
 import (
 	"context"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -136,9 +137,13 @@ func TestRandStep(t *testing.T) {
 				}
 			case *DeleteRangeOperation:
 				client.DeleteRange++
+			case *DeleteRangeUsingTombstoneOperation:
+				client.DeleteRangeUsingTombstone++
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
+			default:
+				t.Fatalf("%T", o)
 			}
 		}
 	}
@@ -152,7 +157,8 @@ func TestRandStep(t *testing.T) {
 			*ScanOperation,
 			*BatchOperation,
 			*DeleteOperation,
-			*DeleteRangeOperation:
+			*DeleteRangeOperation,
+			*DeleteRangeUsingTombstoneOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
@@ -201,6 +207,8 @@ func TestRandStep(t *testing.T) {
 			case ChangeZoneType_ToggleGlobalReads:
 				counts.ChangeZone.ToggleGlobalReads++
 			}
+		default:
+			t.Fatalf("%T", o)
 		}
 		updateKeys(step.Op)
 
@@ -209,5 +217,16 @@ func TestRandStep(t *testing.T) {
 		if trueForEachIntField(&counts, func(count int) bool { return count >= minEachType }) {
 			break
 		}
+	}
+}
+
+func TestRandKeyDecode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for i := 0; i < 10; i++ {
+		rng := rand.New(rand.NewSource(int64(i)))
+		k := randKey(rng)
+		n := uint64FromKey(k)
+		require.Equal(t, k, uint64ToKey(n))
 	}
 }

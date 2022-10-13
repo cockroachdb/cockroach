@@ -147,6 +147,12 @@ message IgnoredSeqNumRange {
 message MVCCValueHeader {
   option (gogoproto.equal) = true;
 
+  message Empty{};
+  Empty kvnemesis_seq = 2 [
+    (gogoproto.customname) = "KVNemesisSeq",
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/buildutil.TestingInt64"];
+
   // The local clock timestamp records the value of the local HLC clock on the
   // leaseholder when the key was originally written. It is used to make claims
   // about the relative real time ordering of the key-value's writer and readers

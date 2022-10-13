@@ -275,7 +275,7 @@ func (r *Replica) evalAndPropose(
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
 		filterArgs := kvserverbase.ProposalFilterArgs{
 			Ctx:        ctx,
-			Cmd:        *proposal.command,
+			Cmd:        proposal.command,
 			QuotaAlloc: proposal.quotaAlloc,
 			CmdID:      idKey,
 			Req:        *ba,

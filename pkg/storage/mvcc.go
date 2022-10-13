@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -991,6 +993,16 @@ func newMVCCIterator(
 func MVCCGet(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
+	// TODO(during review): should this be inlined for performance? How do I tell?
+	value, intent, _, err := MVCCGetWithValueHeader(ctx, reader, key, timestamp, opts)
+	return value, intent, err
+}
+
+// MVCCGetWithValueHeader is like MVCCGet, but in addition returns the
+// MVCCValueHeader for the value.
+func MVCCGetWithValueHeader(
+	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
+) (*roachpb.Value, *roachpb.Intent, enginepb.MVCCValueHeader, error) {
 	iter := newMVCCIterator(
 		reader, timestamp, false /* rangeKeyMasking */, opts.DontInterleaveIntents, IterOptions{
 			KeyTypes: IterKeyTypePointsAndRanges,
@@ -998,8 +1010,8 @@ func MVCCGet(
 		},
 	)
 	defer iter.Close()
-	value, intent, err := mvccGet(ctx, iter, key, timestamp, opts)
-	return value.ToPointer(), intent, err
+	value, intent, vh, err := mvccGetWithValueHeader(ctx, iter, key, timestamp, opts)
+	return value.ToPointer(), intent, vh, err
 }
 
 func mvccGet(
@@ -1009,17 +1021,28 @@ func mvccGet(
 	timestamp hlc.Timestamp,
 	opts MVCCGetOptions,
 ) (value optionalValue, intent *roachpb.Intent, err error) {
+	value, intent, _, err = mvccGetWithValueHeader(ctx, iter, key, timestamp, opts)
+	return value, intent, err
+}
+
+func mvccGetWithValueHeader(
+	ctx context.Context,
+	iter MVCCIterator,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	opts MVCCGetOptions,
+) (value optionalValue, intent *roachpb.Intent, vh enginepb.MVCCValueHeader, err error) {
 	if len(key) == 0 {
-		return optionalValue{}, nil, emptyKeyError()
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, emptyKeyError()
 	}
 	if timestamp.WallTime < 0 {
-		return optionalValue{}, nil, errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
 	}
 	if util.RaceEnabled && !iter.IsPrefix() {
-		return optionalValue{}, nil, errors.AssertionFailedf("mvccGet called with non-prefix iterator")
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, errors.AssertionFailedf("mvccGet called with non-prefix iterator")
 	}
 	if err := opts.validate(); err != nil {
-		return optionalValue{}, nil, err
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, err
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
@@ -1049,36 +1072,38 @@ func mvccGet(
 	recordIteratorStats(ctx, mvccScanner.parent)
 
 	if mvccScanner.err != nil {
-		return optionalValue{}, nil, mvccScanner.err
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, mvccScanner.err
 	}
 	intents, err := buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
-		return optionalValue{}, nil, err
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, err
 	}
 	if opts.errOnIntents() && len(intents) > 0 {
-		return optionalValue{}, nil, &roachpb.WriteIntentError{Intents: intents}
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, &roachpb.WriteIntentError{Intents: intents}
 	}
 
 	if len(intents) > 1 {
-		return optionalValue{}, nil, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, errors.Errorf("expected 0 or 1 intents, got %d", len(intents))
 	} else if len(intents) == 1 {
 		intent = &intents[0]
 	}
 
 	if len(mvccScanner.results.repr) == 0 {
-		return optionalValue{}, intent, nil
+		return optionalValue{}, intent, enginepb.MVCCValueHeader{}, nil
 	}
 
 	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
 	if err != nil {
-		return optionalValue{}, nil, err
+		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, err
 	}
 
 	value = makeOptionalValue(roachpb.Value{
 		RawBytes:  rawValue,
 		Timestamp: mvccKey.Timestamp,
 	})
-	return value, intent, nil
+	// TODO(during review): if MVCCValueHeader ever picks up a pointer, is it
+	// still safe to return it (since it's in curUnsafeValue)?
+	return value, intent, mvccScanner.curUnsafeValue.MVCCValueHeader, nil
 }
 
 // MVCCGetAsTxn constructs a temporary transaction from the given transaction
@@ -2003,6 +2028,13 @@ func mvccPutInternal(
 	versionValue := MVCCValue{}
 	versionValue.Value = value
 	versionValue.LocalTimestamp = localTimestamp
+
+	if buildutil.CrdbTestBuild {
+		if seq, seqOK := kvnemesisutil.FromContext(ctx); seqOK {
+			versionValue.KVNemesisSeq.Set(int64(seq))
+		}
+	}
+
 	if !versionValue.LocalTimestampNeeded(versionKey.Timestamp) ||
 		!writer.ShouldWriteLocalTimestamps(ctx) {
 		versionValue.LocalTimestamp = hlc.ClockTimestamp{}
@@ -3263,6 +3295,11 @@ func MVCCDeleteRangeUsingTombstone(
 	if !value.LocalTimestampNeeded(timestamp) || !rw.ShouldWriteLocalTimestamps(ctx) {
 		value.LocalTimestamp = hlc.ClockTimestamp{}
 	}
+	if buildutil.CrdbTestBuild {
+		if seq, ok := kvnemesisutil.FromContext(ctx); ok {
+			value.KVNemesisSeq.Set(int64(seq))
+		}
+	}
 	valueRaw, err := EncodeMVCCValue(value)
 	if err != nil {
 		return err
@@ -3831,6 +3868,7 @@ func MVCCScan(
 		},
 	)
 	defer iter.Close()
+
 	return mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)
 }
 

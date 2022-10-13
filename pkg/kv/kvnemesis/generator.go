@@ -11,15 +11,17 @@
 package kvnemesis
 
 import (
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 	"math/rand"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -104,6 +106,8 @@ type ClientOperationConfig struct {
 	DeleteExisting int
 	// DeleteRange is an operation that Deletes a key range that may contain values.
 	DeleteRange int
+	// DeleteRange is an operation that invokes DeleteRangeUsingTombstone.
+	DeleteRangeUsingTombstone int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -170,19 +174,20 @@ type ChangeZoneConfig struct {
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:           1,
-		GetMissingForUpdate:  1,
-		GetExisting:          1,
-		GetExistingForUpdate: 1,
-		PutMissing:           1,
-		PutExisting:          1,
-		Scan:                 1,
-		ScanForUpdate:        1,
-		ReverseScan:          1,
-		ReverseScanForUpdate: 1,
-		DeleteMissing:        1,
-		DeleteExisting:       1,
-		DeleteRange:          1,
+		GetMissing:                1,
+		GetMissingForUpdate:       1,
+		GetExisting:               1,
+		GetExistingForUpdate:      1,
+		PutMissing:                1,
+		PutExisting:               1,
+		Scan:                      1,
+		ScanForUpdate:             1,
+		ReverseScan:               1,
+		ReverseScanForUpdate:      1,
+		DeleteMissing:             1,
+		DeleteExisting:            1,
+		DeleteRange:               1,
+		DeleteRangeUsingTombstone: 1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -227,9 +232,18 @@ func newAllOperationsConfig() GeneratorConfig {
 // operations/make some operations more likely.
 func NewDefaultConfig() GeneratorConfig {
 	config := newAllOperationsConfig()
-	// TODO(sarkesian): Enable non-transactional DelRange once #69642 is fixed.
-	config.Ops.DB.DeleteRange = 0
-	config.Ops.Batch.Ops.DeleteRange = 0
+	// DeleteRangeUsingTombstone does not support transactions.
+	config.Ops.ClosureTxn.TxnClientOps.DeleteRangeUsingTombstone = 0
+	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRangeUsingTombstone = 0
+	config.Ops.ClosureTxn.CommitBatchOps.DeleteRangeUsingTombstone = 0
+	// DeleteRangeUsingTombstone does in principle support batches, but
+	// in kvnemesis we don't let it span ranges non-atomically (as it
+	// is allowed to do in CRDB). So if we allow it in batches, it will
+	// likely doom most batches to fail, i.e. we're better off not adding
+	// it in the first place. We don't mix DeleteRangeUsingTombstone in
+	// CRDB, though we may use multiple in a single batch, so adding
+	// coverage for that would be useful.
+	config.Ops.Batch.Ops.DeleteRangeUsingTombstone = 0
 	// TODO(sarkesian): Enable DeleteRange in comingled batches once #71236 is fixed.
 	config.Ops.ClosureTxn.CommitBatchOps.DeleteRange = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRange = 0
@@ -241,10 +255,13 @@ func NewDefaultConfig() GeneratorConfig {
 	// (see CrossRangeTxnWrapperSender) if they are. roachpb.SpanGroup can be used
 	// to efficiently check this.
 	//
-	// TODO(dan): Make this `config.Ops.Batch.Ops.PutExisting = 0` once #46081 is
-	// fixed.
+	// TODO(during review): Make this `config.Ops.Batch.Ops.PutExisting = 0` (and
+	// DeleteRange, etc, all ops that can overwrite existing keys basically), as
+	// #46081 has long been fixed. Then file an issue about generating
+	// non-self-overlapping operations for batches.
 	config.Ops.Batch = BatchOperationConfig{}
-	// TODO(dan): Remove when #45586 is addressed.
+	// TODO(during review): Should be able to remove the two lines below, since
+	// #45586 has already been addressed.
 	config.Ops.ClosureTxn.CommitBatchOps.GetExisting = 0
 	config.Ops.ClosureTxn.CommitBatchOps.GetMissing = 0
 	return config
@@ -331,7 +348,7 @@ type generator struct {
 	Config     GeneratorConfig
 	replicasFn GetReplicasFn
 
-	nextValue int
+	seqGen kvnemesisutil.Seq
 
 	// keys is the set of every key that has been written to, including those
 	// deleted or in rolled back transactions.
@@ -390,6 +407,11 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	return step(g.selectOp(rng, allowed))
 }
 
+func (g *generator) nextSeq() kvnemesisutil.Seq {
+	g.seqGen++
+	return g.seqGen
+}
+
 type opGenFunc func(*generator, *rand.Rand) Operation
 
 type opGen struct {
@@ -433,6 +455,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randReverseScan, c.ReverseScan)
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
 	addOpGen(allowed, randDelRange, c.DeleteRange)
+	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -462,16 +485,16 @@ func randGetExistingForUpdate(g *generator, rng *rand.Rand) Operation {
 }
 
 func randPutMissing(g *generator, rng *rand.Rand) Operation {
-	value := g.getNextValue()
+	seq := g.nextSeq()
 	key := randKey(rng)
 	g.keys[key] = struct{}{}
-	return put(key, value)
+	return put(key, seq)
 }
 
 func randPutExisting(g *generator, rng *rand.Rand) Operation {
-	value := g.getNextValue()
+	seq := g.nextSeq()
 	key := randMapKey(rng, g.keys)
-	return put(key, value)
+	return put(key, seq)
 }
 
 func randScan(g *generator, rng *rand.Rand) Operation {
@@ -500,19 +523,78 @@ func randReverseScanForUpdate(g *generator, rng *rand.Rand) Operation {
 func randDelMissing(g *generator, rng *rand.Rand) Operation {
 	key := randKey(rng)
 	g.keys[key] = struct{}{}
-	return del(key)
+	seq := g.nextSeq()
+	return del(key, seq)
 }
 
 func randDelExisting(g *generator, rng *rand.Rand) Operation {
 	key := randMapKey(rng, g.keys)
-	return del(key)
+	seq := g.nextSeq()
+	return del(key, seq)
 }
 
 func randDelRange(g *generator, rng *rand.Rand) Operation {
 	// We don't write any new keys to `g.keys` on a DeleteRange operation,
 	// because DelRange(..) only deletes existing keys.
 	key, endKey := randSpan(rng)
-	return delRange(key, endKey)
+	seq := g.nextSeq()
+	return delRange(key, endKey, seq)
+}
+
+func randDelRangeUsingTombstone(g *generator, rng *rand.Rand) Operation {
+	// Delete a span. We don't want MVCC rangedels to get split along range
+	// boundaries in kvnemesis (since that would violate atomicity, but is
+	// desired behavior in CRDB) so we try our best to not straddle splits. If
+	// we end up doing it anyway, an interceptor will cause the request to fail
+	// (but not kvnemesis).
+	var key, endKey string
+	n := rng.Intn(3)
+	switch {
+	case n == 0 && len(g.historicalSplits) > 0:
+		// Using historical splits gives us a bit of "everything coverage", including
+		// crossing range boundaries (which is supposed to error out anyway but still).
+		key, endKey = randMapKey(rng, g.historicalSplits), randMapKey(rng, g.historicalSplits)
+	case n == 1 && len(g.currentSplits) > 0:
+		key, endKey = randMapKey(rng, g.currentSplits), randMapKey(rng, g.currentSplits)
+	case n == 2 && len(g.keys) > 0:
+		// Delete a specific key (which may no longer be visible, but at least
+		// has nontrivial MVCC history).
+		key = randMapKey(rng, g.keys)
+		endKey = uint64ToKey(uint64FromKey(key) + 1)
+	default:
+		// Delete a random key.
+		key = randKey(rng)
+		endKey = uint64ToKey(uint64FromKey(key) + 1)
+	}
+
+	if endKey < key {
+		endKey, key = key, endKey
+	} else if key == endKey {
+		// This span will always be contained in one range.
+		endKey = uint64ToKey(uint64FromKey(key) + 1)
+	}
+
+	// Fudge the boundaries a bit, some of the time. Note
+	// that if it's a single-point span, this is a no-op.
+	switch rng.Intn(3) {
+	case 0:
+		// Move start key forward.
+		key = randKeyBetween(rng, key, endKey)
+	case 1:
+		// Shorten endKey to something in (key,endKey].
+		endKey = randKeyBetween(rng,
+			uint64ToKey(uint64FromKey(key)+1),
+			uint64ToKey(uint64FromKey(endKey)-1),
+		)
+	default: // noop
+	}
+
+	seq := g.nextSeq()
+	if key >= endKey {
+		s := fmt.Sprintf("%d %d", uint64FromKey(key), uint64FromKey(endKey))
+		panic(s)
+	}
+	return delRangeUsingTombstone(key, endKey, seq)
 }
 
 func randSplitNew(g *generator, rng *rand.Rand) Operation {
@@ -595,7 +677,6 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var allowed []opGen
 		g.registerClientOps(&allowed, c)
-
 		numOps := rng.Intn(4)
 		ops := make([]Operation, numOps)
 		for i := range ops {
@@ -640,19 +721,29 @@ func makeClosureTxn(
 	}
 }
 
-func (g *generator) getNextValue() string {
-	value := `v-` + strconv.Itoa(g.nextValue)
-	g.nextValue++
-	return value
-}
-
-func randKey(rng *rand.Rand) string {
-	u, err := uuid.NewGenWithReader(rng).NewV4()
+func uint64FromKey(k string) uint64 {
+	k = k[len(GeneratorDataSpan().Key):]
+	_, s, err := encoding.DecodeUnsafeStringAscendingDeepCopy([]byte(k), nil)
 	if err != nil {
 		panic(err)
 	}
+	sl, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return binary.BigEndian.Uint64(sl)
+}
+
+func randKey(rng *rand.Rand) string {
+	return uint64ToKey(rng.Uint64())
+}
+
+func uint64ToKey(n uint64) string {
+	var sl [8]byte
+	binary.BigEndian.PutUint64(sl[:8], n)
+	s := hex.EncodeToString(sl[:8])
 	key := GeneratorDataSpan().Key
-	key = encoding.EncodeStringAscending(key, u.Short())
+	key = encoding.EncodeStringAscending(key, s)
 	return string(key)
 }
 
@@ -665,6 +756,20 @@ func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
 		return randKey(rng)
 	}
 	return keys[rng.Intn(len(keys))]
+}
+
+// Returns a key that falls into `[k,ek)`.
+func randKeyBetween(rng *rand.Rand, k, ek string) string {
+	a, b := uint64FromKey(k), uint64FromKey(ek)
+	if b <= a {
+		b = a + 1 // we will return `k`
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			panic(fmt.Sprintf("a=%d b=%d b-a=%d: %v", a, b, int64(b-a), r))
+		}
+	}()
+	return uint64ToKey(a + (rng.Uint64() % (b - a)))
 }
 
 func randSpan(rng *rand.Rand) (string, string) {
@@ -682,7 +787,9 @@ func step(op Operation) Step {
 }
 
 func batch(ops ...Operation) Operation {
-	return Operation{Batch: &BatchOperation{Ops: ops}}
+	return Operation{Batch: &BatchOperation{
+		Ops: ops,
+	}}
 }
 
 func opSlice(ops ...Operation) []Operation {
@@ -709,8 +816,8 @@ func getForUpdate(key string) Operation {
 	return Operation{Get: &GetOperation{Key: []byte(key), ForUpdate: true}}
 }
 
-func put(key, value string) Operation {
-	return Operation{Put: &PutOperation{Key: []byte(key), Value: []byte(value)}}
+func put(key string, seq kvnemesisutil.Seq) Operation {
+	return Operation{Put: &PutOperation{Key: []byte(key), Seq: seq}}
 }
 
 func scan(key, endKey string) Operation {
@@ -729,12 +836,19 @@ func reverseScanForUpdate(key, endKey string) Operation {
 	return Operation{Scan: &ScanOperation{Key: []byte(key), EndKey: []byte(endKey), Reverse: true, ForUpdate: true}}
 }
 
-func del(key string) Operation {
-	return Operation{Delete: &DeleteOperation{Key: []byte(key)}}
+func del(key string, seq kvnemesisutil.Seq) Operation {
+	return Operation{Delete: &DeleteOperation{
+		Key: []byte(key),
+		Seq: seq,
+	}}
 }
 
-func delRange(key, endKey string) Operation {
-	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey)}}
+func delRange(key, endKey string, seq kvnemesisutil.Seq) Operation {
+	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey), Seq: seq}}
+}
+
+func delRangeUsingTombstone(key, endKey string, seq kvnemesisutil.Seq) Operation {
+	return Operation{DeleteRangeUsingTombstone: &DeleteRangeUsingTombstoneOperation{Key: []byte(key), EndKey: []byte(endKey), Seq: seq}}
 }
 
 func split(key string) Operation {

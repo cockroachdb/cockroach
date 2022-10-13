@@ -13,6 +13,7 @@ go_library(
     }),
     importpath = "github.com/cockroachdb/cockroach/pkg/util/buildutil",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/buildutil/testingint"],
 )
 
 REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
@@ -36,7 +37,10 @@ go_test(
     srcs = ["crdb_test_test.go"],
     args = ["-test.timeout=295s"],
     embed = [":buildutil"],  # keep
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/build/bazel",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 get_x_data(name = "get_x_data")
