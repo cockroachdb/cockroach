@@ -262,15 +262,11 @@ func retrieveAuthInfo(
 	// we should always look up the latest data.
 	const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
 		`WHERE username=$1`
-	var values tree.Datums
-	var err error
-	_ = f.RunWithoutTxn(ctx, func(ctx context.Context, ie sqlutil.InternalExecutor) error {
-		values, err = ie.QueryRowEx(
-			ctx, "get-hashed-pwd", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			getHashedPassword, user)
-		return err
-	})
+	ie := f.MakeInternalExecutorWithoutTxn()
+	values, err := ie.QueryRowEx(
+		ctx, "get-hashed-pwd", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		getHashedPassword, user)
 
 	if err != nil {
 		return aInfo, errors.Wrapf(err, "error looking up user %s", user)
@@ -297,16 +293,12 @@ func retrieveAuthInfo(
 	const getLoginDependencies = `SELECT option, value FROM system.public.role_options ` +
 		`WHERE username=$1 AND option IN ('NOLOGIN', 'VALID UNTIL', 'NOSQLLOGIN')`
 
-	var roleOptsIt sqlutil.InternalRows
-	_ = f.RunWithoutTxn(ctx, func(ctx context.Context, ie sqlutil.InternalExecutor) error {
-		roleOptsIt, err = ie.QueryIteratorEx(
-			ctx, "get-login-dependencies", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			getLoginDependencies,
-			user,
-		)
-		return err
-	})
+	roleOptsIt, err := ie.QueryIteratorEx(
+		ctx, "get-login-dependencies", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		getLoginDependencies,
+		user,
+	)
 
 	if err != nil {
 		return aInfo, errors.Wrapf(err, "error looking up user %s", user)
@@ -403,18 +395,14 @@ WHERE
 `
 	// We use a nil txn as role settings are not tied to any transaction state,
 	// and we should always look up the latest data.
-	var defaultSettingsIt sqlutil.InternalRows
-	var err error
-	_ = f.RunWithoutTxn(ctx, func(ctx context.Context, ie sqlutil.InternalExecutor) error {
-		defaultSettingsIt, err = ie.QueryIteratorEx(
-			ctx, "get-default-settings", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			getDefaultSettings,
-			user,
-			databaseID,
-		)
-		return err
-	})
+	ie := f.MakeInternalExecutorWithoutTxn()
+	defaultSettingsIt, err := ie.QueryIteratorEx(
+		ctx, "get-default-settings", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		getDefaultSettings,
+		user,
+		databaseID,
+	)
 
 	if err != nil {
 		return nil, errors.Wrapf(err, "error looking up user %s", user)
