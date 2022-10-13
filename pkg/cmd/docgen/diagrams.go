@@ -318,6 +318,9 @@ func runParse(
 	b = bytes.Replace(b, []byte("NOTHING_AFTER_RETURNING"), []byte("NOTHING"), -1)
 	b = bytes.Replace(b, []byte("'IDENT'"), []byte("'identifier'"), -1)
 	b = bytes.Replace(b, []byte("_LA"), []byte(""), -1)
+	b = bytes.Replace(b, []byte("INDEX_BEFORE_PAREN"), []byte("INDEX"), -1)
+	b = bytes.Replace(b, []byte("INDEX_BEFORE_NAME_THEN_PAREN"), []byte("INDEX"), -1)
+	b = bytes.Replace(b, []byte("INDEX_AFTER_ORDER_BY_BEFORE_AT"), []byte("INDEX"), -1)
 	return b, err
 }
 
