@@ -38,13 +38,6 @@ const (
 	// resolvedInterval is the value passed to the `resolved` option
 	// when creating the changefeed
 	resolvedInterval = "10s"
-
-	// maxPreviousEntries is the maximum number of previously seen
-	// events the FingerprintValidator will keep in memory when
-	// validating changefeed semantics. The current value corresponds to
-	// less than 20MB of memory, and should be sufficient for about 50k
-	// bank workload transactions
-	maxPreviousEntries = 100_000
 )
 
 var (
@@ -228,7 +221,7 @@ func (cmvt *cdcMixedVersionTester) setupVerifier(node int) versionStep {
 			if err != nil {
 				t.Fatal(err)
 			}
-			fprintV.DBFunc(cmvt.cdcDBConn(getConn)).ValidateDuplicatedEvents(maxPreviousEntries)
+			fprintV.DBFunc(cmvt.cdcDBConn(getConn))
 			validators := cdctest.Validators{
 				cdctest.NewOrderValidator(tableName),
 				fprintV,
