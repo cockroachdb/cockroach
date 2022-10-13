@@ -114,7 +114,7 @@ func (ie *InternalExecutor) WithSyntheticDescriptors(
 
 // MakeInternalExecutor creates an InternalExecutor.
 // TODO (janexing): usage of it should be deprecated with `DescsTxnWithExecutor()`
-// or `RunWithoutTxn()`.
+// or `MakeInternalExecutorWithoutTxn()`.
 func MakeInternalExecutor(
 	s *Server, memMetrics MemoryMetrics, monitor *mon.BytesMonitor,
 ) InternalExecutor {
@@ -1059,7 +1059,7 @@ func (ie *InternalExecutor) checkIfTxnIsConsistent(txn *kv.Txn) error {
 	if txn == nil && ie.extraTxnState != nil {
 		return errors.New("the current internal executor was contructed with" +
 			"a txn. To use an internal executor without a txn, call " +
-			"sqlutil.InternalExecutorFactory.RunWithoutTxn()")
+			"sqlutil.InternalExecutorFactory.MakeInternalExecutorWithoutTxn()")
 	}
 
 	if txn != nil && ie.extraTxnState != nil && ie.extraTxnState.txn != txn {
@@ -1257,7 +1257,7 @@ var _ descs.TxnManager = &InternalExecutorFactory{}
 
 // NewInternalExecutor constructs a new internal executor.
 // TODO (janexing): usage of it should be deprecated with `DescsTxnWithExecutor()`
-// or `RunWithoutTxn()`.
+// or `MakeInternalExecutorWithoutTxn()`.
 func (ief *InternalExecutorFactory) NewInternalExecutor(
 	sd *sessiondata.SessionData,
 ) sqlutil.InternalExecutor {
@@ -1322,13 +1322,11 @@ func (ief *InternalExecutorFactory) newInternalExecutorWithTxn(
 	return &ie, commitTxnFunc
 }
 
-// RunWithoutTxn is to create an internal executor without binding to a txn,
-// and run the passed function with this internal executor.
-func (ief *InternalExecutorFactory) RunWithoutTxn(
-	ctx context.Context, run func(ctx context.Context, ie sqlutil.InternalExecutor) error,
-) error {
-	ie := ief.NewInternalExecutor(nil /* sessionData */)
-	return run(ctx, ie)
+// MakeInternalExecutorWithoutTxn returns an internal executor not bound with any
+// txn.
+func (ief *InternalExecutorFactory) MakeInternalExecutorWithoutTxn() sqlutil.InternalExecutor {
+	ie := MakeInternalExecutor(ief.server, ief.memMetrics, ief.monitor)
+	return &ie
 }
 
 type kvTxnFunc = func(context.Context, *kv.Txn) error
