@@ -12,7 +12,6 @@ package lease
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -59,6 +58,19 @@ type storage struct {
 
 	outstandingLeases *metric.Gauge
 	testingKnobs      StorageTestingKnobs
+	writer            writer
+}
+
+type leaseFields struct {
+	descID     descpb.ID
+	version    descpb.DescriptorVersion
+	instanceID base.SQLInstanceID
+	expiration tree.DTimestamp
+}
+
+type writer interface {
+	deleteLease(context.Context, *kv.Txn, leaseFields) error
+	insertLease(context.Context, *kv.Txn, leaseFields) error
 }
 
 // LeaseRenewalDuration controls the default time before a lease expires when
@@ -112,13 +124,12 @@ func (s storage) acquire(
 		// would not overwrite the old entry if we just were to do another insert.
 		if !expiration.IsEmpty() && desc != nil {
 			prevExpirationTS := storedLeaseExpiration(expiration)
-			deleteLease := fmt.Sprintf(
-				`DELETE FROM system.public.lease WHERE "descID" = %d AND version = %d AND "nodeID" = %d AND expiration = %s`,
-				desc.GetID(), desc.GetVersion(), instanceID, &prevExpirationTS,
-			)
-			if _, err := s.internalExecutor.Exec(
-				ctx, "lease-delete-after-ambiguous", txn, deleteLease,
-			); err != nil {
+			if err := s.writer.deleteLease(ctx, txn, leaseFields{
+				descID:     desc.GetID(),
+				version:    desc.GetVersion(),
+				instanceID: instanceID,
+				expiration: prevExpirationTS,
+			}); err != nil {
 				return errors.Wrap(err, "deleting ambiguously created lease")
 			}
 		}
@@ -142,25 +153,13 @@ func (s storage) acquire(
 		}
 		log.VEventf(ctx, 2, "storage attempting to acquire lease %v@%v", desc, expiration)
 
-		// We use string interpolation here, instead of passing the arguments to
-		// InternalExecutor.Exec() because we don't want to pay for preparing the
-		// statement (which would happen if we'd pass arguments). Besides the
-		// general cost of preparing, preparing this statement always requires a
-		// read from the database for the special descriptor of a system table
-		// (#23937).
 		ts := storedLeaseExpiration(expiration)
-		insertLease := fmt.Sprintf(
-			`INSERT INTO system.public.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
-			desc.GetID(), desc.GetVersion(), instanceID, &ts,
-		)
-		count, err := s.internalExecutor.Exec(ctx, "lease-insert", txn, insertLease)
-		if err != nil {
-			return err
-		}
-		if count != 1 {
-			return errors.Errorf("%s: expected 1 result, found %d", insertLease, count)
-		}
-		return nil
+		return s.writer.insertLease(ctx, txn, leaseFields{
+			descID:     desc.GetID(),
+			version:    desc.GetVersion(),
+			instanceID: s.nodeIDContainer.SQLInstanceID(),
+			expiration: ts,
+		})
 	}
 
 	// Run a retry loop to deal with AmbiguousResultErrors. All other error types
@@ -197,7 +196,7 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
-	firstAttempt := true
+
 	// This transaction is idempotent; the retry was put in place because of
 	// NodeUnavailableErrors.
 	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
@@ -206,29 +205,19 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 		if instanceID == 0 {
 			panic("SQL instance ID not set")
 		}
-		const deleteLease = `DELETE FROM system.public.lease ` +
-			`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
-		count, err := s.internalExecutor.Exec(
-			ctx,
-			"lease-release",
-			nil, /* txn */
-			deleteLease,
-			lease.id, lease.version, instanceID, &lease.expiration,
-		)
+		err := s.writer.deleteLease(ctx, nil, leaseFields{
+			descID:     lease.id,
+			version:    descpb.DescriptorVersion(lease.version),
+			instanceID: instanceID,
+			expiration: lease.expiration,
+		})
 		if err != nil {
 			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
 			if grpcutil.IsConnectionRejected(err) {
 				return
 			}
-			firstAttempt = false
 			continue
 		}
-		// We allow count == 0 after the first attempt.
-		if count > 1 || (count == 0 && firstAttempt) {
-			log.Warningf(ctx, "unexpected results while deleting lease %+v: "+
-				"expected 1 result, found %d", lease, count)
-		}
-
 		s.outstandingLeases.Dec(1)
 		if s.testingKnobs.LeaseReleasedEvent != nil {
 			s.testingKnobs.LeaseReleasedEvent(
