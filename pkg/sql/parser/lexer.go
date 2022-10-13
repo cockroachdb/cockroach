@@ -79,7 +79,20 @@ func (l *lexer) Lex(lval *sqlSymType) int {
 	}
 	*lval = l.tokens[l.lastPos]
 
+	var prevId int32
+	if l.lastPos > 0 {
+		prevId = l.tokens[l.lastPos-1].id
+	}
+
 	switch lval.id {
+	case NOTHING:
+		// Introducing the "RETURNING NOTHING" syntax in CockroachDB
+		// was a terrible idea, given that it is not even used any more!
+		// We should really deprecate it and remove this special case.
+		if prevId == RETURNING {
+			lval.id = NOTHING_AFTER_RETURNING
+		}
+
 	case NOT, WITH, AS, GENERATED, NULLS, RESET, ROLE, USER, ON, TENANT, SET:
 		nextToken := sqlSymType{}
 		if l.lastPos+1 < len(l.tokens) {
