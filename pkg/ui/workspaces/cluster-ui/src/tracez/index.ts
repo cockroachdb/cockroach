@@ -8,17 +8,4 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as React from "react";
-
-interface IconProps {
-  className: string;
-  viewBox?: string;
-}
-
-export function CircleFilled(props: IconProps): React.ReactElement {
-  return (
-    <svg {...props}>
-      <circle cx="5" cy="5" r="5" />
-    </svg>
-  );
-}
+export * from "./snapshot";
