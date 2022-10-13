@@ -1,0 +1,10 @@
+echo
+----
+{
+  b := &Batch{}
+  b.Put(ctx, "b", v2) // context canceled
+  b.GetForUpdate(ctx, "a") // context canceled
+  b.ScanForUpdate(ctx, "a", "c") // context canceled
+  b.ReverseScan(ctx, "a", "c") // context canceled
+  db0.Run(ctx, b) // context canceled
+}

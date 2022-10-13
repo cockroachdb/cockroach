@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -402,6 +403,12 @@ type StoreTestingKnobs struct {
 	// LeaseRenewalDurationOverride replaces the timer duration for proactively
 	// renewing expiration based leases.
 	LeaseRenewalDurationOverride time.Duration
+
+	// RangefeedValueHeaderFilter, if set, is invoked before each value emitted on
+	// the rangefeed, be it in steady state or during the catch-up scan.
+	//
+	// TODO(before merge): plumb the seqno through the rangefeed.
+	RangefeedValueHeaderFilter func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader)
 
 	// MakeSystemConfigSpanUnavailableToQueues makes the system config span
 	// unavailable to queues that ask for it.

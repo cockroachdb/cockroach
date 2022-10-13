@@ -84,6 +84,12 @@ enum ResumeReason {
 // RequestHeader is supplied with every storage node request.
 message RequestHeader {
   reserved 1, 2;
+  message Empty{};
+  Empty kvnemesis_seq = 6 [
+    (gogoproto.customname) = "KVNemesisSeq",
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/buildutil.TestingInt64"];
+
   // The key for request. If the request operates on a range, this
   // represents the starting key for the range.
   bytes key = 3 [(gogoproto.casttype) = "Key"];

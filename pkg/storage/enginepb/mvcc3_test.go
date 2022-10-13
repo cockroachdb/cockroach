@@ -23,6 +23,7 @@ func TestMVCCValueHeader_IsEmpty(t *testing.T) {
 	allFieldsSet := MVCCValueHeader{
 		LocalTimestamp: hlc.ClockTimestamp{WallTime: 1, Logical: 1, Synthetic: true},
 	}
+	allFieldsSet.KVNemesisSeq.Set(123)
 	require.NoError(t, zerofields.NoZeroField(allFieldsSet), "make sure you update the IsEmpty method")
 	require.True(t, MVCCValueHeader{}.IsEmpty())
 	require.False(t, allFieldsSet.IsEmpty())

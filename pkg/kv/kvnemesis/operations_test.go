@@ -11,12 +11,14 @@
 package kvnemesis
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestOperationsFormat(t *testing.T) {
@@ -24,48 +26,29 @@ func TestOperationsFormat(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tests := []struct {
-		step     Step
-		expected string
+		step Step
 	}{
-		{step: step(get(`a`)), expected: `db0.Get(ctx, "a")`},
-		{step: step(del(`a`)), expected: `db0.Del(ctx, "a")`},
-		{step: step(batch(get(`b`), reverseScanForUpdate(`c`, `e`), get(`f`))), expected: `
-			{
-			  b := &Batch{}
-			  b.Get(ctx, "b")
-			  b.ReverseScanForUpdate(ctx, "c", "e")
-			  b.Get(ctx, "f")
-			  db0.Run(ctx, b)
-			}
-		`},
+		{step: step(get(`a`))},
+		{step: step(del(`a`, 1))},
+		{step: step(batch(get(`b`), reverseScanForUpdate(`c`, `e`), get(`f`)))},
 		{
 			step: step(
 				closureTxn(ClosureTxnType_Commit,
-					batch(get(`g`), get(`h`), del(`i`)),
-					delRange(`j`, `k`),
-					put(`k`, `l`),
+					batch(get(`g`), get(`h`), del(`i`, 1)),
+					delRange(`j`, `k`, 2),
+					put(`k`, 3),
 				)),
-			expected: `
-			db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			  {
-			    b := &Batch{}
-			    b.Get(ctx, "g")
-			    b.Get(ctx, "h")
-			    b.Del(ctx, "i")
-			    txn.Run(ctx, b)
-			  }
-			  txn.DelRange(ctx, "j", "k", true)
-			  txn.Put(ctx, "k", l)
-			  return nil
-			})
-			`,
 		},
 	}
 
-	for _, test := range tests {
-		expected := strings.TrimSpace(test.expected)
-		var actual strings.Builder
-		test.step.format(&actual, formatCtx{indent: "\t\t\t"})
-		assert.Equal(t, expected, strings.TrimSpace(actual.String()))
+	w := echotest.Walk(t, testutils.TestDataPath(t, t.Name()))
+	defer w.Check(t)
+	for i, test := range tests {
+		name := fmt.Sprint(i)
+		t.Run(name, w.Do(t, name, func(t *testing.T, path string) {
+			var actual strings.Builder
+			test.step.format(&actual, formatCtx{indent: "···"})
+			echotest.Require(t, strings.TrimLeft(actual.String(), "\n"), path)
+		}))
 	}
 }

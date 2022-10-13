@@ -1,0 +1,8 @@
+echo
+----
+{
+  b := &Batch{}
+  b.Put(ctx, "a", v21) // <nil>
+  b.DelRange(ctx, "b", "c", true /* @s22 */) // <nil>
+  db1.Run(ctx, b) // @<ts> <nil>
+}
