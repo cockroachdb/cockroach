@@ -1606,10 +1606,8 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			}
 		}
 		// Determine which node to propose on. Transfer lease to that node.
-		var propIdx int
-		if !proposeOnFollower {
-			propIdx = 0
-		} else {
+		propIdx := 0
+		if proposeOnFollower {
 			propIdx = 1
 		}
 		propNode := tc.GetFirstStoreFromServer(t, propIdx).TestSender()
@@ -1619,13 +1617,9 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			// Lease transfers may not be immediately observed by the new
 			// leaseholder. Wait until the new leaseholder is aware.
 			repl, err := tc.GetFirstStoreFromServer(t, propIdx).GetReplica(leaderRepl.RangeID)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			repDesc, err := repl.GetReplicaDescriptor()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			if lease, _ := repl.GetLease(); !lease.Replica.Equal(repDesc) {
 				return errors.Errorf("lease not transferred yet; found %v", lease)
 			}
@@ -1686,9 +1680,8 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 		require.NoError(t, tc.RestartServer(2))
 
 		// The write should now succeed.
-		if err := <-putRes; err != nil {
-			t.Fatal(err)
-		}
+		err := <-putRes
+		require.NoError(t, err.GoError())
 	})
 }
 
