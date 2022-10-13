@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"reflect"
 	"sort"
@@ -845,6 +846,10 @@ func ParseJSON(s string) (JSON, error) {
 	// This goes in two phases - first it parses the string into raw interface{}s
 	// using the Go encoding/json package, then it transforms that into a JSON.
 	// This could be faster if we wrote a parser to go directly into the JSON.
+	// Note: a better way to unmarshal a single JSON value would be to use
+	// json.Unmarshal; however, we cannot do that because we want to get numbers
+	// as strings; Alas, json.Unmarshal does not support that, and so, we have
+	// to use json.Decoder.
 	var result interface{}
 	decoder := json.NewDecoder(strings.NewReader(s))
 	// We want arbitrary size/precision decimals, so we call UseNumber() to tell
@@ -858,7 +863,16 @@ func ParseJSON(s string) (JSON, error) {
 		err = pgerror.WithCandidateCode(err, pgcode.InvalidTextRepresentation)
 		return nil, err
 	}
-	if decoder.More() {
+
+	// Check to see if input has more data.
+	// Note: using decoder.More() is wrong since it allows `]` and '}'
+	// characters (i.e. '{}]this is BAD' will be parsed fine, and More will return
+	// false -- thus allowing invalid JSON data to be parsed correctly). The
+	// decoder is meant to be used in the streaming applications; not in a one-off
+	// Unmarshal mode we are using here.  Therefore, to check if input has
+	// trailing characters, we have to attempt to decode the next value.
+	var more interface{}
+	if err := decoder.Decode(&more); err != io.EOF {
 		return nil, errTrailingCharacters
 	}
 	return MakeJSON(result)
