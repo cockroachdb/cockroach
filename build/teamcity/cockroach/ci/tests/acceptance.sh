@@ -6,8 +6,15 @@ dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/teamcity-support.sh"
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 
+if [[ "$(uname -m)" =~ (arm64|aarch64)$ ]]; then
+  export CROSSLINUX_CONFIG="crosslinuxarm"
+else
+  export CROSSLINUX_CONFIG="crosslinux"
+fi
+
 tc_start_block "Build cockroach"
-run_bazel /usr/bin/bash -c 'bazel build --config crosslinux --config ci //pkg/cmd/cockroach-short && cp $(bazel info bazel-bin --config crosslinux --config ci)/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short /artifacts/cockroach && chmod a+w /artifacts/cockroach'
+build_script='bazel build --config $1 --config ci //pkg/cmd/cockroach-short && cp $(bazel info bazel-bin --config $1 --config ci)/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short /artifacts/cockroach && chmod a+w /artifacts/cockroach'
+run_bazel /usr/bin/bash -c "$build_script" -- "$CROSSLINUX_CONFIG"
 tc_end_block "Build cockroach"
 
 export ARTIFACTSDIR=$PWD/artifacts/acceptance
@@ -21,7 +28,7 @@ BAZCI=$(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci
 
 $BAZCI --artifacts_dir=$PWD/artifacts -- \
   test //pkg/acceptance:acceptance_test \
-  --config=crosslinux --config=ci \
+  --config=$CROSSLINUX_CONFIG --config=ci \
   "--sandbox_writable_path=$ARTIFACTSDIR" \
   "--test_tmpdir=$ARTIFACTSDIR" \
   --test_arg=-l="$ARTIFACTSDIR" \
