@@ -1614,6 +1614,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 		}
 		propNode := tc.GetFirstStoreFromServer(t, propIdx).TestSender()
 		tc.TransferRangeLeaseOrFatal(t, *leaderRepl.Desc(), tc.Target(propIdx))
+		tc.WaitForLeaseUpgrade(ctx, t, *leaderRepl.Desc())
 		testutils.SucceedsSoon(t, func() error {
 			// Lease transfers may not be immediately observed by the new
 			// leaseholder. Wait until the new leaseholder is aware.
