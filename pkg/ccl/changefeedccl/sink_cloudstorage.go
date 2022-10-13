@@ -69,7 +69,7 @@ type cloudStorageSinkFile struct {
 	buf         bytes.Buffer
 	alloc       kvevent.Alloc
 	oldestMVCC  hlc.Timestamp
-	pqww        *parquetWriterWrapper
+	pw          *parquetWriterWrapper
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -440,9 +440,7 @@ func makeCloudStorageSink(
 		s.metrics = (*sliMetrics)(nil)
 	}
 
-	log.Errorf(ctx, "xkcd: inside makecloud")
 	if encodingOpts.Format == changefeedbase.OptFormatParquet {
-		log.Errorf(ctx, "xkcd: got parquet")
 		parquetSinkWithEncoder := makeParquetCloudStorageSink(s)
 		return parquetSinkWithEncoder, nil
 	}
@@ -587,7 +585,6 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 	if s.files == nil {
 		return errors.New(`cannot Flush on a closed sink`)
 	}
-	fmt.Printf("xkcd: cloud storage flush called\n")
 
 	s.metrics.recordFlushRequestCallback()()
 
@@ -639,8 +636,8 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	}
 	s.asyncFlushActive = asyncFlushEnabled
 
-	if file.pqww != nil {
-		file.pqww.parquetWriter.Close()
+	if file.pw != nil {
+		file.pw.parquetWriter.Close()
 		file.rawSize = len(file.buf.Bytes())
 	}
 	// We use this monotonically increasing fileID to ensure correct ordering

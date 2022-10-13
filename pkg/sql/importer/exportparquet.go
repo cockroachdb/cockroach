@@ -159,6 +159,9 @@ type ParquetColumn struct {
 	DecodeFn func(interface{}) (tree.Datum, error)
 }
 
+// GetEncoder gets (exports) the encoder for a ParquetColumn. It is needed
+// because encodeFn is not exported. This function is being currently used for
+// supporting parquet format for changefeeds.
 func (pc *ParquetColumn) GetEncoder() (func(datum tree.Datum) (interface{}, error), error) {
 	if pc.encodeFn == nil {
 		return nil, errors.Errorf("Parquet column does not have an encode function")
@@ -166,7 +169,10 @@ func (pc *ParquetColumn) GetEncoder() (func(datum tree.Datum) (interface{}, erro
 	return pc.encodeFn, nil
 }
 
-func (pc *ParquetColumn) GetColName() (string, error) {
+// Name gets (exports) the "name" of a ParquetColumn. It is needed because "name" is not
+// exported. This function is being currently used for supporting parquet format
+// for changefeeds.
+func (pc *ParquetColumn) Name() (string, error) {
 	if pc.name == "" {
 		return "", errors.Errorf("Parquet column does not have a name")
 	}

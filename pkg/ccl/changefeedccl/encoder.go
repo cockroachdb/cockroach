@@ -52,6 +52,10 @@ func getEncoder(
 	case changefeedbase.OptFormatCSV:
 		return newCSVEncoder(opts), nil
 	case changefeedbase.OptFormatParquet:
+		//We will return no encoder for parquet format because there is a separate
+		//sink implemented for parquet format for cloud storage, which does the job
+		//of both encoder and sink. See parquet_sink_cloudstorage.go file for more
+		//information on why this was needed.
 		return nil, nil
 	default:
 		return nil, errors.AssertionFailedf(`unknown format: %s`, opts.Format)

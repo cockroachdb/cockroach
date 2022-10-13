@@ -329,9 +329,12 @@ func (s errorWrapperSink) EncodeAndEmitRow(
 	alloc kvevent.Alloc,
 ) error {
 
-	if err := s.wrapped.(SinkWithEncoder).EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc); err != nil {
-		// return changefeedbase.MarkRetryableError(err)
-		return err
+	if sinkWithEncoder, ok := s.wrapped.(SinkWithEncoder); ok {
+		if err := sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc); err != nil {
+			return changefeedbase.MarkRetryableError(err)
+		}
+	} else {
+		return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.wrapped)
 	}
 	return nil
 }
@@ -598,6 +601,12 @@ func (s *safeSink) Flush(ctx context.Context) error {
 	return s.wrapped.Flush(ctx)
 }
 
+// SinkWithEncoder A sink which both encodes and emits row events. Ideally, this
+// should not be embedding the Sink interface because then all the types that
+// implement this interface will also have to implement EmitRow (instead, they
+// should implement EncodeAndEmitRow), which for a sink with encoder, does not
+// make sense. But since we pass around a type of sink everywhere, we need to
+// embed this for now.
 type SinkWithEncoder interface {
 	Sink
 

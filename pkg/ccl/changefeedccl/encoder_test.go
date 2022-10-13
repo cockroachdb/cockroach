@@ -1060,7 +1060,7 @@ func TestParquetEncoder(t *testing.T) {
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, city STRING, arrayCol STRING[])`)
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, city STRING, arraycol STRING[])`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Berlin', ARRAY['hi', 'bye'])`)
 
 		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
@@ -1068,7 +1068,7 @@ func TestParquetEncoder(t *testing.T) {
 		defer closeFeed(t, foo)
 
 		assertPayloads(t, foo, []string{
-			`foo: [1]->{"arrayCol":{"hi","bye"},city":"Berlin","id":1}`,
+			`foo: [1]->{"arraycol":["hi","bye"],"city":"Berlin","id":1}`,
 		})
 
 	}

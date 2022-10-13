@@ -534,7 +534,10 @@ func (s *notifyFlushSink) EncodeAndEmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	return s.Sink.(SinkWithEncoder).EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc)
+	if sinkWithEncoder, ok := s.Sink.(SinkWithEncoder); ok {
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc)
+	}
+	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.Sink)
 }
 
 var _ Sink = (*notifyFlushSink)(nil)
@@ -888,7 +891,6 @@ type cloudFeedFactory struct {
 func makeCloudFeedFactory(
 	srv serverutils.TestTenantInterface, db *gosql.DB, dir string,
 ) cdctest.TestFeedFactory {
-	fmt.Printf("dir is %s\n", dir)
 	return &cloudFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
 			s:  srv,
@@ -932,7 +934,6 @@ func (f *cloudFeedFactory) Feed(
 	// Nodelocal puts its dir under `ExternalIODir`, which is passed into
 	// cloudFeedFactory.
 	feedDir = filepath.Join(f.dir, feedDir)
-	fmt.Printf("xkcd: feed dir: %s\n", feedDir)
 	if err := os.Mkdir(feedDir, 0755); err != nil {
 		return nil, err
 	}
@@ -1057,6 +1058,8 @@ func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []b
 	return key, value, nil
 }
 
+// This function reads the parquet file and converts each row to its JSON
+// equivalent and appends it to the cloudfeed's row object.
 func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) error {
 
 	f, err := os.Open(path)
@@ -1080,24 +1083,58 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 	}
 
 	for {
+
 		row, err := fr.NextRow()
 		if err == io.EOF {
 			break
 		}
+
 		if err != nil {
 			return err
 		}
 
+		// Holds column to its value mapping for a row and the entire thing will be
+		// JSON encoded later.
 		value := make(map[string]interface{})
+
+		// Holds the list of values of primary keys.
 		key := make([]interface{}, 0)
 
 		for k, v := range row {
 
 			switch vv := v.(type) {
 			case []byte:
+				// Currently, for encoding from CRDB data type to Parquet data type, for
+				// any complex structure (that is, other than ints and floats), it is
+				// always a byte array which is the string representation of that datum
+				// (except for arrays, see below). Therefore, if the parquet reader
+				// decodes a column value as a Go native byte array, then we can be sure
+				// that it is the equivalent string representation of the CRDB datum.
+				// Hence, we can use this value to construct the final JSON object which
+				// will be used by assertPayload to compare actual and expected JSON
+				// objects.
+
+				// Ideally there should be no need to convert byte array to string but
+				// JSON encoder will encode byte arrays as base 64 encoded strings.
+				// Hence, we need to convert to string to tell Marshal to decode it as a
+				// string. For every other Go native type, we can use the type as is and
+				// json.Marhsal will work correctly.
 				value[k] = string(vv)
 			case map[string]interface{}:
-				//https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
+				// This is CRDB ARRAY data type (only data type for which we use parquet
+				// LIST logical type. For all other CRDB types, it's either a byte array
+				// or a primitive parquet type). See importer.NewParquetColumn for
+				// details on how CRDB Array is encoded to parquet. (read it before
+				// reading the rest of the comments). Ideally, the parquet reader should
+				// decode the encoded CRDB array datum as a go native list type. But we
+				// use a low level API provided by the vendor which decodes parquet's
+				// LIST logical data type
+				// (https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
+				// into this weird map structure in Go (It actually makes a lot of sense
+				// why this is done if you understand the parquet LIST logical data
+				// type). A higher level API would convert this map data structure into
+				// go native list type which is what the code below does. This would
+				// probably need to be changed if the parquet vendor is changed.
 				vtemp := make([]interface{}, 0)
 				if castedValue, ok := vv["list"].([]map[string]interface{}); ok {
 					for _, ele := range castedValue {
@@ -1105,6 +1142,7 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 							if byteTypeElement, ok := elementVal.([]byte); ok {
 								vtemp = append(vtemp, string(byteTypeElement))
 							} else {
+								// Primitive types
 								vtemp = append(vtemp, ele["element"])
 							}
 						} else {
@@ -1116,6 +1154,7 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 				}
 				value[k] = vtemp
 			default:
+				// int's, float's and other primitive types
 				value[k] = vv
 			}
 
@@ -1124,11 +1163,11 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 			}
 		}
 
+		// Sorts the keys
 		jsonValue, err := gojson.Marshal(value)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("xkcd: vlaue after json marshal: %s\n", jsonValue)
 
 		jsonKey, err := gojson.Marshal(key)
 		if err != nil {
@@ -1233,19 +1272,18 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return err
 	}
 	defer f.Close()
-	// NB: This is the logic for JSON. Avro will involve parsing an
-	// "Object Container File".
 	details, err := c.Details()
 	if err != nil {
 		return nil
 	}
 
-	switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+	format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
+
+	// NB: This is the logic for JSON. Avro will involve parsing an
+	// "Object Container File".
+	switch format {
 	case changefeedbase.OptFormatParquet:
-		err := c.appendParquetTestFeedMessages(path, topic)
-		if err != nil {
-			return err
-		}
+		return c.appendParquetTestFeedMessages(path, topic)
 	default:
 		s := bufio.NewScanner(f)
 		for s.Scan() {
@@ -1255,7 +1293,7 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 				Value: value,
 			}
 
-			switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
+			switch format {
 			case ``, changefeedbase.OptFormatJSON:
 				// Cloud storage sinks default the `WITH key_in_value` option so that
 				// the key is recoverable. Extract it out of the value (also removing it
@@ -1276,7 +1314,7 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 			case changefeedbase.OptFormatCSV:
 				c.rows = append(c.rows, m)
 			default:
-				return errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
+				return errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, format)
 			}
 		}
 	}

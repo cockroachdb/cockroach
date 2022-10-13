@@ -4,14 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
-	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -20,11 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquet"
 	"github.com/stretchr/testify/require"
@@ -136,6 +126,7 @@ func validateParquetFile(
 		}
 		i++
 	}
+	require.Equal(t, len(test.datums), i)
 	return nil
 }
 
@@ -174,77 +165,75 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 	}
 }
 
-func TestBasicParquetTypes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	dir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
-	dbName := "baz"
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Test fails when run within a test tenant. More
-		// investigation is required. Tracked with #76378.
-		DisableDefaultTestTenant: true,
-		UseDatabase:              dbName,
-		ExternalIODir:            dir,
-	})
-	ctx := context.Background()
-	defer srv.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
+// func TestBasicParquetTypes(t *testing.T) {
+// 	defer leaktest.AfterTest(t)()
+// 	defer log.Scope(t).Close(t)
+// 	dir, dirCleanupFn := testutils.TempDir(t)
+// 	defer dirCleanupFn()
+// 	dbName := "baz"
+// 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+// 		// Test fails when run within a test tenant. More
+// 		// investigation is required. Tracked with #76378.
+// 		DisableDefaultTestTenant: true,
+// 		UseDatabase:              dbName,
+// 		ExternalIODir:            dir,
+// 	})
+// 	ctx := context.Background()
+// 	defer srv.Stopper().Stop(ctx)
+// 	sqlDB := sqlutils.MakeSQLRunner(db)
+// 	sqlDB.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 
-	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
+// 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
-	// instantiating an internal executor to easily get datums from the table
-	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+// 	// instantiating an internal executor to easily get datums from the table
+// 	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
 
-	sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, city STRING)`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Berlin')`)
-	// sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL,
-	// INDEX (y))`)
-	// sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
-	// 2, CAST('nan' AS FLOAT),false),(3, 'Carl', 1, 0.5032135844230652,true),(4, 'Alex', 3, 14.3, NULL), (5,
-	// 'Bobby', 2, 3.4,false), (6, NULL, NULL, 4.5, NULL)`)
+// 	sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, city STRING)`)
+// 	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Berlin')`)
+// 	// sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL,
+// 	// INDEX (y))`)
+// 	// sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
+// 	// 2, CAST('nan' AS FLOAT),false),(3, 'Carl', 1, 0.5032135844230652,true),(4, 'Alex', 3, 14.3, NULL), (5,
+// 	// 'Bobby', 2, 3.4,false), (6, NULL, NULL, 4.5, NULL)`)
 
-	tests := []parquetTest{
-		{
-			filePrefix:     "basic",
-			stmt:           `CREATE CHANGEFEED for foo with initial_scan='only',format='parquet',key_in_value`,
-			validationStmt: `select * from foo`,
-		},
-	}
+// 	tests := []parquetTest{
+// 		{
+// 			filePrefix:     "basic",
+// 			stmt:           `CREATE CHANGEFEED for foo into 'nodelocal://0/basic' with initial_scan='only',format='parquet',key_in_value`,
+// 			validationStmt: `select * from foo`,
+// 		},
+// 	}
 
-	for _, test := range tests {
-		t.Logf("Test %s", test.filePrefix)
-		if test.prep != nil {
-			for _, cmd := range test.prep {
-				sqlDB.Exec(t, cmd)
-			}
-		}
+// 	for _, test := range tests {
+// 		t.Logf("Test %s", test.filePrefix)
+// 		if test.prep != nil {
+// 			for _, cmd := range test.prep {
+// 				sqlDB.Exec(t, cmd)
+// 			}
+// 		}
 
-		sqlDB.Exec(t, test.stmt)
-		time.Sleep(3 * time.Second)
-		// parquetFiles := getParquetFilesWithTimeOut(t, foo)
-		test.dir = dir
-		test.dbName = dbName
-		paths, err := filepath.Glob(filepath.Join(test.dir, test.filePrefix))
-		require.NoError(t, err)
-		require.Equal(t, 1, len(paths))
-		walkFn := func(path string, info fs.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return nil
-			}
-			if strings.HasSuffix(path, `parquet`) {
-				fmt.Printf("xkcd: got file: %s\n", path)
-				return validateParquetFile(t, ctx, ie, test, path)
-			} else {
-				fmt.Printf("xkcd: file %s not have parquet\n", path)
-			}
-			return nil
-		}
-		err = filepath.Walk(paths[0], walkFn)
-		require.NoError(t, err, "failed to validate parquet file")
-	}
-}
+// 		sqlDB.Exec(t, test.stmt)
+// 		time.Sleep(3 * time.Second)
+// 		// parquetFiles := getParquetFilesWithTimeOut(t, foo)
+// 		test.dir = dir
+// 		test.dbName = dbName
+// 		paths, err := filepath.Glob(filepath.Join(test.dir, test.filePrefix))
+// 		require.NoError(t, err)
+// 		require.Equal(t, 1, len(paths))
+// 		walkFn := func(path string, info fs.FileInfo, err error) error {
+// 			if err != nil {
+// 				return err
+// 			}
+// 			if info.IsDir() {
+// 				return nil
+// 			}
+// 			if strings.HasSuffix(path, `parquet`) {
+// 				return validateParquetFile(t, ctx, ie, test, path)
+// 			} else {
+// 			}
+// 			return nil
+// 		}
+// 		err = filepath.Walk(paths[0], walkFn)
+// 		require.NoError(t, err, "failed to validate parquet file")
+// 	}
+// }

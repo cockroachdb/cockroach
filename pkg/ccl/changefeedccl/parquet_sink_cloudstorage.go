@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -25,8 +24,25 @@ import (
 	"github.com/pkg/errors"
 )
 
+// We need a separate sink for parquet format because the parquet encoder has to
+// write metadata to the parquet file (buffer) after each flush. This means that the
+// parquet encoder should have access to the buffer object inside
+// cloudStorageSinkFile file. This means that the parquet writer has to be
+// embedded in the cloudStorageSinkFile file. If we wanted to maintain the
+// existing separation between encoder and the sync, then we would need to
+// figure out a way to get the embedded parquet writer in the
+// cloudStorageSinkFile and pass it to the encode function in the encoder.
+// Instead of this it logically made sense to have a single sink for parquet
+// format which did the job of both encoding and emitting to the cloud storage.
+// This sink currently embeds the cloudStorageSinkFile and it has a function
+// EncodeAndEmitRow which links the buffer in the cloudStorageSinkFile and the
+// parquetWriter every time we need to create a file for each unique combination
+// of topic and schema version (We need to have a unique parquetWriter for each
+// unique combination of topic and schema version because each parquet file can
+// have a single schema written inside it and each parquetWriter can only be
+// associated with a single schema.)
 type parquetCloudStorageSink struct {
-	baseCloudStorageSink *cloudStorageSink
+	wrapped *cloudStorageSink
 }
 
 type parquetWriterWrapper struct {
@@ -39,7 +55,7 @@ type parquetWriterWrapper struct {
 func makeParquetCloudStorageSink(baseCloudStorageSink *cloudStorageSink) *parquetCloudStorageSink {
 	pcs := &parquetCloudStorageSink{}
 
-	pcs.baseCloudStorageSink = baseCloudStorageSink
+	pcs.wrapped = baseCloudStorageSink
 
 	return pcs
 }
@@ -57,11 +73,11 @@ func (pqcs *parquetCloudStorageSink) EmitRow(
 }
 
 func (s *parquetCloudStorageSink) Close() error {
-	return s.baseCloudStorageSink.Close()
+	return s.wrapped.Close()
 }
 
 func (s *parquetCloudStorageSink) Dial() error {
-	return s.baseCloudStorageSink.Dial()
+	return s.wrapped.Dial()
 }
 
 func (s *parquetCloudStorageSink) EmitResolvedTimestamp(
@@ -71,28 +87,12 @@ func (s *parquetCloudStorageSink) EmitResolvedTimestamp(
 }
 
 func (pqcs *parquetCloudStorageSink) Flush(ctx context.Context) error {
-	return pqcs.baseCloudStorageSink.Flush(ctx)
+	return pqcs.wrapped.Flush(ctx)
 }
 
-// func (pqcs *parquetCloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
-// 	s := pqcs.baseCloudStorageSink
-// 	// filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
-// 	// 	s.jobSessionID, s.srcID, s.sinkID, 1, "ganesh", 1234, ".parquet")
-
-// 	filename_output := "/Users/ganeshb/go/src/test/output.parquet"
-// 	payload, err := os.ReadFile(filename_output)
-// 	if err != nil {
-// 		fmt.Printf("error whene opening file: %s\n", err)
-// 	}
-// 	n2, err := file.Write(payload)
-// 	if err != nil {
-// 		fmt.Printf("error whene writing: %s\n", err)
-// 	}
-// 	fmt.Printf("xkcd: wrote %d bytes\n", n2)
-
-// 	return s.flushFile(ctx, file)
-// }
-
+// EncodeAndEmitRow links the buffer in the cloud storage sync file and the
+// parquet writer (see parquetCloudStorageSink). It also takes care of encoding
+// and emitting row event to cloud storage.
 func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
@@ -100,27 +100,23 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	// cacheKey := parquetWriterKey{
-	// 	updatedRow.FamilyID,
-	// }
 
-	s := pqcs.baseCloudStorageSink
+	s := pqcs.wrapped
 	var pqww *parquetWriterWrapper
 	file, err := s.getOrCreateFile(topic, mvcc)
 	if err != nil {
 		return err
 	}
-	// pqcs.flushFile(ctx, file)
 
-	if file.pqww == nil {
+	if file.pw == nil {
 		var err error
 		pqww, err = makeparquetWriterWrapper(ctx, updatedRow, &file.buf)
 		if err != nil {
 			return err
 		}
-		file.pqww = pqww
+		file.pw = pqww
 	} else {
-		pqww = file.pqww
+		pqww = file.pw
 	}
 
 	i := 0
@@ -132,7 +128,6 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		// Revisit: should probably wrap these errors with something
 		// more meaningful for upstream
-		fmt.Printf("xkcd: col name: %s\n", col.Name)
 		encodeFn, err := pqww.parquetColumns[i].GetEncoder()
 		if err != nil {
 			return err
@@ -142,7 +137,7 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 		if err != nil {
 			return err
 		}
-		colName, err := pqww.parquetColumns[i].GetColName()
+		colName, err := pqww.parquetColumns[i].Name()
 		if err != nil {
 			return err
 		}
@@ -216,7 +211,6 @@ func getParquetColumnTypes(
 		names = append(names, col.Name)
 		return nil
 	})
-	fmt.Printf("xkcd: parquet column size: %d\n", len(typs))
 
 	parquetColumns := make([]pqexporter.ParquetColumn, len(typs))
 

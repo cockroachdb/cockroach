@@ -105,6 +105,11 @@ func newEventConsumer(
 
 	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
+
+	//We cannot have a separate encoder and sink for parquet format (see
+	//parquet_sink_cloudstorage.go). Because of this the current nprox solution
+	//does not work for parquet format.
+	//TODO (ganeshb) Add nprox support for parquet format
 	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
 		c, err := makeConsumer(sink, spanFrontier)
 		if err != nil {
@@ -308,45 +313,43 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		evCtx.topic = topic
 	}
 
-	log.Errorf(ctx, "xkcd: event processing type: %T", c.sink)
 	if c.encodingFormat == changefeedbase.OptFormatParquet {
-		if sinkWithEncoder, ok := c.sink.(SinkWithEncoder); ok {
-			log.Errorf(ctx, "xkcd: event processing parquet	")
-			// Revisit: break the arguments into multiple lines
-			err := sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, topic, schemaTimestamp, mvccTimestamp, ev.DetachAlloc())
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		var keyCopy, valueCopy []byte
-		encodedKey, err := c.encoder.EncodeKey(ctx, updatedRow)
-		if err != nil {
-			return err
-		}
-		c.scratch, keyCopy = c.scratch.Copy(encodedKey, 0 /* extraCap */)
-		// TODO(yevgeniy): Some refactoring is needed in the encoder: namely, prevRow
-		// might not be available at all when working with changefeed expressions.
-		encodedValue, err := c.encoder.EncodeValue(ctx, evCtx, updatedRow, prevRow)
-		if err != nil {
-			return err
-		}
-		c.scratch, valueCopy = c.scratch.Copy(encodedValue, 0 /* extraCap */)
+		return c.encodeForParquet(
+			ctx,
+			updatedRow,
+			topic,
+			schemaTimestamp,
+			mvccTimestamp,
+			ev.DetachAlloc(),
+		)
+	}
+	var keyCopy, valueCopy []byte
+	encodedKey, err := c.encoder.EncodeKey(ctx, updatedRow)
+	if err != nil {
+		return err
+	}
+	c.scratch, keyCopy = c.scratch.Copy(encodedKey, 0 /* extraCap */)
+	// TODO(yevgeniy): Some refactoring is needed in the encoder: namely, prevRow
+	// might not be available at all when working with changefeed expressions.
+	encodedValue, err := c.encoder.EncodeValue(ctx, evCtx, updatedRow, prevRow)
+	if err != nil {
+		return err
+	}
+	c.scratch, valueCopy = c.scratch.Copy(encodedValue, 0 /* extraCap */)
 
-		if c.knobs.BeforeEmitRow != nil {
-			if err := c.knobs.BeforeEmitRow(ctx); err != nil {
-				return err
-			}
-		}
-		if err := c.sink.EmitRow(
-			ctx, topic,
-			keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, ev.DetachAlloc(),
-		); err != nil {
+	if c.knobs.BeforeEmitRow != nil {
+		if err := c.knobs.BeforeEmitRow(ctx); err != nil {
 			return err
 		}
-		if log.V(3) {
-			log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
-		}
+	}
+	if err := c.sink.EmitRow(
+		ctx, topic,
+		keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, ev.DetachAlloc(),
+	); err != nil {
+		return err
+	}
+	if log.V(3) {
+		log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
 	}
 	return nil
 }
@@ -354,6 +357,26 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 // Close is a noop for the kvEventToRowConsumer because it
 // has no goroutines in flight.
 func (c *kvEventToRowConsumer) Close() error {
+	return nil
+}
+
+func (c *kvEventToRowConsumer) encodeForParquet(
+	ctx context.Context,
+	updatedRow cdcevent.Row,
+	topic TopicDescriptor,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	if sinkWithEncoder, ok := c.sink.(SinkWithEncoder); ok {
+		// Revisit: break the arguments into multiple lines
+		err := sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc)
+		if err != nil {
+			return err
+		}
+	} else {
+		return errors.AssertionFailedf("Expected a sink with encoder for parquet format, found %T", c.sink)
+	}
+
 	return nil
 }
 
