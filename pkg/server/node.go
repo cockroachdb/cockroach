@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -1743,7 +1744,7 @@ func (n *Node) TokenBucket(
 var NewTenantUsageServer = func(
 	settings *cluster.Settings,
 	db *kv.DB,
-	executor *sql.InternalExecutor,
+	ief sqlutil.InternalExecutorFactory,
 ) multitenant.TenantUsageServer {
 	return dummyTenantUsageServer{}
 }
@@ -1765,6 +1766,7 @@ func (dummyTenantUsageServer) TokenBucketRequest(
 func (dummyTenantUsageServer) ReconfigureTokenBucket(
 	ctx context.Context,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	tenantID roachpb.TenantID,
 	availableRU float64,
 	refillRate float64,

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -83,7 +84,8 @@ func (ts *testState) start(t *testing.T) {
 	ts.tenantUsage = tenantcostserver.NewInstance(
 		ts.s.ClusterSettings(),
 		ts.kvDB,
-		ts.s.InternalExecutor().(*sql.InternalExecutor), ts.clock,
+		ts.s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
+		ts.clock,
 	)
 	ts.metricsReg = metric.NewRegistry()
 	ts.metricsReg.AddMetricStruct(ts.tenantUsage.Metrics())
@@ -241,12 +243,20 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
 	}
-	if err := ts.kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+	ief := ts.s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+	if err := ief.TxnWithExecutor(context.Background(), ts.kvDB, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	) error {
 		return ts.tenantUsage.ReconfigureTokenBucket(
-			ctx, txn,
+			ctx,
+			txn,
+			ie,
 			roachpb.MakeTenantID(tenantID),
-			args.AvailableRU, args.RefillRate, args.MaxBurstRU,
-			time.Time{}, 0,
+			args.AvailableRU,
+			args.RefillRate,
+			args.MaxBurstRU,
+			time.Time{},
+			0,
 		)
 	}); err != nil {
 		d.Fatalf(t, "reconfigure error: %v", err)

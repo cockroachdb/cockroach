@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -111,18 +112,12 @@ type instanceState struct {
 // table.
 type sysTableHelper struct {
 	ctx      context.Context
-	ex       *sql.InternalExecutor
-	txn      *kv.Txn
 	tenantID roachpb.TenantID
 }
 
-func makeSysTableHelper(
-	ctx context.Context, ex *sql.InternalExecutor, txn *kv.Txn, tenantID roachpb.TenantID,
-) sysTableHelper {
+func makeSysTableHelper(ctx context.Context, tenantID roachpb.TenantID) sysTableHelper {
 	return sysTableHelper{
 		ctx:      ctx,
-		ex:       ex,
-		txn:      txn,
 		tenantID: tenantID,
 	}
 }
@@ -131,10 +126,12 @@ func makeSysTableHelper(
 //
 // If the table was not initialized for the tenant, the tenant stats will not be
 // Present.
-func (h *sysTableHelper) readTenantState() (tenant tenantState, _ error) {
+func (h *sysTableHelper) readTenantState(
+	txn *kv.Txn, ie sqlutil.InternalExecutor,
+) (tenant tenantState, _ error) {
 	// We could use a simplified query, but the benefit will be marginal and
 	// this is not used in the hot path.
-	tenant, _, err := h.readTenantAndInstanceState(0 /* instanceID */)
+	tenant, _, err := h.readTenantAndInstanceState(txn, ie, 0 /* instanceID */)
 	return tenant, err
 }
 
@@ -147,13 +144,13 @@ func (h *sysTableHelper) readTenantState() (tenant tenantState, _ error) {
 // If the instance is not in the current active set (according to the table),
 // the instance state will not be Present.
 func (h *sysTableHelper) readTenantAndInstanceState(
-	instanceID base.SQLInstanceID,
+	txn *kv.Txn, ie sqlutil.InternalExecutor, instanceID base.SQLInstanceID,
 ) (tenant tenantState, instance instanceState, _ error) {
 	instance.ID = instanceID
 	// Read the two rows for the per-tenant state (instance_id = 0) and the
 	// per-instance state.
-	rows, err := h.ex.QueryBufferedEx(
-		h.ctx, "tenant-usage-select", h.txn,
+	rows, err := ie.QueryBufferedEx(
+		h.ctx, "tenant-usage-select", txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT
 		  instance_id,               /* 0 */
@@ -212,15 +209,17 @@ func (h *sysTableHelper) readTenantAndInstanceState(
 }
 
 // updateTenantState writes out an updated tenant state.
-func (h *sysTableHelper) updateTenantState(tenant tenantState) error {
+func (h *sysTableHelper) updateTenantState(
+	tenant tenantState, ie sqlutil.InternalExecutor, txn *kv.Txn,
+) error {
 	consumption, err := protoutil.Marshal(&tenant.Consumption)
 	if err != nil {
 		return err
 	}
 	// Note: it is important that this UPSERT specifies all columns of the
 	// table, to allow it to perform "blind" writes.
-	_, err = h.ex.ExecEx(
-		h.ctx, "tenant-usage-upsert", h.txn,
+	_, err = ie.ExecEx(
+		h.ctx, "tenant-usage-upsert", txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`UPSERT INTO system.tenant_usage(
 		  tenant_id,
@@ -251,7 +250,7 @@ func (h *sysTableHelper) updateTenantState(tenant tenantState) error {
 
 // updateTenantState writes out updated tenant and instance states.
 func (h *sysTableHelper) updateTenantAndInstanceState(
-	tenant tenantState, instance instanceState,
+	txn *kv.Txn, ie sqlutil.InternalExecutor, tenant tenantState, instance instanceState,
 ) error {
 	consumption, err := protoutil.Marshal(&tenant.Consumption)
 	if err != nil {
@@ -259,8 +258,8 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 	}
 	// Note: it is important that this UPSERT specifies all columns of the
 	// table, to allow it to perform "blind" writes.
-	_, err = h.ex.ExecEx(
-		h.ctx, "tenant-usage-insert", h.txn,
+	_, err = ie.ExecEx(
+		h.ctx, "tenant-usage-insert", txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`UPSERT INTO system.tenant_usage(
 		  tenant_id,
@@ -304,7 +303,9 @@ func (h *sysTableHelper) updateTenantAndInstanceState(
 // Note that this should only happen after a SQL pod starts up (which is
 // infrequent). In addition, the SQL pod start-up process is not blocked on
 // tenant bucket requests (which happen in the background).
-func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *instanceState) error {
+func (h *sysTableHelper) accomodateNewInstance(
+	txn *kv.Txn, ie sqlutil.InternalExecutor, tenant *tenantState, instance *instanceState,
+) error {
 	if tenant.FirstInstance == 0 || tenant.FirstInstance > instance.ID {
 		// The new instance has the lowest ID.
 		instance.NextInstance = tenant.FirstInstance
@@ -312,8 +313,8 @@ func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *in
 		return nil
 	}
 	// Find the previous instance.
-	row, err := h.ex.QueryRowEx(
-		h.ctx, "find-prev-id", h.txn,
+	row, err := ie.QueryRowEx(
+		h.ctx, "find-prev-id", txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT
 		  instance_id,               /* 0 */
@@ -345,8 +346,8 @@ func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *in
 	// Update the previous instance: its next_instance_id is the new instance.
 	// TODO(radu): consider coalescing this with updateTenantAndInstanceState to
 	// perform a single UPSERT.
-	_, err = h.ex.ExecEx(
-		h.ctx, "update-next-id", h.txn,
+	_, err = ie.ExecEx(
+		h.ctx, "update-next-id", txn,
 		sessiondata.NodeUserSessionDataOverride,
 		// Update the previous instance's next_instance_id.
 		`UPSERT INTO system.tenant_usage(
@@ -379,11 +380,11 @@ func (h *sysTableHelper) accomodateNewInstance(tenant *tenantState, instance *in
 // if it is older than the cutoff time, the instance is removed and the next
 // instance ID is returned (this ID is 0 if this is the highest instance ID).
 func (h *sysTableHelper) maybeCleanupStaleInstance(
-	cutoff time.Time, instanceID base.SQLInstanceID,
+	cutoff time.Time, instanceID base.SQLInstanceID, ie sqlutil.InternalExecutor, txn *kv.Txn,
 ) (deleted bool, nextInstance base.SQLInstanceID, _ error) {
 	ts := tree.MustMakeDTimestamp(cutoff, time.Microsecond)
-	row, err := h.ex.QueryRowEx(
-		h.ctx, "tenant-usage-delete", h.txn,
+	row, err := ie.QueryRowEx(
+		h.ctx, "tenant-usage-delete", txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`DELETE FROM system.tenant_usage
 		 WHERE tenant_id = $1 AND instance_id = $2 AND last_update < $3
@@ -415,7 +416,7 @@ func (h *sysTableHelper) maybeCleanupStaleInstance(
 // the same with startID if nothing was cleaned up, and it is 0 if we cleaned up
 // the last (highest ID) instance.
 func (h *sysTableHelper) maybeCleanupStaleInstances(
-	cutoff time.Time, startID, endID base.SQLInstanceID,
+	txn *kv.Txn, ie sqlutil.InternalExecutor, cutoff time.Time, startID, endID base.SQLInstanceID,
 ) (nextInstance base.SQLInstanceID, _ error) {
 	log.VEventf(
 		h.ctx, 1, "checking stale instances (tenant=%s startID=%d endID=%d)",
@@ -423,7 +424,7 @@ func (h *sysTableHelper) maybeCleanupStaleInstances(
 	)
 	id := startID
 	for n := 0; n < maxInstancesCleanup; n++ {
-		deleted, nextInstance, err := h.maybeCleanupStaleInstance(cutoff, id)
+		deleted, nextInstance, err := h.maybeCleanupStaleInstance(cutoff, id, ie, txn)
 		if err != nil {
 			return -1, err
 		}
@@ -440,20 +441,20 @@ func (h *sysTableHelper) maybeCleanupStaleInstances(
 
 // maybeCheckInvariants checks the invariants for the system table with a random
 // probability and only if this is a test build.
-func (h *sysTableHelper) maybeCheckInvariants() error {
+func (h *sysTableHelper) maybeCheckInvariants(txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 	if buildutil.CrdbTestBuild && rand.Intn(10) == 0 {
-		return h.checkInvariants()
+		return h.checkInvariants(txn, ie)
 	}
 	return nil
 }
 
 // checkInvariants reads all rows in the system table for the given tenant and
 // checks that the state is consistent.
-func (h *sysTableHelper) checkInvariants() error {
+func (h *sysTableHelper) checkInvariants(txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 	// Read the two rows for the per-tenant state (instance_id = 0) and the
 	// per-instance state.
-	rows, err := h.ex.QueryBufferedEx(
-		h.ctx, "tenant-usage-select", h.txn,
+	rows, err := ie.QueryBufferedEx(
+		h.ctx, "tenant-usage-select", txn,
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT
 		  instance_id,               /* 0 */
@@ -567,8 +568,8 @@ func InspectTenantMetadata(
 	tenantID roachpb.TenantID,
 	timeFormat string,
 ) (string, error) {
-	h := makeSysTableHelper(ctx, ex, txn, tenantID)
-	tenant, err := h.readTenantState()
+	h := makeSysTableHelper(ctx, tenantID)
+	tenant, err := h.readTenantState(txn, ex)
 	if err != nil {
 		return "", err
 	}
