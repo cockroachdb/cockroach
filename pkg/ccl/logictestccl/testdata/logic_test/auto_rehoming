@@ -2,10 +2,10 @@
 # LogicTest: local
 
 statement ok
-SET CLUSTER SETTING sql.defaults.experimental_auto_rehoming.enabled = true;
+SET CLUSTER SETTING sql.defaults.auto_rehoming.enabled = true;
 
 statement ok
-SET experimental_enable_auto_rehoming = true;
+SET enable_auto_rehoming = true;
 
 statement ok
 CREATE DATABASE db PRIMARY REGION "test";

@@ -101,6 +101,9 @@ sql.cross_db_fks.enabled	boolean	false	if true, creating foreign key references 
 sql.cross_db_sequence_owners.enabled	boolean	false	if true, creating sequences owned by tables from other databases is allowed
 sql.cross_db_sequence_references.enabled	boolean	false	if true, sequences referenced by tables from other databases are allowed
 sql.cross_db_views.enabled	boolean	false	if true, creating views that refer to other databases is allowed
+sql.defaults.auto_rehoming.enabled	boolean	false	"default value for enable_auto_rehoming; allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE
+This cluster setting is being kept to preserve backwards-compatibility.
+This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.cost_scans_with_default_col_size.enabled	boolean	false	"setting to true uses the same size for all columns to compute scan cost
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
@@ -120,9 +123,6 @@ sql.defaults.distsql	enumeration	auto	"default distributed SQL execution mode [o
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.experimental_alter_column_type.enabled	boolean	false	"default value for experimental_alter_column_type session setting; enables the use of ALTER COLUMN TYPE for general conversions
-This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
-sql.defaults.experimental_auto_rehoming.enabled	boolean	false	"default value for experimental_enable_auto_rehoming; allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.experimental_distsql_planning	enumeration	off	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1]

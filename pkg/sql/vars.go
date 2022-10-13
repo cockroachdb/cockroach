@@ -1530,10 +1530,10 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_enable_auto_rehoming`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_auto_rehoming`),
+	`enable_auto_rehoming`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_auto_rehoming`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("experimental_enable_auto_rehoming", s)
+			b, err := paramparse.ParseBoolVar("enable_auto_rehoming", s)
 			if err != nil {
 				return err
 			}
