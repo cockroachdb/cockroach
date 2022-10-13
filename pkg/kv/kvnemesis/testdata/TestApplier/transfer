@@ -1,0 +1,3 @@
+echo
+----
+db1.TransferLeaseOperation(ctx, tk(6), 1) // <nil>

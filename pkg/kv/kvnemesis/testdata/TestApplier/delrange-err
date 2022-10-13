@@ -1,0 +1,3 @@
+echo
+----
+db1.DelRange(ctx, tk(2), tk(3), true /* @s12 */) // context canceled
