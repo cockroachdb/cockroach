@@ -2021,7 +2021,7 @@ func (c *SyncedCluster) Get(l *logger.Logger, nodes Nodes, src, dest string) err
 		}
 	}
 
-	if config.Quiet && l.File == nil {
+	if config.Quiet && l.File != nil {
 		l.Printf("\n")
 		linesMu.Lock()
 		for i := range lines {
