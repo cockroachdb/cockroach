@@ -1182,6 +1182,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 	workerCtx := bq.AnnotateCtx(context.Background())
 	_ = stopper.RunAsyncTaskEx(workerCtx, stop.TaskOpts{TaskName: bq.name + ".purgatory", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
 		ticker := time.NewTicker(purgatoryReportInterval)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-bq.impl.updateChan():
