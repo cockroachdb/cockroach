@@ -16,7 +16,10 @@ type causes struct {
 	st *cluster.Settings
 }
 
-func (c *causes) examine(stmt *Statement) (result []Cause) {
+// examine will append all causes of the statement's problems to buf and
+// return the result. Buf allows the slice to be pooled.
+func (c *causes) examine(buf []Cause, stmt *Statement) (result []Cause) {
+	result = buf
 	if len(stmt.IndexRecommendations) > 0 {
 		result = append(result, Cause_SuboptimalPlan)
 	}
@@ -29,5 +32,5 @@ func (c *causes) examine(stmt *Statement) (result []Cause) {
 		result = append(result, Cause_HighRetryCount)
 	}
 
-	return
+	return result
 }
