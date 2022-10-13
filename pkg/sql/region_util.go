@@ -154,7 +154,7 @@ func zoneConfigForMultiRegionDatabase(
 		return zonepb.ZoneConfig{}, err
 	}
 
-	leasePreferences := makeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig)
+	leasePreferences := synthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
 
 	zc := zonepb.ZoneConfig{
 		NumReplicas:                 &numReplicas,
@@ -268,15 +268,7 @@ func zoneConfigForMultiRegionPartition(
 	}
 	zc.VoterConstraints = voterConstraints
 	zc.NullVoterConstraintsIsEmpty = true
-
-	var leasePreferences []zonepb.LeasePreference
-
-	if regionConfig.HasSecondaryRegion() {
-		leasePreferences = synthesizeLeasePreferencesWithSecondaryRegion(partitionRegion, regionConfig.SecondaryRegion())
-	} else {
-		leasePreferences = synthesizeLeasePreferences(partitionRegion)
-	}
-	zc.LeasePreferences = leasePreferences
+	zc.LeasePreferences = synthesizeLeasePreferences(partitionRegion, regionConfig.SecondaryRegion())
 	zc.InheritedLeasePreferences = false
 
 	return regionConfig.ExtendZoneConfigWithRegionalIn(zc, partitionRegion)
@@ -490,26 +482,17 @@ func synthesizeReplicaConstraints(
 	}
 }
 
-// synthesizeLeasePreferences generates a LeasePreferences clause representing
-// the `lease_preferences` field to be set for the primary region of a
-// multi-region database or the home region of a table in such a database.
-func synthesizeLeasePreferences(region catpb.RegionName) []zonepb.LeasePreference {
-	return []zonepb.LeasePreference{
-		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)}},
-	}
-}
-
-// synthesizeLeasePreferencesWithSecondaryRegion generates a LeasePreferences
+// synthesizeLeasePreferences generates a LeasePreferences
 // clause representing the `lease_preferences` field to be set for the primary
 // region and secondary region of a multi-region database or the home region of
-// a table in such a database .
-func synthesizeLeasePreferencesWithSecondaryRegion(
+// a table in such a database.
+func synthesizeLeasePreferences(
 	region catpb.RegionName, secondaryRegion catpb.RegionName,
 ) []zonepb.LeasePreference {
 	ret := []zonepb.LeasePreference{
 		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)}},
 	}
-	if region != secondaryRegion {
+	if secondaryRegion != "" && secondaryRegion != region {
 		ret = append(ret, zonepb.LeasePreference{
 			Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(secondaryRegion)},
 		})
@@ -564,9 +547,7 @@ func zoneConfigForMultiRegionTable(
 			}
 			zc.VoterConstraints = voterConstraints
 			zc.NullVoterConstraintsIsEmpty = true
-
-			leasePreferences := synthesizeLeasePreferences(regionConfig.PrimaryRegion())
-			zc.LeasePreferences = leasePreferences
+			zc.LeasePreferences = synthesizeLeasePreferences(regionConfig.PrimaryRegion(), "" /* secondaryRegion */)
 			zc.InheritedLeasePreferences = false
 
 			zc, err = regionConfig.ExtendZoneConfigWithGlobal(zc)
@@ -617,9 +598,7 @@ func zoneConfigForMultiRegionTable(
 		}
 		zc.VoterConstraints = voterConstraints
 		zc.NullVoterConstraintsIsEmpty = true
-
-		leasePreferences := synthesizeLeasePreferences(affinityRegion)
-		zc.LeasePreferences = leasePreferences
+		zc.LeasePreferences = synthesizeLeasePreferences(affinityRegion, "" /* secondaryRegion */)
 		zc.InheritedLeasePreferences = false
 
 		return regionConfig.ExtendZoneConfigWithRegionalIn(zc, affinityRegion)
@@ -632,23 +611,6 @@ func zoneConfigForMultiRegionTable(
 		return zonepb.ZoneConfig{}, errors.AssertionFailedf(
 			"unexpected unknown locality type %T", localityConfig.Locality)
 	}
-}
-
-// makeLeasePreferences returns a list of lease preference constraints.
-// A constraint is added for the region passed in and a secondary lease
-// preference is added if the regionConfig has a secondary region.
-func makeLeasePreferences(
-	region catpb.RegionName, regionConfig multiregion.RegionConfig,
-) []zonepb.LeasePreference {
-	ret := []zonepb.LeasePreference{
-		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)}},
-	}
-	if regionConfig.HasSecondaryRegion() && region != regionConfig.SecondaryRegion() {
-		ret = append(ret, zonepb.LeasePreference{
-			Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(regionConfig.SecondaryRegion())},
-		})
-	}
-	return ret
 }
 
 // applyZoneConfigForMultiRegionTableOption is an option that can be passed into
@@ -845,12 +807,12 @@ func prepareZoneConfigForMultiRegionTable(
 		case table.IsLocalityRegionalByTable():
 			localityConfig := table.TableDesc().LocalityConfig.GetRegionalByTable()
 			if region := localityConfig.Region; region != nil {
-				newLeasePreferences = makeLeasePreferences(*region, regionConfig)
+				newLeasePreferences = synthesizeLeasePreferences(*region, regionConfig.SecondaryRegion())
 			} else {
-				newLeasePreferences = makeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig)
+				newLeasePreferences = synthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
 			}
 		default:
-			newLeasePreferences = makeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig)
+			newLeasePreferences = synthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
 		}
 		newZoneConfig.LeasePreferences = newLeasePreferences
 	}
@@ -1976,7 +1938,6 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 	if err != nil {
 		return err
 	}
-	regionConfig := dbDesc.GetRegionConfig()
 
 	same, mismatch, err := currentZoneConfig.DiffWithZone(
 		expectedZoneConfig,
@@ -1993,12 +1954,6 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 			mismatch.Field,
 		)
 	}
-
-	if regionConfig != nil && regionConfig.SecondaryRegion != "" {
-		leasePreferences := synthesizeLeasePreferencesWithSecondaryRegion(regionConfig.PrimaryRegion, regionConfig.SecondaryRegion)
-		expectedZoneConfig.LeasePreferences = leasePreferences
-	}
-
 	return nil
 }
 
@@ -2170,12 +2125,12 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 			case desc.IsLocalityRegionalByTable():
 				rbt := desc.GetLocalityConfig().GetRegionalByTable()
 				if rbt.Region != nil {
-					leasePreferences = synthesizeLeasePreferencesWithSecondaryRegion(*rbt.Region, regionConfig.SecondaryRegion)
+					leasePreferences = synthesizeLeasePreferences(*rbt.Region, regionConfig.SecondaryRegion)
 				} else {
-					leasePreferences = synthesizeLeasePreferencesWithSecondaryRegion(regionConfig.PrimaryRegion, regionConfig.SecondaryRegion)
+					leasePreferences = synthesizeLeasePreferences(regionConfig.PrimaryRegion, regionConfig.SecondaryRegion)
 				}
 			default:
-				leasePreferences = synthesizeLeasePreferencesWithSecondaryRegion(regionConfig.PrimaryRegion, regionConfig.SecondaryRegion)
+				leasePreferences = synthesizeLeasePreferences(regionConfig.PrimaryRegion, regionConfig.SecondaryRegion)
 			}
 
 			expectedZoneConfig.LeasePreferences = leasePreferences
