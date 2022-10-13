@@ -1,0 +1,1 @@
+This file exists to let teamcity know that it can run tests on ARM64 in the current branch.
