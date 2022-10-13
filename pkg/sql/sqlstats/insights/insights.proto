@@ -103,7 +103,7 @@ message Statement {
 }
 
 message Insight {
-  Session session = 1;
+  Session session = 1 [(gogoproto.nullable) = false];
   Transaction transaction = 2;
   Statement statement = 3;
 

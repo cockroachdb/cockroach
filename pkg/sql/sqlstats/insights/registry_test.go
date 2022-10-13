@@ -28,7 +28,7 @@ import (
 func TestRegistry(t *testing.T) {
 	ctx := context.Background()
 
-	session := &Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
+	session := Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
 	transaction := &Transaction{ID: uuid.FastMakeV4()}
 	statement := &Statement{
 		ID:               clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")),
@@ -136,7 +136,7 @@ func TestRegistry(t *testing.T) {
 	})
 
 	t.Run("buffering statements per session", func(t *testing.T) {
-		otherSession := &Session{ID: clusterunique.IDFromBytes([]byte("cccccccccccccccccccccccccccccccc"))}
+		otherSession := Session{ID: clusterunique.IDFromBytes([]byte("cccccccccccccccccccccccccccccccc"))}
 		otherTransaction := &Transaction{ID: uuid.FastMakeV4()}
 		otherStatement := &Statement{
 			ID:               clusterunique.IDFromBytes([]byte("dddddddddddddddddddddddddddddddd")),
