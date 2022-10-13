@@ -95,6 +95,8 @@ message RequestHeader {
   // A zero-indexed transactional sequence number.
   int32 sequence = 5 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnSeq"];
+
+  int32 seq = 6;
 }
 
 // ResponseHeader is returned with every storage node response. Note that this is

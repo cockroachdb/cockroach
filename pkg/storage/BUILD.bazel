@@ -52,6 +52,7 @@ go_library(
         "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/keys",
+        "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
         "//pkg/kv/kvserver/uncertainty",

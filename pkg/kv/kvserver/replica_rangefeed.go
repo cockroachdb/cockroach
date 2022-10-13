@@ -222,7 +222,11 @@ func (r *Replica) rangeFeedWithRangeID(
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			return rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease)
+			i := rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease)
+			if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
+				i.OnEmit = f
+			}
+			return i
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(
@@ -611,7 +615,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// Read the value directly from the Reader. This is performed in the
 		// same raftMu critical section that the logical op's corresponding
 		// WriteBatch is applied, so the value should exist.
-		val, _, err := storage.MVCCGet(ctx, reader, key, ts, storage.MVCCGetOptions{Tombstones: true})
+		val, _, vh, err := storage.MVCCGetWithValueHeader(ctx, reader, key, ts, storage.MVCCGetOptions{Tombstones: true})
 		if val == nil && err == nil {
 			err = errors.New("value missing in reader")
 		}
@@ -620,6 +624,10 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 				"error consuming %T for key %v @ ts %v: %v", op, key, ts, err,
 			))
 			return
+		}
+
+		if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
+			f(key, ts, vh)
 		}
 		*valPtr = val.RawBytes
 	}

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -266,6 +267,11 @@ func evaluateBatch(
 		}
 
 		reply := br.Responses[index].GetInner()
+
+		// TODO(tbg): inject this code behind crdb_test build tag.
+		if seq := kvnemesisutil.Seq(args.Header().Seq); seq != 0 {
+			ctx = kvnemesisutil.WithSeq(ctx, seq)
+		}
 
 		// Note that `reply` is populated even when an error is returned: it
 		// may carry a response transaction and in the case of WriteTooOldError

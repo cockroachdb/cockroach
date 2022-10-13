@@ -172,6 +172,7 @@ message MVCCValueHeader {
   // to stale reads.
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  int32 seq = 2;
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width

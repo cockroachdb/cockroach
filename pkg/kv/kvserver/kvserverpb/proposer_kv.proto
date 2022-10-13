@@ -230,6 +230,12 @@ message ReplicatedEvalResult {
   // is applied on the new leaseholder through a Raft snapshot.
   kv.kvserver.readsummary.ReadSummary prior_read_summary = 22;
 
+  message Testing {
+    uint32  Seq = 1;
+  }
+
+  Testing testing = 26;
+
   reserved 1, 5, 7, 9, 14, 15, 16, 19, 10001 to 10013;
 }
 

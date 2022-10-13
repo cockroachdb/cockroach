@@ -62,6 +62,7 @@ type CatchUpIterator struct {
 	close     func()
 	span      roachpb.Span
 	startTime hlc.Timestamp // exclusive
+	OnEmit    func(key roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader)
 }
 
 // NewCatchUpIterator returns a CatchUpIterator for the given Reader over the
@@ -302,6 +303,9 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 					},
 				})
 				reorderBuf = append(reorderBuf, event)
+				if i.OnEmit != nil {
+					i.OnEmit(key, ts, mvccVal.MVCCValueHeader)
+				}
 			}
 		}
 
