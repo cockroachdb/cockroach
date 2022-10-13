@@ -144,6 +144,7 @@ var retiredSettings = map[string]struct{}{
 	"kv.rangefeed.catchup_scan_iterator_optimization.enabled":   {},
 	"kv.refresh_range.time_bound_iterators.enabled":             {},
 	"sql.defaults.datestyle.enabled":                            {},
+	"sql.defaults.experimental_auto_rehoming.enabled":           {},
 	"sql.defaults.intervalstyle.enabled":                        {},
 }
 
@@ -153,6 +154,7 @@ var retiredSettings = map[string]struct{}{
 // changed with ALTER ROLE ... SET.
 var sqlDefaultSettings = map[string]struct{}{
 	// PLEASE DO NOT ADD NEW SETTINGS TO THIS MAP. THANK YOU.
+	"sql.defaults.auto_rehoming.enabled":                                        {},
 	"sql.defaults.cost_scans_with_default_col_size.enabled":                     {},
 	"sql.defaults.datestyle":                                                    {},
 	"sql.defaults.datestyle.enabled":                                            {},
@@ -161,7 +163,6 @@ var sqlDefaultSettings = map[string]struct{}{
 	"sql.defaults.disallow_full_table_scans.enabled":                            {},
 	"sql.defaults.distsql":                                                      {},
 	"sql.defaults.experimental_alter_column_type.enabled":                       {},
-	"sql.defaults.experimental_auto_rehoming.enabled":                           {},
 	"sql.defaults.experimental_computed_column_rewrites":                        {},
 	"sql.defaults.experimental_distsql_planning":                                {},
 	"sql.defaults.experimental_enable_unique_without_index_constraints.enabled": {},
