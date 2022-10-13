@@ -57,6 +57,8 @@ pkg/cmd/prereqs/BUILD.bazel
 EXISTING_CRDB_TEST_BUILD_CONSTRAINTS="
 pkg/util/buildutil/crdb_test_off.go://go:build !crdb_test || crdb_test_off
 pkg/util/buildutil/crdb_test_on.go://go:build crdb_test && !crdb_test_off
+pkg/kv/kvnemesis/kvnemesisutil/crdb_test_off.go://go:build !crdb_test || crdb_test_off
+pkg/kv/kvnemesis/kvnemesisutil/crdb_test_on.go://go:build crdb_test && !crdb_test_off
 "
 
 if [ -z "${COCKROACH_BAZEL_CHECK_FAST:-}" ]; then

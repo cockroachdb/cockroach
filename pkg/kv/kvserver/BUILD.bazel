@@ -111,6 +111,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvbase",
         "//pkg/kv/kvclient/rangecache",
+        "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",

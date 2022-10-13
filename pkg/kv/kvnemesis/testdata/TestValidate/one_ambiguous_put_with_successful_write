@@ -1,0 +1,4 @@
+echo
+----
+db0.Put(ctx, tk(1), sv(1)) // result is ambiguous: boom
+/Table/100/"0000000000000001"/0.000000001,0 @ s1 v1

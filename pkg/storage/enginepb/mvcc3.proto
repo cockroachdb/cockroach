@@ -144,8 +144,31 @@ message IgnoredSeqNumRange {
 // Used by storage.MVCCValue.
 //
 // NB: Make sure to update MVCCValueHeader.IsEmpty() when adding fields.
+//
+// NB: a shallow copy of this value has to equal a deep copy, i.e. there
+// must be (recursively) no pointers in this type. Should this need to
+// change, need to update mvccGetWithValueHeader.
+//
+// NB: ensure that this struct stays in sync with MVCCValueHeader{Pure,CrdbTest}.
+// See roachpb.RequestHeader for details on how they help us keep the KVNemesisSeq
+// field out of production code.
 message MVCCValueHeader {
   option (gogoproto.equal) = true;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
+
+  message Empty{};
+  // Empty is zero-size in production. It's an int64 under the crdb_test build tag.
+  // This is used to enable kvnemesis testing, which builds on uniqueness of values
+  // in the MVCC history. Deletions don't have a user-definable value, so we need
+  // an extra identifier, which is provided by this field.
+  //
+  // NB: it's important that this isn't at the end of the message, see:
+  // https://dave.cheney.net/2015/10/09/padding-is-hard
+  Empty kvnemesis_seq = 2 [
+    (gogoproto.customname) = "KVNemesisSeq",
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Container"];
 
   // The local clock timestamp records the value of the local HLC clock on the
   // leaseholder when the key was originally written. It is used to make claims
@@ -170,6 +193,24 @@ message MVCCValueHeader {
   // this will simply lead to additional uncertainty restarts. However, it is
   // not safe for the local clock timestamp to be rounded up, as this could lead
   // to stale reads.
+  util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+}
+
+// MVCCValueHeaderPure is not to be used directly. It's generated only for use of
+// its marshaling methods by MVCCValueHeader. See the comment there.
+message MVCCValueHeaderPure {
+  util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+}
+// MVCCValueHeaderCrdbTest is not to be used directly. It's generated only for use of
+// its marshaling methods by MVCCValueHeader. See the comment there.
+message MVCCValueHeaderCrdbTest {
+  message Empty{};
+  Empty kvnemesis_seq = 2 [
+    (gogoproto.customname) = "KVNemesisSeq",
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Container"];
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }

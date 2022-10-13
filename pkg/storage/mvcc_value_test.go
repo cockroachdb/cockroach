@@ -13,12 +13,16 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,36 +122,39 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 	valHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: 9}
 
 	testcases := map[string]struct {
-		val    MVCCValue
-		expect []byte
+		val MVCCValue
 	}{
-		"tombstone":        {val: MVCCValue{}, expect: nil},
-		"bytes":            {val: MVCCValue{Value: strVal}, expect: []byte{0x0, 0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f}},
-		"int":              {val: MVCCValue{Value: intVal}, expect: []byte{0x0, 0x0, 0x0, 0x0, 0x1, 0x22}},
-		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}, expect: []byte{0x0, 0x0, 0x0, 0x4, 0x65, 0xa, 0x2, 0x8, 0x9}},
-		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}, expect: []byte{0x0, 0x0, 0x0, 0x4, 0x65, 0xa, 0x2, 0x8, 0x9, 0x0, 0x0, 0x0, 0x0, 0x3, 0x66, 0x6f, 0x6f}},
-		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}, expect: []byte{0x0, 0x0, 0x0, 0x4, 0x65, 0xa, 0x2, 0x8, 0x9, 0x0, 0x0, 0x0, 0x0, 0x1, 0x22}},
+		"tombstone":        {val: MVCCValue{}},
+		"bytes":            {val: MVCCValue{Value: strVal}},
+		"int":              {val: MVCCValue{Value: intVal}},
+		"header+tombstone": {val: MVCCValue{MVCCValueHeader: valHeader}},
+		"header+bytes":     {val: MVCCValue{MVCCValueHeader: valHeader, Value: strVal}},
+		"header+int":       {val: MVCCValue{MVCCValueHeader: valHeader, Value: intVal}},
 	}
+	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
 	for name, tc := range testcases {
-		t.Run(name, func(t *testing.T) {
-			encSize := encodedMVCCValueSize(tc.val)
-			require.Equal(t, len(tc.expect), encSize)
-
+		t.Run(name, w.Run(t, name, func(t *testing.T) string {
+			var buf strings.Builder
 			enc, err := EncodeMVCCValue(tc.val)
 			require.NoError(t, err)
-			require.Equal(t, tc.expect, enc)
+			fmt.Fprintf(&buf, "encoded: %x", enc)
+			assert.Equal(t, encodedMVCCValueSize(tc.val), len(enc))
 
 			dec, err := DecodeMVCCValue(enc)
 			require.NoError(t, err)
+
 			if len(dec.Value.RawBytes) == 0 {
 				dec.Value.RawBytes = nil // normalize
 			}
+
 			require.Equal(t, tc.val, dec)
 			require.Equal(t, tc.val.IsTombstone(), dec.IsTombstone())
 			isTombstone, err := EncodedMVCCValueIsTombstone(enc)
 			require.NoError(t, err)
 			require.Equal(t, tc.val.IsTombstone(), isTombstone)
-		})
+
+			return buf.String()
+		}))
 	}
 }
 

@@ -54,19 +54,28 @@ message ScanOperation {
 
 message PutOperation {
   bytes key = 1;
-  bytes value = 2;
+  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
 message DeleteOperation {
   bytes key = 1;
-  Result result = 2 [(gogoproto.nullable) = false];
+  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  Result result = 3 [(gogoproto.nullable) = false];
 }
 
 message DeleteRangeOperation {
   bytes key = 1;
   bytes end_key = 2;
-  Result result = 3 [(gogoproto.nullable) = false];
+  uint32 seq = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  Result result = 4 [(gogoproto.nullable) = false];
+}
+
+message DeleteRangeUsingTombstoneOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  uint32 seq = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  Result result = 4 [(gogoproto.nullable) = false];
 }
 
 message SplitOperation {
@@ -117,11 +126,12 @@ message Operation {
   ScanOperation scan = 9;
   DeleteOperation delete = 10;
   DeleteRangeOperation delete_range = 11;
-  SplitOperation split = 12;
-  MergeOperation merge = 13;
-  ChangeReplicasOperation change_replicas = 14;
-  TransferLeaseOperation transfer_lease = 15;
-  ChangeZoneOperation change_zone = 16;
+  DeleteRangeUsingTombstoneOperation delete_range_using_tombstone = 12;
+  SplitOperation split = 13;
+  MergeOperation merge = 14;
+  ChangeReplicasOperation change_replicas = 15;
+  TransferLeaseOperation transfer_lease = 16;
+  ChangeZoneOperation change_zone = 17;
 }
 
 enum ResultType {
@@ -158,7 +168,7 @@ message Step {
   util.hlc.Timestamp before = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp after = 3 [(gogoproto.nullable) = false];
   int32 db_id = 4 [(gogoproto.customname) = 'DBID'];
-  // Trace will contain the recording of the Step's execution. Used to print it
-  // out when the test fails.
+  // Trace will contain (a reference on where to find) the recording of the
+  // Step's execution. Used to print it out when the test fails.
   string trace = 5;
 }
