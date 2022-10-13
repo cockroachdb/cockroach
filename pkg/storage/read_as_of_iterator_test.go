@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -96,7 +97,7 @@ func TestReadAsOfIterator(t *testing.T) {
 						asOf.WallTime = int64(test.asOf[0])
 					}
 					it := NewReadAsOfIterator(iter, asOf)
-					iterateSimpleMultiIter(t, it, subtest)
+					iterateSimpleMVCCIterator(t, it, subtest)
 				})
 			}
 		})
@@ -183,4 +184,68 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 			require.Equal(t, test.expected, output.String())
 		})
 	}
+}
+
+// populateBatch populates a pebble batch with a series of MVCC key values.
+// input is a string containing key, timestamp, value tuples: first a single
+// character key, then a single character timestamp walltime. If the
+// character after the timestamp is an M, this entry is a "metadata" key
+// (timestamp=0, sorts before any non-0 timestamp, and no value). If the
+// character after the timestamp is an X, this entry is a deletion
+// tombstone. Otherwise the value is the same as the timestamp.
+func populateBatch(t *testing.T, batch Batch, input string) {
+	for i := 0; ; {
+		if i == len(input) {
+			break
+		}
+		k := []byte{input[i]}
+		ts := hlc.Timestamp{WallTime: int64(input[i+1])}
+		var v MVCCValue
+		if i+1 < len(input) && input[i+1] == 'M' {
+			ts = hlc.Timestamp{}
+		} else if i+2 < len(input) && input[i+2] == 'X' {
+			i++
+		} else {
+			v.Value.SetString(string(input[i+1]))
+		}
+		i += 2
+		if ts.IsEmpty() {
+			vRaw, err := EncodeMVCCValue(v)
+			require.NoError(t, err)
+			require.NoError(t, batch.PutUnversioned(k, vRaw))
+		} else {
+			require.NoError(t, batch.PutMVCC(MVCCKey{Key: k, Timestamp: ts}, v))
+		}
+	}
+}
+
+type iterSubtest struct {
+	name     string
+	expected string
+	fn       func(SimpleMVCCIterator)
+}
+
+// iterateSimpleMVCCIterator iterates through a simpleMVCCIterator for expected values,
+// and assumes that populateBatch populated the keys for the iterator.
+func iterateSimpleMVCCIterator(t *testing.T, it SimpleMVCCIterator, subtest iterSubtest) {
+	var output bytes.Buffer
+	for it.SeekGE(MVCCKey{Key: keys.LocalMax}); ; subtest.fn(it) {
+		ok, err := it.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		output.Write(it.UnsafeKey().Key)
+		if it.UnsafeKey().Timestamp.IsEmpty() {
+			output.WriteRune('M')
+		} else {
+			output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
+			v, err := DecodeMVCCValue(it.UnsafeValue())
+			require.NoError(t, err)
+			if v.IsTombstone() {
+				output.WriteRune('X')
+			}
+		}
+	}
+	require.Equal(t, subtest.expected, output.String())
 }
