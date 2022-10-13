@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -313,7 +314,9 @@ func (b *writeBuffer) writeTextColumnarElement(
 		b.writeLengthPrefixedString(d.String())
 
 	case types.BytesFamily:
-		writeTextBytes(b, string(vecs.BytesCols[colIdx].Get(rowIdx)), conv)
+		writeTextBytes(
+			b, unsafeBytesToString(vecs.BytesCols[colIdx].Get(rowIdx)), conv,
+		)
 
 	case types.UuidFamily:
 		id, err := uuid.FromBytes(vecs.BytesCols[colIdx].Get(rowIdx))
@@ -323,7 +326,9 @@ func (b *writeBuffer) writeTextColumnarElement(
 		writeTextUUID(b, id)
 
 	case types.StringFamily:
-		writeTextString(b, string(vecs.BytesCols[colIdx].Get(rowIdx)), typ)
+		writeTextString(
+			b, unsafeBytesToString(vecs.BytesCols[colIdx].Get(rowIdx)), typ,
+		)
 
 	case types.DateFamily:
 		tree.FormatDate(pgdate.MakeCompatibleDateFromDisk(vecs.Int64Cols[colIdx].Get(rowIdx)), b.textFormatter)
@@ -907,4 +912,10 @@ func timeToPgBinary(t time.Time, offset *time.Location) int64 {
 		t = t.UTC()
 	}
 	return duration.DiffMicros(t, pgwirebase.PGEpochJDate)
+}
+
+// unsafeBytesToString constructs a string from a byte slice. It is
+// critical that the byte slice not be modified.
+func unsafeBytesToString(data []byte) string {
+	return *(*string)(unsafe.Pointer(&data))
 }
