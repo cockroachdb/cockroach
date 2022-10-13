@@ -1,0 +1,3 @@
+echo
+----
+env.UpdateZoneConfig(ctx, ToggleGlobalReads) // context canceled

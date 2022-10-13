@@ -278,7 +278,7 @@ func TestMVCCGetNoMoreOldVersion(t *testing.T) {
 	}
 }
 
-func TestMVCCGetAndDelete(t *testing.T) {
+func TestMVCCGetWithValueHeader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -286,32 +286,34 @@ func TestMVCCGetAndDelete(t *testing.T) {
 	engine := NewDefaultInMemForTesting()
 	defer engine.Close()
 
-	if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, value1, nil); err != nil {
+	if err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1, Logical: 1}, hlc.ClockTimestamp{WallTime: 1}, value1, nil); err != nil {
 		t.Fatal(err)
 	}
-	value, _, err := MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, MVCCGetOptions{})
+	value, _, vh, err := MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2}, MVCCGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if value == nil {
 		t.Fatal("the value should not be empty")
 	}
+	require.Equal(t, hlc.ClockTimestamp{WallTime: 1}, vh.LocalTimestamp)
 
-	_, err = MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, nil)
+	_, err = MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{WallTime: 2, Logical: 1}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Read the latest version which should be deleted.
-	value, _, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4}, MVCCGetOptions{})
+	value, _, vh, err = MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4}, MVCCGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if value != nil {
 		t.Fatal("the value should be empty")
 	}
+	require.Zero(t, vh.LocalTimestamp)
 	// Read the latest version with tombstone.
-	value, _, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4},
+	value, _, vh, err = MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4},
 		MVCCGetOptions{Tombstones: true})
 	if err != nil {
 		t.Fatal(err)
@@ -319,9 +321,11 @@ func TestMVCCGetAndDelete(t *testing.T) {
 		t.Fatalf("the value should be non-nil with empty RawBytes; got %+v", value)
 	}
 
+	require.Equal(t, hlc.ClockTimestamp{WallTime: 2, Logical: 1}, vh.LocalTimestamp)
+
 	// Read the old version which should still exist.
 	for _, logical := range []int32{0, math.MaxInt32} {
-		value, _, err = MVCCGet(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2, Logical: logical},
+		value, _, vh, err := MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 2, Logical: logical},
 			MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
@@ -329,6 +333,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 		if value == nil {
 			t.Fatal("the value should not be empty")
 		}
+		require.Equal(t, hlc.ClockTimestamp{WallTime: 1}, vh.LocalTimestamp)
 	}
 }
 

@@ -1,0 +1,3 @@
+echo
+----
+db1.ReverseScanForUpdate(ctx, "a", "c", 0) // context canceled

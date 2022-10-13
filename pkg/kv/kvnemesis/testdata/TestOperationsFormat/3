@@ -1,0 +1,14 @@
+echo
+----
+···db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+···  {
+···    b := &Batch{}
+···    b.Get(ctx, "g")
+···    b.Get(ctx, "h")
+···    b.Del(ctx, "i" /* @s1 */)
+···    txn.Run(ctx, b)
+···  }
+···  txn.DelRange(ctx, "j", "k", true /* @s2 */)
+···  txn.Put(ctx, "k", v3)
+···  return nil
+···})

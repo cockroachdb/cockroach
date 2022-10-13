@@ -1,0 +1,6 @@
+echo
+----
+db1.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+  txn.Put(ctx, "e", v5) // @<ts> <nil>
+  return errors.New("rollback")
+}) // rollback

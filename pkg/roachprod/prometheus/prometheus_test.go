@@ -34,13 +34,13 @@ var nodeIPMap = map[install.Node]string{
 
 func TestMakeYAMLConfig(t *testing.T) {
 	testCases := []struct {
-		name                  string
+		testfile              string
 		useWorkloadHelpers    bool
 		cluster               install.Nodes
 		workloadScrapeConfigs []ScrapeConfig
 	}{
 		{
-			name:               "multiple scrape nodes",
+			testfile:           "multipleScrapeNodes.txt",
 			useWorkloadHelpers: false,
 			workloadScrapeConfigs: []ScrapeConfig{
 				{
@@ -78,7 +78,7 @@ func TestMakeYAMLConfig(t *testing.T) {
 			},
 		},
 		{
-			name:               "using make commands",
+			testfile:           "usingMakeCommands.txt",
 			useWorkloadHelpers: true,
 			cluster:            install.Nodes{8, 9},
 			workloadScrapeConfigs: []ScrapeConfig{
@@ -106,10 +106,8 @@ func TestMakeYAMLConfig(t *testing.T) {
 		},
 	}
 
-	w := echotest.Walk(t, testutils.TestDataPath(t))
-	defer w.Check(t)
 	for _, tc := range testCases {
-		t.Run(tc.name, w.Do(t, tc.name, func(t *testing.T, path string) {
+		t.Run(tc.testfile, func(t *testing.T) {
 			var promCfg Config
 			for i, workloadConfig := range tc.workloadScrapeConfigs {
 				if tc.useWorkloadHelpers {
@@ -131,7 +129,7 @@ func TestMakeYAMLConfig(t *testing.T) {
 			}
 			cfg, err := makeYAMLConfig(promCfg.ScrapeConfigs, nodeIPMap)
 			require.NoError(t, err)
-			echotest.Require(t, cfg, path)
-		}))
+			echotest.Require(t, cfg, testutils.TestDataPath(t, tc.testfile))
+		})
 	}
 }

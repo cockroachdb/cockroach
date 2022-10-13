@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
@@ -405,4 +406,21 @@ func TestFlagCombinations(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRequestHeaderRoundTrip(t *testing.T) {
+	var seq buildutil.TestingInt64
+	seq.Set(123)
+	exp := seq.Get()
+	if buildutil.CrdbTestBuild {
+		require.EqualValues(t, 123, exp)
+	}
+	rh := RequestHeader{KVNemesisSeq: seq}
+	sl, err := rh.Marshal()
+	require.NoError(t, err)
+
+	rh.Reset()
+	require.NoError(t, rh.Unmarshal(sl))
+
+	require.Equal(t, exp, rh.KVNemesisSeq.Get())
 }

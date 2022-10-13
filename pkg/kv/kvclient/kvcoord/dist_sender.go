@@ -345,6 +345,8 @@ type DistSender struct {
 	// LatencyFunc is used to estimate the latency to other nodes.
 	latencyFunc LatencyFunc
 
+	onRangeSpanningNonTxnalBatch func(ba *roachpb.BatchRequest) *roachpb.Error
+
 	// locality is the description of the topography of the server on which the
 	// DistSender is running. It is used to estimate the latency to other nodes
 	// in the absence of a latency function.
@@ -498,6 +500,11 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	} else {
 		ds.latencyFunc = ds.rpcContext.RemoteClocks.Latency
 	}
+
+	if cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch != nil {
+		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
+	}
+
 	return ds
 }
 
@@ -1243,8 +1250,23 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// If there's no transaction and ba spans ranges, possibly re-run as part of
 	// a transaction for consistency. The case where we don't need to re-run is
 	// if the read consistency is not required.
-	if ba.Txn == nil && ba.IsTransactional() && ba.ReadConsistency == roachpb.CONSISTENT {
-		return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
+	//
+	// NB: this check isn't quite right. If we mixed a DeleteRangeUsingTombstone
+	// with a Put, for example, we'd restart with a txn, but
+	// DeleteRangeUsingTombstone does not support txns. Could we instead determine
+	// the read/write timestamp here? But then the write might not be possible at
+	// that timestamp, and we need to start retrying the batch as a kind of
+	// starvable txn (currently the contract is that batches can't return retry
+	// errors).
+	if ba.Txn == nil {
+		if ba.IsTransactional() && ba.ReadConsistency == roachpb.CONSISTENT {
+			return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
+		}
+		if fn := ds.onRangeSpanningNonTxnalBatch; fn != nil {
+			if pErr := fn(ba); pErr != nil {
+				return nil, pErr
+			}
+		}
 	}
 	// If the batch contains a non-parallel commit EndTxn and spans ranges then
 	// we want the caller to come again with the EndTxn in a separate

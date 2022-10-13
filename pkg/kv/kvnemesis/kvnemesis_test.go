@@ -13,16 +13,23 @@ package kvnemesis
 import (
 	"context"
 	gosql "database/sql"
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -35,23 +42,86 @@ func init() {
 	numSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 50)
 }
 
+func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
+	storeKnobs := &kvserver.StoreTestingKnobs{
+		// Drop the clock MaxOffset to reduce commit-wait time for
+		// transactions that write to global_read ranges.
+		MaxOffset: 10 * time.Millisecond,
+		// Make sure we know the seq for each of our writes when they come out of
+		// the rangefeed. We do this via an interceptor to avoid having to change
+		// RangeFeed's APIs.
+		RangefeedValueHeaderFilter: func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader) {
+			if seq := kvnemesisutil.Seq(vh.KVNemesisSeq.Get()); seq > 0 {
+				tr.Add(key, endKey, ts, seq)
+			}
+		},
+	}
+
+	return base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: storeKnobs,
+				KVClient: &kvcoord.ClientTestingKnobs{
+					// Don't let DistSender split DeleteRangeUsingTombstone across range boundaries.
+					// This does happen in real CRDB, but leads to separate atomic subunits, which
+					// would add complexity to kvnemesis that isn't worth it. Instead, the operation
+					// generator for the most part tries to avoid range-spanning requests, and the
+					// ones that do end up happening get a hard error.
+					OnRangeSpanningNonTxnalBatch: func(ba *roachpb.BatchRequest) *roachpb.Error {
+						for _, req := range ba.Requests {
+							if req.GetInner().Method() != roachpb.DeleteRange {
+								continue
+							}
+							if req.GetDeleteRange().UseRangeTombstone == true {
+								return roachpb.NewErrorf("DeleteRangeUsingTombstone can not straddle range boundary")
+							}
+						}
+						return nil
+					},
+				},
+			},
+		},
+	}
+}
+
+func randWithSeed(
+	t interface {
+		Logf(string, ...interface{})
+		Helper()
+	}, seedOrZero int64,
+) *rand.Rand {
+	t.Helper()
+	var rng *rand.Rand
+	if seedOrZero > 0 {
+		rng = rand.New(rand.NewSource(seedOrZero))
+	} else {
+		rng, seedOrZero = randutil.NewTestRand()
+	}
+	t.Logf("seed: %d", seedOrZero)
+	return rng
+}
+
 func TestKVNemesisSingleNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t)
 
+	if !buildutil.CrdbTestBuild {
+		// `roachpb.RequestHeader` and `MVCCValueHeader` have a KVNemesisSeq field
+		// that is zero-sized outside of test builds. We could revisit that should
+		// a need arise to run kvnemesis against production binaries.
+		skip.IgnoreLint(t, "kvnemesis must be run with the crdb_test build tag")
+	}
+
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					// Drop the clock MaxOffset to reduce commit-wait time for
-					// transactions that write to global_read ranges.
-					MaxOffset: 10 * time.Millisecond,
-				},
-			},
-		},
-	})
+
+	// Can set a seed here for determinism. This works best when the seed was
+	// obtained with concurrency=1.
+	const concurrency = 5
+	rng := randWithSeed(t, 0)
+
+	tr := &SeqTracker{}
+	tc := testcluster.StartTestCluster(t, 1, testClusterArgs(tr))
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
@@ -59,9 +129,12 @@ func TestKVNemesisSingleNode(t *testing.T) {
 
 	config := NewDefaultConfig()
 	config.NumNodes, config.NumReplicas = 1, 1
-	rng, _ := randutil.NewTestRand()
-	env := &Env{sqlDBs: []*gosql.DB{sqlDB}}
-	failures, err := RunNemesis(ctx, rng, env, config, numSteps, db)
+
+	env := &Env{SQLDBs: []*gosql.DB{sqlDB}, Tracker: tr, L: t}
+	// NB: when a failure is observed, it can be helpful to try to reproduce it
+	// with concurrency 1, as then determinism is much more likely once a suitable
+	// seed has been identified.
+	failures, err := RunNemesis(ctx, rng, env, config, concurrency, numSteps, db)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {
@@ -74,21 +147,23 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t)
 
+	if !buildutil.CrdbTestBuild {
+		// `roachpb.RequestHeader` and `MVCCValueHeader` have a KVNemesisSeq field
+		// that is zero-sized outside test builds. We could revisit that should
+		// a need arise to run kvnemesis against production binaries.
+		skip.IgnoreLint(t, "kvnemesis must be run with the crdb_test build tag")
+	}
+
+	// Can set a seed here for determinism. This works best when the seed was
+	// obtained with concurrency=1.
+	const concurrency = 5
+	rng := randWithSeed(t, 0)
+
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	const numNodes = 4
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					// Drop the clock MaxOffset to reduce commit-wait time for
-					// transactions that write to global_read ranges.
-					MaxOffset: 10 * time.Millisecond,
-				},
-			},
-		},
-	})
+	tr := &SeqTracker{}
+	tc := testcluster.StartTestCluster(t, numNodes, testClusterArgs(tr))
 	defer tc.Stopper().Stop(ctx)
 	dbs, sqlDBs := make([]*kv.DB, numNodes), make([]*gosql.DB, numNodes)
 	for i := 0; i < numNodes; i++ {
@@ -102,9 +177,8 @@ func TestKVNemesisMultiNode(t *testing.T) {
 
 	config := NewDefaultConfig()
 	config.NumNodes, config.NumReplicas = numNodes, 3
-	rng, _ := randutil.NewTestRand()
-	env := &Env{sqlDBs: sqlDBs}
-	failures, err := RunNemesis(ctx, rng, env, config, numSteps, dbs...)
+	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: t}
+	failures, err := RunNemesis(ctx, rng, env, config, concurrency, numSteps, dbs...)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {

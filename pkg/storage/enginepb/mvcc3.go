@@ -10,7 +10,10 @@
 
 package enginepb
 
-import "github.com/cockroachdb/errors"
+import (
+	_ "github.com/cockroachdb/cockroach/pkg/util/buildutil" // see MVCCValueHeader.KVNemesisSeq
+	"github.com/cockroachdb/errors"
+)
 
 // SafeValue implements the redact.SafeValue interface.
 func (MVCCStatsDelta) SafeValue() {}
@@ -58,5 +61,5 @@ func (h MVCCValueHeader) IsEmpty() bool {
 	// NB: We don't use a struct comparison like h == MVCCValueHeader{} due to a
 	// Go 1.19 performance regression, see:
 	// https://github.com/cockroachdb/cockroach/issues/88818
-	return h.LocalTimestamp.IsEmpty()
+	return h.LocalTimestamp.IsEmpty() && h.KVNemesisSeq.Get() == 0
 }

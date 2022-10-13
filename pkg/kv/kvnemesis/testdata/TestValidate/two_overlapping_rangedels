@@ -1,0 +1,8 @@
+echo
+----
+db0.DelRangeUsingTombstone(ctx, "a", "c" /* @s1 */) // @0.000000001,0 <nil>
+db0.DelRangeUsingTombstone(ctx, "b", "d" /* @s2 */) // @0.000000002,0 <nil>
+{a-b}/0.000000001,0 @ s1 <nil>
+{b-c}/0.000000001,0 @ s1 <nil>
+{b-c}/0.000000002,0 @ s2 <nil>
+{c-d}/0.000000002,0 @ s2 <nil>
