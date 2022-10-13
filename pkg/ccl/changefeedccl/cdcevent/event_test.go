@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -61,35 +62,35 @@ CREATE TABLE foo (
 	for _, tc := range []struct {
 		family          *descpb.ColumnFamilyDescriptor
 		includeVirtual  bool
-		expectedKeyCols []ResultColumn
-		expectedColumns []ResultColumn
-		expectedUDTCols []ResultColumn
+		expectedKeyCols []string
+		expectedColumns []string
+		expectedUDTCols []string
 	}{
 		{
 			family:          mainFamily,
 			includeVirtual:  false,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "a", "b", "e"),
-			expectedUDTCols: expectResultColumns(t, tableDesc, "e"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"a", "b", "e"},
+			expectedUDTCols: []string{"e"},
 		},
 		{
 			family:          mainFamily,
 			includeVirtual:  true,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "a", "b", "d", "e"),
-			expectedUDTCols: expectResultColumns(t, tableDesc, "e"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"a", "b", "d", "e"},
+			expectedUDTCols: []string{"e"},
 		},
 		{
 			family:          cFamily,
 			includeVirtual:  false,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "c"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"c"},
 		},
 		{
 			family:          cFamily,
 			includeVirtual:  true,
-			expectedKeyCols: expectResultColumns(t, tableDesc, "b", "a"),
-			expectedColumns: expectResultColumns(t, tableDesc, "c", "d"),
+			expectedKeyCols: []string{"b", "a"},
+			expectedColumns: []string{"c", "d"},
 		},
 	} {
 		t.Run(fmt.Sprintf("%s/includeVirtual=%t", tc.family.Name, tc.includeVirtual), func(t *testing.T) {
@@ -104,9 +105,9 @@ CREATE TABLE foo (
 
 			// Verify primary key and family columns are as expected.
 			r := Row{EventDescriptor: ed}
-			require.Equal(t, tc.expectedKeyCols, slurpColumns(t, r.ForEachKeyColumn()))
-			require.Equal(t, tc.expectedColumns, slurpColumns(t, r.ForEachColumn()))
-			require.Equal(t, tc.expectedUDTCols, slurpColumns(t, r.ForEachUDTColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedKeyCols), slurpColumns(t, r.ForEachKeyColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedColumns), slurpColumns(t, r.ForEachColumn()))
+			require.Equal(t, expectResultColumns(t, tableDesc, tc.includeVirtual, tc.expectedUDTCols), slurpColumns(t, r.ForEachUDTColumn()))
 		})
 	}
 }
@@ -351,6 +352,207 @@ CREATE TABLE foo (
 
 }
 
+func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t)
+	skip.UnderStress(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	// Use alter column type to force column reordering.
+	sqlDB.Exec(t, `SET enable_experimental_alter_column_type_general = true`)
+
+	type decodeExpectation struct {
+		expectUnwatchedErr bool
+
+		keyValues []string
+		allValues []string
+
+		refreshDescriptor bool
+	}
+
+	for _, tc := range []struct {
+		testName         string
+		familyName       string // Must be set if targetType ChangefeedTargetSpecification_COLUMN_FAMILY
+		includeVirtual   bool
+		actions          []string
+		expectMainFamily []decodeExpectation
+		expectECFamily   []decodeExpectation
+	}{
+		{
+			testName:   "main/main_cols",
+			familyName: "main",
+			actions: []string{
+				"INSERT INTO foo (i,j,a,b) VALUES (0,1,'a0','b0')",
+				"ALTER TABLE foo ALTER COLUMN a SET DATA TYPE VARCHAR(16)",
+				"INSERT INTO foo (i,j,a,b) VALUES (1,2,'a1','b1')",
+			},
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"1", "0"},
+					allValues: []string{"0", "1", "a0", "b0"},
+				},
+				{
+					keyValues: []string{"1", "0"},
+					allValues: []string{"0", "1", "a0", "b0"},
+				},
+				{
+					keyValues: []string{"1", "0"},
+					allValues: []string{"0", "1", "a0", "b0"},
+				},
+				{
+					keyValues: []string{"2", "1"},
+					allValues: []string{"1", "2", "a1", "b1"},
+				},
+			},
+		},
+		{
+			testName:   "ec/ec_cols",
+			familyName: "ec",
+			actions: []string{
+				"INSERT INTO foo (i,j,e,c) VALUES (2,3,'e2','c2')",
+				"ALTER TABLE foo ALTER COLUMN c SET DATA TYPE VARCHAR(16)",
+				"INSERT INTO foo (i,j,e,c) VALUES (3,4,'e3','c3')",
+			},
+			expectMainFamily: []decodeExpectation{
+				{
+					expectUnwatchedErr: true,
+				},
+				{
+					expectUnwatchedErr: true,
+				},
+			},
+			expectECFamily: []decodeExpectation{
+				{
+					keyValues: []string{"3", "2"},
+					allValues: []string{"c2", "e2"},
+				},
+				{
+					keyValues: []string{"3", "2"},
+					allValues: []string{"c2", "e2"},
+				},
+				{
+					keyValues: []string{"3", "2"},
+					allValues: []string{"c2", "e2"},
+				},
+				{
+					keyValues: []string{"4", "3"},
+					allValues: []string{"c3", "e3"},
+				},
+			},
+		},
+		{
+			testName:   "ec/ec_cols_with_virtual",
+			familyName: "ec",
+			actions: []string{
+				"INSERT INTO foo (i,j,e,c) VALUES (4,5,'e4','c4')",
+				"ALTER TABLE foo ALTER COLUMN c SET DATA TYPE VARCHAR(16)",
+				"INSERT INTO foo (i,j,e,c) VALUES (5,6,'e5','c5')",
+			},
+			includeVirtual: true,
+			expectMainFamily: []decodeExpectation{
+				{
+					expectUnwatchedErr: true,
+				},
+				{
+					expectUnwatchedErr: true,
+				},
+			},
+			expectECFamily: []decodeExpectation{
+				{
+					keyValues: []string{"5", "4"},
+					allValues: []string{"c4", "NULL", "e4"},
+				},
+				{
+					keyValues:         []string{"5", "4"},
+					allValues:         []string{"c4", "NULL", "e4"},
+					refreshDescriptor: true,
+				},
+				{
+					keyValues: []string{"5", "4"},
+					allValues: []string{"c4", "NULL", "e4"},
+				},
+				{
+					keyValues: []string{"6", "5"},
+					allValues: []string{"c5", "NULL", "e5"},
+				},
+			},
+		},
+	} {
+		t.Run(tc.testName, func(t *testing.T) {
+			sqlDB.Exec(t, `
+				CREATE TABLE foo (
+					i INT,
+					j INT,
+					a STRING,
+					b STRING,
+					c STRING,
+					d STRING AS (concat(e, c)) VIRTUAL,
+					e STRING,
+					PRIMARY KEY(j,i),
+					FAMILY main (i,j,a,b),
+					FAMILY ec (e,c)
+			)`)
+
+			tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
+			popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), tableDesc)
+			defer cleanup()
+
+			targetType := jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+			if tc.familyName != "" {
+				targetType = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
+			}
+
+			for _, action := range tc.actions {
+				sqlDB.Exec(t, action)
+			}
+
+			targets := changefeedbase.Targets{}
+			targets.Add(changefeedbase.Target{
+				Type:       targetType,
+				TableID:    tableDesc.GetID(),
+				FamilyName: tc.familyName,
+			})
+			serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
+			ctx := context.Background()
+			decoder, err := NewEventDecoder(ctx, &serverCfg, targets, tc.includeVirtual)
+			require.NoError(t, err)
+
+			expectedEvents := len(tc.expectMainFamily) + len(tc.expectECFamily)
+			for i := 0; i < expectedEvents; i++ {
+				v := popRow(t)
+
+				eventFamilyID, err := TestingGetFamilyIDFromKey(decoder, v.Key, v.Timestamp())
+				require.NoError(t, err)
+
+				var expect decodeExpectation
+				if eventFamilyID == 0 {
+					expect, tc.expectMainFamily = tc.expectMainFamily[0], tc.expectMainFamily[1:]
+				} else {
+					expect, tc.expectECFamily = tc.expectECFamily[0], tc.expectECFamily[1:]
+				}
+				updatedRow, err := decoder.DecodeKV(
+					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, v.Timestamp())
+
+				if expect.expectUnwatchedErr {
+					require.ErrorIs(t, err, ErrUnwatchedFamily)
+					continue
+				}
+
+				require.NoError(t, err)
+				require.True(t, updatedRow.IsInitialized())
+
+				require.Equal(t, expect.keyValues, slurpDatums(t, updatedRow.ForEachKeyColumn()))
+				require.Equal(t, expect.allValues, slurpDatums(t, updatedRow.ForEachColumn()))
+			}
+			sqlDB.Exec(t, `DROP TABLE foo`)
+		})
+	}
+}
+
 func mustGetFamily(
 	t *testing.T, desc catalog.TableDescriptor, familyID descpb.FamilyID,
 ) *descpb.ColumnFamilyDescriptor {
@@ -361,9 +563,44 @@ func mustGetFamily(
 }
 
 func expectResultColumns(
-	t *testing.T, desc catalog.TableDescriptor, colNames ...string,
+	t *testing.T, desc catalog.TableDescriptor, includeVirtual bool, colNames []string,
 ) (res []ResultColumn) {
 	t.Helper()
+
+	// Map the column names to the expected ordinality.
+	//
+	// The ordinality values in EventDescriptor.keyCols,
+	// EventDescriptor.valueCols, and EventDescriptor.udtCols (which are indexes
+	// into a rowenc.EncDatumRow) are calculated in the following manner: Start
+	// with catalog.TableDescriptor.PublicColumns() and keep (i) the primary key
+	// columns, (ii) columns in a specified family, and (iii) virtual columns (
+	// which may be outside the specified family). The
+	// remaining columns get filtered out. The position of a particular column in
+	// this array determines its ordinality.
+	//
+	// This function generates ordinality in the same manner, except it uses
+	// colNames instead of a column family descriptor when filtering columns.
+	colNamesSet := make(map[string]int)
+	for _, colName := range colNames {
+		colNamesSet[colName] = -1
+	}
+	ord := 0
+	for _, col := range desc.PublicColumns() {
+		colName := string(col.ColName())
+		if _, ok := colNamesSet[colName]; ok {
+			if col.IsVirtual() {
+				colNamesSet[colName] = virtualColOrd
+			} else {
+				colNamesSet[colName] = ord
+			}
+			ord++
+		} else if desc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(col.GetID()) {
+			ord++
+		} else if col.IsVirtual() && includeVirtual {
+			ord++
+		}
+	}
+
 	for _, colName := range colNames {
 		col, err := desc.FindColumnWithName(tree.Name(colName))
 		require.NoError(t, err)
@@ -374,7 +611,7 @@ func expectResultColumns(
 				TableID:        desc.GetID(),
 				PGAttributeNum: uint32(col.GetPGAttributeNum()),
 			},
-			ord:       col.Ordinal(),
+			ord:       colNamesSet[colName],
 			sqlString: col.ColumnDesc().SQLStringNotHumanReadable(),
 		})
 	}
