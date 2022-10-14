@@ -94,30 +94,6 @@ type Cluster interface {
 	// just be the `Migrate` request, with code added within [1] to do the
 	// specific things intended for the specified version.
 	//
-	// It's important to note that the closure is being executed in the context of
-	// a distributed transaction that may be automatically retried. So something
-	// like the following is an anti-pattern:
-	//
-	//     processed := 0
-	//     _ = h.IterateRangeDescriptors(...,
-	//         func(descriptors ...roachpb.RangeDescriptor) error {
-	//             processed += len(descriptors) // we'll over count if retried
-	//             log.Infof(ctx, "processed %d ranges", processed)
-	//         },
-	//     )
-	//
-	// Instead we allow callers to pass in a callback to signal on every attempt
-	// (including the first). This lets us salvage the example above:
-	//
-	//     var processed int
-	//     init := func() { processed = 0 }
-	//     _ = h.IterateRangeDescriptors(..., init,
-	//         func(descriptors ...roachpb.RangeDescriptor) error {
-	//             processed += len(descriptors)
-	//             log.Infof(ctx, "processed %d ranges", processed)
-	//         },
-	//     )
-	//
 	// [1]: pkg/kv/kvserver/batch_eval/cmd_migrate.go
 	IterateRangeDescriptors(
 		ctx context.Context,
