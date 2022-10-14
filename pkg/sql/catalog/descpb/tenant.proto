@@ -34,6 +34,7 @@ message TenantInfo {
 
   optional uint64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
   optional State state = 2 [(gogoproto.nullable) = false];
+  optional string name = 3 [(gogoproto.nullable) = false];
 }
 
 // TenantInfoAndUsage contains the information for a tenant in a multi-tenant
