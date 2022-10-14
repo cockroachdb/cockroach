@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // StoreTestingKnobs is a part of the context used to control parts of
@@ -422,6 +423,10 @@ type AllocatorTestingKnobs struct {
 	// targets produced by the Allocator to include replicas that may be waiting
 	// for snapshots.
 	AllowLeaseTransfersToReplicasNeedingSnapshots bool
+	RaftStatusFn                                  func(r interface {
+		Desc() *roachpb.RangeDescriptor
+		StoreID() roachpb.StoreID
+	}) *raft.Status
 }
 
 // PinnedLeasesKnob is a testing know for controlling what store can acquire a

@@ -1497,6 +1497,9 @@ type transferLeaseOptions struct {
 	// to disregard the existing lease counts on candidates.
 	checkCandidateFullness bool
 	dryRun                 bool
+	// allowUninitializedCandidates allows a lease transfer target to include
+	// replicas which are not in the existing replica set.
+	allowUninitializedCandidates bool
 }
 
 // leaseTransferOutcome represents the result of shedLease().
