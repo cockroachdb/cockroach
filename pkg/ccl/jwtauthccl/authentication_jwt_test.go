@@ -168,6 +168,39 @@ func TestJWTSingleKey(t *testing.T) {
 	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
 }
 
+func TestJWTSingleKeyWithoutKeyAlgorithm(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	identMapString := ""
+	identMap, err := identmap.From(strings.NewReader(identMapString))
+	require.NoError(t, err)
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+
+	_, key, _ := createJWKS(t)
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256)
+	// Clear the algorithm
+	require.NoError(t, key.Remove(jwk.AlgorithmKey))
+	publicKey, err := key.PublicKey()
+	require.NoError(t, err)
+	jwkPublicKey := serializePublicKey(t, publicKey)
+
+	// When no JWKS is specified the token will be invalid.
+	err = verifier.ValidateJWTLogin(s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid token")
+
+	// Set the JWKS cluster setting.
+	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, jwkPublicKey)
+
+	// Now the validate call gets past the token validity check and fails on the next check (subject matching user)
+	err = verifier.ValidateJWTLogin(s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
+}
+
 func TestJWTMultiKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
