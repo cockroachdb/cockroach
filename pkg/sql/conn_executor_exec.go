@@ -14,7 +14,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"math/rand"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -44,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -61,6 +65,37 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 	"go.opentelemetry.io/otel/attribute"
+)
+
+// traceFingerprint, if set, enables tracing for the statement with the set
+// fingerprint probabilistically (where probability is whatever
+// trace.fingerprint.probability is set to), logging it if the latency threshold
+// is exceeded (configured using trace.fingerprint.threshold).
+var traceFingerprint = settings.RegisterStringSetting(
+	settings.TenantWritable,
+	"trace.fingerprint",
+	"if set, trace the statement with the given fingerprint with probability == trace.fingerprint.probability",
+	"",
+)
+
+// traceFingerprintProbability controls the probability with which we trace
+// specific statements (those with fingerprints equal to what's set on
+// trace.fingerprint).
+var traceFingerprintProbability = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"trace.fingerprint.probability",
+	"traces stmts with fingerprint == trace.fingerprint with the given probability",
+	0,
+)
+
+// traceFingerprintThreshold controls the latency threshold at which we log
+// probabilistically traced statements; see trace.fingerprint.probability and
+// trace.fingerprint above.
+var traceFingerprintThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"trace.fingerprint.threshold",
+	"logs fingerprint-triggered traces if execution latency crosses the specified threshold",
+	0,
 )
 
 // execStmt executes one statement by dispatching according to the current
@@ -688,9 +723,22 @@ func (ex *connExecutor) execStmtInOpenState(
 	var stmtThresholdSpan *tracing.Span
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
 	stmtTraceThreshold := TraceStmtThreshold.Get(&ex.planner.execCfg.Settings.SV)
+	shouldTrace := !alreadyRecording && stmtTraceThreshold > 0
+	if toTraceHexFingerprint := traceFingerprint.Get(&ex.planner.execCfg.Settings.SV); toTraceHexFingerprint != "" {
+		stmtFingerprint := roachpb.ConstructStatementFingerprintID(
+			stmt.StmtNoConstants, false /* failed*/, p.curPlan.flags.IsSet(planFlagImplicitTxn),
+			p.SessionData().Database,
+		)
+		hexStmtFingerprint := hex.EncodeToString(sqlstatsutil.EncodeUint64ToBytes(uint64(stmtFingerprint)))
+		if hexStmtFingerprint == toTraceHexFingerprint &&
+			rand.Float64() < traceFingerprintProbability.Get(&ex.planner.execCfg.Settings.SV) {
+			shouldTrace = true
+		}
+	}
+
 	var stmtCtx context.Context
 	// TODO(andrei): I think we should do this even if alreadyRecording == true.
-	if !alreadyRecording && stmtTraceThreshold > 0 {
+	if shouldTrace {
 		stmtCtx, stmtThresholdSpan = tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "trace-stmt-threshold", tracing.WithRecording(tracing.RecordingVerbose))
 	} else {
 		stmtCtx = ctx
@@ -702,9 +750,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	if stmtThresholdSpan != nil {
+		traceThreshold := traceFingerprintThreshold.Get(&ex.planner.execCfg.Settings.SV)
 		stmtDur := timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
-		needRecording := stmtTraceThreshold < stmtDur
-		if needRecording {
+		shouldLogTrace := traceThreshold < stmtDur || stmtTraceThreshold < stmtDur
+		if shouldLogTrace {
 			rec := stmtThresholdSpan.FinishAndGetRecording(tracing.RecordingVerbose)
 			// NB: This recording does not include the commit for implicit
 			// transactions if the statement didn't auto-commit.
@@ -712,7 +761,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ctx,
 				rec,
 				fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
-				stmtTraceThreshold,
+				traceThreshold,
 				stmtDur,
 			)
 		} else {
