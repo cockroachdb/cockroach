@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -185,7 +185,7 @@ func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool,
 		return true, nil
 	}
 
-	var watchedColumnIDs util.FastIntSet
+	var watchedColumnIDs intsets.FastIntSet
 	if err := e.Before.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		if _, ok := specifiedColumnFamiliesForTable[family.Name]; ok {
 			for _, columnID := range family.ColumnIDs {

@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -1140,7 +1140,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 		}
 
 		// Verify that the constraint's column IDs are valid and unique.
-		var seen util.FastIntSet
+		var seen intsets.FastIntSet
 		for _, colID := range c.ColumnIDs {
 			_, ok := columnsByID[colID]
 			if !ok {

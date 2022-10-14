@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -52,7 +52,7 @@ func (tc *Collection) hydrateDescriptors(
 	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, descs []catalog.Descriptor,
 ) error {
 
-	var hydratableMutableIndexes, hydratableImmutableIndexes util.FastIntSet
+	var hydratableMutableIndexes, hydratableImmutableIndexes intsets.FastIntSet
 	for i, desc := range descs {
 		if desc == nil || !hydrateddesc.IsHydratable(desc) {
 			continue

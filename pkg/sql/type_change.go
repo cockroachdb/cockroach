@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -994,7 +994,7 @@ func findUsagesOfEnumValueInPartitioning(
 		return false, nil
 	}
 
-	var colsToCheck util.FastIntSet
+	var colsToCheck intsets.FastIntSet
 	for i, c := range columns[:partitioning.NumColumns()] {
 		typT := c.GetType()
 		if !typT.UserDefined() {
@@ -1068,7 +1068,7 @@ func findUsageOfEnumValueInEncodedPartitioningValue(
 	partitioning catalog.Partitioning,
 	v []byte,
 	fakePrefixDatums []tree.Datum,
-	colsToCheck util.FastIntSet,
+	colsToCheck intsets.FastIntSet,
 	foundUsage bool,
 	member *descpb.TypeDescriptor_EnumMember,
 ) (bool, error) {

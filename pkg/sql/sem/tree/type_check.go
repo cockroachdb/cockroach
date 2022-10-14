@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -2311,9 +2311,9 @@ type typeCheckExprsState struct {
 
 	exprs           []Expr
 	typedExprs      []TypedExpr
-	constIdxs       util.FastIntSet // index into exprs/typedExprs
-	placeholderIdxs util.FastIntSet // index into exprs/typedExprs
-	resolvableIdxs  util.FastIntSet // index into exprs/typedExprs
+	constIdxs       intsets.FastIntSet // index into exprs/typedExprs
+	placeholderIdxs intsets.FastIntSet // index into exprs/typedExprs
+	resolvableIdxs  intsets.FastIntSet // index into exprs/typedExprs
 }
 
 // TypeCheckSameTypedExprs type checks a list of expressions, asserting that all
@@ -2529,7 +2529,11 @@ func typeCheckConstsAndPlaceholdersWithDesired(
 // - All other Exprs
 func typeCheckSplitExprs(
 	semaCtx *SemaContext, exprs []Expr,
-) (constIdxs util.FastIntSet, placeholderIdxs util.FastIntSet, resolvableIdxs util.FastIntSet) {
+) (
+	constIdxs intsets.FastIntSet,
+	placeholderIdxs intsets.FastIntSet,
+	resolvableIdxs intsets.FastIntSet,
+) {
 	for i, expr := range exprs {
 		switch {
 		case isConstant(expr):

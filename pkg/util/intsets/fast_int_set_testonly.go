@@ -16,7 +16,7 @@
 // fastIntSetAlwaysSmall). Tests that exhibit a difference when using one of
 // these variants indicates a bug.
 
-package util
+package intsets
 
 import (
 	"bytes"
