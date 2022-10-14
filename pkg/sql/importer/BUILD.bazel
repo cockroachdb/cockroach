@@ -100,6 +100,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
+        "//pkg/util/intsets",
         "//pkg/util/ioctx",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",

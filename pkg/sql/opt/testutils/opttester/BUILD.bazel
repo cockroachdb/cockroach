@@ -51,6 +51,7 @@ go_library(
         "//pkg/testutils/sqlutils",
         "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/timeutil",

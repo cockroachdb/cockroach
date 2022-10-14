@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -641,7 +642,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 			var nodeStats exec.ExecutionStats
 
 			incomplete := false
-			var nodes util.FastIntSet
+			var nodes intsets.FastIntSet
 			regionsMap := make(map[string]struct{})
 			for _, c := range components {
 				if c.Type == execinfrapb.ComponentID_PROCESSOR {

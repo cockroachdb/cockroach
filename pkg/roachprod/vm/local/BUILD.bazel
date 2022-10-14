@@ -11,7 +11,7 @@ go_library(
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",

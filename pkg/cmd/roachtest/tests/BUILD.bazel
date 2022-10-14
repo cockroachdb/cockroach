@@ -211,6 +211,7 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",

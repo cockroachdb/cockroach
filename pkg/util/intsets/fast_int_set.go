@@ -11,7 +11,7 @@
 //go:build !fast_int_set_small && !fast_int_set_large
 // +build !fast_int_set_small,!fast_int_set_large
 
-package util
+package intsets
 
 import (
 	"bytes"
@@ -65,6 +65,13 @@ type FastIntSet struct {
 // smallCutoff is the size of the small bitmap.
 // Note: this can be set to a smaller value, e.g. for testing.
 const smallCutoff = 128
+
+const (
+	// MaxInt is the maximum integer that a set can contain.
+	MaxInt = intsets.MaxInt
+	// MinInt is the maximum integer that a set can contain.
+	MinInt = intsets.MinInt
+)
 
 // bitmap implements a bitmap of size smallCutoff.
 type bitmap struct {

@@ -62,6 +62,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/hlc",
+        "//pkg/util/intsets",
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/mon",

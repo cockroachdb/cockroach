@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1377,14 +1377,14 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 // that target local partitions.
 func (c *CustomFuncs) getLocalValues(
 	values tree.Datums, ps partition.PrefixSorter,
-) util.FastIntSet {
+) intsets.FastIntSet {
 	// The PrefixSorter has collected all the prefixes from all the different
 	// partitions (remembering which ones came from local partitions), and has
 	// sorted them so that longer prefixes come before shorter prefixes. For each
 	// span in the scanConstraint, we will iterate through the list of prefixes
 	// until we find a match, so ordering them with longer prefixes first ensures
 	// that the correct match is found.
-	var localVals util.FastIntSet
+	var localVals intsets.FastIntSet
 	for i, val := range values {
 		if match, ok := constraint.FindMatchOnSingleColumn(val, ps); ok {
 			if match.IsLocal {
@@ -1399,7 +1399,7 @@ func (c *CustomFuncs) getLocalValues(
 // by putting the Datums at positions identified by localValOrds into the local
 // slice, and the remaining Datums into the remote slice.
 func (c *CustomFuncs) splitValues(
-	values tree.Datums, localValOrds util.FastIntSet,
+	values tree.Datums, localValOrds intsets.FastIntSet,
 ) (localVals, remoteVals tree.Datums) {
 	localVals = make(tree.Datums, 0, localValOrds.Len())
 	remoteVals = make(tree.Datums, 0, len(values)-len(localVals))
