@@ -678,7 +678,7 @@ func (c *coster) computeDistributeCost(
 		// If the distribution will be elided, the cost is zero.
 		return memo.Cost(0)
 	}
-	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion {
+	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion && c.evalCtx.Planner.IsANSIDML() {
 		return LargeDistributeCost
 	}
 
@@ -943,7 +943,7 @@ func (c *coster) computeLookupJoinCost(
 		join.Flags,
 		join.LocalityOptimized,
 	)
-	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion {
+	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion && c.evalCtx.Planner.IsANSIDML() {
 		provided := distribution.BuildLookupJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
 		if provided.Any() || len(provided.Regions) != 1 {
 			cost += LargeDistributeCost
@@ -1109,7 +1109,7 @@ func (c *coster) computeInvertedJoinCost(
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
 
-	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion {
+	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion && c.evalCtx.Planner.IsANSIDML() {
 		provided := distribution.BuildInvertedJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
 		if provided.Any() || len(provided.Regions) != 1 {
 			cost += LargeDistributeCost
