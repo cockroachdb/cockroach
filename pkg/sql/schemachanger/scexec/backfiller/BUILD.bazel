@@ -20,7 +20,7 @@ go_library(
         "//pkg/sql/backfill",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scexec",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

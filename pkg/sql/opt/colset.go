@@ -11,14 +11,14 @@
 package opt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
 // ColSet efficiently stores an unordered set of column ids.
 type ColSet struct {
-	set util.FastIntSet
+	set intsets.FastIntSet
 }
 
 // We offset the ColumnIDs in the underlying FastIntSet by 1, so that the
@@ -116,7 +116,7 @@ func (s ColSet) SubsetOf(rhs ColSet) bool { return s.set.SubsetOf(rhs.set) }
 // numbers are shown as ranges. For example, for the set {1, 2, 3  5, 6, 10},
 // the output is "(1-3,5,6,10)".
 func (s ColSet) String() string {
-	var noOffset util.FastIntSet
+	var noOffset intsets.FastIntSet
 	s.ForEach(func(col ColumnID) {
 		noOffset.Add(int(col))
 	})

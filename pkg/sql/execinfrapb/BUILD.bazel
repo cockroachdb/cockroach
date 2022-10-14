@@ -48,6 +48,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
+        "//pkg/util/intsets",
         "//pkg/util/netutil",
         "//pkg/util/optional",
         "//pkg/util/protoutil",
