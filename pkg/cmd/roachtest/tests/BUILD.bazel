@@ -101,6 +101,7 @@ go_library(
         "pgjdbc_blocklist.go",
         "pgx.go",
         "pgx_blocklist.go",
+        "poc.go",
         "pop.go",
         "predecessor_version.go",
         "psycopg.go",
