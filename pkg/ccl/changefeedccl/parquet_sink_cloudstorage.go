@@ -119,13 +119,20 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 		pqww = file.pw
 	}
 
-	i := 0
+	i := -1
 	parquetRow := make(map[string]interface{}, pqww.numCols)
 	// Revisit: I am assuming that this iterates through the columns in
 	// the same order as when iterating through the columns when
 	// creating the schema. this is important because each encode
 	// function is dependent on the column position.
 	updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		i++
+		// Omit NULL columns from parquet row (cannot think of any other way of
+		// encoding NULL values)
+		if d == tree.DNull {
+			parquetRow[col.Name] = nil
+			return nil
+		}
 		// Revisit: should probably wrap these errors with something
 		// more meaningful for upstream
 		encodeFn, err := pqww.parquetColumns[i].GetEncoder()
@@ -143,7 +150,6 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 		}
 
 		parquetRow[colName] = edNative
-		i++
 
 		return nil
 

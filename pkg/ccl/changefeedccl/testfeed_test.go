@@ -17,6 +17,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -1156,6 +1157,14 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 			default:
 				// int's, float's and other primitive types
 				value[k] = vv
+			}
+
+			if floatVal, ok := value[k].(float64); ok {
+				// gojson cannot encode NaN values
+				// https://github.com/golang/go/issues/25721
+				if math.IsNaN(floatVal) {
+					value[k] = "NaN"
+				}
 			}
 
 			if _, ok := keyColsSet[k]; ok {
