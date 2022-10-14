@@ -16,7 +16,7 @@ import (
 	"math/bits"
 	"sort"
 
-	"golang.org/x/tools/container/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
 // FastIntMap is a replacement for map[int]int which is more efficient when both
