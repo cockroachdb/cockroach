@@ -2206,7 +2206,9 @@ func loadBasedLeaseRebalanceScore(
 	underfullScore := underfullLeaseThreshold - remoteStore.Capacity.LeaseCount
 	totalScore := overfullScore + underfullScore
 
-	log.KvDistribution.Infof(ctx,
+	log.KvDistribution.VEventf(
+		ctx,
+		2,
 		"node: %d, sourceWeight: %.2f, remoteWeight: %.2f, remoteLatency: %v, "+
 			"rebalanceThreshold: %.2f, meanLeases: %.2f, sourceLeaseCount: %d, overfullThreshold: %d, "+
 			"remoteLeaseCount: %d, underfullThreshold: %d, totalScore: %d",
