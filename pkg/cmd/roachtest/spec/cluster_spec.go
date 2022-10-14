@@ -39,9 +39,10 @@ const (
 // ClusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type ClusterSpec struct {
-	Cloud        string
-	InstanceType string // auto-chosen if left empty
-	NodeCount    int
+	Cloud          string
+	InstanceType   string // auto-chosen if left empty
+	MinCPUPlatform string
+	NodeCount      int
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
 	HighMem              bool
@@ -65,8 +66,10 @@ type ClusterSpec struct {
 }
 
 // MakeClusterSpec makes a ClusterSpec.
-func MakeClusterSpec(cloud string, instanceType string, nodeCount int, opts ...Option) ClusterSpec {
-	spec := ClusterSpec{Cloud: cloud, InstanceType: instanceType, NodeCount: nodeCount}
+func MakeClusterSpec(
+	cloud string, instanceType string, minCPUPlatform string, nodeCount int, opts ...Option,
+) ClusterSpec {
+	spec := ClusterSpec{Cloud: cloud, InstanceType: instanceType, MinCPUPlatform: minCPUPlatform, NodeCount: nodeCount}
 	defaultOpts := []Option{CPU(4), nodeLifetimeOption(12 * time.Hour), ReuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
 		o.apply(&spec)
@@ -122,6 +125,7 @@ func getAWSOpts(machineType string, zones []string, volumeSize int, localSSD boo
 
 func getGCEOpts(
 	machineType string,
+	minCPUPlatform string,
 	zones []string,
 	volumeSize, localSSDCount int,
 	localSSD bool,
@@ -130,6 +134,7 @@ func getGCEOpts(
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
+	opts.MinCPUPlatform = minCPUPlatform
 	if volumeSize != 0 {
 		opts.PDVolumeSize = volumeSize
 	}
@@ -193,6 +198,7 @@ func (s *ClusterSpec) RoachprodOpts(
 
 	createVMOpts.GeoDistributed = s.Geo
 	machineType := s.InstanceType
+	minCPUPlatform := s.MinCPUPlatform
 	ssdCount := s.SSDs
 	if s.CPUs != 0 {
 		// Default to the user-supplied machine type, if any.
@@ -252,7 +258,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	case AWS:
 		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, createVMOpts.SSDOpts.UseLocalSSD)
 	case GCE:
-		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
+		providerOpts = getGCEOpts(machineType, minCPUPlatform, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)

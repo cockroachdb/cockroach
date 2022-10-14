@@ -76,6 +76,7 @@ var (
 	// failure), roachtest can be invoked with --metamorphic-encryption-probability=0
 	encryptionProbability     float64
 	instanceType              string
+	minCPUPlatform            string
 	localSSDArg               bool
 	workload                  string
 	deprecatedRoachprodBinary string
@@ -570,6 +571,9 @@ func MachineTypeToCPUs(s string) int {
 		// GCE machine types.
 		var v int
 		if _, err := fmt.Sscanf(s, "n1-standard-%d", &v); err == nil {
+			return v
+		}
+		if _, err := fmt.Sscanf(s, "n2-standard-%d", &v); err == nil {
 			return v
 		}
 		if _, err := fmt.Sscanf(s, "n1-highcpu-%d", &v); err == nil {

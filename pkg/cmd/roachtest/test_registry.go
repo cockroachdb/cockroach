@@ -34,26 +34,27 @@ func ownerToAlias(o registry.Owner) team.Alias {
 }
 
 type testRegistryImpl struct {
-	m            map[string]*registry.TestSpec
-	cloud        string
-	instanceType string // optional
-	zones        string
-	preferSSD    bool
-
-	promRegistry *prometheus.Registry
+	m              map[string]*registry.TestSpec
+	cloud          string
+	instanceType   string // optional
+	minCPUPlatform string // optional
+	zones          string
+	preferSSD      bool
+	promRegistry   *prometheus.Registry
 }
 
 // makeTestRegistry constructs a testRegistryImpl and configures it with opts.
 func makeTestRegistry(
-	cloud string, instanceType string, zones string, preferSSD bool,
+	cloud string, instanceType string, minCPUPlatform string, zones string, preferSSD bool,
 ) testRegistryImpl {
 	return testRegistryImpl{
-		cloud:        cloud,
-		instanceType: instanceType,
-		zones:        zones,
-		preferSSD:    preferSSD,
-		m:            make(map[string]*registry.TestSpec),
-		promRegistry: prometheus.NewRegistry(),
+		cloud:          cloud,
+		instanceType:   instanceType,
+		zones:          zones,
+		preferSSD:      preferSSD,
+		m:              make(map[string]*registry.TestSpec),
+		promRegistry:   prometheus.NewRegistry(),
+		minCPUPlatform: minCPUPlatform,
 	}
 }
 
@@ -83,7 +84,7 @@ func (r *testRegistryImpl) MakeClusterSpec(nodeCount int, opts ...spec.Option) s
 		finalOpts = append(finalOpts, spec.Zones(r.zones))
 	}
 	finalOpts = append(finalOpts, opts...)
-	return spec.MakeClusterSpec(r.cloud, r.instanceType, nodeCount, finalOpts...)
+	return spec.MakeClusterSpec(r.cloud, r.instanceType, r.minCPUPlatform, nodeCount, finalOpts...)
 }
 
 const testNameRE = "^[a-zA-Z0-9-_=/,]+$"
