@@ -151,6 +151,7 @@ func TestSessionIDEncoding(t *testing.T) {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.err)
 			} else {
+				require.NoError(t, err)
 				require.Equal(t, region, tc.region)
 				require.Equal(t, uuid, tc.id.GetBytes())
 			}
