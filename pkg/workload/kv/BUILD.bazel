@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kv",
@@ -22,3 +22,10 @@ go_library(
 )
 
 get_x_data(name = "get_x_data")
+
+go_test(
+    name = "kv_test",
+    srcs = ["kv_test.go"],
+    embed = [":kv"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
