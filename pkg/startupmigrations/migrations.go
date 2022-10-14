@@ -752,6 +752,24 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		return err
 	}
 
+	// If this is the system tenant, add the host cluster version override for
+	// all tenants. This override is used by secondary tenants to observe the
+	// host cluster version number and ensure that secondary tenants don't
+	// upgrade to a version beyond the host cluster version. As mentioned above,
+	// don't retry on conflict.
+	if r.codec.ForSystemTenant() {
+		// Tenant ID 0 indicates that we're overriding the value for all
+		// tenants.
+		tenantID := tree.NewDInt(0)
+		if err := r.execAsRoot(
+			ctx,
+			"insert-setting",
+			fmt.Sprintf(`INSERT INTO system.tenant_settings (tenant_id, name, value, "last_updated", "value_type") VALUES (%d, 'version', x'%x', now(), 'm') ON CONFLICT(tenant_id, name) DO NOTHING`, tenantID, b),
+		); err != nil {
+			return err
+		}
+	}
+
 	// NB: We have to run with retry here due to the following "race" condition:
 	// - We're attempting to the set the cluster version at startup.
 	// - Setting the cluster version requires all nodes to be up and running, in
