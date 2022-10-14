@@ -532,6 +532,19 @@ func (r *PebbleFileRegistry) getRegistryCopy() *enginepb.FileRegistry {
 	return rv
 }
 
+// List returns a mapping of file in the registry to their enginepb.FileEntry.
+func (r *PebbleFileRegistry) List() map[string]*enginepb.FileEntry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Perform a defensive deep-copy of the internal map here, as there may be
+	// modifications to it after it has been returned to the caller.
+	m := make(map[string]*enginepb.FileEntry, len(r.mu.entries))
+	for k, v := range r.mu.entries {
+		m[k] = v
+	}
+	return m
+}
+
 // Close closes the record writer and record file used for the registry.
 // It should be called when a Pebble instance is closed.
 func (r *PebbleFileRegistry) Close() error {

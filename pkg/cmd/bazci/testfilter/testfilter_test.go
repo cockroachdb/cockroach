@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package main
+package testfilter
 
 import (
 	"strings"
@@ -19,18 +19,13 @@ import (
 	"github.com/cockroachdb/datadriven"
 )
 
-func TestFilter(t *testing.T) {
+func TestFilterAndWrite(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			in := strings.NewReader(td.Input)
 			var out strings.Builder
-			var mode modeT
-			if err := mode.Set(td.Cmd); err != nil {
-				return err.Error()
-			}
-			if err := filter(in, &out, mode); err != nil {
+			if err := FilterAndWrite(in, &out, []string{td.Cmd}); err != nil {
 				return err.Error()
 			}
 			// At the time of writing, datadriven garbles the test files when

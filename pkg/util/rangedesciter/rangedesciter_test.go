@@ -1,4 +1,4 @@
-// Copyright 2020 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package upgradecluster_test
+package rangedesciter_test
 
 import (
 	"context"
@@ -20,17 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/nodelivenesstest"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
 )
 
-func TestClusterIterateRangeDescriptors(t *testing.T) {
+func TestIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	const numNodes = 1
-
 	for _, splits := range [][]roachpb.Key{
 		{},                                    // no splits
 		{keys.Meta2Prefix},                    // split between meta1 and meta2
@@ -58,17 +55,11 @@ func TestClusterIterateRangeDescriptors(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			c := nodelivenesstest.New(numNodes)
-			h := upgradecluster.New(upgradecluster.ClusterConfig{
-				NodeLiveness: c,
-				Dialer:       upgradecluster.NoopDialer{},
-				DB:           kvDB,
-			})
-
+			iter := rangedesciter.New(kvDB)
 			for _, blockSize := range []int{1, 5, 10, 50} {
 				var numDescs int
 				init := func() { numDescs = 0 }
-				if err := h.IterateRangeDescriptors(ctx, blockSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
+				if err := iter.Iterate(ctx, blockSize, init, func(descriptors ...roachpb.RangeDescriptor) error {
 					numDescs += len(descriptors)
 					return nil
 				}); err != nil {
