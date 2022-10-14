@@ -73,7 +73,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	delete(r.statements, sessionID)
 	defer statements.release()
 
-	var slowStatements intsets.FastIntSet
+	var slowStatements intsets.Fast
 	for i, s := range *statements {
 		if r.detector.isSlow(s) {
 			slowStatements.Add(i)

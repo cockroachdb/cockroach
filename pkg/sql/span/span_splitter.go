@@ -46,7 +46,7 @@ func NoopSplitter() Splitter {
 // the NoopSplitter (which never splits).
 // Note: this splitter should **not** be used for deletes.
 func MakeSplitter(
-	table catalog.TableDescriptor, index catalog.Index, neededColOrdinals intsets.FastIntSet,
+	table catalog.TableDescriptor, index catalog.Index, neededColOrdinals intsets.Fast,
 ) Splitter {
 	return MakeSplitterForDelete(table, index, neededColOrdinals, false /* forDelete */)
 }
@@ -56,7 +56,7 @@ func MakeSplitter(
 func MakeSplitterForDelete(
 	table catalog.TableDescriptor,
 	index catalog.Index,
-	neededColOrdinals intsets.FastIntSet,
+	neededColOrdinals intsets.Fast,
 	forDelete bool,
 ) Splitter {
 	// We can only split a span into separate family specific point lookups if:

@@ -207,7 +207,7 @@ func tryNewOnDeleteFastCascadeBuilder(
 		return nil, false
 	}
 
-	var visited intsets.FastIntSet
+	var visited intsets.Fast
 	parentTabID := parentTab.ID()
 	childTabID := childTab.ID()
 

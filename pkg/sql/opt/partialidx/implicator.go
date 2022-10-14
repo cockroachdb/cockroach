@@ -208,7 +208,7 @@ func (im *Implicator) FiltersImplyPredicate(
 func (im *Implicator) filtersImplyPredicateFastPath(
 	filters memo.FiltersExpr, pred memo.FiltersExpr,
 ) (remainingFilters memo.FiltersExpr, ok bool) {
-	var filtersToRemove intsets.FastIntSet
+	var filtersToRemove intsets.Fast
 
 	// For every FiltersItem in pred, search for a matching FiltersItem in
 	// filters.

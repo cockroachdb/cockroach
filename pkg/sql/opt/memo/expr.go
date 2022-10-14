@@ -422,7 +422,7 @@ type ScanFlags struct {
 
 	// ZigzagIndexes makes planner prefer a zigzag with particular indexes.
 	// ForceZigzag must also be true.
-	ZigzagIndexes intsets.FastIntSet
+	ZigzagIndexes intsets.Fast
 }
 
 // Empty returns true if there are no flags set.

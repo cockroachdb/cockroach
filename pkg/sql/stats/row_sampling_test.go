@@ -39,7 +39,7 @@ func runSampleTest(
 ) {
 	ctx := context.Background()
 	var sr SampleReservoir
-	sr.Init(numSamples, 1, []*types.T{types.Int}, memAcc, intsets.MakeFastIntSet(0))
+	sr.Init(numSamples, 1, []*types.T{types.Int}, memAcc, intsets.MakeFast(0))
 	for _, r := range ranks {
 		d := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
 		prevCapacity := sr.Cap()

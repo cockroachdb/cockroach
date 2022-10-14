@@ -95,7 +95,7 @@ type ColIndexJoin struct {
 
 		// Fields that deal with variable-size types.
 		hasVarSizeCols bool
-		varSizeVecIdxs intsets.FastIntSet
+		varSizeVecIdxs intsets.Fast
 		byteLikeCols   []*coldata.Bytes
 		decimalCols    []coldata.Decimals
 		datumCols      []coldata.DatumVec

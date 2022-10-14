@@ -23,10 +23,10 @@ import (
 	"golang.org/x/tools/container/intsets"
 )
 
-// FastIntSet keeps track of a set of integers. It does not perform any
+// Fast keeps track of a set of integers. It does not perform any
 // allocations when the values are in the range [0, smallCutoff). It is not
 // thread-safe.
-type FastIntSet struct {
+type Fast struct {
 	// small is a bitmap that stores values in the range [0, smallCutoff).
 	small bitmap
 	// large is only allocated if values are added to the set that are not in
@@ -44,11 +44,11 @@ type FastIntSet struct {
 	//   |                                                          |
 	//   ------------------------------------------------------------
 	//
-	// FastIntSet stores only values outside the range [0, smallCutoff) in
+	// Fast stores only values outside the range [0, smallCutoff) in
 	// large. Values less than 0 are stored in large as-is. For values greater
 	// than or equal to smallCutoff, we subtract by smallCutoff before storing
 	// them in large. When they are retrieved from large, we add smallCutoff to
-	// get the original value. For example, if 300 is added to the FastIntSet,
+	// get the original value. For example, if 300 is added to the Fast,
 	// it would be added to large as the value (300 - smallCutoff).
 	//
 	// This scheme better utilizes the block with offset=0 compared to an
@@ -80,9 +80,9 @@ type bitmap struct {
 	lo, hi uint64
 }
 
-// MakeFastIntSet returns a set initialized with the given values.
-func MakeFastIntSet(vals ...int) FastIntSet {
-	var res FastIntSet
+// MakeFast returns a set initialized with the given values.
+func MakeFast(vals ...int) Fast {
+	var res Fast
 	for _, v := range vals {
 		res.Add(v)
 	}
@@ -91,14 +91,14 @@ func MakeFastIntSet(vals ...int) FastIntSet {
 
 // fitsInSmall returns whether all elements in this set are between 0 and
 // smallCutoff.
-func (s *FastIntSet) fitsInSmall() bool {
+func (s *Fast) fitsInSmall() bool {
 	return s.large == nil || s.large.IsEmpty()
 }
 
 // Add adds a value to the set. No-op if the value is already in the set. If the
 // large set is not nil and the value is within the range [0, 63], the value is
 // added to both the large and small sets.
-func (s *FastIntSet) Add(i int) {
+func (s *Fast) Add(i int) {
 	if i >= 0 && i < smallCutoff {
 		s.small.Set(i)
 		return
@@ -116,9 +116,9 @@ func (s *FastIntSet) Add(i int) {
 // E.g. AddRange(1,5) adds the values 1, 2, 3, 4, 5 to the set.
 // 'to' must be >= 'from'.
 // AddRange is always more efficient than individual Adds.
-func (s *FastIntSet) AddRange(from, to int) {
+func (s *Fast) AddRange(from, to int) {
 	if to < from {
-		panic("invalid range when adding range to FastIntSet")
+		panic("invalid range when adding range to Fast")
 	}
 
 	if s.large == nil && from >= 0 && to < smallCutoff {
@@ -131,7 +131,7 @@ func (s *FastIntSet) AddRange(from, to int) {
 }
 
 // Remove removes a value from the set. No-op if the value is not in the set.
-func (s *FastIntSet) Remove(i int) {
+func (s *Fast) Remove(i int) {
 	if i >= 0 && i < smallCutoff {
 		s.small.Unset(i)
 		return
@@ -145,7 +145,7 @@ func (s *FastIntSet) Remove(i int) {
 }
 
 // Contains returns true if the set contains the value.
-func (s FastIntSet) Contains(i int) bool {
+func (s Fast) Contains(i int) bool {
 	if i >= 0 && i < smallCutoff {
 		return s.small.IsSet(i)
 	}
@@ -159,12 +159,12 @@ func (s FastIntSet) Contains(i int) bool {
 }
 
 // Empty returns true if the set is empty.
-func (s FastIntSet) Empty() bool {
+func (s Fast) Empty() bool {
 	return s.small == bitmap{} && (s.large == nil || s.large.IsEmpty())
 }
 
 // Len returns the number of the elements in the set.
-func (s FastIntSet) Len() int {
+func (s Fast) Len() int {
 	l := s.small.OnesCount()
 	if s.large != nil {
 		l += s.large.Len()
@@ -174,7 +174,7 @@ func (s FastIntSet) Len() int {
 
 // Next returns the first value in the set which is >= startVal. If there is no
 // value, the second return value is false.
-func (s FastIntSet) Next(startVal int) (int, bool) {
+func (s Fast) Next(startVal int) (int, bool) {
 	if startVal < 0 && s.large != nil {
 		if res := s.large.LowerBound(startVal); res < 0 {
 			return res, true
@@ -202,7 +202,7 @@ func (s FastIntSet) Next(startVal int) (int, bool) {
 }
 
 // ForEach calls a function for each value in the set (in increasing order).
-func (s FastIntSet) ForEach(f func(i int)) {
+func (s Fast) ForEach(f func(i int)) {
 	if !s.fitsInSmall() {
 		for x := s.large.Min(); x < 0; x = s.large.LowerBound(x + 1) {
 			f(x)
@@ -226,7 +226,7 @@ func (s FastIntSet) ForEach(f func(i int)) {
 }
 
 // Ordered returns a slice with all the integers in the set, in increasing order.
-func (s FastIntSet) Ordered() []int {
+func (s Fast) Ordered() []int {
 	if s.Empty() {
 		return nil
 	}
@@ -238,8 +238,8 @@ func (s FastIntSet) Ordered() []int {
 }
 
 // Copy returns a copy of s which can be modified independently.
-func (s FastIntSet) Copy() FastIntSet {
-	var c FastIntSet
+func (s Fast) Copy() Fast {
+	var c Fast
 	c.small = s.small
 	if s.large != nil && !s.large.IsEmpty() {
 		c.large = new(intsets.Sparse)
@@ -250,7 +250,7 @@ func (s FastIntSet) Copy() FastIntSet {
 
 // CopyFrom sets the receiver to a copy of other, which can then be modified
 // independently.
-func (s *FastIntSet) CopyFrom(other FastIntSet) {
+func (s *Fast) CopyFrom(other Fast) {
 	s.small = other.small
 	if other.large != nil && !other.large.IsEmpty() {
 		if s.large == nil {
@@ -265,7 +265,7 @@ func (s *FastIntSet) CopyFrom(other FastIntSet) {
 }
 
 // UnionWith adds all the elements from rhs to this set.
-func (s *FastIntSet) UnionWith(rhs FastIntSet) {
+func (s *Fast) UnionWith(rhs Fast) {
 	s.small.UnionWith(rhs.small)
 	if rhs.large == nil || rhs.large.IsEmpty() {
 		// Fast path.
@@ -278,14 +278,14 @@ func (s *FastIntSet) UnionWith(rhs FastIntSet) {
 }
 
 // Union returns the union of s and rhs as a new set.
-func (s FastIntSet) Union(rhs FastIntSet) FastIntSet {
+func (s Fast) Union(rhs Fast) Fast {
 	r := s.Copy()
 	r.UnionWith(rhs)
 	return r
 }
 
 // IntersectionWith removes any elements not in rhs from this set.
-func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
+func (s *Fast) IntersectionWith(rhs Fast) {
 	s.small.IntersectionWith(rhs.small)
 	if rhs.large == nil {
 		s.large = nil
@@ -298,14 +298,14 @@ func (s *FastIntSet) IntersectionWith(rhs FastIntSet) {
 }
 
 // Intersection returns the intersection of s and rhs as a new set.
-func (s FastIntSet) Intersection(rhs FastIntSet) FastIntSet {
+func (s Fast) Intersection(rhs Fast) Fast {
 	r := s.Copy()
 	r.IntersectionWith(rhs)
 	return r
 }
 
 // Intersects returns true if s has any elements in common with rhs.
-func (s FastIntSet) Intersects(rhs FastIntSet) bool {
+func (s Fast) Intersects(rhs Fast) bool {
 	if s.small.Intersects(rhs.small) {
 		return true
 	}
@@ -316,7 +316,7 @@ func (s FastIntSet) Intersects(rhs FastIntSet) bool {
 }
 
 // DifferenceWith removes any elements in rhs from this set.
-func (s *FastIntSet) DifferenceWith(rhs FastIntSet) {
+func (s *Fast) DifferenceWith(rhs Fast) {
 	s.small.DifferenceWith(rhs.small)
 	if s.large == nil || rhs.large == nil {
 		// Fast path
@@ -326,14 +326,14 @@ func (s *FastIntSet) DifferenceWith(rhs FastIntSet) {
 }
 
 // Difference returns the elements of s that are not in rhs as a new set.
-func (s FastIntSet) Difference(rhs FastIntSet) FastIntSet {
+func (s Fast) Difference(rhs Fast) Fast {
 	r := s.Copy()
 	r.DifferenceWith(rhs)
 	return r
 }
 
 // Equals returns true if the two sets are identical.
-func (s FastIntSet) Equals(rhs FastIntSet) bool {
+func (s Fast) Equals(rhs Fast) bool {
 	if s.small != rhs.small {
 		return false
 	}
@@ -347,7 +347,7 @@ func (s FastIntSet) Equals(rhs FastIntSet) bool {
 }
 
 // SubsetOf returns true if rhs contains all the elements in s.
-func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
+func (s Fast) SubsetOf(rhs Fast) bool {
 	if s.fitsInSmall() {
 		return s.small.SubsetOf(rhs.small)
 	}
@@ -368,7 +368,7 @@ func (s FastIntSet) SubsetOf(rhs FastIntSet) bool {
 //
 // WARNING: this is used by plan gists, so if this encoding changes,
 // explain.gistVersion needs to be bumped.
-func (s *FastIntSet) Encode(buf *bytes.Buffer) error {
+func (s *Fast) Encode(buf *bytes.Buffer) error {
 	if s.large != nil && s.large.Min() < 0 {
 		return errors.AssertionFailedf("Encode used with negative elements")
 	}
@@ -395,12 +395,12 @@ func (s *FastIntSet) Encode(buf *bytes.Buffer) error {
 
 // Decode does the opposite of Encode. The contents of the receiver are
 // overwritten.
-func (s *FastIntSet) Decode(br io.ByteReader) error {
+func (s *Fast) Decode(br io.ByteReader) error {
 	length, err := binary.ReadUvarint(br)
 	if err != nil {
 		return err
 	}
-	*s = FastIntSet{}
+	*s = Fast{}
 
 	if length == 0 {
 		// Special case: a 64-bit bitmap is encoded directly.
@@ -413,7 +413,7 @@ func (s *FastIntSet) Decode(br io.ByteReader) error {
 		for i := 0; i < int(length); i++ {
 			elem, err := binary.ReadUvarint(br)
 			if err != nil {
-				*s = FastIntSet{}
+				*s = Fast{}
 				return err
 			}
 			s.Add(int(elem))

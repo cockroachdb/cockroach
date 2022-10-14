@@ -155,7 +155,7 @@ func (ec *evalContext) iterateNext() error {
 func (ec *evalContext) visit(e entity) error {
 	// Keep track of which slots were filled as part of this step in the
 	// evaluation and then unset them when we pop out of this stack frame.
-	var slotsFilled intsets.FastIntSet
+	var slotsFilled intsets.Fast
 	defer func() {
 		slotsFilled.ForEach(func(i int) { ec.slots[i].reset() })
 	}()
@@ -312,7 +312,7 @@ func (ec *evalContext) buildWhere() (
 }
 
 // unify is like unifyReturningContradiction but it does not return the fact.
-func unify(facts []fact, s []slot, slotsFilled *intsets.FastIntSet) (contradictionFound bool) {
+func unify(facts []fact, s []slot, slotsFilled *intsets.Fast) (contradictionFound bool) {
 	contradictionFound, _ = unifyReturningContradiction(facts, s, slotsFilled)
 	return contradictionFound
 }
@@ -322,7 +322,7 @@ func unify(facts []fact, s []slot, slotsFilled *intsets.FastIntSet) (contradicti
 // contradiction is returned. Any slots set in the process of unification
 // are recorded into the set.
 func unifyReturningContradiction(
-	facts []fact, s []slot, slotsFilled *intsets.FastIntSet,
+	facts []fact, s []slot, slotsFilled *intsets.Fast,
 ) (contradictionFound bool, contradicted fact) {
 	// TODO(ajwerner): As we unify we could determine that some facts are no
 	// longer relevant. When we do that we could move them to the front and keep

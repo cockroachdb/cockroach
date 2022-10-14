@@ -79,7 +79,7 @@ func validateSchemaChangerState(d catalog.Descriptor, vea catalog.ValidationErro
 	// Validate that the target ranks are unique.
 	ranksToTarget := map[uint32]*scpb.Target{}
 	{
-		var duplicates intsets.FastIntSet
+		var duplicates intsets.Fast
 		for i, r := range scs.TargetRanks {
 			if _, exists := ranksToTarget[r]; exists {
 				duplicates.Add(int(r))
@@ -102,17 +102,17 @@ func validateSchemaChangerState(d catalog.Descriptor, vea catalog.ValidationErro
 
 	// Validate that the statements refer exclusively to targets in this
 	// descriptor.
-	statementsExpected := map[uint32]*intsets.FastIntSet{}
+	statementsExpected := map[uint32]*intsets.Fast{}
 	for i := range scs.Targets {
 		t := &scs.Targets[i]
 		exp, ok := statementsExpected[t.Metadata.StatementID]
 		if !ok {
-			exp = &intsets.FastIntSet{}
+			exp = &intsets.Fast{}
 			statementsExpected[t.Metadata.StatementID] = exp
 		}
 		exp.Add(int(scs.TargetRanks[i]))
 	}
-	var statementRanks intsets.FastIntSet
+	var statementRanks intsets.Fast
 	for _, s := range scs.RelevantStatements {
 		statementRanks.Add(int(s.StatementRank))
 		if _, ok := statementsExpected[s.StatementRank]; !ok {
@@ -128,7 +128,7 @@ func validateSchemaChangerState(d catalog.Descriptor, vea catalog.ValidationErro
 
 	// Validate that all targets have a corresponding statement.
 	{
-		var expected intsets.FastIntSet
+		var expected intsets.Fast
 		stmts := statementRanks.Copy()
 		for rank := range statementsExpected {
 			expected.Add(int(rank))

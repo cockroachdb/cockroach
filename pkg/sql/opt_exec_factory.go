@@ -297,7 +297,7 @@ func constructSimpleProjectForPlanNode(
 }
 
 func hasDuplicates(cols []exec.NodeColumnOrdinal) bool {
-	var set intsets.FastIntSet
+	var set intsets.Fast
 	for _, c := range cols {
 		if set.Contains(int(c)) {
 			return true

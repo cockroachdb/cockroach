@@ -596,7 +596,7 @@ func TestConsolidateLocalAndRemoteSpans(t *testing.T) {
 			// only has the partitions and ps (PrefixSorter) elements populated.
 			partitionSpans := parseSpans(&evalCtx, tc.partitionSpans)
 			partitions := make([]testcat.Partition, partitionSpans.Count())
-			localPartitions := intsets.FastIntSet{}
+			localPartitions := intsets.Fast{}
 			for j := 0; j < partitionSpans.Count(); j++ {
 				span := partitionSpans.Get(j)
 				spanDatums := make([]tree.Datums, 1)

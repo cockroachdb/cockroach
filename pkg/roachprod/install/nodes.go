@@ -48,7 +48,7 @@ func ListNodes(s string, numNodesInCluster int) (Nodes, error) {
 		return allNodes(numNodesInCluster), nil
 	}
 
-	var set intsets.FastIntSet
+	var set intsets.Fast
 	for _, p := range strings.Split(s, ",") {
 		parts := strings.Split(p, "-")
 		switch len(parts) {

@@ -125,18 +125,18 @@ const (
 type TableColumnOrdinal int32
 
 // TableColumnOrdinalSet contains a set of TableColumnOrdinal values.
-type TableColumnOrdinalSet = intsets.FastIntSet
+type TableColumnOrdinalSet = intsets.Fast
 
 // NodeColumnOrdinal is the 0-based ordinal index of a column produced by a
 // Node. It is used when referring to a column in an input to an operator.
 type NodeColumnOrdinal int32
 
 // NodeColumnOrdinalSet contains a set of NodeColumnOrdinal values.
-type NodeColumnOrdinalSet = intsets.FastIntSet
+type NodeColumnOrdinalSet = intsets.Fast
 
 // CheckOrdinalSet contains the ordinal positions of a set of check constraints
 // taken from the opt.Table.Check collection.
-type CheckOrdinalSet = intsets.FastIntSet
+type CheckOrdinalSet = intsets.Fast
 
 // AggInfo represents an aggregation (see ConstructGroupBy).
 type AggInfo struct {

@@ -24,10 +24,10 @@ import (
 // index.
 type PartialIndexUpdateHelper struct {
 	// IgnoreForPut is a set of index IDs to ignore for Put operations.
-	IgnoreForPut intsets.FastIntSet
+	IgnoreForPut intsets.Fast
 
 	// IgnoreForDel is a set of index IDs to ignore for Del operations.
-	IgnoreForDel intsets.FastIntSet
+	IgnoreForDel intsets.Fast
 }
 
 // Init initializes a PartialIndexUpdateHelper to track partial index IDs that

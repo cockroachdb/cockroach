@@ -129,7 +129,7 @@ func newSamplerProcessor(
 	}
 
 	inTypes := input.OutputTypes()
-	var sampleCols intsets.FastIntSet
+	var sampleCols intsets.Fast
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
 			spec:     spec.Sketches[i],
@@ -145,7 +145,7 @@ func newSamplerProcessor(
 		var sr stats.SampleReservoir
 		// The datums are converted to their inverted index bytes and
 		// sent as single DBytes column.
-		var srCols intsets.FastIntSet
+		var srCols intsets.Fast
 		srCols.Add(0)
 		sr.Init(int(spec.SampleSize), int(spec.MinSampleSize), bytesRowType, &s.memAcc, srCols)
 		col := spec.InvertedSketches[i].Columns[0]

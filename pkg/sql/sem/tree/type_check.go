@@ -1085,7 +1085,7 @@ func (expr *FuncExpr) TypeCheck(
 		return nil, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "%s()", def.Name)
 	}
 
-	var calledOnNullInputFns, notCalledOnNullInputFns intsets.FastIntSet
+	var calledOnNullInputFns, notCalledOnNullInputFns intsets.Fast
 	for _, idx := range s.overloadIdxs {
 		if def.Overloads[idx].CalledOnNullInput {
 			calledOnNullInputFns.Add(int(idx))
@@ -1107,7 +1107,7 @@ func (expr *FuncExpr) TypeCheck(
 	if funcCls == AggregateClass {
 		for i := range s.typedExprs {
 			if s.typedExprs[i].ResolvedType().Family() == types.UnknownFamily {
-				var filtered intsets.FastIntSet
+				var filtered intsets.Fast
 				for j, ok := notCalledOnNullInputFns.Next(0); ok; j, ok = notCalledOnNullInputFns.Next(j + 1) {
 					if def.Overloads[j].params().GetAt(i).Equivalent(types.String) {
 						filtered.Add(j)
@@ -2356,9 +2356,9 @@ type typeCheckExprsState struct {
 
 	exprs           []Expr
 	typedExprs      []TypedExpr
-	constIdxs       intsets.FastIntSet // index into exprs/typedExprs
-	placeholderIdxs intsets.FastIntSet // index into exprs/typedExprs
-	resolvableIdxs  intsets.FastIntSet // index into exprs/typedExprs
+	constIdxs       intsets.Fast // index into exprs/typedExprs
+	placeholderIdxs intsets.Fast // index into exprs/typedExprs
+	resolvableIdxs  intsets.Fast // index into exprs/typedExprs
 }
 
 // typeCheckSameTypedExprs type checks a list of expressions, asserting that all
@@ -2588,11 +2588,7 @@ func typeCheckConstsAndPlaceholdersWithDesired(
 // - All other Exprs
 func typeCheckSplitExprs(
 	exprs []Expr,
-) (
-	constIdxs intsets.FastIntSet,
-	placeholderIdxs intsets.FastIntSet,
-	resolvableIdxs intsets.FastIntSet,
-) {
+) (constIdxs intsets.Fast, placeholderIdxs intsets.Fast, resolvableIdxs intsets.Fast) {
 	for i, expr := range exprs {
 		switch {
 		case isConstant(expr):

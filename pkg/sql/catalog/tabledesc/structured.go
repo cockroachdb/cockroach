@@ -2042,7 +2042,7 @@ func (desc *wrapper) MakeFirstMutationPublic(
 }
 
 type mutationPublicationPolicy struct {
-	policy intsets.FastIntSet
+	policy intsets.Fast
 }
 
 func makeMutationPublicationPolicy(

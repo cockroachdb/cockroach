@@ -14,7 +14,7 @@ import "github.com/cockroachdb/cockroach/pkg/util/intsets"
 
 // IndexSet efficiently stores an unordered set of index ids.
 type IndexSet struct {
-	set intsets.FastIntSet
+	set intsets.Fast
 }
 
 // MakeIndexIDSet returns a set initialized with the given values.

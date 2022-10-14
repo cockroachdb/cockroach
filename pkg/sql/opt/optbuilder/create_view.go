@@ -42,7 +42,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.insideViewDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
-		b.schemaTypeDeps = intsets.FastIntSet{}
+		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
 
 		b.semaCtx.FunctionResolver = preFuncResolver

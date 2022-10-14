@@ -632,7 +632,7 @@ func makeGroupedIntRows(groupSize, numCols int, groupedCols []int) rowenc.EncDat
 	numRows := intPow(groupSize, len(groupedCols)+1)
 	rows := make(rowenc.EncDatumRows, numRows)
 
-	groupColSet := intsets.MakeFastIntSet(groupedCols...)
+	groupColSet := intsets.MakeFast(groupedCols...)
 	getGroupedColVal := func(rowIdx, colIdx int) int {
 		rank := -1
 		for i, c := range groupedCols {

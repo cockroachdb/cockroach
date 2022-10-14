@@ -317,7 +317,7 @@ func (c *CustomFuncs) extractVarEqualsConst(
 func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 	// usedIndices tracks the set of filter indices we've used to infer constant
 	// values, so we don't inline into them.
-	var usedIndices intsets.FastIntSet
+	var usedIndices intsets.Fast
 	// fixedCols is the set of columns that the filters restrict to be a constant
 	// value.
 	var fixedCols opt.ColSet
@@ -350,7 +350,7 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 	// usedIndices tracks the set of filter indices we've used to infer constant
 	// values, so we don't inline into them.
-	var usedIndices intsets.FastIntSet
+	var usedIndices intsets.Fast
 	// fixedCols is the set of columns that the filters restrict to be a constant
 	// value.
 	var fixedCols opt.ColSet

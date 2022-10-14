@@ -722,7 +722,7 @@ func (md *Metadata) AllViews() []cat.View {
 func (md *Metadata) getAllReferencedTables(
 	ctx context.Context, catalog cat.Catalog,
 ) []cat.DataSource {
-	var tableSet intsets.FastIntSet
+	var tableSet intsets.Fast
 	var tableList []cat.DataSource
 	var addForeignKeyReferencedTables func(tab cat.Table)
 	addForeignKeyReferencedTables = func(tab cat.Table) {

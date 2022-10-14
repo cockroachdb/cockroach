@@ -1107,7 +1107,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		iter2.ForEachStartingAfter(leftIndex.Ordinal(), func(rightIndex cat.Index, innerFilters memo.FiltersExpr, rightCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 			// Check if we have zigzag hints.
 			if scanPrivate.Flags.ForceZigzag {
-				indexes := intsets.MakeFastIntSet(leftIndex.Ordinal(), rightIndex.Ordinal())
+				indexes := intsets.MakeFast(leftIndex.Ordinal(), rightIndex.Ordinal())
 				forceIndexes := scanPrivate.Flags.ZigzagIndexes
 				if !forceIndexes.SubsetOf(indexes) {
 					return

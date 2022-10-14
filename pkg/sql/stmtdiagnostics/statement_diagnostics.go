@@ -700,7 +700,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 	defer r.mu.Unlock()
 
 	now := timeutil.Now()
-	var ids intsets.FastIntSet
+	var ids intsets.Fast
 	for _, row := range rows {
 		id := RequestID(*row[0].(*tree.DInt))
 		stmtFingerprint := string(*row[1].(*tree.DString))

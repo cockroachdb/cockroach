@@ -129,7 +129,7 @@ func (s *slot) reset() {
 }
 
 func maybeSet(
-	slots []slot, idx slotIdx, tv typedValue, set *intsets.FastIntSet,
+	slots []slot, idx slotIdx, tv typedValue, set *intsets.Fast,
 ) (foundContradiction bool) {
 	s := &slots[idx]
 

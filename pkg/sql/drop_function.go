@@ -51,7 +51,7 @@ func (p *planner) DropFunction(
 		toDrop:       make([]*funcdesc.Mutable, 0, len(n.Functions)),
 		dropBehavior: n.DropBehavior,
 	}
-	fnResolved := intsets.MakeFastIntSet()
+	fnResolved := intsets.MakeFast()
 	for _, fn := range n.Functions {
 		ol, err := p.matchUDF(ctx, &fn, !n.IfExists)
 		if err != nil {

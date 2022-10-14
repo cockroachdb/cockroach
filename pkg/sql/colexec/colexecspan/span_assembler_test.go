@@ -91,7 +91,7 @@ func TestSpanAssembler(t *testing.T) {
 									if err != nil {
 										t.Fatal(err)
 									}
-									neededColumns := intsets.MakeFastIntSet(1, 2, 3, 4)
+									neededColumns := intsets.MakeFast(1, 2, 3, 4)
 
 									cols := make([]coldata.Vec, len(typs))
 									for i, typ := range typs {

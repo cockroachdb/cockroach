@@ -1767,7 +1767,7 @@ func getOpIdx(e *edge) int {
 	}
 }
 
-type edgeSet = intsets.FastIntSet
+type edgeSet = intsets.Fast
 
 type bitSet uint64
 
