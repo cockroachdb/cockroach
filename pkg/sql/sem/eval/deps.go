@@ -543,6 +543,10 @@ type TenantOperator interface {
 	// current active version of the cluster performing the create.
 	CreateTenant(ctx context.Context, tenantID uint64, tenantName string) error
 
+	// RenameTenant renames the specified tenant. An error is returned if
+	// the tenant does not exist or the name is already taken.
+	RenameTenant(ctx context.Context, tenantID uint64, tenantName string) error
+
 	// DestroyTenant attempts to uninstall an existing tenant from the system.
 	// It returns an error if the tenant does not exist. If synchronous is true
 	// the gc job will not wait for a GC ttl.
