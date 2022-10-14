@@ -2023,6 +2023,7 @@ func TestLint(t *testing.T) {
 			"../../storage/enginepb",
 			"../../util",
 			"../../util/hlc",
+			"../../util/intsets",
 		}
 
 		// Ensure that all packages that have '//gcassert' or '// gcassert'

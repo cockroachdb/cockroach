@@ -11,7 +11,6 @@ go_library(
         "constants_metamorphic_enable.go",
         "every_n.go",
         "fast_int_map.go",
-        "fast_int_set.go",  # keep
         "hash.go",
         "nocopy.go",
         "pluralize.go",
@@ -32,12 +31,12 @@ go_library(
     deps = [
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
+        "//pkg/util/intsets",
         "//pkg/util/netutil/addr",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@org_golang_x_tools//container/intsets",
     ],
 )
 
