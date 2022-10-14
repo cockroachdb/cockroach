@@ -1141,3 +1141,100 @@ SELECT i, j FROM u@u_j_idx
 query TTTTTTTT
 EXPERIMENTAL SCRUB TABLE u WITH OPTIONS INDEX ALL
 ----
+
+# Example pulled from a blog post.
+# https://malisper.me/the-missing-postgres-scan-the-loose-index-scan
+statement ok
+CREATE TABLE ints (n BIGINT, INDEX (n));
+
+statement ok
+INSERT INTO ints
+VALUES (1), (1), (1), (2), (4), (4), (4), (4), (5), (5),
+  (6), (7), (7), (7), (8), (9), (9), (9), (9), (9);
+
+query I
+WITH RECURSIVE temp (i) AS (
+  (SELECT n FROM ints ORDER BY n ASC LIMIT 1)
+UNION ALL (
+  SELECT n FROM temp,
+    LATERAL (
+      SELECT n
+      FROM ints
+      WHERE n > i
+      ORDER BY n ASC
+      LIMIT 1
+    ) sub
+  )
+)
+SELECT count(*) FROM temp;
+----
+8
+
+query I rowsort
+WITH RECURSIVE temp (i) AS (
+  (SELECT n FROM ints ORDER BY n ASC LIMIT 1)
+UNION ALL (
+  SELECT n FROM temp,
+    LATERAL (
+      SELECT n
+      FROM ints
+      WHERE n > i
+      ORDER BY n ASC
+      LIMIT 1
+    ) sub
+  )
+)
+SELECT * FROM temp;
+----
+1
+2
+4
+5
+6
+7
+8
+9
+
+# Added limit to the recursive branch.
+query I
+WITH RECURSIVE temp (i) AS (
+  (SELECT n FROM ints ORDER BY n ASC LIMIT 1)
+UNION ALL (
+  SELECT n FROM temp,
+    LATERAL (
+      SELECT n
+      FROM ints
+      WHERE n > i
+      ORDER BY n ASC
+      LIMIT 1
+    ) sub LIMIT 1
+  )
+)
+SELECT count(*) FROM temp;
+----
+8
+
+query I rowsort
+WITH RECURSIVE temp (i) AS (
+  (SELECT n FROM ints ORDER BY n ASC LIMIT 1)
+UNION ALL (
+  SELECT n FROM temp,
+    LATERAL (
+      SELECT n
+      FROM ints
+      WHERE n > i
+      ORDER BY n ASC
+      LIMIT 1
+    ) sub LIMIT 1
+  )
+)
+SELECT * FROM temp;
+----
+1
+2
+4
+5
+6
+7
+8
+9
