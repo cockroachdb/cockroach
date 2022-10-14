@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +47,22 @@ func runPOC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes := c.Range(1, 3)
 	lbNode := c.Node(5)
 	appNode := c.Node(4)
-	require.NoError(t, c.Stage(ctx, t.L(), "release", version, "", crdbNodes))
+
+	cfg := (&prometheus.Config{
+		Grafana: prometheus.GrafanaConfig{Enabled: true},
+	}).
+		WithPrometheusNode(appNode.InstallNodes()[0]).
+		WithCluster(crdbNodes.InstallNodes()).
+		WithNodeExporter(crdbNodes.InstallNodes())
+
+	require.NoError(t, c.StartGrafana(ctx, t.L(), cfg))
+	defer func() {
+		_ = c.StopGrafana(ctx, t.L(), t.ArtifactsDir())
+	}()
+
+	require.NoError(
+		t, c.Stage(ctx, t.L(), "release", version, "",
+			c.Nodes(1, 2, 3, 5)))
 	{
 		settings := install.MakeClusterSettings()
 		startOpts := option.DefaultStartOpts()
@@ -56,13 +72,13 @@ func runPOC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1))
 	db.Exec(t, `CREATE DATABASE `+dbName)
 
-	for _, item := range []string{"client", "service", "Manifests", "docker-service"} {
-		c.Put(ctx, filepath.Join(assets, item), item, appNode)
-	}
+	// for _, item := range []string{"client", "service", "Manifests", "docker-service"} {
+	// 	c.Put(ctx, filepath.Join(assets, item), item, appNode)
+	// }
 	c.Put(ctx, filepath.Join(assets, "101222.sql"), "101222.sql", lbNode)
 	require.NoError(t, c.Install(ctx, t.L(), lbNode, "haproxy"))
 	c.Run(ctx, lbNode, `./cockroach gen haproxy --url {pgurl:1} --out - | `+
-		`sed -e 's/roundrobin/leastconn/ -e 's/4096/20000/ -e 's/bind :26257/bind :26000/' > haproxy.cfg`)
+		`sed -e 's/roundrobin/leastconn/' -e 's/4096/20000/' -e 's/bind :26257/bind :26000/' > haproxy.cfg`)
 	c.Run(ctx, lbNode, `sudo systemd-run --unit poc-haproxy --same-dir haproxy -f haproxy.cfg`)
 	// Sanity check haproxy while doing something useful - applying the migration.
 	c.Run(ctx, lbNode, "./cockroach sql --insecure --host=localhost --port=26000 -f 101222.sql")
