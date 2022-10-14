@@ -34,6 +34,8 @@ func registerPOC(r registry.Registry) {
 	})
 }
 
+// Invoke via:
+// ./dev build roachtest && POC_DB_NAME=<you_know_what> POC_ASSETS=/path/to/poc/dir roachtest run --cluster tobias-poc --debug poc --cockroach cockroach
 func runPOC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const version = "v22.1.8"
 	dbName := os.Getenv("POC_DB_NAME")
@@ -44,7 +46,7 @@ func runPOC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes := c.Range(1, 3)
 	lbNode := c.Node(5)
 	appNode := c.Node(4)
-	c.Stage(ctx, t.L(), "release", version, "", crdbNodes)
+	require.NoError(t, c.Stage(ctx, t.L(), "release", version, "", crdbNodes))
 	{
 		settings := install.MakeClusterSettings()
 		startOpts := option.DefaultStartOpts()
@@ -52,20 +54,20 @@ func runPOC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	db := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1))
-	db.Exec(t, `CREATE DATABASE $1`, dbName)
+	db.Exec(t, `CREATE DATABASE `+dbName)
 
 	for _, item := range []string{"client", "service", "Manifests", "docker-service"} {
 		c.Put(ctx, filepath.Join(assets, item), item, appNode)
 	}
 	c.Put(ctx, filepath.Join(assets, "101222.sql"), "101222.sql", lbNode)
-	c.Install(ctx, t.L(), lbNode, "haproxy")
+	require.NoError(t, c.Install(ctx, t.L(), lbNode, "haproxy"))
 	c.Run(ctx, lbNode, `./cockroach gen haproxy --url {pgurl:1} --out - | `+
 		`sed -e 's/roundrobin/leastconn/ -e 's/4096/20000/ -e 's/bind :26257/bind :26000/' > haproxy.cfg`)
 	c.Run(ctx, lbNode, `sudo systemd-run --unit poc-haproxy --same-dir haproxy -f haproxy.cfg`)
 	// Sanity check haproxy while doing something useful - applying the migration.
 	c.Run(ctx, lbNode, "./cockroach sql --insecure --host=localhost --port=26000 -f 101222.sql")
 
-	c.PutString(ctx, `#!/bin/bash
+	require.NoError(t, c.PutString(ctx, `#!/bin/bash
 set -euxo pipefail
 
 
@@ -85,7 +87,7 @@ sudo chmod 666 /var/run/docker.sock
 
 mv service/*.HttpApi service/HttpApi
 chmod +x client/HttpLatencyTest service/HttpApi
-`, "./setup.sh", 0755, appNode)
+`, "./setup.sh", 0755, appNode))
 	c.Run(ctx, appNode, "./setup.sh")
 
 	c.Run(ctx, appNode, "sudo", "systemd-run", "--unit", "HttpApi",
