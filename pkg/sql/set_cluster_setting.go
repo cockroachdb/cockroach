@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -446,6 +447,48 @@ func writeNonDefaultSettingValue(
 	return reportedValue, expectedEncodedValue, nil
 }
 
+// safeToUpgradeTenant ensures that we don't allow for tenant upgrade if it's
+// not safe to do so. Safety is defined as preventing the tenant's cluster
+// version from ever exceeding the host cluster version.
+func safeToUpgradeTenant(
+	ctx context.Context,
+	hostClusterVersion clusterversion.ClusterVersion,
+	tenantClusterVersion clusterversion.ClusterVersion,
+	isSystemTenant bool,
+) (bool, error) {
+	if isSystemTenant {
+		// Unconditionally run upgrades for the system tenant.
+		return true, nil
+	}
+	if hostClusterVersion.Less(tenantClusterVersion.Version) {
+		// We assert here if we find a tenant with a higher cluster version than
+		// the host cluster. It's dangerous to run in this mode because the
+		// tenant may expect upgrades to be present on the host cluster which
+		// haven't yet been run. It's also not clear how we could get into this
+		// state, since a tenant can't be created at a higher level
+		// than the host cluster, and will be prevented from upgrading beyond
+		// the host cluster version by the code below.
+		return false, errors.AssertionFailedf("tenant found at higher cluster version "+
+			"than host cluster - host cluster at version %v, tenant at version"+
+			" %v.", hostClusterVersion, tenantClusterVersion)
+	}
+	if tenantClusterVersion == hostClusterVersion {
+		// The cluster version of the tenant is equal to the cluster version of
+		// the host cluster. If we allow the upgrade it will push the tenant
+		// to a higher cluster version than the host cluster. Block the upgrade.
+		return false, errors.Newf("preventing tenant upgrade from running "+
+			"as the host cluster has not yet been upgraded - "+
+			"host cluster version = %v, tenant cluster version = %v",
+			hostClusterVersion, tenantClusterVersion)
+	}
+
+	// The cluster version of the tenant is less than that of the host
+	// cluster. It's safe to run the startup migrations.
+	log.Infof(ctx, "Safe to upgrade tenant - host cluster at version %v, tenant at version"+
+		" %v", hostClusterVersion, tenantClusterVersion)
+	return true, nil
+}
+
 // setVersionSetting encapsulates the logic for changing the 'version'
 // cluster setting.
 func setVersionSetting(
@@ -508,6 +551,25 @@ func setVersionSetting(
 		return err
 	}
 
+	// If we're in a secondary tenant, determine whether it's safe to perform
+	// the upgrade.
+	if !forSystemTenant {
+		var tenantClusterVersion clusterversion.ClusterVersion
+		tenantClusterVersionRaw := []byte(string(*dStr))
+		// At this point we should be able to decode the cluster version
+		if err := protoutil.Unmarshal(tenantClusterVersionRaw, &tenantClusterVersion); err != nil {
+			return errors.NewAssertionErrorWithWrappedErrf(err, "decoding cluster version %s",
+				redact.SafeString(base64.StdEncoding.EncodeToString(tenantClusterVersionRaw)))
+		}
+		hostClusterVersion := execCfg.Settings.OverridesInformer.(*settingswatcher.SettingsWatcher).GetHostClusterVersion(ctx)
+
+		// Perform the upgrade test.
+		if safe, err := safeToUpgradeTenant(ctx,
+			hostClusterVersion, tenantClusterVersion, execCfg.Codec.ForSystemTenant()); !safe {
+			return err
+		}
+	}
+
 	// Updates the version inside the system.settings table.
 	// If we are already at or above the target version, then this
 	// function is idempotent.
@@ -546,12 +608,27 @@ func setVersionSetting(
 				}
 			}
 			// Only if the version has increased, alter the setting.
-			_, err = execCfg.InternalExecutor.ExecEx(
+			if _, err = execCfg.InternalExecutor.ExecEx(
 				ctx, "update-setting", txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
 				name, string(rawValue), setting.Typ(),
-			)
+			); err != nil {
+				return err
+			}
+
+			// If we're the system tenant, also send an override to each tenant
+			// to ensure that they know about the new cluster version.
+			if forSystemTenant {
+				if _, err = execCfg.InternalExecutor.ExecEx(
+					ctx, "update-setting", txn,
+					sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+					`UPSERT INTO system.tenant_settings (tenant_id, name, value, "last_updated", "value_type") VALUES ($1, $2, $3, now(), $4)`,
+					tree.NewDInt(0), name, string(rawValue), setting.Typ(),
+				); err != nil {
+					return err
+				}
+			}
 			return err
 		})
 	}
