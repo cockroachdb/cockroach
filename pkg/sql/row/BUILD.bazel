@@ -68,6 +68,7 @@ go_library(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
+        "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",

@@ -12,10 +12,6 @@ go_library(
         "every_n.go",
         "fast_int_map.go",
         "fast_int_set.go",  # keep
-        "fast_int_set_large.go",
-        "fast_int_set_small.go",
-        "fast_int_set_str.go",
-        "fast_int_set_testonly.go",
         "hash.go",
         "nocopy.go",
         "pluralize.go",
@@ -51,7 +47,6 @@ go_test(
     srcs = [
         "every_n_test.go",
         "fast_int_map_test.go",
-        "fast_int_set_test.go",
         "slices_test.go",
         "smalltrace_test.go",
         "strings_test.go",

@@ -67,7 +67,7 @@ go_test(
         "//pkg/sql/span",
         "//pkg/sql/types",
         "//pkg/testutils/skip",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
