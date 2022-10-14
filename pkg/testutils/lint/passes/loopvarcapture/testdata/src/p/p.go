@@ -892,6 +892,38 @@ func CapturingGoRoutineFunctions() {
 	}
 }
 
+// StructFields ensures that struct fields are handled properly. The
+// `go/parser` package is not able to correctly resolve composite
+// literals, as it is not known at parse time whether the key in a
+// composite literal is an identifier or a field name. This tests the
+// linter's workaround for this.
+func StructFields() {
+	type S struct{ j int }
+	type S2 struct{ s S }
+	type M map[int]int
+
+	m1 := map[int]int{}
+	m2 := M{}
+
+	for _, j := range collection {
+		fmt.Printf("j = %d\n", j) //
+		go func() {
+			// this is valid; j refers to struct field, not the loop
+			// variable
+			_ = S{j: 10}
+			_ = S2{S{j: 10}}
+
+			// all the references below are not safe
+			m1 = map[int]int{j: 1, 2: 2} // want `loop variable 'j' captured by reference`
+			m1 = map[int]int{3: j}       // want `loop variable 'j' captured by reference`
+			m2 = M{2: 2, j: 1}           // want `loop variable 'j' captured by reference`
+			m2 = M{3: j}                 // want `loop variable 'j' captured by reference`
+
+			_, _ = m1, m2
+		}()
+	}
+}
+
 // RespectsNolintComments makes sure that developers are able to
 // silence the linter using their own judgement.
 func RespectsNolintComments() {

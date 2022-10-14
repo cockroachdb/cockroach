@@ -596,8 +596,8 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]positionedIdent, []posit
 	var refs, syncObjs []positionedIdent
 
 	// define the inspector function so that we can call it recursively
-	var inspector func(int, bool) func(ast.Node) bool
-	inspector = func(pos int, isDefer bool) func(ast.Node) bool {
+	var inspector func(int, bool, bool) func(ast.Node) bool
+	inspector = func(pos int, insideDefer, insideStructLit bool) func(ast.Node) bool {
 		positioned := func(ident *ast.Ident, isDefer bool) positionedIdent {
 			return positionedIdent{pos: pos, isDefer: isDefer, ident: ident}
 		}
@@ -605,7 +605,35 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]positionedIdent, []posit
 		return func(n ast.Node) bool {
 			switch expr := n.(type) {
 			case *ast.DeferStmt:
-				ast.Inspect(expr.Call, inspector(pos, true))
+				ast.Inspect(expr.Call, inspector(pos, true, insideStructLit))
+				return false
+
+			case *ast.CompositeLit:
+				// in a composite literal ({a: b, c: d}), check if the value
+				// being initialized is a struct. In case it is, set the
+				// `insideStructLit` argument accordingly in the recursive
+				// call.
+				var isStructLit bool
+				compositeType := v.pass.TypesInfo.TypeOf(expr.Type)
+				if compositeType != nil {
+					_, isStructLit = compositeType.Underlying().(*types.Struct)
+				}
+				for _, elt := range expr.Elts {
+					ast.Inspect(elt, inspector(pos, insideDefer, insideStructLit || isStructLit))
+				}
+				return false
+
+			case *ast.KeyValueExpr:
+				// we only validate the key in a KeyValueExpr if we are *not*
+				// inside a struct literal initialization. In case we are, we
+				// don't want to mistakenly flag a field name as an invalid
+				// reference to a loop variable.
+				//
+				// See https://github.com/golang/go/issues/45160.
+				if !insideStructLit {
+					ast.Inspect(expr.Key, inspector(pos, insideDefer, insideStructLit))
+				}
+				ast.Inspect(expr.Value, inspector(pos, insideDefer, insideStructLit))
 				return false
 
 			case *ast.Ident:
@@ -614,7 +642,7 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]positionedIdent, []posit
 				}
 
 				if v.isLoopVar(expr) {
-					refs = append(refs, positioned(expr, isDefer))
+					refs = append(refs, positioned(expr, insideDefer))
 				}
 
 				// `Ident` is a child node; stopping the traversal here
@@ -625,13 +653,13 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]positionedIdent, []posit
 				// if this is a call to Done() on a variable of type WaitGroup,
 				// the variable should be considered a synchronization object
 				if ident := v.waitGroupCallee(expr, "Done"); ident != nil {
-					syncObjs = append(syncObjs, positioned(ident, isDefer))
+					syncObjs = append(syncObjs, positioned(ident, insideDefer))
 				}
 
 				// if we are calling the builtin `close`, the associated channel
 				// should be considered a synchronization object
 				if ident := v.closeChan(expr); ident != nil {
-					syncObjs = append(syncObjs, positioned(ident, isDefer))
+					syncObjs = append(syncObjs, positioned(ident, insideDefer))
 				}
 
 				// if we are calling a local closure that is known to capture a
@@ -639,7 +667,7 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]positionedIdent, []posit
 				funcName, ok := expr.Fun.(*ast.Ident)
 				if ok && funcName.Obj != nil {
 					if _, ok := v.closures[funcName.Obj]; ok {
-						refs = append(refs, positioned(funcName, isDefer))
+						refs = append(refs, positioned(funcName, insideDefer))
 					}
 				}
 
@@ -651,7 +679,7 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]positionedIdent, []posit
 				// if we are sending something to a channel, the channel should
 				// be considered a synchronization object
 				if ident, ok := expr.Chan.(*ast.Ident); ok {
-					syncObjs = append(syncObjs, positioned(ident, isDefer))
+					syncObjs = append(syncObjs, positioned(ident, insideDefer))
 				}
 			}
 
@@ -662,7 +690,7 @@ func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]positionedIdent, []posit
 	}
 
 	for pos, stmt := range funcLit.Body.List {
-		ast.Inspect(stmt, inspector(pos, false))
+		ast.Inspect(stmt, inspector(pos, false, false))
 	}
 
 	return refs, syncObjs
