@@ -22,14 +22,14 @@ INSERT INTO data SELECT a, b, c::FLOAT, NULL FROM
 # available for each set of column names. This is important in order to
 # tolerate the rare case of multiple auto stats jobs running between two retry
 # iterations.
-query TTIII colnames,rowsort,retry
+query TTIII colnames,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
-FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names, created
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names, created DESC
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a,b,c}       1000       1000            0
-__auto__         {a,b}         1000       100             0
 __auto__         {a}           1000       10              0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b,c}       1000       1000            0
 __auto__         {b}           1000       10              0
 __auto__         {c}           1000       10              0
 __auto__         {d}           1000       1               1000
@@ -43,14 +43,14 @@ statement ok
 UPDATE data SET d = 10 WHERE (a = 1 OR a = 2 OR a = 3) AND b > 1
 
 # There should be no change to stats.
-query TTIII colnames,rowsort
+query TTIII colnames
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a,b,c}       1000       1000            0
-__auto__         {a,b}         1000       100             0
 __auto__         {a}           1000       10              0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b,c}       1000       1000            0
 __auto__         {b}           1000       10              0
 __auto__         {c}           1000       10              0
 __auto__         {d}           1000       1               1000
@@ -76,14 +76,14 @@ UPDATE data SET d = 12 WHERE d = 10
 # with each one affecting at most 88 rows. Since 88 < 205, the refresh is not
 # guaranteed, making this test flaky.
 skipif config 3node-tenant-default-configs
-query TTIII colnames,rowsort,retry
+query TTIII colnames,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a,b,c}       1000       1000            0
-__auto__         {a,b}         1000       100             0
 __auto__         {a}           1000       10              0
+__auto__         {a,b}         1000       100             0
+__auto__         {a,b,c}       1000       1000            0
 __auto__         {b}           1000       10              0
 __auto__         {c}           1000       10              0
 __auto__         {d}           1000       2               730
@@ -95,14 +95,14 @@ generate_series(1, 11) AS a(a),
 generate_series(1, 10) AS b(b),
 generate_series(1, 5) AS c(c)
 
-query TTIII colnames,rowsort,retry
+query TTIII colnames,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a,b,c}       1050       1050            0
-__auto__         {a,b}         1050       110             0
 __auto__         {a}           1050       11              0
+__auto__         {a,b}         1050       110             0
+__auto__         {a,b,c}       1050       1050            0
 __auto__         {b}           1050       10              0
 __auto__         {c}           1050       10              0
 __auto__         {d}           1050       3               365
@@ -111,14 +111,14 @@ __auto__         {d}           1050       3               365
 statement ok
 DELETE FROM data WHERE c > 5
 
-query TTIII colnames,rowsort,retry
+query TTIII colnames,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
 ----
 statistics_name  column_names  row_count  distinct_count  null_count
-__auto__         {a,b,c}       550        550             0
-__auto__         {a,b}         550        110             0
 __auto__         {a}           550        11              0
+__auto__         {a,b}         550        110             0
+__auto__         {a,b,c}       550        550             0
 __auto__         {b}           550        10              0
 __auto__         {c}           550        5               0
 __auto__         {d}           550        1               0
@@ -129,7 +129,7 @@ CREATE TABLE copy AS SELECT * FROM data
 
 # Distinct count for rowid can be flaky, so don't show it. The estimate is
 # almost always 550, but occasionally it is 549...
-query TTII colnames,rowsort,retry
+query TTII colnames,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, null_count
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names ASC, created DESC
 ----
@@ -143,7 +143,7 @@ __auto__         {rowid}       550        0
 statement ok
 CREATE TABLE test_create (x INT PRIMARY KEY, y CHAR)
 
-query TTIII colnames,rowsort,retry
+query TTIII colnames,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE test_create] ORDER BY column_names ASC, created DESC
 ----
@@ -155,7 +155,7 @@ __auto__         {y}           0          0               0
 statement ok
 DELETE FROM copy WHERE true
 
-query TTII colnames,rowsort,retry
+query TTII colnames,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, null_count
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names ASC, created DESC
 ----
@@ -186,7 +186,7 @@ statement ok
 INSERT INTO my_schema.my_table SELECT k, NULL FROM
    generate_series(1, 10) AS k(k)
 
-query TTIII colnames,rowsort,retry
+query TTIII colnames,retry
 SELECT DISTINCT ON (column_names) statistics_name, column_names, row_count, distinct_count, null_count
 FROM [SHOW STATISTICS FOR TABLE my_schema.my_table] ORDER BY column_names ASC, created DESC
 ----
