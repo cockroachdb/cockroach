@@ -189,6 +189,13 @@ func initFlags() {
 		"skip-init", startOpts.SkipInit, "skip initializing the cluster")
 	startCmd.Flags().IntVar(&startOpts.StoreCount,
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
+	startCmd.Flags().BoolVar(&startOpts.ScheduleBackups,
+		"schedule-backups", startOpts.ScheduleBackups,
+		"create a cluster backup schedule once the cluster has started (by default, "+
+			"full backup hourly and incremental every 15 minutes)")
+	startCmd.Flags().StringVar(&startOpts.ScheduleBackupArgs, "schedule-backup-args", "",
+		`Recurrence and scheduled backup options specification. 
+Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS first_run = 'now'"`)
 
 	startTenantCmd.Flags().StringVarP(&hostCluster,
 		"host-cluster", "H", "", "host cluster")
