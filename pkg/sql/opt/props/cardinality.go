@@ -135,6 +135,15 @@ func (c Cardinality) Skip(rows uint32) Cardinality {
 	return Cardinality{Min: min, Max: max}
 }
 
+// Union returns a cardinality that covers both of the given cardinality ranges.
+// Example: [0-1].Union([5-10]) = [0-10]
+func (c Cardinality) Union(other Cardinality) Cardinality {
+	return Cardinality{
+		Min: minVal(c.Min, other.Min),
+		Max: maxVal(c.Max, other.Max),
+	}
+}
+
 func (c Cardinality) String() string {
 	if c.Max == math.MaxUint32 {
 		return fmt.Sprintf("[%d - ]", c.Min)
