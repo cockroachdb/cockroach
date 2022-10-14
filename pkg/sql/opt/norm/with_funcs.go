@@ -13,6 +13,7 @@ package norm
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/errors"
 )
 
@@ -126,4 +127,73 @@ func (c *CustomFuncs) InlineWithScan(private *memo.WithScanPrivate) memo.RelExpr
 		ID:   c.f.Metadata().NextUniqueID(),
 	})
 	return c.f.ConstructProject(newValuesExpr, projections, opt.ColSet{})
+}
+
+// ApplyLimitToRecursiveCTEScan re-optimizes the recursive branch of a recursive
+// CTE with a limit applied to the binding. This is possible when both the
+// initial and recursive branches have a limit.
+func (c *CustomFuncs) ApplyLimitToRecursiveCTEScan(
+	binding, initial, recursive memo.RelExpr, private *memo.RecursiveCTEPrivate,
+) memo.RelExpr {
+	// The cardinality of each iteration is at least the minimum of the min
+	// cardinality guaranteed by both branches, and at most the maximum of the max
+	// cardinality guaranteed by both branches.
+	newCard := initial.Relational().Cardinality.Union(recursive.Relational().Cardinality)
+	if private.Deduplicate {
+		// Rows maybe be filtered by the de-duplication process, so we can only
+		// guarantee that each WithScan will return at least one row.
+		newCard = newCard.AsLowAs(1)
+	}
+
+	// Use the initial branch's row count estimate for WithScan estimate.
+	newRowCount := initial.Relational().Statistics().RowCount
+	newBinding := c.f.ConstructFakeRel(&memo.FakeRelPrivate{
+		Props: MakeBindingPropsForRecursiveCTE(newCard, binding.Relational().OutputCols, newRowCount),
+	})
+
+	// Re-optimize the recursive branch with the new properties.
+	withID := private.WithID
+	newWithID := c.f.Memo().NextWithID()
+	c.f.Metadata().AddWithBinding(newWithID, newBinding)
+
+	var replace ReplaceFunc
+	replace = func(e opt.Expr) opt.Expr {
+		if withScan, ok := e.(*memo.WithScanExpr); ok && withScan.With == withID {
+			// Reconstruct the with scan using the new binding.
+			newPrivate := withScan.WithScanPrivate
+			newPrivate.With = newWithID
+			newPrivate.ID = c.f.Metadata().NextUniqueID()
+			return c.f.ConstructWithScan(&newPrivate)
+		}
+		return c.f.Replace(e, replace)
+	}
+	newRecursive := replace(recursive).(memo.RelExpr)
+	newPrivate := *private
+	newPrivate.WithID = newWithID
+	return c.f.ConstructRecursiveCTE(newBinding, initial, newRecursive, &newPrivate)
+}
+
+// MakeBindingPropsForRecursiveCTE makes a Relational struct that applies to all
+// iterations of a recursive CTE. The caller must verify that the supplied
+// cardinality applies to all iterations.
+func MakeBindingPropsForRecursiveCTE(
+	card props.Cardinality, outCols opt.ColSet, rowCount float64,
+) *props.Relational {
+	// The working table will always have at least one row, because any iteration
+	// that returns zero rows will end the loop.
+	card = card.AtLeast(props.OneCardinality)
+	bindingProps := &props.Relational{}
+	bindingProps.OutputCols = outCols
+	bindingProps.Cardinality = card
+	bindingProps.Statistics().RowCount = rowCount
+	// Row count must be greater than 0 or the stats code will throw an error.
+	// Set it to 1 to match the cardinality.
+	if bindingProps.Statistics().RowCount < 1 {
+		bindingProps.Statistics().RowCount = 1
+	}
+	// We can infer a zero-column key in the case when there are zero or one rows.
+	if bindingProps.Cardinality.IsZeroOrOne() {
+		bindingProps.FuncDeps.AddStrictKey(opt.ColSet{}, outCols)
+	}
+	return bindingProps
 }
