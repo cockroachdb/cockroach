@@ -712,6 +712,7 @@ func (h *harness) runSimple(tb testing.TB, query benchQuery, phase Phase) {
 		root,
 		&h.evalCtx,
 		true, /* allowAutoCommit */
+		stmt.IsANSIDML(),
 	)
 	if _, err = eb.Build(); err != nil {
 		tb.Fatalf("%v", err)
@@ -764,7 +765,8 @@ func (h *harness) runPrepared(tb testing.TB, phase Phase) {
 		nil, /* catalog */
 		root,
 		&h.evalCtx,
-		true, /* allowAutoCommit */
+		true,  /* allowAutoCommit */
+		false, /* isANSIDML */
 	)
 	if _, err := eb.Build(); err != nil {
 		tb.Fatalf("%v", err)

@@ -358,6 +358,11 @@ type Planner interface {
 	// second return value is false if the database doesn't exist or is not
 	// multiregion.
 	GetMultiregionConfig(databaseID descpb.ID) (interface{}, bool)
+
+	// IsANSIDML returns true if the statement being planned is one of the 4 DML
+	// statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of these
+	// statements.
+	IsANSIDML() bool
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

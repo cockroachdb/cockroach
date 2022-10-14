@@ -812,7 +812,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	}
 
 	res.root = root
-	if b.evalCtx.SessionData().EnforceHomeRegion && b.doScanExprCollection {
+	if b.evalCtx.SessionData().EnforceHomeRegion && b.IsANSIDML && b.doScanExprCollection {
 		if b.builtScans == nil {
 			// Make this large enough to handle simple 2-table join queries without
 			// wasting memory.
@@ -1137,7 +1137,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (execPlan, error) {
 			return nil, err
 		}
 
-		eb := New(ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */)
+		eb := New(ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 		eb.disableTelemetry = true
 		eb.withExprs = withExprs
 		plan, err := eb.Build()
@@ -1829,7 +1829,7 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
-func (b *Builder) enforceScanWithHomeRegion() error {
+func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 	homeRegion := ""
 	firstTable := ""
 	gatewayRegion, foundLocalRegion := b.evalCtx.Locality.Find("region")
@@ -1839,6 +1839,12 @@ func (b *Builder) enforceScanWithHomeRegion() error {
 	for i, scan := range b.builtScans {
 		inputTableMeta := scan.Memo().Metadata().TableMeta(scan.Table)
 		inputTable := inputTableMeta.Table
+		// Mutation DML errors out with additional information via a call to
+		// `filterSuggestionError`, handled by the caller, so skip the target of
+		// the mutations if encountered here.
+		if inputTable.ID() == skipID {
+			continue
+		}
 		inputTableName := string(inputTable.Name())
 		inputIndexOrdinal := scan.Index
 
@@ -1890,7 +1896,20 @@ func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPl
 		return input, err
 	}
 
-	if b.evalCtx.SessionData().EnforceHomeRegion {
+	if b.evalCtx.SessionData().EnforceHomeRegion && b.IsANSIDML {
+		var mutationTableID opt.TableID
+		if updateExpr, ok := distribute.Input.(*memo.UpdateExpr); ok {
+			mutationTableID = updateExpr.Table
+		} else if deleteExpr, ok := distribute.Input.(*memo.DeleteExpr); ok {
+			mutationTableID = deleteExpr.Table
+		}
+		var mutationTabMeta *opt.TableMeta
+		var mutationStableID cat.StableID
+		if mutationTableID != opt.TableID(0) {
+			md := b.mem.Metadata()
+			mutationTabMeta = md.TableMeta(mutationTableID)
+			mutationStableID = mutationTabMeta.Table.ID()
+		}
 		saveDoScanExprCollection := b.doScanExprCollection
 		b.doScanExprCollection = true
 		// Traverse the tree again, this time collecting ScanExprs that should
@@ -1900,7 +1919,7 @@ func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPl
 		if err != nil {
 			return execPlan{}, err
 		}
-		err = b.enforceScanWithHomeRegion()
+		err = b.enforceScanWithHomeRegion(mutationStableID)
 		if err != nil {
 			return execPlan{}, err
 		}
@@ -1915,12 +1934,18 @@ func (b *Builder) buildDistribute(distribute *memo.DistributeExpr) (input execPl
 		} else if distribute.Input.Op() != opt.LookupJoinOp {
 			// More detailed error message handling for lookup join occurs in the
 			// execbuilder.
-			errCode = pgcode.QueryHasNoHomeRegion
-			errorStringBuilder.WriteString("Query has no home region.")
-			errorStringBuilder.WriteString(` Try adding a LIMIT clause.`)
+			if mutationTableID != opt.TableID(0) {
+				err = b.filterSuggestionError(mutationTabMeta, 0 /* indexOrdinal1 */, nil /* table2Meta */, 0 /* indexOrdinal2 */)
+			} else {
+				errCode = pgcode.QueryHasNoHomeRegion
+				errorStringBuilder.WriteString("Query has no home region.")
+				errorStringBuilder.WriteString(` Try adding a LIMIT clause.`)
+			}
 		}
-		msgString := errorStringBuilder.String()
-		err = pgerror.Newf(errCode, "%s", msgString)
+		if err == nil {
+			msgString := errorStringBuilder.String()
+			err = pgerror.Newf(errCode, "%s", msgString)
+		}
 		return execPlan{}, err
 	}
 
@@ -2171,7 +2196,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		}
 	}
 	saveDoScanExprCollection := false
-	enforceHomeRegion := b.evalCtx.SessionData().EnforceHomeRegion
+	enforceHomeRegion := b.evalCtx.SessionData().EnforceHomeRegion && b.IsANSIDML
 	if enforceHomeRegion {
 		saveDoScanExprCollection = b.doScanExprCollection
 		var rel opt.Expr
@@ -2389,7 +2414,7 @@ func (b *Builder) handleRemoteInvertedJoinError(join *memo.InvertedJoinExpr) (er
 }
 
 func (b *Builder) buildInvertedJoin(join *memo.InvertedJoinExpr) (execPlan, error) {
-	enforceHomeRegion := b.evalCtx.SessionData().EnforceHomeRegion
+	enforceHomeRegion := b.evalCtx.SessionData().EnforceHomeRegion && b.IsANSIDML
 	saveDoScanExprCollection := false
 	if enforceHomeRegion {
 		saveDoScanExprCollection = b.doScanExprCollection

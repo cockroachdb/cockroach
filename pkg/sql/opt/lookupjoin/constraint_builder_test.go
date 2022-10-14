@@ -320,6 +320,7 @@ func formatScalar(e opt.Expr, f *norm.Factory, evalCtx *eval.Context) string {
 	execBld := execbuilder.New(
 		nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
 		e, evalCtx, false, /* allowAutoCommit */
+		false, /* isANSIDML */
 	)
 	expr, err := execBld.BuildScalar()
 	if err != nil {

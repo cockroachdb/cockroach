@@ -48,6 +48,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 		scalar,
 		nil,   /* evalCtx */
 		false, /* allowAutoCommit */
+		false, /* isANSIDML */
 	)
 	expr, err := bld.BuildScalar()
 	if err != nil {

@@ -115,6 +115,7 @@ func TestImplicator(t *testing.T) {
 				execBld := execbuilder.New(
 					nil /* factory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
 					&remainingFilters, &evalCtx, false, /* allowAutoCommit */
+					false, /* isANSIDML */
 				)
 				expr, err := execBld.BuildScalar()
 				if err != nil {

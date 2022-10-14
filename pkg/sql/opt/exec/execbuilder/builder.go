@@ -179,6 +179,11 @@ type Builder struct {
 	// doScanExprCollection, when true, causes buildScan to add any ScanExprs it
 	// processes to the builtScans slice.
 	doScanExprCollection bool
+
+	// IsANSIDML is true if the AST the execbuilder is working on is one of the
+	// 4 DML statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of
+	// these statements.
+	IsANSIDML bool
 }
 
 // New constructs an instance of the execution node builder using the
@@ -199,6 +204,7 @@ func New(
 	e opt.Expr,
 	evalCtx *eval.Context,
 	allowAutoCommit bool,
+	isANSIDML bool,
 ) *Builder {
 	b := &Builder{
 		factory:                factory,
@@ -209,6 +215,7 @@ func New(
 		evalCtx:                evalCtx,
 		allowAutoCommit:        allowAutoCommit,
 		initialAllowAutoCommit: allowAutoCommit,
+		IsANSIDML:              isANSIDML,
 	}
 	if evalCtx != nil {
 		sd := evalCtx.SessionData()
