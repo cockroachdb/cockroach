@@ -1046,6 +1046,14 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		int(opt.PruneScanCols),
 		// Needed to ensure that the input of a RangeExpr is always an AndExpr.
 		int(opt.SimplifyRange),
+		// Map and push filter into join rules are needed now that SQLSmith tests
+		// populate tables with many rows and can perform many joins. Otherwise the
+		// intermediate result set data size can grow too large, especially for
+		// geospatial and JSON data types.
+		int(opt.MapFilterIntoJoinLeft),
+		int(opt.MapFilterIntoJoinRight),
+		int(opt.PushFilterIntoJoinLeft),
+		int(opt.PushFilterIntoJoinRight),
 	)
 
 	var disabledRules RuleSet
