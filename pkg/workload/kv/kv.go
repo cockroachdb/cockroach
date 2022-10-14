@@ -24,7 +24,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -82,6 +85,7 @@ type kv struct {
 	shards                               int
 	targetCompressionRatio               float64
 	enum                                 bool
+	insertCount                          int
 }
 
 func init() {
@@ -146,6 +150,9 @@ var kvMeta = workload.Meta{
 			`Target compression ratio for data blocks. Must be >= 1.0`)
 		g.flags.BoolVar(&g.enum, `enum`, false,
 			`Inject an enum column and use it`)
+		g.flags.IntVar(&g.insertCount, `insert-count`, 0,
+			`Number of rows to insert before beginning the workload. Keys are inserted `+
+				`uniformly over the key range.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -198,9 +205,19 @@ ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 			if w.targetCompressionRatio < 1.0 || math.IsNaN(w.targetCompressionRatio) {
 				return errors.New("'target-compression-ratio' must be a number >= 1.0")
 			}
+			if rangeMin, rangeMax := w.keyRange(); rangeMax <= rangeMin+int64(w.insertCount) {
+				return errors.Errorf(
+					"`--insert-count` (%d) is greater than the number of unique keys that could be possibly generated [%d,%d)",
+					w.insertCount, rangeMin, rangeMax)
+			}
 			return nil
 		},
 	}
+}
+
+var kvtableTypes = []*types.T{
+	types.Int,
+	types.Bytes,
 }
 
 func (w *kv) keyRange() (int64, int64) {
@@ -236,6 +253,12 @@ func (w *kv) splitFinder(i int) int {
 	return splitPoint
 }
 
+func (w *kv) insertCountKey(idx, min, max, count int64) int64 {
+	stride := max/(count+1) - min/(count+1)
+	key := min + (idx+1)*stride
+	return key
+}
+
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
 	table := workload.Table{Name: `kv`}
@@ -268,6 +291,42 @@ func (w *kv) Tables() []workload.Table {
 			table.Schema = kvSchema
 		}
 	}
+
+	if w.insertCount > 0 {
+		const batchSize = 1000
+		rangeMin, rangeMax := w.keyRange()
+		table.InitialRows = workload.BatchedTuples{
+			NumBatches: (w.insertCount + batchSize - 1) / batchSize,
+			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
+				if rowEnd > w.insertCount {
+					rowEnd = w.insertCount
+				}
+
+				cb.Reset(kvtableTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
+
+				keyCol := cb.ColVec(0).Int64()
+				valCol := cb.ColVec(1).Bytes()
+				// coldata.Bytes only allows appends so we have to reset it.
+				valCol.Reset()
+				rndBlock := rand.New(rand.NewSource(w.seed))
+
+				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
+					rowOffset := rowIdx - rowBegin
+
+					key := w.insertCountKey(int64(rowIdx), rangeMin, rangeMax, int64(w.insertCount))
+					keyCol.Set(rowOffset, key)
+
+					var payload []byte
+					blockSize, uniqueSize := w.randBlockSize(rndBlock)
+					*a, payload = a.Alloc(blockSize, 0 /* extraCap */)
+					w.randFillBlock(rndBlock, payload, uniqueSize)
+					valCol.Set(rowOffset, payload)
+				}
+			},
+		}
+	}
+
 	return []workload.Table{table}
 }
 
@@ -521,7 +580,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		if sfuArgs != nil {
 			sfuArgs[i] = writeArgs[j]
 		}
-		writeArgs[j+1] = randomBlock(o.config, o.g.rand())
+		writeArgs[j+1] = o.config.randBlock(o.g.rand())
 	}
 	start := timeutil.Now()
 	var err error
@@ -743,19 +802,35 @@ func (g *zipfGenerator) sequence() int64 {
 	return atomic.LoadInt64(&g.seq.val)
 }
 
-func randomBlock(config *kv, r *rand.Rand) []byte {
-	blockSize := r.Intn(config.maxBlockSizeBytes-config.minBlockSizeBytes+1) + config.minBlockSizeBytes
-	blockData := make([]byte, blockSize)
-	uniqueSize := int(float64(blockSize) / config.targetCompressionRatio)
-	if uniqueSize < 1 {
-		uniqueSize = 1
+// randBlock returns a sequence of random bytes according to the kv
+// configuration.
+func (w *kv) randBlock(r *rand.Rand) []byte {
+	blockSize, uniqueSize := w.randBlockSize(r)
+	block := make([]byte, blockSize)
+	w.randFillBlock(r, block, uniqueSize)
+	return block
+}
+
+// randBlockSize returns two integers, for a random integer to use for inserts
+// according to min/max block bytes and the unique bytes given the
+// targetCompressionRatio.
+func (w *kv) randBlockSize(r *rand.Rand) (block int, unique int) {
+	block = r.Intn(w.maxBlockSizeBytes-w.minBlockSizeBytes+1) + w.minBlockSizeBytes
+	unique = int(float64(block) / w.targetCompressionRatio)
+	if unique < 1 {
+		unique = 1
 	}
-	for i := range blockData {
+	return block, unique
+}
+
+// randFillBlock fills the provided buffer with random bytes. len(buf) -
+// uniqueSize entries are repeated.
+func (w *kv) randFillBlock(r *rand.Rand, buf []byte, uniqueSize int) {
+	for i := range buf {
 		if i >= uniqueSize {
-			blockData[i] = blockData[i-uniqueSize]
+			buf[i] = buf[i-uniqueSize]
 		} else {
-			blockData[i] = byte(r.Int() & 0xff)
+			buf[i] = byte(r.Int() & 0xff)
 		}
 	}
-	return blockData
 }

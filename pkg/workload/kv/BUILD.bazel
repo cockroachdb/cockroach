@@ -10,7 +10,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/kv",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/col/coldata",
         "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/types",
+        "//pkg/util/bufalloc",
         "//pkg/util/timeutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
