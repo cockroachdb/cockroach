@@ -18,6 +18,7 @@ go_library(
         "system_external_connections.go",
         "system_privileges.go",
         "system_users_role_id_migration.go",
+        "tenant_table_migration.go",
         "update_invalid_column_ids_in_sequence_back_references.go",
         "upgrade_sequence_to_be_referenced_by_ID.go",
         "upgrades.go",

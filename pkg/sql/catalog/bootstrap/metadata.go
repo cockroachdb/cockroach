@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -452,6 +453,75 @@ func addSystemDatabaseToSchema(
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
+	addSystemTenantEntry(target)
+}
+
+// addSystemTenantEntry adds a kv pair to system.tenants to define the initial
+// system tenant entry.
+func addSystemTenantEntry(target *MetadataSchema) {
+	info := descpb.TenantInfo{
+		ID:    roachpb.SystemTenantID.ToUint64(),
+		Name:  "system",
+		State: descpb.TenantInfo_ACTIVE,
+	}
+	infoBytes, err := protoutil.Marshal(&info)
+	if err != nil {
+		panic(err)
+	}
+
+	// Find the system.tenant descriptor in the newly created catalog.
+	// TODO(knz): Is there a better way?
+	var tableDesc catalog.TableDescriptor
+	for _, desc := range target.descs {
+		if desc.GetName() == "tenants" {
+			tableDesc = desc.(catalog.TableDescriptor)
+			break
+		}
+	}
+	if tableDesc == nil {
+		// No system.tenant table (we're likely in a secondary
+		// tenant). Nothing to do.
+		return
+	}
+
+	// TODO(knz): What if more indexes or columns are added to the table
+	// after this code has been written? I sure wish I could express
+	// this using SQL statements (perhaps as a separate code generator
+	// that would provide raw bytes that I can paste here?)
+	primaryIndex := tableDesc.GetPrimaryIndex()
+	var colIDtoRowIndex catalog.TableColMap
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
+	colIDtoRowIndex.Set(tableDesc.PublicColumns()[3].GetID(), 3)
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(roachpb.SystemTenantID.ToUint64())),
+		tree.MakeDBool(true),
+		tree.NewDBytes(tree.DBytes(infoBytes)),
+		tree.NewDString("system"),
+	}
+	primaryIndexPairs, err := rowenc.EncodePrimaryIndex(
+		target.codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	if err != nil {
+		panic(err)
+	}
+	for _, k := range primaryIndexPairs {
+		target.otherKV = append(target.otherKV,
+			roachpb.KeyValue{Key: k.Key, Value: k.Value})
+	}
+
+	secondaryIndexes := tableDesc.PublicNonPrimaryIndexes()
+	for _, secondaryIndex := range secondaryIndexes {
+		secondaryIndexPairs, err := rowenc.EncodeSecondaryIndex(
+			target.codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true)
+		if err != nil {
+			panic(err)
+		}
+		for _, k := range secondaryIndexPairs {
+			target.otherKV = append(target.otherKV,
+				roachpb.KeyValue{Key: k.Key, Value: k.Value})
+		}
+	}
 }
 
 // TestingMinUserDescID returns the smallest user-created descriptor ID in a
