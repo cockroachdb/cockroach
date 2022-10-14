@@ -1017,10 +1017,18 @@ func (a *Allocator) AllocateTargetFromList(
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string) {
 	existingReplicas := append(existingVoters, existingNonVoters...)
-	analyzedOverallConstraints := constraint.AnalyzeConstraints(ctx, a.StorePool.GetStoreDescriptor,
-		existingReplicas, conf.NumReplicas, conf.Constraints)
-	analyzedVoterConstraints := constraint.AnalyzeConstraints(ctx, a.StorePool.GetStoreDescriptor,
-		existingVoters, conf.GetNumVoters(), conf.VoterConstraints)
+	analyzedOverallConstraints := constraint.AnalyzeConstraints(
+		a.StorePool,
+		existingReplicas,
+		conf.NumReplicas,
+		conf.Constraints,
+	)
+	analyzedVoterConstraints := constraint.AnalyzeConstraints(
+		a.StorePool,
+		existingVoters,
+		conf.GetNumVoters(),
+		conf.VoterConstraints,
+	)
 
 	var constraintsChecker constraintsCheckFn
 	switch t := targetType; t {
@@ -1159,10 +1167,18 @@ func (a Allocator) RemoveTarget(
 	}
 
 	existingReplicas := append(existingVoters, existingNonVoters...)
-	analyzedOverallConstraints := constraint.AnalyzeConstraints(ctx, a.StorePool.GetStoreDescriptor,
-		existingReplicas, conf.NumReplicas, conf.Constraints)
-	analyzedVoterConstraints := constraint.AnalyzeConstraints(ctx, a.StorePool.GetStoreDescriptor,
-		existingVoters, conf.GetNumVoters(), conf.VoterConstraints)
+	analyzedOverallConstraints := constraint.AnalyzeConstraints(
+		a.StorePool,
+		existingReplicas,
+		conf.NumReplicas,
+		conf.Constraints,
+	)
+	analyzedVoterConstraints := constraint.AnalyzeConstraints(
+		a.StorePool,
+		existingVoters,
+		conf.GetNumVoters(),
+		conf.VoterConstraints,
+	)
 
 	var constraintsChecker constraintsCheckFn
 	switch t := targetType; t {
@@ -1294,9 +1310,17 @@ func (a Allocator) RebalanceTarget(
 
 	zero := roachpb.ReplicationTarget{}
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(
-		ctx, a.StorePool.GetStoreDescriptor, existingReplicas, conf.NumReplicas, conf.Constraints)
+		a.StorePool,
+		existingReplicas,
+		conf.NumReplicas,
+		conf.Constraints,
+	)
 	analyzedVoterConstraints := constraint.AnalyzeConstraints(
-		ctx, a.StorePool.GetStoreDescriptor, existingVoters, conf.GetNumVoters(), conf.VoterConstraints)
+		a.StorePool,
+		existingVoters,
+		conf.GetNumVoters(),
+		conf.VoterConstraints,
+	)
 	var removalConstraintsChecker constraintsCheckFn
 	var rebalanceConstraintsChecker rebalanceConstraintsCheckFn
 	var replicaSetToRebalance, replicasWithExcludedStores []roachpb.ReplicaDescriptor
