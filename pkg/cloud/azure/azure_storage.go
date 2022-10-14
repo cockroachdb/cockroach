@@ -11,6 +11,7 @@
 package azure
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -24,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -42,6 +45,13 @@ const (
 
 	scheme                   = "azure"
 	externalConnectionScheme = "azure-storage"
+)
+
+var usePutBlob = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"cloudstorage.azure.buffer_and_put_uploads.enabled",
+	"construct files in memory before uploading via PutBlob (may cause crashes due to memory usage)",
+	false,
 )
 
 func parseAzureURL(
@@ -142,6 +152,10 @@ func (s *azureStorage) Settings() *cluster.Settings {
 }
 
 func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	if usePutBlob.Get(&s.settings.SV) {
+		return s.putUploader(ctx, basename)
+	}
+
 	ctx, sp := tracing.ChildSpan(ctx, "azure.Writer")
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.Writer: %s",
 		path.Join(s.prefix, basename))})
@@ -155,6 +169,36 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 		)
 		return err
 	}), nil
+}
+
+type putBlobUploader struct {
+	ctx  context.Context
+	blob azblob.BlockBlobURL
+	b    *bytes.Buffer
+	sp   *tracing.Span
+}
+
+func (u *putBlobUploader) Write(p []byte) (int, error) {
+	return u.b.Write(p)
+}
+
+func (u *putBlobUploader) Close() error {
+	defer u.sp.Finish()
+	r := bytes.NewReader(u.b.Bytes())
+	_, err := u.blob.Upload(u.ctx, r, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{},
+		azblob.DefaultAccessTier, nil /* blobTagsMap */, azblob.ClientProvidedKeyOptions{})
+	return err
+}
+
+func (s *azureStorage) putUploader(ctx context.Context, basename string) (io.WriteCloser, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "azure.Writer")
+	sp.SetTag("putBlobUploader", attribute.BoolValue(true))
+	return &putBlobUploader{
+		b:    bytes.NewBuffer(make([]byte, 0, 4<<20)),
+		ctx:  ctx,
+		sp:   sp,
+		blob: s.getBlob(basename),
+	}, nil
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
