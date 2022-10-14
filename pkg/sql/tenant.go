@@ -624,3 +624,36 @@ func TestingUpdateTenantRecord(
 ) error {
 	return updateTenantRecord(ctx, execCfg, txn, info)
 }
+
+// RenameTenant implements the tree.TenantOperator interface.
+func (p *planner) RenameTenant(ctx context.Context, tenID uint64, name string) error {
+	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
+		return err
+	}
+
+	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.TenantNames) {
+		return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
+	}
+
+	if err := rejectIfSystemTenant(tenID, "rename"); err != nil {
+		return err
+	}
+
+	if num, err := p.ExecCfg().InternalExecutor.ExecEx(
+		ctx, "rename-tenant", p.txn, sessiondata.NodeUserSessionDataOverride,
+		`UPDATE system.public.tenants
+SET info =
+crdb_internal.json_to_pb('cockroach.sql.sqlbase.TenantInfo',
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) ||
+  json_build_object('name', $2))
+WHERE id = $1`, tenID, name); err != nil {
+		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
+			return pgerror.Newf(pgcode.DuplicateObject, "name %q is already taken", name)
+		}
+		return errors.Wrap(err, "renaming tenant")
+	} else if num != 1 {
+		return pgerror.Newf(pgcode.UndefinedObject, "tenant %d not found", tenID)
+	}
+
+	return nil
+}
