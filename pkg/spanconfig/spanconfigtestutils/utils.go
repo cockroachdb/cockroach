@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
 
 // spanRe matches strings of the form "[start, end)", capturing both the "start"
@@ -42,6 +44,98 @@ var systemTargetRe = regexp.MustCompile(
 // configRe matches either FALLBACK (for readability) or a single letter. It's a
 // shorthand for declaring a unique tagged config.
 var configRe = regexp.MustCompile(`^(FALLBACK)|(^\w)$`)
+
+// ParseRangeID is helper function that constructs a roachpb.RangeID from a
+// string of the form "r<int>".
+func ParseRangeID(t testing.TB, s string) roachpb.RangeID {
+	rangeID, err := strconv.Atoi(strings.TrimPrefix(s, "r"))
+	require.NoError(t, err)
+	return roachpb.RangeID(rangeID)
+}
+
+// ParseNodeID is helper function that constructs a roachpb.NodeID from a string
+// of the form "n<int>".
+func ParseNodeID(t testing.TB, s string) roachpb.NodeID {
+	nodeID, err := strconv.Atoi(strings.TrimPrefix(s, "n"))
+	require.NoError(t, err)
+	return roachpb.NodeID(nodeID)
+}
+
+// ParseReplicaSet is helper function that constructs a roachpb.ReplicaSet from
+// a string of the form "voters=[n1,n2,...] non-voters=[n3,...]". The
+// {store,replica} IDs for each replica is set to be equal to the corresponding
+// node ID.
+func ParseReplicaSet(t testing.TB, s string) roachpb.ReplicaSet {
+	replSet := roachpb.ReplicaSet{}
+	rtypes := map[string]roachpb.ReplicaType{
+		"voters":                     roachpb.VOTER_FULL,
+		"voters-incoming":            roachpb.VOTER_INCOMING,
+		"voters-outgoing":            roachpb.VOTER_OUTGOING,
+		"voters-demoting-learners":   roachpb.VOTER_DEMOTING_LEARNER,
+		"voters-demoting-non-voters": roachpb.VOTER_DEMOTING_NON_VOTER,
+		"learners":                   roachpb.LEARNER,
+		"non-voters":                 roachpb.NON_VOTER,
+	}
+	for _, part := range strings.Split(s, " ") {
+		inner := strings.Split(part, "=")
+		require.Len(t, inner, 2)
+		rtype, found := rtypes[inner[0]]
+		require.Truef(t, found, "unexpected replica type: %s", inner[0])
+		nodes := strings.TrimSuffix(strings.TrimPrefix(inner[1], "["), "]")
+
+		for _, n := range strings.Split(nodes, ",") {
+			n = strings.TrimSpace(n)
+			if n == "" {
+				continue
+			}
+			nodeID := ParseNodeID(t, n)
+			replSet.AddReplica(roachpb.ReplicaDescriptor{
+				NodeID:    nodeID,
+				StoreID:   roachpb.StoreID(nodeID),
+				ReplicaID: roachpb.ReplicaID(nodeID),
+				Type:      rtype,
+			})
+		}
+	}
+	return replSet
+}
+
+// ParseZoneConfig is helper function that constructs a zonepb.ZoneConfig from a
+// string of the form "num_replicas=<int> num_voters=<int> constraints='..'
+// voter_constraints='..'".
+func ParseZoneConfig(t testing.TB, s string) zonepb.ZoneConfig {
+	config := zonepb.DefaultZoneConfig()
+	parts := strings.Split(s, " ")
+	for _, part := range parts {
+		switch {
+		case strings.HasPrefix(part, "num_replicas="):
+			part = strings.TrimPrefix(part, "num_replicas=")
+			n, err := strconv.Atoi(part)
+			require.NoError(t, err)
+			n32 := int32(n)
+			config.NumReplicas = &n32
+		case strings.HasPrefix(part, "num_voters="):
+			part = strings.TrimPrefix(part, "num_voters=")
+			n, err := strconv.Atoi(part)
+			require.NoError(t, err)
+			n32 := int32(n)
+			config.NumVoters = &n32
+		case strings.HasPrefix(part, "constraints="):
+			cl := zonepb.ConstraintsList{}
+			part = strings.TrimPrefix(part, "constraints=")
+			require.NoError(t, yaml.UnmarshalStrict([]byte(part), &cl))
+			config.Constraints = cl.Constraints
+		case strings.HasPrefix(part, "voter_constraints="):
+			cl := zonepb.ConstraintsList{}
+			part = strings.TrimPrefix(part, "voter_constraints=")
+			require.NoError(t, yaml.UnmarshalStrict([]byte(part), &cl))
+			config.VoterConstraints = cl.Constraints
+		default:
+			t.Fatalf("unrecognized suffix for %s, expected 'num_replicas=', 'num_voters=', 'constraints=', or 'voter_constraints='", part)
+		}
+	}
+	return config
+}
 
 // ParseSpan is helper function that constructs a roachpb.Span from a string of
 // the form "[start, end)".

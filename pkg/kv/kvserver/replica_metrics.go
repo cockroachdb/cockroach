@@ -220,10 +220,10 @@ func calcRangeCounter(
 		status := desc.Replicas().ReplicationStatus(func(rDesc roachpb.ReplicaDescriptor) bool {
 			return livenessMap[rDesc.NodeID].IsLive
 		},
-			// neededVoters - we don't care about the under/over-replication
-			// determinations from the report because it's too magic. We'll do our own
-			// determination below.
-			0)
+			// needed{Voters,NonVoters} - we don't care about the
+			// under/over-replication determinations from the report because
+			// it's too magic. We'll do our own determination below.
+			0, 0)
 		unavailable = !status.Available
 		liveVoters := calcLiveVoterReplicas(desc, livenessMap)
 		liveNonVoters := calcLiveNonVoterReplicas(desc, livenessMap)

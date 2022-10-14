@@ -98,6 +98,10 @@ type TestTenantInterface interface {
 	// interface{}.
 	SpanConfigKVAccessor() interface{}
 
+	// SpanConfigReporter returns the underlying spanconfig.Reporter as an
+	// interface{}.
+	SpanConfigReporter() interface{}
+
 	// SpanConfigReconciler returns the underlying spanconfig.Reconciler as an
 	// interface{}.
 	SpanConfigReconciler() interface{}

@@ -10,6 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config/zonepb",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
@@ -19,6 +20,7 @@ go_library(
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 

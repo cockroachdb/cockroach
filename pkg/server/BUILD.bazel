@@ -155,6 +155,7 @@ go_library(
         "//pkg/spanconfig/spanconfigmanager",
         "//pkg/spanconfig/spanconfigptsreader",
         "//pkg/spanconfig/spanconfigreconciler",
+        "//pkg/spanconfig/spanconfigreporter",
         "//pkg/spanconfig/spanconfigsplitter",
         "//pkg/spanconfig/spanconfigsqltranslator",
         "//pkg/spanconfig/spanconfigsqlwatcher",

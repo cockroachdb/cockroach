@@ -217,6 +217,26 @@ func (mr *MockInternalClientMockRecorder) ResetQuorum(arg0, arg1 interface{}, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetQuorum", reflect.TypeOf((*MockInternalClient)(nil).ResetQuorum), varargs...)
 }
 
+// SpanConfigConformance mocks base method.
+func (m *MockInternalClient) SpanConfigConformance(arg0 context.Context, arg1 *roachpb.SpanConfigConformanceRequest, arg2 ...grpc.CallOption) (*roachpb.SpanConfigConformanceResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SpanConfigConformance", varargs...)
+	ret0, _ := ret[0].(*roachpb.SpanConfigConformanceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SpanConfigConformance indicates an expected call of SpanConfigConformance.
+func (mr *MockInternalClientMockRecorder) SpanConfigConformance(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SpanConfigConformance", reflect.TypeOf((*MockInternalClient)(nil).SpanConfigConformance), varargs...)
+}
+
 // TenantSettings mocks base method.
 func (m *MockInternalClient) TenantSettings(arg0 context.Context, arg1 *roachpb.TenantSettingsRequest, arg2 ...grpc.CallOption) (roachpb.Internal_TenantSettingsClient, error) {
 	m.ctrl.T.Helper()

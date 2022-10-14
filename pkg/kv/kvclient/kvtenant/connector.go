@@ -76,6 +76,10 @@ type Connector interface {
 	// applicable to secondary tenants.
 	spanconfig.KVAccessor
 
+	// Reporter provides access to conformance reports, i.e. whether ranges
+	// backing queried keyspans conform the span configs that apply to them.
+	spanconfig.Reporter
+
 	// OverridesMonitor provides access to tenant cluster setting overrides.
 	settingswatcher.OverridesMonitor
 

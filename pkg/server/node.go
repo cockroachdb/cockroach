@@ -241,6 +241,8 @@ type Node struct {
 
 	spanConfigAccessor spanconfig.KVAccessor // powers the span configuration RPCs
 
+	spanConfigReporter spanconfig.Reporter // powers the span configuration RPCs
+
 	// Turns `Node.writeNodeStatus` into a no-op. This is a hack to enable the
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
 	suppressNodeStatus syncutil.AtomicBool
@@ -370,6 +372,7 @@ func NewNode(
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
+	spanConfigReporter spanconfig.Reporter,
 ) *Node {
 	n := &Node{
 		storeCfg:              cfg,
@@ -383,6 +386,7 @@ func NewNode(
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
+		spanConfigReporter:    spanConfigReporter,
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
 	n.storeCfg.KVAdmissionController = kvserver.MakeKVAdmissionController(
@@ -1847,4 +1851,19 @@ func (n *Node) UpdateSpanConfigs(
 		}, nil
 	}
 	return &roachpb.UpdateSpanConfigsResponse{}, nil
+}
+
+// SpanConfigConformance implements the roachpb.InternalServer interface.
+func (n *Node) SpanConfigConformance(
+	ctx context.Context, req *roachpb.SpanConfigConformanceRequest,
+) (*roachpb.SpanConfigConformanceResponse, error) {
+	if n.storeCfg.SpanConfigSubscriber.LastUpdated().IsEmpty() {
+		return nil, errors.Newf("haven't (yet) subscribed to span configs")
+	}
+
+	report, err := n.spanConfigReporter.SpanConfigConformance(ctx, req.Spans)
+	if err != nil {
+		return nil, err
+	}
+	return &roachpb.SpanConfigConformanceResponse{Report: report}, nil
 }

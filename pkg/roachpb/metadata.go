@@ -483,6 +483,17 @@ func (r ReplicaDescriptor) IsAnyVoter() bool {
 	}
 }
 
+// IsNonVoter returns true if the replica is a non-voter. Can be used as a
+// filter for ReplicaDescriptors.Filter.
+func (r ReplicaDescriptor) IsNonVoter() bool {
+	switch r.Type {
+	case NON_VOTER:
+		return true
+	default:
+		return false
+	}
+}
+
 // PercentilesFromData derives percentiles from a slice of data points.
 // Sorts the input data if it isn't already sorted.
 func PercentilesFromData(data []float64) Percentiles {

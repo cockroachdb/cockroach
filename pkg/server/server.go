@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry" // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -87,6 +88,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -566,6 +568,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		// kvAccessor powers the span configuration RPCs and the host tenant's
 		// reconciliation job.
 		kvAccessor spanconfig.KVAccessor
+		// reporter is used to report over span config conformance.
+		reporter spanconfig.Reporter
 		// subscriber is used by stores to subscribe to span configuration updates.
 		subscriber spanconfig.KVSubscriber
 		// kvAccessorForTenantRecords is when creating/destroying secondary
@@ -616,12 +620,23 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			spanConfigKnobs,
 		)
 		spanConfig.kvAccessor, spanConfig.kvAccessorForTenantRecords = scKVAccessor, scKVAccessor
+		spanConfig.reporter = spanconfigreporter.New(
+			nodeLiveness,
+			storePool,
+			spanConfig.subscriber,
+			rangedesciter.New(db),
+			cfg.Settings,
+			spanConfigKnobs,
+		)
 	} else {
 		// If the spanconfigs infrastructure is disabled, there should be no
 		// reconciliation jobs or RPCs issued against the infrastructure. Plug
 		// in a disabled spanconfig.KVAccessor that would error out for
 		// unexpected use.
 		spanConfig.kvAccessor = spanconfigkvaccessor.DisabledKVAccessor
+
+		// Ditto for the spanconfig.Reporter.
+		spanConfig.reporter = spanconfigreporter.DisabledReporter
 
 		// Use a no-op accessor where tenant records are created/destroyed.
 		spanConfig.kvAccessorForTenantRecords = spanconfigkvaccessor.NoopKVAccessor
@@ -722,6 +737,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		tenantUsage,
 		tenantSettingsWatcher,
 		spanConfig.kvAccessor,
+		spanConfig.reporter,
 	)
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
@@ -777,6 +793,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		closedSessionCache,
 		flowScheduler,
 		internalExecutor,
+		spanConfig.reporter,
 	)
 
 	var jobAdoptionStopFile string
