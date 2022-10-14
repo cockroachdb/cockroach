@@ -27,6 +27,39 @@ id  active  name               crdb_internal.pb_to_json
 5   true    NULL               {"id": "5", "name": "", "state": "ACTIVE"}
 10  true    tenant-number-ten  {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
 
+# Check we can add a name where none existed before.
+query I
+SELECT crdb_internal.rename_tenant(5, 'my-tenant')
+----
+5
+
+query IBT colnames
+SELECT id, active, name FROM system.tenants ORDER BY id
+----
+id  active  name
+1   true    system
+5   true    my-tenant
+10  true    tenant-number-ten
+
+
+# Check we can change the name when there was one before.
+query I
+SELECT crdb_internal.rename_tenant(5, 'my-new-tenant-name')
+----
+5
+
+# Check for duplicate names.
+query error name "tenant-number-ten" is already taken
+SELECT crdb_internal.rename_tenant(5, 'tenant-number-ten')
+
+query IBT colnames
+SELECT id, active, name FROM system.tenants ORDER BY id
+----
+id  active  name
+1   true    system
+5   true    my-new-tenant-name
+10  true    tenant-number-ten
+
 # Garbage collect a non-drop tenant fails.
 
 query error tenant 5 is not in state DROP
@@ -44,10 +77,10 @@ SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantI
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name               crdb_internal.pb_to_json
-1   true    system             {"id": "1", "name": "system", "state": "ACTIVE"}
-5   false   NULL               {"id": "5", "name": "", "state": "DROP"}
-10  true    tenant-number-ten  {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
+id  active  name                crdb_internal.pb_to_json
+1   true    system              {"id": "1", "name": "system", "state": "ACTIVE"}
+5   false   my-new-tenant-name  {"id": "5", "name": "my-new-tenant-name", "state": "DROP"}
+10  true    tenant-number-ten   {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
 
 
 # Try to recreate an existing tenant.
@@ -79,6 +112,9 @@ DELETE FROM system.tenants WHERE id = 10
 
 query error pgcode 22023 cannot create tenant "1", ID assigned to system tenant
 SELECT crdb_internal.create_tenant(1)
+
+query error pgcode 22023 cannot rename tenant "1", ID assigned to system tenant
+SELECT crdb_internal.rename_tenant(1, 'hello')
 
 query error pgcode 22023 cannot destroy tenant "1", ID assigned to system tenant
 SELECT crdb_internal.destroy_tenant(1)
