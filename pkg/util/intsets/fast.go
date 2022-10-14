@@ -20,7 +20,6 @@ import (
 	"math/bits"
 
 	"github.com/cockroachdb/errors"
-	"golang.org/x/tools/container/intsets"
 )
 
 // Fast keeps track of a set of integers. It does not perform any
@@ -31,43 +30,8 @@ type Fast struct {
 	small bitmap
 	// large is only allocated if values are added to the set that are not in
 	// the range [0, smallCutoff).
-	//
-	// The implementation of intsets.Sparse is a circular, doubly-linked list of
-	// blocks. Each block contains a 256-bit bitmap and an offset. A block with
-	// offset=n contains a value n+i if the i-th bit of the bitmap is set. Block
-	// offsets are always divisible by 256.
-	//
-	// For example, here is a diagram of the set {0, 1, 256, 257, 512}, where
-	// each block is denoted by {offset, bitmap}:
-	//
-	//   ---> {0, ..011} <----> {256, ..011} <----> {512, ..001} <---
-	//   |                                                          |
-	//   ------------------------------------------------------------
-	//
-	// Fast stores only values outside the range [0, smallCutoff) in
-	// large. Values less than 0 are stored in large as-is. For values greater
-	// than or equal to smallCutoff, we subtract by smallCutoff before storing
-	// them in large. When they are retrieved from large, we add smallCutoff to
-	// get the original value. For example, if 300 is added to the Fast,
-	// it would be added to large as the value (300 - smallCutoff).
-	//
-	// This scheme better utilizes the block with offset=0 compared to an
-	// alternative implementation where small and large contain overlapping
-	// values. For example, consider the set {0, 200, 300}. In the overlapping
-	// implementation, two blocks would be allocated: a block with offset=0
-	// would store 0 and 200, and a block with offset=256 would store 300. By
-	// omitting values in the range [0, smallCutoff) in large, only one block is
-	// allocated: a block with offset=0 that stores 200-smallCutoff and
-	// 300-smallCutoff.
-	large *intsets.Sparse
+	large *Sparse
 }
-
-const (
-	// MaxInt is the maximum integer that a set can contain.
-	MaxInt = intsets.MaxInt
-	// MinInt is the maximum integer that a set can contain.
-	MinInt = intsets.MinInt
-)
 
 // MakeFast returns a set initialized with the given values.
 func MakeFast(vals ...int) Fast {
@@ -81,7 +45,7 @@ func MakeFast(vals ...int) Fast {
 // fitsInSmall returns whether all elements in this set are between 0 and
 // smallCutoff.
 func (s *Fast) fitsInSmall() bool {
-	return s.large == nil || s.large.IsEmpty()
+	return s.large == nil || s.large.Empty()
 }
 
 // Add adds a value to the set. No-op if the value is already in the set. If the
@@ -93,12 +57,12 @@ func (s *Fast) Add(i int) {
 		return
 	}
 	if s.large == nil {
-		s.large = new(intsets.Sparse)
+		s.large = new(Sparse)
 	}
 	if i >= smallCutoff {
 		i -= smallCutoff
 	}
-	s.large.Insert(i)
+	s.large.Add(i)
 }
 
 // AddRange adds values 'from' up to 'to' (inclusively) to the set.
@@ -142,14 +106,14 @@ func (s Fast) Contains(i int) bool {
 		if i >= smallCutoff {
 			i -= smallCutoff
 		}
-		return s.large.Has(i)
+		return s.large.Contains(i)
 	}
 	return false
 }
 
 // Empty returns true if the set is empty.
 func (s Fast) Empty() bool {
-	return s.small == bitmap{} && (s.large == nil || s.large.IsEmpty())
+	return s.small == bitmap{} && (s.large == nil || s.large.Empty())
 }
 
 // Len returns the number of the elements in the set.
@@ -185,9 +149,9 @@ func (s Fast) Next(startVal int) (int, bool) {
 			startVal = 0
 		}
 		res := s.large.LowerBound(startVal)
-		return res + smallCutoff, res != intsets.MaxInt
+		return res + smallCutoff, res != MaxInt
 	}
-	return intsets.MaxInt, false
+	return MaxInt, false
 }
 
 // ForEach calls a function for each value in the set (in increasing order).
@@ -208,7 +172,7 @@ func (s Fast) ForEach(f func(i int)) {
 		v &^= 1 << uint(i)
 	}
 	if !s.fitsInSmall() {
-		for x := s.large.LowerBound(0); x != intsets.MaxInt; x = s.large.LowerBound(x + 1) {
+		for x := s.large.LowerBound(0); x != MaxInt; x = s.large.LowerBound(x + 1) {
 			f(x + smallCutoff)
 		}
 	}
@@ -230,8 +194,8 @@ func (s Fast) Ordered() []int {
 func (s Fast) Copy() Fast {
 	var c Fast
 	c.small = s.small
-	if s.large != nil && !s.large.IsEmpty() {
-		c.large = new(intsets.Sparse)
+	if s.large != nil && !s.large.Empty() {
+		c.large = new(Sparse)
 		c.large.Copy(s.large)
 	}
 	return c
@@ -241,9 +205,9 @@ func (s Fast) Copy() Fast {
 // independently.
 func (s *Fast) CopyFrom(other Fast) {
 	s.small = other.small
-	if other.large != nil && !other.large.IsEmpty() {
+	if other.large != nil && !other.large.Empty() {
 		if s.large == nil {
-			s.large = new(intsets.Sparse)
+			s.large = new(Sparse)
 		}
 		s.large.Copy(other.large)
 	} else {
@@ -256,12 +220,12 @@ func (s *Fast) CopyFrom(other Fast) {
 // UnionWith adds all the elements from rhs to this set.
 func (s *Fast) UnionWith(rhs Fast) {
 	s.small.UnionWith(rhs.small)
-	if rhs.large == nil || rhs.large.IsEmpty() {
+	if rhs.large == nil || rhs.large.Empty() {
 		// Fast path.
 		return
 	}
 	if s.large == nil {
-		s.large = new(intsets.Sparse)
+		s.large = new(Sparse)
 	}
 	s.large.UnionWith(rhs.large)
 }

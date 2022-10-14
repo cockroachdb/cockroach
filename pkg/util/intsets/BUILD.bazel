@@ -5,23 +5,23 @@ go_library(
     name = "intsets",
     srcs = [
         "bitmap.go",
+        "fast.go",  # keep
         "fast_large.go",
         "fast_small.go",
         "fast_str.go",
         "fast_testonly.go",
+        "sparse.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/intsets",
     visibility = ["//visibility:public"],
-    deps = [
-        "@com_github_cockroachdb_errors//:errors",
-        "@org_golang_x_tools//container/intsets",
-    ],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
 )
 
 go_test(
     name = "intsets_test",
+    size = "small",
     srcs = ["fast_test.go"],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=55s"],
     embed = [":intsets"],
     deps = ["//pkg/util/randutil"],
 )
