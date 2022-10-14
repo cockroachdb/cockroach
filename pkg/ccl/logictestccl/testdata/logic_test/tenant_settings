@@ -7,6 +7,12 @@ true
 
 user host-cluster-root
 
+# Ensure that the version is set the same in the system tenant and in the tenant override.
+query I
+select count(*) from system.settings JOIN system.tenant_settings on tenant_settings.name = settings.name where tenant_settings.name = 'version' and tenant_settings.value = settings.value;
+----
+1
+
 statement ok
 ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = false
 

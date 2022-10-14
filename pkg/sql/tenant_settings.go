@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -88,15 +89,18 @@ func (p *planner) AlterTenantSetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
-	// We don't support changing the version for another tenant.
-	// See discussion on issue https://github.com/cockroachdb/cockroach/issues/77733 (wontfix).
-	if _, isVersion := setting.(*settings.VersionSetting); isVersion {
-		return nil, errors.Newf("cannot change the version of another tenant")
-	}
-
 	value, err := p.getAndValidateTypedClusterSetting(ctx, name, n.Value, setting)
 	if err != nil {
 		return nil, err
+	}
+
+	// While we don't allow setting the cluster version for a tenant, we use
+	// this mechanism send the host cluster version to the tenant. The current
+	// host cluster version is important for tenants to know as they need to use
+	// it when determining if it's safe to upgrade.
+	// FIXME: provide more detailed reference here.
+	if _, isVersion := setting.(*settings.VersionSetting); isVersion {
+		log.Infof(ctx, "sending version override %s to tenant", value)
 	}
 
 	node := alterTenantSetClusterSettingNode{
