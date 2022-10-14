@@ -177,7 +177,7 @@ func HasJoinCondition(leftCols, rightCols opt.ColSet, on FiltersExpr, inequality
 // equalities.
 func ExtractJoinConditionFilterOrds(
 	leftCols, rightCols opt.ColSet, on FiltersExpr, inequality bool,
-) (filterOrds intsets.FastIntSet) {
+) (filterOrds intsets.Fast) {
 	var seenCols opt.ColSet
 	for i := range on {
 		condition := on[i].Condition

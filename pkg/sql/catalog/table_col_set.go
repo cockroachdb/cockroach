@@ -17,7 +17,7 @@ import (
 
 // TableColSet efficiently stores an unordered set of column ids.
 type TableColSet struct {
-	set intsets.FastIntSet
+	set intsets.Fast
 }
 
 // MakeTableColSet returns a set initialized with the given values.

@@ -158,7 +158,7 @@ func (p *Provider) Create(
 
 	// We will need to assign ports to the nodes, and they must not conflict with
 	// any other local clusters.
-	var portsTaken intsets.FastIntSet
+	var portsTaken intsets.Fast
 	for _, c := range p.clusters {
 		for i := range c.VMs {
 			portsTaken.Add(c.VMs[i].SQLPort)

@@ -309,7 +309,7 @@ func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {
 	return o.plan, nil
 }
 
-func convertFastIntSetToUint32Slice(colIdxs intsets.FastIntSet) []uint32 {
+func convertFastIntSetToUint32Slice(colIdxs intsets.Fast) []uint32 {
 	cols := make([]uint32, 0, colIdxs.Len())
 	for i, ok := colIdxs.Next(0); ok; i, ok = colIdxs.Next(i + 1) {
 		cols = append(cols, uint32(i))

@@ -378,7 +378,7 @@ func TestInterner(t *testing.T) {
 		{hashFn: in.hasher.HashScanFlags, eqFn: in.hasher.IsScanFlagsEqual, variations: []testVariation{
 			// Use unnamed fields so that compilation fails if a new field is
 			// added to ScanFlags.
-			{val1: ScanFlags{false, false, false, false, false, 0, 0, false, intsets.FastIntSet{}}, val2: ScanFlags{}, equal: true},
+			{val1: ScanFlags{false, false, false, false, false, 0, 0, false, intsets.Fast{}}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: false}, val2: ScanFlags{NoIndexJoin: true}, equal: false},
 			{val1: ScanFlags{NoIndexJoin: true}, val2: ScanFlags{NoIndexJoin: true}, equal: true},
@@ -462,9 +462,9 @@ func TestInterner(t *testing.T) {
 		}},
 
 		{hashFn: in.hasher.HashSchemaTypeDeps, eqFn: in.hasher.IsSchemaTypeDepsEqual, variations: []testVariation{
-			{val1: intsets.MakeFastIntSet(), val2: intsets.MakeFastIntSet(), equal: true},
-			{val1: intsets.MakeFastIntSet(1, 2, 3), val2: intsets.MakeFastIntSet(3, 2, 1), equal: true},
-			{val1: intsets.MakeFastIntSet(1, 2, 3), val2: intsets.MakeFastIntSet(1, 2), equal: false},
+			{val1: intsets.MakeFast(), val2: intsets.MakeFast(), equal: true},
+			{val1: intsets.MakeFast(1, 2, 3), val2: intsets.MakeFast(3, 2, 1), equal: true},
+			{val1: intsets.MakeFast(1, 2, 3), val2: intsets.MakeFast(1, 2), equal: false},
 		}},
 
 		{hashFn: in.hasher.HashWindowFrame, eqFn: in.hasher.IsWindowFrameEqual, variations: []testVariation{

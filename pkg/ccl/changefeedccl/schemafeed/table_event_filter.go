@@ -199,7 +199,7 @@ func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool,
 		return true, nil
 	}
 
-	var watchedColumnIDs intsets.FastIntSet
+	var watchedColumnIDs intsets.Fast
 	if err := e.Before.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		if _, ok := specifiedColumnFamiliesForTable[family.Name]; ok {
 			for _, columnID := range family.ColumnIDs {
@@ -235,11 +235,11 @@ func addedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool, e
 		return false, nil
 	}
 
-	var beforeCols intsets.FastIntSet
+	var beforeCols intsets.Fast
 	for _, col := range e.Before.VisibleColumns() {
 		beforeCols.Add(int(col.GetID()))
 	}
-	var addedCols intsets.FastIntSet
+	var addedCols intsets.Fast
 	for _, col := range e.After.VisibleColumns() {
 		colID := int(col.GetID())
 		if !beforeCols.Contains(colID) {
@@ -358,7 +358,7 @@ func hasNewPrimaryIndexWithNoVisibleColumnChanges(
 	) (cols catalog.TableColSet) {
 
 		// Generate a set of watched columns if the targets contains specific columns.
-		var targetedCols intsets.FastIntSet
+		var targetedCols intsets.Fast
 		if hasSpecificColumnTargets {
 			err := tab.ForeachFamily(func(fam *descpb.ColumnFamilyDescriptor) error {
 				if _, ok := targetFamilies[fam.Name]; ok {

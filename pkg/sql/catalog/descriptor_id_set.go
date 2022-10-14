@@ -17,7 +17,7 @@ import (
 
 // DescriptorIDSet efficiently stores an unordered set of descriptor ids.
 type DescriptorIDSet struct {
-	set intsets.FastIntSet
+	set intsets.Fast
 }
 
 // MakeDescriptorIDSet returns a set initialized with the given values.
