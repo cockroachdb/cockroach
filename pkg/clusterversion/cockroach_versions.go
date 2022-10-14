@@ -314,6 +314,9 @@ const (
 	// the process of upgrading from 22.2 to 23.1.
 	V23_1Start
 
+	// TenantNames adds a name column to system.tenants.
+	TenantNames
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -512,6 +515,11 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_1Start,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 2},
 	},
+	{
+		Key:     TenantNames,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

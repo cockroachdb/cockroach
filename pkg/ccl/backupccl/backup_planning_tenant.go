@@ -32,7 +32,8 @@ SELECT
 FROM
   system.tenants
   LEFT JOIN system.tenant_usage ON
-	  tenants.id = tenant_usage.tenant_id AND tenant_usage.instance_id = 0`
+	  tenants.id = tenant_usage.tenant_id AND tenant_usage.instance_id = 0
+`
 
 func tenantMetadataFromRow(row tree.Datums) (descpb.TenantInfoWithUsage, error) {
 	if len(row) != 7 {
@@ -100,9 +101,11 @@ func retrieveAllTenantsMetadata(
 ) ([]descpb.TenantInfoWithUsage, error) {
 	rows, err := ie.QueryBuffered(
 		ctx, "backupccl.retrieveAllTenantsMetadata", txn,
-		// XXX Should we add a `WHERE active`? We require the tenant to be active
-		// when it is specified..
-		tenantMetadataQuery,
+		// TODO(?): Should we add a `WHERE active`? We require the tenant to be active
+		// when it is specified.
+		// See: https://github.com/cockroachdb/cockroach/issues/89997
+		tenantMetadataQuery+` WHERE id != $1`,
+		roachpb.SystemTenantID.ToUint64(),
 	)
 	if err != nil {
 		return nil, err
