@@ -502,12 +502,14 @@ var rawVersionsSingleton = keyedVersions{
 	// *************************************************
 }
 
-const (
-	// developmentBranch should be toggled to false on a release branch once the
-	// set of versions becomes append-only and associated upgrade implementations
-	// are frozen. It is always true on the main development branch.
-	developmentBranch = true
+// developmentBranch must true on the main development branch but should be set
+// to false on a release branch once the set of versions becomes append-only and
+// associated upgrade implementations are frozen. It can be forced to true via
+// an env var even on a release branch, to allow running a release binary in a
+// dev cluster.
+var developmentBranch = true || envutil.EnvOrDefaultBool("COCKROACH_FORCE_DEV_VERSION", false)
 
+const (
 	// finalVersion should be set on a release branch to the minted final cluster
 	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
 	// Setting it has the effect of ensuring no versions are subsequently added.
