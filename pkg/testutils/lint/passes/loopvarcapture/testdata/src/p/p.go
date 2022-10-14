@@ -298,7 +298,7 @@ func Synchronization() {
 		go runFunc(notSynchronized) // want `'notSynchronized' function captures loop variable 'n' by reference`
 
 		go intID(intProducer("bad", notSynchronized)) // want `'notSynchronized' function captures loop variable 'n' by reference`
-		go intID(intProduder("ok", synchronized))     // this is OK
+		go intID(intProducer("ok", synchronized))     // this is OK
 
 		// inline functions
 		func() {
@@ -323,7 +323,7 @@ func Synchronization() {
 			rangeChan <- nil
 		}()
 
-		for _, c := range rangeChan {
+		for range rangeChan {
 			doWork()
 		}
 
@@ -358,7 +358,7 @@ func GoWrapperWait() {
 			fmt.Printf("done!\n")
 		}
 		eg2.Go(func() error {
-			if rand.Float64 < 0.5 {
+			if rand.Float64() < 0.5 {
 				// eg2 is not waited from within the loop
 				f() // want `'f' function captures loop variable 'n' by reference`
 			}
@@ -366,17 +366,15 @@ func GoWrapperWait() {
 			return nil
 		})
 
-		cg1.Go(func() error {
+		cg1.Go(func() {
 			// cg1.Wait() is called outside the loop
 			intID(n) // want `loop variable 'n' captured by reference`
-			return nil
 		})
 
 		cg2.Wait()
-		cg2.Go(func() error {
+		cg2.Go(func() {
 			// cg2.Wait() is called before this Go() call
 			intID(n) // want `loop variable 'n' captured by reference`
-			return nil
 		})
 
 		eg1.Wait()
@@ -481,7 +479,7 @@ func TestRunner(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run("sequential defer", func(t *testing.T) {
+		t.Run("parallel defer", func(t *testing.T) {
 			t.Parallel()
 			doWork()
 			defer func() {
@@ -545,6 +543,9 @@ func AddressOfLoopVar() {
 		go func() {
 			doWork()
 			x = &n // want `loop variable 'n' captured by reference`
+			if x == nil {
+				return
+			}
 		}()
 
 		var wg sync.WaitGroup
@@ -706,7 +707,7 @@ func IndirectClosure() {
 		go runFunc(nonCapturing)                  // this is OK
 		go runFunc(badClosure)                    // want `'badClosure' function captures loop variable 'i' by reference`
 		go intID(intProducer("bad", badClosure))  // want `'badClosure' function captures loop variable 'i' by reference`
-		go intID(intProduder("ok", nonCapturing)) // this is OK
+		go intID(intProducer("ok", nonCapturing)) // this is OK
 	}
 
 	for j := 0; j < len(collection); j++ {

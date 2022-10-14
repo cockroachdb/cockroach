@@ -321,26 +321,28 @@ func (v *Visitor) runOnStatementBlock(block *ast.BlockStmt) {
 // waits for the go routines to finish:
 //
 // 1:
-//     for k, v := range myMap {
-//         var wg sync.WaitGroup
-//         // same for `defer`, errgroup.Group.Go(), etc
-//         go func() {
-//            defer wg.Done()
-//            fmt.Printf("k = %v, v = %v\n", k, v)
-//         }()
-//         wg.Wait() // loop variable will not change until Go routine is finished
-//     }
+//
+//	for k, v := range myMap {
+//	    var wg sync.WaitGroup
+//	    // same for `defer`, errgroup.Group.Go(), etc
+//	    go func() {
+//	       defer wg.Done()
+//	       fmt.Printf("k = %v, v = %v\n", k, v)
+//	    }()
+//	    wg.Wait() // loop variable will not change until Go routine is finished
+//	}
 //
 // 2:
-//     for k, v := range myMap {
-//         ch := make(chan error)
-//         // same for `defer`, errgroup.Group.Go(), etc
-//         go func() {
-//            defer close(ch)
-//            fmt.Printf("k = %v, v = %v\n", k, v)
-//         }()
-//         <-ch // loop variable will not change until Go routine is finished
-//     }
+//
+//	for k, v := range myMap {
+//	    ch := make(chan error)
+//	    // same for `defer`, errgroup.Group.Go(), etc
+//	    go func() {
+//	       defer close(ch)
+//	       fmt.Printf("k = %v, v = %v\n", k, v)
+//	    }()
+//	    <-ch // loop variable will not change until Go routine is finished
+//	}
 //
 // If a `go` routine (or `defer`) calls a previously-defined closure
 // that captures a loop variable, that is also reported.
@@ -586,10 +588,10 @@ type positionedIdent struct {
 
 // visitFuncLit inspects a closure's body. This function returns:
 //
-// 1. A collection of references to loop variables present in the closure.
-// 2. A collection of objects that could be used to wait for the Go
-//    routine to finish (synchronization objects). These could be wait
-//    groups, channels, etc.
+//  1. A collection of references to loop variables present in the closure.
+//  2. A collection of objects that could be used to wait for the Go
+//     routine to finish (synchronization objects). These could be wait
+//     groups, channels, etc.
 func (v *Visitor) visitFuncLit(funcLit *ast.FuncLit) ([]positionedIdent, []positionedIdent) {
 	var refs, syncObjs []positionedIdent
 
@@ -940,9 +942,12 @@ func (v *Visitor) isLoopVar(ident *ast.Ident) bool {
 // type of `obj`.
 //
 // In other words, it will return `true` for calls of
-//     func (t *T) F() { ... }
+//
+//	func (t *T) F() { ... }
+//
 // and `false` for calls of
-//     func (t T) F() {...}
+//
+//	func (t T) F() {...}
 //
 // Note that this function *assumes*, for simplicity, that the call
 // expression given is already of the form `obj.Foo()`. Ensuring that
