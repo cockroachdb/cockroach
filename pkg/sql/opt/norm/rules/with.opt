@@ -12,3 +12,21 @@
 )
 =>
 (InlineWith $binding $input $withPrivate)
+
+# ApplyLimitToRecursiveCTEScan updates the properties of the recursive with
+# scans in the input of a recursive CTE to reflect a limit that applies to
+# all iterations.
+[ApplyLimitToRecursiveCTEScan, Normalize]
+(RecursiveCTE
+    $binding:* & ^(HasBoundedCardinality $binding)
+    $initial:* & (HasBoundedCardinality $initial)
+    $recursive:* & (HasBoundedCardinality $recursive)
+    $private:*
+)
+=>
+(ApplyLimitToRecursiveCTEScan
+    $binding
+    $initial
+    $recursive
+    $private
+)
