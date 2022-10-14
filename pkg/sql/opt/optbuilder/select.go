@@ -545,7 +545,7 @@ func (b *Builder) buildScan(
 
 	// Scanning tables in databases that don't use the SURVIVE ZONE FAILURE option
 	// is disallowed when EnforceHomeRegion is true.
-	if b.evalCtx.SessionData().EnforceHomeRegion {
+	if b.evalCtx.SessionData().EnforceHomeRegion && parser.IsANSIDML(b.stmt) {
 		errorOnInvalidMultiregionDB(b.ctx, b.evalCtx, tabMeta)
 	}
 
