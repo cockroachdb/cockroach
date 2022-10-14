@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "slstorage",
     srcs = [
+        "key_encoder.go",
         "metrics.go",
         "sessionid.go",
         "slstorage.go",
@@ -18,7 +19,8 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sqlliveness",
         "//pkg/util/cache",
@@ -42,13 +44,14 @@ go_test(
     name = "slstorage_test",
     size = "small",
     srcs = [
+        "key_encoder_test.go",
         "main_test.go",
         "sessionid_test.go",
         "slstorage_test.go",
     ],
     args = ["-test.timeout=55s"],
+    embed = [":slstorage"],
     deps = [
-        ":slstorage",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver",
@@ -65,6 +68,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

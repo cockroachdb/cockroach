@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -460,7 +461,16 @@ CREATE TABLE system.sqlliveness (
     session_id       BYTES NOT NULL,
     expiration       DECIMAL NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (session_id),
-  	FAMILY fam0_session_id_expiration (session_id, expiration)
+    FAMILY fam0_session_id_expiration (session_id, expiration)
+)`
+
+	MrSqllivenessTableSchema = `
+CREATE TABLE system.sqlliveness (
+    session_uuid         BYTES NOT NULL,
+    expiration           DECIMAL NOT NULL,
+    crdb_region          BYTES NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (crdb_region, session_uuid),
+    FAMILY "primary" (crdb_region, session_uuid, expiration)
 )`
 
 	MigrationsTableSchema = `
@@ -1996,26 +2006,58 @@ var (
 		))
 
 	// SqllivenessTable is the descriptor for the sqlliveness table.
-	SqllivenessTable = registerSystemTable(
-		SqllivenessTableSchema,
-		systemTable(
-			catconstants.SqllivenessTableName,
-			keys.SqllivenessID,
-			[]descpb.ColumnDescriptor{
-				{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
-				{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
-			},
-			[]descpb.ColumnFamilyDescriptor{
-				{
-					Name:            "fam0_session_id_expiration",
-					ID:              0,
-					ColumnNames:     []string{"session_id", "expiration"},
-					ColumnIDs:       []descpb.ColumnID{1, 2},
-					DefaultColumnID: 2,
+	SqllivenessTable = func() catalog.TableDescriptor {
+		if SupportMultiRegion() {
+			return registerSystemTable(
+				MrSqllivenessTableSchema,
+				systemTable(
+					catconstants.SqllivenessTableName,
+					keys.SqllivenessID,
+					[]descpb.ColumnDescriptor{
+						{Name: "crdb_region", ID: 4, Type: types.Bytes, Nullable: false},
+						{Name: "session_uuid", ID: 3, Type: types.Bytes, Nullable: false},
+						{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
+					},
+					[]descpb.ColumnFamilyDescriptor{
+						{
+							Name:            "primary",
+							ID:              0,
+							ColumnNames:     []string{"crdb_region", "session_uuid", "expiration"},
+							ColumnIDs:       []descpb.ColumnID{4, 3, 2},
+							DefaultColumnID: 2,
+						},
+					},
+					descpb.IndexDescriptor{
+						Name:                "primary",
+						ID:                  2,
+						Unique:              true,
+						KeyColumnNames:      []string{"crdb_region", "session_uuid"},
+						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+						KeyColumnIDs:        []descpb.ColumnID{4, 3},
+					},
+				))
+		}
+		return registerSystemTable(
+			SqllivenessTableSchema,
+			systemTable(
+				catconstants.SqllivenessTableName,
+				keys.SqllivenessID,
+				[]descpb.ColumnDescriptor{
+					{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
+					{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
 				},
-			},
-			pk("session_id"),
-		))
+				[]descpb.ColumnFamilyDescriptor{
+					{
+						Name:            "fam0_session_id_expiration",
+						ID:              0,
+						ColumnNames:     []string{"session_id", "expiration"},
+						ColumnIDs:       []descpb.ColumnID{1, 2},
+						DefaultColumnID: 2,
+					},
+				},
+				pk("session_id"),
+			))
+	}()
 
 	// MigrationsTable is the descriptor for the migrations table. It stores facts
 	// about the completion state of long-running migrations. It is used to
@@ -2638,3 +2680,16 @@ func IsUnleasableSystemDescriptorByName(
 
 // SpanConfigurationsTableName represents system.span_configurations.
 var SpanConfigurationsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(catconstants.SpanConfigurationsTableName))
+
+// SupportMultiRegion returns true if the cluster should support multi-region
+// optimized system databases.
+//
+// TODO(jeffswenson): remove SupportMultiRegion after implementing migrations
+// and version gates to migrate to the new regional by row compatible schemas.
+func SupportMultiRegion() bool {
+	val, ok := envutil.EnvString("COCKROACH_MR_SYSTEM_DATABASE", 0)
+	if !ok {
+		return false
+	}
+	return val == "1"
+}
