@@ -163,7 +163,40 @@ func TestJWTSingleKey(t *testing.T) {
 	// Set the JWKS cluster setting.
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, jwkPublicKey)
 
-	// Now the validate call gets past the token validity check and fails on the next check (subject matching user)
+	// Now the validate call gets past the token validity check and fails on the next check (subject matching user).
+	err = verifier.ValidateJWTLogin(s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
+}
+
+func TestJWTSingleKeyWithoutKeyAlgorithm(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	identMapString := ""
+	identMap, err := identmap.From(strings.NewReader(identMapString))
+	require.NoError(t, err)
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+
+	_, key, _ := createJWKS(t)
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256)
+	// Clear the algorithm.
+	require.NoError(t, key.Remove(jwk.AlgorithmKey))
+	publicKey, err := key.PublicKey()
+	require.NoError(t, err)
+	jwkPublicKey := serializePublicKey(t, publicKey)
+
+	// When no JWKS is specified the token will be invalid.
+	err = verifier.ValidateJWTLogin(s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid token")
+
+	// Set the JWKS cluster setting.
+	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, jwkPublicKey)
+
+	// Now the validate call gets past the token validity check and fails on the next check (subject matching user).
 	err = verifier.ValidateJWTLogin(s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
 }
@@ -236,7 +269,7 @@ func TestKeyIdMismatch(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, key, _ := createJWKS(t)
-	// create JWT with different key id
+	// Create a JWT with different key id.
 	require.NoError(t, key.Set(jwk.KeyIDKey, invalidKeyID))
 	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256)
 	// Make sure jwt auth is enabled and accepts valid signing keys.
@@ -248,7 +281,7 @@ func TestKeyIdMismatch(t *testing.T) {
 	err = verifier.ValidateJWTLogin(s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid token")
 
-	// Reset key id and regenerate token
+	// Reset the key id and regenerate the token.
 	require.NoError(t, key.Set(jwk.KeyIDKey, keyID1))
 	token = createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256)
 	// Now jwk1 token passes the validity check and fails on the next check.
@@ -336,7 +369,7 @@ func TestSubjectMappingCheck(t *testing.T) {
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	// create a map for issuer2 from username1 to username2 (note not the reverse)
+	// Create a map for issuer2 from username1 to username2 (note not the reverse).
 	identMapString := issuer2 + "    " + username1 + "    " + username2
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
@@ -351,7 +384,7 @@ func TestSubjectMappingCheck(t *testing.T) {
 	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, issuer2)
 
 	// Validation fails with a subject error when a user tries to log in when their user is mapped to username2
-	// but they try to log in with username1
+	// but they try to log in with username1.
 	err = verifier.ValidateJWTLogin(s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid subject")
 
@@ -359,7 +392,7 @@ func TestSubjectMappingCheck(t *testing.T) {
 	err = verifier.ValidateJWTLogin(s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token2, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid subject")
 
-	// Validation passes the subject check when the username matches the mapped subject
+	// Validation passes the subject check when the username matches the mapped subject.
 	err = verifier.ValidateJWTLogin(s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid audience")
 }
@@ -371,7 +404,7 @@ func TestSubjectReservedUser(t *testing.T) {
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	// create a map for issuer2 from username1 to username2 (note not the reverse)
+	// Create a map for issuer2 from username1 to username2 (note not the reverse).
 	identMapString := issuer2 + "    " + username1 + "    root"
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
