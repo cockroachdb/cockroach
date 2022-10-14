@@ -9,7 +9,8 @@
 // licenses/APL.txt.
 
 import React, { useState } from "react";
-import { Alert, DatePicker, Icon, TimePicker } from "antd";
+import { Alert, DatePicker, TimePicker } from "antd";
+import { ArrowLeftOutlined } from "@ant-design/icons";
 import "antd/lib/time-picker/style";
 import "antd/lib/icon/style";
 import "antd/lib/date-picker/style";
@@ -106,7 +107,7 @@ export function DateRangeMenu({
     <div className={cx("popup-content")}>
       <div className={cx("return-to-preset-options-wrapper")}>
         <a onClick={onReturnToPresetOptionsClick}>
-          <Icon type={"arrow-left"} className={cx("icon")} />
+          <ArrowLeftOutlined className={cx("icon")} />
           <Text textType={TextTypes.BodyStrong}>Preset time intervals</Text>
         </a>
       </div>

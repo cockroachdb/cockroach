@@ -13,7 +13,8 @@
     "test": "DEBUG_PRINT_LIMIT=1000000 jest"
   },
   "dependencies": {
-    "@babel/runtime": "7.12.13",
+    "@ant-design/icons": "4.7.0",
+    "@babel/runtime": "7.18.9",
     "@cockroachlabs/cluster-ui": "link:../cluster-ui",
     "@cockroachlabs/crdb-protobuf-client": "link:./src/js",
     "@cockroachlabs/crdb-protobuf-client-ccl": "link:./ccl/src/js",
@@ -22,7 +23,7 @@
     "@cockroachlabs/icons": "0.5.2",
     "@cockroachlabs/ui-components": "0.2.20",
     "analytics-node": "^3.5.0",
-    "antd": "^3.25.2",
+    "antd": "^4.18.9",
     "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
     "combokeys": "^2.4.6",
@@ -40,7 +41,7 @@
     "raw-loader": "^0.5.1",
     "rc-calendar": "^9.15.11",
     "rc-form": "^2.4.11",
-    "rc-progress": "^2.2.1",
+    "rc-progress": "^3.3.2",
     "react": "^16.12.0",
     "react-copy-to-clipboard": "^5.0.1",
     "react-dom": "^16.12.0",

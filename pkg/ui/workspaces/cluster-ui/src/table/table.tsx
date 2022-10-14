@@ -12,6 +12,7 @@ import React from "react";
 import { Table as AntTable, ConfigProvider } from "antd";
 import "antd/lib/table/style";
 import "antd/lib/config-provider/style";
+import type { SorterResult } from 'antd/es/table/interface';
 import type { ColumnProps } from "antd/lib/table";
 import classnames from "classnames/bind";
 import styles from "./table.module.scss";
@@ -33,7 +34,7 @@ const cx = classnames.bind(styles);
 const customizeRenderEmpty = (node: React.ReactNode) => () =>
   <div className={cx("empty-table__message")}>{node}</div>;
 
-export function Table<T>(props: TableProps<T>): React.ReactElement {
+export function Table<T extends object>(props: TableProps<T>): React.ReactElement {
   const {
     columns,
     dataSource,
@@ -55,10 +56,10 @@ export function Table<T>(props: TableProps<T>): React.ReactElement {
         tableLayout={tableLayout}
         pagination={{ hideOnSinglePage: true, pageSize }}
         onChange={(pagination, filters, sorter) => {
-          if (onSortingChange && sorter.column) {
+          if (onSortingChange && (sorter as SorterResult<T>).column) {
             onSortingChange(
-              sorter.column?.title as string,
-              sorter.order === "ascend",
+              (sorter as SorterResult<T>).column?.title as string,
+              (sorter as SorterResult<T>).order === "ascend",
             );
           }
         }}

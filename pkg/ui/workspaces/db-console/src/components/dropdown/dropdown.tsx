@@ -13,7 +13,7 @@ import cn from "classnames";
 
 import { OutsideEventHandler } from "../outsideEventHandler";
 import "./dropdown.styl";
-import { Icon } from "antd";
+import { CaretDownOutlined } from "@ant-design/icons";
 import "antd/lib/icon/style";
 import { Button } from "src/components/button";
 
@@ -49,7 +49,7 @@ function DropdownButton(props: DropdownButtonProps) {
       type="flat"
       size="small"
       iconPosition="right"
-      icon={() => <Icon className="collapse-toggle__icon" type="caret-down" />}
+      icon={() => <CaretDownOutlined className="collapse-toggle__icon" />}
     >
       {children}
     </Button>

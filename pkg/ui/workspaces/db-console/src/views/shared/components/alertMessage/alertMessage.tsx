@@ -9,7 +9,15 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { Alert, Icon } from "antd";
+import {
+  CloseCircleFilled,
+  CheckCircleFilled,
+  InfoCircleFilled,
+  WarningFilled,
+  CloseCircleFilled,
+  InfoCircleFilled,
+} from "@ant-design/icons";
+import { Alert } from "antd";
 import "antd/lib/alert/style";
 import "antd/lib/icon/style";
 import { Link } from "react-router-dom";
@@ -41,18 +49,18 @@ const mapAlertLevelToType = (alertLevel: AlertLevel): AlertType => {
   }
 };
 
-const getIconType = (alertLevel: AlertLevel): string => {
+const getIcon = (alertLevel: AlertLevel): React.ReactNode => {
   switch (alertLevel) {
     case AlertLevel.SUCCESS:
-      return "check-circle";
+      return CheckCircleFilled;
     case AlertLevel.NOTIFICATION:
-      return "info-circle";
+      return InfoCircleFilled;
     case AlertLevel.WARNING:
-      return "warning";
+      return WarningFilled;
     case AlertLevel.CRITICAL:
-      return "close-circle";
+      return CloseCircleFilled;
     default:
-      return "info-circle";
+      return InfoCircleFilled;
   }
 };
 
@@ -89,20 +97,14 @@ export class AlertMessage extends React.Component<AlertMessageProps> {
     }
 
     const type = mapAlertLevelToType(level);
-    const iconType = getIconType(level);
+    const Icon = getIcon(level);
     return (
       <Alert
         className="alert-massage"
         message={title}
         description={description}
         showIcon
-        icon={
-          <Icon
-            type={iconType}
-            theme="filled"
-            className="alert-massage__icon"
-          />
-        }
+        icon={<Icon className="alert-massage__icon" />}
         closable={closable}
         onClose={dismiss}
         closeText={

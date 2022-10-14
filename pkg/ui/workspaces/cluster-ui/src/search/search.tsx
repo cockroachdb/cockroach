@@ -124,7 +124,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     const className = submitted ? cx("submitted") : "";
 
     return (
-      <Form onSubmit={this.onSubmit} className={cx("search-form")}>
+      <Form onFinish={this.onSubmit} className={cx("search-form")}>
         <Form.Item>
           <Input
             className={className}

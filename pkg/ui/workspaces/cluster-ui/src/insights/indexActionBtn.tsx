@@ -10,7 +10,8 @@
 
 import React, { useCallback, useState } from "react";
 import copy from "copy-to-clipboard";
-import { message, Icon } from "antd";
+import { CopyOutlined } from "@ant-design/icons";
+import { message } from "antd";
 import "antd/lib/message/style";
 import "antd/lib/icon/style";
 import { Modal } from "../modal";
@@ -168,7 +169,7 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
             type={"unstyled-link"}
             size={"small"}
             className={cx("bottom-corner")}
-            icon={<Icon type="copy" className={cx("copy-icon")} />}
+            icon={<CopyOutlined className={cx("copy-icon")} />}
             onClick={onCopyClick}
           >
             Copy
@@ -178,8 +179,8 @@ const IdxRecAction = (props: idxRecProps): React.ReactElement => {
           intent="warning"
           className={cx("alert-area")}
           title={`Schema changes consume additional
-          resources and can potentially negatively impact workload
-          responsiveness.`}
+        resources and can potentially negatively impact workload
+        responsiveness.`}
         />
         {error.length > 0 && (
           <InlineAlert

@@ -103,7 +103,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     const MyInput = Input as any;
 
     return (
-      <Form onSubmit={this.onSubmit} className={cx("_search-form")}>
+      <Form onFinish={this.onSubmit} className={cx("_search-form")}>
         <Form.Item>
           <MyInput
             className={className}
