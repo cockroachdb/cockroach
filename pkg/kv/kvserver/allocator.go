@@ -1492,10 +1492,9 @@ func (a *Allocator) ValidLeaseTargets(
 	leaseRepl interface {
 		RaftStatus() *raft.Status
 		StoreID() roachpb.StoreID
+		Desc() *roachpb.RangeDescriptor
 	},
-	// excludeLeaseRepl dictates whether the result set can include the source
-	// replica.
-	excludeLeaseRepl bool,
+	opts transferLeaseOptions,
 ) []roachpb.ReplicaDescriptor {
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
 	replDescs := roachpb.MakeReplicaSet(existing)
@@ -1507,7 +1506,7 @@ func (a *Allocator) ValidLeaseTargets(
 		}
 		// If we're not allowed to include the current replica, remove it from
 		// consideration here.
-		if existing[i].StoreID == leaseRepl.StoreID() && excludeLeaseRepl {
+		if existing[i].StoreID == leaseRepl.StoreID() && opts.excludeLeaseRepl {
 			continue
 		}
 		candidates = append(candidates, existing[i])
@@ -1534,7 +1533,32 @@ func (a *Allocator) ValidLeaseTargets(
 		// potentially transferring the lease to a replica that may be waiting for a
 		// snapshot (which will wedge the range until the replica applies that
 		// snapshot).
-		candidates = excludeReplicasInNeedOfSnapshots(ctx, leaseRepl.RaftStatus(), candidates)
+		validSnapshotCandidates := []roachpb.ReplicaDescriptor{}
+
+		if opts.allowUninitializedCandidates {
+			// When alowing uninitialized candidates, ignore the raft status of
+			// candidates which are not in the current range descriptors
+			// replica set, however are in the candidate list. Uninitialized
+			// replicas will always need a snapshot.
+			existingCandidates := []roachpb.ReplicaDescriptor{}
+			rangeDesc := leaseRepl.Desc()
+			for _, candidate := range candidates {
+				if _, ok := rangeDesc.GetReplicaDescriptor(candidate.StoreID); ok {
+					existingCandidates = append(existingCandidates, candidate)
+				} else {
+					validSnapshotCandidates = append(validSnapshotCandidates, candidate)
+				}
+			}
+			candidates = existingCandidates
+		}
+
+		status := leaseRepl.RaftStatus()
+		if a.knobs != nil && a.knobs.RaftStatusFn != nil {
+			status = a.knobs.RaftStatusFn(leaseRepl)
+		}
+
+		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
+			ctx, status, candidates)...)
 	}
 
 	// Determine which store(s) is preferred based on user-specified preferences.
@@ -1615,6 +1639,7 @@ func (a *Allocator) TransferLeaseTarget(
 		RaftStatus() *raft.Status
 		StoreID() roachpb.StoreID
 		GetRangeID() roachpb.RangeID
+		Desc() *roachpb.RangeDescriptor
 	},
 	stats *replicaStats,
 	forceDecisionWithoutStats bool,
@@ -1640,7 +1665,7 @@ func (a *Allocator) TransferLeaseTarget(
 		return roachpb.ReplicaDescriptor{}
 	}
 
-	existing = a.ValidLeaseTargets(ctx, conf, existing, leaseRepl, excludeLeaseRepl)
+	existing = a.ValidLeaseTargets(ctx, conf, existing, leaseRepl, opts)
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
 		log.VEventf(ctx, 2, "no lease transfer target found for r%d", leaseRepl.GetRangeID())
@@ -1864,13 +1889,14 @@ func (a *Allocator) ShouldTransferLease(
 	leaseRepl interface {
 		RaftStatus() *raft.Status
 		StoreID() roachpb.StoreID
+		Desc() *roachpb.RangeDescriptor
 	},
 	stats *replicaStats,
 ) bool {
 	if a.leaseholderShouldMoveDueToPreferences(ctx, conf, leaseRepl, existing) {
 		return true
 	}
-	existing = a.ValidLeaseTargets(ctx, conf, existing, leaseRepl, false /* excludeLeaseRepl */)
+	existing = a.ValidLeaseTargets(ctx, conf, existing, leaseRepl, transferLeaseOptions{})
 
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseRepl.StoreID()) {
