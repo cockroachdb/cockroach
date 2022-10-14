@@ -98,13 +98,13 @@ func (qc QueryTest) run(t *testing.T, indexes int, db *rel.Database) {
 		results = append(results, cur)
 		return nil
 	}); testutils.IsError(err, `failed to find index to satisfy query`) {
-		if intsets.MakeFastIntSet(qc.UnsatisfiableIndexes...).Contains(indexes) {
+		if intsets.MakeFast(qc.UnsatisfiableIndexes...).Contains(indexes) {
 			return
 		}
 		t.Fatalf("expected to succeed with indexes %d: %v", indexes, err)
 	} else if err != nil {
 		t.Fatal(err)
-	} else if intsets.MakeFastIntSet(qc.UnsatisfiableIndexes...).Contains(indexes) {
+	} else if intsets.MakeFast(qc.UnsatisfiableIndexes...).Contains(indexes) {
 		t.Fatalf("expected to fail with indexes %d", indexes)
 	}
 	expResults := append(qc.Results[:0:0], qc.Results...)

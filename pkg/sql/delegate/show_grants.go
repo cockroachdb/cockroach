@@ -251,7 +251,7 @@ SELECT database_name,
 	} else if n.Targets != nil && len(n.Targets.Functions) > 0 {
 		fmt.Fprint(&source, udfQuery)
 		orderBy = "1,2,3,4,5,6"
-		fnResolved := intsets.MakeFastIntSet()
+		fnResolved := intsets.MakeFast()
 		for _, fn := range n.Targets.Functions {
 			un := fn.FuncName.ToUnresolvedObjectName().ToUnresolvedName()
 			fd, err := d.catalog.ResolveFunction(d.ctx, un, &d.evalCtx.SessionData().SearchPath)

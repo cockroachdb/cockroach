@@ -974,7 +974,7 @@ type LocalProcessor interface {
 // HasParallelProcessors returns whether flow contains multiple processors in
 // the same stage.
 func HasParallelProcessors(flow *execinfrapb.FlowSpec) bool {
-	var seen intsets.FastIntSet
+	var seen intsets.Fast
 	for _, p := range flow.Processors {
 		if seen.Contains(int(p.StageID)) {
 			return true

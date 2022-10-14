@@ -57,7 +57,6 @@ go_library(
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@org_golang_x_tools//container/intsets",
     ],
 )
 

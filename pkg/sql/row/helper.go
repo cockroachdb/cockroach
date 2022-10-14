@@ -152,7 +152,7 @@ func newRowHelper(
 func (rh *rowHelper) encodeIndexes(
 	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
-	ignoreIndexes intsets.FastIntSet,
+	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (
 	primaryIndexKey []byte,
@@ -203,7 +203,7 @@ func (rh *rowHelper) encodePrimaryIndex(
 func (rh *rowHelper) encodeSecondaryIndexes(
 	colIDtoRowIndex catalog.TableColMap,
 	values []tree.Datum,
-	ignoreIndexes intsets.FastIntSet,
+	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry, err error) {
 

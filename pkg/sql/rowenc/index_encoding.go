@@ -162,7 +162,7 @@ func MakeSpanFromEncDatums(
 // retrieve neededCols for the specified table and index. The returned descpb.FamilyIDs
 // are in sorted order.
 func NeededColumnFamilyIDs(
-	neededColOrdinals intsets.FastIntSet, table catalog.TableDescriptor, index catalog.Index,
+	neededColOrdinals intsets.Fast, table catalog.TableDescriptor, index catalog.Index,
 ) []descpb.FamilyID {
 	if table.NumFamilies() == 1 {
 		return []descpb.FamilyID{table.GetFamilies()[0].ID}
@@ -171,9 +171,9 @@ func NeededColumnFamilyIDs(
 	// Build some necessary data structures for column metadata.
 	columns := table.DeletableColumns()
 	colIdxMap := catalog.ColumnIDToOrdinalMap(columns)
-	var indexedCols intsets.FastIntSet
-	var compositeCols intsets.FastIntSet
-	var extraCols intsets.FastIntSet
+	var indexedCols intsets.Fast
+	var compositeCols intsets.Fast
+	var extraCols intsets.Fast
 	for i := 0; i < index.NumKeyColumns(); i++ {
 		columnID := index.GetKeyColumnID(i)
 		columnOrdinal := colIdxMap.GetDefault(columnID)

@@ -107,7 +107,6 @@ go_test(
         "//pkg/util/timeutil/pgdate",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
-        "@org_golang_x_tools//container/intsets",
     ],
 )
 

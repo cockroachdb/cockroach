@@ -436,7 +436,7 @@ is unique across the query. Column numbering involves assigning every base
 column and non-trivial projection in a query a unique, query-specific index.
 Giving each column a unique index allows the expression nodes mentioned above
 to track input and output columns, or really any set of columns during Prep and
-later phases, using a bitmap (FastIntSet). The bitmap representation allows
+later phases, using a bitmap (intsets.Fast). The bitmap representation allows
 fast determination of compatibility between expression nodes and is utilized by
 transforms to determine the legality of such operations.
 

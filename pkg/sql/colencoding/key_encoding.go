@@ -51,7 +51,7 @@ func DecodeKeyValsToCols(
 	indexColIdx []int,
 	checkAllColsForNull bool,
 	keyCols []descpb.IndexFetchSpec_KeyColumn,
-	unseen *intsets.FastIntSet,
+	unseen *intsets.Fast,
 	key []byte,
 	scratch []byte,
 ) (remainingKey []byte, foundNull bool, retScratch []byte, _ error) {

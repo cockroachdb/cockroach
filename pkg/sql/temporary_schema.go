@@ -327,7 +327,7 @@ func cleanupSchemaObjects(
 					if err != nil {
 						return err
 					}
-					dependentColIDs := intsets.MakeFastIntSet()
+					dependentColIDs := intsets.MakeFast()
 					for _, colID := range d.ColumnIDs {
 						dependentColIDs.Add(int(colID))
 					}

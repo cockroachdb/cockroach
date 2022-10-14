@@ -19,7 +19,7 @@ type PostDeserializationChangeType int
 // PostDeserializationChanges are a set of booleans to indicate which types of
 // upgrades or fixes occurred when filling in the descriptor after
 // deserialization.
-type PostDeserializationChanges struct{ s intsets.FastIntSet }
+type PostDeserializationChanges struct{ s intsets.Fast }
 
 // HasChanges returns true if the set of changes is non-empty.
 func (c PostDeserializationChanges) HasChanges() bool {

@@ -410,8 +410,8 @@ func ExtractStatsFromSpans(
 
 // ExtractNodesFromSpans extracts a list of node ids from a set of tracing
 // spans.
-func ExtractNodesFromSpans(spans []tracingpb.RecordedSpan) intsets.FastIntSet {
-	var nodes intsets.FastIntSet
+func ExtractNodesFromSpans(spans []tracingpb.RecordedSpan) intsets.Fast {
+	var nodes intsets.Fast
 	// componentStats is only used to check whether a structured payload item is
 	// of ComponentStats type.
 	var componentStats ComponentStats

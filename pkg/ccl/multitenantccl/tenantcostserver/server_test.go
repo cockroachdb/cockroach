@@ -317,7 +317,7 @@ func TestInstanceCleanup(t *testing.T) {
 
 	// Note: this number needs to be at most maxInstancesCleanup.
 	const maxInstances = 10
-	var liveset, prev intsets.FastIntSet
+	var liveset, prev intsets.Fast
 
 	for steps := 0; steps < 100; steps++ {
 		// Keep the previous set for debugging.
@@ -360,7 +360,7 @@ func TestInstanceCleanup(t *testing.T) {
 		rows := ts.r.Query(t,
 			"SELECT instance_id FROM system.tenant_usage WHERE tenant_id = 5 AND instance_id > 0",
 		)
-		var serverSet intsets.FastIntSet
+		var serverSet intsets.Fast
 		for rows.Next() {
 			var id int
 			if err := rows.Scan(&id); err != nil {

@@ -93,7 +93,7 @@ func TestPrefixSorter(t *testing.T) {
 			// only has the partitions and ps (PrefixSorter) elements populated.
 			partKeys := parsePartitionKeys(&evalCtx, tc.partitionKeys)
 			partitions := make([]testcat.Partition, len(partKeys))
-			localPartitions := intsets.FastIntSet{}
+			localPartitions := intsets.Fast{}
 			for j, partitionKey := range partKeys {
 				partitionDatums := make([]tree.Datums, 1)
 				partitionDatums[0] = partitionKey

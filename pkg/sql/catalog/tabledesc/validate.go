@@ -1140,7 +1140,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 		}
 
 		// Verify that the constraint's column IDs are valid and unique.
-		var seen intsets.FastIntSet
+		var seen intsets.Fast
 		for _, colID := range c.ColumnIDs {
 			_, ok := columnsByID[colID]
 			if !ok {

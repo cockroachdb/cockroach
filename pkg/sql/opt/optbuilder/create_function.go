@@ -53,7 +53,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		b.insideFuncDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
-		b.schemaTypeDeps = intsets.FastIntSet{}
+		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
 
 		b.semaCtx.FunctionResolver = preFuncResolver
@@ -164,7 +164,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		typeDeps.UnionWith(b.schemaTypeDeps)
 		// Reset the tracked dependencies for next statement.
 		b.schemaDeps = nil
-		b.schemaTypeDeps = intsets.FastIntSet{}
+		b.schemaTypeDeps = intsets.Fast{}
 	}
 
 	// Override the function body so that references are fully qualified.

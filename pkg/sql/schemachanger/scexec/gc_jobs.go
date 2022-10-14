@@ -86,7 +86,7 @@ func (gj gcJobs) makeRecords(
 ) (dbZoneConfigsToRemove catalog.DescriptorIDSet, gcJobRecords []jobs.Record) {
 	type stmts struct {
 		s   []scop.StatementForDropJob
-		set intsets.FastIntSet
+		set intsets.Fast
 	}
 	addStmt := func(s *stmts, stmt scop.StatementForDropJob) {
 		if id := int(stmt.StatementID); !s.set.Contains(id) {

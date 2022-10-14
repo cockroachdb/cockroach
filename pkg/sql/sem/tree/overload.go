@@ -568,9 +568,9 @@ type typeCheckOverloadState struct {
 	overloadIdxs    []uint8 // index into overloads
 	exprs           []Expr
 	typedExprs      []TypedExpr
-	resolvableIdxs  intsets.FastIntSet // index into exprs/typedExprs
-	constIdxs       intsets.FastIntSet // index into exprs/typedExprs
-	placeholderIdxs intsets.FastIntSet // index into exprs/typedExprs
+	resolvableIdxs  intsets.Fast // index into exprs/typedExprs
+	constIdxs       intsets.Fast // index into exprs/typedExprs
+	placeholderIdxs intsets.Fast // index into exprs/typedExprs
 }
 
 // typeCheckOverloadedExprs determines the correct overload to use for the given set of

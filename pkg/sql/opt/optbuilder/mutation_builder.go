@@ -1171,8 +1171,8 @@ func (mb *mutationBuilder) parseUniqueConstraintPredicateExpr(uniq cat.UniqueOrd
 // getIndexLaxKeyOrdinals returns the ordinals of all lax key columns in the
 // given index. A column's ordinal is the ordered position of that column in the
 // owning table.
-func getIndexLaxKeyOrdinals(index cat.Index) intsets.FastIntSet {
-	var keyOrds intsets.FastIntSet
+func getIndexLaxKeyOrdinals(index cat.Index) intsets.Fast {
+	var keyOrds intsets.Fast
 	for i, n := 0, index.LaxKeyColumnCount(); i < n; i++ {
 		keyOrds.Add(index.Column(i).Ordinal())
 	}
@@ -1182,8 +1182,8 @@ func getIndexLaxKeyOrdinals(index cat.Index) intsets.FastIntSet {
 // getUniqueConstraintOrdinals returns the ordinals of all columns in the given
 // unique constraint. A column's ordinal is the ordered position of that column
 // in the owning table.
-func getUniqueConstraintOrdinals(tab cat.Table, uc cat.UniqueConstraint) intsets.FastIntSet {
-	var ucOrds intsets.FastIntSet
+func getUniqueConstraintOrdinals(tab cat.Table, uc cat.UniqueConstraint) intsets.Fast {
+	var ucOrds intsets.Fast
 	for i, n := 0, uc.ColumnCount(); i < n; i++ {
 		ucOrds.Add(uc.ColumnOrdinal(tab, i))
 	}
@@ -1193,10 +1193,10 @@ func getUniqueConstraintOrdinals(tab cat.Table, uc cat.UniqueConstraint) intsets
 // getExplicitPrimaryKeyOrdinals returns the ordinals of the primary key
 // columns, excluding any implicit partitioning or hash-shard columns in the
 // primary index.
-func getExplicitPrimaryKeyOrdinals(tab cat.Table) intsets.FastIntSet {
+func getExplicitPrimaryKeyOrdinals(tab cat.Table) intsets.Fast {
 	index := tab.Index(cat.PrimaryIndex)
 	skipCols := index.ImplicitColumnCount()
-	var keyOrds intsets.FastIntSet
+	var keyOrds intsets.Fast
 	for i, n := skipCols, index.LaxKeyColumnCount(); i < n; i++ {
 		keyOrds.Add(index.Column(i).Ordinal())
 	}

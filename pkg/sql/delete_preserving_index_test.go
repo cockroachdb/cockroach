@@ -745,7 +745,7 @@ func fetchIndex(
 	idx, err := table.FindIndexWithName(indexName)
 	require.NoError(t, err)
 	colIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
-	var valsNeeded intsets.FastIntSet
+	var valsNeeded intsets.Fast
 	{
 		colIDsNeeded := idx.CollectKeyColumnIDs()
 		if idx.Primary() {

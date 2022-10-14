@@ -1122,7 +1122,7 @@ func TestJoinReader(t *testing.T) {
 
 							index := td.ActiveIndexes()[c.indexIdx]
 							var fetchColIDs []descpb.ColumnID
-							var neededOrds intsets.FastIntSet
+							var neededOrds intsets.Fast
 							for _, ord := range c.fetchCols {
 								neededOrds.Add(int(ord))
 								fetchColIDs = append(fetchColIDs, td.PublicColumns()[ord].GetID())
@@ -1588,7 +1588,7 @@ func TestIndexJoiner(t *testing.T) {
 			); err != nil {
 				t.Fatal(err)
 			}
-			splitter := span.MakeSplitter(c.desc, c.desc.GetPrimaryIndex(), intsets.MakeFastIntSet(0, 1, 2, 3))
+			splitter := span.MakeSplitter(c.desc, c.desc.GetPrimaryIndex(), intsets.MakeFast(0, 1, 2, 3))
 
 			spec := execinfrapb.JoinReaderSpec{
 				FetchSpec:      fetchSpec,
