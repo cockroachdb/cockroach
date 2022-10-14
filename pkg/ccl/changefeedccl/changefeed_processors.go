@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1246,13 +1245,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.Checkpoint = &checkpoint
 
-			timestampManager := cf.manageProtectedTimestamps
-			// TODO(samiskin): Remove this conditional and the associated deprecated
-			// methods once we're confident in ActiveProtectedTimestampsEnabled
-			if !changefeedbase.ActiveProtectedTimestampsEnabled.Get(&cf.flowCtx.Cfg.Settings.SV) {
-				timestampManager = cf.deprecatedManageProtectedTimestamps
-			}
-			if err := timestampManager(cf.Ctx(), txn, changefeedProgress); err != nil {
+			if err := cf.manageProtectedTimestamps(cf.Ctx(), txn, changefeedProgress); err != nil {
 				log.Warningf(cf.Ctx(), "error managing protected timestamp record: %v", err)
 				return err
 			}
@@ -1328,47 +1321,6 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 	}
 
-	return nil
-}
-
-// deprecatedManageProtectedTimestamps only sets a protected timestamp when the
-// changefeed is in a backfill or the highwater is lagging behind to a
-// sufficient degree after a backfill.  This was deprecated in favor of always
-// maintaining a timestamp record to avoid issues with a low gcttl setting.
-func (cf *changeFrontier) deprecatedManageProtectedTimestamps(
-	ctx context.Context, txn *kv.Txn, progress *jobspb.ChangefeedProgress,
-) error {
-	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider
-	if err := cf.deprecatedMaybeReleaseProtectedTimestamp(ctx, progress, pts, txn); err != nil {
-		return err
-	}
-
-	schemaChangePolicy := changefeedbase.SchemaChangePolicy(cf.spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
-	shouldProtectBoundaries := schemaChangePolicy == changefeedbase.OptSchemaChangePolicyBackfill
-	if cf.frontier.schemaChangeBoundaryReached() && shouldProtectBoundaries {
-		highWater := cf.frontier.Frontier()
-		ptr := createProtectedTimestampRecord(ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater, progress)
-		return pts.Protect(ctx, txn, ptr)
-	}
-	return nil
-}
-
-func (cf *changeFrontier) deprecatedMaybeReleaseProtectedTimestamp(
-	ctx context.Context, progress *jobspb.ChangefeedProgress, pts protectedts.Storage, txn *kv.Txn,
-) error {
-	if progress.ProtectedTimestampRecord == uuid.Nil {
-		return nil
-	}
-	if !cf.frontier.schemaChangeBoundaryReached() && cf.isBehind() {
-		log.VEventf(ctx, 2, "not releasing protected timestamp because changefeed is behind")
-		return nil
-	}
-	log.VEventf(ctx, 2, "releasing protected timestamp %v",
-		progress.ProtectedTimestampRecord)
-	if err := pts.Release(ctx, txn, progress.ProtectedTimestampRecord); err != nil {
-		return err
-	}
-	progress.ProtectedTimestampRecord = uuid.Nil
 	return nil
 }
 
