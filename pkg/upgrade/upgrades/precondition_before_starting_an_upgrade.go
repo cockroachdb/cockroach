@@ -49,7 +49,7 @@ func preconditionNoInvalidDescriptorsBeforeUpgrading(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	var errMsg strings.Builder
-	err := d.CollectionFactory.TxnWithExecutor(ctx, d.DB, d.SessionData,
+	err := d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData,
 		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor) error {
 			query := `SELECT * FROM crdb_internal.invalid_objects`
 			rows, err := ie.QueryIterator(

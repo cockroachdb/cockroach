@@ -94,7 +94,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
@@ -140,7 +139,7 @@ type SQLServer struct {
 	execCfg                 *sql.ExecutorConfig
 	cfg                     *BaseConfig
 	internalExecutor        *sql.InternalExecutor
-	internalExecutorFactory sqlutil.InternalExecutorFactory
+	internalExecutorFactory descs.TxnManager
 	leaseMgr                *lease.Manager
 	blobService             *blobs.Service
 	tracingService          *service.Service
@@ -306,10 +305,8 @@ type sqlServerArgs struct {
 	// TODO(tbg): make this less hacky.
 	circularInternalExecutor *sql.InternalExecutor // empty initially
 
-	collectionFactory *descs.CollectionFactory
-
 	// internalExecutorFactory is to initialize an internal executor.
-	internalExecutorFactory sqlutil.InternalExecutorFactory
+	internalExecutorFactory *sql.InternalExecutorFactory
 
 	// Stores and deletes expired liveness sessions.
 	sqlLivenessProvider sqlliveness.Provider
@@ -820,7 +817,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.db,
 			cfg.circularInternalExecutor,
 			cfg.Settings,
-			collectionFactory,
+			cfg.internalExecutorFactory,
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
@@ -831,7 +828,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		GCJobNotifier:              gcJobNotifier,
 		RangeFeedFactory:           cfg.rangeFeedFactory,
 		CollectionFactory:          collectionFactory,
-		SystemTableIDResolver:      descs.MakeSystemTableIDResolver(collectionFactory, cfg.db),
+		SystemTableIDResolver:      descs.MakeSystemTableIDResolver(collectionFactory, cfg.internalExecutorFactory, cfg.db),
 		ConsistencyChecker:         consistencychecker.NewConsistencyChecker(cfg.db),
 		RangeProber:                rangeprober.NewRangeProber(cfg.db),
 		DescIDGenerator:            descidgen.NewGenerator(codec, cfg.db),
@@ -967,8 +964,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ieFactoryMonitor,
 	)
 
-	collectionFactory.SetInternalExecutorWithTxn(ieFactory)
-
 	distSQLServer.ServerConfig.InternalExecutorFactory = ieFactory
 	jobRegistry.SetInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
@@ -990,8 +985,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.registry.AddMetricStruct(m)
 	}
 	*cfg.circularInternalExecutor = sql.MakeInternalExecutor(pgServer.SQLServer, internalMemMetrics, ieFactoryMonitor)
-	*cfg.collectionFactory = *collectionFactory
-	cfg.internalExecutorFactory = ieFactory
+	*cfg.internalExecutorFactory = *ieFactory
 	execCfg.InternalExecutor = cfg.circularInternalExecutor
 
 	stmtDiagnosticsRegistry := stmtdiagnostics.NewRegistry(
@@ -1029,7 +1023,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgrade.TestingKnobs)
 		migrationMgr := upgrademanager.NewManager(
-			systemDeps, leaseMgr, cfg.circularInternalExecutor, cfg.collectionFactory, jobRegistry, codec,
+			systemDeps, leaseMgr, cfg.circularInternalExecutor, cfg.internalExecutorFactory, jobRegistry, codec,
 			cfg.Settings, knobs,
 		)
 		execCfg.UpgradeJobDeps = migrationMgr
@@ -1088,6 +1082,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.sqlStatusServer,
 		cfg.isMeta1Leaseholder,
 		sqlExecutorTestingKnobs,
+		ieFactory,
 		collectionFactory,
 	)
 

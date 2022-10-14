@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -373,13 +372,13 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		// We need a transaction to group the statements together.
 		// We use TxnWithSteppingEnabled here even though we don't
 		// use stepping below, because that buys us admission control.
-		cf := a.admin.server.sqlServer.execCfg.CollectionFactory
+		ief := a.admin.server.sqlServer.execCfg.InternalExecutorFactory
 		runner = func(ctx context.Context, fn txnFunc) error {
-			return cf.TxnWithExecutor(ctx, a.admin.server.db, nil, func(
-				ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor,
+			return ief.TxnWithExecutor(ctx, a.admin.server.db, nil /* sessionData */, func(
+				ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 			) error {
 				return fn(ctx, txn, ie)
-			}, descs.SteppingEnabled())
+			}, sqlutil.SteppingEnabled())
 		}
 	} else {
 		runner = func(ctx context.Context, fn func(context.Context, *kv.Txn, sqlutil.InternalExecutor) error) error {

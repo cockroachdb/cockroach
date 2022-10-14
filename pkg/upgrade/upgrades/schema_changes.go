@@ -142,7 +142,7 @@ func readTableDescriptor(
 ) (catalog.TableDescriptor, error) {
 	var t catalog.TableDescriptor
 
-	if err := d.CollectionFactory.Txn(ctx, d.DB, func(
+	if err := d.InternalExecutorFactory.DescsTxn(ctx, d.DB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
 		t, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{

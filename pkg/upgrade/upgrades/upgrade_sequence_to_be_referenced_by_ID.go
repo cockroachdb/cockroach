@@ -35,7 +35,7 @@ import (
 func upgradeSequenceToBeReferencedByID(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
 ) error {
-	return d.CollectionFactory.TxnWithExecutor(ctx, d.DB, d.SessionData, func(
+	return d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) (err error) {
 		var lastUpgradedID descpb.ID
@@ -112,7 +112,7 @@ func findNextTableToUpgrade(
 func maybeUpgradeSeqReferencesInTableOrView(
 	ctx context.Context, idToUpgrade descpb.ID, d upgrade.TenantDeps,
 ) error {
-	return d.CollectionFactory.Txn(ctx, d.DB, func(
+	return d.InternalExecutorFactory.DescsTxn(ctx, d.DB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		// Set up: retrieve table desc for `idToUpgrade` and a schema resolver

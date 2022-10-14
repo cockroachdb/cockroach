@@ -163,6 +163,10 @@ type TestServerInterface interface {
 	// also implements sqlutil.InternalExecutor if the test cannot depend on sql).
 	InternalExecutor() interface{}
 
+	// InternalExecutorInternalExecutorFactory returns a
+	// sqlutil.InternalExecutorFactory as an interface{}.
+	InternalExecutorFactory() interface{}
+
 	// TracerI returns a *tracing.Tracer as an interface{}.
 	TracerI() interface{}
 
