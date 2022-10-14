@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -289,19 +290,12 @@ func (b *Builder) buildCTE(
 	// recursive query is executed. We can't really say too much about what the
 	// working table contains, except that it has at least one row (the recursive
 	// query is never invoked with an empty working table).
-	bindingProps := &props.Relational{}
-	bindingProps.OutputCols = outScope.colSet()
-	bindingProps.Cardinality = props.AnyCardinality.AtLeast(props.OneCardinality)
+	bindingCard := props.AnyCardinality.AtLeast(props.OneCardinality)
 	// We don't really know the input row count, except for the first time we run
 	// the recursive query. We don't have anything better though.
-	bindingProps.Statistics().RowCount = initialScope.expr.Relational().Statistics().RowCount
-	// Row count must be greater than 0 or the stats code will throw an error.
-	// Set it to 1 to match the cardinality.
-	if bindingProps.Statistics().RowCount < 1 {
-		bindingProps.Statistics().RowCount = 1
-	}
+	initialRowCount := initialScope.expr.Relational().Statistics().RowCount
 	cteSrc.expr = b.factory.ConstructFakeRel(&memo.FakeRelPrivate{
-		Props: bindingProps,
+		Props: norm.MakeBindingPropsForRecursiveCTE(bindingCard, outScope.colSet(), initialRowCount),
 	})
 	b.factory.Metadata().AddWithBinding(withID, cteSrc.expr)
 

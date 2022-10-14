@@ -477,6 +477,12 @@ func (c *CustomFuncs) CanHaveZeroRows(input memo.RelExpr) bool {
 	return input.Relational().Cardinality.CanBeZero()
 }
 
+// HasBoundedCardinality returns true if the input expression returns a bounded
+// number of rows.
+func (c *CustomFuncs) HasBoundedCardinality(input memo.RelExpr) bool {
+	return !input.Relational().Cardinality.IsUnbounded()
+}
+
 // ----------------------------------------------------------------------
 //
 // Key functions
