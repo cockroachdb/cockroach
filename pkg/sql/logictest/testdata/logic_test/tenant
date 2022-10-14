@@ -1,8 +1,9 @@
 # LogicTest: !3node-tenant-default-configs
-query IBT colnames
-SELECT * FROM system.tenants ORDER BY id
+query IBIT colnames
+SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
-id  active  info
+id  active  length  name
+1   true    12      system
 
 # Create two tenants.
 
@@ -22,8 +23,9 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
-5   true    {"id": "5", "state": "ACTIVE"}
-10  true    {"id": "10", "state": "ACTIVE"}
+1   true    {"id": "1", "name": "system", "state": "ACTIVE"}
+5   true    {"id": "5", "name": "", "state": "ACTIVE"}
+10  true    {"id": "10", "name": "", "state": "ACTIVE"}
 
 # Garbage collect a non-drop tenant fails.
 
@@ -43,8 +45,9 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
-5   false   {"id": "5", "state": "DROP"}
-10  true    {"id": "10", "state": "ACTIVE"}
+1   true    {"id": "1", "name": "system", "state": "ACTIVE"}
+5   false   {"id": "5", "name": "", "state": "DROP"}
+10  true    {"id": "10", "name": "", "state": "ACTIVE"}
 
 
 # Try to recreate an existing tenant.
@@ -145,7 +148,8 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
-10  true    {"id": "10", "state": "ACTIVE"}
+1   true    {"id": "1", "name": "system", "state": "ACTIVE"}
+10  true    {"id": "10", "name": "", "state": "ACTIVE"}
 
 query error tenant resource limits require a CCL binary
 SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)

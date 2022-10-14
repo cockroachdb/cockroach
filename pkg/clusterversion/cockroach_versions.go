@@ -306,6 +306,10 @@ const (
 	// heuristics to identify invalid table descriptors for userfile-related
 	// descriptors.
 	FixUserfileRelatedDescriptorCorruption
+
+	// TenantNames adds a name column to system.tenants.
+	TenantNames
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -496,6 +500,11 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     FixUserfileRelatedDescriptorCorruption,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 76},
 	},
+	{
+		Key:     TenantNames,
+		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 4},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

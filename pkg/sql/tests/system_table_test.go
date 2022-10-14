@@ -52,7 +52,7 @@ func TestInitialKeys(t *testing.T) {
 		var nonDescKeys int
 		if systemTenant {
 			codec = keys.SystemSQLCodec
-			nonDescKeys = 11
+			nonDescKeys = 13
 		} else {
 			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
 			nonDescKeys = 4
