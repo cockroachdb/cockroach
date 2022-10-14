@@ -67,7 +67,7 @@ func (hi *hypotheticalIndex) init(
 	hi.zone = zone
 
 	// Build an index column ordinal set.
-	var colsOrdSet intsets.FastIntSet
+	var colsOrdSet intsets.Fast
 	for _, col := range hi.cols {
 		colsOrdSet.Add(col.Ordinal())
 	}

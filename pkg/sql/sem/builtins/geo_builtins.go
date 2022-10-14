@@ -7425,7 +7425,7 @@ func appendStrArgOverloadForGeometryArgOverloads(def builtinDefinition) builtinD
 		}
 
 		// Find all argument indexes that have the Geometry type.
-		var argsToCast intsets.FastIntSet
+		var argsToCast intsets.Fast
 		for i, paramType := range paramTypes {
 			if paramType.Typ.Equal(types.Geometry) {
 				argsToCast.Add(i)

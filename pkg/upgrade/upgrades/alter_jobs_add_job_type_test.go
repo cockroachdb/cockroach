@@ -171,7 +171,7 @@ func TestAlterSystemJobsTableAddJobTypeColumn(t *testing.T) {
 	var typStr string
 	rows, err := sqlDB.Query("SELECT distinct(job_type) FROM system.jobs")
 	require.NoError(t, err)
-	var seenTypes intsets.FastIntSet
+	var seenTypes intsets.Fast
 	for rows.Next() {
 		err = rows.Scan(&typStr)
 		require.NoError(t, err)

@@ -158,12 +158,12 @@ func (c ColumnIDs) Equals(input ColumnIDs) bool {
 // PermutationOf returns true if this list and the input list contain the same
 // set of column IDs in any order. Duplicate ColumnIDs have no effect.
 func (c ColumnIDs) PermutationOf(input ColumnIDs) bool {
-	ourColsSet := intsets.MakeFastIntSet()
+	ourColsSet := intsets.MakeFast()
 	for _, col := range c {
 		ourColsSet.Add(int(col))
 	}
 
-	inputColsSet := intsets.MakeFastIntSet()
+	inputColsSet := intsets.MakeFast()
 	for _, inputCol := range input {
 		inputColsSet.Add(int(inputCol))
 	}

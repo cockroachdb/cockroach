@@ -127,7 +127,7 @@ func (q *Query) putEvalContext(ec *evalContext) {
 // Entities returns the entities in the query in their join order.
 // This method exists primarily for introspection.
 func (q *Query) Entities() []Var {
-	var entitySlots intsets.FastIntSet
+	var entitySlots intsets.Fast
 	for _, slotIdx := range q.entities {
 		entitySlots.Add(int(slotIdx))
 	}

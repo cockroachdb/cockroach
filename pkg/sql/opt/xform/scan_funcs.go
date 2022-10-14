@@ -360,10 +360,10 @@ func (c *CustomFuncs) buildAllPartitionsConstraint(
 // target local partitions.
 func (c *CustomFuncs) getLocalSpans(
 	scanConstraint *constraint.Constraint, ps partition.PrefixSorter,
-) intsets.FastIntSet {
+) intsets.Fast {
 	// Iterate through the spans and determine whether each one matches
 	// with a prefix from a local partition.
-	var localSpans intsets.FastIntSet
+	var localSpans intsets.Fast
 	for i, n := 0, scanConstraint.Spans.Count(); i < n; i++ {
 		span := scanConstraint.Spans.Get(i)
 		if match, ok := constraint.FindMatch(span, ps); ok {
@@ -379,7 +379,7 @@ func (c *CustomFuncs) getLocalSpans(
 // by putting the spans at positions identified by localSpanOrds into the local
 // constraint, and the remaining spans into the remote constraint.
 func (c *CustomFuncs) splitSpans(
-	origConstraint *constraint.Constraint, localSpanOrds intsets.FastIntSet,
+	origConstraint *constraint.Constraint, localSpanOrds intsets.Fast,
 ) (localConstraint, remoteConstraint constraint.Constraint) {
 	allSpansCount := origConstraint.Spans.Count()
 	localSpansCount := localSpanOrds.Len()

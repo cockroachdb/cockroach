@@ -281,7 +281,7 @@ func constructLeftIndexCombination(
 	rightIndexes [][]cat.IndexColumn,
 	outputIndexes map[cat.Table][][]cat.IndexColumn,
 ) {
-	var leftIndexColSet intsets.FastIntSet
+	var leftIndexColSet intsets.Fast
 	// Store left columns in a set for fast access.
 	for _, leftCol := range leftIndex {
 		leftIndexColSet.Add(int(leftCol.ColID()))

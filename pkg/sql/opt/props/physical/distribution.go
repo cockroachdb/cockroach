@@ -34,7 +34,7 @@ type Distribution struct {
 	// TODO(rytaft): Consider abstracting this to a list of "neighborhoods" to
 	// support more different types of localities.
 	// TODO(rytaft): Consider mapping the region strings to integers and storing
-	// this as a FastIntSet.
+	// this as a intsets.Fast.
 	Regions []string
 }
 

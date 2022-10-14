@@ -1006,7 +1006,7 @@ func findUsagesOfEnumValueInPartitioning(
 		return false, nil
 	}
 
-	var colsToCheck intsets.FastIntSet
+	var colsToCheck intsets.Fast
 	for i, c := range columns[:partitioning.NumColumns()] {
 		typT := c.GetType()
 		if !typT.UserDefined() {
@@ -1080,7 +1080,7 @@ func findUsageOfEnumValueInEncodedPartitioningValue(
 	partitioning catalog.Partitioning,
 	v []byte,
 	fakePrefixDatums []tree.Datum,
-	colsToCheck intsets.FastIntSet,
+	colsToCheck intsets.Fast,
 	foundUsage bool,
 	member *descpb.TypeDescriptor_EnumMember,
 ) (bool, error) {

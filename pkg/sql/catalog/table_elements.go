@@ -930,7 +930,7 @@ func UserDefinedTypeColsInFamilyHaveSameVersion(
 		return false, err
 	}
 
-	familyCols := intsets.FastIntSet{}
+	familyCols := intsets.Fast{}
 	for _, colID := range family.ColumnIDs {
 		familyCols.Add(int(colID))
 	}

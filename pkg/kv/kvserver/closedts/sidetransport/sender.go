@@ -356,7 +356,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 
 	// We'll accumulate all the nodes we need to connect to in order to check if
 	// we need to open new connections or close existing ones.
-	nodesWithFollowers := intsets.MakeFastIntSet()
+	nodesWithFollowers := intsets.MakeFast()
 
 	// If there's any tracked ranges for which we're not the leaseholder any more,
 	// we need to untrack them and tell the connections about it.
