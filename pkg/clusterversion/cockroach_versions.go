@@ -10,7 +10,10 @@
 
 package clusterversion
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+)
 
 // Key is a unique identifier for a version of CockroachDB.
 type Key int
@@ -508,30 +511,50 @@ var rawVersionsSingleton = keyedVersions{
 }
 
 const (
-	// unstableVersionsAbove is a cluster version Key above which any upgrades in
-	// this version are considered unstable development-only versions if it is not
-	// negative, and upgrading to them should permanently move a cluster to
-	// development versions. On master it should be the minted version of the last
-	// release, while on release branches it can be set to invalidVersionKey to
-	// disable marking any versions as development versions.
-	unstableVersionsAbove = invalidVersionKey
-
 	// finalVersion should be set on a release branch to the minted final cluster
 	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
 	// Setting it has the effect of ensuring no versions are subsequently added.
 	finalVersion = V22_2
 )
 
+// developmentBranch must true on the main development branch but should be set
+// to false on a release branch once the set of versions becomes append-only and
+// associated upgrade implementations are frozen. It can be forced to true via
+// an env var even on a release branch, to allow running a release binary in a
+// dev cluster.
+var developmentBranch = false || envutil.EnvOrDefaultBool("COCKROACH_FORCE_DEV_VERSION", false)
+
 var versionsSingleton = func() keyedVersions {
-	if unstableVersionsAbove > invalidVersionKey {
+	if developmentBranch {
+		// If this is a dev branch, we offset every version +1M major versions into
+		// the future. This means a cluster that runs the migrations in a dev build,
+		// while they are still in flux, will persist this offset version, and thus
+		// cannot then "upgrade" to the released build, as its non-offset versions
+		// would then be a downgrade, which is blocked.
+		//
+		// By default, when offsetting versions in a dev binary, we offset *all of
+		// them*, which includes the minimum version from upgrades are supported.
+		// This means a dev binary cannot join, resume or upgrade a release version
+		// cluster, which is by design as it avoids unintentionally but irreversibly
+		// upgrading a cluster to dev versions. Opting in to such an upgrade is
+		// possible however via setting COCKROACH_UPGRADE_TO_DEV_VERSION. Doing so
+		// skips offsetting the earliest version this binary supports, meaning it
+		// will support an upgrade from as low as that released version that then
+		// advances into the dev-numbered versions.
+		//
+		// Note that such upgrades may in fact be a *downgrade* of the logical
+		// version! For example, on a cluster that is on released version 3, a dev
+		// binary containing versions 1, 2, 3, and 4 started with this flag would
+		// renumber only 2-4 to be +1M. It would then step from 3 "up" to 1000002 --
+		// which conceptually is actually back down to 2 -- then back to to 1000003,
+		// then on to 1000004, etc.
+		skipFirst := envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false)
 		const devOffset = 1000000
-		// Throw every version above the last release (which will be none on a release
-		// branch) 1 million major versions into the future, so any "upgrade" to a
-		// release branch build will be a downgrade and thus blocked.
 		for i := range rawVersionsSingleton {
-			if rawVersionsSingleton[i].Key > unstableVersionsAbove {
-				rawVersionsSingleton[i].Major += devOffset
+			if i == 0 && skipFirst {
+				continue
 			}
+			rawVersionsSingleton[i].Major += devOffset
 		}
 	}
 	return rawVersionsSingleton
