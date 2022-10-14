@@ -98,13 +98,16 @@ CREATE TABLE system.settings (
 	DescIDSequenceSchema = `
 CREATE SEQUENCE system.descriptor_id_seq;`
 
-	TenantsTableSchema = `
+	tenantNameComputeExpr = `crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo':::STRING, info)->>'name':::STRING`
+	TenantsTableSchema    = `
 CREATE TABLE system.tenants (
 	id     INT8 NOT NULL,
 	active BOOL NOT NULL DEFAULT true,
 	info   BYTES,
+	name   STRING GENERATED ALWAYS AS (` + tenantNameComputeExpr + `) VIRTUAL,
 	CONSTRAINT "primary" PRIMARY KEY (id),
-	FAMILY "primary" (id, active, info)
+	FAMILY "primary" (id, active, info),
+	UNIQUE INDEX tenants_name_idx (name ASC)
 );`
 
 	// RoleIDSequenceSchema starts at 100 so we have reserved IDs for special
@@ -112,6 +115,8 @@ CREATE TABLE system.tenants (
 	RoleIDSequenceSchema = `
 CREATE SEQUENCE system.role_id_seq START 100 MINVALUE 100 MAXVALUE 2147483647;`
 )
+
+var tenantNameComputeExprStr = tenantNameComputeExpr
 
 // These system tables are not part of the system config.
 const (
@@ -1089,12 +1094,10 @@ var (
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int},
 				{Name: "active", ID: 2, Type: types.Bool, DefaultExpr: &trueBoolString},
-				// NOTE: info is currently a placeholder and may be kept, replaced,
-				// or even just removed. The idea is to provide users of
-				// multi-tenancy with some ability to store associated metadata with
-				// each tenant. For instance, it might prove to be useful to map a
-				// tenant in a cluster back to the corresponding user ID in CC.
 				{Name: "info", ID: 3, Type: types.Bytes, Nullable: true},
+				{Name: "name", ID: 4, Type: types.String, Nullable: true,
+					Virtual:     true,
+					ComputeExpr: &tenantNameComputeExprStr},
 			},
 			[]descpb.ColumnFamilyDescriptor{{
 				Name:        "primary",
@@ -1103,6 +1106,16 @@ var (
 				ColumnIDs:   []descpb.ColumnID{1, 2, 3},
 			}},
 			pk("id"),
+			descpb.IndexDescriptor{
+				Name:                "tenants_name_idx",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"name"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
 		))
 )
 
