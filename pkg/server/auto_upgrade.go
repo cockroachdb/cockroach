@@ -67,9 +67,8 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 				Closer:         s.stopper.ShouldQuiesce(),
 			}
 
-			// Run the set cluster setting version statement and reset cluster setting
-			// `cluster.preserve_downgrade_option` statement in a transaction until
-			// success.
+			// Run the set cluster setting version statement in a transaction
+			// until success.
 			for ur := retry.StartWithCtx(ctx, upgradeRetryOpts); ur.Next(); {
 				if _, err := s.sqlServer.internalExecutor.ExecEx(
 					ctx, "set-version", nil, /* txn */

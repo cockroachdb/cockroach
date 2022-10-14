@@ -88,12 +88,6 @@ func (p *planner) AlterTenantSetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
-	// We don't support changing the version for another tenant.
-	// See discussion on issue https://github.com/cockroachdb/cockroach/issues/77733 (wontfix).
-	if _, isVersion := setting.(*settings.VersionSetting); isVersion {
-		return nil, errors.Newf("cannot change the version of another tenant")
-	}
-
 	value, err := p.getAndValidateTypedClusterSetting(ctx, name, n.Value, setting)
 	if err != nil {
 		return nil, err
