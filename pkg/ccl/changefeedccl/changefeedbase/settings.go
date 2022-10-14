@@ -238,9 +238,9 @@ var UseMuxRangeFeed = settings.RegisterBoolSetting(
 var EventConsumerWorkers = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.event_consumer_workers",
-	"the number of workers to use when processing events; 0 or 1 disables",
-	int64(util.ConstantWithMetamorphicTestRange("changefeed.consumer_max_workers", 8, 0, 32)),
-	settings.NonNegativeInt,
+	"the number of workers to use when processing events: <0 disables, "+
+		"0 assigns a reasonable default, >0 assigns the setting value",
+	0,
 ).WithPublic()
 
 // EventConsumerWorkerQueueSize specifies the maximum number of events a worker buffer.
