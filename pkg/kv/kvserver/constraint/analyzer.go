@@ -10,19 +10,15 @@
 
 package constraint
 
-import (
-	"context"
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
-
-// AnalyzedConstraints represents the result or AnalyzeConstraints(). It
-// combines a zone's constraints with information about which stores satisfy
-// what term of the constraints disjunction.
+// AnalyzedConstraints represents the result of AnalyzeConstraints(). It
+// combines a span config's constraints with information about which stores
+// satisfy what term of the constraints disjunction.
 type AnalyzedConstraints struct {
 	Constraints []roachpb.ConstraintsConjunction
 	// True if the per-replica constraints don't fully cover all the desired
-	// replicas in the range (sum(constraints.NumReplicas) < zone.NumReplicas).
+	// replicas in the range (sum(constraints.NumReplicas) < config.NumReplicas).
 	// In such cases, we allow replicas that don't match any of the per-replica
 	// constraints, but never mark them as necessary.
 	UnconstrainedReplicas bool
@@ -39,13 +35,17 @@ type AnalyzedConstraints struct {
 // satisfied by any given configuration of replicas.
 var EmptyAnalyzedConstraints = AnalyzedConstraints{}
 
-// AnalyzeConstraints processes the zone config constraints that apply to a
+// StoreResolver resolves a store descriptor by a given ID.
+type StoreResolver interface {
+	GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool)
+}
+
+// AnalyzeConstraints processes the span config constraints that apply to a
 // range along with the current replicas for a range, spitting back out
 // information about which constraints are satisfied by which replicas and
 // which replicas satisfy which constraints, aiding in allocation decisions.
 func AnalyzeConstraints(
-	ctx context.Context,
-	getStoreDescFn func(roachpb.StoreID) (roachpb.StoreDescriptor, bool),
+	storeResolver StoreResolver,
 	existing []roachpb.ReplicaDescriptor,
 	numReplicas int32,
 	constraints []roachpb.ConstraintsConjunction,
@@ -67,7 +67,7 @@ func AnalyzeConstraints(
 			// happen once a node is hooked into gossip), trust that it's valid. This
 			// is a much more stable failure state than frantically moving everything
 			// off such a node.
-			store, ok := getStoreDescFn(repl.StoreID)
+			store, ok := storeResolver.GetStoreDescriptor(repl.StoreID)
 			if !ok || ConjunctionsCheck(store, subConstraints.Constraints) {
 				result.SatisfiedBy[i] = append(result.SatisfiedBy[i], store.StoreID)
 				result.Satisfies[store.StoreID] = append(result.Satisfies[store.StoreID], i)
@@ -82,7 +82,7 @@ func AnalyzeConstraints(
 
 // ConjunctionsCheck checks a store against a single set of constraints (out of
 // the possibly numerous sets that apply to a range), returning true iff the
-// store matches the constraints. The contraints are AND'ed together; a store
+// store matches the constraints. The constraints are AND'ed together; a store
 // matches the conjunction if it matches all of them.
 func ConjunctionsCheck(store roachpb.StoreDescriptor, constraints []roachpb.Constraint) bool {
 	for _, constraint := range constraints {

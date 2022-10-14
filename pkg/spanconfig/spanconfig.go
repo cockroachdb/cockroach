@@ -350,6 +350,14 @@ func Delta(
 	return delta, nil
 }
 
+// Reporter generates a conformance report over the given spans, i.e. whether
+// the backing ranges conform to the span configs that apply to them.
+type Reporter interface {
+	SpanConfigConformance(
+		ctx context.Context, spans []roachpb.Span,
+	) (roachpb.SpanConfigConformanceReport, error)
+}
+
 // SQLUpdate captures either a descriptor or a protected timestamp update.
 // It is the unit emitted by the SQLWatcher.
 type SQLUpdate struct {

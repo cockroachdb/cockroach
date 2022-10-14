@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -500,6 +501,7 @@ type statusServer struct {
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
+	spanConfigReporter       spanconfig.Reporter
 }
 
 // StmtDiagnosticsRequester is the interface into *stmtdiagnostics.Registry
@@ -558,6 +560,7 @@ func newStatusServer(
 	closedSessionCache *sql.ClosedSessionCache,
 	remoteFlowRunner *flowinfra.RemoteFlowRunner,
 	internalExecutor *sql.InternalExecutor,
+	spanConfigReporter spanconfig.Reporter,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
@@ -571,15 +574,16 @@ func newStatusServer(
 			rpcCtx:             rpcCtx,
 			stopper:            stopper,
 		},
-		cfg:              cfg,
-		admin:            adminServer,
-		db:               db,
-		gossip:           gossip,
-		metricSource:     metricSource,
-		nodeLiveness:     nodeLiveness,
-		storePool:        storePool,
-		stores:           stores,
-		internalExecutor: internalExecutor,
+		cfg:                cfg,
+		admin:              adminServer,
+		db:                 db,
+		gossip:             gossip,
+		metricSource:       metricSource,
+		nodeLiveness:       nodeLiveness,
+		storePool:          storePool,
+		stores:             stores,
+		internalExecutor:   internalExecutor,
+		spanConfigReporter: spanConfigReporter,
 	}
 
 	return server

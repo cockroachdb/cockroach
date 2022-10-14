@@ -218,6 +218,12 @@ func (m *mockInternalClient) GetSpanConfigs(
 	return nil, fmt.Errorf("unsupported GetSpanConfigs call")
 }
 
+func (m *mockInternalClient) SpanConfigConformance(
+	_ context.Context, _ *roachpb.SpanConfigConformanceRequest, _ ...grpc.CallOption,
+) (*roachpb.SpanConfigConformanceResponse, error) {
+	return nil, fmt.Errorf("unsupported SpanConfigConformance call")
+}
+
 func (m *mockInternalClient) GetAllSystemSpanConfigsThatApply(
 	context.Context, *roachpb.GetAllSystemSpanConfigsThatApplyRequest, ...grpc.CallOption,
 ) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {

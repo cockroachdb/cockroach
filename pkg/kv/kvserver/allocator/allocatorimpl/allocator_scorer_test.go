@@ -583,7 +583,13 @@ var (
 	}
 )
 
-func getTestStoreDesc(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
+type mockStoreResolver struct{}
+
+var _ constraint.StoreResolver = mockStoreResolver{}
+
+func (m mockStoreResolver) GetStoreDescriptor(
+	storeID roachpb.StoreID,
+) (roachpb.StoreDescriptor, bool) {
 	desc, ok := testStores[storeID]
 	return desc, ok
 }
@@ -936,9 +942,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 				Constraints: tc.constraints,
 				NumReplicas: tc.numReplicas,
 			}
-			analyzed := constraint.AnalyzeConstraints(
-				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing),
-				conf.NumReplicas, conf.Constraints)
+			analyzed := constraint.AnalyzeConstraints(mockStoreResolver{}, testStoreReplicas(tc.existing), conf.NumReplicas, conf.Constraints)
 			for _, s := range testStores {
 				valid, necessary := allocateConstraintsCheck(s, analyzed)
 				if e, a := tc.expectedValid[s.StoreID], valid; e != a {
@@ -1071,8 +1075,7 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 				Constraints: tc.constraints,
 				NumReplicas: tc.numReplicas,
 			}
-			analyzed := constraint.AnalyzeConstraints(
-				context.Background(), getTestStoreDesc, existing, conf.NumReplicas, conf.Constraints)
+			analyzed := constraint.AnalyzeConstraints(mockStoreResolver{}, existing, conf.NumReplicas, conf.Constraints)
 			for storeID, expected := range tc.expected {
 				valid, necessary := removeConstraintsCheck(testStores[storeID], analyzed)
 				if e, a := expected.valid, valid; e != a {

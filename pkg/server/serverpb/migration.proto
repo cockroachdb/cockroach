@@ -87,5 +87,8 @@ service Migration {
 
    // WaitForSpanConfigSubscription waits until the target node is wholly
    // subscribed to the global span configurations state.
+   //
+   // TODO(irfansharif): This can be removed -- 22.2 nodes will never issue this
+   // RPC.
    rpc WaitForSpanConfigSubscription (WaitForSpanConfigSubscriptionRequest) returns (WaitForSpanConfigSubscriptionResponse) { }
 }
