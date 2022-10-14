@@ -11,8 +11,10 @@
 package props
 
 import (
+	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 func TestCanFilter(t *testing.T) {
@@ -1071,5 +1074,101 @@ func roundBucket(b *cat.HistogramBucket) {
 func roundHistogram(h *Histogram) {
 	for i := range h.buckets {
 		roundBucket(&h.buckets[i])
+	}
+}
+
+// BenchmarkHistogram measures the performance of various common props.Histogram
+// operations.
+func BenchmarkHistogram(b *testing.B) {
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	typs := []*types.T{
+		types.Int,
+		types.Float,
+		types.String,
+		types.IntArray,
+		types.StringArray,
+	}
+
+	bucketCounts := []int{
+		0,
+		2,
+		20,
+		200,
+		2000,
+	}
+
+	var makeDatum func(*types.T, int) tree.Datum
+	makeDatum = func(t *types.T, i int) tree.Datum {
+		switch t.Family() {
+		case types.IntFamily:
+			return tree.NewDInt(tree.DInt(i))
+		case types.FloatFamily:
+			return tree.NewDFloat(tree.DFloat(i))
+		case types.StringFamily:
+			return tree.NewDString(strconv.Itoa(i * 2))
+		case types.ArrayFamily:
+			arr := tree.NewDArray(t.ArrayContents())
+			arr.Array = make(tree.Datums, 1)
+			arr.HasNonNulls = true
+			arr.Array[0] = makeDatum(t.ArrayContents(), i)
+			return arr
+		}
+		panic(errors.AssertionFailedf("unsupported type"))
+	}
+
+	makeBuckets := func(t *types.T, bucketCount int) []cat.HistogramBucket {
+		buckets := make([]cat.HistogramBucket, bucketCount)
+		for i := range buckets {
+			buckets[i].NumEq = float64(i)
+			buckets[i].NumRange = float64(i)
+			buckets[i].DistinctRange = float64(i)
+			buckets[i].UpperBound = makeDatum(t, i*2)
+		}
+		return buckets
+	}
+
+	makeConstraint := func(t *types.T, bucketCount int) *constraint.Constraint {
+		endKey := constraint.MakeKey(makeDatum(t, bucketCount))
+		var s constraint.Span
+		s.Init(constraint.EmptyKey, constraint.IncludeBoundary, endKey, constraint.ExcludeBoundary)
+		var c constraint.Constraint
+		c.Columns.InitSingle(1)
+		c.Spans.InitSingleSpan(&s)
+		return &c
+	}
+
+	selectivity := MakeSelectivity(0.5)
+
+	for _, typ := range typs {
+		b.Run(typ.Name(), func(b *testing.B) {
+			for _, bucketCount := range bucketCounts {
+				b.Run(fmt.Sprintf("buckets=%v", bucketCount), func(b *testing.B) {
+					h := Histogram{}
+					h.Init(&evalCtx, opt.ColumnID(1), makeBuckets(typ, bucketCount))
+					c := makeConstraint(typ, bucketCount)
+					b.Run("ValuesCount", func(b *testing.B) {
+						for i := 0; i < b.N; i++ {
+							h.ValuesCount()
+						}
+					})
+					b.Run("DistinctValuesCount", func(b *testing.B) {
+						for i := 0; i < b.N; i++ {
+							h.DistinctValuesCount()
+						}
+					})
+					b.Run("Filter", func(b *testing.B) {
+						for i := 0; i < b.N; i++ {
+							h.Filter(c)
+						}
+					})
+					b.Run("ApplySelectivity", func(b *testing.B) {
+						for i := 0; i < b.N; i++ {
+							h.ApplySelectivity(selectivity)
+						}
+					})
+				})
+			}
+		})
 	}
 }
