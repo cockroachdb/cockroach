@@ -105,7 +105,39 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 func TestCloudBackupRestoreAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+
+	uri := createAzureURI(t, "TestCloudBackupRestoreAzure")
+
+	ctx := context.Background()
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+}
+
+// TestBackupRestoreAzureWithLegacyPut is like TestBackupRestoreAzure
+// but it uses the legacy buffer-and-put upload method.
+func TestCloudBackupRestoreAzureWithLegacyPut(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+
+	uri := createAzureURI(t, "TestCloudBackupRestoreAzureWithLegacyPut")
+
+	ctx := context.Background()
+	tc, db, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	db.Exec(t, "SET CLUSTER SETTING cloudstorage.azure.buffer_and_put_uploads.enabled=true")
+	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+}
+
+func createAzureURI(t *testing.T, prefix string) url.URL {
+	t.Helper()
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
+	// NB: the Azure Account key must not be url encoded.
 	accountKey := os.Getenv("AZURE_ACCOUNT_KEY")
 	if accountName == "" || accountKey == "" {
 		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME and AZURE_ACCOUNT_KEY env vars must be set")
@@ -115,19 +147,11 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 		skip.IgnoreLint(t, "AZURE_CONTAINER env var must be set")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer lease.TestingDisableTableLeases()()
-	const numAccounts = 1000
-
-	ctx := context.Background()
-	tc, _, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
-	defer cleanupFn()
-	prefix := fmt.Sprintf("TestBackupRestoreAzure-%d", timeutil.Now().UnixNano())
-	uri := url.URL{Scheme: "azure", Host: bucket, Path: prefix}
+	timestampedPrefix := fmt.Sprintf("%s-%d", prefix, timeutil.Now().UnixNano())
+	uri := url.URL{Scheme: "azure", Host: bucket, Path: timestampedPrefix}
 	values := uri.Query()
 	values.Add(azure.AzureAccountNameParam, accountName)
 	values.Add(azure.AzureAccountKeyParam, accountKey)
 	uri.RawQuery = values.Encode()
-
-	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts)
+	return uri
 }
