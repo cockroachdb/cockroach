@@ -25,7 +25,7 @@ import (
 )
 
 func TestClusterNodes(t *testing.T) {
-	c := &clusterImpl{spec: spec.MakeClusterSpec(spec.GCE, "", 10)}
+	c := &clusterImpl{spec: spec.MakeClusterSpec(spec.GCE, "", "", 10)}
 	opts := func(opts ...option.Option) []option.Option {
 		return opts
 	}
