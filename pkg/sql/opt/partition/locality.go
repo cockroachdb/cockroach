@@ -63,7 +63,7 @@ type PrefixSorter struct {
 
 	// The set of ordinal numbers indexing into the Entry slice, representing
 	// which Prefixes (partitions) are 100% local to the gateway region
-	LocalPartitions intsets.FastIntSet
+	LocalPartitions intsets.Fast
 }
 
 // String returns a string representation of the PrefixSorter.
@@ -150,13 +150,13 @@ func PrefixesToString(prefixes []Prefix) string {
 // determined.
 func HasMixOfLocalAndRemotePartitions(
 	evalCtx *eval.Context, index cat.Index,
-) (localPartitions intsets.FastIntSet, ok bool) {
+) (localPartitions intsets.Fast, ok bool) {
 	if index.PartitionCount() < 2 {
-		return intsets.FastIntSet{}, false
+		return intsets.Fast{}, false
 	}
 	var localRegion string
 	if localRegion, ok = evalCtx.GetLocalRegion(); !ok {
-		return intsets.FastIntSet{}, false
+		return intsets.Fast{}, false
 	}
 	var foundLocal, foundRemote bool
 	for i, n := 0, index.PartitionCount(); i < n; i++ {
@@ -177,7 +177,7 @@ func HasMixOfLocalAndRemotePartitions(
 // group of equal-length prefixes they are ordered by value.
 // This is the main function for building a PrefixSorter.
 func GetSortedPrefixes(
-	index cat.Index, localPartitions intsets.FastIntSet, evalCtx *eval.Context,
+	index cat.Index, localPartitions intsets.Fast, evalCtx *eval.Context,
 ) PrefixSorter {
 	if index == nil || index.PartitionCount() < 2 {
 		return PrefixSorter{}

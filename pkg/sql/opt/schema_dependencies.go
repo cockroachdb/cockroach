@@ -28,7 +28,7 @@ type SchemaDep struct {
 
 	// ColumnOrdinals is the set of column ordinals that are referenced for this
 	// table.
-	ColumnOrdinals intsets.FastIntSet
+	ColumnOrdinals intsets.Fast
 
 	// ColumnIDToOrd maps a scopeColumn's ColumnID to its ColumnOrdinal. This
 	// helps us add only the columns that are actually referenced by the object's
@@ -44,7 +44,7 @@ type SchemaDep struct {
 
 // SchemaTypeDeps contains a set of the IDs of types that
 // this object depends on.
-type SchemaTypeDeps = intsets.FastIntSet
+type SchemaTypeDeps = intsets.Fast
 
 // GetColumnNames returns a sorted list of the names of the column dependencies
 // and a boolean to determine if the dependency was a table.

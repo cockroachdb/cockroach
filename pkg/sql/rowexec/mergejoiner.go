@@ -40,7 +40,7 @@ type mergeJoiner struct {
 	leftIdx, rightIdx       int
 	trackMatchedRight       bool
 	emitUnmatchedRight      bool
-	matchedRight            intsets.FastIntSet
+	matchedRight            intsets.Fast
 	matchedRightCount       int
 
 	streamMerger streamMerger
@@ -246,7 +246,7 @@ func (m *mergeJoiner) nextRow() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 		m.emitUnmatchedRight = shouldEmitUnmatchedRow(rightSide, m.joinType)
 		m.leftIdx, m.rightIdx = 0, 0
 		if m.trackMatchedRight {
-			m.matchedRight = intsets.FastIntSet{}
+			m.matchedRight = intsets.Fast{}
 		}
 	}
 }

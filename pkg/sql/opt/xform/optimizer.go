@@ -40,7 +40,7 @@ type MatchedRuleFunc = norm.MatchedRuleFunc
 type AppliedRuleFunc = norm.AppliedRuleFunc
 
 // RuleSet efficiently stores an unordered set of RuleNames.
-type RuleSet = intsets.FastIntSet
+type RuleSet = intsets.Fast
 
 // Optimizer transforms an input expression tree into the logically equivalent
 // output expression tree with the lowest possible execution cost.
@@ -950,7 +950,7 @@ type groupState struct {
 	// expression in the group that has been fully optimized for the required
 	// properties. These never need to be recosted, no matter how many additional
 	// optimization passes are made.
-	fullyOptimizedExprs intsets.FastIntSet
+	fullyOptimizedExprs intsets.Fast
 
 	// explore is used by the explorer to store intermediate state so that
 	// redundant work is minimized.
@@ -1004,7 +1004,7 @@ func (a *groupStateAlloc) allocate() *groupState {
 
 // disableRulesRandom disables rules with the given probability for testing.
 func (o *Optimizer) disableRulesRandom(probability float64) {
-	essentialRules := intsets.MakeFastIntSet(
+	essentialRules := intsets.MakeFast(
 		// Needed to prevent constraint building from failing.
 		int(opt.NormalizeInConst),
 		// Needed when an index is forced.

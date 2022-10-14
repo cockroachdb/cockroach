@@ -206,7 +206,7 @@ type DatumRowConverter struct {
 	// Tracks which column indices in the set of visible columns are part of the
 	// user specified target columns. This can be used before populating Datums
 	// to filter out unwanted column data.
-	TargetColOrds intsets.FastIntSet
+	TargetColOrds intsets.Fast
 
 	// The rest of these are derived from tableDesc, just cached here.
 	ri                        Inserter

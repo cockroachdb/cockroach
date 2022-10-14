@@ -370,7 +370,7 @@ func (f *PlanGistFactory) decodeBool() bool {
 	return val != 0
 }
 
-func (f *PlanGistFactory) encodeFastIntSet(s intsets.FastIntSet) {
+func (f *PlanGistFactory) encodeFastIntSet(s intsets.Fast) {
 	lenBefore := f.buffer.Len()
 	if err := s.Encode(&f.buffer); err != nil {
 		panic(err)
@@ -415,7 +415,7 @@ func (f *PlanGistFactory) encodeScanParams(params exec.ScanParams) {
 }
 
 func (f *PlanGistFactory) decodeScanParams() exec.ScanParams {
-	neededCols := intsets.FastIntSet{}
+	neededCols := intsets.Fast{}
 	err := neededCols.Decode(&f.buffer)
 	if err != nil {
 		panic(err)

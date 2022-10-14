@@ -79,7 +79,7 @@ func BuildOptAndHypTableMaps(
 type HypotheticalTable struct {
 	cat.Table
 	invertedCols         []*cat.Column
-	primaryKeyColsOrdSet intsets.FastIntSet
+	primaryKeyColsOrdSet intsets.Fast
 	hypotheticalIndexes  []hypotheticalIndex
 }
 

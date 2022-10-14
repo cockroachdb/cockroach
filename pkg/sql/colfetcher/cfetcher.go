@@ -52,7 +52,7 @@ type cTableInfo struct {
 
 	// The set of required value-component column ordinals among only needed
 	// columns.
-	neededValueColsByIdx intsets.FastIntSet
+	neededValueColsByIdx intsets.Fast
 
 	// Map used to get the column index based on the descpb.ColumnID.
 	// It's kept as a pointer so we don't have to re-allocate to sort it each
@@ -66,7 +66,7 @@ type cTableInfo struct {
 
 	// The set of column ordinals which are both composite and part of the index
 	// key.
-	compositeIndexColOrdinals intsets.FastIntSet
+	compositeIndexColOrdinals intsets.Fast
 
 	// One number per column coming from the "key suffix" that is part of the
 	// value; each number is a column ordinal among only needed columns; -1 if
@@ -246,7 +246,7 @@ type cFetcher struct {
 
 		// remainingValueColsByIdx is the set of value columns that are yet to be
 		// seen during the decoding of the current row.
-		remainingValueColsByIdx intsets.FastIntSet
+		remainingValueColsByIdx intsets.Fast
 		// lastRowPrefix is the row prefix for the last row we saw a key for. New
 		// keys are compared against this prefix to determine whether they're part
 		// of a new row or not.

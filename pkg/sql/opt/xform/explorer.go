@@ -239,7 +239,7 @@ type exploreState struct {
 	// fullyExploredMembers is a set of ordinal positions of members within the
 	// memo group. Once a member expression has been fully explored, its ordinal
 	// is added to this set.
-	fullyExploredMembers intsets.FastIntSet
+	fullyExploredMembers intsets.Fast
 }
 
 // isMemberFullyExplored is true if the member at the given ordinal position
