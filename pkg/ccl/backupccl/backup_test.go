@@ -6830,7 +6830,9 @@ func TestBackupRestoreTenant(t *testing.T) {
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
-		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.CheckQueryResults(t, `select id, active, name, info from system.tenants`, [][]string{
+			{`1`, `true`, `system`, `{"id": "1", "state": "ACTIVE", "name": "system"}`},
+		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
 			`SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants`,
@@ -6903,7 +6905,9 @@ func TestBackupRestoreTenant(t *testing.T) {
 			[][]string{{"succeeded"}, {"succeeded"}},
 		)
 
-		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.CheckQueryResults(t, `select id, active, name, info from system.tenants`, [][]string{
+			{`1`, `true`, `system`, `{"id": "1", "state": "ACTIVE", "name": "system"}`},
+		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
@@ -6925,7 +6929,9 @@ func TestBackupRestoreTenant(t *testing.T) {
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
-		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.CheckQueryResults(t, `select id, active, name, info from system.tenants`, [][]string{
+			{`1`, `true`, `system`, `{"id": "1", "state": "ACTIVE", "name": "system"}`},
+		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
@@ -6958,10 +6964,12 @@ func TestBackupRestoreTenant(t *testing.T) {
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
-		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{
+			{`1`, `true`, `{"id": "1", "state": "ACTIVE", "name": "system"}`},
+		})
 		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants where id != 1`,
 			[][]string{
 				{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`},
 				{`11`, `true`, `{"id": "11", "state": "ACTIVE"}`},
