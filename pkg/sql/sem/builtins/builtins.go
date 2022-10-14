@@ -4846,6 +4846,33 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.rename_tenant": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryMultiTenancy,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
+				}
+				tenantName := tree.MustBeDString(args[1])
+				if err := evalCtx.Tenant.RenameTenant(ctx, uint64(sTenID), string(tenantName)); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Renames the specified tenant. Must be run by the System tenant.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.create_join_token": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
