@@ -13,6 +13,7 @@ package slstorage_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math/rand"
 	"strings"
 	"sync"
@@ -60,12 +61,7 @@ func TestStorage(t *testing.T) {
 		*hlc.Clock, *timeutil.ManualTime, *cluster.Settings, *stop.Stopper, *slstorage.Storage,
 	) {
 		dbName := t.Name()
-		tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-		schema := strings.Replace(systemschema.SqllivenessTableSchema,
-			`CREATE TABLE system.sqlliveness`,
-			`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
-		tDB.Exec(t, schema)
-		tableID := getTableID(t, tDB, dbName, "sqlliveness")
+		tableID := newSystemTable(t, tDB, dbName, "sqlliveness", systemschema.SqllivenessTableSchema)
 
 		timeSource := timeutil.NewManualTime(t0)
 		clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
@@ -315,12 +311,7 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	dbName := t.Name()
-	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-	schema := strings.Replace(systemschema.SqllivenessTableSchema,
-		`CREATE TABLE system.sqlliveness`,
-		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
-	tDB.Exec(t, schema)
-	tableID := getTableID(t, tDB, dbName, "sqlliveness")
+	tableID := newSystemTable(t, tDB, dbName, "sqlliveness", systemschema.SqllivenessTableSchema)
 
 	timeSource := timeutil.NewManualTime(t0)
 	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
@@ -478,12 +469,7 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 	dbName := t.Name()
-	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-	schema := strings.Replace(systemschema.SqllivenessTableSchema,
-		`CREATE TABLE system.sqlliveness`,
-		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
-	tDB.Exec(t, schema)
-	tableID := getTableID(t, tDB, dbName, "sqlliveness")
+	tableID := newSystemTable(t, tDB, dbName, "sqlliveness", systemschema.SqllivenessTableSchema)
 
 	timeSource := timeutil.NewManualTime(t0)
 	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
@@ -676,12 +662,7 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 
 	// Set up a fake storage implementation using a separate table.
 	dbName := t.Name()
-	tdb.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-	schema := strings.Replace(systemschema.SqllivenessTableSchema,
-		`CREATE TABLE system.sqlliveness`,
-		`CREATE TABLE "`+dbName+`".sqlliveness`, 1)
-	tdb.Exec(t, schema)
-	tableID := getTableID(t, tdb, dbName, "sqlliveness")
+	tableID := newSystemTable(t, tdb, dbName, "sqlliveness", systemschema.SqllivenessTableSchema)
 
 	storage := slstorage.NewTestingStorage(
 		s.DB().AmbientContext,
@@ -737,16 +718,22 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 	require.NoError(t, res.err)
 }
 
-func getTableID(
-	t *testing.T, db *sqlutils.SQLRunner, dbName, tableName string,
+func newSystemTable(
+	t *testing.T, db *sqlutils.SQLRunner, dbName, tableName, schema string,
 ) (tableID descpb.ID) {
 	t.Helper()
+	db.Exec(t, fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS "%s"`, dbName))
+	schema = strings.Replace(schema,
+		fmt.Sprintf("CREATE TABLE system.%s", tableName),
+		fmt.Sprintf(`CREATE TABLE "%s".%s`, dbName, tableName),
+		1)
+	db.Exec(t, schema)
 	db.QueryRow(t, `
-select u.id 
-  from system.namespace t
-  join system.namespace u 
-    on t.id = u."parentID" 
- where t.name = $1 and u.name = $2`,
+		select u.id 
+		from system.namespace t
+		join system.namespace u 
+		  on t.id = u."parentID" 
+		where t.name = $1 and u.name = $2`,
 		dbName, tableName).Scan(&tableID)
 	return tableID
 }

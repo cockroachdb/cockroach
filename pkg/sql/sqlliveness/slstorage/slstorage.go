@@ -18,14 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -34,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 )
 
 // GCInterval specifies duration between attempts to delete extant
@@ -90,6 +86,7 @@ type Storage struct {
 	g          singleflight.Group
 	newTimer   func() timeutil.TimerI
 	tableID    descpb.ID
+	table      Table
 
 	mu struct {
 		syncutil.Mutex
@@ -134,6 +131,7 @@ func NewTestingStorage(
 			return time.Duration(frac * float64(baseInterval.Nanoseconds()))
 		},
 		metrics: makeMetrics(),
+		table:   MakeTable(codec, sqllivenessTableID),
 	}
 	cacheConfig := cache.Config{
 		Policy: cache.CacheLRU,
@@ -280,23 +278,17 @@ func (s *Storage) isAlive(
 func (s *Storage) deleteOrFetchSession(
 	ctx context.Context, sid sqlliveness.SessionID, prevExpiration hlc.Timestamp,
 ) (alive bool, expiration hlc.Timestamp, err error) {
-	var deleted bool
+	var deleted, exists bool
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		deleted = false
-		k := s.makeSessionKey(sid)
-		kv, err := txn.Get(ctx, k)
+
+		exists, expiration, err = s.table.GetExpiration(ctx, txn, sid)
 		if err != nil {
 			return err
 		}
-		// The session is not alive.
-		if kv.Value == nil {
+		if !exists {
 			return nil
-		}
-		expiration, err = decodeValue(kv)
-		if err != nil {
-			return errors.Wrapf(err, "failed to decode expiration for %s",
-				redact.SafeString(sid.String()))
 		}
 		if !expiration.Equal(prevExpiration) {
 			alive = true
@@ -306,8 +298,7 @@ func (s *Storage) deleteOrFetchSession(
 		// The session is expired and needs to be deleted.
 		deleted = true
 		expiration = hlc.Timestamp{}
-		_, err = txn.Del(ctx, k)
-		return err
+		return s.table.Delete(ctx, txn, sid)
 	}); err != nil {
 		return false, hlc.Timestamp{}, errors.Wrapf(err,
 			"could not query session id: %s", sid)
@@ -349,7 +340,10 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		deleted = 0 // reset for restarts
-		start := s.makeTablePrefix()
+
+		// Since the clean up loop does not inspect the keys, it correctly
+		// handles the RBR and the RBT indexes.
+		start := s.codec.TablePrefix(uint32(s.tableID))
 		end := start.PrefixEnd()
 		const maxRows = 1024 // arbitrary but plenty
 		for {
@@ -397,10 +391,10 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 func (s *Storage) Insert(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (err error) {
-	k := s.makeSessionKey(sid)
-	v := encodeValue(expiration)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	if err := s.db.InitPut(ctx, k, &v, true); err != nil {
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return s.table.SetExpiration(ctx, txn, sid, expiration)
+	}); err != nil {
 		s.metrics.WriteFailures.Inc(1)
 		return errors.Wrapf(err, "could not insert session %s", sid)
 	}
@@ -416,16 +410,11 @@ func (s *Storage) Update(
 ) (sessionExists bool, err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		k := s.makeSessionKey(sid)
-		kv, err := txn.Get(ctx, k)
-		if err != nil {
+		sessionExists, _, err = s.table.GetExpiration(ctx, txn, sid)
+		if !sessionExists || err != nil {
 			return err
 		}
-		if sessionExists = kv.Value != nil; !sessionExists {
-			return nil
-		}
-		v := encodeValue(expiration)
-		return txn.Put(ctx, k, &v)
+		return s.table.SetExpiration(ctx, txn, sid, expiration)
 	})
 	if err != nil || !sessionExists {
 		s.metrics.WriteFailures.Inc(1)
@@ -453,33 +442,4 @@ func (s *cachedStorage) IsAlive(
 	ctx context.Context, sid sqlliveness.SessionID,
 ) (alive bool, err error) {
 	return (*Storage)(s).isAlive(ctx, sid, async)
-}
-
-func (s *Storage) makeTablePrefix() roachpb.Key {
-	return s.codec.IndexPrefix(uint32(s.tableID), 1)
-}
-
-func (s *Storage) makeSessionKey(id sqlliveness.SessionID) roachpb.Key {
-	return keys.MakeFamilyKey(encoding.EncodeBytesAscending(s.makeTablePrefix(), id.UnsafeBytes()), 0)
-}
-
-func decodeValue(kv kv.KeyValue) (hlc.Timestamp, error) {
-	tup, err := kv.Value.GetTuple()
-	if err != nil {
-		return hlc.Timestamp{},
-			errors.Wrapf(err, "failed to decode tuple from key %v", kv.Key)
-	}
-	_, dec, err := encoding.DecodeDecimalValue(tup)
-	if err != nil {
-		return hlc.Timestamp{},
-			errors.Wrapf(err, "failed to decode decimal from key %v", kv.Key)
-	}
-	return hlc.DecimalToHLC(&dec)
-}
-
-func encodeValue(expiration hlc.Timestamp) roachpb.Value {
-	var v roachpb.Value
-	dec := eval.TimestampToDecimal(expiration)
-	v.SetTuple(encoding.EncodeDecimalValue(nil, 2, &dec))
-	return v
 }
