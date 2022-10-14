@@ -11,6 +11,7 @@
 package p
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -36,7 +37,10 @@ type MyStruct struct {
 	closure func()
 }
 
-func OutOfScope() {
+// Unsupported documents current limitations of the linter, especially
+// when it comes to valid synchronization patterns that are not
+// supported/recognized by the linter.
+func Unsupported() {
 	var i int
 	var s MyStruct
 	for j := range collection {
@@ -53,6 +57,32 @@ func OutOfScope() {
 			// it's a much less common pattern.
 			s.closure()
 		}()
+
+		// defer within an anonymous function is a valid way to
+		// synchronize access to loop variables; that is currently not
+		// recognized by the linter
+		ch := make(chan error)
+		func() {
+			defer func() { <-ch }()
+			go func() {
+				// this is safe because of deferred function; however, the
+				// synchronization is not identified currently
+				intID(j) // want `loop variable 'j' captured by reference`
+				ch <- nil
+			}()
+		}()
+
+		// using contexts is another valid way to achieve synchronization;
+		// it's not currently recognized by the linter
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			// this reference is safe, but the synchronization is not
+			// recognized by the linter
+			intID(j) // want `loop variable 'j' captured by reference`
+			cancel()
+		}()
+
+		<-ctx.Done()
 	}
 }
 
