@@ -130,7 +130,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 
 	telemetry.Inc(beginAuthUseCounter)
 
-	parsedToken, err := jwt.Parse(tokenBytes, jwt.WithKeySet(authenticator.mu.conf.jwks), jwt.WithValidate(true))
+	parsedToken, err := jwt.Parse(tokenBytes, jwt.WithKeySet(authenticator.mu.conf.jwks), jwt.WithValidate(true), jwt.InferAlgorithmFromKey(true))
 	if err != nil {
 		return errors.Newf("JWT authentication: invalid token")
 	}
