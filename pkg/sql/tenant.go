@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // rejectIfCantCoordinateMultiTenancy returns an error if the current tenant is
@@ -91,13 +92,22 @@ func CreateTenantRecord(
 	}
 
 	// Insert into the tenant table and detect collisions.
+	if info.Name != "" {
+		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TenantNames) {
+			return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
+		}
+	}
 	if num, err := execCfg.InternalExecutor.ExecEx(
 		ctx, "create-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`INSERT INTO system.tenants (id, active, info) VALUES ($1, $2, $3)`,
 		tenID, active, infoBytes,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
-			return pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\" already exists", tenID)
+			extra := redact.RedactableString("")
+			if info.Name != "" {
+				extra = redact.Sprintf(" with name %q", info.Name)
+			}
+			return pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\"%s already exists", tenID, extra)
 		}
 		return errors.Wrap(err, "inserting new tenant")
 	} else if num != 1 {
@@ -220,7 +230,7 @@ func updateTenantRecord(
 }
 
 // CreateTenant implements the tree.TenantOperator interface.
-func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
+func (p *planner) CreateTenant(ctx context.Context, tenID uint64, name string) error {
 	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
 		return err
 	}
@@ -231,6 +241,7 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64) error {
 			// We synchronously initialize the tenant's keyspace below, so
 			// we can skip the ADD state and go straight to an ACTIVE state.
 			State: descpb.TenantInfo_ACTIVE,
+			Name:  name,
 		},
 	}
 
