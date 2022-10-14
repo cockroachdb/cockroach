@@ -35,6 +35,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/intsets",
         "//pkg/util/timeutil",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",

@@ -1,0 +1,28 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "intsets",
+    srcs = [
+        "fast_int_set_large.go",
+        "fast_int_set_small.go",
+        "fast_int_set_str.go",
+        "fast_int_set_testonly.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/intsets",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@org_golang_x_tools//container/intsets",
+    ],
+)
+
+go_test(
+    name = "intsets_test",
+    srcs = ["fast_int_set_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":intsets"],
+    deps = ["//pkg/util/randutil"],
+)
+
+get_x_data(name = "get_x_data")

@@ -11,6 +11,6 @@
 //go:build fast_int_set_large
 // +build fast_int_set_large
 
-package util
+package intsets
 
 var fastIntSetAlwaysSmall = false

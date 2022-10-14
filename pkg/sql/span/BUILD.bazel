@@ -23,8 +23,8 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
-        "//pkg/util",
         "//pkg/util/encoding",
+        "//pkg/util/intsets",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -47,7 +47,7 @@ go_test(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",

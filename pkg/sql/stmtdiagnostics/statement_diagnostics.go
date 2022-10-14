@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -700,7 +700,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 	defer r.mu.Unlock()
 
 	now := timeutil.Now()
-	var ids util.FastIntSet
+	var ids intsets.FastIntSet
 	for _, row := range rows {
 		id := RequestID(*row[0].(*tree.DInt))
 		stmtFingerprint := string(*row[1].(*tree.DString))

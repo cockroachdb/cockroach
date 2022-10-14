@@ -62,7 +62,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util",
+        "//pkg/util/intsets",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/metric",
