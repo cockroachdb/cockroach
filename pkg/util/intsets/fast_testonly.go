@@ -24,7 +24,6 @@ import (
 	"io"
 
 	"github.com/cockroachdb/errors"
-	"golang.org/x/tools/container/intsets"
 )
 
 // Fast keeps track of a set of integers. It does not perform any
@@ -32,7 +31,7 @@ import (
 type Fast struct {
 	// Used to keep the size of the struct the same.
 	_ struct{ lo, hi uint64 }
-	s *intsets.Sparse
+	s *Sparse
 }
 
 // MakeFast returns a set initialized with the given values.
@@ -46,7 +45,7 @@ func MakeFast(vals ...int) Fast {
 
 func (s *Fast) prepareForMutation() {
 	if s.s == nil {
-		s.s = &intsets.Sparse{}
+		s.s = &Sparse{}
 	} else if fastIntSetAlwaysSmall {
 		// We always make a full copy to prevent any aliasing; this simulates the
 		// semantics of the "small" regime of Fast.
@@ -99,10 +98,10 @@ func (s Fast) Len() int {
 // value, the second return value is false.
 func (s Fast) Next(startVal int) (int, bool) {
 	if s.s == nil {
-		return intsets.MaxInt, false
+		return MaxInt, false
 	}
 	res := s.s.LowerBound(startVal)
-	return res, res != intsets.MaxInt
+	return res, res != MaxInt
 }
 
 // ForEach calls a function for each value in the set (in increasing order).
@@ -110,7 +109,7 @@ func (s Fast) ForEach(f func(i int)) {
 	if s.s == nil {
 		return
 	}
-	for x := s.s.Min(); x != intsets.MaxInt; x = s.s.LowerBound(x + 1) {
+	for x := s.s.Min(); x != MaxInt; x = s.s.LowerBound(x + 1) {
 		f(x)
 	}
 }
@@ -125,7 +124,7 @@ func (s Fast) Ordered() []int {
 
 // Copy returns a copy of s which can be modified independently.
 func (s Fast) Copy() Fast {
-	n := &intsets.Sparse{}
+	n := &Sparse{}
 	if s.s != nil {
 		n.Copy(s.s)
 	}
@@ -217,7 +216,7 @@ func (s Fast) SubsetOf(rhs Fast) bool {
 // Shift generates a new set which contains elements i+delta for elements i in
 // the original set.
 func (s *Fast) Shift(delta int) Fast {
-	n := &intsets.Sparse{}
+	n := &Sparse{}
 	s.ForEach(func(i int) {
 		n.Insert(i + delta)
 	})
