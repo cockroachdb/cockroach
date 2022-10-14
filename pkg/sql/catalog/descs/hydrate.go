@@ -52,7 +52,7 @@ func (tc *Collection) hydrateDescriptors(
 	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, descs []catalog.Descriptor,
 ) error {
 
-	var hydratableMutableIndexes, hydratableImmutableIndexes intsets.FastIntSet
+	var hydratableMutableIndexes, hydratableImmutableIndexes intsets.Fast
 	for i, desc := range descs {
 		if desc == nil || !hydrateddesc.IsHydratable(desc) {
 			continue

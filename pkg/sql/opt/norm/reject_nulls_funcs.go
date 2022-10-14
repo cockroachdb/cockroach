@@ -124,7 +124,7 @@ func (c *CustomFuncs) NullRejectProjections(
 // are randomly disabled for testing. It is used to prevent propagating the
 // RejectNullCols property when the corresponding column-pruning normalization
 // rule is disabled. This prevents rule cycles during testing.
-func DeriveRejectNullCols(in memo.RelExpr, disabledRules intsets.FastIntSet) opt.ColSet {
+func DeriveRejectNullCols(in memo.RelExpr, disabledRules intsets.Fast) opt.ColSet {
 	// Lazily calculate and store the RejectNullCols value.
 	relProps := in.Relational()
 	if relProps.IsAvailable(props.RejectNullCols) {
@@ -219,7 +219,7 @@ func DeriveRejectNullCols(in memo.RelExpr, disabledRules intsets.FastIntSet) opt
 //  2. The aggregate function returns null if its input is empty. And since
 //     by #1, the presence of nulls does not alter the result, the aggregate
 //     function would return null if its input contains only null values.
-func deriveGroupByRejectNullCols(in memo.RelExpr, disabledRules intsets.FastIntSet) opt.ColSet {
+func deriveGroupByRejectNullCols(in memo.RelExpr, disabledRules intsets.Fast) opt.ColSet {
 	input := in.Child(0).(memo.RelExpr)
 	aggs := *in.Child(1).(*memo.AggregationsExpr)
 
@@ -298,7 +298,7 @@ func (c *CustomFuncs) MakeNullRejectFilters(nullRejectCols opt.ColSet) memo.Filt
 //
 //  1. The projection "transmits" nulls - it returns NULL when one or more of
 //     its inputs is NULL.
-func deriveProjectRejectNullCols(in memo.RelExpr, disabledRules intsets.FastIntSet) opt.ColSet {
+func deriveProjectRejectNullCols(in memo.RelExpr, disabledRules intsets.Fast) opt.ColSet {
 	rejectNullCols := DeriveRejectNullCols(in.Child(0).(memo.RelExpr), disabledRules)
 	projections := *in.Child(1).(*memo.ProjectionsExpr)
 	var projectionsRejectCols opt.ColSet

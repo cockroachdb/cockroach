@@ -208,7 +208,7 @@ type MemBatch struct {
 	// b is the slice of columns in this batch.
 	b []Vec
 	// datumVecIdxs stores the indices of all datum-backed vectors in b.
-	datumVecIdxs intsets.FastIntSet
+	datumVecIdxs intsets.Fast
 	useSel       bool
 	// sel is - if useSel is true - a selection vector from upstream. A
 	// selection vector is a list of selected tuple indices in this memBatch's

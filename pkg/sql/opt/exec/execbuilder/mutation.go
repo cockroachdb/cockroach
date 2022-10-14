@@ -652,8 +652,8 @@ func appendColsWhenPresent(dst opt.ColList, src opt.OptionalColList) opt.ColList
 // column ID in the given list. This is used with mutation operators, which
 // maintain lists that correspond to the target table, with zero column IDs
 // indicating columns that are not involved in the mutation.
-func ordinalSetFromColList(colList opt.OptionalColList) intsets.FastIntSet {
-	var res intsets.FastIntSet
+func ordinalSetFromColList(colList opt.OptionalColList) intsets.Fast {
+	var res intsets.Fast
 	for i, col := range colList {
 		if col != 0 {
 			res.Add(i)

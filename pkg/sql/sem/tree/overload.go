@@ -570,9 +570,9 @@ type overloadTypeChecker struct {
 	overloadIdxs    []uint8 // index into overloads
 	exprs           []Expr
 	typedExprs      []TypedExpr
-	resolvableIdxs  intsets.FastIntSet // index into exprs/typedExprs
-	constIdxs       intsets.FastIntSet // index into exprs/typedExprs
-	placeholderIdxs intsets.FastIntSet // index into exprs/typedExprs
+	resolvableIdxs  intsets.Fast // index into exprs/typedExprs
+	constIdxs       intsets.Fast // index into exprs/typedExprs
+	placeholderIdxs intsets.Fast // index into exprs/typedExprs
 	overloadsIdxArr [16]uint8
 }
 
@@ -623,9 +623,9 @@ func (s *overloadTypeChecker) release() {
 	}
 	s.typedExprs = s.typedExprs[:0]
 	s.overloadIdxs = s.overloadIdxs[:0]
-	s.resolvableIdxs = intsets.FastIntSet{}
-	s.constIdxs = intsets.FastIntSet{}
-	s.placeholderIdxs = intsets.FastIntSet{}
+	s.resolvableIdxs = intsets.Fast{}
+	s.constIdxs = intsets.Fast{}
+	s.placeholderIdxs = intsets.Fast{}
 	overloadTypeCheckerPool.Put(s)
 }
 

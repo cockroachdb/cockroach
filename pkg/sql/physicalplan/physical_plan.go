@@ -1128,7 +1128,7 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode(
 	forceSerialization bool, post execinfrapb.PostProcessSpec,
 ) {
 	// Fast path - check if we need to do anything.
-	var nodes intsets.FastIntSet
+	var nodes intsets.Fast
 	var foundDuplicates bool
 	for _, pIdx := range p.ResultRouters {
 		proc := &p.Processors[pIdx]

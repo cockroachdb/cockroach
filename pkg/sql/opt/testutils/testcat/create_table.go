@@ -811,7 +811,7 @@ func (tt *Table) addIndexWithVersion(
 	}
 
 	if typ == primaryIndex {
-		var pkOrdinals intsets.FastIntSet
+		var pkOrdinals intsets.Fast
 		for _, c := range idx.Columns {
 			pkOrdinals.Add(c.Ordinal())
 		}

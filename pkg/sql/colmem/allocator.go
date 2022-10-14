@@ -821,7 +821,7 @@ type SetAccountingHelper struct {
 	allFixedLength bool
 
 	// bytesLikeVecIdxs stores the indices of all bytes-like vectors.
-	bytesLikeVecIdxs intsets.FastIntSet
+	bytesLikeVecIdxs intsets.Fast
 	// bytesLikeVectors stores all actual bytes-like vectors. It is updated
 	// every time a new batch is allocated.
 	bytesLikeVectors []*coldata.Bytes
@@ -830,7 +830,7 @@ type SetAccountingHelper struct {
 	prevBytesLikeTotalSize int64
 
 	// decimalVecIdxs stores the indices of all decimal vectors.
-	decimalVecIdxs intsets.FastIntSet
+	decimalVecIdxs intsets.Fast
 	// decimalVecs stores all decimal vectors. They are updated every time a new
 	// batch is allocated.
 	decimalVecs []coldata.Decimals
@@ -849,7 +849,7 @@ type SetAccountingHelper struct {
 
 	// varLenDatumVecIdxs stores the indices of all datum-backed vectors with
 	// variable-length values.
-	varLenDatumVecIdxs intsets.FastIntSet
+	varLenDatumVecIdxs intsets.Fast
 	// varLenDatumVecs stores all variable-sized datum-backed vectors. They are
 	// updated every time a new batch is allocated.
 	varLenDatumVecs []coldata.DatumVec

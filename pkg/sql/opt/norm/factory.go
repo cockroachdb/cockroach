@@ -102,7 +102,7 @@ type Factory struct {
 
 	// disabledRules is a set of rules that are not allowed to run, used when
 	// rules are disabled during testing to prevent rule cycles.
-	disabledRules intsets.FastIntSet
+	disabledRules intsets.Fast
 }
 
 // maxConstructorStackDepth is the maximum allowed depth of a constructor call
@@ -208,7 +208,7 @@ func (f *Factory) NotifyOnAppliedRule(appliedRule AppliedRuleFunc) {
 // disabled during testing. SetDisabledRules does not prevent rules from
 // matching - rather, it notifies the Factory that rules have been prevented
 // from matching using NotifyOnMatchedRule.
-func (f *Factory) SetDisabledRules(disabledRules intsets.FastIntSet) {
+func (f *Factory) SetDisabledRules(disabledRules intsets.Fast) {
 	f.disabledRules = disabledRules
 }
 

@@ -1123,7 +1123,7 @@ func (m *pgDumpReader) readFile(
 			var targetColMapIdx []int
 			if len(i.Columns) != 0 {
 				targetColMapIdx = make([]int, len(i.Columns))
-				conv.TargetColOrds = intsets.FastIntSet{}
+				conv.TargetColOrds = intsets.Fast{}
 				for j := range i.Columns {
 					colName := string(i.Columns[j])
 					idx, ok := m.colMap[conv][colName]
@@ -1190,7 +1190,7 @@ func (m *pgDumpReader) readFile(
 			var targetColMapIdx []int
 			if conv != nil {
 				targetColMapIdx = make([]int, len(i.Columns))
-				conv.TargetColOrds = intsets.FastIntSet{}
+				conv.TargetColOrds = intsets.Fast{}
 				for j := range i.Columns {
 					colName := string(i.Columns[j])
 					idx, ok := m.colMap[conv][colName]

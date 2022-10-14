@@ -18,7 +18,7 @@ import (
 // MakeSortedColStatKey constructs a unique key representing cols that can be
 // used as the key in a map, and also sorts cols as a side-effect.
 func MakeSortedColStatKey(cols []descpb.ColumnID) string {
-	var colSet intsets.FastIntSet
+	var colSet intsets.Fast
 	for _, c := range cols {
 		colSet.Add(int(c))
 	}

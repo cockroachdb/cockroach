@@ -836,7 +836,7 @@ func formatValues(colNames []string, values tree.Datums) string {
 // It is allowed to check only a subset of the active checks (the optimizer
 // could in principle determine that some checks can't fail because they
 // statically evaluate to true for the entire input).
-type checkSet = intsets.FastIntSet
+type checkSet = intsets.Fast
 
 // When executing mutations, we calculate a boolean column for each check
 // indicating if the check passed. This function verifies that each result is

@@ -193,7 +193,7 @@ func (b *ConstraintBuilder) Build(
 	var inputProjections memo.ProjectionsExpr
 	var lookupExpr memo.FiltersExpr
 	var constFilters memo.FiltersExpr
-	var filterOrdsToExclude intsets.FastIntSet
+	var filterOrdsToExclude intsets.Fast
 	foundLookupCols := false
 	lookupExprRequired := false
 	remainingFilters := make(memo.FiltersExpr, 0, len(onFilters))

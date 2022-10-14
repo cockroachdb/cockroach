@@ -199,7 +199,7 @@ func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool,
 		return true, nil
 	}
 
-	var watchedColumnIDs intsets.FastIntSet
+	var watchedColumnIDs intsets.Fast
 	if err := e.Before.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		if _, ok := specifiedColumnFamiliesForTable[family.Name]; ok {
 			for _, columnID := range family.ColumnIDs {

@@ -505,7 +505,7 @@ func (c *CustomFuncs) PruneWindows(needed opt.ColSet, windows memo.WindowsExpr) 
 // are randomly disabled for testing. It is used to prevent propagating the
 // PruneCols property when the corresponding column-pruning normalization rule
 // is disabled. This prevents rule cycles during testing.
-func DerivePruneCols(e memo.RelExpr, disabledRules intsets.FastIntSet) opt.ColSet {
+func DerivePruneCols(e memo.RelExpr, disabledRules intsets.Fast) opt.ColSet {
 	relProps := e.Relational()
 	if relProps.IsAvailable(props.PruneCols) {
 		return relProps.Rule.PruneCols

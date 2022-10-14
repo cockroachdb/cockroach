@@ -2322,9 +2322,9 @@ type typeCheckExprsState struct {
 
 	exprs           []Expr
 	typedExprs      []TypedExpr
-	constIdxs       intsets.FastIntSet // index into exprs/typedExprs
-	placeholderIdxs intsets.FastIntSet // index into exprs/typedExprs
-	resolvableIdxs  intsets.FastIntSet // index into exprs/typedExprs
+	constIdxs       intsets.Fast // index into exprs/typedExprs
+	placeholderIdxs intsets.Fast // index into exprs/typedExprs
+	resolvableIdxs  intsets.Fast // index into exprs/typedExprs
 }
 
 // typeCheckSameTypedExprs type checks a list of expressions, asserting that all
@@ -2540,11 +2540,7 @@ func typeCheckConstsAndPlaceholdersWithDesired(
 // - All other Exprs
 func typeCheckSplitExprs(
 	semaCtx *SemaContext, exprs []Expr,
-) (
-	constIdxs intsets.FastIntSet,
-	placeholderIdxs intsets.FastIntSet,
-	resolvableIdxs intsets.FastIntSet,
-) {
+) (constIdxs intsets.Fast, placeholderIdxs intsets.Fast, resolvableIdxs intsets.Fast) {
 	for i, expr := range exprs {
 		switch {
 		case isConstant(expr):

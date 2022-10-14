@@ -95,7 +95,7 @@ func runMultiTenantDistSQL(
 	require.NoError(t, err)
 
 	// Create numInstances sql pods and spread them evenly across the machines.
-	var nodes intsets.FastIntSet
+	var nodes intsets.Fast
 	nodes.Add(1)
 	for i := 1; i < numInstances; i++ {
 		node := ((i + 1) % c.Spec().NodeCount) + 1
@@ -156,7 +156,7 @@ func runMultiTenantDistSQL(
 			continue
 		}
 
-		var nodesInPlan intsets.FastIntSet
+		var nodesInPlan intsets.Fast
 		for res.Next() {
 			str := ""
 			err = res.Scan(&str)

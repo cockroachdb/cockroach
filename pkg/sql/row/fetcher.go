@@ -99,7 +99,7 @@ type tableInfo struct {
 
 	// The set of indexes into spec.FetchedColumns that are required for columns
 	// in the value part.
-	neededValueColsByIdx intsets.FastIntSet
+	neededValueColsByIdx intsets.Fast
 
 	// The number of needed columns from the value part of the row. Once we've
 	// seen this number of value columns for a particular row, we can stop

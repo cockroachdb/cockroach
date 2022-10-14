@@ -436,7 +436,7 @@ func intersectTypeSlices(xs, ys []*types.T) (out []*types.T) {
 // The function takes a slice of Exprs and indexes, but expects all the indexed
 // Exprs to wrap a Constant. The reason it does no take a slice of Constants
 // instead is to avoid forcing callers to allocate separate slices of Constant.
-func commonConstantType(vals []Expr, idxs intsets.FastIntSet) (*types.T, bool) {
+func commonConstantType(vals []Expr, idxs intsets.Fast) (*types.T, bool) {
 	var candidates []*types.T
 
 	for i, ok := idxs.Next(0); ok; i, ok = idxs.Next(i + 1) {

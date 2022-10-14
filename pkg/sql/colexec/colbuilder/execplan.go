@@ -131,7 +131,7 @@ type opResult struct {
 }
 
 func needHashAggregator(aggSpec *execinfrapb.AggregatorSpec) (bool, error) {
-	var groupCols, orderedCols intsets.FastIntSet
+	var groupCols, orderedCols intsets.Fast
 	for _, col := range aggSpec.OrderedGroupCols {
 		orderedCols.Add(int(col))
 	}

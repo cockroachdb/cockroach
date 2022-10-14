@@ -55,7 +55,7 @@ type rangefeedMuxer struct {
 
 type muxClientState struct {
 	client  roachpb.Internal_MuxRangeFeedClient
-	streams intsets.FastIntSet
+	streams intsets.Fast
 	cancel  context.CancelFunc
 }
 
