@@ -61,9 +61,6 @@ func (s *Fast) Add(i int) {
 	if s.large == nil {
 		s.large = new(Sparse)
 	}
-	if i >= smallCutoff {
-		i -= smallCutoff
-	}
 	s.large.Add(i)
 }
 
@@ -92,9 +89,6 @@ func (s *Fast) Remove(i int) {
 		return
 	}
 	if s.large != nil {
-		if i >= smallCutoff {
-			i -= smallCutoff
-		}
 		s.large.Remove(i)
 	}
 }
@@ -105,9 +99,6 @@ func (s Fast) Contains(i int) bool {
 		return s.small.IsSet(i)
 	}
 	if s.large != nil {
-		if i >= smallCutoff {
-			i -= smallCutoff
-		}
 		return s.large.Contains(i)
 	}
 	return false
@@ -145,13 +136,8 @@ func (s Fast) Next(startVal int) (int, bool) {
 		}
 	}
 	if s.large != nil {
-		startVal -= smallCutoff
-		if startVal < 0 {
-			// We already searched for negative values in large above.
-			startVal = 0
-		}
 		res := s.large.LowerBound(startVal)
-		return res + smallCutoff, res != MaxInt
+		return res, res != MaxInt
 	}
 	return MaxInt, false
 }
@@ -175,7 +161,7 @@ func (s Fast) ForEach(f func(i int)) {
 	}
 	if !s.fitsInSmall() {
 		for x := s.large.LowerBound(0); x != MaxInt; x = s.large.LowerBound(x + 1) {
-			f(x + smallCutoff)
+			f(x)
 		}
 	}
 }
