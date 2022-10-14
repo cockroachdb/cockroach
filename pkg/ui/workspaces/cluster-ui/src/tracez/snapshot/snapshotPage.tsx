@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import {
@@ -32,11 +32,11 @@ const cx = classNames.bind(styles);
 
 export interface SnapshotPageStateProps {
   sort: SortSetting;
-  snapshotsError: Error | null;
+  snapshotsError?: Error;
   snapshotsLoading: boolean;
-  snapshots: ListTracingSnapshotsResponseMessage;
+  snapshots?: ListTracingSnapshotsResponseMessage;
   snapshot: GetTracingSnapshotResponseMessage;
-  snapshotError: Error | null;
+  snapshotError?: Error;
   snapshotLoading: boolean;
 }
 
@@ -46,9 +46,10 @@ export interface SnapshotPageDispatchProps {
   refreshSnapshot: (id: number) => void;
 }
 
+type UrlParams = Partial<Record<"ascending" | "columnTitle", string>>;
 export type SnapshotPageProps = SnapshotPageStateProps &
   SnapshotPageDispatchProps &
-  RouteComponentProps;
+  RouteComponentProps<UrlParams>;
 
 export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
   const {
@@ -62,27 +63,26 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
     setSort,
   } = props;
 
-  const searchParams = new URLSearchParams(history.location.search);
-
   // Sort Settings.
-  const ascending = (searchParams.get("ascending") || undefined) === "true";
-  const columnTitle = searchParams.get("columnTitle") || "";
+  const ascending = match.params.ascending === "true";
+  const columnTitle = match.params.columnTitle || "";
 
   const snapshotIDStr = getMatchParamByName(match, "snapshotID");
 
   useEffect(() => {
     refreshSnapshots();
-  });
+  }, [refreshSnapshots]);
+
+  const snapArray = snapshots?.snapshots;
 
   useEffect(() => {
-    if (snapshotIDStr || !snapshots) {
+    if (snapshotIDStr || !snapArray) {
       return;
     }
-    const snapArray = snapshots.snapshots;
     const lastSnapshotID = snapArray[snapArray.length - 1].snapshot_id;
     history.location.pathname = "/debug/tracez_v2/snapshot/" + lastSnapshotID;
     history.replace(history.location);
-  }, [snapshots, snapshotIDStr, history]);
+  }, [snapArray, snapshotIDStr, history]);
 
   useEffect(() => {
     if (!columnTitle) {
@@ -114,18 +114,27 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
     );
   };
 
-  const snapshotItems = !snapshots
-    ? []
-    : snapshots.snapshots.map(snapshotInfo => {
-        const id = snapshotInfo.snapshot_id.toString();
-        const time = TimestampToMoment(snapshotInfo.captured_at).format(
-          "MMM D, YYYY [at] HH:mm:ss",
-        );
-        return {
-          name: "Snapshot " + id + ": " + time,
-          value: id,
-        };
-      });
+  const [snapshotItems, snapshotName] = useMemo(() => {
+    if (!snapArray) {
+      return [[], ""];
+    }
+    let selectedName = "";
+    const items = snapArray.map(snapshotInfo => {
+      const id = snapshotInfo.snapshot_id.toString();
+      const time = TimestampToMoment(snapshotInfo.captured_at).format(
+        "MMM D, YYYY [at] HH:mm:ss",
+      );
+      const out = {
+        name: "Snapshot " + id + ": " + time,
+        value: id,
+      };
+      if (id === snapshotIDStr) {
+        selectedName = out.name;
+      }
+      return out;
+    });
+    return [items, selectedName];
+  }, [snapArray, snapshotIDStr]);
 
   const isLoading = props.snapshotsLoading || props.snapshotLoading;
   const error = props.snapshotsError || props.snapshotError;
@@ -137,11 +146,7 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
         <PageConfig>
           <PageConfigItem>
             <Dropdown items={snapshotItems} onChange={onSnapshotSelected}>
-              {snapshotIDStr &&
-                snapshotItems.length &&
-                snapshotItems.find(option => option["value"] === snapshotIDStr)[
-                  "name"
-                ]}
+              {snapshotName}
             </Dropdown>
           </PageConfigItem>
         </PageConfig>
