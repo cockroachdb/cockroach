@@ -710,7 +710,7 @@ func NewLeaseManager(
 	lm := &Manager{
 		storage: storage{
 			nodeIDContainer:  nodeIDContainer,
-			writer:           &ieWriter{ie: internalExecutor},
+			writer:           newKVWriter(codec, db, keys.LeaseTableID),
 			db:               db,
 			clock:            clock,
 			internalExecutor: internalExecutor,
