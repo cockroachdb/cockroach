@@ -102,10 +102,13 @@ func (t *leaseTest) cleanup() {
 }
 
 func (t *leaseTest) getLeases(descID descpb.ID) string {
-	sql := `
-SELECT version, "nodeID" FROM system.lease WHERE "descID" = $1 ORDER BY version, "nodeID"
+	const sql = `
+  SELECT version, "nodeID"
+    FROM system.lease
+   WHERE "descID" = $1 AND "nodeID" > $2
+ORDER BY version, "nodeID";
 `
-	rows, err := t.db.Query(sql, descID)
+	rows, err := t.db.Query(sql, descID, baseIDForLeaseTest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +122,7 @@ SELECT version, "nodeID" FROM system.lease WHERE "descID" = $1 ORDER BY version,
 		if err := rows.Scan(&version, &instanceID); err != nil {
 			t.Fatal(err)
 		}
-		fmt.Fprintf(&buf, "%s/%d/%d", prefix, version, instanceID)
+		fmt.Fprintf(&buf, "%s/%d/%d", prefix, version, instanceID-baseIDForLeaseTest)
 		prefix = " "
 	}
 	if err := rows.Err(); err != nil {
@@ -205,10 +208,13 @@ func (t *leaseTest) mustPublish(ctx context.Context, nodeID uint32, descID descp
 	}
 }
 
+const baseIDForLeaseTest = 1000
+
 // node gets a Manager corresponding to a mock node. A new lease
 // manager is initialized for each node. This allows for more complex
 // inter-node lease testing.
 func (t *leaseTest) node(nodeID uint32) *lease.Manager {
+	nodeID += baseIDForLeaseTest
 	mgr := t.nodes[nodeID]
 	if mgr == nil {
 		var c base.NodeIDContainer
@@ -256,7 +262,7 @@ func TestLeaseManager(testingT *testing.T) {
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
-	const descID = keys.LeaseTableID
+	descID := t.makeTableForTest()
 	ctx := context.Background()
 
 	// We can't acquire a lease on a non-existent table.
@@ -280,7 +286,7 @@ func TestLeaseManager(testingT *testing.T) {
 
 	// It is an error to acquire a lease for a specific version that doesn't
 	// exist yet.
-	expected = "version 2 for descriptor lease does not exist yet"
+	expected = "version 2 for descriptor foo does not exist yet"
 	if _, err := t.acquireMinVersion(1, descID, 2); !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -343,6 +349,14 @@ func TestLeaseManager(testingT *testing.T) {
 	t.expectLeases(descID, "/3/2 /4/1")
 }
 
+func (t *leaseTest) makeTableForTest() descpb.ID {
+	tdb := sqlutils.MakeSQLRunner(t.db)
+	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
+	var descID descpb.ID
+	tdb.QueryRow(t, "SELECT 'foo'::regclass::int").Scan(&descID)
+	return descID
+}
+
 func createTestServerParams() base.TestServerArgs {
 	params, _ := tests.CreateTestServerParams()
 	params.Settings = cluster.MakeTestingClusterSettings()
@@ -369,7 +383,7 @@ func TestLeaseManagerReacquire(testingT *testing.T) {
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
-	const descID = keys.LeaseTableID
+	descID := t.makeTableForTest()
 
 	l1 := t.mustAcquire(1, descID)
 	t.expectLeases(descID, "/1/1")
@@ -403,7 +417,7 @@ func TestLeaseManagerPublishVersionChanged(testingT *testing.T) {
 	t := newLeaseTest(testingT, params)
 	defer t.cleanup()
 
-	const descID = keys.LeaseTableID
+	descID := t.makeTableForTest()
 
 	// Start two goroutines that are concurrently trying to publish a new version
 	// of the descriptor. The first goroutine progresses to the update function
@@ -499,7 +513,7 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 	defer t.cleanup()
 
 	ctx := context.Background()
-	const descID = keys.LeaseTableID
+	descID := t.makeTableForTest()
 
 	{
 		l1 := t.mustAcquire(1, descID)
@@ -511,8 +525,8 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 		// starts draining.
 		l1RemovalTracker := leaseRemovalTracker.TrackRemoval(l1.Underlying())
 
-		t.nodes[1].SetDraining(ctx, true, nil /* reporter */)
-		t.nodes[2].SetDraining(ctx, true, nil /* reporter */)
+		t.node(1).SetDraining(ctx, true, nil /* reporter */)
+		t.node(2).SetDraining(ctx, true, nil /* reporter */)
 
 		// Leases cannot be acquired when in draining mode.
 		if _, err := t.acquire(1, descID); !testutils.IsError(err, "cannot acquire lease when draining") {
@@ -535,7 +549,7 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 	{
 		// Check that leases with a refcount of 0 are correctly kept in the
 		// store once the drain mode has been exited.
-		t.nodes[1].SetDraining(ctx, false, nil /* reporter */)
+		t.node(1).SetDraining(ctx, false, nil /* reporter */)
 		l1 := t.mustAcquire(1, descID)
 		t.mustRelease(1, l1, nil)
 		t.expectLeases(descID, "/1/1")
