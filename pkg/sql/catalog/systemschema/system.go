@@ -457,10 +457,11 @@ CREATE TABLE system.scheduled_jobs (
 
 	SqllivenessTableSchema = `
 CREATE TABLE system.sqlliveness (
-    session_id       BYTES NOT NULL,
-    expiration       DECIMAL NOT NULL,
-    CONSTRAINT "primary" PRIMARY KEY (session_id),
-  	FAMILY fam0_session_id_expiration (session_id, expiration)
+	crdb_region          BYTES NOT NULL,
+    session_uuid         BYTES NOT NULL,
+    expiration           DECIMAL NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (crdb_region, session_uuid),
+  	FAMILY "primary" (crdb_region, session_uuid, expiration)
 )`
 
 	MigrationsTableSchema = `
@@ -2002,19 +2003,27 @@ var (
 			catconstants.SqllivenessTableName,
 			keys.SqllivenessID,
 			[]descpb.ColumnDescriptor{
-				{Name: "session_id", ID: 1, Type: types.Bytes, Nullable: false},
+				{Name: "crdb_region", ID: 4, Type: types.Bytes, Nullable: false},
+				{Name: "session_uuid", ID: 3, Type: types.Bytes, Nullable: false},
 				{Name: "expiration", ID: 2, Type: types.Decimal, Nullable: false},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
-					Name:            "fam0_session_id_expiration",
+					Name:            "primary",
 					ID:              0,
-					ColumnNames:     []string{"session_id", "expiration"},
-					ColumnIDs:       []descpb.ColumnID{1, 2},
+					ColumnNames:     []string{"crdb_region", "session_uuid", "expiration"},
+					ColumnIDs:       []descpb.ColumnID{4, 3, 2},
 					DefaultColumnID: 2,
 				},
 			},
-			pk("session_id"),
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"crdb_region", "session_uuid"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4, 3},
+			},
 		))
 
 	// MigrationsTable is the descriptor for the migrations table. It stores facts

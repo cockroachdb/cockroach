@@ -941,7 +941,7 @@ func TestSQLLivenessExemption(t *testing.T) {
 	_ = r
 
 	codec := keys.MakeSQLCodec(tenantID)
-	key := codec.IndexPrefix(keys.SqllivenessID, 1)
+	key := codec.TablePrefix(keys.SqllivenessID)
 
 	// livenessValue returns the KV value for the one row in the
 	// system.sqlliveness table. The value contains the session expiration time

@@ -131,7 +131,7 @@ func NewTestingStorage(
 			return time.Duration(frac * float64(baseInterval.Nanoseconds()))
 		},
 		metrics: makeMetrics(),
-		table:   MakeTable(codec, sqllivenessTableID),
+		table:   MakeTable(settings, codec, sqllivenessTableID),
 	}
 	cacheConfig := cache.Config{
 		Policy: cache.CacheLRU,

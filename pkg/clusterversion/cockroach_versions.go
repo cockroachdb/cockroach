@@ -321,6 +321,11 @@ const (
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
 	// *************************************************
+
+	// RbrSqlliveness switches the system.sqlliveness descriptor to the new
+	// regional by row compatible format. It also causes the slstorage package
+	// to stop writing to the legacy rbt index.
+	RbrSqlliveness
 )
 
 // TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
@@ -518,6 +523,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     TenantNames,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     RbrSqlliveness,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
 	},
 
 	// *************************************************

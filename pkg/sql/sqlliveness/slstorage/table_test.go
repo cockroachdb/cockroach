@@ -18,10 +18,13 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -34,15 +37,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// test random read/writes to the table while stepping through the migration state
-// ensure the table can be converted to regional by row in the final migration state
+const rbtSqllivenessTable = `
+CREATE TABLE system.sqlliveness (
+		session_id         BYTES NOT NULL,
+		expiration         DECIMAL NOT NULL,
+		CONSTRAINT "primary" PRIMARY KEY (session_id),
+		FAMILY "primary" (session_id)
+);
+`
 
 func TestSqlLivenessTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		false,
+	)
+	require.NoError(t, clusterversion.Initialize(
+		context.Background(), clusterversion.TestingBinaryMinSupportedVersion, &settings.SV,
+	))
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{Settings: settings})
 	defer s.Stopper().Stop(ctx)
 
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
@@ -51,14 +69,24 @@ func TestSqlLivenessTable(t *testing.T) {
 	timeSource := timeutil.NewManualTime(t0)
 	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
 
-	setup := func(t *testing.T) slstorage.Table {
+	setup := func(t *testing.T, schema string) slstorage.Table {
 		dbName := t.Name()
-		tableID := newSystemTable(t, tDB, dbName, "sqlliveness", systemschema.SqllivenessTableSchema)
-		return slstorage.MakeTable(keys.SystemSQLCodec, tableID)
+		tableID := newSystemTable(t, tDB, dbName, "sqlliveness", schema)
+
+		settings := cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.TestingBinaryVersion,
+			clusterversion.TestingBinaryMinSupportedVersion,
+			false,
+		)
+		require.NoError(t, clusterversion.Initialize(
+			context.Background(), clusterversion.TestingBinaryMinSupportedVersion, &settings.SV,
+		))
+
+		return slstorage.MakeTable(settings, keys.SystemSQLCodec, tableID)
 	}
 
 	t.Run("NotFound", func(t *testing.T) {
-		table := setup(t)
+		table := setup(t, systemschema.SqllivenessTableSchema)
 		session, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
 		require.NoError(t, err)
 		require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -72,7 +100,7 @@ func TestSqlLivenessTable(t *testing.T) {
 	})
 
 	t.Run("CreateAndUpdate", func(t *testing.T) {
-		table := setup(t)
+		table := setup(t, systemschema.SqllivenessTableSchema)
 		session, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
 		require.NoError(t, err)
 
@@ -97,7 +125,7 @@ func TestSqlLivenessTable(t *testing.T) {
 	})
 
 	t.Run("DeleteSession", func(t *testing.T) {
-		table := setup(t)
+		table := setup(t, systemschema.SqllivenessTableSchema)
 		session, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
 		require.NoError(t, err)
 
@@ -118,8 +146,38 @@ func TestSqlLivenessTable(t *testing.T) {
 		}))
 	})
 
+	t.Run("LegacySession", func(t *testing.T) {
+		table := setup(t, rbtSqllivenessTable)
+		legacySession := sqlliveness.SessionID(uuid.MakeV4().GetBytes())
+		writeExpiration := clock.Now().Add(10, 00)
+
+		tDB.Exec(t,
+			fmt.Sprintf(`INSERT INTO "%s".sqlliveness (session_id, expiration) VALUES ($1, $2)`, t.Name()),
+			legacySession,
+			eval.TimestampToDecimal(writeExpiration))
+
+		require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			exists, expiration, err := table.GetExpiration(ctx, txn, legacySession)
+			if err != nil {
+				return err
+			}
+			require.True(t, exists)
+			require.Equal(t, expiration, writeExpiration)
+			return nil
+		}))
+
+		require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return table.Delete(ctx, txn, legacySession)
+		}))
+
+		row := tDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM "%s".sqlliveness`, t.Name()))
+		var count int
+		row.Scan(&count)
+		require.Equal(t, count, 0)
+	})
+
 	t.Run("RbtSql", func(t *testing.T) {
-		table := setup(t)
+		table := setup(t, rbtSqllivenessTable)
 		session, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
 		require.NoError(t, err)
 

@@ -1602,6 +1602,7 @@ system              public             630200280_46_1_not_null                  
 system              public             primary                                                                                                         system         public        sql_instances                    PRIMARY KEY      NO             NO
 system              public             630200280_39_1_not_null                                                                                         system         public        sqlliveness                      CHECK            NO             NO
 system              public             630200280_39_2_not_null                                                                                         system         public        sqlliveness                      CHECK            NO             NO
+system              public             630200280_39_3_not_null                                                                                         system         public        sqlliveness                      CHECK            NO             NO
 system              public             primary                                                                                                         system         public        sqlliveness                      PRIMARY KEY      NO             NO
 system              public             630200280_34_1_not_null                                                                                         system         public        statement_bundle_chunks          CHECK            NO             NO
 system              public             630200280_34_3_not_null                                                                                         system         public        statement_bundle_chunks          CHECK            NO             NO
@@ -1798,8 +1799,9 @@ system              public             630200280_37_2_not_null                  
 system              public             630200280_37_3_not_null                                                                                         created IS NOT NULL
 system              public             630200280_37_4_not_null                                                                                         owner IS NOT NULL
 system              public             630200280_37_9_not_null                                                                                         executor_type IS NOT NULL
-system              public             630200280_39_1_not_null                                                                                         session_id IS NOT NULL
-system              public             630200280_39_2_not_null                                                                                         expiration IS NOT NULL
+system              public             630200280_39_1_not_null                                                                                         crdb_region IS NOT NULL
+system              public             630200280_39_2_not_null                                                                                         session_uuid IS NOT NULL
+system              public             630200280_39_3_not_null                                                                                         expiration IS NOT NULL
 system              public             630200280_3_1_not_null                                                                                          id IS NOT NULL
 system              public             630200280_40_1_not_null                                                                                         major IS NOT NULL
 system              public             630200280_40_2_not_null                                                                                         minor IS NOT NULL
@@ -1927,7 +1929,8 @@ system         public        span_configurations              end_key           
 system         public        span_configurations              start_key                                                                                                 system              public             check_bounds
 system         public        span_configurations              start_key                                                                                                 system              public             primary
 system         public        sql_instances                    id                                                                                                        system              public             primary
-system         public        sqlliveness                      session_id                                                                                                system              public             primary
+system         public        sqlliveness                      crdb_region                                                                                               system              public             primary
+system         public        sqlliveness                      session_uuid                                                                                              system              public             primary
 system         public        statement_bundle_chunks          id                                                                                                        system              public             primary
 system         public        statement_diagnostics            id                                                                                                        system              public             primary
 system         public        statement_diagnostics_requests   id                                                                                                        system              public             primary
@@ -2190,8 +2193,9 @@ system         public        sql_instances                    addr              
 system         public        sql_instances                    id                                                                                                        1
 system         public        sql_instances                    locality                                                                                                  4
 system         public        sql_instances                    session_id                                                                                                3
+system         public        sqlliveness                      crdb_region                                                                                               4
 system         public        sqlliveness                      expiration                                                                                                2
-system         public        sqlliveness                      session_id                                                                                                1
+system         public        sqlliveness                      session_uuid                                                                                              3
 system         public        statement_bundle_chunks          data                                                                                                      3
 system         public        statement_bundle_chunks          description                                                                                               2
 system         public        statement_bundle_chunks          id                                                                                                        1

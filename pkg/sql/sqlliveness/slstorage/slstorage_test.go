@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -79,7 +80,8 @@ func TestStorage(t *testing.T) {
 		defer stopper.Stop(ctx)
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
-		const id = "asdf"
+		id, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+		require.NoError(t, err)
 		metrics := storage.Metrics()
 
 		{
@@ -123,8 +125,10 @@ func TestStorage(t *testing.T) {
 
 		// Create two records which will expire before nextGC.
 		exp := clock.Now().Add(gcInterval.Nanoseconds()-1, 0)
-		const id1 = "asdf"
-		const id2 = "ghjk"
+		id1, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+		require.NoError(t, err)
+		id2, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+		require.NoError(t, err)
 		{
 			require.NoError(t, storage.Insert(ctx, id1, exp))
 			require.NoError(t, storage.Insert(ctx, id2, exp))
@@ -224,7 +228,8 @@ func TestStorage(t *testing.T) {
 		storage.Start(ctx)
 
 		exp := clock.Now().Add(time.Second.Nanoseconds(), 0)
-		const id = "asdf"
+		id, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+		require.NoError(t, err)
 		metrics := storage.Metrics()
 
 		{
@@ -346,8 +351,11 @@ func TestConcurrentAccessesAndEvictions(t *testing.T) {
 			t.Helper()
 			state.Lock()
 			defer state.Unlock()
+
+			sid, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+			require.NoError(t, err)
 			s := session{
-				id:         sqlliveness.SessionID(uuid.MakeV4().String()),
+				id:         sqlliveness.SessionID(sid),
 				expiration: clock.Now().Add(expiration.Nanoseconds(), 0),
 			}
 			require.NoError(t, storage.Insert(ctx, s.id, s.expiration))
@@ -518,7 +526,8 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 		cached := storage.CachedReader()
 		var alive bool
 		var g errgroup.Group
-		sid := sqlliveness.SessionID(t.Name())
+		sid, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+		require.NoError(t, err)
 		g.Go(func() (err error) {
 			alive, err = cached.IsAlive(ctx, sid)
 			return err
@@ -547,7 +556,8 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 		cached := storage.CachedReader()
 		var alive bool
 		var g errgroup.Group
-		sid := sqlliveness.SessionID(t.Name())
+		sid, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+		require.NoError(t, err)
 		toCancel, cancel := context.WithCancel(ctx)
 
 		before := storage.Metrics().IsAliveCacheMisses.Count()
@@ -595,7 +605,8 @@ func TestConcurrentAccessSynchronization(t *testing.T) {
 		cached := storage.CachedReader()
 		var alive bool
 		var g errgroup.Group
-		sid := sqlliveness.SessionID(t.Name())
+		sid, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+		require.NoError(t, err)
 		g.Go(func() (err error) {
 			alive, err = cached.IsAlive(ctx, sid)
 			return err
@@ -671,8 +682,8 @@ func TestDeleteMidUpdateFails(t *testing.T) {
 	)
 
 	// Insert a session.
-	ID := sqlliveness.SessionID("foo")
-	require.NoError(t, storage.Insert(ctx, ID, s.Clock().Now()))
+	ID, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+	require.NoError(t, err)
 
 	// Install a filter which will send on this channel when we attempt
 	// to perform an update after the get has evaluated.

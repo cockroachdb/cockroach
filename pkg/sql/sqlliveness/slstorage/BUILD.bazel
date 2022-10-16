@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/multitenant",
@@ -53,6 +54,7 @@ go_test(
     deps = [
         ":slstorage",
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",
@@ -64,6 +66,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/enum",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sqlliveness",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
