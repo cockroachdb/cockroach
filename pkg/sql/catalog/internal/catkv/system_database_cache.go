@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -78,8 +77,6 @@ func (c *SystemDatabaseCache) lookupDescriptor(
 	_ clusterversion.ClusterVersion, id descpb.ID,
 ) catalog.Descriptor {
 	switch id {
-	case keys.SystemDatabaseID:
-		return systemschema.SystemDB
 	case keys.SystemPublicSchemaID:
 		return schemadesc.GetPublicSchema()
 	}
