@@ -400,6 +400,10 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.mu.flushErr != nil {
+		return s.mu.flushErr
+	}
+
 	s.mu.inflight++
 	if log.V(2) {
 		log.Infof(ctx, "emitting %d inflight records to kafka", s.mu.inflight)
