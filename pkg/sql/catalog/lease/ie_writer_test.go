@@ -12,6 +12,7 @@ package lease
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -19,37 +20,49 @@ import (
 )
 
 type ieWriter struct {
-	ie sqlutil.InternalExecutor
+	insertQuery string
+	deleteQuery string
+	ie          sqlutil.InternalExecutor
+}
+
+func newInternalExecutorWriter(ie sqlutil.InternalExecutor, tableName string) *ieWriter {
+	const (
+		deleteLease = `
+DELETE FROM %s
+      WHERE ("descID", version, "nodeID", expiration)
+            = ($1, $2, $3, $4);`
+		insertLease = `
+INSERT
+  INTO %s ("descID", version, "nodeID", expiration)
+VALUES ($1, $2, $3, $4)`
+	)
+	return &ieWriter{
+		ie:          ie,
+		insertQuery: fmt.Sprintf(insertLease, tableName),
+		deleteQuery: fmt.Sprintf(deleteLease, tableName),
+	}
 }
 
 func (w *ieWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	const deleteLease = `
-DELETE FROM system.public.lease
-      WHERE ("descID", version, "nodeID", expiration)
-            = ($1, $2, $3, $4);`
 	_, err := w.ie.Exec(
 		ctx,
 		"lease-release",
 		nil, /* txn */
-		deleteLease,
+		w.deleteQuery,
 		l.descID, l.version, l.instanceID, &l.expiration,
 	)
 	return err
 }
 
 func (w *ieWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	const insertLease = `
-INSERT
-  INTO system.public.lease ("descID", version, "nodeID", expiration)
-VALUES ($1, $2, $3, $4)`
-	count, err := w.ie.Exec(ctx, "lease-insert", txn, insertLease,
+	count, err := w.ie.Exec(ctx, "lease-insert", txn, w.insertQuery,
 		l.descID, l.version, l.instanceID, &l.expiration,
 	)
 	if err != nil {
 		return err
 	}
 	if count != 1 {
-		return errors.Errorf("%s: expected 1 result, found %d", insertLease, count)
+		return errors.Errorf("%s: expected 1 result, found %d", w.insertQuery, count)
 	}
 	return nil
 }
