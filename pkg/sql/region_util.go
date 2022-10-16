@@ -319,21 +319,19 @@ func getNumVotersAndNumReplicas(
 		}
 	case descpb.SurvivalGoal_REGION_FAILURE:
 		// The primary and secondary region each have two voters.
-		// maxFailuresBeforeUnavailability(numVotersForZoneSurvival) = 2.
+		// maxFailuresBeforeUnavailability(numVotersForRegionSurvival) = 2.
 		// We have 5 voters for survival mode region failure such that we can
 		// get quorum with 2 voters in the primary region + one voter outside.
 		// Every other region has one replica.
-
-		numRegionsWithTwoVoters := int32(1)
-		if regionConfig.HasSecondaryRegion() {
-			numRegionsWithTwoVoters = 2
-		}
-
 		numVoters = numVotersForRegionSurvival
-		// We place the maximum concurrent replicas that can fail before a range
-		// outage in the home region, and ensure that there's at least one replica
-		// in all other regions.
-		numReplicas = numRegionsWithTwoVoters*maxFailuresBeforeUnavailability(numVotersForRegionSurvival) + (numRegions - numRegionsWithTwoVoters)
+
+		// There are always 2 (i.e. maxFailuresBeforeUnavailability) replicas in the
+		// primary region, and 1 replica in every other region.
+		numReplicas = maxFailuresBeforeUnavailability(numVotersForRegionSurvival) + (numRegions - 1)
+		if regionConfig.HasSecondaryRegion() {
+			// If there is a secondary region, it gets an additional replica.
+			numReplicas++
+		}
 		if numReplicas < numVoters {
 			// NumReplicas cannot be less than NumVoters. If we have <= 4 regions, all
 			// replicas will be voting replicas.
