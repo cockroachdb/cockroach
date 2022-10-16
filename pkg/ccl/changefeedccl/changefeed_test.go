@@ -7327,6 +7327,7 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
+	skip.WithIssue(t, 90029)
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		knobs := f.(*kafkaFeedFactory).knobs
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
