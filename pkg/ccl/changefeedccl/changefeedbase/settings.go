@@ -221,8 +221,8 @@ var ActiveProtectedTimestampsEnabled = settings.RegisterBoolSetting(
 var BatchReductionRetryEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"changefeed.batch_reduction_retry_enabled",
-	"if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes",
-	true,
+	"*** DO NOT ENABLE ***; if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes",
+	false,
 )
 
 // UseMuxRangeFeed enables the use of MuxRangeFeed RPC.
