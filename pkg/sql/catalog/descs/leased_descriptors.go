@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -98,10 +97,6 @@ func (ld *leasedDescriptors) getByName(
 		return cached.(lease.LeasedDescriptor).Underlying(), false, nil
 	}
 
-	if systemschema.IsUnleasableSystemDescriptorByName(parentID, parentSchemaID, name) {
-		return nil, true, nil
-	}
-
 	readTimestamp := txn.ReadTimestamp()
 	ldesc, err := ld.lm.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
 	const setTxnDeadline = true
@@ -116,10 +111,6 @@ func (ld *leasedDescriptors) getByID(
 	// First, look to see if we already have the table in the shared cache.
 	if cached := ld.getCachedByID(ctx, id); cached != nil {
 		return cached, false, nil
-	}
-
-	if systemschema.IsUnleasableSystemDescriptorByID(id) {
-		return nil, true, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()

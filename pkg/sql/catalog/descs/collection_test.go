@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -975,30 +974,6 @@ func TestCollectionTimeTravelLookingTooFarBack(t *testing.T) {
 				return err
 			}
 			require.Empty(t, c)
-			return nil
-		}))
-	})
-	t.Run("system db lookup by name works", func(t *testing.T) {
-		require.NoError(t, goFarBackInTime(func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			db, err := col.GetImmutableDatabaseByName(
-				ctx, txn, catconstants.SystemDatabaseName, tree.DatabaseLookupFlags{},
-			)
-			if err != nil {
-				return err
-			}
-			require.NotNil(t, db)
-			return nil
-		}))
-	})
-	t.Run("system db lookup by ID works", func(t *testing.T) {
-		require.NoError(t, goFarBackInTime(func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			db, err := col.GetImmutableDescriptorByID(
-				ctx, txn, keys.SystemDatabaseID, tree.CommonLookupFlags{AvoidLeased: true},
-			)
-			if err != nil {
-				return err
-			}
-			require.NotNil(t, db)
 			return nil
 		}))
 	})
