@@ -24,7 +24,6 @@ import (
 type TestInstanceProvider interface {
 	sqlinstance.Provider
 	InitForTest(context.Context)
-	ShutdownSQLInstanceForTest(context.Context)
 }
 
 // NewTestInstanceProvider initializes a instanceprovider.provider
@@ -43,12 +42,7 @@ func NewTestInstanceProvider(
 	return p
 }
 
-// InitAndWaitForTest explicitly calls initAndWait for testing purposes.
+// InitForTest explicitly calls initAndWait for testing purposes.
 func (p *provider) InitForTest(ctx context.Context) {
 	_ = p.init(ctx)
-}
-
-// ShutdownSQLInstanceForTest explicitly calls shutdownSQLInstance for testing purposes.
-func (p *provider) ShutdownSQLInstanceForTest(ctx context.Context) {
-	p.shutdownSQLInstance(ctx)
 }

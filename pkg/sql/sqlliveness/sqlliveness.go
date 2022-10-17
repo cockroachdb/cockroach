@@ -88,9 +88,6 @@ type Session interface {
 	// this time will be assured that any resources claimed under this session
 	// are known to be valid.
 	Expiration() hlc.Timestamp
-
-	// RegisterCallbackForSessionExpiry registers a callback to be executed when the session expires.
-	RegisterCallbackForSessionExpiry(func(ctx context.Context))
 }
 
 // Reader abstracts over the state of session records.
