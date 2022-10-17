@@ -555,9 +555,8 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 func ChecksumRange(
 	ctx context.Context, desc roachpb.RangeDescriptor, snap storage.Reader,
 ) ([]byte, error) {
-	var r *Replica // TODO(pavelkalinnikov): make this less ugly.
 	lim := quotapool.NewRateLimiter("test", 1<<30, 1<<30)
-	res, err := r.sha512(ctx, desc, snap, roachpb.ChecksumMode_CHECK_FULL, lim)
+	res, err := replicaSHA512(ctx, desc, snap, roachpb.ChecksumMode_CHECK_FULL, lim)
 	if err != nil {
 		return nil, err
 	}

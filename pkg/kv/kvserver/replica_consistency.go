@@ -480,9 +480,10 @@ type replicaHash struct {
 	PersistedMS, RecomputedMS enginepb.MVCCStats
 }
 
-// sha512 computes the SHA512 hash of all the replica data at the snapshot.
-// It will dump all the kv data into snapshot if it is provided.
-func (*Replica) sha512(
+// replicaSHA512 computes the SHA512 hash of the replica data at the given
+// snapshot. Either the full replicated state is taken into account, or only
+// RangeAppliedState (which includes MVCC stats), depending on the mode.
+func replicaSHA512(
 	ctx context.Context,
 	desc roachpb.RangeDescriptor,
 	snap storage.Reader,
@@ -690,7 +691,7 @@ func (r *Replica) computeChecksumPostApply(
 		); err != nil {
 			log.Errorf(ctx, "checksum collection did not join: %v", err)
 		} else {
-			result, err := r.sha512(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter)
+			result, err := replicaSHA512(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter)
 			if err != nil {
 				log.Errorf(ctx, "checksum computation failed: %v", err)
 				result = nil
