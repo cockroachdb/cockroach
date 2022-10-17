@@ -869,6 +869,8 @@ type LockTableView interface {
 	// appear to be locked to itself (false is returned). The method is used by
 	// requests in conjunction with the SkipLocked wait policy to determine which
 	// keys they should skip over during evaluation.
+	//
+	// If true is returned, the accompanying txn must be non-nil.
 	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
 }
 
@@ -3592,6 +3594,9 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 		}
 		if err := protoutil.Unmarshal(reader.Value(), &meta); err != nil {
 			return nil, err
+		}
+		if meta.Txn == nil {
+			return nil, errors.AssertionFailedf("unexpected nil MVCCMetadata.Txn: %v", meta)
 		}
 		intents = append(intents, roachpb.MakeIntent(meta.Txn, key.Key))
 	}

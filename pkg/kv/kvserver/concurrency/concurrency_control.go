@@ -773,6 +773,8 @@ type lockTableGuard interface {
 	// returned. A transaction's own lock does not appear to be locked to itself.
 	// The method is used by requests in conjunction with the SkipLocked wait
 	// policy to determine which keys they should skip over during evaluation.
+	//
+	// If true is returned, the accompanying txn must be non-nil.
 	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
 }
 

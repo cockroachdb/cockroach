@@ -1413,6 +1413,10 @@ func (p *pebbleMVCCScanner) addCurIntent(ctx context.Context) bool {
 func (p *pebbleMVCCScanner) addKeyAndMetaAsIntent(
 	ctx context.Context, key roachpb.Key, txn *enginepb.TxnMeta,
 ) bool {
+	if txn != nil {
+		p.err = errors.AssertionFailedf("nil txn passed to addKeyAndMetaAsIntent")
+		return false
+	}
 	mvccKey := MakeMVCCMetadataKey(key)
 	mvccVal := enginepb.MVCCMetadata{Txn: txn}
 	encodedKey := EncodeMVCCKey(mvccKey)
