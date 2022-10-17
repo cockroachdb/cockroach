@@ -8,6 +8,7 @@ go_library(
     name = "kvserver",
     srcs = [
         "addressing.go",
+        "allocation_op.go",
         "consistency_queue.go",
         "debug_print.go",
         "doc.go",
