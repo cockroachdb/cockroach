@@ -33,7 +33,14 @@ func CheckDestinationPrivileges(ctx context.Context, p sql.PlanHookState, to []s
 	if isAdmin {
 		return nil
 	}
+	return CheckNonAdminDestinationPrivileges(ctx, p, to)
+}
 
+// CheckNonAdminDestinationPrivileges iterates over the External Storage URIs
+// and ensures the non-admin user has adequate privileges to use each of them.
+func CheckNonAdminDestinationPrivileges(
+	ctx context.Context, p sql.PlanHookState, to []string,
+) error {
 	// Check destination specific privileges.
 	for _, uri := range to {
 		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())

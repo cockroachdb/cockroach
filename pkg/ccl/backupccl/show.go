@@ -242,6 +242,11 @@ func showBackupPlanHook(
 		infoReader = manifestInfoReader{shower: shower}
 	}
 
+	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
@@ -276,8 +281,10 @@ func showBackupPlanHook(
 					"https://www.cockroachlabs.com/docs/stable/show-backup.html"))
 		}
 
-		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, dest); err != nil {
-			return err
+		if !isAdmin {
+			if err := cloudprivilege.CheckNonAdminDestinationPrivileges(ctx, p, dest); err != nil {
+				return err
+			}
 		}
 
 		fullyResolvedDest := dest
@@ -1336,6 +1343,11 @@ func showBackupsInCollectionPlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	isAdmin, err := p.UserHasAdminRole(ctx, p.User())
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, backup.StatementTag())
 		defer span.Finish()
@@ -1345,8 +1357,10 @@ func showBackupsInCollectionPlanHook(
 			return err
 		}
 
-		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, collection); err != nil {
-			return err
+		if !isAdmin {
+			if err := cloudprivilege.CheckNonAdminDestinationPrivileges(ctx, p, collection); err != nil {
+				return err
+			}
 		}
 
 		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, collection[0], p.User())
