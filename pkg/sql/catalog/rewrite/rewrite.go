@@ -163,6 +163,20 @@ func TableDescs(
 			}
 		}
 
+		origUniqueWithoutIndexConstraints := table.UniqueWithoutIndexConstraints
+		table.UniqueWithoutIndexConstraints = nil
+		for _, unique := range origUniqueWithoutIndexConstraints {
+			if rewrite, ok := descriptorRewrites[unique.TableID]; ok {
+				unique.TableID = rewrite.ID
+				table.UniqueWithoutIndexConstraints = append(table.UniqueWithoutIndexConstraints, unique)
+			} else {
+				// A table's UniqueWithoutIndexConstraint.TableID references itself, and
+				// we should always find a rewrite for the table being restored.
+				return errors.AssertionFailedf("cannot restore %q because referenced table ID in "+
+					"UniqueWithoutIndexConstraint %d was not found", table.Name, unique.TableID)
+			}
+		}
+
 		if table.IsSequence() && table.SequenceOpts.HasOwner() {
 			if ownerRewrite, ok := descriptorRewrites[table.SequenceOpts.SequenceOwner.OwnerTableID]; ok {
 				table.SequenceOpts.SequenceOwner.OwnerTableID = ownerRewrite.ID
