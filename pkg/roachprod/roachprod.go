@@ -925,12 +925,11 @@ func urlGenerator(
 			config.path = "/" + config.path
 		}
 		url := fmt.Sprintf("%s://%s:%d%s", scheme, host, config.port, config.path)
+		urls = append(urls, url)
 		if config.openInBrowser {
 			if err := exec.Command("python", "-m", "webbrowser", url).Run(); err != nil {
 				return nil, err
 			}
-		} else {
-			urls = append(urls, url)
 		}
 	}
 	return urls, nil
