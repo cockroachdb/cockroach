@@ -9,7 +9,11 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { IndexDetailsPageData, util } from "@cockroachlabs/cluster-ui";
+import {
+  IndexDetailsPageData,
+  util,
+  RecommendationType as RecType,
+} from "@cockroachlabs/cluster-ui";
 import { AdminUIState } from "src/redux/state";
 import { RouteComponentProps } from "react-router";
 import { getMatchParamByName } from "src/util/query";
@@ -47,8 +51,14 @@ export const mapStateToProps = createSelector(
         indexRec => indexRec.index_id === details.statistics.key.index_id,
       ) || [];
     const indexRecommendations = filteredIndexRecommendations.map(indexRec => {
+      let type: RecType = "Unknown";
+      switch (RecommendationType[indexRec.type].toString()) {
+        case "DROP_UNUSED":
+          type = "DROP_UNUSED";
+      }
+
       return {
-        type: RecommendationType[indexRec.type].toString(),
+        type: type,
         reason: indexRec.reason,
       };
     });

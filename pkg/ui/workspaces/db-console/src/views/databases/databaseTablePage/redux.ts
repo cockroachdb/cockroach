@@ -11,7 +11,11 @@
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
 import _ from "lodash";
-import { DatabaseTablePageData, util } from "@cockroachlabs/cluster-ui";
+import {
+  DatabaseTablePageData,
+  util,
+  RecommendationType as RecType,
+} from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
 import {
@@ -95,8 +99,13 @@ export const mapStateToProps = createSelector(
           ) || [];
         const indexRecommendations = filteredIndexRecommendations.map(
           indexRec => {
+            let type: RecType = "Unknown";
+            switch (RecommendationType[indexRec.type].toString()) {
+              case "DROP_UNUSED":
+                type = "DROP_UNUSED";
+            }
             return {
-              type: RecommendationType[indexRec.type].toString(),
+              type: type,
               reason: indexRec.reason,
             };
           },
