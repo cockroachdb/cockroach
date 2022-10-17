@@ -102,6 +102,17 @@ type RemoteClockMonitor struct {
 	metrics RemoteClockMetrics
 }
 
+// TestingResetLatencyInfos will clear all latency info from the clock monitor.
+// It is intended to be used in tests when enabling or disabling injected
+// latency.
+func (r *RemoteClockMonitor) TestingResetLatencyInfos() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for a := range r.mu.latencyInfos {
+		delete(r.mu.latencyInfos, a)
+	}
+}
+
 // newRemoteClockMonitor returns a monitor with the given server clock.
 func newRemoteClockMonitor(
 	clock hlc.WallClock,

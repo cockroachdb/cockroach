@@ -102,8 +102,8 @@ func startListenRPCAndSQL(
 
 	anyL := m.Match(cmux.Any())
 	if serverTestKnobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok {
-		if serverTestKnobs.ContextTestingKnobs.ArtificialLatencyMap != nil {
-			anyL = rpc.NewDelayingListener(anyL)
+		if serverTestKnobs.ContextTestingKnobs.InjectedLatencyOracle != nil {
+			anyL = rpc.NewDelayingListener(anyL, serverTestKnobs.ContextTestingKnobs.InjectedLatencyEnabled)
 		}
 	}
 

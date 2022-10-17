@@ -319,28 +319,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			// Now, all servers have been started enough to know their own RPC serving
 			// addresses, but nothing else. Assemble the artificial latency map.
 			c.infoLog(ctx, "initializing latency map")
-			for i, serv := range c.servers {
-				latencyMap := serv.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
-				srcLocality, ok := serv.Cfg.Locality.Find("region")
-				if !ok {
-					continue
-				}
-				srcLocalityMap, ok := regionToRegionToLatency[srcLocality]
-				if !ok {
-					continue
-				}
-				for j, dst := range c.servers {
-					if i == j {
-						continue
-					}
-					dstLocality, ok := dst.Cfg.Locality.Find("region")
-					if !ok {
-						continue
-					}
-					latency := srcLocalityMap[dstLocality]
-					latencyMap[dst.ServingRPCAddr()] = latency
-				}
-			}
+			localityLatencies.Apply(c)
 		}
 		return nil
 	}(phaseCtx); err != nil {
@@ -389,7 +368,8 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 
 			c.tenantServers = make([]serverutils.TestTenantInterface, c.demoCtx.NumNodes)
 			for i := 0; i < c.demoCtx.NumNodes; i++ {
-				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
+				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).
+					ContextTestingKnobs.InjectedLatencyOracle
 				c.infoLog(ctx, "starting tenant node %d", i)
 				tenantStopper := stop.NewStopper()
 				tenID := uint64(i + 2)
@@ -409,7 +389,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							ContextTestingKnobs: rpc.ContextTestingKnobs{
-								ArtificialLatencyMap: latencyMap,
+								InjectedLatencyOracle: latencyMap,
 							},
 						},
 					},
@@ -551,7 +531,7 @@ func (c *transientCluster) createAndAddNode(
 		// started listening on RPC, and before they proceed with their
 		// startup routine.
 		serverKnobs.ContextTestingKnobs = rpc.ContextTestingKnobs{
-			ArtificialLatencyMap: make(map[string]int),
+			InjectedLatencyOracle: make(rpc.InjectedLatencyMap),
 		}
 	}
 
@@ -1416,6 +1396,14 @@ func (s unixSocketDetails) String() string {
 
 func (c *transientCluster) NumNodes() int {
 	return len(c.servers)
+}
+
+func (c *transientCluster) NumServers() int {
+	return len(c.servers)
+}
+
+func (c *transientCluster) Server(i int) serverutils.TestServerInterface {
+	return c.servers[i]
 }
 
 func (c *transientCluster) GetLocality(nodeID int32) string {
