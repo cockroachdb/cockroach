@@ -1707,6 +1707,12 @@ func (s *Server) Stop() {
 	s.stopper.Stop(context.Background())
 }
 
+// ShutdownRequested returns a channel that is signaled when a subsystem wants
+// the server to be shut down.
+func (s *Server) ShutdownRequested() <-chan error {
+	return s.sqlServer.ShutdownRequested()
+}
+
 // TempDir returns the filepath of the temporary directory used for temp storage.
 // It is empty for an in-memory temp storage.
 func (s *Server) TempDir() string {
