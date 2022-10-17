@@ -192,3 +192,88 @@ func MakeBindingPropsForRecursiveCTE(
 	}
 	return bindingProps
 }
+
+// CanAddRecursiveLimit traverses the given expression tree and checks whether a
+// limit that applies to all WithScanExprs with the given ID also applies to the
+// given expression. This is the case when the expression does not duplicate
+// input rows or add new ones. For example, a limit on the input of a DistinctOn
+// always applies to the DistinctOn, but the same is not true for a
+// ScalarGroupBy because it returns one row when the input returns zero rows.
+// This check is used to infer cardinality for recursive CTE expressions.
+//
+// dedupCols describes the set of columns which are de-duplicated by an ancestor
+// of the given expression. This is useful for handling cases where a join
+// duplicates input rows (thus invalidating a limit on input rows) and a later
+// operator de-duplicates (making the limit valid once more).
+func (c *CustomFuncs) CanAddRecursiveLimit(
+	expr memo.RelExpr, withID opt.WithID, dedupCols opt.ColSet,
+) bool {
+	switch t := expr.(type) {
+	case *memo.WithScanExpr:
+		return t.With == withID
+	case *memo.ProjectExpr, *memo.SelectExpr, *memo.LimitExpr,
+		*memo.OrdinalityExpr, *memo.WindowExpr:
+		// The operators never add rows to the input, although they can remove them.
+		// Therefore, a limit that applies to the input also applies to the output
+		// of these operators. In the case of a LimitExpr, we assume the limit is
+		// larger than the candidate limit since if this wasn't the case, the limit
+		// should have been propagated to the expression with which
+		// CanAddRecursiveLimit was originally called.
+		return c.CanAddRecursiveLimit(t.Child(0).(memo.RelExpr), withID, dedupCols)
+	case *memo.DistinctOnExpr, *memo.GroupByExpr:
+		// DistinctOn and GroupBy expressions de-duplicate the grouping columns.
+		private := t.Private().(*memo.GroupingPrivate)
+		dedupCols = private.GroupingCols
+		return c.CanAddRecursiveLimit(t.Child(0).(memo.RelExpr), withID, dedupCols)
+	case *memo.InnerJoinExpr:
+		left, right := t.Child(0).(memo.RelExpr), t.Child(1).(memo.RelExpr)
+		if c.JoinDoesNotDuplicateLeftRows(t) ||
+			(!dedupCols.Empty() && dedupCols.SubsetOf(left.Relational().OutputCols)) {
+			// Either this join will not de-duplicate left rows, or any duplication
+			// will be reversed by an ancestor DistinctOn or GroupBy. It is sufficient
+			// to check whether the de-duplicated columns is a subset of the left
+			// output columns because grouping on a strict subset of columns always
+			// implies grouping on the containing set. In other words, grouping on a
+			// subset is equivalent to first grouping on the containing set, then
+			// grouping on the subset.
+			if c.CanAddRecursiveLimit(left, withID, dedupCols) {
+				return true
+			}
+		}
+		if c.JoinDoesNotDuplicateRightRows(t) ||
+			(!dedupCols.Empty() && dedupCols.SubsetOf(right.Relational().OutputCols)) {
+			// This join will not duplicate right rows, so a limit applying to the
+			// right input applies to the output of the join.
+			if c.CanAddRecursiveLimit(right, withID, dedupCols) {
+				return true
+			}
+		}
+	case *memo.LeftJoinExpr:
+		// We can't propagate a limit through the right side of a LeftJoin because
+		// the join will add unmatched left rows, meaning the cardinality will
+		// always be at least that of the left input even if the right input has a
+		// limit. FullJoins can't be considered at all here for the same reasons.
+		left := t.Child(0).(memo.RelExpr)
+		if c.JoinDoesNotDuplicateLeftRows(t) ||
+			(!dedupCols.Empty() && dedupCols.SubsetOf(left.Relational().OutputCols)) {
+			// This join will not duplicate left rows, so a limit applying to the left
+			// input applies to the output of the join.
+			if c.CanAddRecursiveLimit(left, withID, dedupCols) {
+				return true
+			}
+		}
+	case *memo.SemiJoinExpr, *memo.AntiJoinExpr:
+		// SemiJoins and AntiJoins never duplicate left rows (and don't output right
+		// rows).
+		return c.CanAddRecursiveLimit(t.Child(0).(memo.RelExpr), withID, dedupCols)
+	case *memo.WithExpr:
+		return c.CanAddRecursiveLimit(t.Main, withID, dedupCols)
+	}
+	return false
+}
+
+// GetRecursiveWithID returns the WithID associated with the recursive CTE
+// corresponding to the given private.
+func (c *CustomFuncs) GetRecursiveWithID(private *memo.RecursiveCTEPrivate) opt.WithID {
+	return private.WithID
+}
