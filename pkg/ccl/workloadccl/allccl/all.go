@@ -21,6 +21,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/geospatial"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/indexes"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/insights"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/jsonload"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ledger"
