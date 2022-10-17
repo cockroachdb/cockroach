@@ -306,6 +306,14 @@ const (
 	// heuristics to identify invalid table descriptors for userfile-related
 	// descriptors.
 	FixUserfileRelatedDescriptorCorruption
+
+	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
+	V22_2
+
+	// V23_1_Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from 22.2 to 23.1.
+	V23_1Start
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -496,6 +504,14 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     FixUserfileRelatedDescriptorCorruption,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 76},
 	},
+	{
+		Key:     V22_2,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 0},
+	},
+	{
+		Key:     V23_1Start,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 2},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -543,6 +559,14 @@ var versionsSingleton = func() keyedVersions {
 	}
 	return rawVersionsSingleton
 }()
+
+// V23_1 is a placeholder that will eventually be replaced by the actual 23.1
+// version Key, but in the meantime it points to the latest Key. The placeholder
+// is defined so that it can be referenced in code that simply wants to check if
+// a cluster is running 23.1 and has completed all associated migrations; most
+// version gates can use this instead of defining their own version key if all
+// simply need to check is that the cluster has upgraded to 23.1.
+var V23_1 = versionsSingleton[len(versionsSingleton)-1].Key
 
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
 // feels out of place. A "cluster version" and a "binary version" are two
