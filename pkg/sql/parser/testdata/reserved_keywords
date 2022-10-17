@@ -1,0 +1,122 @@
+parse
+CREATE TABLE nothing (nothing INT)
+----
+CREATE TABLE nothing (nothing INT8) -- normalized!
+CREATE TABLE nothing (nothing INT8) -- fully parenthesized
+CREATE TABLE nothing (nothing INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+SELECT nothing(nothing + 1) AS nothing
+----
+SELECT nothing(nothing + 1) AS nothing
+SELECT (nothing(((nothing) + (1)))) AS nothing -- fully parenthesized
+SELECT nothing(nothing + _) AS nothing -- literals removed
+SELECT nothing(_ + 1) AS _ -- identifiers removed
+
+parse
+SET a = nothing
+----
+SET a = nothing
+SET a = (nothing) -- fully parenthesized
+SET a = nothing -- literals removed
+SET a = _ -- identifiers removed
+
+parse
+CREATE TABLE index (index INT)
+----
+CREATE TABLE index (index INT8) -- normalized!
+CREATE TABLE index (index INT8) -- fully parenthesized
+CREATE TABLE index (index INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE index (a INT CONSTRAINT index NOT NULL FAMILY index, index INT)
+----
+CREATE TABLE index (a INT8 CONSTRAINT index NOT NULL FAMILY index, index INT8) -- normalized!
+CREATE TABLE index (a INT8 CONSTRAINT index NOT NULL FAMILY index, index INT8) -- fully parenthesized
+CREATE TABLE index (a INT8 CONSTRAINT index NOT NULL FAMILY index, index INT8) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ NOT NULL FAMILY _, _ INT8) -- identifiers removed
+
+parse
+CREATE TABLE index (FAMILY index(index), INDEX (index), INDEX index(index))
+----
+CREATE TABLE index (FAMILY index (index), INDEX (index), INDEX index (index)) -- normalized!
+CREATE TABLE index (FAMILY index (index), INDEX (index), INDEX index (index)) -- fully parenthesized
+CREATE TABLE index (FAMILY index (index), INDEX (index), INDEX index (index)) -- literals removed
+CREATE TABLE _ (FAMILY _ (_), INDEX (_), INDEX _ (_)) -- identifiers removed
+
+parse
+CREATE TYPE index AS ENUM ('a')
+----
+CREATE TYPE index AS ENUM ('a')
+CREATE TYPE index AS ENUM ('a') -- fully parenthesized
+CREATE TYPE index AS ENUM ('a') -- literals removed
+CREATE TYPE _ AS ENUM (_) -- identifiers removed
+
+parse
+CREATE TABLE index (a mytype, index index, b myothertype)
+----
+CREATE TABLE index (a mytype, index index, b myothertype)
+CREATE TABLE index (a mytype, index index, b myothertype) -- fully parenthesized
+CREATE TABLE index (a mytype, index index, b myothertype) -- literals removed
+CREATE TABLE _ (_ mytype, _ index, _ myothertype) -- identifiers removed
+
+parse
+CREATE TABLE index (index, index) AS TABLE index
+----
+CREATE TABLE index (index, index) AS TABLE index
+CREATE TABLE index (index, index) AS TABLE index -- fully parenthesized
+CREATE TABLE index (index, index) AS TABLE index -- literals removed
+CREATE TABLE _ (_, _) AS TABLE _ -- identifiers removed
+
+parse
+SELECT index, index AS index, index.index FROM index index, index AS index, index index ORDER BY index, index
+----
+SELECT index, index AS index, index.index FROM index AS index, index AS index, index AS index ORDER BY index, index -- normalized!
+SELECT (index), (index) AS index, (index.index) FROM index AS index, index AS index, index AS index ORDER BY (index), (index) -- fully parenthesized
+SELECT index, index AS index, index.index FROM index AS index, index AS index, index AS index ORDER BY index, index -- literals removed
+SELECT _, _ AS _, _._ FROM _ AS _, _ AS _, _ AS _ ORDER BY _, _ -- identifiers removed
+
+parse
+SELECT index::index, index->'index', EXTRACT(seconds FROM index)
+----
+SELECT index::index, index->'index', extract('seconds', index) -- normalized!
+SELECT ((index)::index), ((index)->('index')), (extract(('seconds'), (index))) -- fully parenthesized
+SELECT index::index, index->'_', extract('_', index) -- literals removed
+SELECT _::_, _->'index', extract('seconds', _) -- identifiers removed
+
+# The following exercises ", index(" in a scalar position. This requires
+# special handling in func_expr.
+parse
+SELECT index(index), index(index), index.index(index)
+----
+SELECT index(index), index(index), index.index(index)
+SELECT (index((index))), (index((index))), (index.index((index))) -- fully parenthesized
+SELECT index(index), index(index), index.index(index) -- literals removed
+SELECT index(_), index(_), index.index(_) -- identifiers removed
+
+# Note: this is also an error in PostgreSQL.
+error
+SELECT index index FROM a
+----
+at or near "index": syntax error
+DETAIL: source SQL:
+SELECT index index FROM a
+             ^
+
+parse
+INSERT INTO t VALUES (1) RETURNING index, index
+----
+INSERT INTO t VALUES (1) RETURNING index, index
+INSERT INTO t VALUES ((1)) RETURNING (index), (index) -- fully parenthesized
+INSERT INTO t VALUES (_) RETURNING index, index -- literals removed
+INSERT INTO _ VALUES (1) RETURNING _, _ -- identifiers removed
+
+parse
+SET a = index
+----
+SET a = index
+SET a = (index) -- fully parenthesized
+SET a = index -- literals removed
+SET a = _ -- identifiers removed

@@ -1127,6 +1127,7 @@ unreserved_keyword ::=
 	| 'INCREMENT'
 	| 'INCREMENTAL'
 	| 'INCREMENTAL_LOCATION'
+	| 'INDEX'
 	| 'INDEXES'
 	| 'INHERITS'
 	| 'INJECT'
@@ -1194,6 +1195,7 @@ unreserved_keyword ::=
 	| 'NEXT'
 	| 'NO'
 	| 'NORMAL'
+	| 'NOTHING'
 	| 'NO_INDEX_JOIN'
 	| 'NO_ZIGZAG_JOIN'
 	| 'NO_FULL_SCAN'
@@ -2615,6 +2617,8 @@ type_func_name_crdb_extra_keyword ::=
 
 cockroachdb_extra_reserved_keyword ::=
 	'INDEX'
+	| 'INDEX'
+	| 'INDEX'
 	| 'NOTHING'
 
 type_func_name_keyword ::=
@@ -3338,6 +3342,7 @@ interval_qualifier ::=
 func_name ::=
 	type_function_name
 	| prefixed_column_path
+	| 'INDEX'
 
 single_sort_clause ::=
 	'ORDER' 'BY' sortby
@@ -3729,9 +3734,11 @@ storage_parameter_key ::=
 	| 'SCONST'
 
 index_def ::=
-	'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	'INDEX' '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INDEX' name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'UNIQUE' 'INDEX' opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
-	| 'INVERTED' 'INDEX' opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INVERTED' 'INDEX' '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'INVERTED' 'INDEX' name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
 
 like_table_option_list ::=
 	(  ) ( ( 'INCLUDING' like_table_option | 'EXCLUDING' like_table_option ) )*

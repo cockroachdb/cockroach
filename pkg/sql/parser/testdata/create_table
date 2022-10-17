@@ -15,22 +15,6 @@ CREATE TABLE "family" (x INT8) -- literals removed
 CREATE TABLE _ (_ INT8) -- identifiers removed
 
 parse
-CREATE TABLE INDEX (x INT)
-----
-CREATE TABLE "index" (x INT8) -- normalized!
-CREATE TABLE "index" (x INT8) -- fully parenthesized
-CREATE TABLE "index" (x INT8) -- literals removed
-CREATE TABLE _ (_ INT8) -- identifiers removed
-
-parse
-CREATE TABLE NOTHING (x INT)
-----
-CREATE TABLE "nothing" (x INT8) -- normalized!
-CREATE TABLE "nothing" (x INT8) -- fully parenthesized
-CREATE TABLE "nothing" (x INT8) -- literals removed
-CREATE TABLE _ (_ INT8) -- identifiers removed
-
-parse
 CREATE TABLE MINVALUE (x INT)
 ----
 CREATE TABLE minvalue (x INT8) -- normalized!
