@@ -97,14 +97,16 @@ func TestInsightsIntegration(t *testing.T) {
 			"status, "+
 			"start_time, "+
 			"end_time, "+
-			"full_scan "+
+			"full_scan, "+
+			"implicit_txn "+
 			"FROM crdb_internal.node_execution_insights where "+
 			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
 
 		var query, status string
 		var startInsights, endInsights time.Time
 		var fullScan bool
-		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan)
+		var implicitTxn bool
+		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan, &implicitTxn)
 
 		if err != nil {
 			return err
