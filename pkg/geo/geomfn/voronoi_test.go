@@ -33,6 +33,7 @@ func TestVoronoiPolygons(t *testing.T) {
 		expected    geo.Geometry
 		expectedErr error
 		skipOnArm64 bool
+		skipPpc64le bool
 	}{
 		{
 			name: "Computes Voronoi Polygons for a given MultiPoint",
@@ -79,6 +80,7 @@ func TestVoronoiPolygons(t *testing.T) {
 			},
 			expected:    geo.MustParseGeometry("MULTILINESTRING ((310.3571428571428 500, 353.515625 298.59375), (353.515625 298.59375, 306.875 231.9642857142857), (306.875 231.9642857142857, 110 175.7142857142857), (589.1666666666666 -10, 306.875 231.9642857142857), (353.515625 298.59375, 590 204))"),
 			skipOnArm64: true,
+			skipPpc64le: true,
 		},
 		{
 			name: "Computes Voronoi Diagram for a given MultiPoint with an empty envelope",
@@ -93,6 +95,9 @@ func TestVoronoiPolygons(t *testing.T) {
 	}
 	for _, tc := range tests {
 		if runtime.GOARCH == "arm64" && tc.skipOnArm64 {
+			continue
+		}
+		if runtime.GOARCH == "ppc64le" && tc.skipPpc64le {
 			continue
 		}
 		t.Run(tc.name, func(t *testing.T) {
