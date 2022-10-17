@@ -214,9 +214,6 @@ type InternalExecutorFactory interface {
 	// NewInternalExecutor constructs a new internal executor.
 	// TODO (janexing): this should be deprecated soon.
 	NewInternalExecutor(sd *sessiondata.SessionData) InternalExecutor
-	// RunWithoutTxn is to create an internal executor without binding to a txn,
-	// and run the passed function with this internal executor.
-	RunWithoutTxn(ctx context.Context, run func(ctx context.Context, ie InternalExecutor) error) error
 
 	// TxnWithExecutor enables callers to run transactions with a *Collection such that all
 	// retrieved immutable descriptors are properly leased and all mutable
@@ -230,6 +227,10 @@ type InternalExecutorFactory interface {
 	// The passed transaction is pre-emptively anchored to the system config key on
 	// the system tenant.
 	TxnWithExecutor(context.Context, *kv.DB, *sessiondata.SessionData, func(context.Context, *kv.Txn, InternalExecutor) error, ...TxnOption) error
+
+	// MakeInternalExecutorWithoutTxn returns an internal executor not bound with any
+	// txn.
+	MakeInternalExecutorWithoutTxn() InternalExecutor
 }
 
 // TxnOption is used to configure a Txn or TxnWithExecutor.

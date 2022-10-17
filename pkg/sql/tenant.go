@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -600,10 +601,14 @@ func (p *planner) UpdateTenantResourceLimits(
 	if err := rejectIfSystemTenant(tenantID, op); err != nil {
 		return err
 	}
-	return p.ExecCfg().TenantUsageServer.ReconfigureTokenBucket(
-		ctx, p.Txn(), roachpb.MakeTenantID(tenantID),
-		availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
-	)
+	return p.WithInternalExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	) error {
+		return p.ExecCfg().TenantUsageServer.ReconfigureTokenBucket(
+			ctx, p.Txn(), ie, roachpb.MakeTenantID(tenantID), availableRU, refillRate,
+			maxBurstRU, asOf, asOfConsumedRequestUnits,
+		)
+	})
 }
 
 // TestingUpdateTenantRecord is a public wrapper around updateTenantRecord
