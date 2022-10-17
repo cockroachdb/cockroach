@@ -4678,23 +4678,17 @@ create_stats_target:
   }
 
 opt_create_stats_options:
-  WITH OPTIONS create_stats_option_list
+  create_stats_option_list
   {
-    /* SKIP DOC */
+    $$.val = $1.createStatsOptions()
+  }
+| WITH OPTIONS create_stats_option_list
+  {
     $$.val = $3.createStatsOptions()
   }
-// Allow AS OF SYSTEM TIME without WITH OPTIONS, for consistency with other
-// statements.
-| as_of_clause
-  {
-    $$.val = &tree.CreateStatsOptions{
-      AsOf: $1.asOfClause(),
-    }
-  }
-| /* EMPTY */
-  {
+| /* EMPTY */ {
     $$.val = &tree.CreateStatsOptions{}
-  }
+}
 
 create_stats_option_list:
   create_stats_option
