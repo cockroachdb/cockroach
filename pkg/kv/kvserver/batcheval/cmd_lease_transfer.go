@@ -74,7 +74,6 @@ func TransferLease(
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 
 	newLease := args.Lease
-	args.Lease = roachpb.Lease{} // prevent accidental use below
 
 	// If this check is removed at some point, the filtering of learners on the
 	// sending side would have to be removed as well.
