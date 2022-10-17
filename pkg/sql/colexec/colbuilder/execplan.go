@@ -680,12 +680,16 @@ func NewColOperator(
 		// processor will simply output all of its internal columns, so we don't
 		// need to do anything special to remap the render exprs since they
 		// still refer to columns using the correct ordinals.
-		wrappingPost := *post
+		// Allocate both postprocesspecs at once.
+		newPosts := [2]execinfrapb.PostProcessSpec{}
+		wrappingPost := &newPosts[0]
+		*wrappingPost = *post
 		wrappingPost.RenderExprs = nil
-		post = &execinfrapb.PostProcessSpec{RenderExprs: post.RenderExprs}
+		newPosts[1] = execinfrapb.PostProcessSpec{RenderExprs: post.RenderExprs}
+		post = &newPosts[1]
 		err = result.createAndWrapRowSource(
 			ctx, flowCtx, args, inputs, inputTypes, core,
-			&wrappingPost, spec.ProcessorID, factory, err,
+			wrappingPost, spec.ProcessorID, factory, err,
 		)
 	} else {
 		switch {
@@ -1699,7 +1703,7 @@ func (r *postProcessResult) planPostProcessSpec(
 				}
 			}
 		}
-		var renderedCols []uint32
+		renderedCols := make([]uint32, 0, len(exprs))
 		for _, expr := range exprs {
 			var outputIdx int
 			r.Op, outputIdx, r.ColumnTypes, err = planProjectionOperators(
@@ -2216,12 +2220,14 @@ func planProjectionOperators(
 		//     WHEN CoalesceExpr.Exprs[1] IS NOT NULL THEN CoalesceExpr.Exprs[1]
 		//     ...
 		//   END
+		whenVals := make([]tree.When, len(t.Exprs))
 		whens := make([]*tree.When, len(t.Exprs))
 		for i := range whens {
-			whens[i] = &tree.When{
+			whenVals[i] = tree.When{
 				Cond: t.GetWhenCondition(i),
 				Val:  t.Exprs[i],
 			}
+			whens[i] = &whenVals[i]
 		}
 		caseExpr, err := tree.NewTypedCaseExpr(
 			nil, /* expr */

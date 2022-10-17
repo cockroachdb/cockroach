@@ -2969,6 +2969,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	argIdxs := make([][]exec.NodeColumnOrdinal, len(w.Windows))
 	filterIdxs := make([]int, len(w.Windows))
 	exprs := make([]*tree.FuncExpr, len(w.Windows))
+	windowVals := make([]tree.WindowDef, len(w.Windows))
 
 	for i := range w.Windows {
 		item := &w.Windows[i]
@@ -3010,16 +3011,17 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 			filterIdxs[i] = -1
 		}
 
+		windowVals[i] = tree.WindowDef{
+			Partitions: partitionExprs,
+			OrderBy:    orderingExprs,
+			Frame:      frame,
+		}
 		exprs[i] = tree.NewTypedFuncExpr(
 			b.wrapFunction(name),
 			0,
 			args,
 			builtFilter,
-			&tree.WindowDef{
-				Partitions: partitionExprs,
-				OrderBy:    orderingExprs,
-				Frame:      frame,
-			},
+			&windowVals[i],
 			overload.FixedReturnType(),
 			props,
 			overload,
