@@ -210,3 +210,29 @@ func (t *Times) GetCommitLatency() time.Duration {
 func (t *Times) GetSessionAge() time.Duration {
 	return t.times[PlannerEndExecStmt].Sub(t.times[SessionInit])
 }
+
+// GetIdleLatency deduces the rough amount of time spent waiting for the client
+// while the transaction is open. (For implicit transactions, this value is 0.)
+func (t *Times) GetIdleLatency(previous *Times) time.Duration {
+	queryReceived := t.times[SessionQueryReceived]
+
+	// If we were received at the same time as the previous execution
+	// (i.e., as part of a compound statement), we didn't have to wait
+	// for the client at all.
+	if queryReceived == previous.times[SessionQueryReceived] {
+		return 0
+	}
+
+	// In general, we have been waiting for the client since the end
+	// of the previous execution.
+	waitingSince := previous.times[SessionQueryServiced]
+
+	// Although we really only want to measure idle latency *within*
+	// an open transaction. So if we're in a new transaction, measure
+	// from its start time instead.
+	if transactionStarted := t.times[SessionTransactionStarted]; transactionStarted.After(waitingSince) {
+		waitingSince = transactionStarted
+	}
+
+	return queryReceived.Sub(waitingSince)
+}

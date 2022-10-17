@@ -65,6 +65,10 @@ const statementStats: Required<IStatementStatistics> = {
     mean: 0,
     squared_diffs: 0,
   },
+  idle_lat: {
+    mean: 0.00018,
+    squared_diffs: 5.4319999999999994e-9,
+  },
   plan_lat: {
     mean: 0.00018,
     squared_diffs: 5.4319999999999994e-9,

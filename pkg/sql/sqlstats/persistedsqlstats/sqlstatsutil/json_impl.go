@@ -321,6 +321,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"maxRetries", (*jsonInt)(&s.MaxRetries)},
 		{"lastExecAt", (*jsonTime)(&s.LastExecTimestamp)},
 		{"numRows", (*numericStats)(&s.NumRows)},
+		{"idleLat", (*numericStats)(&s.IdleLat)},
 		{"parseLat", (*numericStats)(&s.ParseLat)},
 		{"planLat", (*numericStats)(&s.PlanLat)},
 		{"runLat", (*numericStats)(&s.RunLat)},
