@@ -25,6 +25,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgconn//:pgconn",
         "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_jackc_pgx_v4//pgxpool",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_x_exp//rand",
     ],

@@ -13,7 +13,6 @@ package ycsb
 
 import (
 	"context"
-	gosql "database/sql"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -33,6 +32,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 )
@@ -493,10 +493,14 @@ func (g *ycsb) Ops(
 	}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + uint64(i)))
+		conn, err := pool.Get().Acquire(ctx)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
 		w := &ycsbWorker{
 			config:                  g,
 			hists:                   reg.GetHandle(),
-			pool:                    pool,
+			conn:                    conn,
 			readStmt:                readStmt,
 			readFieldForUpdateStmts: readFieldForUpdateStmts,
 			scanStmt:                scanStmt,
@@ -525,7 +529,7 @@ type stmtKey = string
 type ycsbWorker struct {
 	config *ycsb
 	hists  *histogram.Histograms
-	pool   *workload.MultiConnPool
+	conn   *pgxpool.Conn
 	// Statement to read all the fields of a row. Used for read requests.
 	readStmt stmtKey
 	// Statements to read a specific field of a row in preparation for
@@ -701,7 +705,7 @@ func (yw *ycsbWorker) insertRow(ctx context.Context) error {
 	for i := 1; i <= numTableFields; i++ {
 		args[i] = yw.randString(fieldLength)
 	}
-	if _, err := yw.pool.Get().Exec(ctx, yw.insertStmt, args[:]...); err != nil {
+	if _, err := yw.conn.Exec(ctx, yw.insertStmt, args[:]...); err != nil {
 		yw.nextInsertIndex = new(uint64)
 		*yw.nextInsertIndex = keyIndex
 		return err
@@ -727,7 +731,7 @@ func (yw *ycsbWorker) updateRow(ctx context.Context) error {
 		stmt = yw.updateStmts[fieldIdx]
 		args[1] = value
 	}
-	if _, err := yw.pool.Get().Exec(ctx, stmt, args[:]...); err != nil {
+	if _, err := yw.conn.Exec(ctx, stmt, args[:]...); err != nil {
 		return err
 	}
 	return nil
@@ -735,7 +739,7 @@ func (yw *ycsbWorker) updateRow(ctx context.Context) error {
 
 func (yw *ycsbWorker) readRow(ctx context.Context) error {
 	key := yw.nextReadKey()
-	res, err := yw.pool.Get().Query(ctx, yw.readStmt, key)
+	res, err := yw.conn.Query(ctx, yw.readStmt, key)
 	if err != nil {
 		return err
 	}
@@ -754,7 +758,7 @@ func (yw *ycsbWorker) scanRows(ctx context.Context) error {
 	// then it will return this error even if it is being run as an implicit
 	// transaction.
 	return execute(func() error {
-		res, err := yw.pool.Get().Query(ctx, yw.scanStmt, key, scanLength)
+		res, err := yw.conn.Query(ctx, yw.scanStmt, key, scanLength)
 		if err != nil {
 			return err
 		}
@@ -790,12 +794,7 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 	fieldIdx := yw.rng.Intn(numTableFields)
 	var args [2]interface{}
 	args[0] = key
-	conn, err := yw.pool.Get().Acquire(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-	err = crdbpgx.ExecuteTx(ctx, conn, pgx.TxOptions{}, func(tx pgx.Tx) error {
+	err := crdbpgx.ExecuteTx(ctx, yw.conn, pgx.TxOptions{}, func(tx pgx.Tx) error {
 		var oldValue []byte
 		readStmt := yw.readFieldForUpdateStmts[fieldIdx]
 		if err := tx.QueryRow(ctx, readStmt, key).Scan(&oldValue); err != nil {
@@ -812,7 +811,7 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 		_, err := tx.Exec(ctx, updateStmt, args[:]...)
 		return err
 	})
-	if errors.Is(err, gosql.ErrNoRows) && ctx.Err() != nil {
+	if errors.Is(err, pgx.ErrNoRows) && ctx.Err() != nil {
 		// Sometimes a context cancellation during a transaction can result in
 		// sql.ErrNoRows instead of the appropriate context.DeadlineExceeded. In
 		// this case, we just return ctx.Err(). See
