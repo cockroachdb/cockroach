@@ -656,12 +656,12 @@ func WriteTableStatistics(
 	return cloud.WriteFile(ctx, exportStore, BackupStatisticsFileName, bytes.NewReader(statsBuf))
 }
 
-// LoadBackupManifests reads and returns the BackupManifests at the
-// ExternalStorage locations in `uris`.
+// LoadBackupManifestsAtTime reads and returns the BackupManifests at the
+// ExternalStorage locations in `uris`. Only manifests with a startTime < AsOf are returned.
 //
 // The caller is responsible for shrinking `mem` by the returned size once they
 // are done with the returned manifests.
-func LoadBackupManifests(
+func LoadBackupManifestsAtTime(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	uris []string,
@@ -669,6 +669,7 @@ func LoadBackupManifests(
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
+	asOf hlc.Timestamp,
 ) ([]backuppb.BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.LoadBackupManifests")
 	defer sp.Finish()
@@ -685,6 +686,9 @@ func LoadBackupManifests(
 			encryption, kmsEnv)
 		if err != nil {
 			return nil, 0, errors.Wrapf(err, "failed to read backup descriptor")
+		}
+		if !asOf.IsEmpty() && asOf.Less(desc.StartTime) {
+			break
 		}
 		reserved += memSize
 		backupManifests[i] = desc
