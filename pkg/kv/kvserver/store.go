@@ -735,21 +735,22 @@ increasing over time (see Replica.setTombstoneKey).
 NOTE: to the best of our knowledge, we don't rely on this invariant.
 */
 type Store struct {
-	Ident           *roachpb.StoreIdent // pointer to catch access before Start() is called
-	cfg             StoreConfig
-	db              *kv.DB
-	engine          storage.Engine          // The underlying key-value store
-	tsCache         tscache.Cache           // Most recent timestamps for keys / key ranges
-	allocator       allocatorimpl.Allocator // Makes allocation decisions
-	replRankings    *ReplicaRankings
-	storeRebalancer *StoreRebalancer
-	rangeIDAlloc    *idalloc.Allocator // Range ID allocator
-	mvccGCQueue     *mvccGCQueue       // MVCC GC queue
-	mergeQueue      *mergeQueue        // Range merging queue
-	splitQueue      *splitQueue        // Range splitting queue
-	replicateQueue  *replicateQueue    // Replication queue
-	replicaGCQueue  *replicaGCQueue    // Replica GC queue
-	raftLogQueue    *raftLogQueue      // Raft log truncation queue
+	Ident                *roachpb.StoreIdent // pointer to catch access before Start() is called
+	cfg                  StoreConfig
+	db                   *kv.DB
+	engine               storage.Engine          // The underlying key-value store
+	tsCache              tscache.Cache           // Most recent timestamps for keys / key ranges
+	allocator            allocatorimpl.Allocator // Makes allocation decisions
+	replRankings         *ReplicaRankings
+	replRankingsByTenant *ReplicaRankingMap
+	storeRebalancer      *StoreRebalancer
+	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
+	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
+	mergeQueue           *mergeQueue        // Range merging queue
+	splitQueue           *splitQueue        // Range splitting queue
+	replicateQueue       *replicateQueue    // Replication queue
+	replicaGCQueue       *replicaGCQueue    // Replica GC queue
+	raftLogQueue         *raftLogQueue      // Raft log truncation queue
 	// Carries out truncations proposed by the raft log queue, and "replicated"
 	// via raft, when they are safe. Created in Store.Start.
 	raftTruncator      *raftLogTruncator
@@ -1238,6 +1239,8 @@ func NewStore(
 		s.metrics.registry.AddMetricStruct(s.allocator.Metrics.LoadBasedReplicaRebalanceMetrics)
 	}
 	s.replRankings = NewReplicaRankings()
+
+	s.replRankingsByTenant = NewReplicaRankingsMap()
 
 	s.raftRecvQueues.mon = mon.NewUnlimitedMonitor(
 		ctx,
@@ -3057,6 +3060,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
 	rankingsAccumulator := s.replRankings.NewAccumulator()
+	rankingsByTenantAccumulator := s.replRankingsByTenant.NewAccumulator()
 
 	// Query the current L0 sublevels and record the updated maximum to metrics.
 	l0SublevelsMax = int64(syncutil.LoadFloat64(&s.metrics.l0SublevelsWindowedMax))
@@ -3082,10 +3086,12 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 			totalWritesPerSecond += wps
 			writesPerReplica = append(writesPerReplica, wps)
 		}
-		rankingsAccumulator.AddReplica(candidateReplica{
+		cr := candidateReplica{
 			Replica: r,
 			qps:     qps,
-		})
+		}
+		rankingsAccumulator.AddReplica(cr)
+		rankingsByTenantAccumulator.AddReplica(cr)
 		return true
 	})
 	capacity.RangeCount = rangeCount
@@ -3103,6 +3109,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.WritesPerReplica = roachpb.PercentilesFromData(writesPerReplica)
 	s.recordNewPerSecondStats(totalQueriesPerSecond, totalWritesPerSecond)
 	s.replRankings.Update(rankingsAccumulator)
+	s.replRankingsByTenant.Update(rankingsByTenantAccumulator)
 
 	s.cachedCapacity.Lock()
 	s.cachedCapacity.StoreCapacity = capacity
@@ -3556,15 +3563,27 @@ type HotReplicaInfo struct {
 // out of date.
 func (s *Store) HottestReplicas() []HotReplicaInfo {
 	topQPS := s.replRankings.TopQPS()
-	hotRepls := make([]HotReplicaInfo, len(topQPS))
-	for i := range topQPS {
-		hotRepls[i].Desc = topQPS[i].Desc()
-		hotRepls[i].QPS = topQPS[i].QPS()
-		hotRepls[i].RequestsPerSecond = topQPS[i].Repl().RequestsPerSecond()
-		hotRepls[i].WriteKeysPerSecond = topQPS[i].Repl().WritesPerSecond()
-		hotRepls[i].ReadKeysPerSecond = topQPS[i].Repl().ReadsPerSecond()
-		hotRepls[i].WriteBytesPerSecond = topQPS[i].Repl().WriteBytesPerSecond()
-		hotRepls[i].ReadBytesPerSecond = topQPS[i].Repl().ReadBytesPerSecond()
+	return mapToHotReplicasInfo(topQPS)
+}
+
+// HottestReplicasByTenant returns the hottest replicas on a store for specified
+// tenant ID. It works identically as HottestReplicas func with only exception that
+// hottest replicas are grouped by tenant ID.
+func (s *Store) HottestReplicasByTenant(tenantID roachpb.TenantID) []HotReplicaInfo {
+	topQPS := s.replRankingsByTenant.TopQPS(tenantID)
+	return mapToHotReplicasInfo(topQPS)
+}
+
+func mapToHotReplicasInfo(repls []CandidateReplica) []HotReplicaInfo {
+	hotRepls := make([]HotReplicaInfo, len(repls))
+	for i := range repls {
+		hotRepls[i].Desc = repls[i].Desc()
+		hotRepls[i].QPS = repls[i].QPS()
+		hotRepls[i].RequestsPerSecond = repls[i].Repl().RequestsPerSecond()
+		hotRepls[i].WriteKeysPerSecond = repls[i].Repl().WritesPerSecond()
+		hotRepls[i].ReadKeysPerSecond = repls[i].Repl().ReadsPerSecond()
+		hotRepls[i].WriteBytesPerSecond = repls[i].Repl().WriteBytesPerSecond()
+		hotRepls[i].ReadBytesPerSecond = repls[i].Repl().ReadBytesPerSecond()
 	}
 	return hotRepls
 }
