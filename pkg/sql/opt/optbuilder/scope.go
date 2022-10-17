@@ -1025,7 +1025,12 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	case *tree.ColumnItem:
 		colI, resolveErr := colinfo.ResolveColumnItem(s.builder.ctx, s, t)
 		if resolveErr != nil {
-			if sqlerrors.IsUndefinedColumnError(resolveErr) {
+			// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
+			// Attempt to resolve as a TupleStar. We do not attempt to resolve
+			// as a TupleStar if we are inside a view or function definition
+			// because views and functions do not support * expressions.
+			if !s.builder.insideViewDef && !s.builder.insideFuncDef &&
+				sqlerrors.IsUndefinedColumnError(resolveErr) {
 				// Attempt to resolve as columnname.*, which allows items
 				// such as SELECT row_to_json(tbl_name) FROM tbl_name to work.
 				return func() (bool, tree.Expr) {
