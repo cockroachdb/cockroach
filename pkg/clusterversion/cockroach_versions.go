@@ -558,6 +558,14 @@ var versionsSingleton = func() keyedVersions {
 	return rawVersionsSingleton
 }()
 
+// V23_1 is a placeholder that will eventually be replaced by the actual 23.1
+// version Key, but in the meantime it points to the latest Key. The placeholder
+// is defined so that it can be referenced in code that simply wants to check if
+// a cluster is running 23.1 and has completed all associated migrations; most
+// version gates can use this instead of defining their own version key if all
+// simply need to check is that the cluster has upgraded to 23.1.
+var V23_1 = versionsSingleton[len(versionsSingleton)-1].Key
+
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
 // feels out of place. A "cluster version" and a "binary version" are two
 // separate concepts.
