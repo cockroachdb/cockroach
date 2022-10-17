@@ -1494,8 +1494,8 @@ func (t *logicTest) newCluster(
 	var randomWorkmem int
 	if t.rng.Float64() < 0.5 && !serverArgs.DisableWorkmemRandomization {
 		// Randomize sql.distsql.temp_storage.workmem cluster setting in
-		// [10KiB, 100KiB) range.
-		randomWorkmem = 10<<10 + t.rng.Intn(90<<10)
+		// [100KiB, 150KiB) range.
+		randomWorkmem = 100<<10 + t.rng.Intn(50<<10)
 	}
 
 	// Set cluster settings.
