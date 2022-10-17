@@ -15,23 +15,6 @@ EXPLAIN SET a = _ -- literals removed
 EXPLAIN SET a = 3 -- identifiers removed
 
 parse
-SET a = INDEX
-----
-SET a = "index" -- normalized!
-SET a = ("index") -- fully parenthesized
-SET a = "index" -- literals removed
-SET a = _ -- identifiers removed
-
-parse
-SET a = NOTHING
-----
-SET a = "nothing" -- normalized!
-SET a = ("nothing") -- fully parenthesized
-SET a = "nothing" -- literals removed
-SET a = _ -- identifiers removed
-
-
-parse
 SET a = 3, 4
 ----
 SET a = 3, 4

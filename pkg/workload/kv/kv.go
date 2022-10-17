@@ -174,8 +174,17 @@ ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 				return errors.Errorf("Value of 'max-block-bytes' (%d) must be greater than or equal to value of 'min-block-bytes' (%d)",
 					w.maxBlockSizeBytes, w.minBlockSizeBytes)
 			}
-			if w.sequential && w.splits > 0 {
-				return errors.New("'sequential' and 'splits' cannot both be enabled")
+			if w.splits < 0 {
+				return errors.Errorf("Value of `--splits` (%d) must not be negative",
+					w.splits)
+			}
+			if w.cycleLength < 1 {
+				return errors.Errorf("Value of `--cycle-length` (%d) must be greater than 0",
+					w.cycleLength)
+			}
+			if w.cycleLength <= int64(w.splits) {
+				return errors.Errorf("Value of `--splits` (%d) must be less than the value of `--cycle-length` (%d)",
+					w.splits, w.cycleLength)
 			}
 			if w.sequential && w.zipfian {
 				return errors.New("'sequential' and 'zipfian' cannot both be enabled")
@@ -194,20 +203,49 @@ ALTER TABLE kv ADD COLUMN e enum_type NOT NULL AS ('v') STORED;`)
 	}
 }
 
+func (w *kv) keyRange() (int64, int64) {
+	rangeMin := int64(0)
+	rangeMax := w.cycleLength
+	if w.sequential {
+		// Sequential can generate keys in the range [0, cycleLength)
+	} else if w.zipfian {
+		// Zipfian can generate keys in the range [0, MaxInt64)
+		rangeMax = math.MaxInt64
+	} else {
+		// Hash can generate keys in the range [MinInt64, MaxInt64)
+		rangeMax = math.MaxInt64
+		rangeMin = math.MinInt64
+	}
+	return rangeMin, rangeMax
+}
+
+// splitFinder returns the ith split point, given the key access distribution
+// and number of splits.
+func (w *kv) splitFinder(i int) int {
+	splits := int64(w.splits)
+	if splits < 0 || (splits >= w.cycleLength && w.sequential) {
+		panic(fmt.Sprintf("programming error: splits (%d) cannot be less than 0, "+
+			"greater than or equal to the cycle-length (%d) with sequential",
+			splits, w.cycleLength,
+		))
+	}
+	rangeMin, rangeMax := w.keyRange()
+
+	stride := rangeMax/(splits+1) - rangeMin/(splits+1)
+	splitPoint := int(rangeMin + int64(i+1)*stride)
+	return splitPoint
+}
+
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
-	table := workload.Table{
-		Name: `kv`,
-		// TODO(dan): Support initializing kv with data.
-		Splits: workload.Tuples(
-			w.splits,
-			func(splitIdx int) []interface{} {
-				stride := (float64(w.cycleLength) - float64(math.MinInt64)) / float64(w.splits+1)
-				splitPoint := int(math.MinInt64 + float64(splitIdx+1)*stride)
-				return []interface{}{splitPoint}
-			},
-		),
-	}
+	table := workload.Table{Name: `kv`}
+	table.Splits = workload.Tuples(
+		w.splits,
+		func(splitIdx int) []interface{} {
+			return []interface{}{w.splitFinder(splitIdx)}
+		},
+	)
+
 	if w.shards > 0 {
 		schema := shardedKvSchema
 		if w.secondaryIndex {
