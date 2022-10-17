@@ -145,6 +145,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	}
 	s.SQLType = other.SQLType
 	s.NumRows.Add(other.NumRows, s.Count, other.Count)
+	s.IdleLat.Add(other.IdleLat, s.Count, other.Count)
 	s.ParseLat.Add(other.ParseLat, s.Count, other.Count)
 	s.PlanLat.Add(other.PlanLat, s.Count, other.Count)
 	s.RunLat.Add(other.RunLat, s.Count, other.Count)
@@ -181,6 +182,7 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.FirstAttemptCount == other.FirstAttemptCount &&
 		s.MaxRetries == other.MaxRetries &&
 		s.NumRows.AlmostEqual(other.NumRows, eps) &&
+		s.IdleLat.AlmostEqual(other.IdleLat, eps) &&
 		s.ParseLat.AlmostEqual(other.ParseLat, eps) &&
 		s.PlanLat.AlmostEqual(other.PlanLat, eps) &&
 		s.RunLat.AlmostEqual(other.RunLat, eps) &&
