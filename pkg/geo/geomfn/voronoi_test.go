@@ -98,8 +98,8 @@ func TestVoronoiPolygons(t *testing.T) {
 			continue
 		}
 		if runtime.GOARCH == "ppc64le" && tc.skipPpc64le {
-                        continue
-                }
+    	continue
+   	}
 		t.Run(tc.name, func(t *testing.T) {
 			actual, err := VoronoiDiagram(tc.args.a, tc.args.env, tc.args.tol, tc.args.onlyEdges)
 			if tc.expectedErr != nil && tc.expectedErr.Error() != err.Error() {
