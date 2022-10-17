@@ -642,13 +642,15 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 		file.pw.parquetWriter.Close()
 		file.rawSize = len(file.buf.Bytes())
 		if file.codec != nil {
-			// Parquet compression can be done in 2 ways: using the parquetwriter itself
-			// or relying on the Sink's compression. Currently, we are using Sink's
-			// compression. When we create the parquet writer, we pass in the file's
-			// buffer to it (see parquetCloudStorageSink) and the writer writes to that buffer. Once its done, we need
-			// to compress that data by writing to file's codec.
-			file.codec.Write(file.buf.Bytes())
+			// Parquet compression can be done in 2 ways: using the parquetwriter
+			// itself or relying on the Sink's compression. Currently, we are using
+			// Sink's compression. When we create the parquet writer, we pass in the
+			// file's buffer to it (see parquetCloudStorageSink) and the writer writes
+			// to that buffer. Once its done, we need to compress that data by writing
+			// to file's codec.
+			tempBuf := bytes.NewBuffer(file.buf.Bytes())
 			file.buf.Reset()
+			file.codec.Write(tempBuf.Bytes())
 		}
 	}
 	// We use this monotonically increasing fileID to ensure correct ordering
