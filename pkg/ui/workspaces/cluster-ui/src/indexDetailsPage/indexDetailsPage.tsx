@@ -70,8 +70,10 @@ interface IndexDetails {
   indexRecommendations: IndexRecommendation[];
 }
 
+export type RecommendationType = "DROP_UNUSED" | "Unknown";
+
 interface IndexRecommendation {
-  type: string;
+  type: RecommendationType;
   reason: string;
 }
 
@@ -141,20 +143,14 @@ export class IndexDetailsPage extends React.Component<
         </tr>
       );
     }
-    return indexRecommendations.map(recommendation => {
+    return indexRecommendations.map((recommendation, key) => {
       let recommendationType: string;
       switch (recommendation.type) {
         case "DROP_UNUSED":
           recommendationType = "Drop unused index";
       }
-      // TODO(thomas): using recommendation.type as the key seems not good.
-      //  - if it is possible for an index to have multiple recommendations of the same type
-      //  this could cause issues.
       return (
-        <tr
-          key={recommendationType}
-          className={cx("index-recommendations-rows")}
-        >
+        <tr key={key} className={cx("index-recommendations-rows")}>
           <td
             className={cx(
               "index-recommendations-rows__header",
