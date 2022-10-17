@@ -65,7 +65,7 @@ func TestInstanceProvider(t *testing.T) {
 		defer stopper.Stop(ctx)
 		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, addr)
 		slInstance.Start(ctx)
-		instanceProvider.InitAndWaitForTest(ctx)
+		instanceProvider.InitForTest(ctx)
 		instanceID, sessionID, err := instanceProvider.Instance(ctx)
 		require.NoError(t, err)
 		require.Equal(t, expectedInstanceID, instanceID)
@@ -94,17 +94,5 @@ func TestInstanceProvider(t *testing.T) {
 			}
 			return nil
 		})
-	})
-
-	t.Run("test-shutdown-before-init", func(t *testing.T) {
-		stopper, slInstance, _, _ := setup(t)
-		defer stopper.Stop(ctx)
-		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, "addr")
-		slInstance.Start(ctx)
-		instanceProvider.ShutdownSQLInstanceForTest(ctx)
-		instanceProvider.InitAndWaitForTest(ctx)
-		_, _, err := instanceProvider.Instance(ctx)
-		require.Error(t, err)
-		require.Equal(t, "instance never initialized", err.Error())
 	})
 }

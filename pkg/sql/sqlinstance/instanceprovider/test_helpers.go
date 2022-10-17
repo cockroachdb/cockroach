@@ -23,7 +23,7 @@ import (
 // and InitAndWaitForTest methods for testing purposes.
 type TestInstanceProvider interface {
 	sqlinstance.Provider
-	InitAndWaitForTest(context.Context)
+	InitForTest(context.Context)
 	ShutdownSQLInstanceForTest(context.Context)
 }
 
@@ -38,15 +38,14 @@ func NewTestInstanceProvider(
 		stopper:      stopper,
 		session:      session,
 		instanceAddr: addr,
-		initialized:  make(chan struct{}),
+		started:      true,
 	}
-	p.mu.started = true
 	return p
 }
 
 // InitAndWaitForTest explicitly calls initAndWait for testing purposes.
-func (p *provider) InitAndWaitForTest(ctx context.Context) {
-	_ = p.initAndWait(ctx)
+func (p *provider) InitForTest(ctx context.Context) {
+	_ = p.init(ctx)
 }
 
 // ShutdownSQLInstanceForTest explicitly calls shutdownSQLInstance for testing purposes.
