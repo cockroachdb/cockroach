@@ -12,7 +12,7 @@ SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
 # Start with SURVIVE ZONE FAILURE for positive tests.
 # SURVIVE REGION FAILURE cases will always error out.
 statement ok
-CREATE DATABASE multi_region_test_db PRIMARY REGION "ap-southeast-2" REGIONS "ca-central-1", "us-east-1" SURVIVE ZONE FAILURE;
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE ZONE FAILURE;
 
 # Zone configs sometimes are not available right away. Add a sleep time to the
 # test to ensure they're available before running tests.
@@ -153,7 +153,7 @@ CREATE TABLE json_arr1_rbt (
   a STRING[],
   INVERTED INDEX j_idx (j),
   INVERTED INDEX a_idx (a)
-) LOCALITY REGIONAL BY TABLE
+) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
 
 statement ok
 CREATE TABLE json_arr1_rbr (
@@ -171,7 +171,7 @@ CREATE TABLE json_arr2_rbt (
   l INT,
   j JSONB,
   a STRING[]
-) LOCALITY REGIONAL BY TABLE
+) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
 
 statement ok
 SET enforce_home_region = true
@@ -192,10 +192,10 @@ statement error pq: Query has no home region\. Try adding a filter on p\.crdb_re
 SELECT * FROM parent p, child c WHERE p_id = c_p_id AND
 p.crdb_region = c.crdb_region LIMIT 1
 
-# Locality optimized lookup join should not error out in phase 1.
-query TTT retry
+# Locality optimized join is not allowed if the input is a full scan of an RBR
+# table.
+statement error pq: Query has no home region. Try adding a filter on c\.crdb_region and/or on key column \(c\.c_id\)\.
 SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 1
-----
 
 # Locality optimized lookup join should not error out in phase 1.
 query TT retry
@@ -214,7 +214,7 @@ anti-join (lookup parent)
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1e-10]
- ├── cost: 9.35772222
+ ├── cost: 9.36564
  ├── key: ()
  ├── fd: ()-->(1,2)
  ├── distribution: ap-southeast-2
@@ -227,7 +227,7 @@ anti-join (lookup parent)
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── stats: [rows=0.6666667, distinct(1)=0.666667, null(1)=0, distinct(2)=0.665314, null(2)=0.00666667]
- │    ├── cost: 6.65852222
+ │    ├── cost: 6.66468
  │    ├── key: ()
  │    ├── fd: ()-->(1,2)
  │    ├── distribution: ap-southeast-2
@@ -237,7 +237,7 @@ anti-join (lookup parent)
  │    │    ├── right columns: c_id:16 c_p_id:17
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=0.995512, null(2)=0.01]
- │    │    ├── cost: 4.76472222
+ │    │    ├── cost: 4.77
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1,2)
  │    │    ├── distribution: ap-southeast-2
@@ -247,7 +247,7 @@ anti-join (lookup parent)
  │    │    │    ├── constraint: /13/11: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── stats: [rows=0.9333333, distinct(11)=0.933333, null(11)=0, distinct(13)=0.933333, null(13)=0, distinct(11,13)=0.933333, null(11,13)=0]
- │    │    │    ├── cost: 1.70518519
+ │    │    │    ├── cost: 1.70777778
  │    │    │    ├── key: ()
  │    │    │    └── fd: ()-->(11,12)
  │    │    └── scan child
@@ -257,7 +257,7 @@ anti-join (lookup parent)
  │    │         │    └── [/'us-east-1'/10 - /'us-east-1'/10]
  │    │         ├── cardinality: [0 - 1]
  │    │         ├── stats: [rows=0.9666667, distinct(16)=0.966667, null(16)=0, distinct(18)=0.966667, null(18)=0, distinct(16,18)=0.966667, null(16,18)=0]
- │    │         ├── cost: 3.03953704
+ │    │         ├── cost: 3.04222222
  │    │         ├── key: ()
  │    │         └── fd: ()-->(16,17)
  │    └── filters (true)
@@ -295,65 +295,27 @@ statement error pq: Query has no home region\. Try adding a filter on o\.crdb_re
 SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
   (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
 
-# Locality optimized lookup join is allowed.
-query TTTTTTT retry
+# Locality optimized join should error on a mismatch between the input table's
+# home region and the local rows accessed in the lookup table.
+statement error pq: Query has no home region\. The home region \('ca-central-1'\) of table 'messages_rbt' does not match the home region \('ap-southeast-2'\) of lookup table 'messages_rbr'\.
 SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
-----
-
-query T retry
-EXPLAIN SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
-----
-distribution: local
-vectorized: true
-·
-• limit
-│ count: 1
-│
-└── • lookup join
-    │ table: messages_rbr@messages_rbr_pkey
-    │ equality cols are key
-    │ lookup condition: (crdb_region = 'ap-southeast-2') AND (account_id = account_id)
-    │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (account_id = account_id)
-    │
-    └── • scan
-          missing stats
-          table: messages_rbt@messages_rbt_pkey
-          spans: FULL SCAN (SOFT LIMIT)
 
 # Select from a global table is OK with ZONE survivability.
 query TTT retry
 SELECT * FROM messages_global@messages_global_pkey
 ----
 
-# Select from REGIONAL BY TABLE is OK with ZONE survivability.
-query T retry
+# Scanning RBT table from the wrong region should error out.
+statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\.
 SELECT message from messages_rbt@messages_rbt_pkey
-----
 
-# A local join between an RBR and RBT table should be allowed.
-query TTTTTTT retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\.
 SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
-AND rbr.crdb_region = 'ap-southeast-2'
-----
+AND rbr.crdb_region = 'ca-central-1'
 
-query T retry
-EXPLAIN(OPT) SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
-AND rbr.crdb_region = 'ap-southeast-2'
-----
-inner-join (lookup messages_rbr [as=rbr])
- ├── flags: force lookup join (into right side)
- ├── lookup columns are key
- ├── project
- │    ├── scan messages_rbt [as=rbt]
- │    └── projections
- │         └── 'ap-southeast-2'
- └── filters (true)
-
-# A local join between an RBR and RBT table should be allowed.
-query TTTTTTT retry
+statement error pq: Query is not running in its home region\. Try running the query from region 'ca-central-1'\.
 SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
-AND rbr.crdb_region = 'ap-southeast-2'
-----
+AND rbr.crdb_region = 'ca-central-1'
 
 query T retry
 EXPLAIN(OPT) SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
@@ -443,6 +405,11 @@ inner-join (lookup messages_global [as=g3])
 
 statement ok
 ALTER TABLE messages_rbt SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
+
+# Regression test for issue #88788
+# A full scan on an RBT table should error out lookup join.
+statement error pq: Query has no home region\. The home region \('us-east-1'\) of table 'messages_rbt' does not match the home region \('ap-southeast-2'\) of lookup table 'messages_rbr'\.
+SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
 
 # Select from REGIONAL BY TABLE should indicate the gateway region to use.
 statement error pq: Query is not running in its home region. Try running the query from region 'us-east-1'.
@@ -620,7 +587,7 @@ project
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 4309.15778
+ ├── cost: 4312.38
  ├── key: ()
  ├── fd: ()-->(7)
  ├── distribution: ap-southeast-2
@@ -630,7 +597,7 @@ project
       ├── cardinality: [0 - 1]
       ├── immutable
       ├── stats: [rows=1]
-      ├── cost: 4309.13778
+      ├── cost: 4312.36
       ├── key: ()
       ├── fd: ()-->(3,7,9,11)
       ├── distribution: ap-southeast-2
@@ -640,7 +607,7 @@ project
       │    ├── lookup columns are key
       │    ├── immutable
       │    ├── stats: [rows=3333.333]
-      │    ├── cost: 4309.11778
+      │    ├── cost: 4312.34
       │    ├── fd: ()-->(11), (7)-->(9)
       │    ├── limit hint: 1.00
       │    ├── distribution: ap-southeast-2
@@ -652,7 +619,7 @@ project
       │    │    ├── inverted-expr
       │    │    │    └── t1.j:20 @> t2.j:3
       │    │    ├── stats: [rows=3333.333, distinct(17)=1, null(17)=0, distinct(18)=964.524, null(18)=0, distinct(22)=1, null(22)=0]
-      │    │    ├── cost: 3837.19889
+      │    │    ├── cost: 3839.97667
       │    │    ├── fd: ()-->(22)
       │    │    ├── limit hint: 100.00
       │    │    ├── distribution: ap-southeast-2
