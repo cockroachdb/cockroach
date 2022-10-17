@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -140,6 +141,12 @@ func (p *scanRequestScanner) exportSpan(
 		r := roachpb.NewScan(remaining.Key, remaining.EndKey, false /* forUpdate */).(*roachpb.ScanRequest)
 		r.ScanFormat = roachpb.BATCH_RESPONSE
 		b.Header.TargetBytes = targetBytesPerScan
+		b.AdmissionHeader = roachpb.AdmissionHeader{
+			Priority:                 int32(admissionpb.BulkNormalPri),
+			CreateTime:               start.UnixNano(),
+			Source:                   roachpb.AdmissionHeader_FROM_SQL,
+			NoMemoryReservedAtSource: true,
+		}
 		// NB: We use a raw request rather than the Scan() method because we want
 		// the MVCC timestamps which are encoded in the response but are filtered
 		// during result parsing.
