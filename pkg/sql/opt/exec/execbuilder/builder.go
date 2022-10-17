@@ -140,9 +140,20 @@ type Builder struct {
 	// as estimated by the optimizer.
 	TotalScanRows float64
 
+	// TotalScanRowsWithoutForecasts is the total number of rows read by all scans
+	// in the query, as estimated by the optimizer without using forecasts. (If
+	// forecasts were not used, this should be the same as TotalScanRows.)
+	TotalScanRowsWithoutForecasts float64
+
 	// NanosSinceStatsCollected is the maximum number of nanoseconds that have
 	// passed since stats were collected on any table scanned by this query.
 	NanosSinceStatsCollected time.Duration
+
+	// NanosSinceStatsForecasted is the greatest quantity of nanoseconds that have
+	// passed since the forecast time (or until the forecast time, if the it is in
+	// the future, in which case it will be negative) for any table with
+	// forecasted stats scanned by this query.
+	NanosSinceStatsForecasted time.Duration
 
 	// JoinTypeCounts records the number of times each type of logical join was
 	// used in the query.
@@ -151,6 +162,9 @@ type Builder struct {
 	// JoinAlgorithmCounts records the number of times each type of join algorithm
 	// was used in the query.
 	JoinAlgorithmCounts map[exec.JoinAlgorithm]int
+
+	// ScanCounts records the number of times scans were used in the query.
+	ScanCounts [exec.NumScanCountTypes]int
 
 	// wrapFunctionOverride overrides default implementation to return resolvable
 	// function reference for function with specified function name.

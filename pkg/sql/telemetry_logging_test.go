@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
@@ -895,5 +896,278 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		if numLogsFound != tc.expectedNumLogs {
 			t.Errorf("%s: expected %d log entries, found %d", tc.name, tc.expectedNumLogs, numLogsFound)
 		}
+	}
+}
+
+// TestTelemetryScanCounts tests that scans with and without forecasted
+// statistics are counted correctly. It also tests that other statistics
+// forecasting telemetry is counted correctly.
+func TestTelemetryScanCounts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	cleanup := logtestutils.InstallTelemetryLogFileSink(sc, t)
+	defer cleanup()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	defer s.Stopper().Stop(context.Background())
+
+	db.Exec(t, "SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;")
+	db.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
+	db.Exec(t, "CREATE TABLE d (d PRIMARY KEY) AS SELECT generate_series(10, 16);")
+	db.Exec(t, "CREATE TABLE e (e PRIMARY KEY) AS SELECT generate_series(0, 19);")
+	db.Exec(t, "CREATE TABLE f (f PRIMARY KEY) AS SELECT generate_series(5, 8) * 2;")
+	db.Exec(t, `ALTER TABLE e INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "e"
+          ],
+          "created_at": "2017-08-05 00:00:00.000000",
+          "distinct_count": 20,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 1,
+                  "num_range": 0,
+                  "upper_bound": "0"
+              },
+              {
+                  "distinct_range": 18,
+                  "num_eq": 1,
+                  "num_range": 18,
+                  "upper_bound": "20"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 20
+      }
+]';`)
+	db.Exec(t, `ALTER TABLE f INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "f"
+          ],
+          "created_at": "2017-05-07 00:00:00.000000",
+          "distinct_count": 1,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 0,
+                  "num_range": 0,
+                  "upper_bound": "1"
+              },
+              {
+                  "distinct_range": 1,
+                  "num_eq": 0,
+                  "num_range": 1,
+                  "upper_bound": "11"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 1
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "f"
+          ],
+          "created_at": "2017-05-08 00:00:00.000000",
+          "distinct_count": 2,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 0,
+                  "num_range": 0,
+                  "upper_bound": "3"
+              },
+              {
+                  "distinct_range": 2,
+                  "num_eq": 0,
+                  "num_range": 2,
+                  "upper_bound": "13"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 2
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "f"
+          ],
+          "created_at": "2017-05-09 00:00:00.000000",
+          "distinct_count": 3,
+          "histo_buckets": [
+              {
+                  "distinct_range": 0,
+                  "num_eq": 0,
+                  "num_range": 0,
+                  "upper_bound": "5"
+              },
+              {
+                  "distinct_range": 3,
+                  "num_eq": 0,
+                  "num_range": 3,
+                  "upper_bound": "15"
+              }
+          ],
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 3
+      }
+]';`)
+
+	testData := []struct {
+		query                                 string
+		logStmt                               string
+		scanCount                             float64
+		scanWithStatsCount                    float64
+		scanWithStatsForecastCount            float64
+		totalScanRowsEstimate                 float64
+		totalScanRowsWithoutForecastsEstimate float64
+	}{
+		{
+			query:   "SELECT 1",
+			logStmt: "SELECT ‹1›",
+		},
+		{
+			query:   "SELECT * FROM d WHERE true",
+			logStmt: `SELECT * FROM \"\".\"\".d WHERE ‹true›`,
+
+			scanCount: 1,
+		},
+		{
+			query:   "SELECT * FROM e WHERE true",
+			logStmt: `SELECT * FROM \"\".\"\".e WHERE ‹true›`,
+
+			scanCount:                             1,
+			scanWithStatsCount:                    1,
+			totalScanRowsEstimate:                 20,
+			totalScanRowsWithoutForecastsEstimate: 20,
+		},
+		{
+			query:   "SELECT * FROM f WHERE true",
+			logStmt: `SELECT * FROM \"\".\"\".f WHERE ‹true›`,
+
+			scanCount:                             1,
+			scanWithStatsCount:                    1,
+			scanWithStatsForecastCount:            1,
+			totalScanRowsEstimate:                 4,
+			totalScanRowsWithoutForecastsEstimate: 3,
+		},
+		{
+			query:   "SELECT * FROM d INNER HASH JOIN e ON d = e INNER HASH JOIN f ON e = f",
+			logStmt: `SELECT * FROM \"\".\"\".d INNER HASH JOIN \"\".\"\".e ON d = e INNER HASH JOIN \"\".\"\".f ON e = f`,
+
+			scanCount:                             3,
+			scanWithStatsCount:                    2,
+			scanWithStatsForecastCount:            1,
+			totalScanRowsEstimate:                 24,
+			totalScanRowsWithoutForecastsEstimate: 23,
+		},
+	}
+
+	for _, tc := range testData {
+		db.Exec(t, tc.query)
+	}
+
+	log.Flush()
+
+	entries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_query"`),
+		log.WithMarkedSensitiveData,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(entries) == 0 {
+		t.Fatal(errors.Newf("no entries found"))
+	}
+
+	t.Log("testcases")
+cases:
+	for _, tc := range testData {
+		for i := len(entries) - 1; i >= 0; i-- {
+			if strings.Contains(entries[i].Message, tc.logStmt) {
+				var entry map[string]interface{}
+				if err := json.Unmarshal([]byte(entries[i].Message), &entry); err != nil {
+					t.Error(err)
+					continue cases
+				}
+				get := func(key string) float64 {
+					if val, ok := entry[key]; ok {
+						return val.(float64)
+					}
+					return 0
+				}
+
+				if get("ScanCount") != tc.scanCount {
+					t.Errorf(
+						"query `%s` expected ScanCount %v, was: %v",
+						tc.query, tc.scanCount, get("ScanCount"),
+					)
+				}
+				if get("ScanWithStatsCount") != tc.scanWithStatsCount {
+					t.Errorf(
+						"query `%s` expected ScanWithStatsCount %v, was: %v",
+						tc.query, tc.scanWithStatsCount, get("ScanWithStatsCount"),
+					)
+				}
+				if get("ScanWithStatsForecastCount") != tc.scanWithStatsForecastCount {
+					t.Errorf(
+						"query `%s` expected ScanWithStatsForecastCount %v, was: %v",
+						tc.query, tc.scanWithStatsForecastCount, get("ScanWithStatsForecastCount"),
+					)
+				}
+				if get("TotalScanRowsEstimate") != tc.totalScanRowsEstimate {
+					t.Errorf(
+						"query `%s` expected TotalScanRowsEstimate %v, was: %v",
+						tc.query, tc.totalScanRowsEstimate, get("TotalScanRowsEstimate"),
+					)
+				}
+				if get("TotalScanRowsWithoutForecastsEstimate") != tc.totalScanRowsWithoutForecastsEstimate {
+					t.Errorf(
+						"query `%s` expected TotalScanRowsWithoutForecastsEstimate %v, was: %v",
+						tc.query, tc.totalScanRowsWithoutForecastsEstimate, get("TotalScanRowsWithoutForecastsEstimate"),
+					)
+				}
+				if tc.scanWithStatsForecastCount > 0 {
+					if get("NanosSinceStatsForecasted") <= 0 {
+						t.Errorf(
+							"query `%s` expected NanosSinceStatsForecasted > 0, was: %v",
+							tc.query, get("NanosSinceStatsForecasted"),
+						)
+					}
+					if get("NanosSinceStatsForecasted") >= get("NanosSinceStatsCollected") {
+						t.Errorf(
+							"query `%s` expected NanosSinceStatsForecasted < NanosSinceStatsCollected: %v, %v",
+							tc.query, get("NanosSinceStatsForecasted"), get("NanosSinceStatsCollected"),
+						)
+					}
+				}
+				continue cases
+			}
+		}
+		t.Errorf("couldn't find log entry containing `%s`", tc.logStmt)
 	}
 }
