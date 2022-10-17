@@ -10,6 +10,7 @@ go_library(
         "activerecord_blocklist.go",
         "admission_control.go",
         "admission_control_elastic_backup.go",
+        "admission_control_elastic_cdc.go",
         "admission_control_multi_store_overload.go",
         "admission_control_snapshot_overload.go",
         "admission_control_tpcc_overload.go",

@@ -32,6 +32,14 @@ CREATE TABLE mutation (
 )
 ----
 
+exec-ddl
+CREATE TABLE fgh (
+    f INT,
+    g TEXT,
+    h INT
+)
+----
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -455,3 +463,723 @@ build
 DELETE FROM mutation ORDER BY p LIMIT 2
 ----
 error (42P10): column "p" is being backfilled
+
+# ------------------------------------------------------------------------------
+# Test USING.
+# ------------------------------------------------------------------------------
+
+# Test a simple join with a filter.
+build format=show-qual
+DELETE FROM abcde USING fgh WHERE c = fgh.h AND fgh.g = 'd'
+----
+delete t.public.abcde
+ ├── columns: <none>
+ ├── fetch columns: t.public.abcde.a:9 t.public.abcde.b:10 t.public.abcde.c:11 t.public.abcde.d:12 t.public.abcde.e:13 t.public.abcde.rowid:14
+ ├── passthrough columns t.public.fgh.f:17 t.public.fgh.g:18 t.public.fgh.h:19 t.public.fgh.rowid:20 t.public.fgh.crdb_internal_mvcc_timestamp:21 t.public.fgh.tableoid:22
+ └── distinct-on
+      ├── columns: t.public.abcde.a:9!null t.public.abcde.b:10 t.public.abcde.c:11!null t.public.abcde.d:12 t.public.abcde.e:13 t.public.abcde.rowid:14!null t.public.abcde.crdb_internal_mvcc_timestamp:15 t.public.abcde.tableoid:16 t.public.fgh.f:17 t.public.fgh.g:18!null t.public.fgh.h:19!null t.public.fgh.rowid:20!null t.public.fgh.crdb_internal_mvcc_timestamp:21 t.public.fgh.tableoid:22
+      ├── grouping columns: t.public.abcde.rowid:14!null
+      ├── select
+      │    ├── columns: t.public.abcde.a:9!null t.public.abcde.b:10 t.public.abcde.c:11!null t.public.abcde.d:12 t.public.abcde.e:13 t.public.abcde.rowid:14!null t.public.abcde.crdb_internal_mvcc_timestamp:15 t.public.abcde.tableoid:16 t.public.fgh.f:17 t.public.fgh.g:18!null t.public.fgh.h:19!null t.public.fgh.rowid:20!null t.public.fgh.crdb_internal_mvcc_timestamp:21 t.public.fgh.tableoid:22
+      │    ├── inner-join (cross)
+      │    │    ├── columns: t.public.abcde.a:9!null t.public.abcde.b:10 t.public.abcde.c:11 t.public.abcde.d:12 t.public.abcde.e:13 t.public.abcde.rowid:14!null t.public.abcde.crdb_internal_mvcc_timestamp:15 t.public.abcde.tableoid:16 t.public.fgh.f:17 t.public.fgh.g:18 t.public.fgh.h:19 t.public.fgh.rowid:20!null t.public.fgh.crdb_internal_mvcc_timestamp:21 t.public.fgh.tableoid:22
+      │    │    ├── scan t.public.abcde
+      │    │    │    ├── columns: t.public.abcde.a:9!null t.public.abcde.b:10 t.public.abcde.c:11 t.public.abcde.d:12 t.public.abcde.e:13 t.public.abcde.rowid:14!null t.public.abcde.crdb_internal_mvcc_timestamp:15 t.public.abcde.tableoid:16
+      │    │    │    └── computed column expressions
+      │    │    │         ├── t.public.abcde.d:12
+      │    │    │         │    └── (t.public.abcde.b:10 + t.public.abcde.c:11) + 1
+      │    │    │         └── t.public.abcde.e:13
+      │    │    │              └── t.public.abcde.a:9
+      │    │    ├── scan t.public.fgh
+      │    │    │    └── columns: t.public.fgh.f:17 t.public.fgh.g:18 t.public.fgh.h:19 t.public.fgh.rowid:20!null t.public.fgh.crdb_internal_mvcc_timestamp:21 t.public.fgh.tableoid:22
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── (t.public.abcde.c:11 = t.public.fgh.h:19) AND (t.public.fgh.g:18 = 'd')
+      └── aggregations
+           ├── first-agg [as=t.public.abcde.a:9]
+           │    └── t.public.abcde.a:9
+           ├── first-agg [as=t.public.abcde.b:10]
+           │    └── t.public.abcde.b:10
+           ├── first-agg [as=t.public.abcde.c:11]
+           │    └── t.public.abcde.c:11
+           ├── first-agg [as=t.public.abcde.d:12]
+           │    └── t.public.abcde.d:12
+           ├── first-agg [as=t.public.abcde.e:13]
+           │    └── t.public.abcde.e:13
+           ├── first-agg [as=t.public.abcde.crdb_internal_mvcc_timestamp:15]
+           │    └── t.public.abcde.crdb_internal_mvcc_timestamp:15
+           ├── first-agg [as=t.public.abcde.tableoid:16]
+           │    └── t.public.abcde.tableoid:16
+           ├── first-agg [as=t.public.fgh.f:17]
+           │    └── t.public.fgh.f:17
+           ├── first-agg [as=t.public.fgh.g:18]
+           │    └── t.public.fgh.g:18
+           ├── first-agg [as=t.public.fgh.h:19]
+           │    └── t.public.fgh.h:19
+           ├── first-agg [as=t.public.fgh.rowid:20]
+           │    └── t.public.fgh.rowid:20
+           ├── first-agg [as=t.public.fgh.crdb_internal_mvcc_timestamp:21]
+           │    └── t.public.fgh.crdb_internal_mvcc_timestamp:21
+           └── first-agg [as=t.public.fgh.tableoid:22]
+                └── t.public.fgh.tableoid:22
+
+# Test a self join.
+build
+DELETE FROM abcde USING abcde abcde2 WHERE abcde.a = abcde2.c
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: abcde.a:9 abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 abcde.rowid:14
+ ├── passthrough columns abcde2.a:17 abcde2.b:18 abcde2.c:19 abcde2.d:20 abcde2.e:21 abcde2.rowid:22 abcde2.crdb_internal_mvcc_timestamp:23 abcde2.tableoid:24
+ └── distinct-on
+      ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 abcde2.a:17!null abcde2.b:18 abcde2.c:19!null abcde2.d:20 abcde2.e:21 abcde2.rowid:22!null abcde2.crdb_internal_mvcc_timestamp:23 abcde2.tableoid:24
+      ├── grouping columns: abcde.rowid:14!null
+      ├── select
+      │    ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 abcde2.a:17!null abcde2.b:18 abcde2.c:19!null abcde2.d:20 abcde2.e:21 abcde2.rowid:22!null abcde2.crdb_internal_mvcc_timestamp:23 abcde2.tableoid:24
+      │    ├── inner-join (cross)
+      │    │    ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 abcde2.a:17!null abcde2.b:18 abcde2.c:19 abcde2.d:20 abcde2.e:21 abcde2.rowid:22!null abcde2.crdb_internal_mvcc_timestamp:23 abcde2.tableoid:24
+      │    │    ├── scan abcde
+      │    │    │    ├── columns: abcde.a:9!null abcde.b:10 abcde.c:11 abcde.d:12 abcde.e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
+      │    │    │    └── computed column expressions
+      │    │    │         ├── abcde.d:12
+      │    │    │         │    └── (abcde.b:10 + abcde.c:11) + 1
+      │    │    │         └── abcde.e:13
+      │    │    │              └── abcde.a:9
+      │    │    ├── scan abcde [as=abcde2]
+      │    │    │    ├── columns: abcde2.a:17!null abcde2.b:18 abcde2.c:19 abcde2.d:20 abcde2.e:21 abcde2.rowid:22!null abcde2.crdb_internal_mvcc_timestamp:23 abcde2.tableoid:24
+      │    │    │    └── computed column expressions
+      │    │    │         ├── abcde2.d:20
+      │    │    │         │    └── (abcde2.b:18 + abcde2.c:19) + 1
+      │    │    │         └── abcde2.e:21
+      │    │    │              └── abcde2.a:17
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── abcde.a:9 = abcde2.c:19
+      └── aggregations
+           ├── first-agg [as=abcde.a:9]
+           │    └── abcde.a:9
+           ├── first-agg [as=abcde.b:10]
+           │    └── abcde.b:10
+           ├── first-agg [as=abcde.c:11]
+           │    └── abcde.c:11
+           ├── first-agg [as=abcde.d:12]
+           │    └── abcde.d:12
+           ├── first-agg [as=abcde.e:13]
+           │    └── abcde.e:13
+           ├── first-agg [as=abcde.crdb_internal_mvcc_timestamp:15]
+           │    └── abcde.crdb_internal_mvcc_timestamp:15
+           ├── first-agg [as=abcde.tableoid:16]
+           │    └── abcde.tableoid:16
+           ├── first-agg [as=abcde2.a:17]
+           │    └── abcde2.a:17
+           ├── first-agg [as=abcde2.b:18]
+           │    └── abcde2.b:18
+           ├── first-agg [as=abcde2.c:19]
+           │    └── abcde2.c:19
+           ├── first-agg [as=abcde2.d:20]
+           │    └── abcde2.d:20
+           ├── first-agg [as=abcde2.e:21]
+           │    └── abcde2.e:21
+           ├── first-agg [as=abcde2.rowid:22]
+           │    └── abcde2.rowid:22
+           ├── first-agg [as=abcde2.crdb_internal_mvcc_timestamp:23]
+           │    └── abcde2.crdb_internal_mvcc_timestamp:23
+           └── first-agg [as=abcde2.tableoid:24]
+                └── abcde2.tableoid:24
+
+# Test when USING uses multiple tables.
+build
+DELETE FROM fgh USING abcde, xyz WHERE abcde.c = fgh.f AND xyz.x = fgh.g
+----
+delete fgh
+ ├── columns: <none>
+ ├── fetch columns: f:7 g:8 h:9 fgh.rowid:10
+ ├── passthrough columns a:13 b:14 c:15 d:16 e:17 abcde.rowid:18 abcde.crdb_internal_mvcc_timestamp:19 abcde.tableoid:20 x:21 y:22 z:23 xyz.crdb_internal_mvcc_timestamp:24 xyz.tableoid:25
+ └── distinct-on
+      ├── columns: f:7!null g:8!null h:9 fgh.rowid:10!null fgh.crdb_internal_mvcc_timestamp:11 fgh.tableoid:12 a:13!null b:14 c:15!null d:16 e:17 abcde.rowid:18!null abcde.crdb_internal_mvcc_timestamp:19 abcde.tableoid:20 x:21!null y:22 z:23 xyz.crdb_internal_mvcc_timestamp:24 xyz.tableoid:25
+      ├── grouping columns: fgh.rowid:10!null
+      ├── select
+      │    ├── columns: f:7!null g:8!null h:9 fgh.rowid:10!null fgh.crdb_internal_mvcc_timestamp:11 fgh.tableoid:12 a:13!null b:14 c:15!null d:16 e:17 abcde.rowid:18!null abcde.crdb_internal_mvcc_timestamp:19 abcde.tableoid:20 x:21!null y:22 z:23 xyz.crdb_internal_mvcc_timestamp:24 xyz.tableoid:25
+      │    ├── inner-join (cross)
+      │    │    ├── columns: f:7 g:8 h:9 fgh.rowid:10!null fgh.crdb_internal_mvcc_timestamp:11 fgh.tableoid:12 a:13!null b:14 c:15 d:16 e:17 abcde.rowid:18!null abcde.crdb_internal_mvcc_timestamp:19 abcde.tableoid:20 x:21!null y:22 z:23 xyz.crdb_internal_mvcc_timestamp:24 xyz.tableoid:25
+      │    │    ├── scan fgh
+      │    │    │    └── columns: f:7 g:8 h:9 fgh.rowid:10!null fgh.crdb_internal_mvcc_timestamp:11 fgh.tableoid:12
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: a:13!null b:14 c:15 d:16 e:17 abcde.rowid:18!null abcde.crdb_internal_mvcc_timestamp:19 abcde.tableoid:20 x:21!null y:22 z:23 xyz.crdb_internal_mvcc_timestamp:24 xyz.tableoid:25
+      │    │    │    ├── scan abcde
+      │    │    │    │    ├── columns: a:13!null b:14 c:15 d:16 e:17 abcde.rowid:18!null abcde.crdb_internal_mvcc_timestamp:19 abcde.tableoid:20
+      │    │    │    │    └── computed column expressions
+      │    │    │    │         ├── d:16
+      │    │    │    │         │    └── (b:14 + c:15) + 1
+      │    │    │    │         └── e:17
+      │    │    │    │              └── a:13
+      │    │    │    ├── scan xyz
+      │    │    │    │    └── columns: x:21!null y:22 z:23 xyz.crdb_internal_mvcc_timestamp:24 xyz.tableoid:25
+      │    │    │    └── filters (true)
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── (c:15 = f:7) AND (x:21 = g:8)
+      └── aggregations
+           ├── first-agg [as=f:7]
+           │    └── f:7
+           ├── first-agg [as=g:8]
+           │    └── g:8
+           ├── first-agg [as=h:9]
+           │    └── h:9
+           ├── first-agg [as=fgh.crdb_internal_mvcc_timestamp:11]
+           │    └── fgh.crdb_internal_mvcc_timestamp:11
+           ├── first-agg [as=fgh.tableoid:12]
+           │    └── fgh.tableoid:12
+           ├── first-agg [as=a:13]
+           │    └── a:13
+           ├── first-agg [as=b:14]
+           │    └── b:14
+           ├── first-agg [as=c:15]
+           │    └── c:15
+           ├── first-agg [as=d:16]
+           │    └── d:16
+           ├── first-agg [as=e:17]
+           │    └── e:17
+           ├── first-agg [as=abcde.rowid:18]
+           │    └── abcde.rowid:18
+           ├── first-agg [as=abcde.crdb_internal_mvcc_timestamp:19]
+           │    └── abcde.crdb_internal_mvcc_timestamp:19
+           ├── first-agg [as=abcde.tableoid:20]
+           │    └── abcde.tableoid:20
+           ├── first-agg [as=x:21]
+           │    └── x:21
+           ├── first-agg [as=y:22]
+           │    └── y:22
+           ├── first-agg [as=z:23]
+           │    └── z:23
+           ├── first-agg [as=xyz.crdb_internal_mvcc_timestamp:24]
+           │    └── xyz.crdb_internal_mvcc_timestamp:24
+           └── first-agg [as=xyz.tableoid:25]
+                └── xyz.tableoid:25
+
+# Test if USING works well with RETURNING expressions that reference
+# the USING table.
+build
+DELETE FROM
+  abcde
+USING
+  fgh
+WHERE
+  fgh.h > abcde.b AND fgh.h <= 4
+RETURNING
+  abcde.a, abcde.b, abcde.c, abcde.d, abcde.e
+----
+project
+ ├── columns: a:1!null b:2!null c:3 d:4 e:5
+ └── delete abcde
+      ├── columns: a:1!null b:2!null c:3 d:4 e:5 abcde.rowid:6!null f:17 g:18 h:19 fgh.rowid:20 fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+      ├── fetch columns: a:9 b:10 c:11 d:12 e:13 abcde.rowid:14
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    ├── e:13 => e:5
+      │    └── abcde.rowid:14 => abcde.rowid:6
+      ├── passthrough columns f:17 g:18 h:19 fgh.rowid:20 fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+      └── distinct-on
+           ├── columns: a:9!null b:10!null c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17 g:18 h:19!null fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           ├── grouping columns: abcde.rowid:14!null
+           ├── select
+           │    ├── columns: a:9!null b:10!null c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17 g:18 h:19!null fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    ├── inner-join (cross)
+           │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    │    ├── scan abcde
+           │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
+           │    │    │    └── computed column expressions
+           │    │    │         ├── d:12
+           │    │    │         │    └── (b:10 + c:11) + 1
+           │    │    │         └── e:13
+           │    │    │              └── a:9
+           │    │    ├── scan fgh
+           │    │    │    └── columns: f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    │    └── filters (true)
+           │    └── filters
+           │         └── (h:19 > b:10) AND (h:19 <= 4)
+           └── aggregations
+                ├── first-agg [as=a:9]
+                │    └── a:9
+                ├── first-agg [as=b:10]
+                │    └── b:10
+                ├── first-agg [as=c:11]
+                │    └── c:11
+                ├── first-agg [as=d:12]
+                │    └── d:12
+                ├── first-agg [as=e:13]
+                │    └── e:13
+                ├── first-agg [as=abcde.crdb_internal_mvcc_timestamp:15]
+                │    └── abcde.crdb_internal_mvcc_timestamp:15
+                ├── first-agg [as=abcde.tableoid:16]
+                │    └── abcde.tableoid:16
+                ├── first-agg [as=f:17]
+                │    └── f:17
+                ├── first-agg [as=g:18]
+                │    └── g:18
+                ├── first-agg [as=h:19]
+                │    └── h:19
+                ├── first-agg [as=fgh.rowid:20]
+                │    └── fgh.rowid:20
+                ├── first-agg [as=fgh.crdb_internal_mvcc_timestamp:21]
+                │    └── fgh.crdb_internal_mvcc_timestamp:21
+                └── first-agg [as=fgh.tableoid:22]
+                     └── fgh.tableoid:22
+
+# Test if RETURNING * returns everything.
+build
+DELETE FROM abcde USING fgh WHERE c = fgh.f AND fgh.g = 'd' RETURNING *
+----
+project
+ ├── columns: a:1!null b:2 c:3!null d:4 e:5 f:17 g:18 h:19
+ └── delete abcde
+      ├── columns: a:1!null b:2 c:3!null d:4 e:5 abcde.rowid:6!null f:17 g:18 h:19 fgh.rowid:20 fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+      ├── fetch columns: a:9 b:10 c:11 d:12 e:13 abcde.rowid:14
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    ├── e:13 => e:5
+      │    └── abcde.rowid:14 => abcde.rowid:6
+      ├── passthrough columns f:17 g:18 h:19 fgh.rowid:20 fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+      └── distinct-on
+           ├── columns: a:9!null b:10 c:11!null d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17!null g:18!null h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           ├── grouping columns: abcde.rowid:14!null
+           ├── select
+           │    ├── columns: a:9!null b:10 c:11!null d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17!null g:18!null h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    ├── inner-join (cross)
+           │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    │    ├── scan abcde
+           │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
+           │    │    │    └── computed column expressions
+           │    │    │         ├── d:12
+           │    │    │         │    └── (b:10 + c:11) + 1
+           │    │    │         └── e:13
+           │    │    │              └── a:9
+           │    │    ├── scan fgh
+           │    │    │    └── columns: f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    │    └── filters (true)
+           │    └── filters
+           │         └── (c:11 = f:17) AND (g:18 = 'd')
+           └── aggregations
+                ├── first-agg [as=a:9]
+                │    └── a:9
+                ├── first-agg [as=b:10]
+                │    └── b:10
+                ├── first-agg [as=c:11]
+                │    └── c:11
+                ├── first-agg [as=d:12]
+                │    └── d:12
+                ├── first-agg [as=e:13]
+                │    └── e:13
+                ├── first-agg [as=abcde.crdb_internal_mvcc_timestamp:15]
+                │    └── abcde.crdb_internal_mvcc_timestamp:15
+                ├── first-agg [as=abcde.tableoid:16]
+                │    └── abcde.tableoid:16
+                ├── first-agg [as=f:17]
+                │    └── f:17
+                ├── first-agg [as=g:18]
+                │    └── g:18
+                ├── first-agg [as=h:19]
+                │    └── h:19
+                ├── first-agg [as=fgh.rowid:20]
+                │    └── fgh.rowid:20
+                ├── first-agg [as=fgh.crdb_internal_mvcc_timestamp:21]
+                │    └── fgh.crdb_internal_mvcc_timestamp:21
+                └── first-agg [as=fgh.tableoid:22]
+                     └── fgh.tableoid:22
+
+# Test ORDER BY and LIMIT when ordering by primary key columns
+build
+DELETE FROM mutation AS foo USING abcde as bar WHERE foo.n > bar.a ORDER BY foo.m LIMIT 3
+----
+delete mutation [as=foo]
+ ├── columns: <none>
+ ├── fetch columns: m:7 n:8 o:9 p:10
+ ├── passthrough columns a:13 b:14 c:15 d:16 e:17 rowid:18 bar.crdb_internal_mvcc_timestamp:19 bar.tableoid:20
+ └── distinct-on
+      ├── columns: m:7!null n:8!null o:9 p:10 foo.crdb_internal_mvcc_timestamp:11 foo.tableoid:12 a:13!null b:14 c:15 d:16 e:17 rowid:18!null bar.crdb_internal_mvcc_timestamp:19 bar.tableoid:20
+      ├── grouping columns: m:7!null
+      ├── limit
+      │    ├── columns: m:7!null n:8!null o:9 p:10 foo.crdb_internal_mvcc_timestamp:11 foo.tableoid:12 a:13!null b:14 c:15 d:16 e:17 rowid:18!null bar.crdb_internal_mvcc_timestamp:19 bar.tableoid:20
+      │    ├── internal-ordering: +7
+      │    ├── sort
+      │    │    ├── columns: m:7!null n:8!null o:9 p:10 foo.crdb_internal_mvcc_timestamp:11 foo.tableoid:12 a:13!null b:14 c:15 d:16 e:17 rowid:18!null bar.crdb_internal_mvcc_timestamp:19 bar.tableoid:20
+      │    │    ├── ordering: +7
+      │    │    ├── limit hint: 3.00
+      │    │    └── select
+      │    │         ├── columns: m:7!null n:8!null o:9 p:10 foo.crdb_internal_mvcc_timestamp:11 foo.tableoid:12 a:13!null b:14 c:15 d:16 e:17 rowid:18!null bar.crdb_internal_mvcc_timestamp:19 bar.tableoid:20
+      │    │         ├── inner-join (cross)
+      │    │         │    ├── columns: m:7!null n:8 o:9 p:10 foo.crdb_internal_mvcc_timestamp:11 foo.tableoid:12 a:13!null b:14 c:15 d:16 e:17 rowid:18!null bar.crdb_internal_mvcc_timestamp:19 bar.tableoid:20
+      │    │         │    ├── scan mutation [as=foo]
+      │    │         │    │    └── columns: m:7!null n:8 o:9 p:10 foo.crdb_internal_mvcc_timestamp:11 foo.tableoid:12
+      │    │         │    ├── scan abcde [as=bar]
+      │    │         │    │    ├── columns: a:13!null b:14 c:15 d:16 e:17 rowid:18!null bar.crdb_internal_mvcc_timestamp:19 bar.tableoid:20
+      │    │         │    │    └── computed column expressions
+      │    │         │    │         ├── d:16
+      │    │         │    │         │    └── (b:14 + c:15) + 1
+      │    │         │    │         └── e:17
+      │    │         │    │              └── a:13
+      │    │         │    └── filters (true)
+      │    │         └── filters
+      │    │              └── n:8 > a:13
+      │    └── 3
+      └── aggregations
+           ├── first-agg [as=n:8]
+           │    └── n:8
+           ├── first-agg [as=o:9]
+           │    └── o:9
+           ├── first-agg [as=p:10]
+           │    └── p:10
+           ├── first-agg [as=foo.crdb_internal_mvcc_timestamp:11]
+           │    └── foo.crdb_internal_mvcc_timestamp:11
+           ├── first-agg [as=foo.tableoid:12]
+           │    └── foo.tableoid:12
+           ├── first-agg [as=a:13]
+           │    └── a:13
+           ├── first-agg [as=b:14]
+           │    └── b:14
+           ├── first-agg [as=c:15]
+           │    └── c:15
+           ├── first-agg [as=d:16]
+           │    └── d:16
+           ├── first-agg [as=e:17]
+           │    └── e:17
+           ├── first-agg [as=rowid:18]
+           │    └── rowid:18
+           ├── first-agg [as=bar.crdb_internal_mvcc_timestamp:19]
+           │    └── bar.crdb_internal_mvcc_timestamp:19
+           └── first-agg [as=bar.tableoid:20]
+                └── bar.tableoid:20
+
+# Aliased table names, ORDER BY and LIMIT when ordering by non primary key columns
+# TODO(#89817): Add support for ORDER BY columns that are non-PK columns of the target
+# table or columns from non-target tables.
+build
+DELETE FROM abcde AS foo USING xyz AS bar WHERE bar.y > 0 ORDER BY foo.a DESC LIMIT 5
+----
+error (42P10): SELECT DISTINCT ON expressions must match initial ORDER BY expressions
+
+# Test if DELETE FROM ... USING can return hidden columns.
+build
+DELETE FROM
+  abcde
+USING
+  fgh
+WHERE
+  abcde.a = fgh.f
+RETURNING
+  fgh.rowid
+----
+project
+ ├── columns: rowid:20
+ └── delete abcde
+      ├── columns: a:1!null b:2 c:3 d:4 e:5 abcde.rowid:6!null f:17 g:18 h:19 fgh.rowid:20 fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+      ├── fetch columns: a:9 b:10 c:11 d:12 e:13 abcde.rowid:14
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    ├── e:13 => e:5
+      │    └── abcde.rowid:14 => abcde.rowid:6
+      ├── passthrough columns f:17 g:18 h:19 fgh.rowid:20 fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+      └── distinct-on
+           ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17!null g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           ├── grouping columns: abcde.rowid:14!null
+           ├── select
+           │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17!null g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    ├── inner-join (cross)
+           │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    │    ├── scan abcde
+           │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
+           │    │    │    └── computed column expressions
+           │    │    │         ├── d:12
+           │    │    │         │    └── (b:10 + c:11) + 1
+           │    │    │         └── e:13
+           │    │    │              └── a:9
+           │    │    ├── scan fgh
+           │    │    │    └── columns: f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    │    └── filters (true)
+           │    └── filters
+           │         └── a:9 = f:17
+           └── aggregations
+                ├── first-agg [as=a:9]
+                │    └── a:9
+                ├── first-agg [as=b:10]
+                │    └── b:10
+                ├── first-agg [as=c:11]
+                │    └── c:11
+                ├── first-agg [as=d:12]
+                │    └── d:12
+                ├── first-agg [as=e:13]
+                │    └── e:13
+                ├── first-agg [as=abcde.crdb_internal_mvcc_timestamp:15]
+                │    └── abcde.crdb_internal_mvcc_timestamp:15
+                ├── first-agg [as=abcde.tableoid:16]
+                │    └── abcde.tableoid:16
+                ├── first-agg [as=f:17]
+                │    └── f:17
+                ├── first-agg [as=g:18]
+                │    └── g:18
+                ├── first-agg [as=h:19]
+                │    └── h:19
+                ├── first-agg [as=fgh.rowid:20]
+                │    └── fgh.rowid:20
+                ├── first-agg [as=fgh.crdb_internal_mvcc_timestamp:21]
+                │    └── fgh.crdb_internal_mvcc_timestamp:21
+                └── first-agg [as=fgh.tableoid:22]
+                     └── fgh.tableoid:22
+
+# Test if returning returns columns in the target table and USING table.
+build
+DELETE FROM abcde USING fgh WHERE abcde.a = fgh.f RETURNING fgh.f, abcde.a
+----
+project
+ ├── columns: f:17 a:1!null
+ └── delete abcde
+      ├── columns: a:1!null b:2 c:3 d:4 e:5 abcde.rowid:6!null f:17 g:18 h:19 fgh.rowid:20 fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+      ├── fetch columns: a:9 b:10 c:11 d:12 e:13 abcde.rowid:14
+      ├── return-mapping:
+      │    ├── a:9 => a:1
+      │    ├── b:10 => b:2
+      │    ├── c:11 => c:3
+      │    ├── d:12 => d:4
+      │    ├── e:13 => e:5
+      │    └── abcde.rowid:14 => abcde.rowid:6
+      ├── passthrough columns f:17 g:18 h:19 fgh.rowid:20 fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+      └── distinct-on
+           ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17!null g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           ├── grouping columns: abcde.rowid:14!null
+           ├── select
+           │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17!null g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    ├── inner-join (cross)
+           │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    │    ├── scan abcde
+           │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
+           │    │    │    └── computed column expressions
+           │    │    │         ├── d:12
+           │    │    │         │    └── (b:10 + c:11) + 1
+           │    │    │         └── e:13
+           │    │    │              └── a:9
+           │    │    ├── scan fgh
+           │    │    │    └── columns: f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+           │    │    └── filters (true)
+           │    └── filters
+           │         └── a:9 = f:17
+           └── aggregations
+                ├── first-agg [as=a:9]
+                │    └── a:9
+                ├── first-agg [as=b:10]
+                │    └── b:10
+                ├── first-agg [as=c:11]
+                │    └── c:11
+                ├── first-agg [as=d:12]
+                │    └── d:12
+                ├── first-agg [as=e:13]
+                │    └── e:13
+                ├── first-agg [as=abcde.crdb_internal_mvcc_timestamp:15]
+                │    └── abcde.crdb_internal_mvcc_timestamp:15
+                ├── first-agg [as=abcde.tableoid:16]
+                │    └── abcde.tableoid:16
+                ├── first-agg [as=f:17]
+                │    └── f:17
+                ├── first-agg [as=g:18]
+                │    └── g:18
+                ├── first-agg [as=h:19]
+                │    └── h:19
+                ├── first-agg [as=fgh.rowid:20]
+                │    └── fgh.rowid:20
+                ├── first-agg [as=fgh.crdb_internal_mvcc_timestamp:21]
+                │    └── fgh.crdb_internal_mvcc_timestamp:21
+                └── first-agg [as=fgh.tableoid:22]
+                     └── fgh.tableoid:22
+
+# Test if DELETE FROM ... USING works with LATERAL.
+build
+DELETE FROM abcde USING fgh, LATERAL (SELECT x FROM xyz WHERE fgh.g > xyz.x) AS other WHERE other.x = 'a'
+----
+delete abcde
+ ├── columns: <none>
+ ├── fetch columns: a:9 b:10 c:11 d:12 e:13 abcde.rowid:14
+ ├── passthrough columns f:17 g:18 h:19 fgh.rowid:20 fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22 x:23
+ └── distinct-on
+      ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22 x:23!null
+      ├── grouping columns: abcde.rowid:14!null
+      ├── select
+      │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22 x:23!null
+      │    ├── inner-join (cross)
+      │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16 f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22 x:23!null
+      │    │    ├── scan abcde
+      │    │    │    ├── columns: a:9!null b:10 c:11 d:12 e:13 abcde.rowid:14!null abcde.crdb_internal_mvcc_timestamp:15 abcde.tableoid:16
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:12
+      │    │    │         │    └── (b:10 + c:11) + 1
+      │    │    │         └── e:13
+      │    │    │              └── a:9
+      │    │    ├── inner-join-apply
+      │    │    │    ├── columns: f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22 x:23!null
+      │    │    │    ├── scan fgh
+      │    │    │    │    └── columns: f:17 g:18 h:19 fgh.rowid:20!null fgh.crdb_internal_mvcc_timestamp:21 fgh.tableoid:22
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: x:23!null
+      │    │    │    │    └── select
+      │    │    │    │         ├── columns: x:23!null y:24 z:25 xyz.crdb_internal_mvcc_timestamp:26 xyz.tableoid:27
+      │    │    │    │         ├── scan xyz
+      │    │    │    │         │    └── columns: x:23!null y:24 z:25 xyz.crdb_internal_mvcc_timestamp:26 xyz.tableoid:27
+      │    │    │    │         └── filters
+      │    │    │    │              └── g:18 > x:23
+      │    │    │    └── filters (true)
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── x:23 = 'a'
+      └── aggregations
+           ├── first-agg [as=a:9]
+           │    └── a:9
+           ├── first-agg [as=b:10]
+           │    └── b:10
+           ├── first-agg [as=c:11]
+           │    └── c:11
+           ├── first-agg [as=d:12]
+           │    └── d:12
+           ├── first-agg [as=e:13]
+           │    └── e:13
+           ├── first-agg [as=abcde.crdb_internal_mvcc_timestamp:15]
+           │    └── abcde.crdb_internal_mvcc_timestamp:15
+           ├── first-agg [as=abcde.tableoid:16]
+           │    └── abcde.tableoid:16
+           ├── first-agg [as=f:17]
+           │    └── f:17
+           ├── first-agg [as=g:18]
+           │    └── g:18
+           ├── first-agg [as=h:19]
+           │    └── h:19
+           ├── first-agg [as=fgh.rowid:20]
+           │    └── fgh.rowid:20
+           ├── first-agg [as=fgh.crdb_internal_mvcc_timestamp:21]
+           │    └── fgh.crdb_internal_mvcc_timestamp:21
+           ├── first-agg [as=fgh.tableoid:22]
+           │    └── fgh.tableoid:22
+           └── first-agg [as=x:23]
+                └── x:23
+
+# Test if DELETE FROM ... USING works with partial indexes.
+exec-ddl
+CREATE TABLE pindex (
+  a DECIMAL(10, 2),
+  INDEX (a) WHERE a > 3
+)
+----
+
+build
+DELETE FROM pindex USING (VALUES (5.0, 6.0)) v(b) WHERE pindex.a = v.b
+----
+delete pindex
+ ├── columns: <none>
+ ├── fetch columns: a:5 rowid:6
+ ├── passthrough columns column1:9 column2:10
+ ├── partial index del columns: partial_index_del1:11
+ └── project
+      ├── columns: partial_index_del1:11!null a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null column2:10!null
+      ├── distinct-on
+      │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null column2:10!null
+      │    ├── grouping columns: rowid:6!null
+      │    ├── select
+      │    │    ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null column2:10!null
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null column2:10!null
+      │    │    │    ├── scan pindex
+      │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+      │    │    │    │    └── partial index predicates
+      │    │    │    │         └── pindex_a_idx: filters
+      │    │    │    │              └── a:5 > 3
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: column1:9!null column2:10!null
+      │    │    │    │    └── (5.0, 6.0)
+      │    │    │    └── filters (true)
+      │    │    └── filters
+      │    │         └── a:5 = column1:9
+      │    └── aggregations
+      │         ├── first-agg [as=a:5]
+      │         │    └── a:5
+      │         ├── first-agg [as=crdb_internal_mvcc_timestamp:7]
+      │         │    └── crdb_internal_mvcc_timestamp:7
+      │         ├── first-agg [as=tableoid:8]
+      │         │    └── tableoid:8
+      │         ├── first-agg [as=column1:9]
+      │         │    └── column1:9
+      │         └── first-agg [as=column2:10]
+      │              └── column2:10
+      └── projections
+           └── a:5 > 3 [as=partial_index_del1:11]
+
+# Test that multiple of the same table in the USING clause returns an error.
+build
+DELETE FROM abcde USING xyz, fgh, fgh WHERE fgh.f = abcde.a
+----
+error (42712): source name "fgh" specified more than once (missing AS clause)
+
+# Test when the target table has a compound primary key,
+# to ensure that the distinct-on groups by all the PK columns.
+exec-ddl
+CREATE TABLE hij (
+  h INT,
+  i INT,
+  j INT,
+  PRIMARY KEY (h, i)
+)
+----
+
+build
+DELETE FROM hij USING abcde WHERE hij.i = abcde.a
+----
+delete hij
+ ├── columns: <none>
+ ├── fetch columns: h:6 i:7 j:8
+ ├── passthrough columns a:11 b:12 c:13 d:14 e:15 rowid:16 abcde.crdb_internal_mvcc_timestamp:17 abcde.tableoid:18
+ └── distinct-on
+      ├── columns: h:6!null i:7!null j:8 hij.crdb_internal_mvcc_timestamp:9 hij.tableoid:10 a:11!null b:12 c:13 d:14 e:15 rowid:16!null abcde.crdb_internal_mvcc_timestamp:17 abcde.tableoid:18
+      ├── grouping columns: h:6!null i:7!null
+      ├── select
+      │    ├── columns: h:6!null i:7!null j:8 hij.crdb_internal_mvcc_timestamp:9 hij.tableoid:10 a:11!null b:12 c:13 d:14 e:15 rowid:16!null abcde.crdb_internal_mvcc_timestamp:17 abcde.tableoid:18
+      │    ├── inner-join (cross)
+      │    │    ├── columns: h:6!null i:7!null j:8 hij.crdb_internal_mvcc_timestamp:9 hij.tableoid:10 a:11!null b:12 c:13 d:14 e:15 rowid:16!null abcde.crdb_internal_mvcc_timestamp:17 abcde.tableoid:18
+      │    │    ├── scan hij
+      │    │    │    └── columns: h:6!null i:7!null j:8 hij.crdb_internal_mvcc_timestamp:9 hij.tableoid:10
+      │    │    ├── scan abcde
+      │    │    │    ├── columns: a:11!null b:12 c:13 d:14 e:15 rowid:16!null abcde.crdb_internal_mvcc_timestamp:17 abcde.tableoid:18
+      │    │    │    └── computed column expressions
+      │    │    │         ├── d:14
+      │    │    │         │    └── (b:12 + c:13) + 1
+      │    │    │         └── e:15
+      │    │    │              └── a:11
+      │    │    └── filters (true)
+      │    └── filters
+      │         └── i:7 = a:11
+      └── aggregations
+           ├── first-agg [as=j:8]
+           │    └── j:8
+           ├── first-agg [as=hij.crdb_internal_mvcc_timestamp:9]
+           │    └── hij.crdb_internal_mvcc_timestamp:9
+           ├── first-agg [as=hij.tableoid:10]
+           │    └── hij.tableoid:10
+           ├── first-agg [as=a:11]
+           │    └── a:11
+           ├── first-agg [as=b:12]
+           │    └── b:12
+           ├── first-agg [as=c:13]
+           │    └── c:13
+           ├── first-agg [as=d:14]
+           │    └── d:14
+           ├── first-agg [as=e:15]
+           │    └── e:15
+           ├── first-agg [as=rowid:16]
+           │    └── rowid:16
+           ├── first-agg [as=abcde.crdb_internal_mvcc_timestamp:17]
+           │    └── abcde.crdb_internal_mvcc_timestamp:17
+           └── first-agg [as=abcde.tableoid:18]
+                └── abcde.tableoid:18

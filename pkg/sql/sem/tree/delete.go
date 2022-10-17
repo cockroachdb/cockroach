@@ -25,6 +25,7 @@ type Delete struct {
 	Table     TableExpr
 	Where     *Where
 	OrderBy   OrderBy
+	Using     TableExprs
 	Limit     *Limit
 	Returning ReturningClause
 }
@@ -34,6 +35,10 @@ func (node *Delete) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.With)
 	ctx.WriteString("DELETE FROM ")
 	ctx.FormatNode(node.Table)
+	if len(node.Using) > 0 {
+		ctx.WriteString(" USING ")
+		ctx.FormatNode(&node.Using)
+	}
 	if node.Where != nil {
 		ctx.WriteByte(' ')
 		ctx.FormatNode(node.Where)

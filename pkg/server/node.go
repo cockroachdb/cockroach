@@ -743,11 +743,12 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 	_ = stopper.RunAsyncTask(ctx, "compute-metrics", func(ctx context.Context) {
 		// Compute periodic stats at the same frequency as metrics are sampled.
 		ticker := time.NewTicker(interval)
+		previousMetrics := make(map[*kvserver.Store]*storage.Metrics)
 		defer ticker.Stop()
 		for tick := 0; ; tick++ {
 			select {
 			case <-ticker.C:
-				if err := n.computePeriodicMetrics(ctx, tick); err != nil {
+				if err := n.computeMetricsPeriodically(ctx, previousMetrics, tick); err != nil {
 					log.Errorf(ctx, "failed computing periodic metrics: %s", err)
 				}
 			case <-stopper.ShouldQuiesce():
@@ -757,12 +758,20 @@ func (n *Node) startComputePeriodicMetrics(stopper *stop.Stopper, interval time.
 	})
 }
 
-// computePeriodicMetrics instructs each store to compute the value of
+// computeMetricsPeriodically instructs each store to compute the value of
 // complicated metrics.
-func (n *Node) computePeriodicMetrics(ctx context.Context, tick int) error {
+func (n *Node) computeMetricsPeriodically(
+	ctx context.Context, storeToMetrics map[*kvserver.Store]*storage.Metrics, tick int,
+) error {
 	return n.stores.VisitStores(func(store *kvserver.Store) error {
-		if err := store.ComputeMetrics(ctx, tick); err != nil {
+		if newMetrics, err := store.ComputeMetricsPeriodically(ctx, storeToMetrics[store], tick); err != nil {
 			log.Warningf(ctx, "%s: unable to compute metrics: %s", store, err)
+		} else {
+			if storeToMetrics[store] == nil {
+				storeToMetrics[store] = &newMetrics
+			} else {
+				*storeToMetrics[store] = newMetrics
+			}
 		}
 		return nil
 	})

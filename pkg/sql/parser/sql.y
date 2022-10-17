@@ -1378,7 +1378,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <*tree.Limit> select_limit opt_select_limit
 %type <tree.TableNames> relation_expr_list
 %type <tree.ReturningClause> returning_clause
-%type <empty> opt_using_clause
+%type <tree.TableExprs> opt_using_clause
 %type <tree.RefreshDataOption> opt_clear_data
 
 %type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
@@ -4827,6 +4827,7 @@ opt_changefeed_sink:
 // %Category: DML
 // %Text: DELETE FROM <tablename> [WHERE <expr>]
 //               [ORDER BY <exprs...>]
+//               [USING <exprs...>]
 //               [LIMIT <expr>]
 //               [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
@@ -4836,6 +4837,7 @@ delete_stmt:
     $$.val = &tree.Delete{
       With: $1.with(),
       Table: $4.tblExpr(),
+      Using: $5.tblExprs(),
       Where: tree.NewWhere(tree.AstWhere, $6.expr()),
       OrderBy: $7.orderBy(),
       Limit: $8.limit(),
@@ -4845,8 +4847,14 @@ delete_stmt:
 | opt_with_clause DELETE error // SHOW HELP: DELETE
 
 opt_using_clause:
-  USING from_list { return unimplementedWithIssueDetail(sqllex, 40963, "delete using") }
-| /* EMPTY */ { }
+  USING from_list
+  {
+    $$.val = $2.tblExprs()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.TableExprs{}
+  }
 
 
 // %Help: DISCARD - reset the session to its initial state

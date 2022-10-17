@@ -211,6 +211,9 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	var ep *tpccChaosEventProcessor
 	var promCfg *prometheus.Config
 	if !opts.DisablePrometheus {
+		// TODO(irfansharif): Move this after the import step. The statistics
+		// during import itself is uninteresting and pollutes actual workload
+		// data.
 		var cleanupFunc func()
 		promCfg, cleanupFunc = setupPrometheusForRoachtest(ctx, t, c, opts.PrometheusConfig, workloadInstances)
 		defer cleanupFunc()
