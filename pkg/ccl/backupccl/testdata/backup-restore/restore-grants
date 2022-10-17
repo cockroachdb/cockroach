@@ -1,6 +1,3 @@
-skip issue-num=87129
-----
-
 # Ensure that non-cluster restores appropriately wipes the grants on the
 # restored descriptors. Since we're not restoring the users, the users that
 # the restoring descriptors reference may not be the same users as they
@@ -9,6 +6,17 @@ skip issue-num=87129
 # We allow implicit access to non-admin users so that we can test
 # with nodelocal.
 new-server name=s1 allow-implicit-access
+----
+
+# TODO(ssd): We reset the closed timestamp configurables to avoid schema
+# change transactions entering a retry loop with the lease acquisition
+# transactions. See https://github.com/cockroachdb/cockroach/issues/89900
+exec-sql
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '3s';
+----
+
+exec-sql
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval= '200ms';
 ----
 
 # First, let's create some users, a database, a couple of types, some tables,
