@@ -36,20 +36,23 @@ func New(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 	testingKnobs *sqlliveness.TestingKnobs,
+	isTenant bool,
 ) sqlliveness.Provider {
 	storage := slstorage.NewStorage(ambientCtx, stopper, clock, db, codec, settings)
-	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings, testingKnobs)
+	instance := slinstance.NewSQLInstance(stopper, clock, storage, settings, testingKnobs, isTenant)
 	return &provider{
 		Storage:  storage,
 		Instance: instance,
 	}
 }
 
-func (p *provider) Start(ctx context.Context) {
+// Start implements the sqlliveness.Provider interface
+func (p *provider) Start(ctx context.Context) <-chan error {
 	p.Storage.Start(ctx)
-	p.Instance.Start(ctx)
+	return p.Instance.Start(ctx)
 }
 
+// Metrics implements the sqlliveness.Provider interface
 func (p *provider) Metrics() metric.Struct {
 	return p.Storage.Metrics()
 }

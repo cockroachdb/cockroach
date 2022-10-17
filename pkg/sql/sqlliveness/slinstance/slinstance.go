@@ -69,9 +69,6 @@ type session struct {
 	mu struct {
 		syncutil.RWMutex
 		exp hlc.Timestamp
-		// sessionExpiryCallbacks are invoked when the session expires. They're
-		// invoked under the session's lock, so keep them small.
-		sessionExpiryCallbacks []func(ctx context.Context)
 	}
 }
 
@@ -90,23 +87,6 @@ func (s *session) Start() hlc.Timestamp {
 	return s.start
 }
 
-// RegisterCallbackForSessionExpiry adds the given function to the list
-// of functions called after a session expires. The functions are
-// executed in a goroutine.
-func (s *session) RegisterCallbackForSessionExpiry(sExp func(context.Context)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.sessionExpiryCallbacks = append(s.mu.sessionExpiryCallbacks, sExp)
-}
-
-func (s *session) invokeSessionExpiryCallbacks(ctx context.Context) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, callback := range s.mu.sessionExpiryCallbacks {
-		callback(ctx)
-	}
-}
-
 func (s *session) setExpiration(exp hlc.Timestamp) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -122,9 +102,11 @@ type Instance struct {
 	clock     *hlc.Clock
 	settings  *cluster.Settings
 	stopper   *stop.Stopper
+	errChan   chan error
 	storage   Writer
 	ttl       func() time.Duration
 	hb        func() time.Duration
+	isTenant  bool
 	testKnobs sqlliveness.TestingKnobs
 	startErr  error
 	mu        struct {
@@ -152,22 +134,20 @@ func (l *Instance) setSession(s *session) {
 	l.mu.Unlock()
 }
 
-func (l *Instance) clearSession(ctx context.Context) {
-	l.checkExpiry(ctx)
+func (l *Instance) clearSession() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.mu.s = nil
 	l.mu.blockCh = make(chan struct{})
 }
 
-func (l *Instance) checkExpiry(ctx context.Context) {
+func (l *Instance) isSessionExpired() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if expiration := l.mu.s.Expiration(); expiration.Less(l.clock.Now()) {
-		// If the session has expired, invoke the session expiry callbacks
-		// associated with the session.
-		l.mu.s.invokeSessionExpiryCallbacks(ctx)
+		return true
 	}
+	return false
 }
 
 // createSession tries until it can create a new session and returns an error
@@ -263,15 +243,17 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 			t.Read = true
 			s, _ := l.getSessionOrBlockCh()
 			// TODO(aaditya): consider combining `DefaultTTL` and `DefaultHeartBeat` into a single knob to make these
-			//  timeouts less fragile
+			// timeouts less fragile
 			timeout := l.ttl()/2 + l.hb()
 			if s == nil {
 				var newSession *session
-				if err := contextutil.RunWithTimeout(ctx, "sqlliveness create session", timeout, func(ctx context.Context) error {
+				err := contextutil.RunWithTimeout(ctx, "sqlliveness create session", timeout, func(ctx context.Context) error {
 					var err error
 					newSession, err = l.createSession(ctx)
 					return err
-				}); err != nil {
+				})
+				switch {
+				case err != nil:
 					log.Errorf(ctx, "sqlliveness failed to create new session: %v", err)
 					func() {
 						l.mu.Lock()
@@ -282,11 +264,13 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 						// the session failed.
 						close(l.mu.blockCh)
 					}()
+					l.errChan <- err
 					return
+				default:
+					l.setSession(newSession)
+					t.Reset(l.hb())
+					continue
 				}
-				l.setSession(newSession)
-				t.Reset(l.hb())
-				continue
 			}
 			var found bool
 			err := contextutil.RunWithTimeout(ctx, "sqlliveness extend session", timeout, func(ctx context.Context) error {
@@ -296,21 +280,25 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 			})
 			switch {
 			case errors.HasType(err, (*contextutil.TimeoutError)(nil)):
-				// Retry without clearing the session because we don't know the current status.
-				l.checkExpiry(ctx)
+				if l.isSessionExpired() {
+					l.errChan <- errors.Wrapf(err, "sqlliveness session expired:")
+					return
+				}
 				t.Reset(0)
 				continue
 			case err != nil && ctx.Err() == nil:
 				log.Errorf(ctx, "sqlliveness failed to extend session: %v", err)
 				fallthrough
-			case err != nil:
-				// TODO(ajwerner): Decide whether we actually should exit the heartbeat loop here if the context is not
-				// canceled. Consider the case of an ambiguous result error: shouldn't we try again?
-				l.clearSession(ctx)
-				return
-			case !found:
-				// No existing session found, immediately create one.
-				l.clearSession(ctx)
+			case err != nil || !found:
+				if l.isTenant {
+					l.errChan <- errors.Wrapf(err, "unable to extend session:")
+					return
+				}
+				if l.isSessionExpired() {
+					l.errChan <- errors.Wrapf(err, "sqlliveness session expired:")
+					return
+				}
+				l.clearSession()
 				// Start next loop iteration immediately to insert a new session.
 				t.Reset(0)
 			default:
@@ -331,6 +319,7 @@ func NewSQLInstance(
 	storage Writer,
 	settings *cluster.Settings,
 	testKnobs *sqlliveness.TestingKnobs,
+	isTenant bool,
 ) *Instance {
 	l := &Instance{
 		clock:    clock,
@@ -348,19 +337,22 @@ func NewSQLInstance(
 		l.testKnobs = *testKnobs
 	}
 	l.mu.blockCh = make(chan struct{})
+	l.errChan = make(chan error)
+	l.isTenant = isTenant
 	return l
 }
 
 // Start runs the hearbeat loop.
-func (l *Instance) Start(ctx context.Context) {
+func (l *Instance) Start(ctx context.Context) <-chan error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.mu.started {
-		return
+		return l.errChan
 	}
 	log.Infof(ctx, "starting SQL liveness instance")
 	_ = l.stopper.RunAsyncTask(ctx, "slinstance", l.heartbeatLoop)
 	l.mu.started = true
+	return l.errChan
 }
 
 // Session returns a live session id. For each Sqlliveness instance the

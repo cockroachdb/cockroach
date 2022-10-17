@@ -34,7 +34,7 @@ type SessionID string
 // Provider is a wrapper around the sqllivness subsystem for external
 // consumption.
 type Provider interface {
-	Start(ctx context.Context)
+	Start(ctx context.Context) <-chan error
 	Metrics() metric.Struct
 	Liveness
 
@@ -88,9 +88,6 @@ type Session interface {
 	// this time will be assured that any resources claimed under this session
 	// are known to be valid.
 	Expiration() hlc.Timestamp
-
-	// RegisterCallbackForSessionExpiry registers a callback to be executed when the session expires.
-	RegisterCallbackForSessionExpiry(func(ctx context.Context))
 }
 
 // Reader abstracts over the state of session records.

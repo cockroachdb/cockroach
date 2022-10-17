@@ -15,5 +15,5 @@ import "context"
 // ClearSessionForTest is used in test to
 // immediately delete the current session.
 func (l *Instance) ClearSessionForTest(ctx context.Context) {
-	l.clearSession(ctx)
+	l.clearSession()
 }

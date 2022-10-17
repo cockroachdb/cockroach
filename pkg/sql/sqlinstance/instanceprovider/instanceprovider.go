@@ -169,25 +169,15 @@ func (p *provider) initialize(ctx context.Context) error {
 	}
 	p.sessionID = session.ID()
 	p.instanceID = instanceID
-
-	session.RegisterCallbackForSessionExpiry(func(_ context.Context) {
-		// Stop the instance asynchronously. This callback runs in a stopper task,
-		// so it can't do the shutdown (as the shutdown stops the stopper).
-		go func() {
-			ctx, sp := p.stopper.Tracer().StartSpanCtx(context.Background(), "instance shutdown")
-			defer sp.Finish()
-			p.shutdownSQLInstance(ctx)
-		}()
-	})
 	return nil
 }
 
-// shutdownSQLInstance shuts down the SQL instance.
-func (p *provider) shutdownSQLInstance(ctx context.Context) {
+// Shutdown implements the sqlinstance.Provider interface.
+func (p *provider) Shutdown(ctx context.Context) {
 	if !p.started() {
 		return
 	}
-	// Initialize initError if shutdownSQLInstance is called
+	// Initialize initError if ShutdownSQLInstance is called
 	// before initialization of the instance ID
 	go func() {
 		p.initOnce.Do(func() {
@@ -195,11 +185,7 @@ func (p *provider) shutdownSQLInstance(ctx context.Context) {
 			close(p.initialized)
 		})
 	}()
-	select {
-	case <-ctx.Done():
-		return
-	case <-p.initialized:
-	}
+	<-p.initialized
 	// If there is any initialization error, return as there is nothing to do.
 	if p.initError != nil {
 		return
@@ -208,5 +194,4 @@ func (p *provider) shutdownSQLInstance(ctx context.Context) {
 	if err != nil {
 		log.Ops.Warningf(ctx, "could not release instance id %d", p.instanceID)
 	}
-	p.stopper.Stop(ctx)
 }

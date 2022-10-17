@@ -169,14 +169,12 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	// TODO(tbg): make the other goodies in `./cockroach start` reusable, such as
 	// logging to files, periodic memory output, heap and goroutine dumps.
 	// Then use them here.
-
-	errChan := make(chan error, 1)
 	var serverStatusMu serverStatus
 	serverStatusMu.started = true
 
 	return waitForShutdown(
 		func() serverShutdownInterface { return sqlServer },
 		stopper,
-		errChan, signalCh,
+		sqlServer.SqllivenessErrChan, signalCh,
 		&serverStatusMu)
 }

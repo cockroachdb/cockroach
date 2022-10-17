@@ -700,7 +700,7 @@ type serverShutdownInterface interface {
 func waitForShutdown(
 	getS func() serverShutdownInterface,
 	stopper *stop.Stopper,
-	errChan chan error,
+	errChan <-chan error,
 	signalCh chan os.Signal,
 	serverStatusMu *serverStatus,
 ) (returnErr error) {
@@ -726,6 +726,11 @@ func waitForShutdown(
 		// StartAlwaysFlush both flushes and ensures that subsequent log
 		// writes are flushed too.
 		log.StartAlwaysFlush()
+		if sqlServer, ok := getS().(*server.SQLServerWrapper); ok {
+			if sqlServer.InstanceShutdownFunc != nil {
+				sqlServer.InstanceShutdownFunc(shutdownCtx)
+			}
+		}
 		return err
 
 	case <-stopper.ShouldQuiesce():
@@ -815,6 +820,11 @@ func waitForShutdown(
 				// Avoid a busy wait with high CPU usage if the server replies
 				// with an incomplete drain too quickly.
 				time.Sleep(200 * time.Millisecond)
+			}
+			if sqlServer, ok := getS().(*server.SQLServerWrapper); ok {
+				if sqlServer.InstanceShutdownFunc != nil {
+					sqlServer.InstanceShutdownFunc(shutdownCtx)
+				}
 			}
 
 			stopper.Stop(drainCtx)

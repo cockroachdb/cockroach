@@ -52,6 +52,8 @@ type Provider interface {
 	// Start starts the instanceprovider and initializes the current SQL instance.
 	// This will block until the underlying instance data reader has been started.
 	Start(context.Context) error
+	// Shutdown shuts down the current SQL instance and releases the instance ID.
+	Shutdown(ctx context.Context)
 }
 
 // fakeSQLProvider implements the sqlinstance.Provider interface as a
@@ -76,6 +78,9 @@ func (p *fakeSQLProvider) Instance(
 ) (_ base.SQLInstanceID, _ sqlliveness.SessionID, err error) {
 	return base.SQLInstanceID(0), "", NotASQLInstanceError
 }
+
+// Shutdown implements the sqlinstance.Provider interface.
+func (p *fakeSQLProvider) Shutdown(ctx context.Context) {}
 
 // GetInstance implements the AddressResolver interface.
 func (p *fakeSQLProvider) GetInstance(context.Context, base.SQLInstanceID) (InstanceInfo, error) {

@@ -420,15 +420,16 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	tracingService := service.New(cfg.Tracer)
 	tracingservicepb.RegisterTracingServer(cfg.grpcServer, tracingService)
 
-	sqllivenessKnobs, _ := cfg.TestingKnobs.SQLLivenessKnobs.(*sqlliveness.TestingKnobs)
-	cfg.sqlLivenessProvider = slprovider.New(
-		cfg.AmbientCtx,
-		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs,
-	)
 	// If the node id is already populated, we only need to create a placeholder
 	// instance provider without initializing the instance, since this is not a
 	// SQL pod server.
 	_, isNotSQLPod := cfg.nodeIDContainer.OptionalNodeID()
+
+	sqllivenessKnobs, _ := cfg.TestingKnobs.SQLLivenessKnobs.(*sqlliveness.TestingKnobs)
+	cfg.sqlLivenessProvider = slprovider.New(
+		cfg.AmbientCtx,
+		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs, !isNotSQLPod,
+	)
 	if isNotSQLPod {
 		cfg.sqlInstanceProvider = sqlinstance.NewFakeSQLProvider()
 	} else {
@@ -1180,24 +1181,24 @@ func maybeCheckTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB)
 	return nil
 }
 
-func (s *SQLServer) startSQLLivenessAndInstanceProviders(ctx context.Context) error {
+func (s *SQLServer) startSQLLivenessAndInstanceProviders(ctx context.Context) (<-chan error, error) {
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
 	// until a connection is established to the cluster and its ID has been
 	// determined.
 	if s.tenantConnect != nil {
 		if err := s.tenantConnect.Start(ctx); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	s.sqlLivenessProvider.Start(ctx)
+	livenessErrChan := s.sqlLivenessProvider.Start(ctx)
 	// sqlInstanceProvider must always be started after sqlLivenessProvider
 	// as sqlInstanceProvider relies on the session initialized and maintained by
 	// sqlLivenessProvider.
 	if err := s.sqlInstanceProvider.Start(ctx); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return livenessErrChan, nil
 }
 
 func (s *SQLServer) setInstanceID(ctx context.Context) error {
@@ -1227,21 +1228,22 @@ func (s *SQLServer) preStart(
 	connManager netutil.Server,
 	pgL net.Listener,
 	orphanedLeasesTimeThresholdNanos int64,
-) error {
+) (<-chan error, error) {
 	// The sqlliveness and sqlinstance subsystem should be started first to ensure
 	// the instance ID is initialized prior to any other systems that need it.
-	if err := s.startSQLLivenessAndInstanceProviders(ctx); err != nil {
-		return err
+	livenessErrChan, err := s.startSQLLivenessAndInstanceProviders(ctx)
+	if err != nil {
+		return nil, err
 	}
 	// Confirm tenant exists prior to initialization. This is a sanity
 	// check for the dev environment to ensure that a tenant has been
 	// successfully created before attempting to initialize a SQL
 	// server for it.
 	if err := maybeCheckTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
-		return err
+		return nil, err
 	}
 	if err := s.setInstanceID(ctx); err != nil {
-		return err
+		return nil, err
 	}
 	s.connManager = connManager
 	s.pgL = pgL
@@ -1250,11 +1252,11 @@ func (s *SQLServer) preStart(
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
 	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
-		return err
+		return nil, err
 	}
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
 	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Before serving SQL requests, we have to make sure the database is
@@ -1300,12 +1302,12 @@ func (s *SQLServer) preStart(
 	s.startupMigrationsMgr = startupMigrationsMgr // only for testing via TestServer
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
-		return err
+		return nil, err
 	}
 
 	if s.spanconfigMgr != nil {
 		if err := s.spanconfigMgr.Start(ctx); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -1314,7 +1316,7 @@ func (s *SQLServer) preStart(
 		if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return txn.GetProto(ctx, keys.BootstrapVersionKey, &bootstrapVersion)
 		}); err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		// We don't currently track the bootstrap version of each secondary tenant.
@@ -1336,15 +1338,15 @@ func (s *SQLServer) preStart(
 	}
 
 	if err := s.settingsWatcher.Start(ctx); err != nil {
-		return errors.Wrap(err, "initializing settings")
+		return nil, errors.Wrap(err, "initializing settings")
 	}
 	if err := s.systemConfigWatcher.Start(ctx, s.stopper); err != nil {
-		return errors.Wrap(err, "initializing settings")
+		return nil, errors.Wrap(err, "initializing settings")
 	}
 
 	// Run startup upgrades (note: these depend on jobs subsystem running).
 	if err := startupMigrationsMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
-		return errors.Wrap(err, "ensuring SQL migrations")
+		return nil, errors.Wrap(err, "ensuring SQL migrations")
 	}
 
 	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
@@ -1386,7 +1388,7 @@ func (s *SQLServer) preStart(
 	)
 
 	scheduledlogging.Start(ctx, stopper, s.execCfg.DB, s.execCfg.Settings, s.internalExecutor, s.execCfg.CaptureIndexUsageStatsKnobs)
-	return nil
+	return livenessErrChan, nil
 }
 
 // SQLInstanceID returns the ephemeral ID assigned to each SQL instance. The ID

@@ -895,7 +895,7 @@ func (ts *TestServer) StartTenant(
 			tenantKnobs.ClusterSettingsUpdater = st.MakeUpdater()
 		}
 	}
-	sqlServer, authServer, drainServer, addr, httpAddr, err := startTenantInternal(
+	sqlServer, authServer, drainServer, addr, httpAddr, _, err := startTenantInternal(
 		ctx,
 		stopper,
 		ts.Cfg.ClusterName,

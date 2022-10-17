@@ -51,5 +51,5 @@ func (p *provider) InitAndWaitForTest(ctx context.Context) {
 
 // ShutdownSQLInstanceForTest explicitly calls shutdownSQLInstance for testing purposes.
 func (p *provider) ShutdownSQLInstanceForTest(ctx context.Context) {
-	p.shutdownSQLInstance(ctx)
+	p.Shutdown(ctx)
 }

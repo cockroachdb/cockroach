@@ -67,16 +67,18 @@ func StartTenant(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (*SQLServerWrapper, error) {
-	sqlServer, authServer, drainServer, pgAddr, httpAddr, err := startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	sqlServer, authServer, drainServer, pgAddr, httpAddr, sqllivenessErrChan, err := startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, err
 	}
 	return &SQLServerWrapper{
-		SQLServer:   sqlServer,
-		authServer:  authServer,
-		drainServer: drainServer,
-		pgAddr:      pgAddr,
-		httpAddr:    httpAddr,
+		SQLServer:            sqlServer,
+		SqllivenessErrChan:   sqllivenessErrChan,
+		InstanceShutdownFunc: sqlServer.sqlInstanceProvider.Shutdown,
+		authServer:           authServer,
+		drainServer:          drainServer,
+		pgAddr:               pgAddr,
+		httpAddr:             httpAddr,
 	}, err
 }
 
@@ -84,10 +86,14 @@ func StartTenant(
 // a SQLServer and its helpers that make it a networked service.
 type SQLServerWrapper struct {
 	*SQLServer
-	authServer  *authenticationServer
-	drainServer *drainServer
-	pgAddr      string
-	httpAddr    string
+	InstanceShutdownFunc func(ctx context.Context)
+	// SqllivenessErrChan is used to surface unrecoverable errors up to the server level to
+	// initiate shutdown
+	SqllivenessErrChan <-chan error
+	authServer         *authenticationServer
+	drainServer        *drainServer
+	pgAddr             string
+	httpAddr           string
 }
 
 // Drain idempotently activates the draining mode.
@@ -124,11 +130,12 @@ func startTenantInternal(
 	drainServer *drainServer,
 	pgAddr string,
 	httpAddr string,
+	sqllivenessErrChan <-chan error,
 	_ error,
 ) {
 	err := ApplyTenantLicense()
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 
 	// Inform the server identity provider that we're operating
@@ -137,11 +144,11 @@ func startTenantInternal(
 
 	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 	err = args.ValidateAddrs(ctx)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 	closedSessionCache := sql.NewClosedSessionCache(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
@@ -179,7 +186,7 @@ func startTenantInternal(
 	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
 	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, grpcMain)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 
 	{
@@ -193,13 +200,13 @@ func startTenantInternal(
 		}
 		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-pgl", waitQuiesce); err != nil {
 			waitQuiesce(background)
-			return nil, nil, nil, "", "", err
+			return nil, nil, nil, "", "", nil, err
 		}
 	}
 
 	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 
 	args.advertiseAddr = baseCfg.AdvertiseAddr
@@ -218,7 +225,7 @@ func startTenantInternal(
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 	adminAuthzCheck := &adminPrivilegeChecker{
 		ie: s.execCfg.InternalExecutor,
@@ -264,12 +271,12 @@ func startTenantInternal(
 		baseCfg.AdvertiseAddr,
 	)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 
 	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-			return nil, nil, nil, "", "", err
+			return nil, nil, nil, "", "", nil, err
 		}
 	}
 
@@ -295,7 +302,7 @@ func startTenantInternal(
 		debugServer,     /* handleDebugUnauthenticated */
 		nil,             /* apiServer */
 	); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 
 	connManager := netutil.MakeServer(ctx,
@@ -304,7 +311,7 @@ func startTenantInternal(
 		http.HandlerFunc(httpServer.baseHandler), // handler
 	)
 	if err := httpServer.start(ctx, background, connManager, serverTLSConfig, args.stopper); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 
 	args.recorder.AddNode(
@@ -328,17 +335,12 @@ func startTenantInternal(
 		args.runtime,
 		args.sessionRegistry,
 	); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 
-	if err := s.preStart(ctx,
-		args.stopper,
-		args.TestingKnobs,
-		connManager,
-		pgL,
-		orphanedLeasesTimeThresholdNanos,
-	); err != nil {
-		return nil, nil, nil, "", "", err
+	sqllivenessErrChan, err = s.preStart(ctx, args.stopper, args.TestingKnobs, connManager, pgL, orphanedLeasesTimeThresholdNanos)
+	if err != nil {
+		return nil, nil, nil, "", "", nil, err
 	}
 	clusterID := args.rpcContext.LogicalClusterID.Get()
 	instanceID := s.SQLInstanceID()
@@ -366,7 +368,7 @@ func startTenantInternal(
 		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 
 	if err := s.startServeSQL(ctx,
@@ -374,10 +376,10 @@ func startTenantInternal(
 		s.connManager,
 		s.pgL,
 		nil /* socketFile */); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, nil, nil, "", "", nil, err
 	}
 
-	return s, authServer, drainServer, baseCfg.SQLAddr, baseCfg.HTTPAddr, nil
+	return s, authServer, drainServer, baseCfg.SQLAddr, baseCfg.HTTPAddr, sqllivenessErrChan, nil
 }
 
 func makeTenantSQLServerArgs(

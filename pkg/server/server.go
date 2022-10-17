@@ -1625,7 +1625,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent(ctx)
 
-	if err := s.sqlServer.preStart(
+	// TODO(aadityas): figure out what to do with errChan here
+	if _, err := s.sqlServer.preStart(
 		workersCtx,
 		s.stopper,
 		s.cfg.TestingKnobs,

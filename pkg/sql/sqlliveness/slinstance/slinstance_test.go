@@ -12,7 +12,8 @@ package slinstance_test
 
 import (
 	"context"
-	"sync/atomic"
+	"fmt"
+	"github.com/cockroachdb/errors"
 	"testing"
 	"time"
 
@@ -46,11 +47,11 @@ func TestSQLInstance(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, false)
 	sqlInstance.Start(ctx)
 
 	// Add one more instance to introduce concurrent access to storage.
-	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, false)
 	dummy.Start(ctx)
 
 	s1, err := sqlInstance.Session(ctx)
@@ -121,18 +122,25 @@ func TestSQLInstanceDeadlines(t *testing.T) {
 	}
 	defer cleanUpFunc()
 
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
-	sqlInstance.Start(ctx)
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, false)
+	errChan := sqlInstance.Start(ctx)
 
 	// verify that we do not create a session
 	require.Never(
 		t,
 		func() bool {
-			_, err := sqlInstance.Session(ctx)
+			s, err := sqlInstance.Session(ctx)
+			fmt.Print(s)
 			return err == nil
 		},
 		100*time.Millisecond, 10*time.Millisecond,
 	)
+
+	// verify that the errChan is written to on session creation failure
+	testutils.SucceedsSoon(t, func() error {
+		<-errChan
+		return nil
+	})
 }
 
 // TestSQLInstanceDeadlinesExtend tests that we have proper deadlines set on the
@@ -156,34 +164,32 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
-	sqlInstance.Start(ctx)
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, false)
+	errChan := sqlInstance.Start(ctx)
 
 	// verify that eventually session is created successfully
+	var session sqlliveness.Session
 	testutils.SucceedsSoon(
 		t,
 		func() error {
-			_, err := sqlInstance.Session(ctx)
+			var err error
+			session, err = sqlInstance.Session(ctx)
 			return err
 		},
 	)
 
-	// verify that session is also extended successfully a few times
-	require.Never(
+	// verify that session is also extended successfully
+	oldExpiration := session.Expiration()
+	testutils.SucceedsSoon(
 		t,
-		func() bool {
-			_, err := sqlInstance.Session(ctx)
-			return err != nil
+		func() error {
+			s, _ := sqlInstance.Session(ctx)
+			if oldExpiration == s.Expiration() {
+				return errors.New("session not extended")
+			}
+			return nil
 		},
-		100*time.Millisecond, 10*time.Millisecond,
 	)
-
-	// register a callback for verification that this session expired
-	var sessionExpired atomic.Bool
-	s, _ := sqlInstance.Session(ctx)
-	s.RegisterCallbackForSessionExpiry(func(ctx context.Context) {
-		sessionExpired.Store(true)
-	})
 
 	// block the fake storage
 	fakeStorage.SetBlockCh()
@@ -194,12 +200,9 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 	// advance manual clock so that session expires
 	mt.Advance(slinstance.DefaultTTL.Get(&settings.SV))
 
-	// expect session to expire
-	require.Eventually(
-		t,
-		func() bool {
-			return sessionExpired.Load()
-		},
-		testutils.DefaultSucceedsSoonDuration, 10*time.Millisecond,
-	)
+	// verify that the errChan is written to on session expiry
+	testutils.SucceedsSoon(t, func() error {
+		<-errChan
+		return nil
+	})
 }

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +53,7 @@ func TestInstanceProvider(t *testing.T) {
 
 		stopper := stop.NewStopper()
 		fakeStorage := slstorage.NewFakeStorage()
-		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, false)
 		return stopper, slInstance, fakeStorage, clock
 	}
 
@@ -64,7 +63,7 @@ func TestInstanceProvider(t *testing.T) {
 		stopper, slInstance, storage, clock := setup(t)
 		defer stopper.Stop(ctx)
 		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, addr)
-		slInstance.Start(ctx)
+		errChan := slInstance.Start(ctx)
 		instanceProvider.InitAndWaitForTest(ctx)
 		instanceID, sessionID, err := instanceProvider.Instance(ctx)
 		require.NoError(t, err)
@@ -87,11 +86,9 @@ func TestInstanceProvider(t *testing.T) {
 		// Delete the session to shutdown the instance.
 		require.NoError(t, storage.Delete(ctx, sessionID))
 
-		// Verify that the SQL instance is shutdown on session expiry.
+		// Verify that the error channel is written to when a session expires.
 		testutils.SucceedsSoon(t, func() error {
-			if _, _, err = instanceProvider.Instance(ctx); !errors.Is(err, stop.ErrUnavailable) {
-				return errors.Errorf("sql instance is not shutdown on session expiry")
-			}
+			<-errChan
 			return nil
 		})
 	})
