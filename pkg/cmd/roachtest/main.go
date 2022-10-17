@@ -87,6 +87,7 @@ func main() {
 	var literalArtifacts string
 	var httpPort int
 	var debugEnabled bool
+	var runSkipped bool
 	var clusterID string
 	var count = 1
 	var versionsBinaryOverride map[string]string
@@ -229,7 +230,7 @@ Examples:
 			matchedTests := r.List(args)
 			for _, test := range matchedTests {
 				var skip string
-				if test.Skip != "" {
+				if test.Skip != "" && !runSkipped {
 					skip = " (skipped: " + test.Skip + ")"
 				}
 				fmt.Printf("%s [%s]%s\n", test.Name, test.Owner, skip)
@@ -249,6 +250,7 @@ Examples:
 			count:                  count,
 			cpuQuota:               cpuQuota,
 			debugEnabled:           debugEnabled,
+			runSkipped:             runSkipped,
 			httpPort:               httpPort,
 			parallelism:            parallelism,
 			artifactsDir:           artifacts,
@@ -317,6 +319,8 @@ runner itself.
 			&count, "count", 1, "the number of times to run each test")
 		cmd.Flags().BoolVarP(
 			&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
+		cmd.Flags().BoolVar(
+			&runSkipped, "run-skipped", runSkipped, "run skipped tests")
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
@@ -384,6 +388,7 @@ type cliCfg struct {
 	count                  int
 	cpuQuota               int
 	debugEnabled           bool
+	runSkipped             bool
 	httpPort               int
 	parallelism            int
 	artifactsDir           string
@@ -410,7 +415,7 @@ func runTests(register func(registry.Registry), cfg cliCfg, benchOnly bool) erro
 	defer stopper.Stop(context.Background())
 	runner := newTestRunner(cr, stopper, r.buildVersion)
 
-	filter := registry.NewTestFilter(cfg.args)
+	filter := registry.NewTestFilter(cfg.args, cfg.runSkipped)
 	clusterType := roachprodCluster
 	bindTo := ""
 	if cloud == spec.Local {
@@ -572,11 +577,11 @@ func testRunnerLogger(
 }
 
 func testsToRun(r testRegistryImpl, filter *registry.TestFilter) []registry.TestSpec {
-	tests := r.GetTests(filter)
+	tests, tagMismatch := r.GetTests(filter)
 
 	var notSkipped []registry.TestSpec
 	for _, s := range tests {
-		if s.Skip == "" {
+		if s.Skip == "" || filter.RunSkipped {
 			notSkipped = append(notSkipped, s)
 		} else {
 			if teamCity {
@@ -585,6 +590,13 @@ func testsToRun(r testRegistryImpl, filter *registry.TestFilter) []registry.Test
 			}
 			fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
 		}
+	}
+	for _, s := range tagMismatch {
+		if teamCity {
+			fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='tag mismatch']\n",
+				s.Name)
+		}
+		fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\ttag mismatch\n", s.Name, "0.00s")
 	}
 	return notSkipped
 }

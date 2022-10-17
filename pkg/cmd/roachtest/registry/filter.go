@@ -21,14 +21,15 @@ type TestFilter struct {
 	Name *regexp.Regexp
 	Tag  *regexp.Regexp
 	// RawTag is the string representation of the regexps in tag.
-	RawTag []string
+	RawTag     []string
+	RunSkipped bool
 }
 
 // NewTestFilter initializes a new filter. The strings are interpreted
 // as regular expressions. As a special case, a `tag:` prefix implies
 // that the remainder of the string filters tests by tag, and not by
 // name.
-func NewTestFilter(filter []string) *TestFilter {
+func NewTestFilter(filter []string, runSkipped bool) *TestFilter {
 	var name []string
 	var tag []string
 	var rawTag []string
@@ -61,8 +62,9 @@ func NewTestFilter(filter []string) *TestFilter {
 	}
 
 	return &TestFilter{
-		Name:   makeRE(name),
-		Tag:    makeRE(tag),
-		RawTag: rawTag,
+		Name:       makeRE(name),
+		Tag:        makeRE(tag),
+		RawTag:     rawTag,
+		RunSkipped: runSkipped,
 	}
 }
