@@ -643,6 +643,7 @@ func DefaultStartOpts() install.StartOpts {
 		TenantID:           2,
 		ScheduleBackups:    false,
 		ScheduleBackupArgs: "",
+		InitTarget:         1,
 	}
 }
 
@@ -710,7 +711,7 @@ func Stop(ctx context.Context, l *logger.Logger, clusterName string, opts StopOp
 }
 
 // Init initializes the cluster.
-func Init(ctx context.Context, l *logger.Logger, clusterName string) error {
+func Init(ctx context.Context, l *logger.Logger, clusterName string, opts install.StartOpts) error {
 	if err := LoadClusters(); err != nil {
 		return err
 	}
@@ -718,7 +719,7 @@ func Init(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err != nil {
 		return err
 	}
-	return c.Init(ctx, l)
+	return c.Init(ctx, l, opts.GetInitTarget())
 }
 
 // Wipe wipes the nodes in a cluster.

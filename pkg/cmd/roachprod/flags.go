@@ -187,6 +187,8 @@ func initFlags() {
 		"encrypt", startOpts.EncryptedStores, "start nodes with encryption at rest turned on")
 	startCmd.Flags().BoolVar(&startOpts.SkipInit,
 		"skip-init", startOpts.SkipInit, "skip initializing the cluster")
+	startCmd.Flags().IntVar(&startOpts.InitTarget,
+		"init-target", startOpts.InitTarget, "node on which to run initialization")
 	startCmd.Flags().IntVar(&startOpts.StoreCount,
 		"store-count", startOpts.StoreCount, "number of stores to start each node with")
 	startCmd.Flags().BoolVar(&startOpts.ScheduleBackups,
@@ -250,6 +252,9 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 
 	grafanaDumpCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
 		"the absolute path to dump prometheus data to (use the contained 'prometheus-docker-run.sh' to visualize")
+
+	initCmd.Flags().IntVar(&startOpts.InitTarget,
+		"init-target", startOpts.InitTarget, "node on which to run initialization")
 
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
