@@ -51,6 +51,10 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 		ctx, t, c, tpccOptions{
 			Warehouses: s.Warehouses, SetupType: usingImport,
 		})
+	// We make use of querybench below, only available through the `workload`
+	// binary.
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
+
 	const queryFileName = "queries.sql"
 	// querybench expects the entire query to be on a single line.
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`
