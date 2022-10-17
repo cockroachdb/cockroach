@@ -202,7 +202,7 @@ func Init(
 		// NB: when upgrading here, make sure to target a version that picks up this PR:
 		// https://github.com/prometheus/node_exporter/pull/2311
 		// At time of writing, there hasn't been a release in over half a year.
-		if err := c.RepeatRun(ctx, l, os.Stdout, os.Stderr, cfg.NodeExporter,
+		if err := c.RepeatRun(ctx, l, l.Stdout, l.Stderr, cfg.NodeExporter,
 			"download node exporter",
 			`
 (sudo systemctl stop node_exporter || true) &&
@@ -214,7 +214,7 @@ rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
 		}
 
 		// Start node_exporter.
-		if err := c.Run(ctx, l, os.Stdout, os.Stderr, cfg.NodeExporter, "init node exporter",
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, cfg.NodeExporter, "init node exporter",
 			`cd node_exporter &&
 sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		); err != nil {
@@ -226,8 +226,8 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 	if err := c.RepeatRun(
 		ctx,
 		l,
-		os.Stdout,
-		os.Stderr,
+		l.Stdout,
+		l.Stderr,
 		cfg.PrometheusNode,
 		"reset prometheus",
 		"sudo systemctl stop prometheus || echo 'no prometheus is running'",
@@ -238,8 +238,8 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 	if err := c.RepeatRun(
 		ctx,
 		l,
-		os.Stdout,
-		os.Stderr,
+		l.Stdout,
+		l.Stderr,
 		cfg.PrometheusNode,
 		"download prometheus",
 		`sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
@@ -272,8 +272,8 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 	if err := c.Run(
 		ctx,
 		l,
-		os.Stdout,
-		os.Stderr,
+		l.Stdout,
+		l.Stderr,
 		cfg.PrometheusNode,
 		"start-prometheus",
 		`cd /tmp/prometheus &&
@@ -286,8 +286,8 @@ sudo systemd-run --unit prometheus --same-dir \
 	if cfg.Grafana.Enabled {
 		// Install Grafana.
 		if err := c.RepeatRun(ctx, l,
-			os.Stdout,
-			os.Stderr, cfg.PrometheusNode, "install grafana",
+			l.Stdout,
+			l.Stderr, cfg.PrometheusNode, "install grafana",
 			`sudo apt-get install -qqy apt-transport-https &&
 sudo apt-get install -qqy software-properties-common wget &&
 wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add - &&
@@ -299,8 +299,8 @@ sudo apt-get update -qqy && sudo apt-get install -qqy grafana-enterprise && sudo
 
 		// Provision local prometheus instance as data source.
 		if err := c.RepeatRun(ctx, l,
-			os.Stdout,
-			os.Stderr, cfg.PrometheusNode, "permissions",
+			l.Stdout,
+			l.Stderr, cfg.PrometheusNode, "permissions",
 			`sudo chmod 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards /etc/grafana/grafana.ini`,
 		); err != nil {
 			return nil, err
@@ -342,14 +342,14 @@ org_role = Admin
 
 		for idx, u := range cfg.Grafana.DashboardURLs {
 			cmd := fmt.Sprintf("curl -fsSL %s -o /var/lib/grafana/dashboards/%d.json", u, idx)
-			if err := c.Run(ctx, l, os.Stdout, os.Stderr, cfg.PrometheusNode, "download dashboard",
+			if err := c.Run(ctx, l, l.Stdout, l.Stderr, cfg.PrometheusNode, "download dashboard",
 				cmd); err != nil {
 				l.PrintfCtx(ctx, "failed to download dashboard from %s: %s", u, err)
 			}
 		}
 
 		// Start Grafana. Default port is 3000.
-		if err := c.Run(ctx, l, os.Stdout, os.Stderr, cfg.PrometheusNode, "start grafana",
+		if err := c.Run(ctx, l, l.Stdout, l.Stderr, cfg.PrometheusNode, "start grafana",
 			`sudo systemctl restart grafana-server`); err != nil {
 			return nil, err
 		}
@@ -371,8 +371,8 @@ func Snapshot(
 	if err := c.Run(
 		ctx,
 		l,
-		os.Stdout,
-		os.Stderr,
+		l.Stdout,
+		l.Stderr,
 		promNode,
 		"prometheus snapshot",
 		`sudo rm -rf /tmp/prometheus/data/snapshots/* && curl -XPOST http://localhost:9090/api/v1/admin/tsdb/snapshot &&
@@ -442,13 +442,13 @@ func Shutdown(
 			shutdownErr = errors.CombineErrors(shutdownErr, err)
 		}
 	}
-	if err := c.Run(ctx, l, os.Stdout, os.Stderr, nodes, "stop node exporter",
+	if err := c.Run(ctx, l, l.Stdout, l.Stderr, nodes, "stop node exporter",
 		`sudo systemctl stop node_exporter || echo 'Stopped node exporter'`); err != nil {
 		l.Printf("Failed to stop node exporter: %v", err)
 		shutdownErr = errors.CombineErrors(shutdownErr, err)
 	}
 
-	if err := c.Run(ctx, l, os.Stdout, os.Stderr, promNode, "stop grafana",
+	if err := c.Run(ctx, l, l.Stdout, l.Stderr, promNode, "stop grafana",
 		`sudo systemctl stop grafana-server || echo 'Stopped grafana'`); err != nil {
 		l.Printf("Failed to stop grafana server: %v", err)
 		shutdownErr = errors.CombineErrors(shutdownErr, err)
@@ -457,8 +457,8 @@ func Shutdown(
 	if err := c.RepeatRun(
 		ctx,
 		l,
-		os.Stdout,
-		os.Stderr,
+		l.Stdout,
+		l.Stderr,
 		promNode,
 		"stop prometheus",
 		"sudo systemctl stop prometheus || echo 'Stopped prometheus'",

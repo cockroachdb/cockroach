@@ -184,8 +184,9 @@ type mutationBuilder struct {
 
 	// extraAccessibleCols stores all the columns that are available to the
 	// mutation that are not part of the target table. This is useful for
-	// UPDATE ... FROM queries, as the columns from the FROM tables must be
-	// made accessible to the RETURNING clause.
+	// UPDATE ... FROM queries and DELETE ... USING queries, as the columns
+	// from the FROM and USING tables must be made accessible to the
+	// RETURNING clause, respectively.
 	extraAccessibleCols []scopeColumn
 
 	// fkCheckHelper is used to prevent allocating the helper separately.
@@ -376,7 +377,7 @@ func (mb *mutationBuilder) buildInputForUpdate(
 // the Delete operator, similar to this:
 //
 //	SELECT <cols>
-//	FROM <table>
+//	FROM <table> [, <using-tables>]
 //	WHERE <where>
 //	ORDER BY <order-by>
 //	LIMIT <limit>
@@ -384,7 +385,12 @@ func (mb *mutationBuilder) buildInputForUpdate(
 // All columns from the table to update are added to fetchColList.
 // TODO(andyk): Do needed column analysis to project fewer columns if possible.
 func (mb *mutationBuilder) buildInputForDelete(
-	inScope *scope, texpr tree.TableExpr, where *tree.Where, limit *tree.Limit, orderBy tree.OrderBy,
+	inScope *scope,
+	texpr tree.TableExpr,
+	where *tree.Where,
+	using tree.TableExprs,
+	limit *tree.Limit,
+	orderBy tree.OrderBy,
 ) {
 	var indexFlags *tree.IndexFlags
 	if source, ok := texpr.(*tree.AliasedTableExpr); ok && source.IndexFlags != nil {
@@ -413,7 +419,39 @@ func (mb *mutationBuilder) buildInputForDelete(
 		inScope,
 		false, /* disableNotVisibleIndex */
 	)
-	mb.outScope = mb.fetchScope
+
+	// Set list of columns that will be fetched by the input expression.
+	mb.setFetchColIDs(mb.fetchScope.cols)
+
+	// USING
+	usingClausePresent := len(using) > 0
+	if usingClausePresent {
+		usingScope := mb.b.buildFromTables(using, noRowLocking, inScope)
+
+		// Check that the same table name is not used multiple times
+		mb.b.validateJoinTableNames(mb.fetchScope, usingScope)
+
+		// The USING table columns can be accessed by the RETURNING clause of the
+		// query and so we have to make them accessible.
+		mb.extraAccessibleCols = usingScope.cols
+
+		// Add the columns to the USING scope.
+		// We create a new scope so that fetchScope is not modified
+		// as fetchScope contains the set of columns from the target
+		// table specified by USING. This will be used later with partial
+		// index predicate expressions and will prevent ambiguities with
+		// column names in the USING clause.
+		mb.outScope = mb.fetchScope.replace()
+		mb.outScope.appendColumnsFromScope(mb.fetchScope)
+		mb.outScope.appendColumnsFromScope(usingScope)
+
+		left := mb.fetchScope.expr
+		right := usingScope.expr
+
+		mb.outScope.expr = mb.b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+	} else {
+		mb.outScope = mb.fetchScope
+	}
 
 	// WHERE
 	mb.b.buildWhere(where, mb.outScope)
@@ -432,8 +470,23 @@ func (mb *mutationBuilder) buildInputForDelete(
 
 	mb.outScope = projectionsScope
 
-	// Set list of columns that will be fetched by the input expression.
-	mb.setFetchColIDs(mb.outScope.cols)
+	// Build a distinct on to ensure there is at most one row in the joined output
+	// for every row in the table
+	if usingClausePresent {
+		var pkCols opt.ColSet
+
+		// We need to ensure that the join has a maximum of one row for every row
+		// in the table and we ensure this by constructing a distinct on the primary
+		// key columns.
+		primaryIndex := mb.tab.Index(cat.PrimaryIndex)
+		for i := 0; i < primaryIndex.KeyColumnCount(); i++ {
+			col := primaryIndex.Column(i)
+			pkCols.Add(mb.fetchColIDs[col.Ordinal()])
+		}
+
+		mb.outScope = mb.b.buildDistinctOn(
+			pkCols, mb.outScope, false /* nullsAreDistinct */, "" /* errorOnDup */)
+	}
 }
 
 // addTargetColsByName adds one target column for each of the names in the given
@@ -1001,8 +1054,9 @@ func (mb *mutationBuilder) buildReturning(returning tree.ReturningExprs) {
 
 	// extraAccessibleCols contains all the columns that the RETURNING
 	// clause can refer to in addition to the table columns. This is useful for
-	// UPDATE ... FROM statements, where all columns from tables in the FROM clause
-	// are in scope for the RETURNING clause.
+	// UPDATE ... FROM and DELETE ... USING statements, where all columns from
+	// tables in the FROM clause and USING clause are in scope for the RETURNING
+	// clause, respectively.
 	inScope.appendColumns(mb.extraAccessibleCols)
 
 	// Construct the Project operator that projects the RETURNING expressions.

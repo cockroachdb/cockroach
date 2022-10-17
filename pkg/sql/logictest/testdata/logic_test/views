@@ -1492,4 +1492,3 @@ SELECT * FROM v;
 
 statement ok
 SET DATABASE = test;
-

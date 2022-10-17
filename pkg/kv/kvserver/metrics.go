@@ -1663,6 +1663,13 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Occurrences",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaStorageFlushUtilization = metric.Metadata{
+		Name:        "storage.flush.utilization",
+		Help:        "The percentage of time the storage engine is actively flushing memtables to disk.",
+		Measurement: "Flush Utilization",
+		Unit:        metric.Unit_PERCENT,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1957,6 +1964,8 @@ type StoreMetrics struct {
 	// Replica batch evaluation metrics.
 	ReplicaReadBatchEvaluationLatency  *metric.Histogram
 	ReplicaWriteBatchEvaluationLatency *metric.Histogram
+
+	FlushUtilization *metric.GaugeFloat64
 }
 
 type tenantMetricsRef struct {
@@ -2494,6 +2503,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaWriteBatchEvaluationLatency: metric.NewHistogram(
 			metaReplicaWriteBatchEvaluationLatency, histogramWindow, metric.IOLatencyBuckets,
 		),
+		FlushUtilization: metric.NewGaugeFloat64(metaStorageFlushUtilization),
 	}
 
 	{

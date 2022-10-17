@@ -62,7 +62,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the delete table will be projected.
-	mb.buildInputForDelete(inScope, del.Table, del.Where, del.Limit, del.OrderBy)
+	mb.buildInputForDelete(inScope, del.Table, del.Where, del.Using, del.Limit, del.OrderBy)
 
 	// Build the final delete statement, including any returned expressions.
 	if resultsNeeded(del.Returning) {
@@ -83,6 +83,11 @@ func (mb *mutationBuilder) buildDelete(returning tree.ReturningExprs) {
 	mb.projectPartialIndexDelCols()
 
 	private := mb.makeMutationPrivate(returning != nil)
+	for _, col := range mb.extraAccessibleCols {
+		if col.id != 0 {
+			private.PassthroughCols = append(private.PassthroughCols, col.id)
+		}
+	}
 	mb.outScope.expr = mb.b.factory.ConstructDelete(
 		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
 	)

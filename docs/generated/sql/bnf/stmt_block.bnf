@@ -193,7 +193,7 @@ create_stmt ::=
 	| create_external_connection_stmt
 
 delete_stmt ::=
-	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'DELETE' 'FROM' table_expr_opt_alias_idx opt_using_clause opt_where_clause opt_sort_clause opt_limit_clause returning_clause
 
 drop_stmt ::=
 	drop_ddl_stmt
@@ -596,6 +596,10 @@ table_expr_opt_alias_idx ::=
 	table_name_opt_idx
 	| table_name_opt_idx table_alias_name
 	| table_name_opt_idx 'AS' table_alias_name
+
+opt_using_clause ::=
+	'USING' from_list
+	| 
 
 opt_sort_clause ::=
 	sort_clause
@@ -1771,6 +1775,9 @@ with_clause ::=
 table_name_opt_idx ::=
 	opt_only table_name opt_index_flags opt_descendant
 
+from_list ::=
+	( table_ref ) ( ( ',' table_ref ) )*
+
 sort_clause ::=
 	'ORDER' 'BY' sortby_list
 
@@ -1970,9 +1977,6 @@ relation_expr ::=
 set_clause ::=
 	single_set_clause
 	| multiple_set_clause
-
-from_list ::=
-	( table_ref ) ( ( ',' table_ref ) )*
 
 simple_db_object_name ::=
 	db_object_name_component
@@ -2487,6 +2491,16 @@ opt_descendant ::=
 	'*'
 	| 
 
+table_ref ::=
+	relation_expr opt_index_flags opt_ordinality opt_alias_clause
+	| select_with_parens opt_ordinality opt_alias_clause
+	| 'LATERAL' select_with_parens opt_ordinality opt_alias_clause
+	| joined_table
+	| '(' joined_table ')' opt_ordinality alias_clause
+	| func_table opt_ordinality opt_func_alias_clause
+	| 'LATERAL' func_table opt_ordinality opt_alias_clause
+	| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
+
 sortby_list ::=
 	( sortby ) ( ( ',' sortby ) )*
 
@@ -2601,16 +2615,6 @@ single_set_clause ::=
 
 multiple_set_clause ::=
 	'(' insert_column_list ')' '=' in_expr
-
-table_ref ::=
-	relation_expr opt_index_flags opt_ordinality opt_alias_clause
-	| select_with_parens opt_ordinality opt_alias_clause
-	| 'LATERAL' select_with_parens opt_ordinality opt_alias_clause
-	| joined_table
-	| '(' joined_table ')' opt_ordinality alias_clause
-	| func_table opt_ordinality opt_func_alias_clause
-	| 'LATERAL' func_table opt_ordinality opt_alias_clause
-	| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
 
 type_func_name_crdb_extra_keyword ::=
 	'FAMILY'
@@ -3062,6 +3066,43 @@ common_table_expr ::=
 index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*
 
+opt_ordinality ::=
+	'WITH' 'ORDINALITY'
+	| 
+
+opt_alias_clause ::=
+	alias_clause
+	| 
+
+joined_table ::=
+	'(' joined_table ')'
+	| table_ref 'CROSS' opt_join_hint 'JOIN' table_ref
+	| table_ref join_type opt_join_hint 'JOIN' table_ref join_qual
+	| table_ref 'JOIN' table_ref join_qual
+	| table_ref 'NATURAL' join_type opt_join_hint 'JOIN' table_ref
+	| table_ref 'NATURAL' 'JOIN' table_ref
+
+alias_clause ::=
+	'AS' table_alias_name opt_col_def_list_no_types
+	| table_alias_name opt_col_def_list_no_types
+
+func_table ::=
+	func_expr_windowless
+	| 'ROWS' 'FROM' '(' rowsfrom_list ')'
+
+opt_func_alias_clause ::=
+	func_alias_clause
+	| 
+
+row_source_extension_stmt ::=
+	delete_stmt
+	| explain_stmt
+	| insert_stmt
+	| select_stmt
+	| show_stmt
+	| update_stmt
+	| upsert_stmt
+
 sortby ::=
 	a_expr opt_asc_desc opt_nulls_order
 	| 'PRIMARY' 'KEY' table_name opt_asc_desc
@@ -3120,43 +3161,6 @@ var_list ::=
 
 schema_wildcard ::=
 	wildcard_pattern
-
-opt_ordinality ::=
-	'WITH' 'ORDINALITY'
-	| 
-
-opt_alias_clause ::=
-	alias_clause
-	| 
-
-joined_table ::=
-	'(' joined_table ')'
-	| table_ref 'CROSS' opt_join_hint 'JOIN' table_ref
-	| table_ref join_type opt_join_hint 'JOIN' table_ref join_qual
-	| table_ref 'JOIN' table_ref join_qual
-	| table_ref 'NATURAL' join_type opt_join_hint 'JOIN' table_ref
-	| table_ref 'NATURAL' 'JOIN' table_ref
-
-alias_clause ::=
-	'AS' table_alias_name opt_col_def_list_no_types
-	| table_alias_name opt_col_def_list_no_types
-
-func_table ::=
-	func_expr_windowless
-	| 'ROWS' 'FROM' '(' rowsfrom_list ')'
-
-opt_func_alias_clause ::=
-	func_alias_clause
-	| 
-
-row_source_extension_stmt ::=
-	delete_stmt
-	| explain_stmt
-	| insert_stmt
-	| select_stmt
-	| show_stmt
-	| update_stmt
-	| upsert_stmt
 
 type_func_name_no_crdb_extra_keyword ::=
 	'AUTHORIZATION'
@@ -3488,6 +3492,30 @@ index_flags_param ::=
 	| 'FORCE_ZIGZAG'
 	| 'FORCE_ZIGZAG' '=' index_name
 
+opt_join_hint ::=
+	'HASH'
+	| 'MERGE'
+	| 'LOOKUP'
+	| 'INVERTED'
+	| 
+
+join_type ::=
+	'FULL' join_outer
+	| 'LEFT' join_outer
+	| 'RIGHT' join_outer
+	| 'INNER'
+
+join_qual ::=
+	'USING' '(' name_list ')'
+	| 'ON' a_expr
+
+rowsfrom_list ::=
+	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
+
+func_alias_clause ::=
+	'AS' table_alias_name opt_col_def_list
+	| table_alias_name opt_col_def_list
+
 opt_asc_desc ::=
 	'ASC'
 	| 'DESC'
@@ -3519,30 +3547,6 @@ opt_nowait_or_skip ::=
 
 wildcard_pattern ::=
 	name '.' '*'
-
-opt_join_hint ::=
-	'HASH'
-	| 'MERGE'
-	| 'LOOKUP'
-	| 'INVERTED'
-	| 
-
-join_type ::=
-	'FULL' join_outer
-	| 'LEFT' join_outer
-	| 'RIGHT' join_outer
-	| 'INNER'
-
-join_qual ::=
-	'USING' '(' name_list ')'
-	| 'ON' a_expr
-
-rowsfrom_list ::=
-	( rowsfrom_item ) ( ( ',' rowsfrom_item ) )*
-
-func_alias_clause ::=
-	'AS' table_alias_name opt_col_def_list
-	| table_alias_name opt_col_def_list
 
 func_arg ::=
 	func_arg_class param_name func_arg_type
@@ -3759,12 +3763,6 @@ func_as ::=
 col_def_list_no_types ::=
 	( name ) ( ( ',' name ) )*
 
-group_by_item ::=
-	a_expr
-
-window_definition ::=
-	window_name 'AS' window_specification
-
 join_outer ::=
 	'OUTER'
 	| 
@@ -3774,6 +3772,12 @@ rowsfrom_item ::=
 
 opt_col_def_list ::=
 	'(' col_def_list ')'
+
+group_by_item ::=
+	a_expr
+
+window_definition ::=
+	window_name 'AS' window_specification
 
 func_arg_class ::=
 	'IN'
