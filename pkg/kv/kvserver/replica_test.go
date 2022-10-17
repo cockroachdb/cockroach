@@ -10431,7 +10431,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Regression test for #31870.
 		snap := tc.engine.NewSnapshot()
 		defer snap.Close()
-		res, err := tc.repl.sha512(ctx, *tc.repl.Desc(), tc.engine,
+		res, err := replicaSHA512(ctx, *tc.repl.Desc(), tc.engine,
 			roachpb.ChecksumMode_CHECK_FULL,
 			quotapool.NewRateLimiter("ConsistencyQueue", quotapool.Limit(math.MaxFloat64), math.MaxInt64))
 		if err != nil {
