@@ -12,7 +12,6 @@ package slinstance_test
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,11 +45,11 @@ func TestSQLInstance(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
 	sqlInstance.Start(ctx)
 
 	// Add one more instance to introduce concurrent access to storage.
-	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
 	dummy.Start(ctx)
 
 	s1, err := sqlInstance.Session(ctx)
@@ -121,7 +120,8 @@ func TestSQLInstanceDeadlines(t *testing.T) {
 	}
 	defer cleanUpFunc()
 
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	events := &channelSessionEventListener{c: make(chan struct{})}
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, events)
 	sqlInstance.Start(ctx)
 
 	// verify that we do not create a session
@@ -133,6 +133,13 @@ func TestSQLInstanceDeadlines(t *testing.T) {
 		},
 		100*time.Millisecond, 10*time.Millisecond,
 	)
+
+	// verify that the errChan is written to on session creation failure
+	select {
+	case <-events.c:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("session deletion event not signaled")
+	}
 }
 
 // TestSQLInstanceDeadlinesExtend tests that we have proper deadlines set on the
@@ -156,7 +163,8 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	events := &channelSessionEventListener{c: make(chan struct{})}
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, events)
 	sqlInstance.Start(ctx)
 
 	// verify that eventually session is created successfully
@@ -178,13 +186,6 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 		100*time.Millisecond, 10*time.Millisecond,
 	)
 
-	// register a callback for verification that this session expired
-	var sessionExpired atomic.Bool
-	s, _ := sqlInstance.Session(ctx)
-	s.RegisterCallbackForSessionExpiry(func(ctx context.Context) {
-		sessionExpired.Store(true)
-	})
-
 	// block the fake storage
 	fakeStorage.SetBlockCh()
 	cleanUpFunc := func() {
@@ -194,12 +195,21 @@ func TestSQLInstanceDeadlinesExtend(t *testing.T) {
 	// advance manual clock so that session expires
 	mt.Advance(slinstance.DefaultTTL.Get(&settings.SV))
 
-	// expect session to expire
-	require.Eventually(
-		t,
-		func() bool {
-			return sessionExpired.Load()
-		},
-		testutils.DefaultSucceedsSoonDuration, 10*time.Millisecond,
-	)
+	// verify that the errChan is written to on session expiry
+	select {
+	case <-events.c:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("session deletion event not signaled")
+	}
+}
+
+type channelSessionEventListener struct {
+	c chan struct{}
+}
+
+var _ slinstance.SessionEventListener = &channelSessionEventListener{}
+
+// OnSessionDeleted implements the slinstance.SessionEventListener interface.
+func (d *channelSessionEventListener) OnSessionDeleted() {
+	close(d.c)
 }

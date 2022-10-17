@@ -666,6 +666,16 @@ If problems persist, please see %s.`
 				true /* isHostNode */, initialStart, uuid.UUID{} /* tenantClusterID */)
 		}(); err != nil {
 			errChan <- err
+		} else {
+			// Start a goroutine that watches for shutdown requests and notifies
+			// errChan.
+			go func() {
+				select {
+				case err := <-s.ShutdownRequested():
+					errChan <- err
+				case <-stopper.ShouldQuiesce():
+				}
+			}()
 		}
 	}()
 
@@ -693,14 +703,20 @@ type serverShutdownInterface interface {
 	Drain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
 }
 
-// waitForShutdown lets the server run asynchronously and waits for
-// shutdown, either due to the server spontaneously shutting down
-// (signaled by stopper), or due to a server error (signaled on
-// errChan), by receiving a signal (signaled by signalCh).
+// waitForShutdown blocks until interrupted by a shutdown signal, which can come
+// in several forms:
+// - a call to stopper.Stop(). This is done, by example, by the DrainServer.
+// - an error being signaled on errChan
+// - receiving a signal on signalCh
+//
+// In case of a stopper.Stop() interruption, the function returns directly.
+// In case of an errChan interruption, stopper.Stop() is called.
+// In case of a signal, the server is first drained and then stopper.Stop() is
+// called.
 func waitForShutdown(
 	getS func() serverShutdownInterface,
 	stopper *stop.Stopper,
-	errChan chan error,
+	errChan <-chan error,
 	signalCh chan os.Signal,
 	serverStatusMu *serverStatus,
 ) (returnErr error) {
@@ -726,6 +742,7 @@ func waitForShutdown(
 		// StartAlwaysFlush both flushes and ensures that subsequent log
 		// writes are flushed too.
 		log.StartAlwaysFlush()
+		stopper.Stop(logtags.AddTag(getS().AnnotateCtx(context.Background()), "shutdown", nil))
 		return err
 
 	case <-stopper.ShouldQuiesce():
