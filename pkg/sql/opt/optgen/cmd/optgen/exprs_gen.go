@@ -600,7 +600,7 @@ func (g *exprsGen) genMemoizeFuncs() {
 		// Construct a new expression and add it to the interning map.
 		if define.Tags.Contains("Scalar") {
 			fmt.Fprintf(g.w, "  const size = int64(unsafe.Sizeof(%s{}))\n", opTyp.name)
-			fmt.Fprintf(g.w, "  e := &%s{\n", opTyp.name)
+			fmt.Fprintf(g.w, "  e := %s{\n", opTyp.name)
 		} else {
 			groupName := fmt.Sprintf("%sGroup", unTitle(string(define.Name)))
 			fmt.Fprintf(g.w, "  const size = int64(unsafe.Sizeof(%s{}))\n", groupName)
@@ -620,21 +620,21 @@ func (g *exprsGen) genMemoizeFuncs() {
 			fmt.Fprintf(g.w, "   rank: m.NextRank(),\n")
 			fmt.Fprintf(g.w, "  }\n")
 			if g.needsDataTypeField(define) {
-				fmt.Fprintf(g.w, "  e.Typ = InferType(m, e)\n")
+				fmt.Fprintf(g.w, "  e.Typ = InferType(m, &e)\n")
 			}
-			fmt.Fprintf(g.w, "  interned := m.interner.Intern%s(e)\n", define.Name)
+			fmt.Fprintf(g.w, "  interned, foundExisting := m.interner.Intern%s(e)\n", define.Name)
 		} else {
 			fmt.Fprintf(g.w, "  }}\n")
-			fmt.Fprintf(g.w, "  e := &grp.first\n")
-			fmt.Fprintf(g.w, "  e.grp = grp\n")
-			fmt.Fprintf(g.w, "  interned := m.interner.Intern%s(e)\n", define.Name)
+			fmt.Fprintf(g.w, "  grp.first.grp = grp\n")
+			fmt.Fprintf(g.w, "  e := grp.first\n")
+			fmt.Fprintf(g.w, "  interned, foundExisting := m.interner.Intern%s(e)\n", define.Name)
 		}
 
 		// Build relational props, track memory usage, and check consistency if
 		// expression was not already interned.
-		fmt.Fprintf(g.w, "  if interned == e {\n")
+		fmt.Fprintf(g.w, "  if !foundExisting {\n")
 		fmt.Fprintf(g.w, "  if m.newGroupFn != nil {\n")
-		fmt.Fprintf(g.w, "    m.newGroupFn(e)\n")
+		fmt.Fprintf(g.w, "    m.newGroupFn(interned)\n")
 		fmt.Fprintf(g.w, "  }\n")
 
 		if g.md.hasUnexportedFields(define) {
@@ -642,11 +642,11 @@ func (g *exprsGen) genMemoizeFuncs() {
 		}
 
 		if !define.Tags.Contains("Scalar") {
-			fmt.Fprintf(g.w, "  m.logPropsBuilder.build%sProps(e, &grp.rel)\n", define.Name)
+			fmt.Fprintf(g.w, "  m.logPropsBuilder.build%sProps(interned, &grp.rel)\n", define.Name)
 			fmt.Fprintf(g.w, "  grp.rel.Populated = true\n")
 		}
 		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
-		fmt.Fprintf(g.w, "    m.CheckExpr(e)\n")
+		fmt.Fprintf(g.w, "    m.CheckExpr(interned)\n")
 		fmt.Fprintf(g.w, "  }\n")
 		if define.Tags.Contains("Scalar") {
 			fmt.Fprintf(g.w, "  return interned\n")
@@ -695,14 +695,14 @@ func (g *exprsGen) genAddToGroupFuncs() {
 		fmt.Fprintf(g.w, "func (m *Memo) Add%sToGroup(e *%s, grp RelExpr) *%s {\n",
 			define.Name, opTyp.name, opTyp.name)
 		fmt.Fprintf(g.w, "  const size = int64(unsafe.Sizeof(%s{}))\n", opTyp.name)
-		fmt.Fprintf(g.w, "  interned := m.interner.Intern%s(e)\n", define.Name)
-		fmt.Fprintf(g.w, "  if interned == e {\n")
+		fmt.Fprintf(g.w, "  interned, foundExisting := m.interner.Intern%s(*e)\n", define.Name)
+		fmt.Fprintf(g.w, "  if !foundExisting {\n")
 		if g.md.hasUnexportedFields(define) {
 			fmt.Fprintf(g.w, "    e.initUnexportedFields(m)\n")
 		}
-		fmt.Fprintf(g.w, "    e.setGroup(grp)\n")
+		fmt.Fprintf(g.w, "    interned.setGroup(grp)\n")
 		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
-		fmt.Fprintf(g.w, "    m.CheckExpr(e)\n")
+		fmt.Fprintf(g.w, "    m.CheckExpr(interned)\n")
 		fmt.Fprintf(g.w, "  } else if interned.group() != grp.group() {\n")
 		fmt.Fprintf(g.w, "    // This is a group collision, do nothing.\n")
 		fmt.Fprintf(g.w, "    return nil\n")
@@ -714,12 +714,12 @@ func (g *exprsGen) genAddToGroupFuncs() {
 
 // genInternFuncs generates methods on the interner.
 func (g *exprsGen) genInternFuncs() {
-	fmt.Fprintf(g.w, "func (in *interner) InternExpr(e opt.Expr) opt.Expr {\n")
+	fmt.Fprintf(g.w, "func (in *interner) InternExpr(e opt.Expr) (opt.Expr, bool) {\n")
 	fmt.Fprintf(g.w, "  switch t := e.(type) {\n")
 	for _, define := range g.compiled.Defines.WithoutTag("Enforcer").WithoutTag("Private") {
 		opTyp := g.md.typeOf(define)
 		fmt.Fprintf(g.w, "  case *%s:\n", opTyp.name)
-		fmt.Fprintf(g.w, "    return in.Intern%s(t)\n", define.Name)
+		fmt.Fprintf(g.w, "    return in.Intern%s(*t)\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "  default:\n")
 	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled op: %%s\", e.Op()))\n")
@@ -729,7 +729,7 @@ func (g *exprsGen) genInternFuncs() {
 	for _, define := range g.compiled.Defines.WithoutTag("Enforcer").WithoutTag("Private") {
 		opTyp := g.md.typeOf(define)
 
-		fmt.Fprintf(g.w, "func (in *interner) Intern%s(val *%s) *%s {\n",
+		fmt.Fprintf(g.w, "func (in *interner) Intern%s(val %s) (*%s, bool) {\n",
 			define.Name, opTyp.name, opTyp.name)
 
 		fmt.Fprintf(g.w, "  in.hasher.Init()\n")
@@ -737,7 +737,7 @@ func (g *exprsGen) genInternFuncs() {
 		// Generate code to compute hash.
 		fmt.Fprintf(g.w, "  in.hasher.HashOperator(opt.%sOp)\n", define.Name)
 		if opTyp.listItemType != nil {
-			fmt.Fprintf(g.w, "  in.hasher.Hash%s(*val)\n", title(opTyp.friendlyName))
+			fmt.Fprintf(g.w, "  in.hasher.Hash%s(val)\n", title(opTyp.friendlyName))
 		} else {
 			for _, field := range expandFields(g.compiled, define) {
 				fieldName := g.md.fieldName(field)
@@ -764,7 +764,7 @@ func (g *exprsGen) genInternFuncs() {
 		first := true
 		if opTyp.listItemType != nil {
 			first = false
-			fmt.Fprintf(g.w, "  if in.hasher.Is%sEqual(*val, *existing)", title(opTyp.friendlyName))
+			fmt.Fprintf(g.w, "  if in.hasher.Is%sEqual(val, *existing)", title(opTyp.friendlyName))
 		} else {
 			for _, field := range expandFields(g.compiled, define) {
 				fieldName := g.md.fieldName(field)
@@ -792,18 +792,19 @@ func (g *exprsGen) genInternFuncs() {
 
 		if !first {
 			fmt.Fprintf(g.w, " {\n")
-			fmt.Fprintf(g.w, "        return existing\n")
+			fmt.Fprintf(g.w, "        return existing, true\n")
 			fmt.Fprintf(g.w, "      }\n")
 		} else {
 			// Handle expressions with no children.
-			fmt.Fprintf(g.w, "      return existing\n")
+			fmt.Fprintf(g.w, "      return existing, true\n")
 		}
 		fmt.Fprintf(g.w, "    }\n")
 		fmt.Fprintf(g.w, "  }\n\n")
 
 		// Generate code to add expression to the cache.
-		fmt.Fprintf(g.w, "  in.cache.Add(val)\n")
-		fmt.Fprintf(g.w, "  return val\n")
+		fmt.Fprintf(g.w, "  cached := val\n")
+		fmt.Fprintf(g.w, "  in.cache.Add(&cached)\n")
+		fmt.Fprintf(g.w, "  return &cached, false\n")
 		fmt.Fprintf(g.w, "}\n\n")
 	}
 }
