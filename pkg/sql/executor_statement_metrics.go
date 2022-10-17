@@ -124,6 +124,8 @@ func (ex *connExecutor) recordStatementSummary(
 	phaseTimes := ex.statsCollector.PhaseTimes()
 
 	// Collect the statistics.
+	clientLatRaw := phaseTimes.GetClientLatency(ex.statsCollector.PreviousPhaseTimes())
+	clientLat := clientLatRaw.Seconds()
 	runLatRaw := phaseTimes.GetRunLatency()
 	runLat := runLatRaw.Seconds()
 	parseLat := phaseTimes.GetParsingLatency().Seconds()
@@ -187,6 +189,7 @@ func (ex *connExecutor) recordStatementSummary(
 		AutoRetryCount:       automaticRetryCount,
 		AutoRetryReason:      ex.state.mu.autoRetryReason,
 		RowsAffected:         rowsAffected,
+		ClientLatency:        clientLat,
 		ParseLatency:         parseLat,
 		PlanLatency:          planLat,
 		RunLatency:           runLat,

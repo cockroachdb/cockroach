@@ -64,6 +64,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
+         "clientLat": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
          "parseLat": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}

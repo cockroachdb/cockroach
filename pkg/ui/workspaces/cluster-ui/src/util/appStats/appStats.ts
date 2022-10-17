@@ -155,6 +155,12 @@ export function addStatementStats(
       ? a.max_retries
       : b.max_retries,
     num_rows: aggregateNumericStats(a.num_rows, b.num_rows, countA, countB),
+    client_lat: aggregateNumericStats(
+      a.client_lat,
+      b.client_lat,
+      countA,
+      countB,
+    ),
     parse_lat: aggregateNumericStats(a.parse_lat, b.parse_lat, countA, countB),
     plan_lat: aggregateNumericStats(a.plan_lat, b.plan_lat, countA, countB),
     run_lat: aggregateNumericStats(a.run_lat, b.run_lat, countA, countB),

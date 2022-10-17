@@ -198,6 +198,7 @@ type RecordedStmtStats struct {
 	AutoRetryCount       int
 	AutoRetryReason      error
 	RowsAffected         int
+	ClientLatency        float64
 	ParseLatency         float64
 	PlanLatency          float64
 	RunLatency           float64

@@ -61,6 +61,9 @@ message StatementStatistics {
 
   // Phase latencies:
 
+  // ClientLat is the time spent waiting for the client to send the statement.
+  optional NumericStat client_lat = 28 [(gogoproto.nullable) = false];
+
   // ParseLat is the time to transform the SQL string into an AST.
   optional NumericStat parse_lat = 6 [(gogoproto.nullable) = false];
 
