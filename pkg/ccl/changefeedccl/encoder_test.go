@@ -1057,6 +1057,7 @@ func TestParquetEncoder(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		TestingSetIncludeParquetMetadata()
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
@@ -1078,7 +1079,7 @@ INDEX (y))`)
 			`foo: [1]->{"a":true,"i":1,"x":"Alice","y":3,"z":0.5032135844230652}`,
 			`foo: [2]->{"a":false,"i":2,"x":"Bob","y":2,"z":"NaN"}`,
 			// NULL values are omitted from parquet row when encoding
-			`foo: [3]->{"i":3","z":4.5}`,
+			`foo: [3]->{"i":3,"z":4.5}`,
 		})
 
 	}

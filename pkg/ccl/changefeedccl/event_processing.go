@@ -367,16 +367,15 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	if sinkWithEncoder, ok := c.sink.(SinkWithEncoder); ok {
-		// Revisit: break the arguments into multiple lines
-		err := sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc)
-		if err != nil {
-			return err
-		}
-	} else {
+	sinkWithEncoder, ok := c.sink.(SinkWithEncoder)
+	if !ok {
 		return errors.AssertionFailedf("Expected a sink with encoder for parquet format, found %T", c.sink)
 	}
-
+	if err := sinkWithEncoder.EncodeAndEmitRow(
+		ctx, updatedRow, topic, updated, mvcc, alloc,
+	); err != nil {
+		return err
+	}
 	return nil
 }
 

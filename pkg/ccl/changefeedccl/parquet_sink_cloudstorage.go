@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	pqexporter "github.com/cockroachdb/cockroach/pkg/sql/importer"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -23,6 +22,11 @@ import (
 	"github.com/fraugster/parquet-go/parquetschema"
 	"github.com/pkg/errors"
 )
+
+// This variable is used to make sure that we add primary keys of the table to
+// the metadata of the parquet file only under testing (The primary keys are
+// used to convert the parquet data into JSON)
+var includeParquetTestMetadata = false
 
 // We need a separate sink for parquet format because the parquet encoder has to
 // write metadata to the parquet file (buffer) after each flush. This means that the
@@ -60,6 +64,8 @@ func makeParquetCloudStorageSink(baseCloudStorageSink *cloudStorageSink) *parque
 	return pcs
 }
 
+// EmitRow does not do anything. It must not be called. It is present so that
+// parquetCloudStorageSink implements the Sink interface.
 func (pqcs *parquetCloudStorageSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
@@ -67,32 +73,36 @@ func (pqcs *parquetCloudStorageSink) EmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-
 	return errors.Errorf("Emit Row should not be called for parquet format")
-
 }
 
-func (s *parquetCloudStorageSink) Close() error {
-	return s.wrapped.Close()
+// Close implements the Sink interface.
+func (pqcs *parquetCloudStorageSink) Close() error {
+	return pqcs.wrapped.Close()
 }
 
-func (s *parquetCloudStorageSink) Dial() error {
-	return s.wrapped.Dial()
+// Dial implements the Sink interface.
+func (pqcs *parquetCloudStorageSink) Dial() error {
+	return pqcs.wrapped.Dial()
 }
 
-func (s *parquetCloudStorageSink) EmitResolvedTimestamp(
+// EmitResolvedTimestamp does not do anything as of now. It is there to
+// implement Sink interface.
+func (pqcs *parquetCloudStorageSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
 	return errors.Errorf("parquet format does not support emitting resolved timestamp")
 }
 
+// Flush implements the Sink interface.
 func (pqcs *parquetCloudStorageSink) Flush(ctx context.Context) error {
 	return pqcs.wrapped.Flush(ctx)
 }
 
 // EncodeAndEmitRow links the buffer in the cloud storage sync file and the
 // parquet writer (see parquetCloudStorageSink). It also takes care of encoding
-// and emitting row event to cloud storage.
+// and emitting row event to cloud storage. Implements the SinkWithEncoder
+// interface.
 func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
@@ -100,10 +110,10 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-
 	s := pqcs.wrapped
 	var pqww *parquetWriterWrapper
 	file, err := s.getOrCreateFile(topic, mvcc)
+	file.alloc.Merge(&alloc)
 	if err != nil {
 		return err
 	}
@@ -121,10 +131,6 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 
 	i := -1
 	parquetRow := make(map[string]interface{}, pqww.numCols)
-	// Revisit: I am assuming that this iterates through the columns in
-	// the same order as when iterating through the columns when
-	// creating the schema. this is important because each encode
-	// function is dependent on the column position.
 	updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		i++
 		// Omit NULL columns from parquet row (cannot think of any other way of
@@ -133,23 +139,17 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 			parquetRow[col.Name] = nil
 			return nil
 		}
-		// Revisit: should probably wrap these errors with something
-		// more meaningful for upstream
 		encodeFn, err := pqww.parquetColumns[i].GetEncoder()
 		if err != nil {
 			return err
 		}
 		// Revisit: no clue what unwrap datum does, using it cuz export also did
-		edNative, err := encodeFn(eval.UnwrapDatum(nil, d))
-		if err != nil {
-			return err
-		}
-		colName, err := pqww.parquetColumns[i].Name()
+		edNative, err := encodeFn(d)
 		if err != nil {
 			return err
 		}
 
-		parquetRow[colName] = edNative
+		parquetRow[col.Name] = edNative
 
 		return nil
 
@@ -157,7 +157,6 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 
 	pqww.parquetWriter.AddData(parquetRow)
 
-	file.alloc.Merge(&alloc)
 	if pqww.parquetWriter.CurrentRowGroupSize() > s.targetMaxFileSize {
 		s.metrics.recordSizeBasedFlush()
 
@@ -182,19 +181,28 @@ func makeparquetWriterWrapper(
 
 	schema := pqexporter.NewParquetSchema(parquetColumns)
 
-	keyCols := make(map[string]string)
-	colNames := ""
-	row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		colNames += col.Name + ","
-		return nil
-	})
-	keyCols["pkeys"] = colNames
+	parquetWriterOptions := make([]goparquet.FileWriterOption, 0)
 
-	// Revisit: not using parquets inbuilt compressor, relying on sinks
-	// compression
+	// TODO(cdc): We really should revisit if we should include any metadata in
+	// parquet files. There are plenty things we can include there, including crdb
+	// native column types, OIDs for those column types, etc
+	if includeParquetTestMetadata {
+		keyCols := make(map[string]string)
+		colNames := ""
+		row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+			colNames += col.Name + ","
+			return nil
+		})
+		keyCols["pkeys"] = colNames
+		parquetWriterOptions = append(parquetWriterOptions, goparquet.WithMetaData(keyCols))
+	}
+
+	// TODO(cdc): Determine if we should parquet's builtin compressor or rely on
+	// sinks compressing. Currently using not parquets builtin compressor, relying
+	// on sinks compression
+	parquetWriterOptions = append(parquetWriterOptions, goparquet.WithSchemaDefinition(schema))
 	pqw := goparquet.NewFileWriter(buf,
-		goparquet.WithSchemaDefinition(schema),
-		goparquet.WithMetaData(keyCols),
+		parquetWriterOptions...,
 	)
 
 	pqww := &parquetWriterWrapper{
@@ -219,11 +227,15 @@ func getParquetColumnTypes(
 	})
 
 	parquetColumns := make([]pqexporter.ParquetColumn, len(typs))
+	const nullable = true
 
 	for i := 0; i < len(typs); i++ {
-		// Revisit: im passing "true" for all columns, meaning that all
-		// value columns are nullable. make sure this is correct.
-		parquetCol, err := pqexporter.NewParquetColumn(typs[i], names[i], true)
+		// Make every field optional, so that all schema evolutions for a table are
+		// considered "backward compatible" by parquet. This means that the parquet
+		// type doesn't mirror the column's nullability, but it makes it much easier
+		// to work with long histories of table data afterward, especially for
+		// things like loading into analytics databases.
+		parquetCol, err := pqexporter.NewParquetColumn(typs[i], names[i], nullable)
 		if err != nil {
 			return nil, err
 		}

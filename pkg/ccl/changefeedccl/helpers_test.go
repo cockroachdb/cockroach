@@ -244,10 +244,6 @@ func assertPayloadsTimeout() time.Duration {
 	return 30 * time.Second
 }
 
-func collectParquetPayloadTimeout() time.Duration {
-	return 30 * time.Second
-}
-
 func withTimeout(
 	f cdctest.TestFeed, timeout time.Duration, fn func(ctx context.Context) error,
 ) error {
@@ -1017,4 +1013,8 @@ func waitForJobStatus(
 		}
 		return nil
 	})
+}
+
+func TestingSetIncludeParquetMetadata() {
+	includeParquetTestMetadata = true
 }

@@ -1059,10 +1059,75 @@ func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []b
 	return key, value, nil
 }
 
-// This function reads the parquet file and converts each row to its JSON
+func (c *cloudFeed) decodeParquetValueAsJson(value interface{}) (interface{}, error) {
+	switch vv := value.(type) {
+	case []byte:
+		// Currently, for encoding from CRDB data type to Parquet data type, for
+		// any complex structure (that is, other than ints and floats), it is
+		// always a byte array which is the string representation of that datum
+		// (except for arrays, see below). Therefore, if the parquet reader
+		// decodes a column value as a Go native byte array, then we can be sure
+		// that it is the equivalent string representation of the CRDB datum.
+		// Hence, we can use this value to construct the final JSON object which
+		// will be used by assertPayload to compare actual and expected JSON
+		// objects.
+
+		// Ideally there should be no need to convert byte array to string but
+		// JSON encoder will encode byte arrays as base 64 encoded strings.
+		// Hence, we need to convert to string to tell Marshal to decode it as a
+		// string. For every other Go native type, we can use the type as is and
+		// json.Marhsal will work correctly.
+		return string(vv), nil
+	case map[string]interface{}:
+		// This is CRDB ARRAY data type (only data type for which we use parquet
+		// LIST logical type. For all other CRDB types, it's either a byte array
+		// or a primitive parquet type). See importer.NewParquetColumn for
+		// details on how CRDB Array is encoded to parquet. (read it before
+		// reading the rest of the comments). Ideally, the parquet reader should
+		// decode the encoded CRDB array datum as a go native list type. But we
+		// use a low level API provided by the vendor which decodes parquet's
+		// LIST logical data type
+		// (https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
+		// into this weird map structure in Go (It actually makes a lot of sense
+		// why this is done if you understand the parquet LIST logical data
+		// type). A higher level API would convert this map data structure into
+		// go native list type which is what the code below does. This would
+		// probably need to be changed if the parquet vendor is changed.
+		vtemp := make([]interface{}, 0)
+		if castedValue, ok := vv["list"].([]map[string]interface{}); ok {
+			for _, ele := range castedValue {
+				if elementVal, ok := ele["element"]; ok {
+					if byteTypeElement, ok := elementVal.([]byte); ok {
+						vtemp = append(vtemp, string(byteTypeElement))
+					} else {
+						// Primitive types
+						vtemp = append(vtemp, ele["element"])
+					}
+				} else {
+					return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+				}
+			}
+		} else {
+			return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+		}
+		return vtemp, nil
+	default:
+		// int's, float's and other primitive types
+		if floatVal, ok := vv.(float64); ok {
+			// gojson cannot encode NaN values
+			// https://github.com/golang/go/issues/25721
+			if math.IsNaN(floatVal) {
+				return "NaN", nil
+			}
+		}
+		return vv, nil
+	}
+
+}
+
+// appendParquetTestFeedMessages function reads the parquet file and converts each row to its JSON
 // equivalent and appends it to the cloudfeed's row object.
 func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) error {
-
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -1084,7 +1149,6 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 	}
 
 	for {
-
 		row, err := fr.NextRow()
 		if err == io.EOF {
 			break
@@ -1102,69 +1166,9 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 		key := make([]interface{}, 0)
 
 		for k, v := range row {
-
-			switch vv := v.(type) {
-			case []byte:
-				// Currently, for encoding from CRDB data type to Parquet data type, for
-				// any complex structure (that is, other than ints and floats), it is
-				// always a byte array which is the string representation of that datum
-				// (except for arrays, see below). Therefore, if the parquet reader
-				// decodes a column value as a Go native byte array, then we can be sure
-				// that it is the equivalent string representation of the CRDB datum.
-				// Hence, we can use this value to construct the final JSON object which
-				// will be used by assertPayload to compare actual and expected JSON
-				// objects.
-
-				// Ideally there should be no need to convert byte array to string but
-				// JSON encoder will encode byte arrays as base 64 encoded strings.
-				// Hence, we need to convert to string to tell Marshal to decode it as a
-				// string. For every other Go native type, we can use the type as is and
-				// json.Marhsal will work correctly.
-				value[k] = string(vv)
-			case map[string]interface{}:
-				// This is CRDB ARRAY data type (only data type for which we use parquet
-				// LIST logical type. For all other CRDB types, it's either a byte array
-				// or a primitive parquet type). See importer.NewParquetColumn for
-				// details on how CRDB Array is encoded to parquet. (read it before
-				// reading the rest of the comments). Ideally, the parquet reader should
-				// decode the encoded CRDB array datum as a go native list type. But we
-				// use a low level API provided by the vendor which decodes parquet's
-				// LIST logical data type
-				// (https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
-				// into this weird map structure in Go (It actually makes a lot of sense
-				// why this is done if you understand the parquet LIST logical data
-				// type). A higher level API would convert this map data structure into
-				// go native list type which is what the code below does. This would
-				// probably need to be changed if the parquet vendor is changed.
-				vtemp := make([]interface{}, 0)
-				if castedValue, ok := vv["list"].([]map[string]interface{}); ok {
-					for _, ele := range castedValue {
-						if elementVal, ok := ele["element"]; ok {
-							if byteTypeElement, ok := elementVal.([]byte); ok {
-								vtemp = append(vtemp, string(byteTypeElement))
-							} else {
-								// Primitive types
-								vtemp = append(vtemp, ele["element"])
-							}
-						} else {
-							return errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
-						}
-					}
-				} else {
-					return errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
-				}
-				value[k] = vtemp
-			default:
-				// int's, float's and other primitive types
-				value[k] = vv
-			}
-
-			if floatVal, ok := value[k].(float64); ok {
-				// gojson cannot encode NaN values
-				// https://github.com/golang/go/issues/25721
-				if math.IsNaN(floatVal) {
-					value[k] = "NaN"
-				}
+			value[k], err = c.decodeParquetValueAsJson(v)
+			if err != nil {
+				return err
 			}
 
 			if _, ok := keyColsSet[k]; ok {
@@ -1288,43 +1292,42 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 
 	format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
 
-	// NB: This is the logic for JSON. Avro will involve parsing an
-	// "Object Container File".
-	switch format {
-	case changefeedbase.OptFormatParquet:
+	if format == changefeedbase.OptFormatParquet {
 		return c.appendParquetTestFeedMessages(path, topic)
-	default:
-		s := bufio.NewScanner(f)
-		for s.Scan() {
-			value := append([]byte(nil), s.Bytes()...)
-			m := &cdctest.TestFeedMessage{
-				Topic: topic,
-				Value: value,
-			}
+	}
 
-			switch format {
-			case ``, changefeedbase.OptFormatJSON:
-				// Cloud storage sinks default the `WITH key_in_value` option so that
-				// the key is recoverable. Extract it out of the value (also removing it
-				// so the output matches the other sinks). Note that this assumes the
-				// format is json, this will have to be fixed once we add format=avro
-				// support to cloud storage.
-				//
-				// TODO(dan): Leave the key in the value if the TestFeed user
-				// specifically requested it.
-				if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
-					return nil
-				}
-				if isNew := c.markSeen(m); !isNew {
-					continue
-				}
-				m.Resolved = nil
-				c.rows = append(c.rows, m)
-			case changefeedbase.OptFormatCSV:
-				c.rows = append(c.rows, m)
-			default:
-				return errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, format)
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		value := append([]byte(nil), s.Bytes()...)
+		m := &cdctest.TestFeedMessage{
+			Topic: topic,
+			Value: value,
+		}
+
+		// NB: This is the logic for JSON. Avro will involve parsing an
+		// "Object Container File".
+		switch format {
+		case ``, changefeedbase.OptFormatJSON:
+			// Cloud storage sinks default the `WITH key_in_value` option so that
+			// the key is recoverable. Extract it out of the value (also removing it
+			// so the output matches the other sinks). Note that this assumes the
+			// format is json, this will have to be fixed once we add format=avro
+			// support to cloud storage.
+			//
+			// TODO(dan): Leave the key in the value if the TestFeed user
+			// specifically requested it.
+			if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
+				return nil
 			}
+			if isNew := c.markSeen(m); !isNew {
+				continue
+			}
+			m.Resolved = nil
+			c.rows = append(c.rows, m)
+		case changefeedbase.OptFormatCSV:
+			c.rows = append(c.rows, m)
+		default:
+			return errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, format)
 		}
 	}
 	return nil
