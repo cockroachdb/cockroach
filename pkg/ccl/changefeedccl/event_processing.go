@@ -106,10 +106,10 @@ func newEventConsumer(
 	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
 
-	//We cannot have a separate encoder and sink for parquet format (see
-	//parquet_sink_cloudstorage.go). Because of this the current nprox solution
-	//does not work for parquet format.
-	//TODO (ganeshb) Add nprox support for parquet format
+	// We cannot have a separate encoder and sink for parquet format (see
+	// parquet_sink_cloudstorage.go). Because of this the current nprox solution
+	// does not work for parquet format. TODO (ganeshb) Add nprox support for
+	// parquet format
 	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
 		c, err := makeConsumer(sink, spanFrontier)
 		if err != nil {

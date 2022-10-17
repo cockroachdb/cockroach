@@ -1093,6 +1093,9 @@ func (c *cloudFeed) decodeParquetValueAsJson(value interface{}) (interface{}, er
 		// type). A higher level API would convert this map data structure into
 		// go native list type which is what the code below does. This would
 		// probably need to be changed if the parquet vendor is changed.
+
+		// TODO(ganeshb): Make sure that the library is indeed decoding parquet lists
+		// into this weird map format and it is not because of the way we encode
 		vtemp := make([]interface{}, 0)
 		if castedValue, ok := vv["list"].([]map[string]interface{}); ok {
 			for _, ele := range castedValue {
