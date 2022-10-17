@@ -130,6 +130,13 @@ func (cfg *Config) WithCluster(nodes install.Nodes) *Config {
 	return cfg
 }
 
+// WithTenantPod adds scraping for a tenant SQL pod running on the given nodes.
+// Chains for convenience.
+func (cfg *Config) WithTenantPod(node install.Node, tenantID int) *Config {
+	cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, MakeInsecureTenantPodScrapeConfig(node, tenantID)...)
+	return cfg
+}
+
 // WithGrafanaDashboard adds links to dashboards to provision into Grafana. See
 // cfg.Grafana.DashboardURLs for helpful tips.
 // Enables Grafana if not already enabled.
@@ -177,7 +184,10 @@ func MakeInsecureCockroachScrapeConfig(nodes install.Nodes) []ScrapeConfig {
 		sl = append(sl, ScrapeConfig{
 			JobName:     "cockroach-n" + s,
 			MetricsPath: "/_status/vars",
-			Labels:      map[string]string{"node": s},
+			Labels: map[string]string{
+				"node":   s,
+				"tenant": "system", // all CRDB nodes emit SQL metrics for the system tenant since it's embedded
+			},
 			ScrapeNodes: []ScrapeNode{
 				{
 					Node: node,
@@ -186,6 +196,27 @@ func MakeInsecureCockroachScrapeConfig(nodes install.Nodes) []ScrapeConfig {
 			},
 		})
 	}
+	return sl
+}
+
+// MakeInsecureTenantPodScrapeConfig creates a scrape config for a given tenant
+// SQL pod. All nodes are assumed to be insecure and running on port 8081.
+func MakeInsecureTenantPodScrapeConfig(node install.Node, tenantID int) []ScrapeConfig {
+	var sl []ScrapeConfig
+	sl = append(sl, ScrapeConfig{
+		JobName:     fmt.Sprintf("cockroach-tenant-t%d-n%d", tenantID, int(node)),
+		MetricsPath: "/_status/vars",
+		Labels: map[string]string{
+			"node":   strconv.Itoa(int(node)),
+			"tenant": strconv.Itoa(tenantID),
+		},
+		ScrapeNodes: []ScrapeNode{
+			{
+				Node: node,
+				Port: 8081,
+			},
+		},
+	})
 	return sl
 }
 
@@ -494,6 +525,10 @@ func makeNodeIPMap(c *install.SyncedCluster) (map[install.Node]string, error) {
 
 // makeYAMLConfig creates a prometheus YAML config for the server to use.
 func makeYAMLConfig(scrapeConfigs []ScrapeConfig, nodeIPs map[install.Node]string) (string, error) {
+	type tlsConfig struct {
+		InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
+	}
+
 	type yamlStaticConfig struct {
 		Labels  map[string]string `yaml:",omitempty"`
 		Targets []string
@@ -503,6 +538,7 @@ func makeYAMLConfig(scrapeConfigs []ScrapeConfig, nodeIPs map[install.Node]strin
 		JobName       string             `yaml:"job_name"`
 		StaticConfigs []yamlStaticConfig `yaml:"static_configs"`
 		MetricsPath   string             `yaml:"metrics_path"`
+		TLSConfig     tlsConfig          `yaml:"tls_config"`
 	}
 
 	type yamlConfig struct {
@@ -533,6 +569,9 @@ func makeYAMLConfig(scrapeConfigs []ScrapeConfig, nodeIPs map[install.Node]strin
 						Labels:  scrapeConfig.Labels,
 						Targets: targets,
 					},
+				},
+				TLSConfig: tlsConfig{
+					InsecureSkipVerify: true,
 				},
 			},
 		)

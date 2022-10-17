@@ -12,8 +12,12 @@ scrape_configs:
     - 127.0.0.4:2003
     - 127.0.0.5:2003
   metrics_path: /b
+  tls_config:
+    insecure_skip_verify: true
 - job_name: workload1
   static_configs:
   - targets:
     - 127.0.0.6:2009
   metrics_path: /c
+  tls_config:
+    insecure_skip_verify: true
