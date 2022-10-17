@@ -25,6 +25,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/covering",
         "//pkg/storage/enginepb",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/limit",
