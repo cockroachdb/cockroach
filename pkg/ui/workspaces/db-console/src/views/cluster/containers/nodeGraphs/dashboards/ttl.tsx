@@ -74,15 +74,14 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
     <LineGraph
-      title="Ranges in Progress"
+      title="Spans in Progress"
       sources={nodeSources}
-      tooltip={`Number of active ranges being processed by TTL.`}
+      tooltip={`Number of active spans being processed by TTL.`}
     >
-      <Axis label="range count" units={AxisUnits.Count}>
+      <Axis label="span count" units={AxisUnits.Count}>
         <Metric
-          name="cr.node.jobs.row_level_ttl.num_active_ranges"
-          title="number of ranges being processed"
-          nonNegativeRate
+          name="cr.node.jobs.row_level_ttl.num_active_spans"
+          title="number of spans being processed"
         />
       </Axis>
     </LineGraph>,
