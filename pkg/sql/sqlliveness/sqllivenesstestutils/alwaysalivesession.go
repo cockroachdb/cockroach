@@ -11,8 +11,6 @@
 package sqllivenesstestutils
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -35,6 +33,3 @@ func (f alwaysAliveSession) Expiration() hlc.Timestamp { return hlc.MaxTimestamp
 
 // Start implements the sqlliveness.Session interface.
 func (f alwaysAliveSession) Start() hlc.Timestamp { return hlc.MinTimestamp }
-
-// RegisterCallbackForSessionExpiry implements the sqlliveness.Session interface.
-func (f alwaysAliveSession) RegisterCallbackForSessionExpiry(func(context.Context)) {}

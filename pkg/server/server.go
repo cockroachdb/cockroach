@@ -168,6 +168,9 @@ type Server struct {
 }
 
 // NewServer creates a Server from a server.Config.
+//
+// The caller is responsible for listening on the server's ShutdownRequested()
+// channel and calling stopper.Stop().
 func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if err := cfg.ValidateAddrs(context.Background()); err != nil {
 		return nil, err
@@ -1708,6 +1711,12 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 // RPC.
 func (s *Server) Stop() {
 	s.stopper.Stop(context.Background())
+}
+
+// ShutdownRequested returns a channel that is signaled when a subsystem wants
+// the server to be shut down.
+func (s *Server) ShutdownRequested() <-chan error {
+	return s.sqlServer.ShutdownRequested()
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.
