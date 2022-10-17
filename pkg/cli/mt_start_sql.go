@@ -171,13 +171,11 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	// logging to files, periodic memory output, heap and goroutine dumps.
 	// Then use them here.
 
-	serverStartupErrC := make(chan error, 1)
 	var serverStatusMu serverStatus
 	serverStatusMu.started = true
 
 	return waitForShutdown(
 		func() serverShutdownInterface { return tenantServer },
-		stopper,
-		serverStartupErrC, signalCh,
+		stopper, tenantServer.ShutdownRequested(), signalCh,
 		&serverStatusMu)
 }

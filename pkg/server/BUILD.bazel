@@ -207,6 +207,7 @@ go_library(
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlinstance/instanceprovider",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqlliveness/slprovider",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",

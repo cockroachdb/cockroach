@@ -131,7 +131,11 @@ func (s *SQLServerWrapper) Drain(
 	return s.drainServer.runDrain(ctx, verbose)
 }
 
-// NewTenantServer creates a tenant-specific, SQL-only server against a KV backend.
+// NewTenantServer creates a tenant-specific, SQL-only server against a KV
+// backend.
+//
+// The caller is responsible for listening to the server's ShutdownRequested()
+// channel and stopping cfg.stopper when signaled.
 func NewTenantServer(
 	ctx context.Context, stopper *stop.Stopper, baseCfg BaseConfig, sqlCfg SQLConfig,
 ) (*SQLServerWrapper, error) {
@@ -688,6 +692,12 @@ func (s *SQLServerWrapper) LogicalClusterID() uuid.UUID {
 // Used in cli/mt_start_sql.go.
 func (s *SQLServerWrapper) StartDiagnostics(ctx context.Context) {
 	s.sqlServer.StartDiagnostics(ctx)
+}
+
+// ShutdownRequested returns a channel that is signaled when a subsystem wants
+// the server to be shut down.
+func (s *SQLServerWrapper) ShutdownRequested() <-chan error {
+	return s.sqlServer.ShutdownRequested()
 }
 
 func makeTenantSQLServerArgs(

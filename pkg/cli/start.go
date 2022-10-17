@@ -578,7 +578,7 @@ If problems persist, please see %s.`
 	// if we get stuck on something during initialization (#10138).
 	var serverStatusMu serverStatus
 	var s *server.Server
-	serverStartupErrC := make(chan error, 1)
+	shutdownErrC := make(chan error, 1)
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
 		defer log.Flush()
@@ -599,11 +599,11 @@ If problems persist, please see %s.`
 		defer startupSpan.Finish()
 
 		// Any error beyond this point should be reported through the
-		// serverStartupErrC defined above. However, in Go the code pattern "if err
+		// shutdownErrC defined above. However, in Go the code pattern "if err
 		// != nil { return err }" is more common. Expecting contributors
-		// to remember to write "if err != nil { serverStartupErrC <- err }" beyond
+		// to remember to write "if err != nil { shutdownErrC <- err }" beyond
 		// this point is optimistic. To avoid any mistake, we capture all
-		// the error returns in a closure, and do the serverStartupErrC reporting,
+		// the error returns in a closure, and do the shutdownErrC reporting,
 		// if needed, when that function returns.
 		if err := func() error {
 			// Instantiate the server.
@@ -674,7 +674,17 @@ If problems persist, please see %s.`
 			return reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(),
 				true /* isHostNode */, initialStart, uuid.UUID{} /* tenantClusterID */)
 		}(); err != nil {
-			serverStartupErrC <- err
+			shutdownErrC <- newServerStartupError(err)
+		} else {
+			// Start a goroutine that watches for shutdown requests and notifies
+			// errChan.
+			go func() {
+				select {
+				case err := <-s.ShutdownRequested():
+					shutdownErrC <- err
+				case <-stopper.ShouldQuiesce():
+				}
+			}()
 		}
 	}()
 
@@ -682,8 +692,28 @@ If problems persist, please see %s.`
 		// NB: we delay the access to s, as it is assigned
 		// asynchronously in a goroutine above.
 		func() serverShutdownInterface { return s },
-		stopper, serverStartupErrC, signalCh,
+		stopper, shutdownErrC, signalCh,
 		&serverStatusMu)
+}
+
+// serverStartupError wraps errors encoutered during server startup.
+type serverStartupError struct {
+	cause error
+}
+
+var _ errors.Wrapper = &serverStartupError{}
+
+func (e *serverStartupError) Error() string {
+	return fmt.Sprintf("error during server startup: %s", e.Unwrap())
+}
+
+// Unwrap implements the errors.Wrapper interface.
+func (e *serverStartupError) Unwrap() error {
+	return e.cause
+}
+
+func newServerStartupError(cause error) error {
+	return &serverStartupError{cause: cause}
 }
 
 // serverStatus coordinates the async goroutine that starts the server
@@ -743,24 +773,21 @@ type serverShutdownInterface interface {
 	Drain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
 }
 
-// waitForShutdown lets the server run asynchronously and waits for
-// shutdown, either due to the server spontaneously shutting down
-// (signaled by stopper), or due to a server error (signaled on
-// serverStartupErrC), by receiving a signal (signaled by signalCh).
+// waitForShutdown blocks until interrupted by a shutdown signal, which can come
+// in several forms:
+// - a call to stopper.Stop(). This is done, by example, by the DrainServer.
+// - a shutdown request coming from an internal module being signaled on shutdownC.
+// - receiving a Unix signal on signalCh.
+//
+// Depending on what interruption is received, the server might be drained
+// before shutting down.
 func waitForShutdown(
 	getS func() serverShutdownInterface,
 	stopper *stop.Stopper,
-	serverStartupErrC chan error,
+	shutdownC <-chan error,
 	signalCh chan os.Signal,
 	serverStatusMu *serverStatus,
 ) (returnErr error) {
-	// The remainder of the main function executes concurrently with the
-	// start up goroutine started above.
-	//
-	// It is concerned with determining when the server should stop
-	// because the main process is being shut down, e.g. via a RPC call
-	// or a signal.
-
 	// We'll want to log any shutdown activity against a separate span.
 	// We cannot use s.AnnotateCtx here because the server might not have
 	// been assigned yet (the goroutine above runs asynchronously).
@@ -769,33 +796,26 @@ func waitForShutdown(
 
 	stopWithoutDrain := make(chan struct{}) // closed if interrupted very early
 
-	// Block until one of the signals above is received or the stopper
-	// is stopped externally (for example, via the quit endpoint).
 	select {
-	case err := <-serverStartupErrC:
-		// An error in errChat signals that the early server startup failed.
+	case err := <-shutdownC:
 		returnErr = err
-		// At this point, we do not expect any application load, etc., and
-		// therefore we are OK with an expedited shutdown: pass false to
-		// shouldDrain.
-		startShutdownAsync(getS, stopper, serverStatusMu, stopWithoutDrain, false /* shouldDrain */)
+		// There's no point in draining if the server didn't even fully start.
+		drain := !errors.HasType(err, &serverStartupError{})
+		startShutdownAsync(getS, stopper, serverStatusMu, stopWithoutDrain, drain)
 		// We do not return here, on purpose, because we want the common
 		// shutdown logic below to apply for this case as well.
 
 	case <-stopper.ShouldQuiesce():
-		// Receiving a signal on ShouldQuiesce means that a shutdown was
-		// requested via the Drain RPC. The RPC code takes ownership
-		// of calling stopper.Stop.
-		//
-		// We fall through to the common logic below so that an operator
-		// looking at a server running in the foreground on their terminal
-		// can see what is going on.
+		// Receiving a signal on ShouldQuiesce means that a shutdown was requested
+		// via the Drain RPC. The RPC handler called stopper.Stop(), so there's no
+		// need (and it's also too late) for us to call startShutdownAsync().
 
 		// StartAlwaysFlush both flushes and ensures that subsequent log
 		// writes are flushed too.
 		log.StartAlwaysFlush()
-		// We do not return here, on purpose, because we want the common
-		// shutdown logic below to apply for this case as well.
+		// We fall through to the common logic below so that an operator
+		// looking at a server running in the foreground on their terminal
+		// can see what is going on.
 
 	case sig := <-signalCh:
 		// We start flushing log writes from here, because if a
