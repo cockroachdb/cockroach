@@ -2051,7 +2051,6 @@ func (node *CreateStats) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Table)
 
 	if !node.Options.Empty() {
-		ctx.WriteString(" WITH OPTIONS ")
 		ctx.FormatNode(&node.Options)
 	}
 }
@@ -2066,18 +2065,25 @@ type CreateStatsOptions struct {
 	// Note that the timestamp will be moved up during the operation if it gets
 	// too old (in order to avoid problems with TTL expiration).
 	AsOf AsOfClause
+
+	// AT EXTREMES specifies the statistics collection to be at the
+	// extreme values of the table or the index specified.
+	UsingExtremes bool
+
+	// WHERE will specify the statistics collection in a range
+	Where *Where
 }
 
 // Empty returns true if no options were provided.
 func (o *CreateStatsOptions) Empty() bool {
-	return o.Throttling == 0 && o.AsOf.Expr == nil
+	return o.Throttling == 0 && o.AsOf.Expr == nil && o.Where == nil && !o.UsingExtremes
 }
 
 // Format implements the NodeFormatter interface.
 func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
-	sep := ""
+	sep := " "
 	if o.Throttling != 0 {
-		ctx.WriteString("THROTTLING ")
+		ctx.WriteString(" THROTTLING ")
 		// TODO(knz): Remove all this with ctx.FormatNode()
 		// if/when throttling supports full expressions.
 		if ctx.flags.HasFlags(FmtHideConstants) {
