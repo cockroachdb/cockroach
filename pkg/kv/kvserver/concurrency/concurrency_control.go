@@ -767,12 +767,15 @@ type lockTableGuard interface {
 	// that conflict.
 	CheckOptimisticNoConflicts(*spanset.SpanSet) (ok bool)
 
-	// IsKeyLockedByConflictingTxn returns whether the provided key is locked by a
-	// conflicting transaction in the lockTableGuard's snapshot of the lock table,
-	// given the caller's own desired locking strength. If so, the lock holder is
-	// returned. A transaction's own lock does not appear to be locked to itself.
-	// The method is used by requests in conjunction with the SkipLocked wait
-	// policy to determine which keys they should skip over during evaluation.
+	// IsKeyLockedByConflictingTxn returns whether the specified key is locked or
+	// reserved (see lockTable "reservations") by a conflicting transaction in the
+	// lockTableGuard's snapshot of the lock table, given the caller's own desired
+	// locking strength. If so, true is returned. If the key is locked, the lock
+	// holder is also returned. Otherwise, if the key is reserved, nil is also
+	// returned. A transaction's own lock or reservation does not appear to be
+	// locked to itself (false is returned). The method is used by requests in
+	// conjunction with the SkipLocked wait policy to determine which keys they
+	// should skip over during evaluation.
 	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
 }
 
