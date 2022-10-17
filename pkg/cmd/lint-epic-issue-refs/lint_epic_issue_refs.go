@@ -151,6 +151,8 @@ func checkForMissingRefs(prInfo prBodyInfo, commitInfos []commitInfo, params *pa
 		return true
 	}
 
+	fmt.Print("Warning: No epic or issue ref found in the PR body. Checking commits...")
+
 	commitsWithoutRefs := []string{}
 	for _, info := range commitInfos {
 		if len(info.epicRefs)+len(info.issueInformRefs)+len(info.issueCloseRefs) == 0 && !info.epicNone {
@@ -159,9 +161,15 @@ func checkForMissingRefs(prInfo prBodyInfo, commitInfos []commitInfo, params *pa
 	}
 	if len(commitsWithoutRefs) > 0 {
 		if len(commitsWithoutRefs) == len(commitInfos) {
-			fmt.Print("Error: The PR body or each commit in the PR should have an epic or issue ref but they don't\n\n")
+			fmt.Print("Error (1): Neither the PR body nor any of the commit messages contain an issue or epic reference. " +
+				"Please include one in either the PR body or within each commit." +
+				" Some examples:\n\n- Fixes #654321\n- Resolves CRDB-123456\n- Epic: CRDB-86420")
+
 		} else {
-			fmt.Printf("Error: These commits should have an epic or issue ref but don't: %v\n\n", commitsWithoutRefs)
+			fmt.Printf("Error (2): These commits should have an epic or issue ref but don't: %v\n\n"+
+				"Also, the PR body doesn't include a valid reference. Please include one in either the PR "+
+				"body or within each of the aforementioned commits. Some examples:\n\n"+
+				"- Fixes #654321\n- Resolved: CRDB-123456\n- Epic: CRDB-86420", commitsWithoutRefs)
 		}
 		return false
 	}
@@ -204,7 +212,7 @@ func checkPrEpicsUsedInCommits(
 		if !found {
 			printHeader()
 			fmt.Printf(
-				"- Error: This epic was listed in the PR body but was not referenced in any commits: %s\n",
+				"- Error (3): This epic was listed in the PR body but was not referenced in any commits: %s\n",
 				prEpic.String(),
 			)
 		}
@@ -217,13 +225,13 @@ func checkPrEpicsUsedInCommits(
 		}
 		if len(ci.epicRefs) == 0 {
 			printHeader()
-			fmt.Printf("- Error: This commit did not reference an epic but should: %#v\n", commitShaURL(ci.sha, params))
+			fmt.Printf("- Error (4): This commit did not reference an epic but should: %#v\n", commitShaURL(ci.sha, params))
 		} else {
 			for _, epicRef := range reflect.ValueOf(ci.epicRefs).MapKeys() {
 				if _, ok := prInfo.epicRefs[epicRef.String()]; !ok {
 					printHeader()
 					fmt.Printf(
-						"- Error: This commit references an epic that isn't referenced in the PR body. "+
+						"- Error (5): This commit references an epic that isn't referenced in the PR body. "+
 							"epic_ref: %v, commit: %s\n",
 						epicRef,
 						commitShaURL(ci.sha, params),
@@ -250,7 +258,7 @@ func checkMultipleEpicsInCommits(commitInfos []commitInfo, params *parameters) b
 	for _, ci := range commitInfos {
 		if len(ci.epicRefs) > 1 {
 			fmt.Printf(
-				"Warning: This commit references multiple epics. Normally a commit only references one epic. "+
+				"Error (6): This commit references multiple epics. Normally a commit only references one epic. "+
 					"Noting this to verify this commit relates to multiple epics. "+
 					"epic_refs=[%v], commit: %s\n\n",
 				ci.epicRefs,
