@@ -1,0 +1,18 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "regionlatency",
+    srcs = ["region_latencies.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/rpc",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/testutils/serverutils",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+get_x_data(name = "get_x_data")

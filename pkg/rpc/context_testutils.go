@@ -12,6 +12,7 @@ package rpc
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,15 +36,24 @@ type ContextTestingKnobs struct {
 	// internalClientAdapter - i.e. KV RPCs done against the local server.
 	StreamClientInterceptor func(target string, class ConnectionClass) grpc.StreamClientInterceptor
 
-	// ArtificialLatencyMap if non-nil contains a map from target address
+	// InjectedLatencyOracle if non-nil contains a map from target address
 	// (server.RPCServingAddr() of a remote node) to artificial latency in
 	// milliseconds to inject. Setting this will cause the server to pause for
-	// the given amount of milliseconds on every network write.
-	ArtificialLatencyMap map[string]int
+	// the given duration on every network write.
+	InjectedLatencyOracle InjectedLatencyOracle
+
+	// InjectedLatencyEnabled is used to turn on or off the InjectedLatencyOracle.
+	InjectedLatencyEnabled func() bool
 
 	// StorageClusterID initializes the Context's StorageClusterID container to
 	// this value if non-nil at construction time.
 	StorageClusterID *uuid.UUID
+}
+
+// InjectedLatencyOracle is a testing mechanism used to inject artificial
+// latency to an address.
+type InjectedLatencyOracle interface {
+	GetLatency(addr string) time.Duration
 }
 
 // NewInsecureTestingContext creates an insecure rpc Context suitable for tests.

@@ -1446,18 +1446,19 @@ func (rpcCtx *Context) grpcDialOptions(
 			streamInterceptors = append(append([]grpc.StreamClientInterceptor(nil), streamInterceptors...), testingStreamInterceptor)
 		}
 	}
-	if rpcCtx.Knobs.ArtificialLatencyMap != nil {
+	if rpcCtx.Knobs.InjectedLatencyOracle != nil {
 		dialerFunc := func(ctx context.Context, target string) (net.Conn, error) {
 			dialer := net.Dialer{
 				LocalAddr: sourceAddr,
 			}
 			return dialer.DialContext(ctx, "tcp", target)
 		}
-		latency := rpcCtx.Knobs.ArtificialLatencyMap[target]
+		latency := rpcCtx.Knobs.InjectedLatencyOracle.GetLatency(target)
 		log.VEventf(rpcCtx.MasterCtx, 1, "connecting to node %s with simulated latency %dms", target, latency)
 		dialer := artificialLatencyDialer{
 			dialerFunc: dialerFunc,
-			latencyMS:  latency,
+			latency:    latency,
+			enabled:    rpcCtx.Knobs.InjectedLatencyEnabled,
 		}
 		dialerFunc = dialer.dial
 		dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
@@ -1562,7 +1563,8 @@ type dialerFunc func(context.Context, string) (net.Conn, error)
 
 type artificialLatencyDialer struct {
 	dialerFunc dialerFunc
-	latencyMS  int
+	latency    time.Duration
+	enabled    func() bool
 }
 
 func (ald *artificialLatencyDialer) dial(ctx context.Context, addr string) (net.Conn, error) {
@@ -1572,21 +1574,23 @@ func (ald *artificialLatencyDialer) dial(ctx context.Context, addr string) (net.
 	}
 	return &delayingConn{
 		Conn:    conn,
-		latency: time.Duration(ald.latencyMS) * time.Millisecond,
+		latency: ald.latency,
+		enabled: ald.enabled,
 		readBuf: new(bytes.Buffer),
 	}, nil
 }
 
 type delayingListener struct {
 	net.Listener
+	enabled func() bool
 }
 
 // NewDelayingListener creates a net.Listener that introduces a set delay on its connections.
-func NewDelayingListener(l net.Listener) net.Listener {
-	return delayingListener{Listener: l}
+func NewDelayingListener(l net.Listener, enabled func() bool) net.Listener {
+	return &delayingListener{Listener: l, enabled: enabled}
 }
 
-func (d delayingListener) Accept() (net.Conn, error) {
+func (d *delayingListener) Accept() (net.Conn, error) {
 	c, err := d.Listener.Accept()
 	if err != nil {
 		return nil, err
@@ -1597,6 +1601,7 @@ func (d delayingListener) Accept() (net.Conn, error) {
 		// as packets are exchanged across the delayingConnections.
 		latency: time.Duration(0) * time.Millisecond,
 		readBuf: new(bytes.Buffer),
+		enabled: d.enabled,
 	}, nil
 }
 
@@ -1612,12 +1617,24 @@ func (d delayingListener) Accept() (net.Conn, error) {
 // on both ends with x/2 milliseconds of latency.
 type delayingConn struct {
 	net.Conn
+	enabled     func() bool
 	latency     time.Duration
 	lastSendEnd time.Time
 	readBuf     *bytes.Buffer
 }
 
-func (d delayingConn) Write(b []byte) (n int, err error) {
+func (d *delayingConn) getLatencyMS() int32 {
+	if !d.isEnabled() {
+		return 0
+	}
+	return int32(d.latency / time.Millisecond)
+}
+
+func (d *delayingConn) isEnabled() bool {
+	return d.enabled == nil || d.enabled()
+}
+
+func (d *delayingConn) Write(b []byte) (n int, err error) {
 	tNow := timeutil.Now()
 	if d.lastSendEnd.Before(tNow) {
 		d.lastSendEnd = tNow
@@ -1626,7 +1643,7 @@ func (d delayingConn) Write(b []byte) (n int, err error) {
 		Magic:    magic,
 		ReadTime: d.lastSendEnd.Add(d.latency).UnixNano(),
 		Sz:       int32(len(b)),
-		DelayMS:  int32(d.latency / time.Millisecond),
+		DelayMS:  d.getLatencyMS(),
 	}
 	if err := binary.Write(d.Conn, binary.BigEndian, hdr); err != nil {
 		return n, err
@@ -1665,9 +1682,9 @@ func (d *delayingConn) Read(b []byte) (n int, err error) {
 		if d.latency == 0 && hdr.DelayMS != 0 {
 			d.latency = time.Duration(hdr.DelayMS) * time.Millisecond
 		}
-		defer func() {
-			time.Sleep(timeutil.Until(timeutil.Unix(0, hdr.ReadTime)))
-		}()
+		if d.isEnabled() {
+			defer time.Sleep(timeutil.Until(timeutil.Unix(0, hdr.ReadTime)))
+		}
 		if _, err := io.CopyN(d.readBuf, d.Conn, int64(hdr.Sz)); err != nil {
 			return 0, err
 		}
@@ -1756,13 +1773,14 @@ func (rpcCtx *Context) grpcDialRaw(
 
 	dialer := onlyOnceDialer{}
 	dialerFunc := dialer.dial
-	if rpcCtx.Knobs.ArtificialLatencyMap != nil {
-		latency := rpcCtx.Knobs.ArtificialLatencyMap[target]
+	if rpcCtx.Knobs.InjectedLatencyOracle != nil {
+		latency := rpcCtx.Knobs.InjectedLatencyOracle.GetLatency(target)
 		log.VEventf(ctx, 1, "connecting with simulated latency %dms",
 			latency)
 		dialer := artificialLatencyDialer{
 			dialerFunc: dialerFunc,
-			latencyMS:  latency,
+			latency:    latency,
+			enabled:    rpcCtx.Knobs.InjectedLatencyEnabled,
 		}
 		dialerFunc = dialer.dial
 	}
