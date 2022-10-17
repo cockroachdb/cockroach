@@ -446,7 +446,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			}
 			info, err := cfg.sqlInstanceProvider.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
 			if err != nil {
-				return nil, errors.Errorf("unable to look up descriptor for nsql%d", nodeID)
+				return nil, errors.Wrapf(err, "unable to look up descriptor for nsql%d", nodeID)
 			}
 			return &util.UnresolvedAddr{AddressField: info.InstanceAddr}, nil
 		}
