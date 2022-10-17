@@ -2051,7 +2051,7 @@ func (node *CreateStats) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Table)
 
 	if !node.Options.Empty() {
-		ctx.WriteString(" WITH OPTIONS ")
+		ctx.WriteString(" WITH OPTIONS")
 		ctx.FormatNode(&node.Options)
 	}
 }
@@ -2075,9 +2075,8 @@ func (o *CreateStatsOptions) Empty() bool {
 
 // Format implements the NodeFormatter interface.
 func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
-	sep := ""
 	if o.Throttling != 0 {
-		ctx.WriteString("THROTTLING ")
+		ctx.WriteString(" THROTTLING ")
 		// TODO(knz): Remove all this with ctx.FormatNode()
 		// if/when throttling supports full expressions.
 		if ctx.flags.HasFlags(FmtHideConstants) {
@@ -2088,12 +2087,10 @@ func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
 		} else {
 			fmt.Fprintf(ctx, "%g", o.Throttling)
 		}
-		sep = " "
 	}
 	if o.AsOf.Expr != nil {
-		ctx.WriteString(sep)
+		ctx.WriteByte(' ')
 		ctx.FormatNode(&o.AsOf)
-		sep = " "
 	}
 }
 
