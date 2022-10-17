@@ -19,6 +19,7 @@ import "antd/lib/tooltip/style";
 interface ISummaryCardProps {
   children: React.ReactNode;
   className?: string;
+  id?: string;
 }
 
 const cx = classnames.bind(styles);
@@ -28,7 +29,12 @@ const booleanSettingCx = classnames.bind(booleanSettingStyles);
 export const SummaryCard: React.FC<ISummaryCardProps> = ({
   children,
   className = "",
-}) => <div className={`${cx("summary--card")} ${className}`}>{children}</div>;
+  id,
+}) => (
+  <div className={`${cx("summary--card")} ${className}`} id={id}>
+    {children}
+  </div>
+);
 
 interface ISummaryCardItemProps {
   label: React.ReactNode;
