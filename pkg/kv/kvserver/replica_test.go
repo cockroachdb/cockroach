@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -7551,112 +7550,6 @@ func TestNewReplicaCorruptionError(t *testing.T) {
 	}
 }
 
-func TestDiffRange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// TODO(tschottdorf): this test should really pass the data through a
-	// RocksDB engine to verify that the original snapshots sort correctly.
-
-	require.Empty(t, DiffRange(nil, nil))
-
-	timestamp := hlc.Timestamp{WallTime: 1729, Logical: 1}
-	value := []byte("foo")
-
-	// Construct the two snapshots.
-	leaderSnapshot := &roachpb.RaftSnapshotData{
-		KV: []roachpb.RaftSnapshotData_KeyValue{
-			{Key: []byte("a"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abc"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abcd"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abcde"), Timestamp: timestamp, Value: value},
-			// Timestamps sort in descending order, with the notable exception
-			// of the zero timestamp, which sorts first.
-			{Key: []byte("abcdefg"), Timestamp: hlc.Timestamp{}, Value: value},
-			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
-			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
-			{Key: []byte("x"), Timestamp: timestamp, Value: value},
-			{Key: []byte("y"), Timestamp: timestamp, Value: value},
-			// Both 'zeroleft' and 'zeroright' share the version at (1,1), but
-			// a zero timestamp (=meta) key pair exists on the leader or
-			// follower, respectively.
-			{Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{}, Value: value},
-			{Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
-			{Key: []byte("zeroright"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
-		},
-		// Fragmented range keys.
-		RangeKV: []roachpb.RaftSnapshotData_RangeKeyValue{
-			{StartKey: []byte("A"), EndKey: []byte("C"), Timestamp: timestamp},
-			{StartKey: []byte("A"), EndKey: []byte("C"), Timestamp: timestamp.Add(0, -1)},
-			{StartKey: []byte("C"), EndKey: []byte("F"), Timestamp: timestamp},
-			{StartKey: []byte("P"), EndKey: []byte("R"), Timestamp: timestamp},
-			{StartKey: []byte("S"), EndKey: []byte("T"), Timestamp: timestamp, Value: []byte{1}},
-			{StartKey: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp},
-		},
-	}
-
-	// No diff works.
-	require.Empty(t, DiffRange(leaderSnapshot, leaderSnapshot))
-
-	replicaSnapshot := &roachpb.RaftSnapshotData{
-		KV: []roachpb.RaftSnapshotData_KeyValue{
-			{Key: []byte("ab"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abc"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abcde"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abcdefg"), Timestamp: hlc.Timestamp{}, Value: value},
-			{Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
-			{Key: []byte("abcdefg"), Timestamp: timestamp, Value: value},
-			{Key: []byte("abcdefgh"), Timestamp: timestamp, Value: value},
-			{Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
-			{Key: []byte("z"), Timestamp: timestamp, Value: value},
-			{Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
-			{Key: []byte("zeroright"), Timestamp: hlc.Timestamp{}, Value: value},
-			{Key: []byte("zeroright"), Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1}, Value: value},
-		},
-		RangeKV: []roachpb.RaftSnapshotData_RangeKeyValue{
-			{StartKey: []byte("A"), EndKey: []byte("C"), Timestamp: timestamp},
-			{StartKey: []byte("E"), EndKey: []byte("G"), Timestamp: timestamp},
-			{StartKey: []byte("Q"), EndKey: []byte("R"), Timestamp: timestamp},
-			{StartKey: []byte("S"), EndKey: []byte("T"), Timestamp: timestamp, Value: []byte{2}},
-			{StartKey: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp.Add(0, 1)},
-		},
-	}
-
-	// The expected diff.
-	eDiff := ReplicaSnapshotDiffSlice{
-		{LeaseHolder: true, Key: []byte("a"), Timestamp: timestamp, Value: value},
-		{LeaseHolder: false, Key: []byte("ab"), Timestamp: timestamp, Value: value},
-		{LeaseHolder: true, Key: []byte("abcd"), Timestamp: timestamp, Value: value},
-		{LeaseHolder: false, Key: []byte("abcdef"), Timestamp: timestamp, Value: value},
-		{LeaseHolder: false, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, 1), Value: value},
-		{LeaseHolder: true, Key: []byte("abcdefg"), Timestamp: timestamp.Add(0, -1), Value: value},
-		{LeaseHolder: true, Key: []byte("x"), Timestamp: timestamp, Value: value},
-		{LeaseHolder: false, Key: []byte("x"), Timestamp: timestamp, Value: []byte("bar")},
-		{LeaseHolder: true, Key: []byte("y"), Timestamp: timestamp, Value: value},
-		{LeaseHolder: false, Key: []byte("z"), Timestamp: timestamp, Value: value},
-		{LeaseHolder: true, Key: []byte("zeroleft"), Timestamp: hlc.Timestamp{}, Value: value},
-		{LeaseHolder: false, Key: []byte("zeroright"), Timestamp: hlc.Timestamp{}, Value: value},
-
-		{LeaseHolder: true, Key: []byte("A"), EndKey: []byte("C"), Timestamp: timestamp.Add(0, -1)},
-		{LeaseHolder: true, Key: []byte("C"), EndKey: []byte("F"), Timestamp: timestamp},
-		{LeaseHolder: false, Key: []byte("E"), EndKey: []byte("G"), Timestamp: timestamp},
-		{LeaseHolder: true, Key: []byte("P"), EndKey: []byte("R"), Timestamp: timestamp},
-		{LeaseHolder: false, Key: []byte("Q"), EndKey: []byte("R"), Timestamp: timestamp},
-		{LeaseHolder: true, Key: []byte("S"), EndKey: []byte("T"), Timestamp: timestamp, Value: []byte{1}},
-		{LeaseHolder: false, Key: []byte("S"), EndKey: []byte("T"), Timestamp: timestamp, Value: []byte{2}},
-		{LeaseHolder: false, Key: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp.Add(0, 1)},
-		{LeaseHolder: true, Key: []byte("X"), EndKey: []byte("Z"), Timestamp: timestamp},
-	}
-	diff := DiffRange(leaderSnapshot, replicaSnapshot)
-	require.Equal(t, eDiff, diff)
-
-	// Assert the stringifed output. This is what the consistency checker
-	// will actually print.
-	echotest.Require(t, diff.String(), testutils.TestDataPath(t, "replica_consistency_diff"))
-}
-
 func TestSyncSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -10538,8 +10431,8 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Regression test for #31870.
 		snap := tc.engine.NewSnapshot()
 		defer snap.Close()
-		res, err := tc.repl.sha512(ctx, *tc.repl.Desc(), tc.engine,
-			nil /* diff */, roachpb.ChecksumMode_CHECK_FULL,
+		res, err := replicaSHA512(ctx, *tc.repl.Desc(), tc.engine,
+			roachpb.ChecksumMode_CHECK_FULL,
 			quotapool.NewRateLimiter("ConsistencyQueue", quotapool.Limit(math.MaxFloat64), math.MaxInt64))
 		if err != nil {
 			return hlc.Timestamp{}, err

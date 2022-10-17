@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -482,34 +480,19 @@ type replicaHash struct {
 	PersistedMS, RecomputedMS enginepb.MVCCStats
 }
 
-// LoadRaftSnapshotDataForTesting returns all the KV data of the given range.
-// Only for testing.
-func LoadRaftSnapshotDataForTesting(
-	ctx context.Context, rd roachpb.RangeDescriptor, store storage.Reader,
-) (roachpb.RaftSnapshotData, error) {
-	var r *Replica
-	var snap roachpb.RaftSnapshotData
-	lim := quotapool.NewRateLimiter("test", 1<<20, 1<<20)
-	if _, err := r.sha512(ctx, rd, store, &snap, roachpb.ChecksumMode_CHECK_FULL, lim); err != nil {
-		return roachpb.RaftSnapshotData{}, err
-	}
-	return snap, nil
-}
-
-// sha512 computes the SHA512 hash of all the replica data at the snapshot.
-// It will dump all the kv data into snapshot if it is provided.
-func (*Replica) sha512(
+// replicaSHA512 computes the SHA512 hash of the replica data at the given
+// snapshot. Either the full replicated state is taken into account, or only
+// RangeAppliedState (which includes MVCC stats), depending on the mode.
+func replicaSHA512(
 	ctx context.Context,
 	desc roachpb.RangeDescriptor,
 	snap storage.Reader,
-	snapshot *roachpb.RaftSnapshotData,
 	mode roachpb.ChecksumMode,
 	limiter *quotapool.RateLimiter,
 ) (*replicaHash, error) {
 	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
 
 	// Iterate over all the data in the range.
-	var alloc bufalloc.ByteAllocator
 	var intBuf [8]byte
 	var legacyTimestamp hlc.LegacyTimestamp
 	var timestampBuf []byte
@@ -520,17 +503,6 @@ func (*Replica) sha512(
 		if err := limiter.WaitN(ctx, int64(len(unsafeKey.Key)+len(unsafeValue))); err != nil {
 			return err
 		}
-
-		if snapshot != nil {
-			// Add (a copy of) the kv pair into the debug message.
-			kv := roachpb.RaftSnapshotData_KeyValue{
-				Timestamp: unsafeKey.Timestamp,
-			}
-			alloc, kv.Key = alloc.Copy(unsafeKey.Key, 0)
-			alloc, kv.Value = alloc.Copy(unsafeValue, 0)
-			snapshot.KV = append(snapshot.KV, kv)
-		}
-
 		// Encode the length of the key and value.
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.Key)))
 		if _, err := hasher.Write(intBuf[:]); err != nil {
@@ -566,18 +538,6 @@ func (*Replica) sha512(
 		if err != nil {
 			return err
 		}
-
-		if snapshot != nil {
-			// Add (a copy of) the range key into the debug message.
-			rkv := roachpb.RaftSnapshotData_RangeKeyValue{
-				Timestamp: rangeKV.RangeKey.Timestamp,
-			}
-			alloc, rkv.StartKey = alloc.Copy(rangeKV.RangeKey.StartKey, 0)
-			alloc, rkv.EndKey = alloc.Copy(rangeKV.RangeKey.EndKey, 0)
-			alloc, rkv.Value = alloc.Copy(rangeKV.Value, 0)
-			snapshot.RangeKV = append(snapshot.RangeKV, rkv)
-		}
-
 		// Encode the length of the start key and end key.
 		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(rangeKV.RangeKey.StartKey)))
 		if _, err := hasher.Write(intBuf[:]); err != nil {
@@ -638,19 +598,6 @@ func (*Replica) sha512(
 		b, err := protoutil.Marshal(rangeAppliedState)
 		if err != nil {
 			return nil, err
-		}
-		if snapshot != nil {
-			// Add LeaseAppliedState to the snapshot.
-			kv := roachpb.RaftSnapshotData_KeyValue{
-				Timestamp: hlc.Timestamp{},
-			}
-			kv.Key = keys.RangeAppliedStateKey(desc.RangeID)
-			var v roachpb.Value
-			if err := v.SetProto(rangeAppliedState); err != nil {
-				return nil, err
-			}
-			kv.Value = v.RawBytes
-			snapshot.KV = append(snapshot.KV, kv)
 		}
 		if _, err := hasher.Write(b); err != nil {
 			return nil, err
@@ -725,6 +672,7 @@ func (r *Replica) computeChecksumPostApply(
 		defer taskCancel()
 		defer snap.Close()
 		defer cleanup()
+
 		// Wait until the CollectChecksum request handler joins in and learns about
 		// the starting computation, and then start it.
 		if err := contextutil.RunWithTimeout(ctx, taskName, consistencyCheckSyncTimeout,
@@ -743,7 +691,7 @@ func (r *Replica) computeChecksumPostApply(
 		); err != nil {
 			log.Errorf(ctx, "checksum collection did not join: %v", err)
 		} else {
-			result, err := r.sha512(ctx, desc, snap, nil /* snapshot */, cc.Mode, r.store.consistencyLimiter)
+			result, err := replicaSHA512(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter)
 			if err != nil {
 				log.Errorf(ctx, "checksum computation failed: %v", err)
 				result = nil

@@ -2776,13 +2776,6 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Generate a minimal fake snapshot.
-	snapData := &roachpb.RaftSnapshotData{}
-	data, err := protoutil.Marshal(snapData)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Wrap the snapshot in a minimal header. The request will be dropped
 	// because the Raft log index and term are less than the hard state written
 	// above.
@@ -2803,7 +2796,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 			Message: raftpb.Message{
 				Type: raftpb.MsgSnap,
 				Snapshot: raftpb.Snapshot{
-					Data: data,
+					Data: []byte{},
 					Metadata: raftpb.SnapshotMetadata{
 						Index: 1,
 						Term:  1,

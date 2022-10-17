@@ -347,9 +347,8 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	assert.Contains(t, resp.Result[0].Detail, `[minority]`)
 	assert.Contains(t, resp.Result[0].Detail, `stats`)
 
-	// Checkpoints should have been created on all stores. Load replica snapshots
-	// from them.
-	snaps := make([]roachpb.RaftSnapshotData, numStores)
+	// Checkpoints should have been created on all stores.
+	hashes := make([][]byte, numStores)
 	for i := 0; i < numStores; i++ {
 		cps := onDiskCheckpointPaths(i)
 		require.Len(t, cps, 1)
@@ -379,23 +378,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			}))
 		require.NotNil(t, desc)
 
-		// Load the content of the problematic range.
-		snap, err := kvserver.LoadRaftSnapshotDataForTesting(context.Background(), *desc, cpEng)
+		// Compute a checksum over the content of the problematic range.
+		hash, err := kvserver.ChecksumRange(context.Background(), *desc, cpEng)
 		require.NoError(t, err)
-		snaps[i] = snap
+		hashes[i] = hash
 	}
 
-	assert.Empty(t, kvserver.DiffRange(&snaps[0], &snaps[2])) // s1 and s3 agree
-	diff := kvserver.DiffRange(&snaps[0], &snaps[1])
-	diff[0].Timestamp = hlc.Timestamp{Logical: 987, WallTime: 123} // for determinism
-	wantDiff := `--- leaseholder
-+++ follower
-+0.000000123,987 "e"
-+    ts:1970-01-01 00:00:00.000000123 +0000 UTC
-+    value:"\x00\x00\x00\x00\x01T"
-+    raw mvcc_key/value: 6500000000000000007b000003db0d 000000000154
-`
-	assert.Equal(t, wantDiff, diff.String())
+	assert.Equal(t, hashes[0], hashes[2])    // s1 and s3 agree
+	assert.NotEqual(t, hashes[0], hashes[1]) // s2 diverged
 
 	// A death rattle should have been written on s2 (store index 1).
 	eng := store1.Engine()
