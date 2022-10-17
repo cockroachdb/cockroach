@@ -310,6 +310,10 @@ const (
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
 
+	// V23_1_Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from 22.2 to 23.1.
+	V23_1Start
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -504,6 +508,10 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V22_2,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 0},
 	},
+	{
+		Key:     V23_1Start,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 2},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -519,7 +527,7 @@ const (
 	// finalVersion should be set on a release branch to the minted final cluster
 	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
 	// Setting it has the effect of ensuring no versions are subsequently added.
-	finalVersion = V22_2
+	finalVersion = invalidVersionKey
 )
 
 // devVersionsAbove is the version key above which all versions are offset to be
