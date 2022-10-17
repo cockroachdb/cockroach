@@ -184,7 +184,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 					)
 					// add before returning err in case of partial success
 					atomic.AddInt64(&processorRowCount, spanRowCount)
-					metrics.RangeTotalDuration.RecordValue(int64(timeutil.Since(start)))
+					metrics.SpanTotalDuration.RecordValue(int64(timeutil.Since(start)))
 					if err != nil {
 						// Continue until channel is fully read.
 						// Otherwise, the keys input will be blocked.
@@ -262,8 +262,8 @@ func (t *ttlProcessor) runTTLOnSpan(
 	relationName string,
 	deleteRateLimiter *quotapool.RateLimiter,
 ) (spanRowCount int64, err error) {
-	metrics.NumActiveRanges.Inc(1)
-	defer metrics.NumActiveRanges.Dec(1)
+	metrics.NumActiveSpans.Inc(1)
+	defer metrics.NumActiveSpans.Dec(1)
 
 	// TODO(#82140): investigate improving row deletion performance with secondary indexes
 
