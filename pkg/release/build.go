@@ -52,6 +52,8 @@ func SuffixFromPlatform(platform Platform) string {
 		// TODO(#release): The architecture is at least 10.10 until v20.2 and 10.15 for
 		// v21.1 and after. Check whether this can be changed.
 		return ".darwin-10.9-amd64"
+	case PlatformMacOSArm:
+		return ".darwin-11.0-aarch64.unsigned"
 	case PlatformWindows:
 		return ".windows-6.2-amd64.exe"
 	default:
@@ -69,6 +71,8 @@ func CrossConfigFromPlatform(platform Platform) string {
 		return "crosslinuxarmbase"
 	case PlatformMacOS:
 		return "crossmacosbase"
+	case PlatformMacOSArm:
+		return "crossmacosarmbase"
 	case PlatformWindows:
 		return "crosswindowsbase"
 	default:
@@ -86,6 +90,8 @@ func TargetTripleFromPlatform(platform Platform) string {
 		return "aarch64-unknown-linux-gnu"
 	case PlatformMacOS:
 		return "x86_64-apple-darwin19"
+	case PlatformMacOSArm:
+		return "aarch64-apple-darwin21.2"
 	case PlatformWindows:
 		return "x86_64-w64-mingw32"
 	default:
@@ -100,7 +106,7 @@ func SharedLibraryExtensionFromPlatform(platform Platform) string {
 		return ".so"
 	case PlatformWindows:
 		return ".dll"
-	case PlatformMacOS:
+	case PlatformMacOS, PlatformMacOSArm:
 		return ".dylib"
 	default:
 		panic(errors.Newf("unknown platform %d", platform))
@@ -236,6 +242,8 @@ const (
 	PlatformLinuxArm
 	// PlatformMacOS is the Darwin x86_64 target.
 	PlatformMacOS
+	// PlatformMacOSArm is the Darwin aarch6 target.
+	PlatformMacOSArm
 	// PlatformWindows is the Windows (mingw) x86_64 target.
 	PlatformWindows
 )
