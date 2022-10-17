@@ -245,7 +245,7 @@ type runnerTest struct {
 func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *runnerTest {
 	ctx := context.Background()
 
-	tests := testsToRun(ctx, r, registry.NewTestFilter(testFilters))
+	tests := testsToRun(ctx, r, registry.NewTestFilter(testFilters), false)
 	cr := newClusterRegistry()
 
 	stopper := stop.NewStopper()
@@ -439,7 +439,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 			}
 		},
 	})
-	tests := testsToRun(ctx, r, registry.NewTestFilter(nil))
+	tests := testsToRun(ctx, r, registry.NewTestFilter(nil), false)
 	lopt := loggingOpt{
 		l:            nilLogger(),
 		tee:          logger.NoTee,
