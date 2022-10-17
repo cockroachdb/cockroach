@@ -316,6 +316,7 @@ func (b *Builder) buildCase(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Ty
 	}
 
 	// Extract the list of WHEN ... THEN ... clauses.
+	whensVals := make([]tree.When, len(cas.Whens))
 	whens := make([]*tree.When, len(cas.Whens))
 	for i, expr := range cas.Whens {
 		whenExpr := expr.(*memo.WhenExpr)
@@ -327,7 +328,8 @@ func (b *Builder) buildCase(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Ty
 		if err != nil {
 			return nil, err
 		}
-		whens[i] = &tree.When{Cond: cond, Val: val}
+		whensVals[i] = tree.When{Cond: cond, Val: val}
+		whens[i] = &whensVals[i]
 	}
 
 	elseExpr, err := b.buildScalar(ctx, cas.OrElse)
