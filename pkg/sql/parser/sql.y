@@ -870,7 +870,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
-%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION
+%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION EXTREMES
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
@@ -4678,23 +4678,17 @@ create_stats_target:
   }
 
 opt_create_stats_options:
-  WITH OPTIONS create_stats_option_list
+  create_stats_option_list
   {
-    /* SKIP DOC */
+    $$.val = $1.createStatsOptions()
+  }
+| WITH OPTIONS create_stats_option_list
+  {
     $$.val = $3.createStatsOptions()
   }
-// Allow AS OF SYSTEM TIME without WITH OPTIONS, for consistency with other
-// statements.
-| as_of_clause
-  {
-    $$.val = &tree.CreateStatsOptions{
-      AsOf: $1.asOfClause(),
-    }
-  }
-| /* EMPTY */
-  {
+| /* EMPTY */ {
     $$.val = &tree.CreateStatsOptions{}
-  }
+}
 
 create_stats_option_list:
   create_stats_option
@@ -4712,17 +4706,17 @@ create_stats_option_list:
   }
 
 create_stats_option:
-  THROTTLING FCONST
+ THROTTLING FCONST
   {
-    /* SKIP DOC */
-    value, _ := constant.Float64Val($2.numVal().AsConstantValue())
-    if value < 0.0 || value >= 1.0 {
-      sqllex.Error("THROTTLING fraction must be between 0 and 1")
-      return 1
-    }
-    $$.val = &tree.CreateStatsOptions{
-      Throttling: value,
-    }
+   /* SKIP DOC */
+       value, _ := constant.Float64Val($2.numVal().AsConstantValue())
+     if value < 0.0 || value >= 1.0 {
+       sqllex.Error("THROTTLING fraction must be between 0 and 1")
+       return 1
+     }
+     $$.val = &tree.CreateStatsOptions{
+       Throttling: value,
+     }
   }
 | as_of_clause
   {
@@ -15337,6 +15331,7 @@ unreserved_keyword:
 | EXPORT
 | EXTENSION
 | EXTERNAL
+| EXTREMES
 | FAILURE
 | FILES
 | FILTER

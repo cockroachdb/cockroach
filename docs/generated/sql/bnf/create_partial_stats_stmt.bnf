@@ -1,0 +1,2 @@
+create_partial_stats_stmt ::=
+	'CREATE' 'PARTIAL' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
