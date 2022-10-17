@@ -12,7 +12,6 @@ package registry
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -84,26 +83,31 @@ type TestSpec struct {
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
 }
 
-// MatchOrSkip returns true if the filter matches the test. If the filter does
+type MatchType int
+
+const (
+	Matched      MatchType = 0
+	FailedFilter           = 1
+	FailedTags             = 2
+)
+
+// Match returns Matched if the filter matches the test. If the filter does
 // not match the test because the tag filter does not match, the test is
-// matched, but marked as skipped.
-//
-// TODO(tbg): it's gross that this sets t.Skip, let the caller do this.
-func (t *TestSpec) MatchOrSkip(filter *TestFilter) bool {
+// marked as FailedTags.
+func (t *TestSpec) Match(filter *TestFilter) MatchType {
 	if !filter.Name.MatchString(t.Name) {
-		return false
+		return FailedFilter
 	}
 	if len(t.Tags) == 0 {
 		if !filter.Tag.MatchString("default") {
-			t.Skip = fmt.Sprintf("%s does not match [default]", filter.RawTag)
+			return FailedTags
 		}
-		return true
+		return Matched
 	}
 	for _, t := range t.Tags {
 		if filter.Tag.MatchString(t) {
-			return true
+			return Matched
 		}
 	}
-	t.Skip = fmt.Sprintf("%s does not match %s", filter.RawTag, t.Tags)
-	return true
+	return FailedTags
 }
