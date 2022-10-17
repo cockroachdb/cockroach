@@ -168,7 +168,6 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
-	repl := &Replica{} // We don't actually need the replica at all, just the method.
 	desc := roachpb.RangeDescriptor{
 		RangeID:  1,
 		StartKey: roachpb.RKey("a"),
@@ -176,7 +175,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 	}
 
 	// Hash the empty state.
-	rh, err := repl.sha512(ctx, desc, eng, nil, roachpb.ChecksumMode_CHECK_FULL, lim)
+	rh, err := replicaSHA512(ctx, desc, eng, roachpb.ChecksumMode_CHECK_FULL, lim)
 	require.NoError(t, err)
 	fmt.Fprintf(sb, "checksum0: %x\n", rh.SHA512[:])
 
@@ -214,30 +213,19 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, ts, localTS, value, nil))
 		}
 
-		rh, err = repl.sha512(ctx, desc, eng, nil, roachpb.ChecksumMode_CHECK_FULL, lim)
+		rh, err = replicaSHA512(ctx, desc, eng, roachpb.ChecksumMode_CHECK_FULL, lim)
 		require.NoError(t, err)
 		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rh.SHA512[:])
 	}
 
-	// Run another check to obtain a snapshot and stats for the final state.
-	kvSnapshot := roachpb.RaftSnapshotData{}
-	rh, err = repl.sha512(ctx, desc, eng, &kvSnapshot, roachpb.ChecksumMode_CHECK_FULL, lim)
+	// Run another check to obtain stats for the final state.
+	rh, err = replicaSHA512(ctx, desc, eng, roachpb.ChecksumMode_CHECK_FULL, lim)
 	require.NoError(t, err)
 
 	jsonpb := protoutil.JSONPb{Indent: "  "}
 	json, err := jsonpb.Marshal(&rh.RecomputedMS)
 	require.NoError(t, err)
 	fmt.Fprintf(sb, "stats: %s\n", string(json))
-
-	fmt.Fprint(sb, "snapshot:\n")
-	for _, kv := range kvSnapshot.KV {
-		fmt.Fprintf(sb, "  %s=%q\n", storage.MVCCKey{Key: kv.Key, Timestamp: kv.Timestamp}, kv.Value)
-	}
-	for _, rkv := range kvSnapshot.RangeKV {
-		fmt.Fprintf(sb, "  %s=%q\n",
-			storage.MVCCRangeKey{StartKey: rkv.StartKey, EndKey: rkv.EndKey, Timestamp: rkv.Timestamp},
-			rkv.Value)
-	}
 
 	echotest.Require(t, sb.String(), testutils.TestDataPath(t, "replica_consistency_sha512"))
 }
