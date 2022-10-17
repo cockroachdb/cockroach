@@ -43,6 +43,12 @@ CREATE VIEW v6 (x, y) AS SELECT a, b FROM v1
 statement ok
 CREATE VIEW v7 (x, y) AS SELECT a, b FROM v1 ORDER BY a DESC LIMIT 2
 
+statement error pgcode 42703 column \"j\" does not exist
+CREATE VIEW err AS SELECT j FROM t
+
+statement error pgcode 42703 column \"j\" does not exist
+CREATE VIEW err AS SELECT a FROM t WHERE a = j
+
 query II colnames,rowsort
 SELECT * FROM v1
 ----
@@ -1492,4 +1498,3 @@ SELECT * FROM v;
 
 statement ok
 SET DATABASE = test;
-
