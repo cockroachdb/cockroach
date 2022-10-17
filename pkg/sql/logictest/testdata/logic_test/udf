@@ -49,8 +49,26 @@ CREATE FUNCTION c(i INT, j INT) RETURNS INT LANGUAGE SQL AS 'SELECT i - j'
 statement error column \"j\" does not exist
 CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT j'
 
-statement error column \"j\" does not exist
-CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT * FROM ab WHERE a = j'
+statement error pgcode 42703 column \"j\" does not exist
+CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT a FROM ab WHERE a = j'
+
+statement error pgcode 0A000 functions do not currently support \* expressions
+CREATE FUNCTION err(i INT) RETURNS ab LANGUAGE SQL AS 'SELECT * FROM ab'
+
+statement error pgcode 0A000 functions do not currently support \* expressions
+CREATE FUNCTION err(i INT) RETURNS ab LANGUAGE SQL AS 'SELECT ab.* FROM ab'
+
+statement error pgcode 0A000 functions do not currently support \* expressions
+CREATE FUNCTION err(i INT) RETURNS ab LANGUAGE SQL AS $$
+  SELECT 1;
+  SELECT * FROM ab;
+$$
+
+statement error pgcode 0A000 functions do not currently support \* expressions
+CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS $$
+  SELECT * FROM ab;
+  SELECT 1;
+$$
 
 statement ok
 CREATE FUNCTION d(i INT2) RETURNS INT4 LANGUAGE SQL AS 'SELECT i'
@@ -2403,15 +2421,16 @@ SELECT imp(), (1,2,'a')::imp = imp(), pg_typeof(imp())
 ----
 (1,2,a)  true  imp
 
-statement ok
-CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
-  SELECT * FROM imp
-$$
-
-query TBT
-SELECT imp_star(), (1,2,'a')::imp = imp_star(), pg_typeof(imp_star())
-----
-(1,2,a)  true  imp
+# TODO(#90080): Allow star expressions in UDFs.
+# statement ok
+# CREATE FUNCTION imp_star() RETURNS imp LANGUAGE SQL AS $$
+#   SELECT * FROM imp
+# $$
+#
+# query TBT
+# SELECT imp_star(), (1,2,'a')::imp = imp_star(), pg_typeof(imp_star())
+# ----
+# (1,2,a)  true  imp
 
 statement ok
 INSERT INTO imp VALUES (100, 200, 'z')
