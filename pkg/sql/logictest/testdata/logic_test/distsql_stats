@@ -879,7 +879,7 @@ INSERT INTO et VALUES ('hello', 'hello'), ('howdy', 'howdy'), ('hi', 'hi');
 statement ok
 CREATE STATISTICS s FROM et
 
-query TTIIB colnames,rowsort
+query TTIIB colnames
 SELECT
   statistics_name,
   column_names,
@@ -979,7 +979,7 @@ INSERT INTO prim VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 statement ok
 CREATE STATISTICS s FROM prim
 
-query TTIIB colnames,rowsort
+query TTIIB colnames
 SELECT
   statistics_name,
   column_names,
@@ -1019,7 +1019,7 @@ INSERT INTO sec VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 statement ok
 CREATE STATISTICS s FROM sec
 
-query TTIIB colnames,rowsort
+query TTIIB colnames
 SELECT
   statistics_name,
   column_names,
@@ -1068,7 +1068,7 @@ INSERT INTO partial VALUES (1, 1, 1, 1, '{"a": "b"}'), (2, 2, 2, 10, '{"c": "d"}
 statement ok
 CREATE STATISTICS s FROM partial
 
-query TTIIB colnames,rowsort
+query TTIIB colnames
 SELECT
   statistics_name,
   column_names,
@@ -1121,7 +1121,7 @@ INSERT INTO virt VALUES (1), (2), (3)
 statement ok
 CREATE STATISTICS s FROM virt
 
-query TTIIB colnames,rowsort
+query TTIIB colnames
 SELECT
   statistics_name,
   column_names,
@@ -1158,7 +1158,7 @@ INSERT INTO expression VALUES (1, 1, '{"a": "b"}'), (2, 10, '{"c": "d"}'), (3, 1
 statement ok
 CREATE STATISTICS s FROM expression
 
-query TTIIB colnames,rowsort
+query TTIIB colnames
 SELECT
   statistics_name,
   column_names,
@@ -1187,7 +1187,7 @@ INSERT INTO noind VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 statement ok
 CREATE STATISTICS s FROM noind
 
-query TTIIB colnames,rowsort
+query TTIIB colnames
 SELECT
   statistics_name,
   column_names,
@@ -1885,7 +1885,7 @@ CREATE STATISTICS u_b_a ON b, a FROM u;
 statement ok
 CREATE STATISTICS u_c_d_b ON c, d, b FROM u;
 
-query TT colnames,rowsort
+query TT colnames
 SELECT statistics_name, column_names
 FROM [SHOW STATISTICS FOR TABLE u]
 ORDER BY column_names, statistics_name

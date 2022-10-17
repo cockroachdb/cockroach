@@ -25,6 +25,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { IndexDetailsPageData } from "./indexDetailsPage";
 import { selectIsTenant } from "../store/uiConfig";
 import { BreadcrumbItem } from "../breadcrumbs";
+import { RecommendationType as RecType } from "./indexDetailsPage";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const selectIndexDetails = createSelector(
@@ -48,8 +49,13 @@ export const selectIndexDetails = createSelector(
         indexRec => indexRec.index_id === details.statistics.key.index_id,
       ) || [];
     const indexRecommendations = filteredIndexRecommendations.map(indexRec => {
+      let type: RecType = "Unknown";
+      switch (RecommendationType[indexRec.type].toString()) {
+        case "DROP_UNUSED":
+          type = "DROP_UNUSED";
+      }
       return {
-        type: RecommendationType[indexRec.type].toString(),
+        type: type,
         reason: indexRec.reason,
       };
     });
