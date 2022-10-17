@@ -167,7 +167,6 @@ type TransferLeaseOptions struct {
 	// CheckCandidateFullness, when false, tells `TransferLeaseTarget`
 	// to disregard the existing lease counts on candidates.
 	CheckCandidateFullness bool
-	DryRun                 bool
 	// AllowUninitializedCandidates allows a lease transfer target to include
 	// replicas which are not in the existing replica set.
 	AllowUninitializedCandidates bool
@@ -181,8 +180,6 @@ const (
 	TransferErr LeaseTransferOutcome = iota
 	// TransferOK indicates a successful lease transfer attempt.
 	TransferOK
-	// NoTransferDryRun indicates a dry-run (i.e. noop) lease transfer attempt.
-	NoTransferDryRun
 	// NoSuitableTarget indicates a lease transfer attempt that found no suitable
 	// targets.
 	NoSuitableTarget
@@ -194,8 +191,6 @@ func (o LeaseTransferOutcome) String() string {
 		return "err"
 	case TransferOK:
 		return "ok"
-	case NoTransferDryRun:
-		return "no transfer; dry run"
 	case NoSuitableTarget:
 		return "no suitable transfer target found"
 	default:
