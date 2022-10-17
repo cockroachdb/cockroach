@@ -271,7 +271,8 @@ CREATE TABLE crdb_internal.cluster_execution_insights (
    last_retry_reason STRING NULL,
    exec_node_ids INT8[] NOT NULL,
    contention INTERVAL NULL,
-   index_recommendations STRING[] NOT NULL
+   index_recommendations STRING[] NOT NULL,
+   implicit_txn BOOL NOT NULL
 )  CREATE TABLE crdb_internal.cluster_execution_insights (
    session_id STRING NOT NULL,
    txn_id UUID NOT NULL,
@@ -296,7 +297,8 @@ CREATE TABLE crdb_internal.cluster_execution_insights (
    last_retry_reason STRING NULL,
    exec_node_ids INT8[] NOT NULL,
    contention INTERVAL NULL,
-   index_recommendations STRING[] NOT NULL
+   index_recommendations STRING[] NOT NULL,
+   implicit_txn BOOL NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_inflight_traces (
    trace_id INT8 NOT NULL,
@@ -993,7 +995,8 @@ CREATE TABLE crdb_internal.node_execution_insights (
    last_retry_reason STRING NULL,
    exec_node_ids INT8[] NOT NULL,
    contention INTERVAL NULL,
-   index_recommendations STRING[] NOT NULL
+   index_recommendations STRING[] NOT NULL,
+   implicit_txn BOOL NOT NULL
 )  CREATE TABLE crdb_internal.node_execution_insights (
    session_id STRING NOT NULL,
    txn_id UUID NOT NULL,
@@ -1018,7 +1021,8 @@ CREATE TABLE crdb_internal.node_execution_insights (
    last_retry_reason STRING NULL,
    exec_node_ids INT8[] NOT NULL,
    contention INTERVAL NULL,
-   index_recommendations STRING[] NOT NULL
+   index_recommendations STRING[] NOT NULL,
+   implicit_txn BOOL NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_inflight_trace_spans (
    trace_id INT8 NOT NULL,
