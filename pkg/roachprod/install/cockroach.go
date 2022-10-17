@@ -95,6 +95,10 @@ type StartOpts struct {
 	// systemd limits on resources.
 	NumFilesLimit int64
 
+	// InitTarget is the node that Start will run Init on and the default node
+	// that will be used when constructing join arguments.
+	InitTarget int
+
 	// -- Options that apply only to StartDefault target --
 
 	SkipInit        bool
@@ -119,12 +123,23 @@ const (
 	StartTenantProxy
 )
 
+const defaultInitTarget = Node(1)
+
 func (st StartTarget) String() string {
 	return [...]string{
 		StartDefault:     "default",
 		StartTenantSQL:   "tenant SQL",
 		StartTenantProxy: "tenant proxy",
 	}[st]
+}
+
+// GetInitTarget returns the Node that should be used for
+// initialization operations.
+func (so StartOpts) GetInitTarget() Node {
+	if so.InitTarget == 0 {
+		return defaultInitTarget
+	}
+	return Node(so.InitTarget)
 }
 
 // Start the cockroach process on the cluster.
@@ -172,8 +187,8 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 		}
 
 		// We reserve a few special operations (bootstrapping, and setting
-		// cluster settings) for node 1.
-		if node != 1 {
+		// cluster settings) to the InitTarget.
+		if startOpts.GetInitTarget() != node {
 			return nil, nil
 		}
 
@@ -511,7 +526,8 @@ func (c *SyncedCluster) generateStartArgs(
 
 	// --join flags are unsupported/unnecessary in `cockroach start-single-node`.
 	if startOpts.Target == StartDefault && !c.useStartSingleNode() {
-		args = append(args, fmt.Sprintf("--join=%s:%d", c.Host(1), c.NodePort(1)))
+		initTarget := startOpts.GetInitTarget()
+		args = append(args, fmt.Sprintf("--join=%s:%d", c.Host(initTarget), c.NodePort(initTarget)))
 	}
 	if startOpts.Target == StartTenantSQL {
 		args = append(args, fmt.Sprintf("--kv-addrs=%s", startOpts.KVAddrs))
@@ -654,12 +670,12 @@ func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) s
 
 	var clusterSettingCmd string
 	if c.IsLocal() {
-		clusterSettingCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
+		clusterSettingCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 
 	binary := cockroachNodeBinary(c, node)
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "settings-initialized")
-	url := c.NodeURL("localhost", c.NodePort(1))
+	url := c.NodeURL("localhost", c.NodePort(node))
 
 	// We ignore failures to set remote_debugging.mode, which was
 	// removed in v21.2.
@@ -677,7 +693,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) s
 func (c *SyncedCluster) generateInitCmd(node Node) string {
 	var initCmd string
 	if c.IsLocal() {
-		initCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
+		initCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 	}
 
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "cluster-bootstrapped")
