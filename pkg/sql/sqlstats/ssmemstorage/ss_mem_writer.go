@@ -201,6 +201,7 @@ func (s *Container) RecordStatement(
 		Nodes:                value.Nodes,
 		Contention:           contention,
 		IndexRecommendations: value.IndexRecommendations,
+		ImplicitTxn:          key.ImplicitTxn,
 	})
 
 	return stats.ID, nil

@@ -99,7 +99,7 @@ message Statement {
   repeated int64 nodes = 17;
   google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
   repeated string index_recommendations = 19;
-
+  bool implicit_txn = 20;
 }
 
 message Insight {
