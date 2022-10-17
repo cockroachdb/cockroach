@@ -1065,16 +1065,10 @@ INDEX (y))`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
 	2, CAST('nan' AS FLOAT),false),(3, NULL, NULL, 4.5, NULL)`)
 
-		//sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, city STRING, arraycol STRING[])`)
-		//sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Berlin', ARRAY['hi', 'bye'])`)
-
 		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
 			`WITH format=%s,initial_scan='only'`, changefeedbase.OptFormatParquet))
 		defer closeFeed(t, foo)
 
-		//assertPayloads(t, foo, []string{
-		//	`foo: [1]->{"arraycol":["hi","bye"],"city":"Berlin","id":1}`,
-		//})
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"a":true,"i":1,"x":"Alice","y":3,"z":0.5032135844230652}`,
 			`foo: [2]->{"a":false,"i":2,"x":"Bob","y":2,"z":"NaN"}`,

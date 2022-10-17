@@ -369,7 +369,7 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 ) error {
 	sinkWithEncoder, ok := c.sink.(SinkWithEncoder)
 	if !ok {
-		return errors.AssertionFailedf("Expected a sink with encoder for parquet format, found %T", c.sink)
+		return errors.AssertionFailedf("Expected a SinkWithEncoder for parquet format, found %T", c.sink)
 	}
 	if err := sinkWithEncoder.EncodeAndEmitRow(
 		ctx, updatedRow, topic, updated, mvcc, alloc,

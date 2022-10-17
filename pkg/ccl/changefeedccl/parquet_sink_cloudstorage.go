@@ -57,11 +57,11 @@ type parquetWriterWrapper struct {
 }
 
 func makeParquetCloudStorageSink(baseCloudStorageSink *cloudStorageSink) *parquetCloudStorageSink {
-	pcs := &parquetCloudStorageSink{}
+	pqcs := &parquetCloudStorageSink{}
 
-	pcs.wrapped = baseCloudStorageSink
+	pqcs.wrapped = baseCloudStorageSink
 
-	return pcs
+	return pqcs
 }
 
 // EmitRow does not do anything. It must not be called. It is present so that
@@ -143,7 +143,6 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 		if err != nil {
 			return err
 		}
-		// Revisit: no clue what unwrap datum does, using it cuz export also did
 		edNative, err := encodeFn(d)
 		if err != nil {
 			return err
@@ -173,7 +172,6 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 func makeparquetWriterWrapper(
 	ctx context.Context, row cdcevent.Row, buf *bytes.Buffer,
 ) (*parquetWriterWrapper, error) {
-
 	parquetColumns, err := getParquetColumnTypes(ctx, row)
 	if err != nil {
 		return nil, err
