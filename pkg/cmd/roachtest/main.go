@@ -373,8 +373,15 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 
 	filter := registry.NewTestFilter(cfg.args)
 	clusterType := roachprodCluster
+	bindTo := ""
 	if local {
 		clusterType = localCluster
+
+		// This will suppress the annoying "Allow incoming network connections" popup from
+		// OSX when running a roachtest
+		bindTo = "localhost"
+
+		fmt.Printf("--local specified. Binding http listener to localhost only")
 		if cfg.parallelism != 1 {
 			fmt.Printf("--local specified. Overriding --parallelism to 1.\n")
 			cfg.parallelism = 1
@@ -389,7 +396,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		keepClustersOnTestFailure: cfg.debugEnabled,
 		clusterID:                 cfg.clusterID,
 	}
-	if err := runner.runHTTPServer(cfg.httpPort, os.Stdout); err != nil {
+	if err := runner.runHTTPServer(cfg.httpPort, os.Stdout, bindTo); err != nil {
 		return err
 	}
 

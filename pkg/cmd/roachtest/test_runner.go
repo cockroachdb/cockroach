@@ -1162,14 +1162,15 @@ func (r *testRunner) removeWorker(ctx context.Context, name string) {
 // runHTTPServer starts a server running in the background.
 //
 // httpPort: The port on which to serve the web interface. Pass 0 for allocating
+// bindTo: The host/ip on which to bind. Leave empty to bind on all local ips
 //
 //	a port automatically (which will be printed to stdout).
-func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer) error {
+func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer, bindTo string) error {
 	http.HandleFunc("/", r.serveHTTP)
 	// Run an http server in the background.
 	// We handle the case where httpPort is 0, which means we automatically
 	// allocate a port.
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", httpPort))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", bindTo, httpPort))
 	if err != nil {
 		return err
 	}
@@ -1179,7 +1180,11 @@ func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer) error {
 			panic(err)
 		}
 	}()
-	fmt.Fprintf(stdout, "HTTP server listening on all network interfaces, port %d.\n", httpPort)
+	bindToDesc := "all network interfaces"
+	if bindTo != "" {
+		bindToDesc = bindTo
+	}
+	fmt.Fprintf(stdout, "HTTP server listening on %s, port %d.\n", bindToDesc, httpPort)
 	return nil
 }
 
