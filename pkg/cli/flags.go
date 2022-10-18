@@ -369,6 +369,45 @@ func init() {
 	// avoid printing some messages to standard output in that case.
 	_, startCtx.inBackground = envutil.EnvString(backgroundEnvVar, 1)
 
+	// Flags common to KV-only servers.
+	for _, cmd := range append(StartCmds, connectInitCmd, connectJoinCmd) {
+		f := cmd.Flags()
+
+		// Cluster joining flags. We need to enable this both for 'start'
+		// and 'start-single-node' although the latter does not support
+		// --join, because it delegates its logic to that of 'start', and
+		// 'start' will check that the flag is properly defined.
+		cliflagcfg.VarFlag(f, &serverCfg.JoinList, cliflags.Join)
+		cliflagcfg.BoolFlag(f, &serverCfg.JoinPreferSRVRecords, cliflags.JoinPreferSRVRecords)
+
+		if cmd != connectJoinCmd {
+			// The initialization token and expected peers. For 'start' commands this is optional.
+			cliflagcfg.StringFlag(f, &startCtx.initToken, cliflags.InitToken)
+			cliflagcfg.IntFlag(f, &startCtx.numExpectedNodes, cliflags.NumExpectedInitialNodes)
+			cliflagcfg.BoolFlag(f, &startCtx.genCertsForSingleNode, cliflags.SingleNode)
+		}
+
+		if cmd == startSingleNodeCmd {
+			// Even though all server flags are supported for
+			// 'start-single-node', we intend that command to be used by
+			// beginners / developers running on a single machine. To
+			// enhance the UX, we hide the flags since they are not directly
+			// relevant when running a single node.
+			_ = f.MarkHidden(cliflags.Join.Name)
+			_ = f.MarkHidden(cliflags.JoinPreferSRVRecords.Name)
+			_ = f.MarkHidden(cliflags.InitToken.Name)
+		}
+
+		// Node attributes.
+		//
+		// TODO(knz): do we want SQL-only servers to have node-level
+		// attributes too? Would this be useful for e.g. SQL query
+		// planning?
+		if cmd != connectInitCmd && cmd != connectJoinCmd {
+			cliflagcfg.StringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
+		}
+	}
+
 	// Flags common to the start commands, the connect command, and the node join
 	// command.
 	for _, cmd := range append(StartCmds, connectInitCmd, connectJoinCmd) {
@@ -384,23 +423,11 @@ func init() {
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
 		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
-
-		// Cluster joining flags. We need to enable this both for 'start'
-		// and 'start-single-node' although the latter does not support
-		// --join, because it delegates its logic to that of 'start', and
-		// 'start' will check that the flag is properly defined.
-		cliflagcfg.VarFlag(f, &serverCfg.JoinList, cliflags.Join)
-		cliflagcfg.BoolFlag(f, &serverCfg.JoinPreferSRVRecords, cliflags.JoinPreferSRVRecords)
 	}
 
 	// Flags common to the start commands and the connect command.
 	for _, cmd := range append(StartCmds, connectInitCmd) {
 		f := cmd.Flags()
-
-		// The initialization token and expected peers. For 'start' commands this is optional.
-		cliflagcfg.StringFlag(f, &startCtx.initToken, cliflags.InitToken)
-		cliflagcfg.IntFlag(f, &startCtx.numExpectedNodes, cliflags.NumExpectedInitialNodes)
-		cliflagcfg.BoolFlag(f, &startCtx.genCertsForSingleNode, cliflags.SingleNode)
 
 		if cmd == startSingleNodeCmd {
 			// Even though all server flags are supported for
@@ -408,11 +435,8 @@ func init() {
 			// beginners / developers running on a single machine. To
 			// enhance the UX, we hide the flags since they are not directly
 			// relevant when running a single node.
-			_ = f.MarkHidden(cliflags.Join.Name)
-			_ = f.MarkHidden(cliflags.JoinPreferSRVRecords.Name)
 			_ = f.MarkHidden(cliflags.AdvertiseAddr.Name)
 			_ = f.MarkHidden(cliflags.SQLAdvertiseAddr.Name)
-			_ = f.MarkHidden(cliflags.InitToken.Name)
 		}
 
 		// Backward-compatibility flags.
@@ -455,7 +479,6 @@ func init() {
 
 		cliflagcfg.VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
 
-		cliflagcfg.StringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
 		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
 
 		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
