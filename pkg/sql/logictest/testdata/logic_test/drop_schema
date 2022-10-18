@@ -1,4 +1,4 @@
-# LogicTest: default-configs local-mixed-22.1-22.2
+# LogicTest: default-configs local-mixed-22.2-23.1
 
 statement error pq: cannot drop schema "public"
 DROP SCHEMA public

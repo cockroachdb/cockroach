@@ -448,22 +448,11 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		Name:                "local-mixed-21.2-22.1",
-		NumNodes:            1,
-		OverrideDistSQLMode: "off",
-		// Test fails when run within a test tenant. Tracked with
-		// #76378.
-		DisableDefaultTestTenant: true,
-		BootstrapVersion:         roachpb.Version{Major: 21, Minor: 2},
-		BinaryVersion:            roachpb.Version{Major: 22, Minor: 1},
-		DisableUpgrade:           true,
-	},
-	{
-		Name:                        "local-mixed-22.1-22.2",
+		Name:                        "local-mixed-22.2-23.1",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.ByKey(clusterversion.V22_1),
-		BinaryVersion:               clusterversion.ByKey(clusterversion.EnableLeaseUpgrade), // TODO(dt): switch to 22.2.
+		BootstrapVersion:            clusterversion.ByKey(clusterversion.V22_2),
+		BinaryVersion:               clusterversion.ByKey(clusterversion.V23_1),
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
