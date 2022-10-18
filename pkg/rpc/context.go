@@ -1363,7 +1363,7 @@ func (a rangeFeedServerAdapter) Send(e *roachpb.RangeFeedEvent) error {
 
 // IsLocal returns true if the given InternalClient is local.
 func IsLocal(iface RestrictedInternalClient) bool {
-	_, ok := iface.(*internalClientAdapter)
+	_, ok := iface.(internalClientAdapter)
 	return ok // internalClientAdapter is used for local connections.
 }
 
