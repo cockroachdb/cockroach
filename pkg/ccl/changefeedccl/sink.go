@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -320,6 +321,25 @@ func (s errorWrapperSink) EmitRow(
 	return nil
 }
 
+func (s errorWrapperSink) EncodeAndEmitRow(
+	ctx context.Context,
+	updatedRow cdcevent.Row,
+	prevRow cdcevent.Row,
+	topic TopicDescriptor,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+
+	if sinkWithEncoder, ok := s.wrapped.(SinkWithEncoder); ok {
+		if err := sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, alloc); err != nil {
+			return changefeedbase.MarkRetryableError(err)
+		}
+	} else {
+		return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.wrapped)
+	}
+	return nil
+}
+
 // EmitResolvedTimestamp implements Sink interface.
 func (s errorWrapperSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
@@ -580,4 +600,25 @@ func (s *safeSink) Flush(ctx context.Context) error {
 	s.Lock()
 	defer s.Unlock()
 	return s.wrapped.Flush(ctx)
+}
+
+// SinkWithEncoder A sink which both encodes and emits row events. Ideally, this
+// should not be embedding the Sink interface because then all the types that
+// implement this interface will also have to implement EmitRow (instead, they
+// should implement EncodeAndEmitRow), which for a sink with encoder, does not
+// make sense. But since we pass around a type of sink everywhere, we need to
+// embed this for now.
+type SinkWithEncoder interface {
+	Sink
+
+	EncodeAndEmitRow(
+		ctx context.Context,
+		updatedRow cdcevent.Row,
+		prevRow cdcevent.Row,
+		topic TopicDescriptor,
+		updated, mvcc hlc.Timestamp,
+		alloc kvevent.Alloc,
+	) error
+
+	Flush(ctx context.Context) error
 }

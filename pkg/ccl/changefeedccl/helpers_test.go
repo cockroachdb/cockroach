@@ -847,7 +847,9 @@ func makeFeedFactoryWithOptions(
 			t.Fatalf("expected externalIODir option to be set")
 		}
 		f := makeCloudFeedFactory(s, db, options.externalIODir)
-		return f, func() {}
+		return f, func() {
+			TestingSetIncludeParquetMetadata()()
+		}
 	case "enterprise":
 		sink, cleanup := pgURLForUser(username.RootUser)
 		f := makeTableFeedFactory(s, db, sink)
@@ -1013,4 +1015,14 @@ func waitForJobStatus(
 		}
 		return nil
 	})
+}
+
+// TestingSetIncludeParquetMetadata adds the option to turn on adding metadata
+// (primary key column names) to the parquet file which is used to convert parquet
+// data to JSON format
+func TestingSetIncludeParquetMetadata() func() {
+	includeParquetTestMetadata = true
+	return func() {
+		includeParquetTestMetadata = false
+	}
 }
