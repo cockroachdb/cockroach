@@ -126,11 +126,10 @@ export const StatementInsightDetailsOverviewTab: React.FC<
     [isCockroachCloud],
   );
 
-  const insightDetailsArr = useMemo(() => {
-    const eventDetails = [insightEventDetails];
-    populateStatementInsightsFromProblemAndCauses(eventDetails);
-    return eventDetails;
-  }, [insightEventDetails]);
+  const insightDetailsArr = useMemo(
+    () => populateStatementInsightsFromProblemAndCauses([insightEventDetails]),
+    [insightEventDetails],
+  );
   const insightDetails = insightDetailsArr.length ? insightDetailsArr[0] : null;
   const tableData = insightsTableData(insightDetails);
 
