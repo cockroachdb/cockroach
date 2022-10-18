@@ -300,12 +300,15 @@ func (sr *schemaResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
 	tc := sr.descCollection
-	desc, err := tc.GetImmutableTypeByID(ctx, sr.txn, id, tree.ObjectLookupFlags{})
+	flags := sr.CommonLookupFlagsRequired()
+	flags.ParentID = sr.typeResolutionDbID
+	desc, err := tc.GetImmutableTypeByID(ctx, sr.txn, id, tree.ObjectLookupFlags{
+		CommonLookupFlags: flags,
+	})
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
 	// Note that the value of required doesn't matter for lookups by ID.
-	flags := sr.CommonLookupFlagsRequired()
 	_, db, err := tc.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(), flags)
 	if err != nil {
 		return tree.TypeName{}, nil, err
@@ -480,13 +483,15 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 		}
 	}
 
-	flags := tree.ObjectLookupFlagsWithRequired()
+	flags := sr.CommonLookupFlagsRequired()
 	flags.AvoidLeased = sr.skipDescriptorCache
+	flags.ParentID = sr.typeResolutionDbID
 	descID, err := funcdesc.UserDefinedFunctionOIDToID(oid)
 	if err != nil {
 		return "", nil, err
 	}
-	funcDesc, err := sr.descCollection.GetImmutableFunctionByID(ctx, sr.txn, descID, flags)
+	funcDesc, err := sr.descCollection.GetImmutableFunctionByID(ctx, sr.txn, descID,
+		tree.ObjectLookupFlags{CommonLookupFlags: flags})
 	if err != nil {
 		return "", nil, err
 	}

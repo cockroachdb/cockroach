@@ -1544,6 +1544,14 @@ func (t *logicTest) newCluster(
 			}
 		}
 
+		if cfg.UseIndexLookupForDescriptorsInDatabase {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.catalog.virtual_tables.use_index_lookup_for_descriptors_in_database.enabled = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
 		//

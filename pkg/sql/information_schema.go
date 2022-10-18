@@ -2363,8 +2363,14 @@ func forEachTypeDesc(
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
 	fn func(db catalog.DatabaseDescriptor, sc string, typ catalog.TypeDescriptor) error,
-) error {
-	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+) (err error) {
+	var all nstree.Catalog
+	if dbContext != nil &&
+		useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
+		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext)
+	} else {
+		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	}
 	if err != nil {
 		return err
 	}
@@ -2529,8 +2535,13 @@ func forEachTableDescWithTableLookupInternal(
 	virtualOpts virtualOpts,
 	allowAdding bool,
 	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
-) error {
-	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+) (err error) {
+	var all nstree.Catalog
+	if dbContext != nil && useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
+		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext)
+	} else {
+		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn)
+	}
 	if err != nil {
 		return err
 	}
