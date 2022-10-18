@@ -514,6 +514,50 @@ func init() {
 		}
 	}
 
+	// Multi-tenancy start-sql command flags.
+	{
+		f := mtStartSQLCmd.Flags()
+		cliflagcfg.VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
+		// NB: serverInsecure populates baseCfg.{Insecure,SSLCertsDir} in this the following method
+		// (which is a PreRun for this command):
+		_ = extraServerFlagInit // guru assignment
+		// NB: Insecure is deprecated. See #53404.
+		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+
+		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
+		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
+		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverSQLAddr, &serverSQLPort), cliflags.ListenSQLAddr)
+		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAddr, &serverHTTPPort), cliflags.ListenHTTPAddr)
+		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort), cliflags.HTTPAdvertiseAddr)
+		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverAdvertiseAddr, &serverAdvertisePort), cliflags.AdvertiseAddr)
+
+		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
+		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
+		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
+		cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
+		cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
+
+		cliflagcfg.StringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
+
+		// Enable/disable various external storage endpoints.
+		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
+		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
+		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
+
+		// Engine flags.
+		cliflagcfg.VarFlag(f, sqlSizeValue, cliflags.SQLMem)
+		cliflagcfg.VarFlag(f, tsdbSizeValue, cliflags.TSDBMem)
+		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
+		// the stores flag has been parsed and the storage device that a percentage
+		// refers to becomes known.
+		cliflagcfg.VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
+		cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
+
+		if backgroundFlagDefined {
+			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
+		}
+	}
+
 	// Flags that apply to commands that start servers.
 	telemetryEnabledCmds := append(serverCmds, demoCmd, statementBundleRecreateCmd)
 	telemetryEnabledCmds = append(telemetryEnabledCmds, demoCmd.Commands()...)
@@ -887,50 +931,6 @@ func init() {
 			if f.Lookup(cliflags.Verbose.Name) == nil {
 				cliflagcfg.BoolFlag(f, &debugCtx.verbose, cliflags.Verbose)
 			}
-		}
-	}
-
-	// Multi-tenancy start-sql command flags.
-	{
-		f := mtStartSQLCmd.Flags()
-		cliflagcfg.VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
-		// NB: serverInsecure populates baseCfg.{Insecure,SSLCertsDir} in this the following method
-		// (which is a PreRun for this command):
-		_ = extraServerFlagInit // guru assignment
-		// NB: Insecure is deprecated. See #53404.
-		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
-
-		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
-		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverSQLAddr, &serverSQLPort), cliflags.ListenSQLAddr)
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAddr, &serverHTTPPort), cliflags.ListenHTTPAddr)
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort), cliflags.HTTPAdvertiseAddr)
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverAdvertiseAddr, &serverAdvertisePort), cliflags.AdvertiseAddr)
-
-		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
-		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
-		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
-		cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
-		cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
-
-		cliflagcfg.StringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
-
-		// Enable/disable various external storage endpoints.
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
-
-		// Engine flags.
-		cliflagcfg.VarFlag(f, sqlSizeValue, cliflags.SQLMem)
-		cliflagcfg.VarFlag(f, tsdbSizeValue, cliflags.TSDBMem)
-		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
-		// the stores flag has been parsed and the storage device that a percentage
-		// refers to becomes known.
-		cliflagcfg.VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
-		cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
-
-		if backgroundFlagDefined {
-			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
 	}
 
